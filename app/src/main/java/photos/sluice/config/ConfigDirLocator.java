@@ -14,17 +14,17 @@ public final class ConfigDirLocator {
         if (os.contains("win")) {
             String appData = env.get("APPDATA");
             if (appData != null) {
-                return Path.of(appData, "Sluice");
+                return Path.of(appData + "\\Sluice");
             }
-            return Path.of(env.get("USERPROFILE"), "AppData", "Roaming", "Sluice");
+            return Path.of(env.get("USERPROFILE") + "\\AppData\\Roaming\\Sluice");
         }
         if (os.contains("mac")) {
-            return Path.of(env.get("HOME"), "Library", "Application Support", "Sluice");
+            return Path.of(env.get("HOME") + "/Library/Application Support/Sluice");
         }
         String xdgConfigHome = env.get("XDG_CONFIG_HOME");
         if (xdgConfigHome != null) {
-            return Path.of(xdgConfigHome, "sluice");
+            return Path.of(xdgConfigHome + "/sluice");
         }
-        return Path.of(env.get("HOME"), ".config", "sluice");
+        return Path.of(env.get("HOME") + "/.config/sluice");
     }
 }
