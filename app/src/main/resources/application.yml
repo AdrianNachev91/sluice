@@ -1,0 +1,6 @@
+sluice:
+  montage:
+    tiles-per-row: 5
+    tile-size: 224
+  cull:
+    provider: external-agent

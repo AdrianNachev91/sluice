@@ -1,12 +1,19 @@
 package photos.sluice;
 
-import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import photos.sluice.config.ConfigDirLocator;
+
+import java.nio.file.Path;
 
 @SpringBootApplication
 public class SluiceApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(SluiceApplication.class, args);
+    static void main(String[] args) {
+        Path configFile = ConfigDirLocator.locate(System.getProperty("os.name"), System.getenv())
+                .resolve("config.yml");
+        new SpringApplicationBuilder(SluiceApplication.class)
+                .properties("spring.config.import=optional:file:" + configFile)
+                .run(args);
     }
 }
