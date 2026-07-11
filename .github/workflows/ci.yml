@@ -3,7 +3,17 @@ name: CI
 on:
   push:
     branches: [master]
+    # CI only builds/tests the Java app (`mvn -f app/pom.xml test`), so run it only when the app or
+    # this workflow itself changes. Docs, devlog, memory, plans, and PowerShell scripts skip CI - no
+    # point burning the matrix on a docs-only commit. If a build-affecting file ever lands outside
+    # app/, add its path here.
+    paths:
+      - 'app/**'
+      - '.github/workflows/ci.yml'
   pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/ci.yml'
 
 jobs:
   build:
