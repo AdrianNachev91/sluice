@@ -1,9 +1,23 @@
 package photos.sluice.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import photos.sluice.adapter.metadata.ExifSource;
+import photos.sluice.adapter.metadata.FilenameSource;
+import photos.sluice.adapter.metadata.MtimeSource;
+import photos.sluice.adapter.metadata.TakeoutJsonSource;
+import photos.sluice.domain.dating.DateResolver;
 
 @Configuration
 @EnableConfigurationProperties({PathsProperties.class, MontageConfig.class, CullConfig.class})
 public class AppConfig {
+
+    // Takes the concrete adapter types (not the shared DateSource port) so Spring resolves each
+    // chain position unambiguously - four DateSource beans would otherwise be indistinguishable.
+    @Bean
+    public DateResolver dateResolver(TakeoutJsonSource sidecarSource, ExifSource exifSource,
+            FilenameSource filenameSource, MtimeSource mtimeSource) {
+        return new DateResolver(sidecarSource, exifSource, filenameSource, mtimeSource);
+    }
 }

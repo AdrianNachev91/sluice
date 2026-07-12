@@ -25,8 +25,8 @@ public class TakeoutJsonSource implements DateSource {
         if (sidecar == null) {
             return Optional.empty();
         }
-        try {
-            JsonNode root = MAPPER.readTree(Files.newInputStream(sidecar.jsonPath()));
+        try (var input = Files.newInputStream(sidecar.jsonPath())) {
+            JsonNode root = MAPPER.readTree(input);
             JsonNode timestamp = root.path("photoTakenTime").path("timestamp");
             // A missing node's .asLong() silently defaults to 0 (the Unix epoch) - checked
             // explicitly so a malformed sidecar can't masquerade as a trusted 1970 date.
