@@ -28,10 +28,11 @@ class CsvLibraryHashIndexTest {
     void loadParsesFixtureShapedLikeRealIndexWithBomAndDuplicateHash(@TempDir Path repoRoot) throws IOException {
         Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
-        Files.writeString(csv, "﻿\"sha256\",\"path\"\r\n"
-                + "\"201936E3F7331FE027E25C63481533A55C7BD9F2CF37A2664B4A4AA301CC19FE\",\"D:\\OneDrive\\PhotoLibrary\\Photos\\2017\\08\\a.jpg\"\r\n"
-                + "\"201936E3F7331FE027E25C63481533A55C7BD9F2CF37A2664B4A4AA301CC19FE\",\"D:\\OneDrive\\PhotoLibrary\\Photos\\2017\\08\\a (2).jpg\"\r\n",
-                StandardCharsets.UTF_8);
+        Files.writeString(csv, """
+                ﻿"sha256","path"\r
+                "201936E3F7331FE027E25C63481533A55C7BD9F2CF37A2664B4A4AA301CC19FE","D:\\OneDrive\\PhotoLibrary\\Photos\\2017\\08\\a.jpg"\r
+                "201936E3F7331FE027E25C63481533A55C7BD9F2CF37A2664B4A4AA301CC19FE","D:\\OneDrive\\PhotoLibrary\\Photos\\2017\\08\\a (2).jpg"\r
+                """, StandardCharsets.UTF_8);
         CsvLibraryHashIndex index = indexAt(repoRoot);
 
         Map<String, List<Path>> loaded = index.load();
@@ -47,7 +48,10 @@ class CsvLibraryHashIndexTest {
     void containsReflectsLoadedHashes(@TempDir Path repoRoot) throws IOException {
         Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
-        Files.writeString(csv, "\"sha256\",\"path\"\n\"ABC123\",\"D:\\lib\\x.jpg\"\n", StandardCharsets.UTF_8);
+        Files.writeString(csv, """
+                "sha256","path"
+                "ABC123","D:\\lib\\x.jpg"
+                """, StandardCharsets.UTF_8);
         CsvLibraryHashIndex index = indexAt(repoRoot);
 
         assertThat(index.contains("ABC123")).isTrue();
@@ -67,7 +71,10 @@ class CsvLibraryHashIndexTest {
     void appendAddsRowsWithoutDuplicatingHeaderOnExistingFile(@TempDir Path repoRoot) throws IOException {
         Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
-        Files.writeString(csv, "\"sha256\",\"path\"\n\"HASH1\",\"D:\\lib\\one.jpg\"\n", StandardCharsets.UTF_8);
+        Files.writeString(csv, """
+                "sha256","path"
+                "HASH1","D:\\lib\\one.jpg"
+                """, StandardCharsets.UTF_8);
         CsvLibraryHashIndex index = indexAt(repoRoot);
 
         index.append(List.of(new IndexEntry("HASH2", Path.of("D:\\lib\\two.jpg"))));
@@ -84,7 +91,11 @@ class CsvLibraryHashIndexTest {
             throws IOException {
         Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
         Files.createDirectories(csv.getParent());
-        Files.writeString(csv, "\"sha256\",\"path\"\n\"HASH1\",\"D:\\lib\\one.jpg\"", StandardCharsets.UTF_8);
+        // Deliberately no trailing newline after the last row - see the WHY in append()'s
+        // needsLeadingNewline comment.
+        Files.writeString(csv, """
+                "sha256","path"
+                "HASH1","D:\\lib\\one.jpg\"""", StandardCharsets.UTF_8);
         CsvLibraryHashIndex index = indexAt(repoRoot);
 
         index.append(List.of(new IndexEntry("HASH2", Path.of("D:\\lib\\two.jpg"))));
