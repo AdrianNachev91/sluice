@@ -1,0 +1,55 @@
+package photos.sluice.adapter.metadata;
+
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.imaging.ImageProcessingException;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifSubIFDDirectory;
+import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.DateSource;
+import photos.sluice.domain.model.MediaFile;
+import photos.sluice.domain.model.TakeoutSidecar;
+
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Optional;
+
+@Component
+public class ExifSource implements DateSource {
+
+    // metadata-extractor's raw Exif date string ("yyyy:MM:dd HH:mm:ss") carries no timezone.
+    // Parsed directly to LocalDateTime rather than via Directory#getDate(TimeZone), which would
+    // treat the naive value as if it were already in that zone and convert it.
+    private static final DateTimeFormatter EXIF_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss");
+
+    @Override
+    public Optional<LocalDateTime> resolve(MediaFile file, TakeoutSidecar sidecar) {
+        Metadata metadata;
+        try {
+            metadata = ImageMetadataReader.readMetadata(file.path().toFile());
+        } catch (ImageProcessingException | IOException | RuntimeException e) {
+            // metadata-extractor throws unchecked exceptions (e.g. ArrayIndexOutOfBoundsException)
+            // on some malformed/corrupt real-world EXIF blocks, not just its checked exception type.
+            // One bad file must fall through to the next DateSource, not abort the whole batch.
+            return Optional.empty();
+        }
+        ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+        if (directory == null) {
+            return Optional.empty();
+        }
+        return parse(directory.getString(ExifSubIFDDirectory.TAG_DATETIME_ORIGINAL))
+                .or(() -> parse(directory.getString(ExifSubIFDDirectory.TAG_DATETIME_DIGITIZED)));
+    }
+
+    private static Optional<LocalDateTime> parse(String raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(LocalDateTime.parse(raw, EXIF_DATE_FORMAT));
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
+        }
+    }
+}
