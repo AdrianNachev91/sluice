@@ -61,7 +61,7 @@ class DateResolverTest {
 
     @Test
     void filenameWinsWhenNoSidecarAndNoExif() {
-        MediaFile file = new MediaFile(Path.of("IMG_20210315_103000.jpg")); // no such file on disk
+        MediaFile file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
 
         DateResult result = resolver.resolve(file, null);
 
