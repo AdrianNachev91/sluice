@@ -60,6 +60,9 @@ this," picking the closest (shortest) match if several do.
 
 ## Related
 
+- How media and sidecar lists are built in the first place (the walk over the inbox tree, the
+  media/sidecar/dropped classification): `inbox-scanning.md` in the sibling `adapter/fs` design
+  folder.
 - Risk note: a name-only pairing can't tell a real Takeout sidecar from an unrelated `.json` that
   happens to share a filename prefix. Whatever deletes a consumed sidecar must only do so once it
   has actually been read as valid Takeout metadata, never on name-match alone.
