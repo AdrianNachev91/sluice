@@ -4,8 +4,9 @@ import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.DateSource;
+import photos.sluice.domain.dating.DateSource;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.TakeoutSidecar;
 
@@ -24,11 +25,11 @@ public class ExifSource implements DateSource {
     private static final DateTimeFormatter EXIF_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss");
 
     @Override
-    public Optional<LocalDateTime> resolve(MediaFile file, TakeoutSidecar sidecar) {
+    public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
         Metadata metadata;
         try {
             metadata = ImageMetadataReader.readMetadata(file.path().toFile());
-        } catch (ImageProcessingException | IOException | RuntimeException e) {
+        } catch (ImageProcessingException | IOException | RuntimeException _) {
             // metadata-extractor throws unchecked exceptions (e.g. ArrayIndexOutOfBoundsException)
             // on some malformed/corrupt real-world EXIF blocks, not just its checked exception type.
             // One bad file must fall through to the next DateSource, not abort the whole batch.
@@ -42,13 +43,13 @@ public class ExifSource implements DateSource {
                 .or(() -> parse(directory.getString(ExifSubIFDDirectory.TAG_DATETIME_DIGITIZED)));
     }
 
-    private static Optional<LocalDateTime> parse(String raw) {
+    private static Optional<LocalDateTime> parse(@Nullable String raw) {
         if (raw == null) {
             return Optional.empty();
         }
         try {
             return Optional.of(LocalDateTime.parse(raw, EXIF_DATE_FORMAT));
-        } catch (DateTimeParseException e) {
+        } catch (DateTimeParseException _) {
             return Optional.empty();
         }
     }

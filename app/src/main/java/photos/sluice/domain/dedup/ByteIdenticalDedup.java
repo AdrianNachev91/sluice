@@ -15,6 +15,11 @@ public final class ByteIdenticalDedup {
 
     public record DedupPlan(List<MediaFile> toSort, List<MediaFile> redundantVsLibrary,
                              List<MediaFile> withinBatchDuplicates) {
+        public DedupPlan {
+            toSort = List.copyOf(toSort);
+            redundantVsLibrary = List.copyOf(redundantVsLibrary);
+            withinBatchDuplicates = List.copyOf(withinBatchDuplicates);
+        }
     }
 
     public DedupPlan plan(List<HashedMedia> media, Set<String> libraryHashes) {

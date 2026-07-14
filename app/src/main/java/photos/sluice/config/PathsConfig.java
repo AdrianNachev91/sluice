@@ -1,10 +1,12 @@
 package photos.sluice.config;
 
 import jakarta.annotation.PostConstruct;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 
 @Component
 public class PathsConfig {
@@ -23,15 +25,15 @@ public class PathsConfig {
     }
 
     public Path repoRoot() {
-        return resolve(properties.repoRoot());
+        return resolve(Objects.requireNonNull(properties.repoRoot()));
     }
 
     public Path libraryRoot() {
-        return resolve(properties.libraryRoot());
+        return resolve(Objects.requireNonNull(properties.libraryRoot()));
     }
 
     public Path inbox() {
-        return resolve(properties.inbox());
+        return resolve(Objects.requireNonNull(properties.inbox()));
     }
 
     public Path logs() {
@@ -42,7 +44,7 @@ public class PathsConfig {
         return Path.of(raw).toAbsolutePath().normalize();
     }
 
-    private static void requireExistingDirectory(String property, String raw) {
+    private static void requireExistingDirectory(String property, @Nullable String raw) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalStateException(
                     property + " is not configured. Set it in Settings or via the " + property + " property.");

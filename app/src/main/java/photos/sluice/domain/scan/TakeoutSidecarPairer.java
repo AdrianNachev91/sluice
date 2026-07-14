@@ -1,5 +1,7 @@
 package photos.sluice.domain.scan;
 
+import org.jspecify.annotations.Nullable;
+
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -27,7 +29,11 @@ public final class TakeoutSidecarPairer {
     // The media-side form of dup-numbering: "name(1).jpg".
     private static final Pattern MEDIA_DUP_NUMBERED = Pattern.compile("^(.*?)(\\(\\d+\\))(\\.[^.]+)$");
 
-    public record PairingResult(boolean takeoutMode, Map<Path, Path> sidecarsByMedia) {}
+    public record PairingResult(boolean takeoutMode, Map<Path, Path> sidecarsByMedia) {
+        public PairingResult {
+            sidecarsByMedia = Map.copyOf(sidecarsByMedia);
+        }
+    }
 
     public PairingResult pair(List<Path> mediaPaths, List<Path> jsonPaths) {
         boolean takeoutMode = !jsonPaths.isEmpty();
@@ -91,7 +97,7 @@ public final class TakeoutSidecarPairer {
 
     // Tries the media's own filename first, then its edited-suffix-stripped form - an edited
     // copy has no sidecar of its own, so it must be looked up under its original's key instead.
-    private static Path matchByOwnerKey(Map<String, Path> owners, String mediaFileName) {
+    private static @Nullable Path matchByOwnerKey(@Nullable Map<String, Path> owners, String mediaFileName) {
         if (owners == null) {
             return null;
         }
@@ -112,7 +118,7 @@ public final class TakeoutSidecarPairer {
     // priority order, taking the first prefix with any hit and the shortest-matching sidecar
     // among that prefix's hits - covers non-standard sidecar naming the owner-key derivation
     // above doesn't land on exactly.
-    private static Path prefixFallback(List<Path> dirSidecars, String mediaFileName) {
+    private static @Nullable Path prefixFallback(@Nullable List<Path> dirSidecars, String mediaFileName) {
         if (dirSidecars == null) {
             return null;
         }
@@ -152,7 +158,7 @@ public final class TakeoutSidecarPairer {
     // Among sidecars whose base name starts with this prefix, the shortest is the closest match
     // to the prefix itself - a longer one is more likely to be an unrelated sidecar that merely
     // happens to share the same leading characters.
-    private static Path shortestStartingWith(List<Path> dirSidecars, String prefix) {
+    private static @Nullable Path shortestStartingWith(List<Path> dirSidecars, String prefix) {
         Path best = null;
         int bestLength = Integer.MAX_VALUE;
         for (Path json : dirSidecars) {

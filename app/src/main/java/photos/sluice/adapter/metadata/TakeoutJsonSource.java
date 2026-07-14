@@ -1,11 +1,13 @@
 package photos.sluice.adapter.metadata;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.DateSource;
+import photos.sluice.domain.dating.DateSource;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.TakeoutSidecar;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,10 +20,10 @@ import java.util.Optional;
 @Component
 public class TakeoutJsonSource implements DateSource {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
     @Override
-    public Optional<LocalDateTime> resolve(MediaFile file, TakeoutSidecar sidecar) {
+    public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
         if (sidecar == null) {
             return Optional.empty();
         }
@@ -30,13 +32,13 @@ public class TakeoutJsonSource implements DateSource {
             JsonNode timestamp = root.path("photoTakenTime").path("timestamp");
             // A missing node's .asLong() silently defaults to 0 (the Unix epoch) - checked
             // explicitly so a malformed sidecar can't masquerade as a trusted 1970 date.
-            if (!timestamp.isTextual()) {
+            if (!timestamp.isString()) {
                 return Optional.empty();
             }
-            long epochSeconds = Long.parseLong(timestamp.asText());
+            long epochSeconds = Long.parseLong(timestamp.asString());
             return Optional.of(
                     Instant.ofEpochSecond(epochSeconds).atZone(ZoneId.systemDefault()).toLocalDateTime());
-        } catch (IOException | NumberFormatException e) {
+        } catch (IOException | JacksonException | NumberFormatException _) {
             return Optional.empty();
         }
     }

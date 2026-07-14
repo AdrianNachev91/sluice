@@ -1,6 +1,5 @@
 package photos.sluice.domain.dating;
 
-import photos.sluice.application.port.out.DateSource;
 import photos.sluice.domain.model.Confidence;
 import photos.sluice.domain.model.DateResult;
 import photos.sluice.domain.model.MediaFile;

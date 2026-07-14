@@ -1,7 +1,8 @@
 package photos.sluice.adapter.metadata;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.DateSource;
+import photos.sluice.domain.dating.DateSource;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.TakeoutSidecar;
 
@@ -22,7 +23,7 @@ public class FilenameSource implements DateSource {
             Pattern.compile("(20\\d{2}|19\\d{2})[-_.]?(\\d{2})[-_.]?(\\d{2})");
 
     @Override
-    public Optional<LocalDateTime> resolve(MediaFile file, TakeoutSidecar sidecar) {
+    public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
         Matcher matcher = DATE_PATTERN.matcher(file.path().getFileName().toString());
         if (!matcher.find()) {
             return Optional.empty();
@@ -32,7 +33,7 @@ public class FilenameSource implements DateSource {
         int day = Integer.parseInt(matcher.group(3));
         try {
             return Optional.of(LocalDate.of(year, month, day).atStartOfDay());
-        } catch (DateTimeException e) {
+        } catch (DateTimeException _) {
             return Optional.empty();
         }
     }
