@@ -3,6 +3,7 @@ package photos.sluice.config;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
@@ -19,5 +20,10 @@ public class AppConfig {
     public DateResolver dateResolver(TakeoutJsonSource sidecarSource, ExifSource exifSource,
             FilenameSource filenameSource, MtimeSource mtimeSource) {
         return new DateResolver(sidecarSource, exifSource, filenameSource, mtimeSource);
+    }
+
+    @Bean
+    public CsvLibraryHashIndex csvLibraryHashIndex(PathsConfig pathsConfig) {
+        return new CsvLibraryHashIndex(pathsConfig.logs().resolve("library-hashes.csv"));
     }
 }

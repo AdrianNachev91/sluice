@@ -2,8 +2,6 @@ package photos.sluice.adapter.fs;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.IOException;
@@ -121,8 +119,6 @@ class CsvLibraryHashIndexTest {
     }
 
     private static CsvLibraryHashIndex indexAt(Path repoRoot) {
-        PathsConfig pathsConfig = new PathsConfig(
-                new PathsProperties(repoRoot.toString(), repoRoot.toString(), repoRoot.toString()));
-        return new CsvLibraryHashIndex(pathsConfig);
+        return new CsvLibraryHashIndex(repoRoot.resolve("logs").resolve("library-hashes.csv"));
     }
 }

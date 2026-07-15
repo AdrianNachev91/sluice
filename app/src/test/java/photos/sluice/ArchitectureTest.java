@@ -68,4 +68,13 @@ class ArchitectureTest {
             noClasses().that().resideOutsideOfPackages("..adapter..", "..config..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter..")
                     .as("only config (the composition root) may depend on a concrete adapter; everything else goes through ports");
+
+    // Config is the composition root: it may depend on adapters (to wire them), but the arrow must
+    // not point back - an adapter depending on config would mean the wiring layer's concerns leak
+    // into the effect implementation it's supposed to just assemble.
+    @ArchTest
+    static final ArchRule adaptersDoNotDependOnConfig =
+            noClasses().that().resideInAPackage("..adapter..")
+                    .should().dependOnClassesThat().resideInAPackage("..config..")
+                    .as("adapters receive resolved values from wiring; they must not depend on config");
 }

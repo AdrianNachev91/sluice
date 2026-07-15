@@ -1,8 +1,6 @@
 package photos.sluice.adapter.fs;
 
-import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.HashIndexPort;
-import photos.sluice.config.PathsConfig;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.BufferedWriter;
@@ -21,7 +19,6 @@ import java.util.Map;
 
 // Format matches an existing on-disk hash index this adapter must stay interoperable with:
 // 2 columns, always-quoted, UTF-8 encoded with a leading byte-order mark.
-@Component
 public class CsvLibraryHashIndex implements HashIndexPort {
 
     private static final String HEADER = "\"sha256\",\"path\"";
@@ -29,21 +26,20 @@ public class CsvLibraryHashIndex implements HashIndexPort {
     // strip it automatically, so it survives as a literal leading character.
     private static final char BOM = '﻿';
 
-    private final PathsConfig pathsConfig;
+    private final Path indexFile;
 
-    public CsvLibraryHashIndex(PathsConfig pathsConfig) {
-        this.pathsConfig = pathsConfig;
+    public CsvLibraryHashIndex(Path indexFile) {
+        this.indexFile = indexFile;
     }
 
     @Override
     public Map<String, List<Path>> load() {
-        Path file = indexFile();
-        if (!Files.isRegularFile(file)) {
+        if (!Files.isRegularFile(indexFile)) {
             return Map.of();
         }
         Map<String, List<Path>> result = new LinkedHashMap<>();
         try {
-            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+            List<String> lines = Files.readAllLines(indexFile, StandardCharsets.UTF_8);
             for (int i = 0; i < lines.size(); i++) {
                 // The BOM (if present) and the header row only ever appear on line 0.
                 String line = i == 0 ? stripBom(lines.get(i)) : lines.get(i);
@@ -57,7 +53,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
                 }
             }
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read hash index " + file, e);
+            throw new UncheckedIOException("Failed to read hash index " + indexFile, e);
         }
         return result;
     }
@@ -75,7 +71,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         if (entries.isEmpty()) {
             return;
         }
-        Path file = indexFile();
+        Path file = indexFile;
         try {
             Files.createDirectories(file.getParent());
             boolean exists = Files.isRegularFile(file);
@@ -115,10 +111,6 @@ public class CsvLibraryHashIndex implements HashIndexPort {
             byte last = buffer.get(0);
             return last == '\n' || last == '\r';
         }
-    }
-
-    private Path indexFile() {
-        return pathsConfig.logs().resolve("library-hashes.csv");
     }
 
     private static String formatLine(IndexEntry entry) {
