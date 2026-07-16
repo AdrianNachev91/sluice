@@ -40,6 +40,14 @@ public class PathsConfig {
         return repoRoot().resolve("logs");
     }
 
+    public Path sorted() {
+        return repoRoot().resolve("Sorted");
+    }
+
+    public Path review() {
+        return repoRoot().resolve("Review");
+    }
+
     private static Path resolve(String raw) {
         return Path.of(raw).toAbsolutePath().normalize();
     }

@@ -10,7 +10,7 @@ class PathsConfigTest {
 
     @Test
     void relativePathsResolveAgainstWorkingDirectory() {
-        PathsConfig config = new PathsConfig(new PathsProperties("relative-repo", "relative-lib", "relative-inbox"));
+        var config = new PathsConfig(new PathsProperties("relative-repo", "relative-lib", "relative-inbox"));
 
         Path expectedBase = Path.of("").toAbsolutePath().normalize();
         assertThat(config.repoRoot()).isEqualTo(expectedBase.resolve("relative-repo"));
@@ -21,7 +21,7 @@ class PathsConfigTest {
     @Test
     void absolutePathsResolveUnchanged() {
         Path absolute = Path.of("").toAbsolutePath().normalize();
-        PathsConfig config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+        var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
 
         assertThat(config.repoRoot()).isEqualTo(absolute);
     }
@@ -29,8 +29,24 @@ class PathsConfigTest {
     @Test
     void logsIsDerivedFromRepoRoot() {
         Path absolute = Path.of("").toAbsolutePath().normalize();
-        PathsConfig config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+        var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
 
         assertThat(config.logs()).isEqualTo(absolute.resolve("logs"));
+    }
+
+    @Test
+    void sortedIsDerivedFromRepoRoot() {
+        Path absolute = Path.of("").toAbsolutePath().normalize();
+        var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+
+        assertThat(config.sorted()).isEqualTo(absolute.resolve("Sorted"));
+    }
+
+    @Test
+    void reviewIsDerivedFromRepoRoot() {
+        Path absolute = Path.of("").toAbsolutePath().normalize();
+        var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+
+        assertThat(config.review()).isEqualTo(absolute.resolve("Review"));
     }
 }

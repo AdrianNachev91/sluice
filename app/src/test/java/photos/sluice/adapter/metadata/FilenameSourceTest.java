@@ -16,7 +16,7 @@ class FilenameSourceTest {
 
     @Test
     void resolvesRunTogetherDate() {
-        MediaFile file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
+        var file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -25,7 +25,7 @@ class FilenameSourceTest {
 
     @Test
     void resolvesDashSeparatedDate() {
-        MediaFile file = new MediaFile(Path.of("IMG-2021-03-15-WA0001.jpg"));
+        var file = new MediaFile(Path.of("IMG-2021-03-15-WA0001.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -34,7 +34,7 @@ class FilenameSourceTest {
 
     @Test
     void resolvesUnderscoreSeparatedDate() {
-        MediaFile file = new MediaFile(Path.of("IMG_2021_03_15_WA0001.jpg"));
+        var file = new MediaFile(Path.of("IMG_2021_03_15_WA0001.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -43,7 +43,7 @@ class FilenameSourceTest {
 
     @Test
     void resolvesPeriodSeparatedDate() {
-        MediaFile file = new MediaFile(Path.of("IMG.2021.03.15.jpg"));
+        var file = new MediaFile(Path.of("IMG.2021.03.15.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -53,7 +53,7 @@ class FilenameSourceTest {
     @Test
     void ignoresAnyEmbeddedTimeComponent() {
         // Folder routing only needs year/month/day, so an embedded time component is ignored.
-        MediaFile file = new MediaFile(Path.of("IMG_20210315_235959.jpg"));
+        var file = new MediaFile(Path.of("IMG_20210315_235959.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -62,7 +62,7 @@ class FilenameSourceTest {
 
     @Test
     void returnsEmptyWhenNoDateInFilename() {
-        MediaFile file = new MediaFile(Path.of("vacation-photo.jpg"));
+        var file = new MediaFile(Path.of("vacation-photo.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -72,7 +72,7 @@ class FilenameSourceTest {
     @Test
     void returnsEmptyForImpossibleCalendarDate() {
         // 20210230 has a well-formed year/month/day shape but Feb 30 doesn't exist.
-        MediaFile file = new MediaFile(Path.of("IMG_20210230_103000.jpg"));
+        var file = new MediaFile(Path.of("IMG_20210230_103000.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -81,7 +81,7 @@ class FilenameSourceTest {
 
     @Test
     void returnsEmptyForOutOfRangeMonth() {
-        MediaFile file = new MediaFile(Path.of("IMG_20211315_103000.jpg"));
+        var file = new MediaFile(Path.of("IMG_20211315_103000.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 

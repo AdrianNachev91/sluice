@@ -17,7 +17,7 @@ class ExifSourceTest {
 
     @Test
     void resolvesDateTimeOriginalFromJpeg() {
-        MediaFile file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
+        var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -26,7 +26,7 @@ class ExifSourceTest {
 
     @Test
     void resolvesDateTimeOriginalFromIphoneHeic() {
-        MediaFile file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
+        var file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -35,7 +35,7 @@ class ExifSourceTest {
 
     @Test
     void fallsBackToDateTimeDigitizedWhenOriginalAbsent() {
-        MediaFile file = new MediaFile(FIXTURES.resolve("digitized-only-exif.jpg"));
+        var file = new MediaFile(FIXTURES.resolve("digitized-only-exif.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -44,7 +44,7 @@ class ExifSourceTest {
 
     @Test
     void returnsEmptyWhenImageHasNoExifData() {
-        MediaFile file = new MediaFile(FIXTURES.resolve("no-exif.jpg"));
+        var file = new MediaFile(FIXTURES.resolve("no-exif.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
@@ -53,7 +53,7 @@ class ExifSourceTest {
 
     @Test
     void returnsEmptyWhenFileIsNotAnImage() {
-        MediaFile file = new MediaFile(FIXTURES.resolve("not-an-image.txt"));
+        var file = new MediaFile(FIXTURES.resolve("not-an-image.txt"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 

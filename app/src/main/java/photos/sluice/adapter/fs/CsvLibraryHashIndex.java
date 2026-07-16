@@ -141,7 +141,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
     // field) or the field's closing quote, disambiguated by peeking at the next character.
     private static List<String> parseCsvFields(String line) {
         List<String> fields = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
+        var current = new StringBuilder();
         boolean inQuotes = false;
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);

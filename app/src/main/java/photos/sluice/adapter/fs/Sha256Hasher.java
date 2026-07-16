@@ -31,7 +31,7 @@ public class Sha256Hasher implements Sha256Port {
         // requiring the whole file in memory at once. The read loop exists only to drive that
         // side effect - the returned bytes themselves are discarded.
         try (InputStream in = Files.newInputStream(file);
-             DigestInputStream digestIn = new DigestInputStream(in, digest)) {
+             var digestIn = new DigestInputStream(in, digest)) {
             byte[] buffer = new byte[BUFFER_SIZE];
             //noinspection StatementWithEmptyBody -- reading drives the digest; the bytes themselves are discarded
             while (digestIn.read(buffer) != -1) {}

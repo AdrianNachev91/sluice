@@ -1,5 +1,7 @@
 package photos.sluice.adapter.fs;
 
+import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.InboxScannerPort;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.ScanResult;
 import photos.sluice.domain.model.TakeoutSidecar;
@@ -19,14 +21,15 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 // Recursively enumerates every regular file under an inbox tree and pairs Takeout JSON sidecars
-// against recognized media files. No port/out exists for scanning yet, so this is a plain class
-// rather than a Spring-managed adapter.
+// against recognized media files.
 // Flowcharts + scenario table: app/docs/design/adapter/fs/inbox-scanning.md.
-public final class InboxScanner {
+@Component
+public final class InboxScanner implements InboxScannerPort {
 
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
     private final TakeoutSidecarPairer sidecarPairer = new TakeoutSidecarPairer();
 
+    @Override
     public ScanResult scan(Path inboxRoot) {
         List<Path> mediaPaths = new ArrayList<>();
         List<Path> jsonPaths = new ArrayList<>();

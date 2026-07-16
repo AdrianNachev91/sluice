@@ -30,9 +30,9 @@ class DateResolverTest {
 
     @Test
     void sidecarWinsOverExif(@TempDir Path dir) throws IOException {
-        MediaFile file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg")); // exif date 2021-03-15
+        var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg")); // exif date 2021-03-15
         LocalDateTime sidecarDate = LocalDateTime.of(2015, 5, 5, 12, 0, 0);
-        TakeoutSidecar sidecar = new TakeoutSidecar(writeSidecar(dir, sidecarDate));
+        var sidecar = new TakeoutSidecar(writeSidecar(dir, sidecarDate));
 
         DateResult result = resolver.resolve(file, sidecar);
 
@@ -41,7 +41,7 @@ class DateResolverTest {
 
     @Test
     void exifWinsWhenNoSidecar() {
-        MediaFile file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
+        var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
 
         DateResult result = resolver.resolve(file, null);
 
@@ -51,7 +51,7 @@ class DateResolverTest {
 
     @Test
     void resolvesHeicExifWithoutExiftool() {
-        MediaFile file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
+        var file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
 
         DateResult result = resolver.resolve(file, null);
 
@@ -61,7 +61,7 @@ class DateResolverTest {
 
     @Test
     void filenameWinsWhenNoSidecarAndNoExif() {
-        MediaFile file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
+        var file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
 
         DateResult result = resolver.resolve(file, null);
 
@@ -72,7 +72,7 @@ class DateResolverTest {
     @Test
     void trustedFilenameDateBypassesThePlausibilityGuard() {
         // 1999 predates the plausibility floor, but only LOW-confidence sources are guarded.
-        MediaFile file = new MediaFile(Path.of("IMG_19990101_120000.jpg"));
+        var file = new MediaFile(Path.of("IMG_19990101_120000.jpg"));
 
         DateResult result = resolver.resolve(file, null);
 
@@ -121,7 +121,7 @@ class DateResolverTest {
     @Test
     void allSourcesFailingStillProducesAnUnsortableResult() {
         // No sidecar, no exif (nonexistent path), no date-pattern filename, and no mtime to read.
-        MediaFile file = new MediaFile(Path.of("does-not-exist/plain-file.jpg"));
+        var file = new MediaFile(Path.of("does-not-exist/plain-file.jpg"));
 
         DateResult result = resolver.resolve(file, null);
 

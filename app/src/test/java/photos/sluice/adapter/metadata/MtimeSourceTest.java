@@ -31,7 +31,7 @@ class MtimeSourceTest {
 
     @Test
     void returnsEmptyWhenFileDoesNotExist() {
-        MediaFile file = new MediaFile(Path.of("does-not-exist.jpg"));
+        var file = new MediaFile(Path.of("does-not-exist.jpg"));
 
         Optional<LocalDateTime> result = source.resolve(file, null);
 
