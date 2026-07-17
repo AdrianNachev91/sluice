@@ -5,9 +5,11 @@ import photos.sluice.application.port.out.MediaStore;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 
 // Flowchart + scenario table: app/docs/design/adapter/fs/media-store.md.
 @Component
@@ -53,6 +55,30 @@ public class NioMediaStore implements MediaStore {
             Files.createDirectories(dir);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to create directory " + dir, e);
+        }
+    }
+
+    @Override
+    public boolean exists(Path path) {
+        return Files.exists(path);
+    }
+
+    @Override
+    public long size(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read size of " + path, e);
+        }
+    }
+
+    @Override
+    public void appendLine(Path file, String line) {
+        try {
+            Files.writeString(file, line + System.lineSeparator(), StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to append line to " + file, e);
         }
     }
 

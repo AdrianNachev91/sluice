@@ -40,4 +40,6 @@ once a free numbered candidate is found it is used immediately, matching first-f
 
 - `delete` and `ensureDirectory` are thin `Files` wrappers with no branching worth diagramming;
   both rewrap `IOException` as `UncheckedIOException` with a contextual message, matching every
-  other adapter in this package.
+  other adapter in this package. The same is true of `exists`, `size`, and `appendLine`.
+- The main consumer of this port's full method set (including `exists`/`size`/`appendLine`):
+  `sort-engine.md` in the `application/service` design folder.

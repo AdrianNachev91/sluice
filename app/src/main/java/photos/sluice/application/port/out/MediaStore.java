@@ -11,4 +11,10 @@ public interface MediaStore {
     void delete(Path path);
 
     void ensureDirectory(Path dir);
+
+    boolean exists(Path path);
+
+    long size(Path path);
+
+    void appendLine(Path file, String line);
 }

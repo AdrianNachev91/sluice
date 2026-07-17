@@ -26,7 +26,7 @@ public final class MediaTypeDetector {
         return Optional.empty();
     }
 
-    private static String extensionOf(Path path) {
+    public static String extensionOf(Path path) {
         String name = path.getFileName().toString();
         int dot = name.lastIndexOf('.');
         if (dot < 0 || dot == name.length() - 1) {

@@ -8,6 +8,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -135,5 +136,44 @@ class NioMediaStoreTest {
         store.ensureDirectory(dir);
 
         assertThat(Files.isDirectory(dir)).isTrue();
+    }
+
+    @Test
+    void existsIsTrueForARealFileAndFalseOtherwise(@TempDir Path root) throws IOException {
+        Path file = root.resolve("present.jpg");
+        Files.writeString(file, "bytes");
+        Path missing = root.resolve("absent.jpg");
+
+        assertThat(store.exists(file)).isTrue();
+        assertThat(store.exists(missing)).isFalse();
+    }
+
+    @Test
+    void sizeReturnsByteCount(@TempDir Path root) throws IOException {
+        Path file = root.resolve("file.jpg");
+        Files.writeString(file, "12345", StandardCharsets.UTF_8);
+
+        assertThat(store.size(file)).isEqualTo(5);
+    }
+
+    @Test
+    void appendLineCreatesFileOnFirstCallThenAppendsOnSubsequentCalls(@TempDir Path root) {
+        Path file = root.resolve("_reasons.txt");
+
+        store.appendLine(file, "IMG_0001.jpg - low-res");
+        store.appendLine(file, "IMG_0002.jpg - unsorted-implausible-date");
+
+        assertThat(Files.exists(file)).isTrue();
+        List<String> lines = readLines(file);
+        assertThat(lines).containsExactly(
+                "IMG_0001.jpg - low-res", "IMG_0002.jpg - unsorted-implausible-date");
+    }
+
+    private static List<String> readLines(Path file) {
+        try {
+            return Files.readAllLines(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }

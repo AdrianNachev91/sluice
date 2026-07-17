@@ -3,13 +3,14 @@ package photos.sluice.config;
 import jakarta.annotation.PostConstruct;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.PathsPort;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
 @Component
-public class PathsConfig {
+public class PathsConfig implements PathsPort {
 
     private final PathsProperties properties;
 
@@ -32,6 +33,7 @@ public class PathsConfig {
         return resolve(Objects.requireNonNull(properties.libraryRoot()));
     }
 
+    @Override
     public Path inbox() {
         return resolve(Objects.requireNonNull(properties.inbox()));
     }
@@ -40,10 +42,12 @@ public class PathsConfig {
         return repoRoot().resolve("logs");
     }
 
+    @Override
     public Path sorted() {
         return repoRoot().resolve("Sorted");
     }
 
+    @Override
     public Path review() {
         return repoRoot().resolve("Review");
     }
