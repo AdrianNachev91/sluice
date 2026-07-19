@@ -10,6 +10,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 
 // Flowchart + scenario table: app/docs/design/adapter/fs/media-store.md.
 @Component
@@ -79,6 +82,41 @@ public class NioMediaStore implements MediaStore {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to append line to " + file, e);
+        }
+    }
+
+    @Override
+    public void removeEmptyDirectories(Path root) {
+        List<Path> directories;
+        try (Stream<Path> walk = Files.walk(root)) {
+            directories = walk.filter(Files::isDirectory).filter(dir -> !dir.equals(root)).toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to walk " + root, e);
+        }
+        // Deepest directories first. A chain of nested empty directories then collapses bottom-up
+        // in this single pass. By the time a shallower directory is checked, any empty child it
+        // had has already been removed, leaving it genuinely empty too if nothing else remains.
+        directories.stream()
+                .sorted(Comparator.comparingInt(Path::getNameCount).reversed())
+                .forEach(this::deleteIfEmptyOfFiles);
+    }
+
+    private void deleteIfEmptyOfFiles(Path dir) {
+        if (!Files.exists(dir) || containsAnyFile(dir)) {
+            return;
+        }
+        try {
+            Files.delete(dir);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to remove empty directory " + dir, e);
+        }
+    }
+
+    private static boolean containsAnyFile(Path dir) {
+        try (Stream<Path> walk = Files.walk(dir)) {
+            return walk.anyMatch(Files::isRegularFile);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to inspect " + dir, e);
         }
     }
 

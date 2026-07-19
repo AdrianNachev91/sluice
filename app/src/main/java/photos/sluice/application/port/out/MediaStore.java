@@ -17,4 +17,8 @@ public interface MediaStore {
     long size(Path path);
 
     void appendLine(Path file, String line);
+
+    // Removes every subdirectory under root left empty of all files (root itself is never a
+    // candidate). A directory holding a genuine non-media leftover is left in place.
+    void removeEmptyDirectories(Path root);
 }

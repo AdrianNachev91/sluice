@@ -81,13 +81,39 @@ looks at it - "which folder does this date belong in" is meaningless without a u
 low-res gate only ever runs on a file that already cleared that check. A "reason noted" move also
 appends a line (`"<filename> - <reason>"`) to a `_reasons.txt` file in the destination folder.
 
+## 5. Post-run sweep
+
+Runs once, after every keeper has been routed:
+
+```mermaid
+flowchart TD
+    A["remaining media = step 1's<br/>scan media, minus every<br/>in-scope file's path"] --> C["SidecarSweep.findOrphaned<br/>on the derived media + JSON lists"]
+    B["remaining JSON = step 1's<br/>scan JSON paths, minus every<br/>path section 2 consumed"] --> C
+    C --> D["delete every orphaned<br/>sidecar returned"]
+    D --> E["MediaStore.removeEmptyDirectories<br/>(Inbox root)"]
+```
+
+This is independent of section 2's per-file consumption - that mechanism only spends a sidecar
+whose date actually won for its file. The sweep instead catches every other spent sidecar too.
+That includes unmatched ones, and ones whose media left via a different branch (sorted, or deleted
+as a duplicate) than the one that would have consumed their sidecar inline. This is what keeps
+sidecars from piling up across incremental year-by-year runs. `SortSummary.sidecarsDeleted` is not
+incremented here - only section 2's inline consumption counts toward it.
+
+"Remaining" is derived from step 1's original scan, not observed directly. `dedup.plan`'s three
+buckets (section 1) are a total partition of every in-scope file, and each bucket is either moved
+or deleted before the sweep runs. So every in-scope file is guaranteed to have left the Inbox
+already, and step 1's original scan lists minus what this run itself removed already describe
+what's left.
+
 ## Scenarios
 
 | Scenario | Outcome |
 |---|---|
 | Photo with a Takeout sidecar that produced its date | Sidecar deleted, counted in `sidecarsDeleted` |
 | Photo `+` its `-edited` copy, sharing one sidecar, both in scope | Sidecar deleted exactly once, `sidecarsDeleted` = 1, not 2 |
-| Sidecar present but invalid/unrelated | Left on disk; date falls through to the next source in the chain |
+| Sidecar present but invalid/unrelated, and its would-be media leaves the directory this run | Not deleted inline (not counted in `sidecarsDeleted`); swept afterward since nothing in the directory owns it anymore |
+| Sidecar present but invalid/unrelated, and a same-named media file remains in the directory (e.g. awaiting a future run) | Left on disk by both mechanisms |
 | Inbox file's hash matches a library-index hash whose recorded path still exists | Deleted, counted in `reimportsDeleted`, never moved |
 | Inbox file's hash matches a library-index hash whose recorded path is gone | Not treated as redundant - sorts (or routes) normally |
 | Two inbox files share bytes, neither is in the library | First one sorts; the rest are deleted, counted in `byteDupsDeleted` |
@@ -95,6 +121,7 @@ appends a line (`"<filename> - <reason>"`) to a `_reasons.txt` file in the desti
 | Small or low-dimension photo | `Review/<yyyy-MM>/`, `lowRes` count |
 | Video or `.svg`, however small | Exempt from the low-res gate - sorts normally |
 | Sorted photo whose date came only from file-modification time | Sorts normally, but also listed in `lowConfidenceFiles` |
+| A Takeout album directory left with no files at all after this run | Directory removed (cascades up through empty parent directories too) |
 
 ## Related
 
@@ -102,5 +129,4 @@ appends a line (`"<filename> - <reason>"`) to a `_reasons.txt` file in the desti
   appending a reason line): `media-store.md` in the `adapter/fs` design folder.
 - Scope selection itself (`Year`/`OldestN`/`OldestYear`) is delegated to
   `domain/dating/ScopeSelector` and not diagrammed here - see that class directly.
-- A whole-Inbox sweep for now-orphaned sidecars and directories left empty of all files is not
-  part of this pipeline yet; it lands in a later addition to this same engine.
+- The sweep's orphan decision itself: `sidecar-sweep.md` in the `domain/scan` design folder.

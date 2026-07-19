@@ -97,7 +97,7 @@ class SortEngineTest {
     }
 
     @Test
-    void invalidSidecarIsNotDeletedAndDateFallsThroughPastExifToFilename(@TempDir Path root) throws IOException {
+    void invalidSidecarIsNotConsumedInlineButIsSweptOnceItsMediaLeavesTheDirectory(@TempDir Path root) throws IOException {
         Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20210315_photo.jpg"), padded("keeper"));
         Path sidecar = inbox.resolve("20210315_photo.jpg.supplemental-metadata.json");
@@ -105,9 +105,68 @@ class SortEngineTest {
 
         SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
 
+        // Mechanism 1 (inline consumption) never touches it. Its date came from filename, not
+        // this sidecar, so sidecarsDeleted stays 0. But the whole-Inbox sweep (mechanism 2) is
+        // independent of why the media left. Once the photo is sorted away, nothing in the
+        // sidecar's directory owns it anymore, so the sweep deletes it anyway.
         assertThat(summary.sidecarsDeleted()).isEqualTo(0);
-        assertThat(Files.exists(sidecar)).isTrue();
+        assertThat(Files.exists(sidecar)).isFalse();
         assertThat(Files.exists(root.resolve("Sorted/Photos/2021/03/20210315_photo.jpg"))).isTrue();
+    }
+
+    @Test
+    void orphanedSidecarInANestedAlbumDirIsSweptAndTheNowEmptyDirIsRemoved(@TempDir Path root) throws IOException {
+        Path inbox = inboxOf(root);
+        Path albumDir = inbox.resolve("Takeout").resolve("Album");
+        writeFile(albumDir.resolve("20210315_photo.jpg"), padded("keeper"));
+        Path sidecar = albumDir.resolve("20210315_photo.jpg.supplemental-metadata.json");
+        Files.writeString(sidecar, "{not valid json");
+
+        newEngine(root).sort(new SortScope.OldestYear());
+
+        assertThat(Files.exists(sidecar)).isFalse();
+        assertThat(Files.exists(albumDir)).isFalse();
+        assertThat(Files.exists(inbox.resolve("Takeout"))).isFalse();
+    }
+
+    @Test
+    void sidecarSurvivesTheSweepWhileItsMediaIsStillPresentAwaitingAFutureRun(@TempDir Path root) throws IOException {
+        Path inbox = inboxOf(root);
+        Path albumDir = inbox.resolve("Takeout").resolve("Album");
+        writeFile(albumDir.resolve("20190101_a.jpg"), padded("in-scope"));
+        writeFile(albumDir.resolve("20250101_future.jpg"), padded("future"));
+        Path futureSidecar = albumDir.resolve("20250101_future.jpg.supplemental-metadata.json");
+        writeSidecar(futureSidecar, LocalDateTime.of(2025, 1, 1, 0, 0, 0));
+
+        SortSummary summary = newEngine(root).sort(new SortScope.Year(2019, null));
+
+        assertThat(summary.processed()).isEqualTo(1);
+        assertThat(Files.exists(root.resolve("Sorted/Photos/2019/01/20190101_a.jpg"))).isTrue();
+        assertThat(Files.exists(albumDir.resolve("20250101_future.jpg"))).isTrue();
+        assertThat(Files.exists(futureSidecar)).isTrue();
+        assertThat(Files.exists(albumDir)).isTrue();
+    }
+
+    @Test
+    void sidecarOfAReimportDeletedFileIsSweptTooNotJustSidecarsOfMovedFiles(@TempDir Path root) throws IOException {
+        Path inbox = inboxOf(root);
+        String content = padded("reimport-with-sidecar");
+        Path inboxFile = inbox.resolve("20190101_dup.jpg");
+        writeFile(inboxFile, content);
+        String hash = sha256Port.hash(inboxFile);
+        Path libraryFile = root.resolve("LibraryFixture").resolve("existing.jpg");
+        writeFile(libraryFile, content);
+        HashIndexPort hashIndex = seededIndex(root, hash, libraryFile);
+        // Invalid, so mechanism 1 never wins the date-resolution race for it. Any cleanup here can
+        // only be mechanism 2 (the sweep) noticing the media is gone, not the inline consumption.
+        Path sidecar = inbox.resolve("20190101_dup.jpg.supplemental-metadata.json");
+        Files.writeString(sidecar, "{not valid json");
+
+        SortSummary summary = newEngine(root, hashIndex).sort(new SortScope.OldestYear());
+
+        assertThat(summary.reimportsDeleted()).isEqualTo(1);
+        assertThat(summary.sidecarsDeleted()).isEqualTo(0);
+        assertThat(Files.exists(sidecar)).isFalse();
     }
 
     @Test

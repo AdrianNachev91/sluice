@@ -76,13 +76,16 @@ public final class TakeoutSidecarPairer {
 
     // A root-level path has no parent to scope pairing by; fall back to the path itself so it
     // groups with nothing rather than throwing (Collectors.groupingBy rejects a null key).
-    private static Path directoryKeyOf(Path path) {
+    // Package-visible: SidecarSweep reuses this to scope its own orphan check per directory.
+    static Path directoryKeyOf(Path path) {
         Path parent = path.getParent();
         return parent != null ? parent : path;
     }
 
-    // Derives the media filename a sidecar describes from its base name (json extension already stripped).
-    private static String ownerKeyOf(Path json) {
+    // Derives the media filename a sidecar describes from its base name (json extension already
+    // stripped). Package-visible: SidecarSweep reuses this so the sweep's "which media does this
+    // sidecar belong to" derivation never drifts from the pairer's.
+    static String ownerKeyOf(Path json) {
         String base = stripJsonExtension(json.getFileName().toString());
         Matcher supplemental = SUPPLEMENTAL.matcher(base);
         if (supplemental.matches()) {

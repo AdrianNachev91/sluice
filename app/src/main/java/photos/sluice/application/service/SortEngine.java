@@ -25,6 +25,7 @@ import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.TakeoutSidecar;
 import photos.sluice.domain.scan.MediaTypeDetector;
+import photos.sluice.domain.scan.SidecarSweep;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -35,12 +36,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 // The one-pass Inbox -> Sorted/Review pipeline. Dates every scanned file, narrows to the
 // requested scope, deletes what's already redundant, and routes undatable/low-res files to
-// Review. Everything else gets sorted. Does not yet sweep the whole Inbox for orphaned sidecars
-// or empty directories - that sweep lands in a later addition, appended after the per-file
-// routing below.
+// Review. Everything else gets sorted. A final whole-Inbox sweep then removes now-orphaned
+// Takeout sidecars and any directory left empty of all files.
 @Component
 public class SortEngine implements SortUseCase {
 
@@ -59,6 +60,7 @@ public class SortEngine implements SortUseCase {
     private final ByteIdenticalDedup dedup = new ByteIdenticalDedup();
     private final ScopeSelector scopeSelector = new ScopeSelector();
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
+    private final SidecarSweep sidecarSweep = new SidecarSweep();
 
     public SortEngine(PathsPort pathsPort, InboxScannerPort inboxScanner, DateResolver dateResolver,
             Sha256Port sha256Port, HashIndexPort hashIndexPort, ImageDimensionsPort imageDimensionsPort,
@@ -91,7 +93,7 @@ public class SortEngine implements SortUseCase {
         // below, so its sidecar is already spent regardless of which branch runs. This runs as
         // its own pass here, before dedup and routing, to keep that independence visible rather
         // than interleaving it into decisions it doesn't actually depend on.
-        int sidecarsDeleted = consumeSidecars(inScope, scanResult.sidecars());
+        Set<Path> consumedSidecars = consumeSidecars(inScope, scanResult.sidecars());
 
         Set<String> libraryHashes = existingLibraryHashes();
         List<HashedMedia> hashed = inScope.stream()
@@ -104,22 +106,19 @@ public class SortEngine implements SortUseCase {
 
         RoutingResult routing = routeSurvivors(plan.toSort(), dateByFile);
 
-        // A whole-Inbox sweep for now-orphaned sidecars and directories left empty of all files
-        // still belongs here, appended after routing and before the summary is built - not yet
-        // implemented in this chunk.
+        sweepOrphanedSidecarsAndEmptyDirectories(scanResult, inScope, consumedSidecars);
 
         return new SortSummary(inScope.size(), plan.redundantVsLibrary().size(), plan.withinBatchDuplicates().size(),
-                routing.photosSorted, routing.videosSorted, routing.lowRes, routing.unsorted, sidecarsDeleted,
+                routing.photosSorted, routing.videosSorted, routing.lowRes, routing.unsorted, consumedSidecars.size(),
                 routing.lowConfidenceFiles, routing.unsortedFiles);
     }
 
-    private int consumeSidecars(List<DatedMedia> inScope, Map<MediaFile, TakeoutSidecar> sidecars) {
+    private Set<Path> consumeSidecars(List<DatedMedia> inScope, Map<MediaFile, TakeoutSidecar> sidecars) {
         // An "-edited" copy shares its original's sidecar - TakeoutSidecarPairer maps both media
         // files to the same JSON path. So the same path can come up more than once here. Set.add
         // returns false on the second occurrence, which is what keeps a shared sidecar from being
         // deleted and counted twice.
         Set<Path> deletedSidecars = new HashSet<>();
-        int sidecarsDeleted = 0;
         for (DatedMedia dated : inScope) {
             TakeoutSidecar sidecar = sidecars.get(dated.file());
             // Only a sidecar that actually won the date-resolution chain is spent. One that
@@ -128,10 +127,37 @@ public class SortEngine implements SortUseCase {
             if (sidecar != null && dated.date().source().equals(SIDECAR_SOURCE)
                     && deletedSidecars.add(sidecar.jsonPath())) {
                 mediaStore.delete(sidecar.jsonPath());
-                sidecarsDeleted++;
             }
         }
-        return sidecarsDeleted;
+        return deletedSidecars;
+    }
+
+    // Independent of consumeSidecars above. That method only spends a sidecar whose date actually
+    // won for its file. This sweep instead treats a sidecar as spent purely because its owning
+    // media is gone from its directory now, regardless of why. That catches unmatched sidecars
+    // and ones whose media was deleted as a duplicate, so sidecars never pile up across
+    // incremental year-by-year runs. A directory left empty of all files afterward is then
+    // removed.
+    //
+    // "Remaining" is derived from the original scan rather than observed directly. Every in-scope
+    // file is guaranteed to have left the Inbox by this point. dedup.plan's three buckets are a
+    // total partition of inScope, and every one of toSort/redundantVsLibrary/withinBatchDuplicates
+    // is either moved or deleted above. So the original scan's media and JSON lists, minus what
+    // this run itself removed, already describe what's left.
+    private void sweepOrphanedSidecarsAndEmptyDirectories(ScanResult scanResult, List<DatedMedia> inScope,
+            Set<Path> consumedSidecars) {
+        Set<Path> removedMediaPaths = inScope.stream().map(dated -> dated.file().path()).collect(Collectors.toSet());
+        List<Path> remainingMediaPaths = scanResult.media().stream()
+                .map(MediaFile::path)
+                .filter(path -> !removedMediaPaths.contains(path))
+                .toList();
+        List<Path> remainingJsonPaths = scanResult.jsonPaths().stream()
+                .filter(path -> !consumedSidecars.contains(path))
+                .toList();
+        for (Path orphaned : sidecarSweep.findOrphaned(remainingMediaPaths, remainingJsonPaths)) {
+            mediaStore.delete(orphaned);
+        }
+        mediaStore.removeEmptyDirectories(pathsPort.inbox());
     }
 
     // A hash the index remembers is only treated as "already in the library" if at least one of

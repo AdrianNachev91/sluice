@@ -169,6 +169,43 @@ class NioMediaStoreTest {
                 "IMG_0001.jpg - low-res", "IMG_0002.jpg - unsorted-implausible-date");
     }
 
+    @Test
+    void removeEmptyDirectoriesCollapsesNestedEmptyChainBottomUp(@TempDir Path root) throws IOException {
+        Path nested = Files.createDirectories(root.resolve("Takeout").resolve("Google Photos").resolve("2019-06"));
+
+        store.removeEmptyDirectories(root);
+
+        assertThat(Files.exists(nested)).isFalse();
+        assertThat(Files.exists(root.resolve("Takeout").resolve("Google Photos"))).isFalse();
+        assertThat(Files.exists(root.resolve("Takeout"))).isFalse();
+        assertThat(Files.exists(root)).isTrue();
+    }
+
+    @Test
+    void removeEmptyDirectoriesLeavesADirectoryWithAFileInPlace(@TempDir Path root) throws IOException {
+        Path keptDir = Files.createDirectories(root.resolve("keep"));
+        Files.writeString(keptDir.resolve("leftover.txt"), "not media");
+        Path emptyDir = Files.createDirectories(root.resolve("empty"));
+
+        store.removeEmptyDirectories(root);
+
+        assertThat(Files.exists(keptDir)).isTrue();
+        assertThat(Files.exists(emptyDir)).isFalse();
+    }
+
+    @Test
+    void removeEmptyDirectoriesLeavesAnAncestorInPlaceWhenADeeperSiblingStillHasAFile(@TempDir Path root) throws IOException {
+        Path emptyBranch = Files.createDirectories(root.resolve("album").resolve("empty-sub"));
+        Path fileBranch = Files.createDirectories(root.resolve("album").resolve("has-file"));
+        Files.writeString(fileBranch.resolve("leftover.txt"), "not media");
+
+        store.removeEmptyDirectories(root);
+
+        assertThat(Files.exists(emptyBranch)).isFalse();
+        assertThat(Files.exists(fileBranch)).isTrue();
+        assertThat(Files.exists(root.resolve("album"))).isTrue();
+    }
+
     private static List<String> readLines(Path file) {
         try {
             return Files.readAllLines(file, StandardCharsets.UTF_8);

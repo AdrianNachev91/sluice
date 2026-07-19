@@ -68,7 +68,7 @@ public final class InboxScanner implements InboxScannerPort {
         pairing.sidecarsByMedia().forEach((mediaPath, jsonPath) ->
                 sidecars.put(new MediaFile(mediaPath), new TakeoutSidecar(jsonPath)));
 
-        return new ScanResult(media, sidecars, pairing.takeoutMode());
+        return new ScanResult(media, sidecars, pairing.takeoutMode(), jsonPaths);
     }
 
     private static boolean isJson(Path path) {

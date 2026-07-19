@@ -16,7 +16,7 @@ flowchart TD
     E -- no --> G(["dropped - not a sidecar,<br/>not media, never appears<br/>in the result"])
     D --> H["TakeoutSidecarPairer.pair(media list, sidecar list)"]
     F --> H
-    H --> I(["ScanResult: media,<br/>media-to-sidecar map,<br/>takeoutMode"])
+    H --> I(["ScanResult: media,<br/>media-to-sidecar map,<br/>takeoutMode, full sidecar list"])
 ```
 
 Directories themselves are walked but never classified - only regular files reach the
@@ -61,3 +61,7 @@ caller never has to know which shape triggered it.
   sibling `domain/scan` design folder.
 - Risk note: pairing is name-based only, so a paired sidecar must be schema-validated as real
   Takeout metadata before anything ever deletes it - never on name-match alone.
+- `ScanResult.jsonPaths` carries every sidecar found, paired or not. `SortEngine` calls this scan
+  once per `sort()` invocation and reuses that full list after routing - minus whatever it
+  consumed itself - to feed `SidecarSweep` and find orphans. See `sidecar-sweep.md` in the
+  `domain/scan` design folder.
