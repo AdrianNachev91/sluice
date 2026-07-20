@@ -72,11 +72,15 @@ now-empty-directory delete `removeEmptyDirectories` itself uses, applied to `dir
 
 ## Related
 
-- `delete` and `ensureDirectory` are thin `Files` wrappers with no branching worth diagramming;
-  both rewrap `IOException` as `UncheckedIOException` with a contextual message, matching every
-  other adapter in this package. The same is true of `exists`, `size`, and `appendLine`.
+- `delete`, `ensureDirectory`, and `listFiles` are thin `Files` wrappers with no branching worth
+  diagramming; all rewrap `IOException` as `UncheckedIOException` with a contextual message,
+  matching every other adapter in this package. The same is true of `exists`, `size`, and
+  `appendLine`.
 - The main consumer of `move`, `delete`, `exists`, `size`, and `appendLine` is `sort-engine.md` in
-  the `application/service` design folder. `copy` has no caller yet - it's declared alongside
+  the `application/service` design folder. `listFiles` is used by both `CommitEngine` (walking
+  `Sorted/`) and `RescueEngine` (walking a Review folder) - neither has its own design doc, since
+  each engine's own scope/branching logic (not this port method) is the part worth diagramming, and
+  only `rescue-engine.md` cleared that bar. `copy` has no caller yet - it's declared alongside
   `move` for the near-dup handling a later phase's apply engine will need.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the
   first step (which sidecars count as orphaned) is `sidecar-sweep.md` in the `domain/scan` design
