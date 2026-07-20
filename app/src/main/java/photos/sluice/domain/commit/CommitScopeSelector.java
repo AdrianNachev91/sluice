@@ -3,7 +3,7 @@ package photos.sluice.domain.commit;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.commit.CommitScope.All;
 import photos.sluice.domain.commit.CommitScope.Year;
-import photos.sluice.domain.model.SortScope.MonthRange;
+import photos.sluice.domain.model.MonthRange;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

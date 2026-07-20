@@ -2,8 +2,8 @@ package photos.sluice.domain.dating;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.model.DatedMedia;
+import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
-import photos.sluice.domain.model.SortScope.MonthRange;
 import photos.sluice.domain.model.SortScope.OldestN;
 import photos.sluice.domain.model.SortScope.OldestYear;
 import photos.sluice.domain.model.SortScope.Year;

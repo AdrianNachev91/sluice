@@ -1,7 +1,7 @@
 package photos.sluice.domain.commit;
 
 import org.jspecify.annotations.Nullable;
-import photos.sluice.domain.model.SortScope.MonthRange;
+import photos.sluice.domain.model.MonthRange;
 
 // The set of ways a commit run's Sorted files can be selected: a specific year (optionally
 // narrowed to a month range), or everything. There is no separate "unscoped" variant. The

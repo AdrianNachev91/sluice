@@ -1,7 +1,7 @@
 package photos.sluice.domain.commit;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.domain.model.SortScope.MonthRange;
+import photos.sluice.domain.model.MonthRange;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

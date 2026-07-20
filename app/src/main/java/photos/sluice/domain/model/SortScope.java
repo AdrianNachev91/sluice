@@ -16,14 +16,4 @@ public sealed interface SortScope {
 
     record OldestYear() implements SortScope {
     }
-
-    record MonthRange(int from, int to) {
-        public static MonthRange of(int month) {
-            return new MonthRange(month, month);
-        }
-
-        public boolean includes(int month) {
-            return month >= from && month <= to;
-        }
-    }
 }

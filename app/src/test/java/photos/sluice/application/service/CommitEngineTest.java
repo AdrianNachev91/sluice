@@ -10,7 +10,7 @@ import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
-import photos.sluice.domain.model.SortScope.MonthRange;
+import photos.sluice.domain.model.MonthRange;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

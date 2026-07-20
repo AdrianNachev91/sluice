@@ -6,7 +6,7 @@ import photos.sluice.domain.model.DatedMedia;
 import photos.sluice.domain.model.DateResult;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.SortScope;
-import photos.sluice.domain.model.SortScope.MonthRange;
+import photos.sluice.domain.model.MonthRange;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
