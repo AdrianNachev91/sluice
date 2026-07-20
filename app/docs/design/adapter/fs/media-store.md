@@ -58,8 +58,9 @@ even if every directory under it ends up empty. A directory holding a genuine no
 - `delete` and `ensureDirectory` are thin `Files` wrappers with no branching worth diagramming;
   both rewrap `IOException` as `UncheckedIOException` with a contextual message, matching every
   other adapter in this package. The same is true of `exists`, `size`, and `appendLine`.
-- The main consumer of this port's full method set (including `exists`/`size`/`appendLine`):
-  `sort-engine.md` in the `application/service` design folder.
+- The main consumer of this port is `sort-engine.md` in the `application/service` design folder,
+  which uses `move`, `delete`, `exists`, `size`, and `appendLine`. `copy` has no caller yet - it's
+  declared alongside `move` for the near-dup handling a later phase's apply engine will need.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the
   first step (which sidecars count as orphaned) is `sidecar-sweep.md` in the `domain/scan` design
   folder.

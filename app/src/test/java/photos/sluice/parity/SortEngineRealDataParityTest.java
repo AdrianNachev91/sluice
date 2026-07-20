@@ -18,6 +18,8 @@ import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.model.SortScope;
+import photos.sluice.domain.scan.SidecarSweep;
+import photos.sluice.domain.scan.TakeoutSidecarPairer;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -27,8 +29,6 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -48,13 +48,6 @@ class SortEngineRealDataParityTest {
 
     private static final String[] SOURCE_YEAR_FOLDERS = {"Photos from 2014", "Photos from 2016"};
     private static final int SCOPE_SIZE = 10_000; // comfortably above the ~856-file real copy
-
-    // Mirrors TakeoutSidecarPairer.ownerKeyOf's full derivation. Duplicated rather than reused
-    // because the production method is deliberately package-private to domain.scan, and this filter
-    // is independent oracle-side logic, not a production code path.
-    private static final Pattern SUPPLEMENTAL = Pattern.compile("^(.+?)\\.supplemental.*$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern SIDECAR_DUP_NUMBERED = Pattern.compile("^(.+)\\.([^.]+)\\((\\d+)\\)$");
-    private static final int MIN_TRUNCATED_OWNER_KEY_LENGTH = 46; // SidecarSweep.MIN_TRUNCATED_OWNER_KEY_LENGTH
 
     @Test
     void sortEngineMatchesReferenceEngineOnRealTakeoutData(@TempDir Path rootA, @TempDir Path rootB)
@@ -118,26 +111,7 @@ class SortEngineRealDataParityTest {
             return false;
         }
         String fileName = relativePath.substring(relativePath.lastIndexOf('/') + 1);
-        return ownerKeyOf(fileName).length() < MIN_TRUNCATED_OWNER_KEY_LENGTH;
-    }
-
-    // Mirrors TakeoutSidecarPairer.ownerKeyOf's exact-match, supplemental-suffix, and dup-numbered
-    // branches. The 46-char floor comparison below is only meaningful against the same owner key
-    // production actually computes, so a dup-numbered sidecar needs its dup-numbering reversed here
-    // too, not just its json/supplemental suffix stripped.
-    private static String ownerKeyOf(String jsonFileName) {
-        String base = jsonFileName.regionMatches(true, jsonFileName.length() - 5, ".json", 0, 5)
-                ? jsonFileName.substring(0, jsonFileName.length() - 5)
-                : jsonFileName;
-        Matcher supplemental = SUPPLEMENTAL.matcher(base);
-        if (supplemental.matches()) {
-            return supplemental.group(1);
-        }
-        Matcher dup = SIDECAR_DUP_NUMBERED.matcher(base);
-        if (dup.matches()) {
-            return dup.group(1) + "(" + dup.group(3) + ")." + dup.group(2);
-        }
-        return base;
+        return TakeoutSidecarPairer.ownerKeyOf(Path.of(fileName)).length() < SidecarSweep.MIN_TRUNCATED_OWNER_KEY_LENGTH;
     }
 
     // Walks upward from the JVM's working directory until a directory containing the reference

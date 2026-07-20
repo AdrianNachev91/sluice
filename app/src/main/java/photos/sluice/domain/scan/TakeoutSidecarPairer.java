@@ -83,9 +83,10 @@ public final class TakeoutSidecarPairer {
     }
 
     // Derives the media filename a sidecar describes from its base name (json extension already
-    // stripped). Package-visible: SidecarSweep reuses this so the sweep's "which media does this
-    // sidecar belong to" derivation never drifts from the pairer's.
-    static String ownerKeyOf(Path json) {
+    // stripped). Public: SidecarSweep reuses this so the sweep's "which media does this sidecar
+    // belong to" derivation never drifts from the pairer's, and the Phase 6 real-data parity test
+    // reuses it too, for the same reason - a hand-duplicated copy already drifted out of sync once.
+    public static String ownerKeyOf(Path json) {
         String base = stripJsonExtension(json.getFileName().toString());
         Matcher supplemental = SUPPLEMENTAL.matcher(base);
         if (supplemental.matches()) {

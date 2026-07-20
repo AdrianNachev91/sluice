@@ -26,7 +26,9 @@ public final class SidecarSweep {
     // itself. A genuine truncation of that kind lands close to 46 characters. A shorter owner key
     // hitting the prefix-fallback path is far more likely to be an accidental collision with an
     // unrelated file. So only an owner key at least this long is trusted as prefix evidence.
-    private static final int MIN_TRUNCATED_OWNER_KEY_LENGTH = 46;
+    // Public: the Phase 6 parity test reuses this exact threshold to recognize a known, deliberate
+    // divergence from the engine it's validated against.
+    public static final int MIN_TRUNCATED_OWNER_KEY_LENGTH = 46;
 
     // remainingMedia and remainingJsonPaths describe the Inbox as it stands right now. This
     // method has no opinion on how the caller derived "remaining," and does no scanning itself.
