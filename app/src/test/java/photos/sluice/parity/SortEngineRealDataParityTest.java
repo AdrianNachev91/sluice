@@ -67,7 +67,7 @@ class SortEngineRealDataParityTest {
 
         Path repoRoot = findRepoRoot();
         runReferenceEngine(repoRoot, rootA);
-        newSortEngine(rootB).sort(new SortScope.OldestN(SCOPE_SIZE));
+        sortEngine(rootB).sort(new SortScope.OldestN(SCOPE_SIZE));
 
         MoveDiffer differ = new MoveDiffer();
         assertNoUnexplainedDiff("Sorted", differ.diffTrees(rootA.resolve("Sorted"), rootB.resolve("Sorted")));
@@ -152,7 +152,7 @@ class SortEngineRealDataParityTest {
         }
     }
 
-    private static SortEngine newSortEngine(Path root) {
+    private static SortEngine sortEngine(Path root) {
         var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), root.toString(), root.resolve("Inbox").toString()));
         var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));

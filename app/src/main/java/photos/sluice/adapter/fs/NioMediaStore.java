@@ -110,6 +110,18 @@ public class NioMediaStore implements MediaStore {
                 .forEach(this::deleteIfEmptyOfFiles);
     }
 
+    @Override
+    public void removeIfEmptyOfFiles(Path dir) {
+        if (!Files.exists(dir) || containsAnyFile(dir)) {
+            return;
+        }
+        // Every subdirectory below dir is now known empty of files too (containsAnyFile already
+        // checked the whole subtree), so this prunes all of them bottom-up, leaving dir itself
+        // with no children - at which point it is safe to remove too.
+        removeEmptyDirectories(dir);
+        deleteIfEmptyOfFiles(dir);
+    }
+
     private void deleteIfEmptyOfFiles(Path dir) {
         if (!Files.exists(dir) || containsAnyFile(dir)) {
             return;

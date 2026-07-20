@@ -9,6 +9,7 @@ import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.domain.dating.DateResolver;
+import photos.sluice.domain.dating.RescueDateResolver;
 
 @Configuration
 @EnableConfigurationProperties({PathsProperties.class, MontageConfig.class, CullConfig.class})
@@ -20,6 +21,13 @@ public class AppConfig {
     public DateResolver dateResolver(TakeoutJsonSource sidecarSource, ExifSource exifSource,
             FilenameSource filenameSource, MtimeSource mtimeSource) {
         return new DateResolver(sidecarSource, exifSource, filenameSource, mtimeSource);
+    }
+
+    // Same reasoning as dateResolver() above: concrete adapter types so Spring can tell the two
+    // DateSource positions apart.
+    @Bean
+    public RescueDateResolver rescueDateResolver(ExifSource exifSource, FilenameSource filenameSource) {
+        return new RescueDateResolver(exifSource, filenameSource);
     }
 
     @Bean

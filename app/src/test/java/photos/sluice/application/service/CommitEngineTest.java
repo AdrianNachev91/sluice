@@ -28,7 +28,7 @@ class CommitEngineTest {
         Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "keeper");
 
-        CommitSummary summary = newEngine(root, libraryRoot).commit(new CommitScope.All());
+        CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.All());
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(summary.byBucket()).containsEntry(LibraryBucket.PHOTOS, 1);
@@ -44,7 +44,7 @@ class CommitEngineTest {
         String expectedHash = new Sha256Hasher().hash(source);
         var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
 
-        newEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
+        commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
 
         assertThat(hashIndex.load())
                 .containsOnlyKeys(expectedHash)
@@ -57,7 +57,7 @@ class CommitEngineTest {
         writeFile(root.resolve("Sorted/Photos/2019/06/in.jpg"), "in");
         writeFile(root.resolve("Sorted/Photos/2020/01/out.jpg"), "out");
 
-        CommitSummary summary = newEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
+        CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/in.jpg"))).isTrue();
@@ -70,7 +70,7 @@ class CommitEngineTest {
         writeFile(root.resolve("Sorted/Videos/2019/07/in.mp4"), "in");
         writeFile(root.resolve("Sorted/Videos/2019/05/out.mp4"), "out");
 
-        CommitSummary summary = newEngine(root, libraryRoot).commit(new CommitScope.Year(2019, new MonthRange(6, 8)));
+        CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, new MonthRange(6, 8)));
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(Files.exists(libraryRoot.resolve("Videos/2019/07/in.mp4"))).isTrue();
@@ -82,11 +82,11 @@ class CommitEngineTest {
         Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Funny/joke.jpg"), "funny");
 
-        CommitSummary yearSummary = newEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
+        CommitSummary yearSummary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
         assertThat(yearSummary.committed()).isEqualTo(0);
         assertThat(Files.exists(root.resolve("Sorted/Funny/joke.jpg"))).isTrue();
 
-        CommitSummary allSummary = newEngine(root, libraryRoot).commit(new CommitScope.All());
+        CommitSummary allSummary = commitEngine(root, libraryRoot).commit(new CommitScope.All());
         assertThat(allSummary.committed()).isEqualTo(1);
         assertThat(allSummary.byBucket()).containsEntry(LibraryBucket.FUNNY, 1);
         assertThat(Files.exists(libraryRoot.resolve("Funny/joke.jpg"))).isTrue();
@@ -97,7 +97,7 @@ class CommitEngineTest {
         Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "keeper");
 
-        newEngine(root, libraryRoot).commit(new CommitScope.All());
+        commitEngine(root, libraryRoot).commit(new CommitScope.All());
 
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/06"))).isFalse();
         assertThat(Files.exists(root.resolve("Sorted/Photos"))).isFalse();
@@ -109,7 +109,7 @@ class CommitEngineTest {
         Files.createDirectories(root.resolve("Sorted"));
         var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
 
-        CommitSummary summary = newEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
+        CommitSummary summary = commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
 
         assertThat(summary.committed()).isEqualTo(0);
         assertThat(summary.byBucket()).isEmpty();
@@ -120,15 +120,15 @@ class CommitEngineTest {
     void committingWithNoSortedDirectoryAtAllFailsLoudly(@TempDir Path root) {
         Path libraryRoot = root.resolve("Library"); // Sorted itself is never created
 
-        assertThatThrownBy(() -> newEngine(root, libraryRoot).commit(new CommitScope.All()))
+        assertThatThrownBy(() -> commitEngine(root, libraryRoot).commit(new CommitScope.All()))
                 .isInstanceOf(UncheckedIOException.class);
     }
 
-    private static CommitEngine newEngine(Path repoRoot, Path libraryRoot) {
-        return newEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
+    private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot) {
+        return commitEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
     }
 
-    private static CommitEngine newEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex) {
+    private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex) {
         var pathsConfig = new PathsConfig(
                 new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
         return new CommitEngine(pathsConfig, new NioMediaStore(), new Sha256Hasher(), hashIndex);

@@ -53,14 +53,33 @@ bottom-up in one walk, with no repeated passes needed. `root` itself is never a 
 even if every directory under it ends up empty. A directory holding a genuine non-media leftover
 (a stray `.txt`, an album descriptor) is left in place, and so is every ancestor above it.
 
+## Removing a directory entirely, if it's empty of files
+
+```mermaid
+flowchart TD
+    A["dir exists and contains<br/>no file anywhere in<br/>its own subtree?"] -- no --> B(["left entirely untouched -<br/>not even a nested<br/>empty subdirectory"])
+    A -- yes --> C["removeEmptyDirectories(dir) -<br/>every subdirectory is now<br/>known empty too, so all<br/>get pruned bottom-up"]
+    C --> D["dir itself now has<br/>no children left -<br/>delete it too"]
+```
+
+Unlike `removeEmptyDirectories`, `dir` itself is a delete candidate here - that's the whole point:
+a caller wants the named directory to disappear completely once nothing real is left in it. The
+check is whole-subtree, not top-level-only, and it's all-or-nothing: a single file buried anywhere
+below `dir` blocks the entire operation, leaving even unrelated empty sibling subdirectories
+inside `dir` untouched. The implementation composes the two existing pieces above rather than
+duplicating traversal logic - `removeEmptyDirectories(dir)` for the pruning, then the same
+now-empty-directory delete `removeEmptyDirectories` itself uses, applied to `dir`.
+
 ## Related
 
 - `delete` and `ensureDirectory` are thin `Files` wrappers with no branching worth diagramming;
   both rewrap `IOException` as `UncheckedIOException` with a contextual message, matching every
   other adapter in this package. The same is true of `exists`, `size`, and `appendLine`.
-- The main consumer of this port is `sort-engine.md` in the `application/service` design folder,
-  which uses `move`, `delete`, `exists`, `size`, and `appendLine`. `copy` has no caller yet - it's
-  declared alongside `move` for the near-dup handling a later phase's apply engine will need.
+- The main consumer of `move`, `delete`, `exists`, `size`, and `appendLine` is `sort-engine.md` in
+  the `application/service` design folder. `copy` has no caller yet - it's declared alongside
+  `move` for the near-dup handling a later phase's apply engine will need.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the
   first step (which sidecars count as orphaned) is `sidecar-sweep.md` in the `domain/scan` design
   folder.
+- `removeIfEmptyOfFiles` is used by `rescue-engine.md` (also in `application/service`) to dissolve
+  a Review folder once every file in it has been rescued.

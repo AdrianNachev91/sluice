@@ -229,6 +229,38 @@ class NioMediaStoreTest {
         assertThat(Files.exists(root.resolve("album"))).isTrue();
     }
 
+    @Test
+    void removeIfEmptyOfFilesDeletesDirAndNestedEmptySubtreeWhenNoFileRemains(@TempDir Path root) throws IOException {
+        Path target = Files.createDirectories(root.resolve("2019-06").resolve("empty-sub"));
+
+        store.removeIfEmptyOfFiles(root.resolve("2019-06"));
+
+        assertThat(Files.exists(target)).isFalse();
+        assertThat(Files.exists(root.resolve("2019-06"))).isFalse();
+        assertThat(Files.exists(root)).isTrue();
+    }
+
+    @Test
+    void removeIfEmptyOfFilesLeavesDirInPlaceWhenAFileRemainsAnywhereBelow(@TempDir Path root) throws IOException {
+        Path target = Files.createDirectories(root.resolve("2019-06"));
+        Path nested = Files.createDirectories(target.resolve("nested"));
+        Files.writeString(nested.resolve("leftover.jpg"), "keeper", StandardCharsets.UTF_8);
+
+        store.removeIfEmptyOfFiles(target);
+
+        assertThat(Files.exists(target)).isTrue();
+        assertThat(Files.exists(target.resolve("nested").resolve("leftover.jpg"))).isTrue();
+    }
+
+    @Test
+    void removeIfEmptyOfFilesOnAMissingDirIsANoOp(@TempDir Path root) {
+        Path missing = root.resolve("does-not-exist");
+
+        store.removeIfEmptyOfFiles(missing);
+
+        assertThat(Files.exists(missing)).isFalse();
+    }
+
     private static List<String> readLines(Path file) {
         try {
             return Files.readAllLines(file, StandardCharsets.UTF_8);

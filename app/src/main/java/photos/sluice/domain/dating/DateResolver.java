@@ -13,8 +13,6 @@ import java.util.Optional;
 // much to trust it.
 public class DateResolver {
 
-    private static final int PLAUSIBLE_MIN_YEAR = 2000;
-
     private final DateSource sidecarSource;
     private final DateSource exifSource;
     private final DateSource filenameSource;
@@ -37,7 +35,7 @@ public class DateResolver {
                 // the caller routes on the confidence marker, not on this placeholder date.
                 .orElseGet(() -> new DateResult(LocalDateTime.now(), Confidence.UNSORTABLE, "none"));
 
-        if (result.confidence() == Confidence.LOW && !isPlausible(result.when())) {
+        if (result.confidence() == Confidence.LOW && !DatePlausibility.isPlausible(result.when())) {
             return new DateResult(result.when(), Confidence.UNSORTABLE, result.source());
         }
         return result;
@@ -48,7 +46,4 @@ public class DateResolver {
         return source.resolve(file, sidecar).map(when -> new DateResult(when, confidence, name));
     }
 
-    private static boolean isPlausible(LocalDateTime when) {
-        return when.getYear() >= PLAUSIBLE_MIN_YEAR && !when.isAfter(LocalDateTime.now());
-    }
 }

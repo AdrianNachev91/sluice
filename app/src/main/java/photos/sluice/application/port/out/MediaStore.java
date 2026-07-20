@@ -25,4 +25,9 @@ public interface MediaStore {
     // Removes every subdirectory under root left empty of all files (root itself is never a
     // candidate). A directory holding a genuine non-media leftover is left in place.
     void removeEmptyDirectories(Path root);
+
+    // Removes dir itself, and everything under it, provided dir contains no file anywhere in its
+    // subtree. A no-op (dir is left untouched, including any empty subdirectories) if even one
+    // file remains anywhere below it.
+    void removeIfEmptyOfFiles(Path dir);
 }
