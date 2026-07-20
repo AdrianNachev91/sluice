@@ -9,4 +9,6 @@ public interface PathsPort {
     Path sorted();
 
     Path review();
+
+    Path library();
 }

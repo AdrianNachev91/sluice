@@ -18,6 +18,29 @@ class NioMediaStoreTest {
     private final NioMediaStore store = new NioMediaStore();
 
     @Test
+    void listFilesReturnsEveryRegularFileRecursivelyButNoDirectories(@TempDir Path root) throws IOException {
+        Files.writeString(root.resolve("top.jpg"), "top");
+        Path nested = Files.createDirectories(root.resolve("2019").resolve("06"));
+        Files.writeString(nested.resolve("nested.jpg"), "nested");
+
+        List<Path> files = store.listFiles(root);
+
+        assertThat(files).containsExactlyInAnyOrder(root.resolve("top.jpg"), nested.resolve("nested.jpg"));
+    }
+
+    @Test
+    void listFilesOnAnEmptyDirectoryReturnsEmpty(@TempDir Path root) {
+        assertThat(store.listFiles(root)).isEmpty();
+    }
+
+    @Test
+    void listFilesOnAMissingRootWrapsIoExceptionUnchecked(@TempDir Path root) {
+        Path missing = root.resolve("does-not-exist");
+
+        assertThatThrownBy(() -> store.listFiles(missing)).isInstanceOf(UncheckedIOException.class);
+    }
+
+    @Test
     void moveCreatesDestDirAndPlacesFileUnderOriginalName(@TempDir Path root) throws IOException {
         Path source = root.resolve("IMG_1234.jpg");
         Files.writeString(source, "photo bytes", StandardCharsets.UTF_8);

@@ -29,7 +29,8 @@ public class PathsConfig implements PathsPort {
         return resolve(Objects.requireNonNull(properties.repoRoot()));
     }
 
-    public Path libraryRoot() {
+    @Override
+    public Path library() {
         return resolve(Objects.requireNonNull(properties.libraryRoot()));
     }
 

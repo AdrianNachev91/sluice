@@ -19,6 +19,15 @@ import java.util.stream.Stream;
 public class NioMediaStore implements MediaStore {
 
     @Override
+    public List<Path> listFiles(Path root) {
+        try (Stream<Path> walk = Files.walk(root)) {
+            return walk.filter(Files::isRegularFile).toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to walk " + root, e);
+        }
+    }
+
+    @Override
     public Path move(Path source, Path destDir) {
         Path dest = prepareDestination(source, destDir);
         try {

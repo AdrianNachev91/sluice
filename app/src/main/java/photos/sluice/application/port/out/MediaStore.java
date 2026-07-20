@@ -1,8 +1,12 @@
 package photos.sluice.application.port.out;
 
 import java.nio.file.Path;
+import java.util.List;
 
 public interface MediaStore {
+
+    // Every regular file under root, recursively, as absolute paths. Order is unspecified.
+    List<Path> listFiles(Path root);
 
     Path move(Path source, Path destDir);
 

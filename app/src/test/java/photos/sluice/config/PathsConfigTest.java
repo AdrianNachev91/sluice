@@ -14,7 +14,7 @@ class PathsConfigTest {
 
         Path expectedBase = Path.of("").toAbsolutePath().normalize();
         assertThat(config.repoRoot()).isEqualTo(expectedBase.resolve("relative-repo"));
-        assertThat(config.libraryRoot()).isEqualTo(expectedBase.resolve("relative-lib"));
+        assertThat(config.library()).isEqualTo(expectedBase.resolve("relative-lib"));
         assertThat(config.inbox()).isEqualTo(expectedBase.resolve("relative-inbox"));
     }
 
