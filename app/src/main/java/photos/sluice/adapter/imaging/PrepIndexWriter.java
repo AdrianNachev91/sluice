@@ -11,8 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-// PrepDir already mirrors index.json's field shape and order 1:1 (see PrepDir's own doc comment);
-// this just substitutes String for its two Path fields, for the same reason as SidecarWriter.
+// PrepDir already mirrors index.json's field shape and order 1:1 (see PrepDir's own doc comment).
+// This substitutes String for its Path-typed fields (basePath, prepDir, and each entry in
+// unreviewable), for the same reason as SidecarWriter.
 @Component
 public class PrepIndexWriter {
 
@@ -29,7 +30,8 @@ public class PrepIndexWriter {
     }
 
     private record Index(
-            String scope, String basePath, int photos, int montages, String prepDir, List<String> entries) {
+            String scope, String basePath, int photos, List<String> unreviewable, int montages,
+            String prepDir, List<String> entries) {
     }
 
     public void write(Path indexPath, PrepDir prepDir) {
@@ -37,6 +39,7 @@ public class PrepIndexWriter {
                 prepDir.scope(),
                 prepDir.basePath().toString(),
                 prepDir.photos(),
+                prepDir.unreviewable().stream().map(Path::toString).toList(),
                 prepDir.montages(),
                 prepDir.prepDir().toString(),
                 prepDir.entries());

@@ -9,6 +9,7 @@ import org.apache.batik.transcoder.TranscoderInput;
 import org.apache.batik.transcoder.TranscoderOutput;
 import org.apache.batik.transcoder.image.ImageTranscoder;
 import org.jspecify.annotations.Nullable;
+import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.domain.imaging.LowResGate;
 import photos.sluice.domain.scan.MediaTypeDetector;
@@ -32,6 +33,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
+@Component
 public class TileRenderer {
 
     // The TIFF-container RAW formats. A generic decode attempt is still made for them (see

@@ -39,6 +39,7 @@ public class PathsConfig implements PathsPort {
         return resolve(Objects.requireNonNull(properties.inbox()));
     }
 
+    @Override
     public Path logs() {
         return repoRoot().resolve("logs");
     }

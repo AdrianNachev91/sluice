@@ -11,4 +11,6 @@ public interface PathsPort {
     Path review();
 
     Path library();
+
+    Path logs();
 }

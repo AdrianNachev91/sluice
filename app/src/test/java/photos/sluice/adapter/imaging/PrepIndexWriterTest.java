@@ -28,7 +28,8 @@ class PrepIndexWriterTest {
         Path indexPath = dir.resolve("index.json");
         Path basePath = dir.resolve("Sorted");
         Path prepDir = dir.resolve("prep");
-        var prep = new PrepDir("2023", basePath, 42, 2, prepDir, List.of("montage-001", "montage-002"));
+        Path corrupt = dir.resolve("corrupt.cr2");
+        var prep = new PrepDir("2023", basePath, 42, List.of(corrupt), 2, prepDir, List.of("montage-001", "montage-002"));
 
         writer.write(indexPath, prep);
 
@@ -38,17 +39,18 @@ class PrepIndexWriterTest {
                   "scope": "2023",
                   "basePath": "%s",
                   "photos": 42,
+                  "unreviewable": ["%s"],
                   "montages": 2,
                   "prepDir": "%s",
                   "entries": ["montage-001", "montage-002"]
                 }
-                """.formatted(jsonEscaped(basePath), jsonEscaped(prepDir)));
+                """.formatted(jsonEscaped(basePath), jsonEscaped(corrupt), jsonEscaped(prepDir)));
     }
 
     @Test
     void wrapsAWriteFailureIntoUncheckedIOException(@TempDir Path dir) {
         Path indexPath = dir.resolve("missing-parent").resolve("index.json");
-        var prep = new PrepDir("2023", dir, 0, 0, dir, List.of());
+        var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> writer.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
@@ -61,7 +63,7 @@ class PrepIndexWriterTest {
         doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(java.io.OutputStream.class), any());
         var writerWithFailingMapper = new PrepIndexWriter(mapper);
         Path indexPath = dir.resolve("index.json");
-        var prep = new PrepDir("2023", dir, 0, 0, dir, List.of());
+        var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> writerWithFailingMapper.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
