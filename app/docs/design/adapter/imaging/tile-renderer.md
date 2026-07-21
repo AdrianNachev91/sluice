@@ -133,11 +133,17 @@ preview" rather than blending in if that routing is ever skipped or incomplete a
 - **5 of 8 RAW extensions are untested with real bytes** (`dng, cr3, raf, orf, rw2`). They share the
   identical code path already proven safe by the CR2/NEF/ARW fixtures, but that's inference from a
   shared mechanism, not direct verification of each format.
-- **`isSourceUnreviewable`'s index-0 assumption isn't independently proven.** It reads a separate,
-  lightweight dimension-only stream to check the source size, assuming that stream's index 0 is the
-  same sub-image `renderRaster`'s own Thumbnailator-based decode actually used. If a future
-  TwelveMonkeys version (or an unusual multi-image file) ever picks a different sub-image for the
-  two reads, the size check could silently disagree with what's actually shown in the tile.
+- **`isSourceUnreviewable`'s index-0 assumption rests on an internal library detail, not a public
+  contract.** It reads a separate, lightweight dimension-only stream at index 0, assuming that's the
+  same sub-image `renderRaster`'s own Thumbnailator-based decode actually used. Verified directly
+  against Thumbnailator 0.4.21's own source: `InputStreamImageSource.FIRST_IMAGE_INDEX = 0` is used
+  consistently for width, height, and the actual read, with no format-specific branching. The two
+  reads agree today, but that verification can't cover a future Thumbnailator version.
+  `TileRendererTest.unreviewableFlagMatchesTheSubImageActuallyRendered` is the actual guardrail
+  against that: a synthetic multi-page file with visibly different content per page, checked
+  against the tile's own rendered pixels rather than trusting the source read to still hold. A
+  future version that picked a different sub-image would fail that test immediately, rather than
+  silently disagreeing.
 - **The 640px judgeability threshold is grounded in exactly three real cameras** (Canon EOS 20D 2004,
   Nikon D40 2006, Sony ILCE-6700 2023) - a real empirical basis for "old cameras have this problem,
   modern ones likely don't", but not an exhaustive survey across manufacturers or eras.

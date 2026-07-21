@@ -7,11 +7,18 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import photos.sluice.adapter.imaging.TileRenderer.TileResult;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Iterator;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -308,6 +315,60 @@ class TileRendererTest {
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE);
+    }
+
+    // isSourceUnreviewable reads a separate, lightweight ImageIO stream to check index 0's size.
+    // renderRaster's own Thumbnailator-based decode is a black box that never exposes which
+    // sub-image it actually used. Whether the two reads agree is an assumption, not something this
+    // code can check at runtime. Verified directly against Thumbnailator 0.4.21's own source that
+    // both reads agree today (InputStreamImageSource.FIRST_IMAGE_INDEX = 0, used consistently for
+    // width/height/read), but that's an internal library detail, not a public contract. This test
+    // doesn't lean on re-reading that source again. It builds a file whose two sub-images are
+    // visibly different in size and color. It then checks the tile's actual rendered content
+    // against what unreviewable claims about it. A future Thumbnailator version that picked a
+    // different sub-image would fail this test immediately, rather than silently disagreeing.
+    @Test
+    void unreviewableFlagMatchesTheSubImageActuallyRendered(@TempDir Path tempDir) throws IOException {
+        Path tiff = tempDir.resolve("two-page.tiff");
+        writeTwoPageTiff(tiff, 50, 50, Color.RED, 2000, 2000, Color.BLUE);
+
+        TileResult result = renderer.render(tiff, TILE_SIZE);
+
+        assertThat(result.unreviewable()).isTrue();
+        int centerX = result.image().getWidth() / 2;
+        int centerY = result.image().getHeight() / 2;
+        assertThat(new Color(result.image().getRGB(centerX, centerY))).isEqualTo(Color.RED);
+    }
+
+    private static void writeTwoPageTiff(
+            Path target, int firstWidth, int firstHeight, Color firstColor,
+            int secondWidth, int secondHeight, Color secondColor) throws IOException {
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("TIFF");
+        ImageWriter writer = writers.next();
+        try (ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile())) {
+            writer.setOutput(out);
+            writer.prepareWriteSequence(null);
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            writer.writeToSequence(
+                    new IIOImage(solidImage(firstWidth, firstHeight, firstColor), null, null), param);
+            writer.writeToSequence(
+                    new IIOImage(solidImage(secondWidth, secondHeight, secondColor), null, null), param);
+            writer.endWriteSequence();
+        } finally {
+            writer.dispose();
+        }
+    }
+
+    private static BufferedImage solidImage(int width, int height, Color color) {
+        var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            g.setColor(color);
+            g.fillRect(0, 0, width, height);
+        } finally {
+            g.dispose();
+        }
+        return image;
     }
 
     private static void writeJpeg(Path target, int width, int height) throws IOException {
