@@ -158,5 +158,5 @@ preview" rather than blending in if that routing is ever skipped or incomplete a
 - `application/port/out/HeifDecoder` - the port this class depends on.
 - `adapter/imaging/CliHeifDecoder` - the real libheif-CLI-backed implementation.
 - `domain/scan/MediaTypeDetector` - supplies the lowercase extension this class routes on.
-- The montage grid composition that arranges these tiles and draws the per-photo filename label
-  band is a later stage, not yet built.
+- `adapter/imaging/MontageBuilder` - composes this class's tiles into a montage grid and draws the
+  per-photo filename label band below each one.
