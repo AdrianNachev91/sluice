@@ -98,6 +98,11 @@ vary slightly between them.
 - **An empty tile list throws by design**, on the assumption upstream routing never reaches this
   class with zero photos to montage - not a defensive validation against a scenario expected to occur
   in normal operation.
+- **This class never filters by `TileResult.unreviewable`.** `MontageTile` has no such field.
+  Excluding unreviewable tiles (no decode at all, or real pixels below 640px) before batching is the
+  caller's job, not this class's - see `MontageRenderer` below. If one leaked through anyway,
+  `TileRenderer.placeholder()`'s `#444444` background still stays visually distinct from this
+  class's own `#111111` grid background, so it wouldn't silently blend in.
 - **Pixel-based tests deliberately avoid exact glyph colors**, checking only "differs from
   background" for label-band content, since anti-aliased text edges render slightly differently
   across the Ubuntu/Windows CI matrix.
@@ -109,4 +114,5 @@ vary slightly between them.
 - `domain/cull/MontageConfig` - supplies `tileSize`/`tilesPerRow`.
 - `application/port/out/MontageRenderer` - the orchestration port a later chunk implements on top of
   this class, batching photos, calling `TileRenderer` per photo, calling this class per batch, then
-  writing the composed image and sidecar JSON to disk.
+  writing the composed image and sidecar JSON to disk. This is also where `TileResult.unreviewable`
+  filtering must happen - this class doesn't do it.
