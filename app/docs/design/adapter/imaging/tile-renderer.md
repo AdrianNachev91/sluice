@@ -106,8 +106,12 @@ RAW format, or "NO PREVIEW" otherwise.
 ## Placeholder tile
 
 A plain `tileSize x tileSize` image: solid `#444444` background, centered bold white label text.
-Deliberately distinct from the montage grid's own `#111111` background/label band (a later stage's
-job), so a placeholder reads clearly as "no preview" inside the grid.
+`render()` never throws, so this is the value it returns when nothing could be decoded, always
+paired with `unreviewable=true`. Per this file's own routing rule, an unreviewable tile is expected
+to be routed away from montage assembly before a grid is ever built. A placeholder should not
+normally reach a montage a human or the culler actually sees. Its background is still styled
+distinctly from the montage grid's own `#111111` band regardless, so it stays legible as "no
+preview" rather than blending in if that routing is ever skipped or incomplete at a call site.
 
 ## Scenarios
 
@@ -139,7 +143,8 @@ job), so a placeholder reads clearly as "no preview" inside the grid.
   modern ones likely don't", but not an exhaustive survey across manufacturers or eras.
 - **AVIF/HEIC/HEIF have zero real decode today.** Every real file of these types becomes a
   placeholder in the actual running app right now, not just in the test suite - `HeifDecoder` has no
-  implementation yet.
+  implementation yet. Recheck this claim once a real `HeifDecoder` implementation exists - it
+  should flip to false, and this bullet should be removed rather than left stale.
 
 ## Related
 

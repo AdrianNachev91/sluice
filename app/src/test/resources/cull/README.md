@@ -25,10 +25,11 @@ camera model), checked 2026-07-21.
 - `sony-ilce-6700.arw` SHA-256: `dc3e2ed22f46fcef778553767e0703bc37cfb043f107afe2d7e6e4dbca34200a`
 - `arctic-sky.avif` SHA-256: `de02099cae1fc520cbc3e76732e73b487bfa9f736ef6d723e6a1d73f1ecc7da2`
 
-`sony-ilce-6700.arw` (42MB, a genuinely current 2023 camera) was too large for this session's fetch
-tool to retrieve directly (~10MB cap) - downloaded by hand instead. That cap is a tool limitation
-on retrieval, not a real constraint: test fixtures never ship in the packaged app (only
-`src/main/resources` does), so fixture file size has no bearing on what end users download.
+`sony-ilce-6700.arw` (42MB, a genuinely current 2023 camera) exceeds the ~10MB direct-fetch cap
+this project's tooling has for retrieving files from a URL - downloaded by hand instead. That cap
+is a tool limitation on retrieval, not a real constraint: test fixtures never ship in the packaged
+app (only `src/main/resources` does), so fixture file size has no bearing on what end users
+download.
 
 `arctic-sky.avif` (real, verified `ftyp`/`avif` box structure) is reserved for when a real
 libheif-backed `HeifDecoder` adapter exists - no real decoder exists yet, so
@@ -62,9 +63,14 @@ The Canon and Nikon files also caught and fixed a real, already-live bug in
 multiple Exif metadata directories describing its embedded images. The first one (the embedded
 preview's own) carries no width/height tags at all - only a later directory holds the true
 3040x2014 native capture resolution, under the generic TIFF tag pair rather than the EXIF-specific
-one Canon uses. The old code trusted only the first such directory, and would have silently
-returned the tiny 160x120 embedded-thumbnail size instead. That would have wrongly flagged a real
-high-res photo as low-res.
+one Canon uses. Trusting only the first such directory returns the tiny 160x120 embedded-thumbnail
+size instead, wrongly flagging a real high-res photo as low-res.
+
+`arctic-sky.avif` caught a second, separate bug in the same class. metadata-extractor does parse
+AVIF correctly, but stores its dimensions under a `HeifDirectory`, not an `ExifSubIFDDirectory` -
+`ImageDimensionsReader` only ever checked the latter, so every AVIF file read empty regardless of
+its actual metadata. Fixed by also checking `HeifDirectory` from the same metadata parse, taking
+the largest result across both directory types.
 
 ## The other 5 RAW extensions (dng, cr3, raf, orf, rw2)
 
