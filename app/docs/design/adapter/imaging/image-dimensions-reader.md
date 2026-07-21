@@ -45,10 +45,10 @@ type and keeps the largest, rather than the first found. This is verified agains
 NEF: its *first* `ExifSubIFDDirectory` (the embedded preview's own) has no width/height tags at
 all. Only a later one holds the true native capture resolution.
 
-`largestOf` then compares the two directory types' results against each other, not just an
-`.or()` fallback. A file could in principle carry dimensions in both at once - an edited HEIC
-whose EXIF wasn't refreshed to match a later HEIF-box resize, for example. The same largest-wins
-safety margin applies across types too, not only within one.
+`largestOf` compares the two directory types' results against each other. A file could in
+principle carry dimensions in both at once - an edited HEIC whose EXIF wasn't refreshed to match a
+later HEIF-box resize, for example. The same largest-wins safety margin applies across types too,
+not only within one.
 
 Trusting the largest is a one-directional safety margin. `LowResGate` only ever flags a file
 low-res when its reported dimensions are small, so under-reporting a real capture's size is the
