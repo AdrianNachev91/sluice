@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import photos.sluice.adapter.fs.CsvLibraryHashIndex;
+import photos.sluice.adapter.imaging.CliHeifDecoder;
 import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
@@ -12,7 +13,7 @@ import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
 
 @Configuration
-@EnableConfigurationProperties({PathsProperties.class, MontageConfig.class, CullConfig.class})
+@EnableConfigurationProperties({PathsProperties.class, MontageConfig.class, CullConfig.class, ImagingConfig.class})
 public class AppConfig {
 
     // Takes the concrete adapter types (not the shared DateSource port) so Spring resolves each
@@ -33,5 +34,10 @@ public class AppConfig {
     @Bean
     public CsvLibraryHashIndex csvLibraryHashIndex(PathsConfig pathsConfig) {
         return new CsvLibraryHashIndex(pathsConfig.logs().resolve("library-hashes.csv"));
+    }
+
+    @Bean
+    public CliHeifDecoder cliHeifDecoder(ImagingConfig imagingConfig) {
+        return new CliHeifDecoder(imagingConfig.heifDecoderCommand());
     }
 }

@@ -273,19 +273,21 @@ class TileRendererTest {
     }
 
     // A real AVIF file (arctic-sky.avif, a public-domain USGS photo via Wikimedia Commons,
-    // verified genuine ftyp/avif box structure) run through the default renderer, which has no
-    // real HeifDecoder wired in yet - proves today's actual, honest behavior for a real file of
-    // this format: a placeholder, not a crash or a silent mis-route. Once a real libheif-backed
-    // adapter exists, this test should start asserting a real decoded tile instead.
+    // verified genuine ftyp/avif box structure), run through a TileRenderer wired to the real
+    // CliHeifDecoder instead of the stub every other test in this class uses. This proves the
+    // HEIF-family routing path actually recovers a real tile end to end, not just that it calls
+    // whatever HeifDecoder it's given. 1600x1063 source (verified via `magick identify`) fit
+    // within 224x224 lands on 224x149.
     @Test
-    void realAvifFixtureFallsBackToAPlaceholderUntilARealDecoderExists() {
+    void realAvifFixtureDecodesToARealTileViaTheCliHeifDecoder() {
+        TileRenderer withRealHeifDecoder = new TileRenderer(new CliHeifDecoder("heif-convert"));
         Path avif = FIXTURES.resolve("arctic-sky.avif");
 
-        TileResult result = renderer.render(avif, TILE_SIZE);
+        TileResult result = withRealHeifDecoder.render(avif, TILE_SIZE);
 
-        assertThat(result.unreviewable()).isTrue();
+        assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
-        assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE);
+        assertThat(result.image().getHeight()).isEqualTo(149);
     }
 
     // The HEIC/AVIF decode path's own version of the judgeability check: a decoder can hand back

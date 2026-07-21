@@ -4,3 +4,7 @@ sluice:
     tile-size: 224
   cull:
     provider: external-agent
+  imaging:
+    # A bare command name, resolved against PATH - not a machine-specific path. Override with a
+    # full path via the standard env-var/user-config-file precedence if it isn't on PATH.
+    heif-decoder-command: heif-convert

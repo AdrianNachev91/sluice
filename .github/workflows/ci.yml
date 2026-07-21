@@ -30,5 +30,39 @@ jobs:
           java-version: '26'
           cache: maven
 
+      # CliHeifDecoder (Phase 8) shells to a libheif-based CLI (heif-convert) to decode real
+      # HEIC/HEIF/AVIF fixtures. The tests exercise the real binary instead of skipping in CI.
+      # That way a regression is caught automatically, not just on a dev machine.
+      # heif-convert is used rather than its newer heif-dec rename. Ubuntu's stock
+      # libheif-examples package (both 22.04 and 24.04) only ships the older name. Pinning to it
+      # avoids a cross-platform version mismatch instead of chasing a newer package source.
+      - name: Install libheif CLI (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libheif-examples
+
+      - name: Install libheif CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # windows-latest does not reliably ship 7-Zip (actions/runner-images#9361). Bootstrap a
+          # standalone 7za.exe from NuGet first. A .nupkg is just a zip file, so Expand-Archive
+          # handles it directly - no chicken-and-egg 7z-to-extract-7z problem.
+          $temp = "$env:RUNNER_TEMP\libheif-install"
+          New-Item -ItemType Directory -Force -Path $temp | Out-Null
+          Invoke-WebRequest -Uri 'https://www.nuget.org/api/v2/package/7-Zip.CommandLine' -OutFile "$temp\7za.zip"
+          Expand-Archive -Path "$temp\7za.zip" -DestinationPath "$temp\7za" -Force
+          $sevenZa = (Get-ChildItem -Path "$temp\7za" -Recurse -Filter '7za.exe' | Select-Object -First 1).FullName
+          if (-not $sevenZa) { throw "7za.exe not found inside the NuGet 7-Zip.CommandLine package - its internal layout may have changed." }
+
+          # v1.14.0: an older build that still ships heif-convert.exe, matching both the command
+          # name pinned above for Ubuntu and the local dev install.
+          $archive = "$temp\libheif.7z"
+          Invoke-WebRequest -Uri 'https://github.com/pphh77/libheif-Windowsbinary/releases/download/v1.14.0/libheif-1.14.0-win64.7z' -OutFile $archive
+          $dest = "$env:RUNNER_TEMP\libheif"
+          & $sevenZa x $archive "-o$dest" -y | Out-Null
+          $binDir = (Get-ChildItem -Path $dest -Recurse -Filter 'heif-convert.exe' | Select-Object -First 1).DirectoryName
+          if (-not $binDir) { throw "heif-convert.exe not found in the extracted libheif archive - its internal layout may have changed." }
+          Add-Content -Path $env:GITHUB_PATH -Value $binDir
+
       - name: Build and test
         run: mvn -f app/pom.xml test

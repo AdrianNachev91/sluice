@@ -63,9 +63,13 @@ flowchart TD
 
 AVIF shares HEIC/HEIF's ISOBMFF container and is decodable by the same underlying codec library
 (AV1 payload instead of HEVC), so it's routed through the same `HeifDecoder` port rather than a
-separate one. The port has no real implementation yet. Today this path is only exercised with a
-fake decoder in tests, so every real HEIC/HEIF/AVIF file currently lands on the placeholder branch,
-until a real adapter is wired in.
+separate one. `adapter/imaging/CliHeifDecoder` is the real implementation. It shells to a
+libheif-based CLI decoder, its command configurable via `sluice.imaging.heif-decoder-command`
+and defaulting to `heif-convert` on PATH. It's verified against real HEIC and AVIF fixtures. A
+missing or failing binary degrades to `Optional.empty()`, which this path already turns into a
+placeholder.
+`TileRenderer` still takes any `HeifDecoder` through its constructor, so which instance it actually
+runs with in the assembled app is a later wiring concern, not this class's.
 
 ## Generic raster path (everything else, including every RAW extension)
 
@@ -126,7 +130,8 @@ preview" rather than blending in if that routing is ever skipped or incomplete a
 | Real Sony ILCE-6700 ARW (2023) | Real tile via its EXIF embedded thumbnail, `unreviewable=false` (6192x4128 source) |
 | A `.cr2`-named file with no real image content | Placeholder labeled `CR2` |
 | An unknown-extension corrupt file | Placeholder labeled `NO PREVIEW` |
-| Real or fake HEIC/HEIF/AVIF today | Placeholder labeled with the real extension (no real decoder wired in yet) |
+| Real HEIC/AVIF, via `CliHeifDecoder` | Real tile, `unreviewable` per the same 640px source-size check |
+| HEIC/HEIF/AVIF with no decoder on PATH or a corrupt file | Placeholder labeled with the real extension |
 
 ## Known limitations
 
@@ -147,14 +152,11 @@ preview" rather than blending in if that routing is ever skipped or incomplete a
 - **The 640px judgeability threshold is grounded in exactly three real cameras** (Canon EOS 20D 2004,
   Nikon D40 2006, Sony ILCE-6700 2023) - a real empirical basis for "old cameras have this problem,
   modern ones likely don't", but not an exhaustive survey across manufacturers or eras.
-- **AVIF/HEIC/HEIF have zero real decode today.** Every real file of these types becomes a
-  placeholder in the actual running app right now, not just in the test suite - `HeifDecoder` has no
-  implementation yet. Recheck this claim once a real `HeifDecoder` implementation exists - it
-  should flip to false, and this bullet should be removed rather than left stale.
 
 ## Related
 
-- `application/port/out/HeifDecoder` - the port this class depends on; no real adapter exists yet.
+- `application/port/out/HeifDecoder` - the port this class depends on.
+- `adapter/imaging/CliHeifDecoder` - the real libheif-CLI-backed implementation.
 - `domain/scan/MediaTypeDetector` - supplies the lowercase extension this class routes on.
 - The montage grid composition that arranges these tiles and draws the per-photo filename label
   band is a later stage, not yet built.
