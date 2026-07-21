@@ -8,7 +8,11 @@ public final class LowResGate {
 
     // 1024-based (KiB), not a decimal 50000-byte threshold.
     private static final long SMALL_FILE_BYTES = 50 * 1024;
-    private static final int MIN_DIMENSION = 640;
+
+    // Public so other classes asking a related but distinct question - not "is this photo
+    // low-res" but "is this specific recovered preview big enough to trust a vision judgment on"
+    // (TileRenderer) - share the same bar instead of duplicating the literal.
+    public static final int MIN_DIMENSION = 640;
 
     private LowResGate() {
     }

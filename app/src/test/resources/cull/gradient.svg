@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   version="1.1"
+   viewBox="0 0 300 200">
+
+  <title>SVG Gradient Test</title>
+
+  <defs>
+    <linearGradient id="gfuser" x1="-40" y1="0" x2="40" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="rgb(255,255,255)" />
+      <stop offset="0.6" stop-color="rgb(127,127,127)" />
+      <stop offset="0.65" stop-color="rgb(255,255,255)" />
+      <stop offset="0.7" stop-color="rgb(135,135,135)" />
+      <stop offset=".9" stop-color="rgb(0,0,0)" />
+      <stop offset="1" stop-color="rgb(255,255,255)" />
+    </linearGradient>
+
+    <linearGradient id="gffactor" x1="0" y1=".5" x2="1" y2=".5">
+      <stop offset="0" stop-color="rgb(255,255,255)" />
+      <stop offset="0.6" stop-color="rgb(127,127,127)" />
+      <stop offset="0.65" stop-color="rgb(255,255,255)" />
+      <stop offset="0.7" stop-color="rgb(135,135,135)" />
+      <stop offset=".9" stop-color="rgb(0,0,0)" />
+      <stop offset="1" stop-color="rgb(255,255,255)" />
+    </linearGradient>
+
+    <linearGradient id="gfpercent" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="0.6" stop-color="rgb(127,127,127)" />
+      <stop offset="0.65" stop-color="rgb(255,255,255)" />
+      <stop offset="0.7" stop-color="rgb(135,135,135)" />
+      <stop offset="90%" stop-color="#000000" />
+      <stop offset="99%" stop-color="#FFFFFF" />
+    </linearGradient>
+
+    <linearGradient id="XXX_2_" gradientUnits="userSpaceOnUse" x1="10" y1="80" x2="290" y2="100">
+      <stop offset="0" stop-color="#FF0000" stop-opacity="1"/>
+      <stop offset="0.5" stop-color="#00FF00" stop-opacity="1"/>
+      <stop offset="1" stop-color="#0000FF" stop-opacity="1"/>
+    </linearGradient>
+
+    <path id="bar" d="M 10,80 L 290,80 290,100 10,100 10,80" />
+  </defs>
+
+  <rect fill="pink" x="0" y="0" width="300" height="200" />
+
+  <use xlink:href="#bar" fill="url(#XXX_2_)" />
+
+  <g transform="translate(50,50)">
+    <rect x="-40" y="-20" width="80" height="40" stroke="black" fill="url('#gfuser')" />
+  </g>
+
+  <g transform="translate(150,50)">
+    <rect x="-40" y="-20" width="80" height="40" stroke="black" fill="url('#gffactor')" />
+  </g>
+
+  <g transform="translate(250,50)">
+    <rect x="-40" y="-20" width="80" height="40" stroke="black" fill="url('#gfpercent')" />
+  </g>
+
+  <g transform="translate(50,150) rotate(45)">
+    <rect x="-40" y="-20" width="80" height="40" stroke="black" fill="url(#gfuser)" />
+  </g>
+
+  <g transform="translate(150,150) rotate(45)">
+    <rect x="-40" y="-20" width="80" height="40" stroke="black" fill="url(#gffactor)" />
+  </g>
+
+  <g transform="translate(250,150) rotate(90)">
+    <rect x="-40" y="-20" width="80" height="40" stroke="black" fill="url(#gfpercent)" />
+  </g>
+
+</svg>
