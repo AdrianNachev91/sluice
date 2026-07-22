@@ -33,6 +33,23 @@ class CullConfigTest {
     }
 
     @Test
+    void bundledDefaultCategoriesAreTheStandardFour() {
+        runner.run(context -> {
+            CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.categories()).containsExactly("junk", "scenery", "food", "funny");
+        });
+    }
+
+    @Test
+    void explicitPropertyOverridesCategories() {
+        runner.withPropertyValues("sluice.cull.categories=junk,receipts,pets")
+                .run(context -> {
+                    CullConfig config = context.getBean(CullConfig.class);
+                    assertThat(config.categories()).containsExactly("junk", "receipts", "pets");
+                });
+    }
+
+    @Test
     void providerSettingsBindWhenBothFieldsPresent() {
         runner.withPropertyValues(
                 "sluice.cull.provider=anthropic",

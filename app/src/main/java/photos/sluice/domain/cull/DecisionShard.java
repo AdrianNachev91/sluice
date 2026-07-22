@@ -1,6 +1,7 @@
 package photos.sluice.domain.cull;
 
 import java.util.List;
+import java.util.Objects;
 
 // The vision step's decisions for one montage, mirroring an on-disk decisions-NNN.json file: the
 // montage id it covers plus every non-keep decision within it. An empty decisions list is valid and
@@ -10,6 +11,7 @@ import java.util.List;
 public record DecisionShard(String montage, List<Decision> decisions) {
 
     public DecisionShard {
+        Objects.requireNonNull(montage, "montage");
         decisions = List.copyOf(decisions);
     }
 }
