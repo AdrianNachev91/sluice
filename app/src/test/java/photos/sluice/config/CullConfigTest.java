@@ -20,10 +20,10 @@ class CullConfigTest {
         runner.run(context -> {
             CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.provider()).isEqualTo("external-agent");
-            // providerSettings binds to null when sluice.cull.provider-settings.* is absent; the IDE
-            // can't model that reflective path and reads the isNull assertion as always-failing.
-            //noinspection DataFlowIssue
-            assertThat(config.providerSettings()).isNull();
+            // With sluice.cull.provider-settings.* absent, the settings object still exists (the
+            // port promises never-null) and each field reports unset as null.
+            assertThat(config.providerSettings().model()).isNull();
+            assertThat(config.providerSettings().endpoint()).isNull();
         });
     }
 

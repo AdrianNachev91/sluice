@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.DecisionShard;
@@ -209,5 +210,10 @@ class ExternalAgentCullerTest {
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
+
+        @Override
+        public CullProviderSettings providerSettings() {
+            return new CullProviderSettings(null, null);
+        }
     }
 }

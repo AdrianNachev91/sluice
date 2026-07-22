@@ -2,6 +2,7 @@ package photos.sluice.adapter.vision;
 
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.out.CullCategory;
+import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
@@ -82,5 +83,10 @@ class CullerPromptTest {
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
+
+        @Override
+        public CullProviderSettings providerSettings() {
+            return new CullProviderSettings(null, null);
+        }
     }
 }

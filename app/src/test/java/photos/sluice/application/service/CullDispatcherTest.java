@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
@@ -107,6 +108,11 @@ class CullDispatcherTest {
         @Override
         public List<CullCategory> categories() {
             return List.of();
+        }
+
+        @Override
+        public CullProviderSettings providerSettings() {
+            return new CullProviderSettings(null, null);
         }
     }
 

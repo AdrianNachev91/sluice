@@ -14,4 +14,7 @@ public interface CullSettings {
     // be one of the card names; ShardValidator checks that. Automated vision providers also render
     // each card's description into their culling prompt.
     List<CullCategory> categories();
+
+    // Connection settings for API-backed providers. Never null; its fields are null when unset.
+    CullProviderSettings providerSettings();
 }

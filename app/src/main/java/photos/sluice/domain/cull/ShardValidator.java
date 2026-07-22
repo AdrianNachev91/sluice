@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 // Validates a prep directory's decision shards against the shard contract - the single source of
 // truth for what a well-formed cull looks like. It reports every representable-but-wrong problem at
@@ -32,8 +33,14 @@ import java.util.TreeSet;
 //   - Each decision carries its required reasons (reason, or chosen_reason for a near-dup keeper).
 //   - Each near-dup group has exactly one chosen keeper and at least one reject, and belongs to a
 //     single montage - a group id reused across shards is rejected.
+//   - A group id is a slug: lowercase a-z0-9 runs joined by single hyphens, at most 24 chars. It
+//     becomes part of a Duplicates/YYYY-MM_<slug>/ folder name, so it must stay a short, portable
+//     path segment.
 //   - No file is acted on twice across all shards.
 public final class ShardValidator {
+
+    private static final Pattern GROUP_SLUG = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
+    private static final int GROUP_SLUG_MAX_LENGTH = 24;
 
     // A parsed shard paired with the montage id its on-disk filename implies (decisions-003.json ->
     // montage-003). The caller derives the id from the filename - the only place that linkage is
@@ -128,6 +135,11 @@ public final class ShardValidator {
             }
             if (rejects < 1) {
                 problems.add(montageId + ": near-dup group '" + group + "' has " + rejects + " reject(s) (need >=1)");
+            }
+            if (!GROUP_SLUG.matcher(group).matches() || group.length() > GROUP_SLUG_MAX_LENGTH) {
+                problems.add(montageId + ": near-dup group '" + group
+                        + "' is not a valid slug (lowercase a-z0-9, hyphenated, max "
+                        + GROUP_SLUG_MAX_LENGTH + " chars)");
             }
             montagesByGroup.computeIfAbsent(group, _ -> new TreeSet<>()).add(montageId);
         }

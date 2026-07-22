@@ -55,6 +55,11 @@
       <artifactId>metadata-extractor</artifactId>
       <version>2.20.0</version>
     </dependency>
+    <dependency>
+      <groupId>com.anthropic</groupId>
+      <artifactId>anthropic-java</artifactId>
+      <version>2.50.0</version>
+    </dependency>
     <!-- Versions for all com.twelvemonkeys.imageio modules come from the BOM above, imported
          into dependencyManagement - every module here always resolves to the same release. -->
     <dependency>

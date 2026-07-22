@@ -161,6 +161,39 @@ class ShardValidatorTest {
     }
 
     @Test
+    void aGroupSlugWithUppercaseOrUnderscoresIsReported() {
+        var report = validate(shardFile("montage-001",
+                new NearDupChosen(A, "Beach_Day", "sharp"),
+                new NearDupReject(B, "Beach_Day", "blurred")));
+
+        assertThat(report.problems()).contains(
+                "montage-001: near-dup group 'Beach_Day' is not a valid slug "
+                        + "(lowercase a-z0-9, hyphenated, max 24 chars)");
+    }
+
+    @Test
+    void aGroupSlugLongerThanTwentyFourCharsIsReported() {
+        var tooLong = "a-very-long-birthday-slug"; // 25 chars
+        var report = validate(shardFile("montage-001",
+                new NearDupChosen(A, tooLong, "sharp"),
+                new NearDupReject(B, tooLong, "blurred")));
+
+        assertThat(report.problems()).contains(
+                "montage-001: near-dup group '" + tooLong + "' is not a valid slug "
+                        + "(lowercase a-z0-9, hyphenated, max 24 chars)");
+    }
+
+    @Test
+    void aHyphenatedSlugAtTheLengthLimitIsValid() {
+        var atLimit = "birthday-cake-candles-24"; // 24 chars exactly
+        var report = validate(shardFile("montage-001",
+                new NearDupChosen(A, atLimit, "sharp"),
+                new NearDupReject(B, atLimit, "blurred")));
+
+        assertThat(report.valid()).isTrue();
+    }
+
+    @Test
     void aMontageFieldNotMatchingTheFilenameIsReported() {
         var report = validate(new ShardFile("montage-001",
                 new DecisionShard("montage-002", List.of(new Classification(A, "junk", "screenshot")))));
