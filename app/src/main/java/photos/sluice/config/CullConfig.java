@@ -1,11 +1,16 @@
 package photos.sluice.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import photos.sluice.application.port.out.CullSettings;
 
 import java.util.List;
 
 @ConfigurationProperties(prefix = "sluice.cull")
-public record CullConfig(String provider, ProviderSettings providerSettings, List<String> categories) {
+public record CullConfig(String provider, ProviderSettings providerSettings, List<String> categories)
+        implements CullSettings {
+
+    // provider() is supplied by the record's own accessor, satisfying CullSettings so the application
+    // layer selects a culler without importing this config record.
 
     // categories is the classification set the culler routes to (junk/scenery/food/funny by default,
     // extensible by the user); ShardValidator checks every classification against it. The default
