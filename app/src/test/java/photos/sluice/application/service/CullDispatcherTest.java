@@ -85,7 +85,7 @@ class CullDispatcherTest {
     }
 
     private static CullSettings settingsFor(String provider) {
-        return () -> provider;
+        return new MutableSettings(provider);
     }
 
     private static final class MutableSettings implements CullSettings {
@@ -99,6 +99,11 @@ class CullDispatcherTest {
         @Override
         public String provider() {
             return provider;
+        }
+
+        @Override
+        public List<String> categories() {
+            return List.of();
         }
     }
 

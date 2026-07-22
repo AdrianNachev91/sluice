@@ -4,9 +4,10 @@ import java.nio.file.Path;
 import java.util.List;
 
 // The receipt MontageRenderer.build() hands back to its caller, mirroring index.json's own field
-// shape and order. Downstream consumers (the culler, apply) re-read the prep directory from disk
-// themselves rather than consuming this value directly - it exists for the calling engine to
-// report a summary without re-reading the file it just wrote. No source field: a cull run only
+// shape and order. The record is what travels in memory: the caller reports a summary from it
+// and hands it to the VisionCuller port. index.json makes the same data durable, so a later
+// session can rebuild the record without re-running prep. The montage, sidecar, and shard files
+// themselves are always re-read from disk by whoever consumes them. No source field: a cull run only
 // ever reads Sorted - the library is final once committed, never re-scanned by cull.
 //
 // unreviewable lists every candidate this run found but couldn't render a judgeable tile for
