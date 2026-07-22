@@ -34,14 +34,14 @@ import java.util.List;
 // rest of the run's problems, not as a first-error parse crash. Null DTO fields are omitted on write,
 // so a classification shard carries only file/action/reason and never emits an empty group key.
 @Component
-public class ShardCodec {
+class ShardCodec {
 
     private static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
     private static final String NEAR_DUP_REJECT = "near-dup-reject";
 
     private final JsonMapper mapper;
 
-    public ShardCodec() {
+    ShardCodec() {
         this(JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build());
     }
 
