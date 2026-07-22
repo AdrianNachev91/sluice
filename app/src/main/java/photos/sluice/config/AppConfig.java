@@ -40,4 +40,12 @@ public class AppConfig {
     public CliHeifDecoder cliHeifDecoder(ImagingConfig imagingConfig) {
         return new CliHeifDecoder(imagingConfig.heifDecoderCommand());
     }
+
+    // The domain grid record the montage pipeline consumes, built from the bound properties
+    // record. Mapped by accessor name, so a reordering of either record's fields cannot
+    // silently swap the two ints.
+    @Bean
+    public photos.sluice.domain.cull.MontageConfig montageConfig(MontageConfig properties) {
+        return new photos.sluice.domain.cull.MontageConfig(properties.tileSize(), properties.tilesPerRow());
+    }
 }
