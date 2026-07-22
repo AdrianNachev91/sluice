@@ -1,6 +1,7 @@
 package photos.sluice.adapter.vision;
 
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullSettings;
@@ -65,7 +66,8 @@ class ExternalAgentCuller implements VisionCuller {
         List<Path> sidecarSrcs = prep.entries().stream()
                 .flatMap(montage -> sidecarReader.readSrcs(prep.prepDir().resolve(montage + ".json")).stream())
                 .toList();
-        ValidationReport report = validator.validate(shards, sidecarSrcs, settings.categories());
+        List<String> categoryNames = settings.categories().stream().map(CullCategory::name).toList();
+        ValidationReport report = validator.validate(shards, sidecarSrcs, categoryNames);
         problems.addAll(report.problems());
 
         if (!problems.isEmpty()) {

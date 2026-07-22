@@ -2,6 +2,7 @@ package photos.sluice.adapter.vision;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullSettings;
@@ -162,7 +163,11 @@ class ExternalAgentCullerTest {
 
     private ExternalAgentCuller culler() {
         return new ExternalAgentCuller(new ShardCodec(), new SidecarReader(),
-                new FixedSettings("external-agent", List.of("junk", "scenery", "food", "funny")));
+                new FixedSettings("external-agent", List.of(
+                        new CullCategory("junk", "objectively worthless shots"),
+                        new CullCategory("scenery", "unremarkable scenery"),
+                        new CullCategory("food", "meal photos"),
+                        new CullCategory("funny", "memes and funny screenshots"))));
     }
 
     private static CullOptions options() {
@@ -202,6 +207,6 @@ class ExternalAgentCullerTest {
         return path.toString().replace("\\", "\\\\");
     }
 
-    private record FixedSettings(String provider, List<String> categories) implements CullSettings {
+    private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
     }
 }

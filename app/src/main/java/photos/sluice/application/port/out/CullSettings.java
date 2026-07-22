@@ -10,7 +10,8 @@ public interface CullSettings {
     // Id of the vision provider to route a cull through, matched against each VisionCuller.id().
     String provider();
 
-    // The configured classification categories. Every classification decision's category must be a
-    // member of this set; ShardValidator checks that.
-    List<String> categories();
+    // The configured classification category cards. Every classification decision's category must
+    // be one of the card names; ShardValidator checks that. Automated vision providers also render
+    // each card's description into their culling prompt.
+    List<CullCategory> categories();
 }

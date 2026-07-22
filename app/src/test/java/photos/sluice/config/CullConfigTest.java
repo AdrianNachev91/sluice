@@ -5,6 +5,7 @@ import org.springframework.boot.test.context.ConfigDataApplicationContextInitial
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+import photos.sluice.application.port.out.CullCategory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -36,20 +37,48 @@ class CullConfigTest {
     }
 
     @Test
-    void bundledDefaultCategoriesAreTheStandardFour() {
+    void bundledDefaultCategoriesAreTheStandardFourCards() {
         runner.run(context -> {
             CullConfig config = context.getBean(CullConfig.class);
-            assertThat(config.categories()).containsExactly("junk", "scenery", "food", "funny");
+            assertThat(config.categories()).extracting(CullCategory::name)
+                    .containsExactly("junk", "scenery", "food", "funny");
         });
     }
 
     @Test
-    void explicitPropertyOverridesCategories() {
-        runner.withPropertyValues("sluice.cull.categories=junk,receipts,pets")
-                .run(context -> {
-                    CullConfig config = context.getBean(CullConfig.class);
-                    assertThat(config.categories()).containsExactly("junk", "receipts", "pets");
-                });
+    void bundledJunkCardKeepsThePhotoOfAScreenEmphasis() {
+        // Photos of screens are the single most-missed junk class; the bundled card's description
+        // is what teaches an automated provider to catch them. Guard the phrase so a future
+        // rewording of the defaults can't silently drop the emphasis.
+        runner.run(context -> {
+            CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.categories().getFirst().description()).contains("photo of a screen");
+        });
+    }
+
+    @Test
+    void explicitPropertiesOverrideCategories() {
+        runner.withPropertyValues(
+                "sluice.cull.categories[0].name=receipts",
+                "sluice.cull.categories[0].description=Paper receipts and invoices",
+                "sluice.cull.categories[1].name=pets",
+                "sluice.cull.categories[1].description=Photos of the family dog"
+        ).run(context -> {
+            CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.categories()).containsExactly(
+                    new CullCategory("receipts", "Paper receipts and invoices"),
+                    new CullCategory("pets", "Photos of the family dog"));
+        });
+    }
+
+    @Test
+    void rejectsTwoCardsSharingAName() {
+        runner.withPropertyValues(
+                "sluice.cull.categories[0].name=receipts",
+                "sluice.cull.categories[0].description=Paper receipts and invoices",
+                "sluice.cull.categories[1].name=receipts",
+                "sluice.cull.categories[1].description=Photos of till slips"
+        ).run(context -> assertThat(context).hasFailed());
     }
 
     @Test

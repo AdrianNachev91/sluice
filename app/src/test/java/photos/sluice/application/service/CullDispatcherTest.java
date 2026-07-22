@@ -2,6 +2,7 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.Nullable;
+import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullSettings;
@@ -102,7 +103,7 @@ class CullDispatcherTest {
         }
 
         @Override
-        public List<String> categories() {
+        public List<CullCategory> categories() {
             return List.of();
         }
     }
