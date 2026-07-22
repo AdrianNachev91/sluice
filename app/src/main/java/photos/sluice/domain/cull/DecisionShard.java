@@ -1,0 +1,15 @@
+package photos.sluice.domain.cull;
+
+import java.util.List;
+
+// The vision step's decisions for one montage, mirroring an on-disk decisions-NNN.json file: the
+// montage id it covers plus every non-keep decision within it. An empty decisions list is valid and
+// meaningful. It marks a montage reviewed and held entirely as keeps, distinct from a montage never
+// processed (whose shard is simply absent). montage must equal the shard filename's own id (checked
+// by ShardValidator).
+public record DecisionShard(String montage, List<Decision> decisions) {
+
+    public DecisionShard {
+        decisions = List.copyOf(decisions);
+    }
+}
