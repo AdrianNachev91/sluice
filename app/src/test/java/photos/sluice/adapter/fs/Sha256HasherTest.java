@@ -14,9 +14,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class Sha256HasherTest {
 
-    private static final String FIXTURE_CONTENT = "sluice-phase2-fixture\n";
+    private static final String FIXTURE_CONTENT = "sluice-hash-fixture\n";
     private static final String FIXTURE_SHA256 =
-            "30C9606C6DD07382446782C0CE33FA626DE13A71567E292B0D44C325E1FCD96E";
+            "0589AB8077386B804C8C7734B058DDC089CCC72B86032F53B759FC6368960284";
 
     private final Sha256Hasher hasher = new Sha256Hasher();
 
