@@ -3,6 +3,7 @@ package photos.sluice.application.service;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
@@ -33,8 +34,8 @@ public class CullDispatcher {
         this.settings = settings;
     }
 
-    public void cull(PrepDir prep, CullOptions options) throws CullException {
-        select().cull(prep, options);
+    public CullReport cull(PrepDir prep, CullOptions options) throws CullException {
+        return select().cull(prep, options);
     }
 
     private VisionCuller select() {

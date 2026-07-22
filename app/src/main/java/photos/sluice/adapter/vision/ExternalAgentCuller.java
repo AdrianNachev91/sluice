@@ -4,9 +4,11 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.ValidationReport;
@@ -29,7 +31,9 @@ import java.util.stream.Stream;
 // list in one pass. The throw is the poke: fix the shards, run again.
 //
 // opts.allowPartial() waives only the missing-shard requirement. Whatever shards do exist must
-// still be fully valid. opts.timeout() is ignored - there is nothing to wait on.
+// still be fully valid. opts.timeout() is ignored - there is nothing to wait on. The returned
+// report counts waived montages as skipped and carries zero tokens: the judgement happened out of
+// band, so no model tokens were spent through this app.
 //
 // Two failure channels, split by who can fix them. Shard problems are the culling agent's to fix
 // and go into the CullException report. The sidecars listing what each montage shows are this
@@ -55,7 +59,7 @@ class ExternalAgentCuller implements VisionCuller {
     }
 
     @Override
-    public void cull(PrepDir prep, CullOptions opts) throws CullException {
+    public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
         var problems = new ArrayList<String>();
         var shards = new ArrayList<ShardFile>();
         for (String montage : prep.entries()) {
@@ -64,7 +68,8 @@ class ExternalAgentCuller implements VisionCuller {
         problems.addAll(strayShards(prep));
 
         List<Path> sidecarSrcs = prep.entries().stream()
-                .flatMap(montage -> sidecarReader.readSrcs(prep.prepDir().resolve(montage + ".json")).stream())
+                .flatMap(montage -> sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json")).stream())
+                .map(SidecarPhotoEntry::src)
                 .toList();
         List<String> categoryNames = settings.categories().stream().map(CullCategory::name).toList();
         ValidationReport report = validator.validate(shards, sidecarSrcs, categoryNames);
@@ -74,6 +79,9 @@ class ExternalAgentCuller implements VisionCuller {
             throw new CullException("Cull for " + prep.scope() + " is incomplete ("
                     + problems.size() + " problem(s)):\n - " + String.join("\n - ", problems));
         }
+        // A problem-free run means every montage either yielded a valid shard or was waived by
+        // allowPartial, so the waived count is what the shard list doesn't cover.
+        return new CullReport(shards.size(), prep.entries().size() - shards.size(), 0, 0);
     }
 
     // Reads one montage's expected shard into the validation list, or records why it can't be. The

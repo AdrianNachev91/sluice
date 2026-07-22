@@ -2,6 +2,7 @@ package photos.sluice.adapter.vision;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
 
@@ -19,7 +20,7 @@ class AnthropicCuller implements VisionCuller {
     }
 
     @Override
-    public void cull(PrepDir prep, CullOptions opts) {
+    public CullReport cull(PrepDir prep, CullOptions opts) {
         throw new UnsupportedOperationException(
                 "The 'anthropic' vision provider is not implemented yet. Use provider 'external-agent'.");
     }

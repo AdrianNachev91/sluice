@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
@@ -27,10 +28,11 @@ class CullDispatcherTest {
         var other = new RecordingCuller("external-agent");
         var dispatcher = new CullDispatcher(List.of(other, target), settingsFor("anthropic"));
 
-        dispatcher.cull(PREP, OPTIONS);
+        CullReport report = dispatcher.cull(PREP, OPTIONS);
 
         assertThat(target.receivedPrep).isSameAs(PREP);
         assertThat(target.receivedOptions).isSameAs(OPTIONS);
+        assertThat(report).isSameAs(target.report);
         assertThat(other.receivedPrep).isNull();
     }
 
@@ -111,6 +113,7 @@ class CullDispatcherTest {
     private static final class RecordingCuller implements VisionCuller {
 
         private final String id;
+        private final CullReport report = new CullReport(0, 0, 0, 0);
         private @Nullable PrepDir receivedPrep;
         private @Nullable CullOptions receivedOptions;
 
@@ -124,16 +127,17 @@ class CullDispatcherTest {
         }
 
         @Override
-        public void cull(PrepDir prep, CullOptions opts) {
+        public CullReport cull(PrepDir prep, CullOptions opts) {
             this.receivedPrep = prep;
             this.receivedOptions = opts;
+            return report;
         }
     }
 
     private record ThrowingCuller(String id) implements VisionCuller {
 
         @Override
-        public void cull(PrepDir prep, CullOptions opts) throws CullException {
+        public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
             throw new CullException("shards missing");
         }
     }

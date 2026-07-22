@@ -15,8 +15,9 @@ public interface VisionCuller {
     String id();
 
     // Ensures every montage in prep has a present, valid decision shard, by whatever means the
-    // implementation obtains the judgements. Throws CullException when a complete, valid set cannot be
-    // yielded. The throw is the signal to whoever is culling to fix the shards and run again.
-    // opts.allowPartial() tolerates missing shards.
-    void cull(PrepDir prep, CullOptions opts) throws CullException;
+    // implementation obtains the judgements, and returns a report of what the run did and spent.
+    // Throws CullException when a complete, valid set cannot be yielded. The throw is the signal to
+    // whoever is culling to fix the shards and run again. opts.allowPartial() tolerates missing
+    // shards.
+    CullReport cull(PrepDir prep, CullOptions opts) throws CullException;
 }

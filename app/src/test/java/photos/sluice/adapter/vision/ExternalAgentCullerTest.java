@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.DecisionShard;
@@ -31,7 +32,7 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void returnsWhenEveryMontageHasAValidShard(@TempDir Path dir) throws IOException {
+    void reportsEveryMontageCulledWhenEachHasAValidShard(@TempDir Path dir) throws IOException, CullException {
         Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         Path keeper = dir.resolve("base").resolve("IMG_002.jpg");
         writeSidecar(dir, "montage-001", junk);
@@ -41,8 +42,8 @@ class ExternalAgentCullerTest {
         // An all-keeps montage still answers with a shard - an empty decisions list, not no file.
         codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
-        assertThatCode(() -> culler.cull(prep(dir, "montage-001", "montage-002"), options()))
-                .doesNotThrowAnyException();
+        assertThat(culler.cull(prep(dir, "montage-001", "montage-002"), options()))
+                .isEqualTo(new CullReport(2, 0, 0, 0));
     }
 
     @Test
@@ -57,15 +58,15 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void allowPartialWaivesMissingShards(@TempDir Path dir) throws IOException {
+    void allowPartialWaivesMissingShardsAndReportsThemSkipped(@TempDir Path dir) throws IOException, CullException {
         Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         writeSidecar(dir, "montage-001", junk);
         writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "blurry document"))));
 
-        assertThatCode(() -> culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial()))
-                .doesNotThrowAnyException();
+        assertThat(culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial()))
+                .isEqualTo(new CullReport(1, 1, 0, 0));
     }
 
     @Test
@@ -156,9 +157,9 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void returnsCleanlyWhenThePrepDirHasNoMontages(@TempDir Path dir) {
-        assertThatCode(() -> culler.cull(prep(dir), options()))
-                .doesNotThrowAnyException();
+    void returnsAnEmptyReportWhenThePrepDirHasNoMontages(@TempDir Path dir) throws CullException {
+        assertThat(culler.cull(prep(dir), options()))
+                .isEqualTo(new CullReport(0, 0, 0, 0));
     }
 
     private ExternalAgentCuller culler() {
