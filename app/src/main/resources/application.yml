@@ -3,6 +3,10 @@ sluice:
     tiles-per-row: 5
     tile-size: 224
   cull:
+    # Which vision provider culls. Built in: external-agent (an agent you run reads the montages
+    # and writes the decision shards) and anthropic (the app calls the Anthropic API with your
+    # key). Future openai and ollama adapters are planned but not yet written. A new provider is
+    # one class; see adapter/vision/package-info.java.
     provider: external-agent
     # Category cards. name is the action id decisions carry. description is the "what belongs
     # here" prose an automated vision provider renders into its culling prompt.

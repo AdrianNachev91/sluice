@@ -443,7 +443,8 @@ class AnthropicCuller implements VisionCuller {
         return model;
     }
 
-    private static AnthropicClient defaultClient(CullProviderSettings providerSettings) {
+    // Package-private so the live verify can wrap the client this builds instead of its own.
+    static AnthropicClient defaultClient(CullProviderSettings providerSettings) {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException("Environment variable ANTHROPIC_API_KEY is not set; "

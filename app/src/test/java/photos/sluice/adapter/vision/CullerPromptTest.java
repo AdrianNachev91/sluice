@@ -88,7 +88,7 @@ class CullerPromptTest {
                 Your verdicts for this sheet failed validation:
                  - no verdict for photo 3 (IMG_003.jpg)
                  - montage-007[#1]: missing 'reason'
-                Return the complete corrected verdict list for this sheet as JSON only, matching the schema you were given.
+                Return the complete corrected verdict list for this sheet as JSON only, matching the schema you were given. Give exactly one verdict per photo in the photo table, keyed by that table's index and name. Never add a verdict for any other index or name.
                 """);
     }
 

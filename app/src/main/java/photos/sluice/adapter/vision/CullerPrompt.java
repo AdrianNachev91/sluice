@@ -70,7 +70,9 @@ class CullerPrompt {
 
     // The follow-up turn after a response failed validation. It lists every problem found and asks
     // for the whole corrected verdict list, not a patch. The response replaces the failed one
-    // outright, so a partial answer would drop the verdicts it omits.
+    // outright, so a partial answer would drop the verdicts it omits. The reply's shape is also
+    // restated defensively. A name-mismatch problem can read as if the misnamed photo were an
+    // extra photo, and a model that answers for both names duplicates an index.
     String correctionTurn(List<String> problems) {
         var text = new StringBuilder();
         text.append("Your verdicts for this sheet failed validation:\n");
@@ -78,7 +80,9 @@ class CullerPrompt {
             text.append(" - ").append(problem).append('\n');
         }
         text.append("Return the complete corrected verdict list for this sheet as JSON only, "
-                + "matching the schema you were given.\n");
+                + "matching the schema you were given. Give exactly one verdict per photo in the "
+                + "photo table, keyed by that table's index and name. Never add a verdict for any "
+                + "other index or name.\n");
         return text.toString();
     }
 
