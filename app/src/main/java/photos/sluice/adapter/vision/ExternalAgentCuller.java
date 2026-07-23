@@ -91,7 +91,7 @@ class ExternalAgentCuller implements VisionCuller {
     // problems.
     private void collectShard(Path prepDir, String montage, boolean allowPartial,
             List<ShardFile> shards, List<String> problems) {
-        String shardName = shardNameFor(montage);
+        String shardName = MontageNaming.shardFileFor(montage);
         Path shardPath = prepDir.resolve(shardName);
         if (!Files.exists(shardPath)) {
             if (!allowPartial) {
@@ -112,7 +112,7 @@ class ExternalAgentCuller implements VisionCuller {
     // decisions-NNN pattern, so a mis-numbered name like decisions-01.json is caught too.
     private static List<String> strayShards(PrepDir prep) {
         List<String> expected = prep.entries().stream()
-                .map(ExternalAgentCuller::shardNameFor)
+                .map(MontageNaming::shardFileFor)
                 .toList();
         try (Stream<Path> files = Files.list(prep.prepDir())) {
             return files.map(path -> path.getFileName().toString())
@@ -124,10 +124,6 @@ class ExternalAgentCuller implements VisionCuller {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to list prep dir " + prep.prepDir(), e);
         }
-    }
-
-    private static String shardNameFor(String montage) {
-        return montage.replaceFirst("^montage-", "decisions-") + ".json";
     }
 
     // The codec wraps its failures in one or two layers of carrier exceptions whose messages only

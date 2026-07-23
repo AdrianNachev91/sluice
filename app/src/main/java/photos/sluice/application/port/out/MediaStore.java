@@ -22,6 +22,10 @@ public interface MediaStore {
 
     void appendLine(Path file, String line);
 
+    // Every line of file, in order, or empty if file does not exist - the read-side counterpart to
+    // appendLine, for resuming from a crash-safety log written one line per completed step.
+    List<String> readLines(Path file);
+
     // Removes every subdirectory under root left empty of all files (root itself is never a
     // candidate). A directory holding a genuine non-media leftover is left in place.
     void removeEmptyDirectories(Path root);

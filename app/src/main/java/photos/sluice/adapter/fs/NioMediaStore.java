@@ -95,6 +95,18 @@ public class NioMediaStore implements MediaStore {
     }
 
     @Override
+    public List<String> readLines(Path file) {
+        if (!Files.exists(file)) {
+            return List.of();
+        }
+        try {
+            return Files.readAllLines(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read lines from " + file, e);
+        }
+    }
+
+    @Override
     public void removeEmptyDirectories(Path root) {
         List<Path> directories;
         try (Stream<Path> walk = Files.walk(root)) {

@@ -195,7 +195,7 @@ class AnthropicCuller implements VisionCuller {
             for (String montage : prep.entries()) {
                 ordinal++;
                 List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
-                Path shardPath = prep.prepDir().resolve(shardNameFor(montage));
+                Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
                 if (resumesExistingShard(shardPath, montage, acceptedShards, scopeSrcs,
                         categoryNames)) {
                     resumed++;
@@ -467,10 +467,6 @@ class AnthropicCuller implements VisionCuller {
         Integer maxRetries = providerSettings.maxRetries();
         builder.maxRetries(maxRetries == null ? DEFAULT_TRANSPORT_RETRIES : maxRetries);
         return builder.build();
-    }
-
-    private static String shardNameFor(String montage) {
-        return montage.replaceFirst("^montage-", "decisions-") + ".json";
     }
 
     private static String orEmpty(@Nullable String value) {

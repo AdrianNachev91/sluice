@@ -193,6 +193,23 @@ class NioMediaStoreTest {
     }
 
     @Test
+    void readLinesReturnsEveryLineInOrder(@TempDir Path root) {
+        Path file = root.resolve("applied.log");
+
+        store.appendLine(file, "IMG_0001.jpg");
+        store.appendLine(file, "IMG_0002.jpg");
+
+        assertThat(store.readLines(file)).containsExactly("IMG_0001.jpg", "IMG_0002.jpg");
+    }
+
+    @Test
+    void readLinesOnAMissingFileReturnsEmpty(@TempDir Path root) {
+        Path missing = root.resolve("applied.log");
+
+        assertThat(store.readLines(missing)).isEmpty();
+    }
+
+    @Test
     void removeEmptyDirectoriesCollapsesNestedEmptyChainBottomUp(@TempDir Path root) throws IOException {
         Path nested = Files.createDirectories(root.resolve("Takeout").resolve("Google Photos").resolve("2019-06"));
 
