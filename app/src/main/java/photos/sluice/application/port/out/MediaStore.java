@@ -10,6 +10,16 @@ public interface MediaStore {
 
     Path move(Path source, Path destDir);
 
+    // The exact free path move(source, destDir) would land on, without performing the move - the
+    // first name not already occupied under destDir (source's own leaf, then " (2)", " (3)", ...).
+    // Exists so a caller can durably record where a decision is headed BEFORE moving it, closing the
+    // crash window between "decided the destination" and "the move actually happened."
+    Path resolveDestination(Path source, Path destDir);
+
+    // Moves source to exactly destination - no collision handling of its own, since the caller is
+    // expected to have already reserved that exact path via resolveDestination.
+    Path moveTo(Path source, Path destination);
+
     Path copy(Path source, Path destDir);
 
     void delete(Path path);

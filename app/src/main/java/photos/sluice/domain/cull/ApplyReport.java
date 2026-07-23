@@ -5,9 +5,9 @@ import java.util.Map;
 
 // Two distinct uses, two distinct scopes. As ApplyEngine.apply()'s return value, every count
 // reflects only what THIS run itself moved. A decision already carried out by an earlier, crashed
-// run (skipped via applied.log) is not counted again, so a caller can report "what did this
-// invocation just do". As the summary embedded in the merged decisions.json, the counts instead
-// cover every decision in that same file's decisions array - this run's and every prior run's
+// run (confirmed done rather than reprocessed) is not counted again, so a caller can report "what
+// did this invocation just do". As the summary embedded in the merged decisions.json, the counts
+// instead cover every decision in that same file's decisions array - this run's and every prior run's
 // alike. Otherwise the persisted summary would silently drift from the array sitting right next to
 // it. reviewed is the prep directory's own reviewable photo count (PrepDir.photos()), carried
 // through for the merged record either way. heals lists every path ShardValidator auto-corrected

@@ -29,13 +29,23 @@ public class NioMediaStore implements MediaStore {
 
     @Override
     public Path move(Path source, Path destDir) {
-        Path dest = prepareDestination(source, destDir);
+        return moveTo(source, resolveDestination(source, destDir));
+    }
+
+    @Override
+    public Path resolveDestination(Path source, Path destDir) {
+        return resolveCollision(destDir, source.getFileName().toString());
+    }
+
+    @Override
+    public Path moveTo(Path source, Path destination) {
+        ensureDirectory(destination.getParent());
         try {
-            Files.move(source, dest);
+            Files.move(source, destination);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to move " + source + " to " + dest, e);
+            throw new UncheckedIOException("Failed to move " + source + " to " + destination, e);
         }
-        return dest;
+        return destination;
     }
 
     @Override

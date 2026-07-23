@@ -20,9 +20,17 @@ flowchart TD
     D --> I["Files.move or Files.copy(source, candidate)"]
 ```
 
-`base`/`ext` split on the last `.` in the leaf name; a leaf with no extension (or a leading-dot
+`base`/`ext` split on the last `.` in the leaf name. A leaf with no extension (or a leading-dot
 dotfile) keeps the whole name as `base` and an empty `ext`. The loop only ever increments `n` -
 once a free numbered candidate is found it is used immediately, matching first-free-wins.
+
+`move` is this whole flow end to end: resolve a candidate, then move straight to it. `copy` is the
+same, but with `Files.copy` in the last step. The candidate-finding part above, with no file
+movement, is also exposed on its own as `resolveDestination`. The final move-to-a-path step is
+exposed as `moveTo`. `ApplyEngine` calls them separately. It needs to know a move's exact
+destination before performing it, to durably record a decision's source hash against that
+destination first - see `apply-engine.md`'s move-record section. `moveTo` trusts its caller to
+have already reserved that exact path and does no collision handling of its own.
 
 ## Scenarios
 
@@ -80,8 +88,8 @@ now-empty-directory delete `removeEmptyDirectories` itself uses, applied to `dir
   the `application/service` design folder. `listFiles` is used by both `CommitEngine` (walking
   `Sorted/`) and `RescueEngine` (walking a Review folder) - neither has its own design doc, since
   each engine's own scope/branching logic (not this port method) is the part worth diagramming, and
-  only `rescue-engine.md` cleared that bar. `copy` has no caller yet - it's declared alongside
-  `move` for the near-dup handling a later phase's apply engine will need.
+  only `rescue-engine.md` cleared that bar. `copy`, `resolveDestination`, `moveTo`, and `write` are
+  used by `apply-engine.md`'s `ApplyEngine` for near-dup handling and crash-safe resume.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the
   first step (which sidecars count as orphaned) is `sidecar-sweep.md` in the `domain/scan` design
   folder.
