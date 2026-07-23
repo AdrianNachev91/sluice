@@ -85,15 +85,15 @@ principle the metadata path applies.
 
 ## Scenarios
 
-| File | Path taken | Result |
-|---|---|---|
-| iPhone HEIC (real EXIF) | `ExifSubIFDDirectory` | True capture resolution |
-| Real AVIF, no embedded EXIF | `HeifDirectory` | True capture resolution |
-| Real Nikon NEF, multiple SubIFDs | `ExifSubIFDDirectory`, largest across all | True capture resolution, not the 160x120 preview |
-| Real Sony ARW, TIFF vs. EXIF tag pairs on different SubIFDs | `ExifSubIFDDirectory`, largest across all | True capture resolution, not the smaller preview |
-| Plain PNG/JPEG with no EXIF | ImageIO fallback | Real dimensions |
-| Multi-image TIFF | ImageIO fallback, largest across sub-images | The larger image, not the embedded thumbnail |
-| Not an image / unparseable | Neither path finds anything | Empty |
+| File                                                        | Path taken                                  | Result                                           |
+|-------------------------------------------------------------|---------------------------------------------|--------------------------------------------------|
+| iPhone HEIC (real EXIF)                                     | `ExifSubIFDDirectory`                       | True capture resolution                          |
+| Real AVIF, no embedded EXIF                                 | `HeifDirectory`                             | True capture resolution                          |
+| Real Nikon NEF, multiple SubIFDs                            | `ExifSubIFDDirectory`, largest across all   | True capture resolution, not the 160x120 preview |
+| Real Sony ARW, TIFF vs. EXIF tag pairs on different SubIFDs | `ExifSubIFDDirectory`, largest across all   | True capture resolution, not the smaller preview |
+| Plain PNG/JPEG with no EXIF                                 | ImageIO fallback                            | Real dimensions                                  |
+| Multi-image TIFF                                            | ImageIO fallback, largest across sub-images | The larger image, not the embedded thumbnail     |
+| Not an image / unparseable                                  | Neither path finds anything                 | Empty                                            |
 
 ## Known limitations
 

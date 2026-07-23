@@ -45,15 +45,15 @@ caller never has to know which shape triggered it.
 
 ## Scenarios
 
-| Scenario | Outcome |
-|---|---|
-| `photo.jpg` + `photo.jpg.json` in the same folder | Paired (delegated to `TakeoutSidecarPairer`) |
-| `photo.jpg.JSON` (uppercase extension) | Still recognized as a sidecar - the check is case-insensitive |
-| `readme.txt` alongside media | Dropped silently - neither a sidecar nor a recognized media extension |
-| `orphan.jpg.json` with no matching photo anywhere | Collected as a sidecar but never paired; `takeoutMode` still flips true (a JSON file was present) |
-| Two folders each with their own `IMG_1234.jpg` + `IMG_1234.jpg.json` | Each pairs within its own folder only - pairing never crosses directories |
-| Empty inbox folder | `ScanResult` with empty media, empty sidecars, `takeoutMode = false` |
-| Inbox root path doesn't exist | Throws `UncheckedIOException` |
+| Scenario                                                             | Outcome                                                                                           |
+|----------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `photo.jpg` + `photo.jpg.json` in the same folder                    | Paired (delegated to `TakeoutSidecarPairer`)                                                      |
+| `photo.jpg.JSON` (uppercase extension)                               | Still recognized as a sidecar - the check is case-insensitive                                     |
+| `readme.txt` alongside media                                         | Dropped silently - neither a sidecar nor a recognized media extension                             |
+| `orphan.jpg.json` with no matching photo anywhere                    | Collected as a sidecar but never paired; `takeoutMode` still flips true (a JSON file was present) |
+| Two folders each with their own `IMG_1234.jpg` + `IMG_1234.jpg.json` | Each pairs within its own folder only - pairing never crosses directories                         |
+| Empty inbox folder                                                   | `ScanResult` with empty media, empty sidecars, `takeoutMode = false`                              |
+| Inbox root path doesn't exist                                        | Throws `UncheckedIOException`                                                                     |
 
 ## Related
 

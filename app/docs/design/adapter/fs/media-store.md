@@ -26,15 +26,15 @@ once a free numbered candidate is found it is used immediately, matching first-f
 
 ## Scenarios
 
-| Scenario | Outcome |
-|---|---|
-| `destDir` doesn't exist yet | Created (and any missing parents) before the collision check |
-| No file at `destDir/IMG_1234.jpg` | Placed at the original name, no suffix |
-| `IMG_1234.jpg` already present | Placed at `IMG_1234 (2).jpg` |
-| `IMG_1234.jpg` and `IMG_1234 (2).jpg` both present | Placed at `IMG_1234 (3).jpg` |
-| Leaf has no extension (e.g. `README`) | Suffix still applies: `README (2)`, `README (3)`, ... |
-| `move` | Source is removed; destination holds the bytes |
-| `copy` | Source is left in place; destination holds a duplicate |
+| Scenario                                           | Outcome                                                      |
+|----------------------------------------------------|--------------------------------------------------------------|
+| `destDir` doesn't exist yet                        | Created (and any missing parents) before the collision check |
+| No file at `destDir/IMG_1234.jpg`                  | Placed at the original name, no suffix                       |
+| `IMG_1234.jpg` already present                     | Placed at `IMG_1234 (2).jpg`                                 |
+| `IMG_1234.jpg` and `IMG_1234 (2).jpg` both present | Placed at `IMG_1234 (3).jpg`                                 |
+| Leaf has no extension (e.g. `README`)              | Suffix still applies: `README (2)`, `README (3)`, ...        |
+| `move`                                             | Source is removed; destination holds the bytes               |
+| `copy`                                             | Source is left in place; destination holds a duplicate       |
 
 ## Removing empty directories
 

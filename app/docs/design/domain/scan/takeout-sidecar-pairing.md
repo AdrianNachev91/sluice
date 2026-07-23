@@ -47,16 +47,16 @@ this," picking the closest (shortest) match if several do.
 
 ## Naming examples
 
-| Media file on disk | Sidecar on disk | How it pairs |
-|---|---|---|
-| `IMG_1234.jpg` | `IMG_1234.jpg.json` | Exact owner-key match (owner key = base name as-is). |
-| `IMG_1234.jpg` | `IMG_1234.jpg.supplemental-metadata.json` | Exact match; owner key strips the `.supplemental-metadata` suffix. |
-| `IMG_1234(1).jpg` | `IMG_1234.jpg(1).json` | Exact match; owner key reverses the dup-number to `IMG_1234(1).jpg`. |
-| `IMG_1234-edited.jpg` | `IMG_1234.jpg.json` | No sidecar of its own; matches under the original's owner key after stripping `-edited`. |
-| `IMG_1234.jpg` | `IMG_1234.jpg.someextra.json` | No exact owner-key match (owner key stays `IMG_1234.jpg.someextra`); prefix fallback matches because the sidecar's base name starts with the media filename. |
-| `IMG_1234(1).jpg` | `IMG_1234.jpg(1).extra.json` | No exact match; prefix fallback needs the dup-reversed candidate (`IMG_1234.jpg(1)`) to find the hit. |
-| `IMG_5678.jpg` | `IMG_1234.jpg.json` (unrelated) | No key or prefix match anywhere - falls through unpaired. |
-| `dirA/IMG_1234.jpg` | `dirB/IMG_1234.jpg.json` | Same owner key, different directory - never pairs. |
+| Media file on disk    | Sidecar on disk                           | How it pairs                                                                                                                                                 |
+|-----------------------|-------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `IMG_1234.jpg`        | `IMG_1234.jpg.json`                       | Exact owner-key match (owner key = base name as-is).                                                                                                         |
+| `IMG_1234.jpg`        | `IMG_1234.jpg.supplemental-metadata.json` | Exact match; owner key strips the `.supplemental-metadata` suffix.                                                                                           |
+| `IMG_1234(1).jpg`     | `IMG_1234.jpg(1).json`                    | Exact match; owner key reverses the dup-number to `IMG_1234(1).jpg`.                                                                                         |
+| `IMG_1234-edited.jpg` | `IMG_1234.jpg.json`                       | No sidecar of its own; matches under the original's owner key after stripping `-edited`.                                                                     |
+| `IMG_1234.jpg`        | `IMG_1234.jpg.someextra.json`             | No exact owner-key match (owner key stays `IMG_1234.jpg.someextra`); prefix fallback matches because the sidecar's base name starts with the media filename. |
+| `IMG_1234(1).jpg`     | `IMG_1234.jpg(1).extra.json`              | No exact match; prefix fallback needs the dup-reversed candidate (`IMG_1234.jpg(1)`) to find the hit.                                                        |
+| `IMG_5678.jpg`        | `IMG_1234.jpg.json` (unrelated)           | No key or prefix match anywhere - falls through unpaired.                                                                                                    |
+| `dirA/IMG_1234.jpg`   | `dirB/IMG_1234.jpg.json`                  | Same owner key, different directory - never pairs.                                                                                                           |
 
 ## Related
 

@@ -4,17 +4,17 @@ Real-world fixtures for `TileRendererTest` and `ImageDimensionsReaderTest`, all 
 give the RAW-decode fixes and the resolution-reading fix below real CI protection, not just local
 verification.
 
-| File | Source | License | Checked |
-|---|---|---|---|
-| `gradient.svg` | https://commons.wikimedia.org/wiki/File:SVG_Gradient.svg (direct: https://upload.wikimedia.org/wikipedia/commons/8/8b/SVG_Gradient.svg) | CC0 1.0 (confirmed on the file's Commons page) | 2026-07-21 |
-| `webp-sample.webp` | https://developers.google.com/speed/webp/gallery1 (direct: https://www.gstatic.com/webp/gallery/4.webp) | Creative Commons Attribution 4.0 (Google's official WebP gallery) | 2026-07-21 |
-| `raw-samples/canon-eos-20d.cr2` | https://raw.pixls.us/data/Canon/EOS%2020D/IMG_3893.CR2 | CC0 | 2026-07-21 |
-| `raw-samples/nikon-d40.nef` | https://raw.pixls.us/data/Nikon/D40/DSC_1842.NEF | CC0 | 2026-07-21 |
-| `raw-samples/sony-ilce-6700.arw` | https://raw.pixls.us/data/Sony/ILCE-6700/DSC00001.ARW | CC0 | 2026-07-21 |
-| `arctic-sky.avif` | https://commons.wikimedia.org/wiki/File:Arctic_Sky_(4371010590).jpg (converted to AVIF via https://file-in-abyss.soga-web.studio/formats/avif) | CC0 1.0 and separately US public domain (USGS work) - both confirmed on the file's own Commons page | 2026-07-21 |
-| `rectangle.svg`, `doctype-viewbox-only.svg` | Written by hand for this repo, not third-party content (the DOCTYPE prolog in the latter is the standard public-domain SVG 1.1 boilerplate, not original content) | N/A | N/A |
-| `defqon_2027_overlay.svg` | This project's own media (`Sorted/Photos/2026/06/`) - actually a PNG mislabeled with an `.svg` extension, kept deliberately as a real-world edge-case fixture | N/A (repo's own file) | N/A |
-| `fake-corrupt.cr2`, `not-an-image.dat` | Synthetic, not real image content | N/A | N/A |
+| File                                        | Source                                                                                                                                                            | License                                                                                             | Checked    |
+|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|------------|
+| `gradient.svg`                              | https://commons.wikimedia.org/wiki/File:SVG_Gradient.svg (direct: https://upload.wikimedia.org/wikipedia/commons/8/8b/SVG_Gradient.svg)                           | CC0 1.0 (confirmed on the file's Commons page)                                                      | 2026-07-21 |
+| `webp-sample.webp`                          | https://developers.google.com/speed/webp/gallery1 (direct: https://www.gstatic.com/webp/gallery/4.webp)                                                           | Creative Commons Attribution 4.0 (Google's official WebP gallery)                                   | 2026-07-21 |
+| `raw-samples/canon-eos-20d.cr2`             | https://raw.pixls.us/data/Canon/EOS%2020D/IMG_3893.CR2                                                                                                            | CC0                                                                                                 | 2026-07-21 |
+| `raw-samples/nikon-d40.nef`                 | https://raw.pixls.us/data/Nikon/D40/DSC_1842.NEF                                                                                                                  | CC0                                                                                                 | 2026-07-21 |
+| `raw-samples/sony-ilce-6700.arw`            | https://raw.pixls.us/data/Sony/ILCE-6700/DSC00001.ARW                                                                                                             | CC0                                                                                                 | 2026-07-21 |
+| `arctic-sky.avif`                           | https://commons.wikimedia.org/wiki/File:Arctic_Sky_(4371010590).jpg (converted to AVIF via https://file-in-abyss.soga-web.studio/formats/avif)                    | CC0 1.0 and separately US public domain (USGS work) - both confirmed on the file's own Commons page | 2026-07-21 |
+| `rectangle.svg`, `doctype-viewbox-only.svg` | Written by hand for this repo, not third-party content (the DOCTYPE prolog in the latter is the standard public-domain SVG 1.1 boilerplate, not original content) | N/A                                                                                                 | N/A        |
+| `defqon_2027_overlay.svg`                   | This project's own media (`Sorted/Photos/2026/06/`) - actually a PNG mislabeled with an `.svg` extension, kept deliberately as a real-world edge-case fixture     | N/A (repo's own file)                                                                               | N/A        |
+| `fake-corrupt.cr2`, `not-an-image.dat`      | Synthetic, not real image content                                                                                                                                 | N/A                                                                                                 | N/A        |
 
 All three RAW files' CC0 license confirmed by checking they do not appear in
 `https://raw.pixls.us/json/getrepository.php?set=noncc0` (the site's own list of every non-CC0

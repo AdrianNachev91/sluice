@@ -87,15 +87,15 @@ media-safety invariant protects from bulk deletes.
 
 ## Scenarios
 
-| Input | Outcome |
-|---|---|
-| `Year(year, null)` | Whole year directory scanned, every month present included |
-| `Year(year, [6, 7])` | Only those two month subdirectories scanned |
-| A requested month directory that doesn't exist | Skipped silently, not an error |
-| `OldestN(n)` | Whole `Photos` root scanned, true global oldest by mtime, capped to `n` |
-| An unreviewable file lands inside `OldestN`'s window | Its slot is dropped, not backfilled from just outside the window |
-| Every candidate in scope is unreviewable | `photos=0, montages=0, entries=[]`; `index.json` still written, no crash |
-| Rerun with fewer reviewable photos than a prior run | Stale montage files from the prior run are removed first |
+| Input                                                | Outcome                                                                  |
+|------------------------------------------------------|--------------------------------------------------------------------------|
+| `Year(year, null)`                                   | Whole year directory scanned, every month present included               |
+| `Year(year, [6, 7])`                                 | Only those two month subdirectories scanned                              |
+| A requested month directory that doesn't exist       | Skipped silently, not an error                                           |
+| `OldestN(n)`                                         | Whole `Photos` root scanned, true global oldest by mtime, capped to `n`  |
+| An unreviewable file lands inside `OldestN`'s window | Its slot is dropped, not backfilled from just outside the window         |
+| Every candidate in scope is unreviewable             | `photos=0, montages=0, entries=[]`; `index.json` still written, no crash |
+| Rerun with fewer reviewable photos than a prior run  | Stale montage files from the prior run are removed first                 |
 
 ## Known limitations
 

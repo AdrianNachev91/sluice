@@ -108,20 +108,20 @@ what's left.
 
 ## Scenarios
 
-| Scenario | Outcome |
-|---|---|
-| Photo with a Takeout sidecar that produced its date | Sidecar deleted, counted in `sidecarsDeleted` |
-| Photo `+` its `-edited` copy, sharing one sidecar, both in scope | Sidecar deleted exactly once, `sidecarsDeleted` = 1, not 2 |
-| Sidecar present but invalid/unrelated, and its would-be media leaves the directory this run | Not deleted inline (not counted in `sidecarsDeleted`); swept afterward since nothing in the directory owns it anymore |
-| Sidecar present but invalid/unrelated, and a same-named media file remains in the directory (e.g. awaiting a future run) | Left on disk by both mechanisms |
-| Inbox file's hash matches a library-index hash whose recorded path still exists | Deleted, counted in `reimportsDeleted`, never moved |
-| Inbox file's hash matches a library-index hash whose recorded path is gone | Not treated as redundant - sorts (or routes) normally |
-| Two inbox files share bytes, neither is in the library | First one sorts; the rest are deleted, counted in `byteDupsDeleted` |
-| Undatable file (implausible mtime, no better source) | `Review/Unsorted/`, `unsorted` count, filename in `unsortedFiles` |
-| Small or low-dimension photo | `Review/<yyyy-MM>/`, `lowRes` count |
-| Video or `.svg`, however small | Exempt from the low-res gate - sorts normally |
-| Sorted photo whose date came only from file-modification time | Sorts normally, but also listed in `lowConfidenceFiles` |
-| A Takeout album directory left with no files at all after this run | Directory removed (cascades up through empty parent directories too) |
+| Scenario                                                                                                                 | Outcome                                                                                                               |
+|--------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| Photo with a Takeout sidecar that produced its date                                                                      | Sidecar deleted, counted in `sidecarsDeleted`                                                                         |
+| Photo `+` its `-edited` copy, sharing one sidecar, both in scope                                                         | Sidecar deleted exactly once, `sidecarsDeleted` = 1, not 2                                                            |
+| Sidecar present but invalid/unrelated, and its would-be media leaves the directory this run                              | Not deleted inline (not counted in `sidecarsDeleted`); swept afterward since nothing in the directory owns it anymore |
+| Sidecar present but invalid/unrelated, and a same-named media file remains in the directory (e.g. awaiting a future run) | Left on disk by both mechanisms                                                                                       |
+| Inbox file's hash matches a library-index hash whose recorded path still exists                                          | Deleted, counted in `reimportsDeleted`, never moved                                                                   |
+| Inbox file's hash matches a library-index hash whose recorded path is gone                                               | Not treated as redundant - sorts (or routes) normally                                                                 |
+| Two inbox files share bytes, neither is in the library                                                                   | First one sorts; the rest are deleted, counted in `byteDupsDeleted`                                                   |
+| Undatable file (implausible mtime, no better source)                                                                     | `Review/Unsorted/`, `unsorted` count, filename in `unsortedFiles`                                                     |
+| Small or low-dimension photo                                                                                             | `Review/<yyyy-MM>/`, `lowRes` count                                                                                   |
+| Video or `.svg`, however small                                                                                           | Exempt from the low-res gate - sorts normally                                                                         |
+| Sorted photo whose date came only from file-modification time                                                            | Sorts normally, but also listed in `lowConfidenceFiles`                                                               |
+| A Takeout album directory left with no files at all after this run                                                       | Directory removed (cascades up through empty parent directories too)                                                  |
 
 ## Related
 

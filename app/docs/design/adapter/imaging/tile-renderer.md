@@ -119,19 +119,19 @@ preview" rather than blending in if that routing is ever skipped or incomplete a
 
 ## Scenarios
 
-| File | Outcome |
-|---|---|
-| Real JPEG/PNG/WebP/TIFF/BMP/GIF, source >= 640px | Real tile, `unreviewable=false` |
-| Real JPEG etc., source < 640px | Real tile, `unreviewable=true` |
-| Real SVG (`viewBox` only, or with a standard DOCTYPE) | Real tile, correct aspect ratio, `unreviewable=false` |
-| A PNG mislabeled with an `.svg` extension | Real tile via the raster fallback, subject to the same size check |
-| Real Nikon NEF (2006) | Real tile, decoded directly, `unreviewable=true` (160x120 source) |
-| Real Canon CR2 (2004) | Real tile via its EXIF embedded thumbnail, `unreviewable=true` (160x120 source) |
-| Real Sony ILCE-6700 ARW (2023) | Real tile via its EXIF embedded thumbnail, `unreviewable=false` (6192x4128 source) |
-| A `.cr2`-named file with no real image content | Placeholder labeled `CR2` |
-| An unknown-extension corrupt file | Placeholder labeled `NO PREVIEW` |
-| Real HEIC/AVIF, via `CliHeifDecoder` | Real tile, `unreviewable` per the same 640px source-size check |
-| HEIC/HEIF/AVIF with no decoder on PATH or a corrupt file | Placeholder labeled with the real extension |
+| File                                                     | Outcome                                                                            |
+|----------------------------------------------------------|------------------------------------------------------------------------------------|
+| Real JPEG/PNG/WebP/TIFF/BMP/GIF, source >= 640px         | Real tile, `unreviewable=false`                                                    |
+| Real JPEG etc., source < 640px                           | Real tile, `unreviewable=true`                                                     |
+| Real SVG (`viewBox` only, or with a standard DOCTYPE)    | Real tile, correct aspect ratio, `unreviewable=false`                              |
+| A PNG mislabeled with an `.svg` extension                | Real tile via the raster fallback, subject to the same size check                  |
+| Real Nikon NEF (2006)                                    | Real tile, decoded directly, `unreviewable=true` (160x120 source)                  |
+| Real Canon CR2 (2004)                                    | Real tile via its EXIF embedded thumbnail, `unreviewable=true` (160x120 source)    |
+| Real Sony ILCE-6700 ARW (2023)                           | Real tile via its EXIF embedded thumbnail, `unreviewable=false` (6192x4128 source) |
+| A `.cr2`-named file with no real image content           | Placeholder labeled `CR2`                                                          |
+| An unknown-extension corrupt file                        | Placeholder labeled `NO PREVIEW`                                                   |
+| Real HEIC/AVIF, via `CliHeifDecoder`                     | Real tile, `unreviewable` per the same 640px source-size check                     |
+| HEIC/HEIF/AVIF with no decoder on PATH or a corrupt file | Placeholder labeled with the real extension                                        |
 
 ## Known limitations
 

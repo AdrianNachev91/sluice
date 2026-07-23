@@ -43,14 +43,14 @@ trusted at or above that length. Below it, only an exact match keeps a sidecar a
 
 ## Scenarios
 
-| Scenario | Outcome |
-|---|---|
-| Sidecar's media still sits in the same directory | Kept |
-| Sidecar's media has left the directory (sorted away, or deleted as a duplicate) | Orphaned |
-| A same-named media file exists, but in a *different* directory | Orphaned - directory-scoped, never cross-pairs |
-| Sidecar name is a truncated (>= 46 char) prefix of a remaining, longer media filename | Kept |
-| Owner key is a short (< 46 char) prefix of an unrelated remaining media filename | Orphaned - not trusted as truncation evidence |
-| Owner-key match is case-different (`PHOTO.JPG` vs `photo.jpg.json`) | Kept - comparison is case-insensitive |
+| Scenario                                                                              | Outcome                                        |
+|---------------------------------------------------------------------------------------|------------------------------------------------|
+| Sidecar's media still sits in the same directory                                      | Kept                                           |
+| Sidecar's media has left the directory (sorted away, or deleted as a duplicate)       | Orphaned                                       |
+| A same-named media file exists, but in a *different* directory                        | Orphaned - directory-scoped, never cross-pairs |
+| Sidecar name is a truncated (>= 46 char) prefix of a remaining, longer media filename | Kept                                           |
+| Owner key is a short (< 46 char) prefix of an unrelated remaining media filename      | Orphaned - not trusted as truncation evidence  |
+| Owner-key match is case-different (`PHOTO.JPG` vs `photo.jpg.json`)                   | Kept - comparison is case-insensitive          |
 
 ## Related
 

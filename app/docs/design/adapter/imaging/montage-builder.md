@@ -78,14 +78,14 @@ vary slightly between them.
 
 ## Scenarios
 
-| Input | Outcome |
-|---|---|
-| Empty tile list | `IllegalArgumentException` |
-| N tiles exactly filling full rows | Canvas sized to exactly `rows * cellHeight`, no wasted space |
-| N tiles not a multiple of `tilesPerRow` | Canvas still full-width; unused cells in the last row are plain `#111111` |
-| A landscape-aspect tile (shorter than `tileSize`) | Centered vertically within its slot |
-| A portrait-aspect tile (narrower than `tileSize`) | Centered horizontally within its slot |
-| A filename longer than the cell can fit | Clipped at the cell's own edge, never bleeds into the neighboring cell |
+| Input                                             | Outcome                                                                   |
+|---------------------------------------------------|---------------------------------------------------------------------------|
+| Empty tile list                                   | `IllegalArgumentException`                                                |
+| N tiles exactly filling full rows                 | Canvas sized to exactly `rows * cellHeight`, no wasted space              |
+| N tiles not a multiple of `tilesPerRow`           | Canvas still full-width; unused cells in the last row are plain `#111111` |
+| A landscape-aspect tile (shorter than `tileSize`) | Centered vertically within its slot                                       |
+| A portrait-aspect tile (narrower than `tileSize`) | Centered horizontally within its slot                                     |
+| A filename longer than the cell can fit           | Clipped at the cell's own edge, never bleeds into the neighboring cell    |
 
 ## Known limitations
 

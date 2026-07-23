@@ -76,15 +76,15 @@ looked at was actually rescued does cleanup run at all.
 
 ## Scenarios
 
-| Scenario | Outcome |
-|---|---|
-| Folder named `2019-06`, file has no EXIF or filename date | Folder name wins - dated `2019/06` |
-| Folder named `Food`, file has an EXIF date | EXIF wins (no folder name to short-circuit with) |
-| Folder named `Food`, file has neither EXIF nor a filename date | Skipped, left in place |
-| Resolved date is from 1998 (folder, EXIF, or filename) | Rejected as implausible - skipped |
-| Every file in the folder rescued, no skips | Folder (and any `_reasons.txt`) removed entirely |
-| One file in the folder skipped | Folder kept, including every other file already rescued |
-| `reviewFolder` argument tries to escape the Review root (e.g. `../Sorted`) | Rejected before anything is read |
+| Scenario                                                                   | Outcome                                                 |
+|----------------------------------------------------------------------------|---------------------------------------------------------|
+| Folder named `2019-06`, file has no EXIF or filename date                  | Folder name wins - dated `2019/06`                      |
+| Folder named `Food`, file has an EXIF date                                 | EXIF wins (no folder name to short-circuit with)        |
+| Folder named `Food`, file has neither EXIF nor a filename date             | Skipped, left in place                                  |
+| Resolved date is from 1998 (folder, EXIF, or filename)                     | Rejected as implausible - skipped                       |
+| Every file in the folder rescued, no skips                                 | Folder (and any `_reasons.txt`) removed entirely        |
+| One file in the folder skipped                                             | Folder kept, including every other file already rescued |
+| `reviewFolder` argument tries to escape the Review root (e.g. `../Sorted`) | Rejected before anything is read                        |
 
 ## Related
 
