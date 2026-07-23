@@ -2,6 +2,7 @@ package photos.sluice.adapter.fs;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.IOException;
@@ -59,10 +60,11 @@ class CsvLibraryHashIndexTest {
     @Test
     void appendCreatesFileWithHeaderWhenMissing(@TempDir Path repoRoot) {
         CsvLibraryHashIndex index = indexAt(repoRoot);
+        Path entryPath = Path.of("D:\\lib\\one.jpg");
 
-        index.append(List.of(new IndexEntry("HASH1", Path.of("D:\\lib\\one.jpg"))));
+        index.append(List.of(new IndexEntry("HASH1", entryPath)));
 
-        assertThat(index.load()).containsEntry("HASH1", List.of(Path.of("D:\\lib\\one.jpg")));
+        assertThat(index.load()).containsEntry("HASH1", List.of(entryPath));
     }
 
     @Test
@@ -95,8 +97,9 @@ class CsvLibraryHashIndexTest {
                 "sha256","path"
                 "HASH1","D:\\lib\\one.jpg\"""", StandardCharsets.UTF_8);
         CsvLibraryHashIndex index = indexAt(repoRoot);
+        Path secondEntryPath = Path.of("D:\\lib\\two.jpg");
 
-        index.append(List.of(new IndexEntry("HASH2", Path.of("D:\\lib\\two.jpg"))));
+        index.append(List.of(new IndexEntry("HASH2", secondEntryPath)));
 
         List<String> lines = Files.readAllLines(csv, StandardCharsets.UTF_8);
         assertThat(lines).containsExactly(
@@ -105,7 +108,54 @@ class CsvLibraryHashIndexTest {
                 "\"HASH2\",\"D:\\lib\\two.jpg\"");
         assertThat(index.load()).containsOnly(
                 Map.entry("HASH1", List.of(Path.of("D:\\lib\\one.jpg"))),
-                Map.entry("HASH2", List.of(Path.of("D:\\lib\\two.jpg"))));
+                Map.entry("HASH2", List.of(secondEntryPath)));
+    }
+
+    @Test
+    void sessionAppendsSeveralEntriesUnderOneHeader(@TempDir Path repoRoot) throws IOException {
+        Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
+        CsvLibraryHashIndex index = indexAt(repoRoot);
+
+        try (HashIndexPort.Session session = index.openSession()) {
+            session.append(new IndexEntry("HASH1", Path.of("D:\\lib\\one.jpg")));
+            session.append(new IndexEntry("HASH2", Path.of("D:\\lib\\two.jpg")));
+        }
+
+        List<String> lines = Files.readAllLines(csv, StandardCharsets.UTF_8);
+        assertThat(lines).containsExactly(
+                "\"sha256\",\"path\"",
+                "\"HASH1\",\"D:\\lib\\one.jpg\"",
+                "\"HASH2\",\"D:\\lib\\two.jpg\"");
+    }
+
+    @Test
+    void sessionClosedWithoutAnyAppendLeavesIndexFileUntouched(@TempDir Path repoRoot) {
+        Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
+        CsvLibraryHashIndex index = indexAt(repoRoot);
+
+        // Deliberately no append() call before closing - an empty commit/rescue scope.
+        index.openSession().close();
+
+        assertThat(Files.exists(csv)).isFalse();
+    }
+
+    @Test
+    void sessionFlushesEachEntryImmediatelyRatherThanBufferingUntilClose(@TempDir Path repoRoot) throws IOException {
+        Path csv = repoRoot.resolve("logs").resolve("library-hashes.csv");
+        CsvLibraryHashIndex index = indexAt(repoRoot);
+
+        try (HashIndexPort.Session session = index.openSession()) {
+            session.append(new IndexEntry("HASH1", Path.of("D:\\lib\\one.jpg")));
+
+            // Read back through a separate file handle before the session closes - proves the row
+            // reached disk via flush(), not only once the writer is closed. This is the actual
+            // crash-safety guarantee this session API exists for: a crash before close() must not
+            // lose an already-appended row.
+            List<String> lines = Files.readAllLines(csv, StandardCharsets.UTF_8);
+            assertThat(lines).containsExactly(
+                    "\"sha256\",\"path\"",
+                    "\"HASH1\",\"D:\\lib\\one.jpg\"");
+        }
     }
 
     @Test

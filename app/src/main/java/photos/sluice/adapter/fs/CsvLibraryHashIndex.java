@@ -1,5 +1,6 @@
 package photos.sluice.adapter.fs;
 
+import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.domain.model.IndexEntry;
 
@@ -49,7 +50,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
                     // The same file/hash can legitimately appear more than once (a byte-identical
                     // copy filed under two names/locations), so group by hash instead of
                     // overwriting.
-                    result.computeIfAbsent(entry.sha256(), key -> new ArrayList<>()).add(entry.path());
+                    result.computeIfAbsent(entry.sha256(), _ -> new ArrayList<>()).add(entry.path());
                 }
             }
         } catch (IOException e) {
@@ -71,34 +72,71 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         if (entries.isEmpty()) {
             return;
         }
-        Path file = indexFile;
-        try {
-            Files.createDirectories(file.getParent());
-            boolean exists = Files.isRegularFile(file);
-            long size = exists ? Files.size(file) : 0;
-            boolean writeHeader = !exists || size == 0;
-            // Defensive: the file can arrive here without a trailing newline (a manual edit, an
-            // editor that strips trailing whitespace, an interrupted write). Appending straight
-            // onto such a line would merge it with the next row into one unparsable line and
-            // break load() for the whole file.
-            boolean needsLeadingNewline = size > 0 && !endsWithNewline(file);
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-                if (needsLeadingNewline) {
-                    writer.newLine();
-                }
-                if (writeHeader) {
-                    writer.write(HEADER);
-                    writer.newLine();
-                }
-                for (IndexEntry entry : entries) {
-                    writer.write(formatLine(entry));
-                    writer.newLine();
-                }
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to append to hash index " + file, e);
+        try (Session session = openSession()) {
+            entries.forEach(session::append);
         }
+    }
+
+    @Override
+    public Session openSession() {
+        return new CsvSession();
+    }
+
+    // The writer (and the header/leading-newline checks that precede opening it) is created lazily,
+    // on the session's first append() call, not here. A session that never appends anything - an
+    // empty commit/rescue scope - must leave the index file untouched, exactly like the old
+    // empty-list append() did.
+    private final class CsvSession implements Session {
+
+        private @Nullable BufferedWriter writer;
+
+        @Override
+        public void append(IndexEntry entry) {
+            try {
+                if (writer == null) {
+                    writer = openWriter();
+                }
+                writer.write(formatLine(entry));
+                writer.newLine();
+                writer.flush();
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to append to hash index " + indexFile, e);
+            }
+        }
+
+        @Override
+        public void close() {
+            if (writer == null) {
+                return;
+            }
+            try {
+                writer.close();
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to close hash index " + indexFile, e);
+            }
+        }
+    }
+
+    private BufferedWriter openWriter() throws IOException {
+        Files.createDirectories(indexFile.getParent());
+        boolean exists = Files.isRegularFile(indexFile);
+        long size = exists ? Files.size(indexFile) : 0;
+        boolean writeHeader = !exists || size == 0;
+        // Defensive: the file can arrive here without a trailing newline (a manual edit, an
+        // editor that strips trailing whitespace, an interrupted write). Appending straight
+        // onto such a line would merge it with the next row into one unparsable line and
+        // break load() for the whole file.
+        boolean needsLeadingNewline = size > 0 && !endsWithNewline(indexFile);
+        BufferedWriter writer = Files.newBufferedWriter(indexFile, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        if (needsLeadingNewline) {
+            writer.newLine();
+        }
+        if (writeHeader) {
+            writer.write(HEADER);
+            writer.newLine();
+        }
+        return writer;
     }
 
     // Reads only the file's last byte via a seek, rather than loading the whole file, since this

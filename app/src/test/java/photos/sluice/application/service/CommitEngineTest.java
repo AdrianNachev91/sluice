@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
+import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.commit.CommitScope;
@@ -124,18 +125,143 @@ class CommitEngineTest {
                 .isInstanceOf(UncheckedIOException.class);
     }
 
+    @Test
+    void aCrashAfterTheFirstMoveLeavesItsIndexRowDurableAndResumeFinishesTheSecond(@TempDir Path root)
+            throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(first, "keeper1");
+        writeFile(second, "keeper2");
+        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        String firstHash = new Sha256Hasher().hash(first);
+        // Allows exactly one move to succeed, then throws - simulating a process crash right after
+        // the first file's move-and-index but before the loop reaches the second.
+        CommitEngine crashingEngine = commitEngine(root, libraryRoot, hashIndex, new FailingAfterMoves(1));
+
+        assertThatThrownBy(() -> crashingEngine.commit(new CommitScope.All()))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("simulated crash");
+
+        Path firstDest = libraryRoot.resolve("Photos/2019/06/a.jpg");
+        assertThat(Files.exists(firstDest)).isTrue();
+        assertThat(hashIndex.load()).containsOnlyKeys(firstHash);
+        // The crash lands on the second file's move itself, before it touches the filesystem at all
+        // - it's still sitting in Sorted, exactly where an ordinary resumed commit would find it.
+        assertThat(Files.exists(second)).isTrue();
+        assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/b.jpg"))).isFalse();
+
+        CommitSummary resumeSummary = commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
+
+        assertThat(resumeSummary.committed()).isEqualTo(1);
+        Path secondDest = libraryRoot.resolve("Photos/2019/06/b.jpg");
+        assertThat(Files.exists(secondDest)).isTrue();
+        assertThat(hashIndex.load()).containsOnlyKeys(firstHash, new Sha256Hasher().hash(secondDest));
+    }
+
     private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot) {
         return commitEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
     }
 
     private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex) {
+        return commitEngine(repoRoot, libraryRoot, hashIndex, new NioMediaStore());
+    }
+
+    private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex,
+            MediaStore mediaStore) {
         var pathsConfig = new PathsConfig(
                 new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
-        return new CommitEngine(pathsConfig, new NioMediaStore(), new Sha256Hasher(), hashIndex);
+        return new CommitEngine(pathsConfig, mediaStore, new Sha256Hasher(), hashIndex);
     }
 
     private static void writeFile(Path file, String content) throws IOException {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
+    }
+
+    // Wraps the real NioMediaStore but throws after a fixed number of successful move() calls -
+    // CommitEngine's own move step. Deterministically simulates a crash mid-run. listFiles() sorts
+    // the delegate's result so which file counts as "first" doesn't depend on filesystem walk order.
+    private static final class FailingAfterMoves implements MediaStore {
+        private final MediaStore delegate = new NioMediaStore();
+        private int movesUntilFailure;
+
+        FailingAfterMoves(int movesUntilFailure) {
+            this.movesUntilFailure = movesUntilFailure;
+        }
+
+        @Override
+        public List<Path> listFiles(Path root) {
+            return delegate.listFiles(root).stream().sorted().toList();
+        }
+
+        @Override
+        public Path move(Path source, Path destDir) {
+            if (movesUntilFailure <= 0) {
+                throw new RuntimeException("simulated crash");
+            }
+            movesUntilFailure--;
+            return delegate.move(source, destDir);
+        }
+
+        @Override
+        public Path resolveDestination(Path source, Path destDir) {
+            return delegate.resolveDestination(source, destDir);
+        }
+
+        @Override
+        public Path moveTo(Path source, Path destination) {
+            return delegate.moveTo(source, destination);
+        }
+
+        @Override
+        public Path copy(Path source, Path destDir) {
+            return delegate.copy(source, destDir);
+        }
+
+        @Override
+        public void delete(Path path) {
+            delegate.delete(path);
+        }
+
+        @Override
+        public void ensureDirectory(Path dir) {
+            delegate.ensureDirectory(dir);
+        }
+
+        @Override
+        public boolean exists(Path path) {
+            return delegate.exists(path);
+        }
+
+        @Override
+        public long size(Path path) {
+            return delegate.size(path);
+        }
+
+        @Override
+        public void appendLine(Path file, String line) {
+            delegate.appendLine(file, line);
+        }
+
+        @Override
+        public void write(Path file, String content) {
+            delegate.write(file, content);
+        }
+
+        @Override
+        public List<String> readLines(Path file) {
+            return delegate.readLines(file);
+        }
+
+        @Override
+        public void removeEmptyDirectories(Path root) {
+            delegate.removeEmptyDirectories(root);
+        }
+
+        @Override
+        public void removeIfEmptyOfFiles(Path dir) {
+            delegate.removeIfEmptyOfFiles(dir);
+        }
     }
 }

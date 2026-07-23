@@ -56,11 +56,14 @@ public class RescueEngine implements RescueUseCase {
         // need to re-walk the directory a second time.
         List<Path> allFiles = mediaStore.listFiles(target);
         var outcome = new RescueOutcome();
-        for (Path file : allFiles) {
-            rescueOneFile(file, targetLeaf, libraryRoot, outcome);
+        // One session for the whole rescue loop. Each rescued file's index row is written and
+        // flushed immediately, so a crash mid-run never leaves an already-moved file with no index
+        // row. The header/leading-newline checks still only run once, instead of once per file.
+        try (HashIndexPort.Session session = hashIndexPort.openSession()) {
+            for (Path file : allFiles) {
+                rescueOneFile(file, targetLeaf, libraryRoot, outcome, session);
+            }
         }
-
-        hashIndexPort.append(outcome.indexEntries);
 
         // All-or-nothing per folder: dissolving it (and the marker files inside it) only happens
         // once every file rescue looked at actually got rescued. A single skipped file anywhere
@@ -80,7 +83,8 @@ public class RescueEngine implements RescueUseCase {
     // Checked in this order, and only this order. A non-media file (a stray _reasons.txt, or
     // anything else left in the folder) is ignored outright - neither rescued nor skipped. Only a
     // real media file that also has no resolvable date counts as skipped.
-    private void rescueOneFile(Path file, String targetLeaf, Path libraryRoot, RescueOutcome outcome) {
+    private void rescueOneFile(Path file, String targetLeaf, Path libraryRoot, RescueOutcome outcome,
+            HashIndexPort.Session session) {
         Optional<MediaType> type = mediaTypeDetector.classify(file);
         if (type.isEmpty()) {
             return;
@@ -94,7 +98,7 @@ public class RescueEngine implements RescueUseCase {
                 .resolve(yearFolder(date.get())).resolve(monthFolder(date.get()));
         String hash = sha256Port.hash(file);
         Path dest = mediaStore.move(file, destDir);
-        outcome.indexEntries.add(new IndexEntry(hash, dest));
+        session.append(new IndexEntry(hash, dest));
         outcome.rescued++;
     }
 
@@ -121,6 +125,5 @@ public class RescueEngine implements RescueUseCase {
     private static final class RescueOutcome {
         int rescued;
         final List<String> skipped = new ArrayList<>();
-        final List<IndexEntry> indexEntries = new ArrayList<>();
     }
 }

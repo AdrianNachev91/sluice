@@ -13,9 +13,7 @@ import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 
 // Moves every in-scope Sorted file into the library at the same relative structure it already
@@ -43,25 +41,30 @@ public class CommitEngine implements CommitUseCase {
         Path sorted = pathsPort.sorted();
         Path library = pathsPort.library();
         Map<LibraryBucket, Integer> byBucket = new EnumMap<>(LibraryBucket.class);
-        List<IndexEntry> entries = new ArrayList<>();
+        int committed = 0;
 
-        for (Path file : mediaStore.listFiles(sorted)) {
-            String relativePath = sorted.relativize(file).toString().replace('\\', '/');
-            if (scopeSelector.isInScope(relativePath, scope)) {
-                String hash = sha256Port.hash(file);
-                Path dest = mediaStore.move(file, library.resolve(relativePath).getParent());
-                entries.add(new IndexEntry(hash, dest));
-                // merge rather than a pre-seeded zero per bucket: a scoped commit (e.g. one year)
-                // never touches most buckets, so byBucket should only ever report the ones this
-                // run actually populated.
-                byBucket.merge(LibraryBucket.ofFirstSegment(firstSegment(relativePath)), 1, Integer::sum);
+        // One session for the whole move loop. Each moved file's index row is written and flushed
+        // immediately, so a crash mid-run never leaves an already-moved file with no index row. The
+        // header/leading-newline checks still only run once, instead of once per file.
+        try (HashIndexPort.Session session = hashIndexPort.openSession()) {
+            for (Path file : mediaStore.listFiles(sorted)) {
+                String relativePath = sorted.relativize(file).toString().replace('\\', '/');
+                if (scopeSelector.isInScope(relativePath, scope)) {
+                    String hash = sha256Port.hash(file);
+                    Path dest = mediaStore.move(file, library.resolve(relativePath).getParent());
+                    session.append(new IndexEntry(hash, dest));
+                    // merge rather than a pre-seeded zero per bucket: a scoped commit (e.g. one
+                    // year) never touches most buckets, so byBucket should only ever report the
+                    // ones this run actually populated.
+                    byBucket.merge(LibraryBucket.ofFirstSegment(firstSegment(relativePath)), 1, Integer::sum);
+                    committed++;
+                }
             }
         }
 
-        hashIndexPort.append(entries);
         mediaStore.removeEmptyDirectories(sorted);
 
-        return new CommitSummary(entries.size(), byBucket);
+        return new CommitSummary(committed, byBucket);
     }
 
     private static String firstSegment(String relativePath) {
