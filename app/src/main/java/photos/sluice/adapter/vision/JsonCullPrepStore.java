@@ -12,6 +12,8 @@ import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.MontageNaming;
+import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -26,10 +28,13 @@ import java.util.Map;
 // The CullPrepPort implementation. Lives alongside ShardCodec and SidecarReader (same package). This
 // lets it reuse their montage-sidecar and per-montage-shard reading at package-private visibility.
 // Neither class's access needs widening, and no cross-adapter-subpackage dependency is added. The
-// merged decisions.json this class writes is a distinct artifact from a per-montage shard. It gets
-// its own small DTO here rather than reaching into ShardCodec's private encoding.
+// merged decisions.json this class writes, and the index.json it reads back, are each a distinct
+// artifact from a per-montage shard. They get their own small DTOs here rather than reaching into
+// ShardCodec's private encoding. Public (unlike ShardCodec/SidecarReader): ApplyEngine's own tests
+// live outside this package and need a real CullPrepPort. Other engine tests wire real adapters
+// (NioMediaStore, CsvLibraryHashIndex) the same way, instead of a fake.
 @Component
-class JsonCullPrepStore implements CullPrepPort {
+public class JsonCullPrepStore implements CullPrepPort {
 
     private static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
     private static final String NEAR_DUP_REJECT = "near-dup-reject";
@@ -37,6 +42,13 @@ class JsonCullPrepStore implements CullPrepPort {
     private final ShardCodec shardCodec;
     private final SidecarReader sidecarReader;
     private final JsonMapper mapper;
+
+    // Public and no-arg so a test in another package (ApplyEngineTest) can build a real instance
+    // without depending on the package-private ShardCodec/SidecarReader constructor parameters.
+    // Unused by Spring, which resolves the @Autowired constructor below instead.
+    public JsonCullPrepStore() {
+        this(new ShardCodec(), new SidecarReader());
+    }
 
     @Autowired
     JsonCullPrepStore(ShardCodec shardCodec, SidecarReader sidecarReader) {
@@ -49,6 +61,34 @@ class JsonCullPrepStore implements CullPrepPort {
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
         this.mapper = mapper;
+    }
+
+    private record RawIndex(String scope, String basePath, int photos, @Nullable List<String> unreviewable,
+            int montages, String prepDir, @Nullable List<String> entries) {
+    }
+
+    @Override
+    public PrepDir readIndex(Path prepDir) {
+        Path path = prepDir.resolve("index.json");
+        RawIndex raw;
+        try (var input = Files.newInputStream(path)) {
+            raw = mapper.readValue(input, RawIndex.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read prep index " + path, e);
+        } catch (JacksonException e) {
+            throw new UncheckedIOException("Failed to read prep index " + path, new IOException(e));
+        }
+        // The IDE binds the generic result to the non-null RawIndex type and can't see that a
+        // literal null document deserializes to null.
+        //noinspection ConstantValue
+        if (raw == null) {
+            throw new UncheckedIOException("Prep index " + path + " is not a JSON object",
+                    new IOException("null document"));
+        }
+        List<String> unreviewable = raw.unreviewable() == null ? List.of() : raw.unreviewable();
+        List<String> entries = raw.entries() == null ? List.of() : raw.entries();
+        return new PrepDir(raw.scope(), Path.of(raw.basePath()), raw.photos(),
+                unreviewable.stream().map(Path::of).toList(), raw.montages(), Path.of(raw.prepDir()), entries);
     }
 
     @Override

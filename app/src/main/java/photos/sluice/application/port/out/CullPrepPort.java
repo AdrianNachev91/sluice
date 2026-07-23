@@ -3,17 +3,24 @@ package photos.sluice.application.port.out;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.nio.file.Path;
 import java.util.List;
 
 // Reads and writes the JSON artifacts a prep directory holds beyond the montage images themselves.
-// That means the montage sidecars (this app's own prior output) and the vision step's decision
-// shards, plus the merged decisions.json ApplyEngine writes once a run completes. Listing which
-// decisions-*.json files exist (for stray-shard detection) stays on the already-generic MediaStore.
-// This port only covers the structured JSON MediaStore cannot parse on its own.
+// That means index.json, the montage sidecars, and the vision step's decision shards (all this
+// app's own prior output), plus the merged decisions.json ApplyEngine writes once a run completes.
+// Listing which decisions-*.json files exist (for stray-shard detection) stays on the
+// already-generic MediaStore. This port only covers the structured JSON MediaStore cannot parse on
+// its own.
 public interface CullPrepPort {
+
+    // The prep directory's own index.json, describing the scope it covers and every montage it
+    // expects a shard for. Unchecked failure if missing or unreadable - the app's own prior output,
+    // so a broken one means the prep dir itself is corrupt, not a fixable culling mistake.
+    PrepDir readIndex(Path prepDir);
 
     // Every photo entry montage's sidecar (montage-NNN.json) lists. Unchecked failure if unreadable
     // or malformed. The sidecar is this app's own prior output, so a broken one means the prep dir

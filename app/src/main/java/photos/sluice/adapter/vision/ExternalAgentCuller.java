@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;

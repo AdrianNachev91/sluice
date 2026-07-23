@@ -54,6 +54,11 @@ public class PathsConfig implements PathsPort {
         return repoRoot().resolve("Review");
     }
 
+    @Override
+    public Path duplicates() {
+        return repoRoot().resolve("Duplicates");
+    }
+
     private static Path resolve(String raw) {
         return Path.of(raw).toAbsolutePath().normalize();
     }

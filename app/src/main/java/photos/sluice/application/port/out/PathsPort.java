@@ -10,6 +10,8 @@ public interface PathsPort {
 
     Path review();
 
+    Path duplicates();
+
     Path library();
 
     Path logs();

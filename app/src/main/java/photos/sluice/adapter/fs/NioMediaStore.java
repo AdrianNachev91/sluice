@@ -95,6 +95,16 @@ public class NioMediaStore implements MediaStore {
     }
 
     @Override
+    public void write(Path file, String content) {
+        try {
+            Files.writeString(file, content + System.lineSeparator(), StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write " + file, e);
+        }
+    }
+
+    @Override
     public List<String> readLines(Path file) {
         if (!Files.exists(file)) {
             return List.of();

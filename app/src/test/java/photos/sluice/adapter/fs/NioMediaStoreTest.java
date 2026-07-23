@@ -193,6 +193,17 @@ class NioMediaStoreTest {
     }
 
     @Test
+    void writeCreatesFileOnFirstCallThenReplacesItsWholeContentOnSubsequentCalls(@TempDir Path root) {
+        Path file = root.resolve("chosen.jpg.txt");
+
+        store.write(file, "Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
+        store.write(file, "Chose a.jpg - sharpest. Rejects: b.jpg - blurred, c.jpg - also blurred");
+
+        assertThat(readLines(file)).containsExactly(
+                "Chose a.jpg - sharpest. Rejects: b.jpg - blurred, c.jpg - also blurred");
+    }
+
+    @Test
     void readLinesReturnsEveryLineInOrder(@TempDir Path root) {
         Path file = root.resolve("applied.log");
 

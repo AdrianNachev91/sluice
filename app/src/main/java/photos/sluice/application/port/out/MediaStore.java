@@ -22,6 +22,11 @@ public interface MediaStore {
 
     void appendLine(Path file, String line);
 
+    // Creates file with exactly this content, replacing whatever was there before - unlike
+    // appendLine, which accumulates. For a file meant to hold a single, self-contained record
+    // (rewritten wholesale whenever it changes) rather than a growing log of entries.
+    void write(Path file, String content);
+
     // Every line of file, in order, or empty if file does not exist - the read-side counterpart to
     // appendLine, for resuming from a crash-safety log written one line per completed step.
     List<String> readLines(Path file);

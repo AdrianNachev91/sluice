@@ -2,6 +2,7 @@ package photos.sluice.adapter.vision;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Decision;
@@ -9,6 +10,7 @@ import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -41,6 +43,35 @@ class JsonCullPrepStoreTest {
         List<SidecarPhotoEntry> entries = store.readSidecar(dir, "montage-001");
 
         assertThat(entries).containsExactly(photo);
+    }
+
+    @Test
+    void readsBackAnIndexWrittenByPrepIndexWriter(@TempDir Path dir) {
+        var prepDir = new PrepDir("2019-06", dir.resolve("base"), 3, List.of(dir.resolve("skip.jpg")), 1, dir,
+                List.of("montage-001"));
+        new PrepIndexWriter().write(dir.resolve("index.json"), prepDir);
+
+        assertThat(store.readIndex(dir)).isEqualTo(prepDir);
+    }
+
+    @Test
+    void readIndexTreatsAMissingUnreviewableOrEntriesArrayAsEmpty(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "basePath": "%s", "photos": 0, "montages": 0, "prepDir": "%s" }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        PrepDir prepDir = store.readIndex(dir);
+
+        assertThat(prepDir.unreviewable()).isEmpty();
+        assertThat(prepDir.entries()).isEmpty();
+    }
+
+    @Test
+    void readIndexOnANullDocumentThrowsUnchecked(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), "null");
+
+        assertThatThrownBy(() -> store.readIndex(dir))
+                .isInstanceOf(UncheckedIOException.class);
     }
 
     @Test

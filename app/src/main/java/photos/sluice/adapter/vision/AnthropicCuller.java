@@ -30,6 +30,7 @@ import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
