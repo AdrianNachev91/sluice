@@ -78,6 +78,20 @@ class CullerPromptTest {
                 """);
     }
 
+    @Test
+    void correctionTurnListsEveryProblemAndAsksForTheFullList() {
+        String turn = cullerPrompt(CARDS).correctionTurn(List.of(
+                "no verdict for photo 3 (IMG_003.jpg)",
+                "montage-007[#1]: missing 'reason'"));
+
+        assertThat(turn).isEqualTo("""
+                Your verdicts for this sheet failed validation:
+                 - no verdict for photo 3 (IMG_003.jpg)
+                 - montage-007[#1]: missing 'reason'
+                Return the complete corrected verdict list for this sheet as JSON only, matching the schema you were given.
+                """);
+    }
+
     private static CullerPrompt cullerPrompt(List<CullCategory> categories) {
         return new CullerPrompt(new FixedSettings("anthropic", categories), new MontageConfig(224, 5));
     }
@@ -86,7 +100,7 @@ class CullerPromptTest {
 
         @Override
         public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null);
+            return new CullProviderSettings(null, null, null, null);
         }
     }
 }

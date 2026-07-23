@@ -24,6 +24,8 @@ class CullConfigTest {
             // port promises never-null) and each field reports unset as null.
             assertThat(config.providerSettings().model()).isNull();
             assertThat(config.providerSettings().endpoint()).isNull();
+            assertThat(config.providerSettings().thinking()).isNull();
+            assertThat(config.providerSettings().maxRetries()).isNull();
         });
     }
 
@@ -82,15 +84,19 @@ class CullConfigTest {
     }
 
     @Test
-    void providerSettingsBindWhenBothFieldsPresent() {
+    void providerSettingsBindWhenAllFieldsPresent() {
         runner.withPropertyValues(
                 "sluice.cull.provider=anthropic",
                 "sluice.cull.provider-settings.model=claude-sonnet-5",
-                "sluice.cull.provider-settings.endpoint=https://api.anthropic.com"
+                "sluice.cull.provider-settings.endpoint=https://api.anthropic.com",
+                "sluice.cull.provider-settings.thinking=true",
+                "sluice.cull.provider-settings.max-retries=5"
         ).run(context -> {
             CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.providerSettings().model()).isEqualTo("claude-sonnet-5");
             assertThat(config.providerSettings().endpoint()).isEqualTo("https://api.anthropic.com");
+            assertThat(config.providerSettings().thinking()).isTrue();
+            assertThat(config.providerSettings().maxRetries()).isEqualTo(5);
         });
     }
 

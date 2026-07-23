@@ -30,7 +30,7 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
         // absent provider-settings node normalizes to that shape here.
         //noinspection ConstantValue
         if (providerSettings == null) {
-            providerSettings = new CullProviderSettings(null, null);
+            providerSettings = new CullProviderSettings(null, null, null, null);
         }
         // Two cards sharing a name would silently alias one category, so duplicates fail loud.
         List<String> duplicates = categories.stream()

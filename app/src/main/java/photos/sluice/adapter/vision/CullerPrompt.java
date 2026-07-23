@@ -68,6 +68,20 @@ class CullerPrompt {
         return text.toString();
     }
 
+    // The follow-up turn after a response failed validation. It lists every problem found and asks
+    // for the whole corrected verdict list, not a patch. The response replaces the failed one
+    // outright, so a partial answer would drop the verdicts it omits.
+    String correctionTurn(List<String> problems) {
+        var text = new StringBuilder();
+        text.append("Your verdicts for this sheet failed validation:\n");
+        for (String problem : problems) {
+            text.append(" - ").append(problem).append('\n');
+        }
+        text.append("Return the complete corrected verdict list for this sheet as JSON only, "
+                + "matching the schema you were given.\n");
+        return text.toString();
+    }
+
     // Package-private static so the placeholder contract is testable without swapping out the
     // bundled resource.
     static String rendered(String template, List<CullCategory> categories) {

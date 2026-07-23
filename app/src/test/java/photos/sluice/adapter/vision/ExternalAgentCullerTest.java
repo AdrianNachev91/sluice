@@ -213,7 +213,7 @@ class ExternalAgentCullerTest {
 
         @Override
         public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null);
+            return new CullProviderSettings(null, null, null, null);
         }
     }
 }

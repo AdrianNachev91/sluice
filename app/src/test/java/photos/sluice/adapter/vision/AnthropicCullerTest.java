@@ -3,8 +3,10 @@ package photos.sluice.adapter.vision;
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.models.messages.CacheCreation;
 import com.anthropic.models.messages.ContentBlock;
+import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
+import com.anthropic.models.messages.MessageParam;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlock;
 import com.anthropic.models.messages.Usage;
@@ -37,6 +39,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AnthropicCullerTest {
@@ -127,7 +131,7 @@ class AnthropicCullerTest {
         assertThat(prepDir.resolve("decisions-001.json")).exists();
         assertThat(prepDir.resolve("decisions-002.json")).exists();
         assertThat(report).isEqualTo(new CullReport(2, 0, 2100, 140));
-        org.mockito.Mockito.verify(client).close();
+        verify(client).close();
     }
 
     // A stateless call cannot remember the slugs earlier montages picked, so the accumulated
@@ -167,6 +171,263 @@ class AnthropicCullerTest {
     }
 
     @Test
+    void retriesOnceWithTheProblemListWhenTheFirstResponseFailsValidation() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                          ]
+                        }
+                        """, 120, 30));
+
+        CullReport report = culler().cull(prep, OPTIONS);
+
+        DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        assertThat(shard.decisions()).containsExactly(
+                new Classification(src("IMG_0001.jpg"), "junk", "screenshot"));
+        // Both attempts' tokens count: the failed first call cost real money too.
+        assertThat(report).isEqualTo(new CullReport(1, 0, 220, 40));
+        var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(messages, times(2)).create(captor.capture());
+        MessageCreateParams retry = captor.getAllValues().getLast();
+        assertThat(retry.messages()).hasSize(3);
+        assertThat(retry.messages().get(1).role()).isEqualTo(MessageParam.Role.ASSISTANT);
+        assertThat(retry.messages().get(1).content().string().orElseThrow()).contains("WRONG.jpg");
+        assertThat(retry.messages().get(2).role()).isEqualTo(MessageParam.Role.USER);
+        assertThat(retry.messages().get(2).content().string().orElseThrow())
+                .contains("failed validation")
+                .contains("verdict 1 names 'WRONG.jpg' but photo 1 is 'IMG_0001.jpg'")
+                .contains("complete corrected verdict list");
+    }
+
+    // The retry budget is a hard cap of one corrective attempt: a model that fails the same
+    // montage twice stops burning tokens right there.
+    @Test
+    void failsAfterOneRetryAggregatingBothAttemptsProblems() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        assertThatThrownBy(() -> culler().cull(prep, OPTIONS))
+                .isInstanceOf(CullException.class)
+                .hasMessageContaining("a corrective retry did not fix it")
+                .hasMessageContaining("First attempt (1 problem(s))")
+                .hasMessageContaining("Retry (1 problem(s))");
+        verify(messages, times(2))
+                .create(any(MessageCreateParams.class));
+        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+    }
+
+    // A failed attempt must roll its tentative shard back out of the accepted set. Poisoned
+    // leftovers would surface as phantom problems when a later montage is validated.
+    @Test
+    void aFailedFirstAttemptLeavesTheAcceptedSetCleanForLaterMontages() throws Exception {
+        writeMontage("montage-001", "IMG_0001.jpg");
+        writeMontage("montage-002", "IMG_0002.jpg");
+        respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "trash", "reason": "blurry" }
+                          ]
+                        }
+                        """, 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "blurry" }
+                          ]
+                        }
+                        """, 120, 30),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0002.jpg", "action": "junk", "reason": "screenshot" }
+                          ]
+                        }
+                        """, 200, 20));
+
+        CullReport report = culler().cull(prep("montage-001", "montage-002"), OPTIONS);
+
+        assertThat(new ShardCodec().read(prepDir.resolve("decisions-001.json")).decisions())
+                .containsExactly(new Classification(src("IMG_0001.jpg"), "junk", "blurry"));
+        assertThat(new ShardCodec().read(prepDir.resolve("decisions-002.json")).decisions())
+                .containsExactly(new Classification(src("IMG_0002.jpg"), "junk", "screenshot"));
+        assertThat(report).isEqualTo(new CullReport(2, 0, 420, 60));
+    }
+
+    // The API rejects empty text blocks, so a blank reply cannot be echoed verbatim on retry.
+    @Test
+    void aBlankResponseRetriesWithAPlaceholderEcho() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        respondWith(
+                response("", 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 120, 30));
+
+        CullReport report = culler().cull(prep, OPTIONS);
+
+        assertThat(new ShardCodec().read(prepDir.resolve("decisions-001.json")).decisions()).isEmpty();
+        assertThat(report).isEqualTo(new CullReport(1, 0, 220, 40));
+        var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(messages, times(2)).create(captor.capture());
+        MessageCreateParams retry = captor.getAllValues().getLast();
+        assertThat(retry.messages().get(1).content().string().orElseThrow()).isEqualTo("(empty response)");
+        assertThat(retry.messages().get(2).content().string().orElseThrow())
+                .contains("response carries no text content");
+    }
+
+    @Test
+    void resumesAMontageWhoseValidShardAlreadyExists() throws Exception {
+        writeMontage("montage-001", "IMG_0001.jpg");
+        writeMontage("montage-002", "IMG_0002.jpg");
+        new ShardCodec().write(prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(src("IMG_0001.jpg"), "junk", "photo of a screen"))));
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0002.jpg", "action": "keep" }
+                  ]
+                }
+                """, 500, 50));
+
+        CullReport report = culler().cull(prep("montage-001", "montage-002"), OPTIONS);
+
+        assertThat(report).isEqualTo(new CullReport(1, 1, 500, 50));
+        var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(messages).create(captor.capture());
+        // The one request that went out is montage-002's, still numbered 2 of 2: a skip does not
+        // renumber the sheets that follow it.
+        assertThat(captor.getValue().messages().getFirst().content().blockParams().orElseThrow()
+                .getLast().text().orElseThrow().text()).contains("sheet 002 (2 of 2)");
+    }
+
+    @Test
+    void reCullsAMontageWhoseExistingShardIsUnreadable() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        Files.writeString(prepDir.resolve("decisions-001.json"), "not a shard at all");
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 100, 10));
+
+        CullReport report = culler().cull(prep, OPTIONS);
+
+        assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
+        DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        assertThat(shard.decisions()).containsExactly(
+                new Classification(src("IMG_0001.jpg"), "junk", "screenshot"));
+    }
+
+    @Test
+    void reCullsAMontageWhoseExistingShardBreaksTheContract() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        // Parseable, but a blank reason breaks the shard contract - resume must decline it.
+        new ShardCodec().write(prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(src("IMG_0001.jpg"), "junk", ""))));
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 100, 10));
+
+        CullReport report = culler().cull(prep, OPTIONS);
+
+        assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
+        DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        assertThat(shard.decisions()).containsExactly(
+                new Classification(src("IMG_0001.jpg"), "junk", "screenshot"));
+    }
+
+    // A resumed shard joins the accumulated set, so the cross-shard rules keep firing across the
+    // resume boundary. A later montage cannot reuse a group id an earlier run's shard claimed.
+    @Test
+    void aResumedShardStillBlocksALaterGroupIdReuse() throws Exception {
+        writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
+        writeMontage("montage-002", "IMG_0003.jpg", "IMG_0004.jpg");
+        new ShardCodec().write(prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new NearDupChosen(src("IMG_0001.jpg"), "beach", "sharpest"),
+                        new NearDupReject(src("IMG_0002.jpg"), "beach", "blurrier"))));
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0003.jpg", "action": "near-dup-chosen", "group": "beach",
+                      "chosen_reason": "sharpest" },
+                    { "index": 2, "name": "IMG_0004.jpg", "action": "near-dup-reject", "group": "beach",
+                      "reason": "blurrier" }
+                  ]
+                }
+                """, 100, 10));
+
+        assertThatThrownBy(() -> culler().cull(prep("montage-001", "montage-002"), OPTIONS))
+                .isInstanceOf(CullException.class)
+                .hasMessageContaining("montage-002")
+                .hasMessageContaining("near-dup group 'beach' spans 2 shards");
+    }
+
+    @Test
+    void thinkingIsExplicitlyDisabledByDefault() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        culler().cull(prep, OPTIONS);
+
+        var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(messages).create(captor.capture());
+        assertThat(captor.getValue().thinking().orElseThrow().isDisabled()).isTrue();
+        assertThat(captor.getValue().maxTokens()).isEqualTo(8192);
+    }
+
+    @Test
+    void configuredThinkingSendsAdaptiveWithAHigherTokenCeiling() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        culler(settingsWithThinking()).cull(prep, OPTIONS);
+
+        var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(messages).create(captor.capture());
+        assertThat(captor.getValue().thinking().orElseThrow().isAdaptive()).isTrue();
+        assertThat(captor.getValue().maxTokens()).isEqualTo(16384);
+    }
+
+    @Test
     void sendsSystemPromptMontageImageAndPhotoTable() throws Exception {
         PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
         respondWith(response("""
@@ -180,13 +441,13 @@ class AnthropicCullerTest {
         culler().cull(prep, OPTIONS);
 
         var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        org.mockito.Mockito.verify(messages).create(captor.capture());
+        verify(messages).create(captor.capture());
         MessageCreateParams request = captor.getValue();
         assertThat(request.model().asString()).isEqualTo("claude-sonnet-5");
         assertThat(request.system().orElseThrow().string().orElseThrow())
                 .contains("### `junk`")
                 .contains("When unsure, keep.");
-        List<com.anthropic.models.messages.ContentBlockParam> blocks =
+        List<ContentBlockParam> blocks =
                 request.messages().getFirst().content().blockParams().orElseThrow();
         String imageData = blocks.getFirst().image().orElseThrow()
                 .source().base64().orElseThrow().data();
@@ -273,7 +534,10 @@ class AnthropicCullerTest {
     }
 
     private AnthropicCuller culler() {
-        CullSettings settings = settings("claude-sonnet-5");
+        return culler(settings("claude-sonnet-5"));
+    }
+
+    private AnthropicCuller culler(CullSettings settings) {
         when(client.messages()).thenReturn(messages);
         return new AnthropicCuller(cullerPrompt(settings), new ShardCodec(), new SidecarReader(),
                 settings, () -> client);
@@ -356,7 +620,13 @@ class AnthropicCullerTest {
     }
 
     private static CullSettings settings(@Nullable String model) {
-        return new FixedSettings("anthropic", CARDS, new CullProviderSettings(model, null));
+        return new FixedSettings("anthropic", CARDS,
+                new CullProviderSettings(model, null, null, null));
+    }
+
+    private static CullSettings settingsWithThinking() {
+        return new FixedSettings("anthropic", CARDS,
+                new CullProviderSettings("claude-sonnet-5", null, true, null));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,
