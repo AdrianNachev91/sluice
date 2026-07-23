@@ -15,7 +15,8 @@ flowchart TD
     A["cull(prep, opts)"] --> B["require sluice.cull.<br/>provider-settings.model"]
     B --> C["render the system prompt<br/>(CullerPrompt + category cards)"]
     C --> D["build the API client<br/>(ANTHROPIC_API_KEY, optional endpoint,<br/>transport max-retries)"]
-    D --> E["for each montage, in sidecar order"]
+    D --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>unreadable fails unchecked)"]
+    W --> E["for each montage, in sidecar order"]
     E --> R{"existing shard<br/>readable + valid?"}
     R -- yes --> S["skip: count as resumed,<br/>shard joins the accepted set"]
     S --> E
@@ -41,10 +42,9 @@ remainder. An unreadable or contract-breaking existing shard is re-culled and ov
 
 ```mermaid
 flowchart TD
-    A["montage-NNN"] --> B["SidecarReader.readEntries<br/>(montage-NNN.json)"]
-    B -- unreadable --> X(["fail unchecked:<br/>prep dir is broken"])
+    A["montage-NNN"] --> B["its sidecar entries<br/>(read up front)"]
     B --> C["read montage-NNN.jpg,<br/>base64-encode"]
-    C -- unreadable --> X
+    C -- unreadable --> X(["fail unchecked:<br/>prep dir is broken"])
     C --> D["CullerPrompt.userTurn:<br/>scope line, grid line, photo table"]
     D --> E["request = system prompt<br/>+ image block + text block<br/>+ structured-output JSON schema"]
 ```
@@ -60,8 +60,9 @@ Thinking is always sent explicitly, never left to the model generation's own def
 ceiling is sized from the answer. A verdict runs about 70 tokens, so the largest list a sheet can
 produce is ~3.5k on a dense 7x7 grid. 8192 holds that worst case more than twice over. A thinking
 run doubles the ceiling to 16384. Reasoning shares the response budget, so the extra 8192 is a
-reasoning allowance (~300 tokens of deliberation per photo). That keeps a long chain from
-squeezing out the verdict JSON. Either ceiling also bounds what one runaway call can cost.
+reasoning allowance (~300 tokens of deliberation per photo on the default 5x5 sheet). That keeps
+a long chain from squeezing out the verdict JSON. Either ceiling also bounds what one runaway
+call can cost.
 
 ## Response validation
 
@@ -95,9 +96,11 @@ Two validation layers, split by where the information lives:
 - **Shard-level, delegated:** everything shard-shaped goes to `ShardValidator`, the contract's
   single source of truth. It runs over the whole accepted-so-far set, not the current shard alone,
   because its cross-shard rules can only fire on the full set. A near-dup group id reused by two
-  montages, say, is something a stateless call could never avoid on its own. Earlier shards are
-  known clean, so any fresh problem implicates the current montage. Resumed shards join the same
-  set, so the cross-shard rules keep firing across the resume boundary.
+  montages, say, is something a stateless call could never avoid on its own. Every run validates
+  against the whole scope's src list, read from all sidecars up front, so "in scope" means the
+  same thing here as for the sibling provider. Earlier shards are known clean, so any fresh
+  problem implicates the current montage. Resumed shards join the same set, so the cross-shard
+  rules keep firing across the resume boundary.
 
 A failing attempt does not throw by itself. Its problem list feeds the corrective retry (see the
 top-level flow). The model's reply comes back as an assistant turn, and the problems follow as a
@@ -125,7 +128,7 @@ deliberate - a model that fails the same montage twice stops burning tokens.
 | A verdict names the wrong photo for its index, twice            | `CullException`; no shard written for that montage                                                                |
 | A tile has no verdict, or two, twice                            | `CullException` listing the gap or the duplicate                                                                  |
 | Action is not `keep`, near-dup, or a configured category, twice | `CullException` via `ShardValidator`                                                                              |
-| Two montages reuse one near-dup group id                        | `CullException` at the second montage; the first montage's shard stays on disk                                    |
+| Two montages reuse one near-dup group id, twice                 | `CullException` at the second montage; the first montage's shard stays on disk                                    |
 | Response is not the schema's JSON, twice                        | `CullException`                                                                                                   |
 | Run fails at montage N                                          | Shards 1..N-1 remain; the run reports failure and nothing is applied (missing shards stay a hard gate downstream) |
 | Re-run after a failure or interruption                          | Montages with valid shards resume (skipped, no API call); the rest are culled                                     |

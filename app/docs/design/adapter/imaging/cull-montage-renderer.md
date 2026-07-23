@@ -101,9 +101,9 @@ media-safety invariant protects from bulk deletes.
 
 - **Unreviewable files are reported, never moved.** `PrepDir.unreviewable` lists them so a caller
   can see what got skipped, but this class only ever reads files, never moves or deletes anything
-  in `Sorted`. The actual move to `Unreviewable/<year>/<month>/` is a documented follow-up item in
-  Phase 11's `ApplyEngine` (`docs/plans/java-port-phases/phase-11-apply.md`) - keeping this class
-  side-effect-free is also what keeps a cull run dry-run-safe.
+  in `Sorted`. The actual move to `Unreviewable/<year>/<month>/` belongs to the apply step, which
+  acts on culled scopes - keeping this class side-effect-free is also what keeps a cull run
+  dry-run-safe.
 - **`OldestN` caps before the unreviewable filter runs.** Capping to `n` happens on the full ordered
   list; filtering happens after. If one of the `n` oldest candidates turns out unreviewable, that
   slot is simply dropped - it is not backfilled from the next-oldest candidate just outside the

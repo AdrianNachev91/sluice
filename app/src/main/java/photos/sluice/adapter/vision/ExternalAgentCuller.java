@@ -23,8 +23,8 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 // The provider for a user whose vision judgement comes from an agent outside this app. That agent
-// reads the montages and drops a decisions-NNN.json shard per montage into the prep directory, out
-// of band. cull() is therefore a single-attempt completeness check, never a wait. It verifies that
+// reads the montages and drops a decisions-NNN.json shard per montage into the prep directory on
+// its own schedule. cull() is therefore a single-attempt completeness check, never a wait. It verifies that
 // every montage has a present, contract-valid shard right now. Otherwise it throws CullException
 // carrying every problem found: missing shards, unparseable shards, shards for montages that don't
 // exist, and every contract violation ShardValidator reports. Whoever culls gets the whole to-fix
@@ -32,8 +32,8 @@ import java.util.stream.Stream;
 //
 // opts.allowPartial() waives only the missing-shard requirement. Whatever shards do exist must
 // still be fully valid. opts.timeout() is ignored - there is nothing to wait on. The returned
-// report counts waived montages as skipped and carries zero tokens: the judgement happened out of
-// band, so no model tokens were spent through this app.
+// report counts waived montages as skipped and carries zero tokens: the judgement happened outside
+// this app, so no model tokens were spent here.
 //
 // Two failure channels, split by who can fix them. Shard problems are the culling agent's to fix
 // and go into the CullException report. The sidecars listing what each montage shows are this

@@ -46,6 +46,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -74,7 +75,8 @@ import java.util.stream.Collectors;
 //
 // A montage whose valid shard is already on disk is skipped, so an interrupted run re-invoked on
 // the same prep directory finishes only the remainder. An invalid existing shard is re-culled and
-// overwritten.
+// overwritten. A stray decisions file naming no current montage is left untouched. CullOptions is
+// not wired yet: every montage needs a shard regardless of allowPartial, and timeout is unhonored.
 //
 // The API client is built lazily inside cull(), never at startup, so the app boots without an API
 // key for users on other providers. The factory seam exists for tests to inject a mock client.
@@ -87,7 +89,7 @@ class AnthropicCuller implements VisionCuller {
     private static final long MAX_TOKENS = 8192;
     // A thinking run adds a reasoning allowance equal to the whole answer ceiling. Reasoning
     // shares the response budget. The extra 8192 (~300 tokens of deliberation per photo on a
-    // full sheet) keeps even a long chain from squeezing out the verdict JSON.
+    // full default 5x5 sheet) keeps even a long chain from squeezing out the verdict JSON.
     private static final long MAX_TOKENS_THINKING = 16384;
     private static final int DEFAULT_TRANSPORT_RETRIES = 2;
     private static final String KEEP = "keep";
@@ -173,20 +175,28 @@ class AnthropicCuller implements VisionCuller {
         int resumed = 0;
         int total = prep.entries().size();
         int ordinal = 0;
-        // Accepted shards and srcs accumulate so each montage is validated against everything
-        // already accepted, not alone - ShardValidator's cross-shard rules (a near-dup group id
-        // reused by two montages, say) can only fire on the whole set. Earlier shards are known
-        // clean, so any fresh problem implicates the current montage.
+        // Every sidecar is read up front, so validation always sees the whole scope's files. That
+        // is the in-scope set the shard contract defines. Accepted shards still accumulate one
+        // montage at a time. ShardValidator's cross-shard rules (a near-dup group id reused by
+        // two montages, say) can only fire on the whole set. Earlier shards are known clean, so
+        // any fresh problem implicates the current montage.
+        var entriesByMontage = new LinkedHashMap<String, List<SidecarPhotoEntry>>();
+        for (String montage : prep.entries()) {
+            entriesByMontage.put(montage,
+                    sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json")));
+        }
+        List<Path> scopeSrcs = entriesByMontage.values().stream()
+                .flatMap(List::stream)
+                .map(SidecarPhotoEntry::src)
+                .toList();
         var acceptedShards = new ArrayList<ShardFile>();
-        var acceptedSrcs = new ArrayList<Path>();
         AnthropicClient client = clientFactory.get();
         try {
             for (String montage : prep.entries()) {
                 ordinal++;
-                List<SidecarPhotoEntry> entries =
-                        sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json"));
+                List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
                 Path shardPath = prep.prepDir().resolve(shardNameFor(montage));
-                if (resumesExistingShard(shardPath, montage, entries, acceptedShards, acceptedSrcs,
+                if (resumesExistingShard(shardPath, montage, acceptedShards, scopeSrcs,
                         categoryNames)) {
                     resumed++;
                 } else {
@@ -197,14 +207,14 @@ class AnthropicCuller implements VisionCuller {
                     inputTokens += response.usage().inputTokens();
                     outputTokens += response.usage().outputTokens();
                     AttemptOutcome outcome = attempt(montage, entries, response, acceptedShards,
-                            acceptedSrcs, categoryNames);
+                            scopeSrcs, categoryNames);
                     if (outcome.shard() == null) {
                         Message retryResponse = client.messages().create(retryRequest(request,
                                 responseText(response), prompt.correctionTurn(outcome.problems())));
                         inputTokens += retryResponse.usage().inputTokens();
                         outputTokens += retryResponse.usage().outputTokens();
                         AttemptOutcome retried = attempt(montage, entries, retryResponse,
-                                acceptedShards, acceptedSrcs, categoryNames);
+                                acceptedShards, scopeSrcs, categoryNames);
                         if (retried.shard() == null) {
                             throw retryFailedException(prep.scope(), montage, outcome.problems(),
                                     retried.problems());
@@ -225,8 +235,8 @@ class AnthropicCuller implements VisionCuller {
     // accepted so far - the resume path for an interrupted run. An unreadable or contract-breaking
     // shard is not an error here. It reports false, and the caller re-culls the montage, the fresh
     // shard overwriting the bad one.
-    private boolean resumesExistingShard(Path shardPath, String montage, List<SidecarPhotoEntry> entries,
-            List<ShardFile> acceptedShards, List<Path> acceptedSrcs, List<String> categoryNames) {
+    private boolean resumesExistingShard(Path shardPath, String montage,
+            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames) {
         if (!Files.exists(shardPath)) {
             return false;
         }
@@ -236,37 +246,34 @@ class AnthropicCuller implements VisionCuller {
         } catch (UncheckedIOException e) {
             return false;
         }
-        return acceptIfValid(montage, existing, entries, acceptedShards, acceptedSrcs, categoryNames)
-                .isEmpty();
+        return acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames).isEmpty();
     }
 
     // One response's full journey: response text -> candidate shard -> accumulated validation.
     private AttemptOutcome attempt(String montage, List<SidecarPhotoEntry> entries, Message response,
-            List<ShardFile> acceptedShards, List<Path> acceptedSrcs, List<String> categoryNames) {
+            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames) {
         var problems = new ArrayList<String>();
         DecisionShard shard = shardOf(montage, entries, response, problems);
         if (shard == null) {
             return new AttemptOutcome(null, problems);
         }
         List<String> validationProblems =
-                acceptIfValid(montage, shard, entries, acceptedShards, acceptedSrcs, categoryNames);
+                acceptIfValid(montage, shard, acceptedShards, scopeSrcs, categoryNames);
         if (!validationProblems.isEmpty()) {
             return new AttemptOutcome(null, validationProblems);
         }
         return new AttemptOutcome(shard, List.of());
     }
 
-    // Tentatively adds the shard to the accepted set and validates the whole set. A clean result
-    // keeps it and returns no problems. Anything else rolls the addition back, so a retry or
-    // re-cull starts from the same accepted state.
-    private List<String> acceptIfValid(String montage, DecisionShard shard, List<SidecarPhotoEntry> entries,
-            List<ShardFile> acceptedShards, List<Path> acceptedSrcs, List<String> categoryNames) {
+    // Tentatively adds the shard to the accepted set and validates the whole set against the
+    // scope's full src list. A clean result keeps it and returns no problems. Anything else rolls
+    // the addition back, so a retry or re-cull starts from the same accepted state.
+    private List<String> acceptIfValid(String montage, DecisionShard shard,
+            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames) {
         acceptedShards.add(new ShardFile(montage, shard));
-        entries.stream().map(SidecarPhotoEntry::src).forEach(acceptedSrcs::add);
-        ValidationReport report = validator.validate(acceptedShards, acceptedSrcs, categoryNames);
+        ValidationReport report = validator.validate(acceptedShards, scopeSrcs, categoryNames);
         if (!report.problems().isEmpty()) {
             acceptedShards.removeLast();
-            acceptedSrcs.subList(acceptedSrcs.size() - entries.size(), acceptedSrcs.size()).clear();
         }
         return report.problems();
     }

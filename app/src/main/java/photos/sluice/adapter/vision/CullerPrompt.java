@@ -47,7 +47,10 @@ class CullerPrompt {
 
     // One montage's user turn: sheet header, numbering scheme, and the photo table the model keys
     // its verdicts to. Indices are 1-based in sidecar order, which is grid order. montage is the
-    // sidecar's base name (montage-NNN); ordinal and total locate the sheet within the run.
+    // sidecar's base name (montage-NNN); ordinal and total locate the sheet within the run. The
+    // table labels each timestamp "taken" although the sidecar carries raw file mtime. The plain
+    // word keeps the burst-grouping rule natural for the model, and mtime is the closest signal
+    // the sidecar has.
     String userTurn(String scope, String montage, int ordinal, int total, List<SidecarPhotoEntry> entries) {
         var text = new StringBuilder();
         text.append("Scope: ").append(scope)
