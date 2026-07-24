@@ -22,8 +22,12 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,7 +84,7 @@ class ApplyEngineRealDataParityTest {
         applyEngine(rootB).apply(prepDirB, new ApplyOptions(false));
 
         MoveDiffer differ = new MoveDiffer();
-        assertTreesIdentical(differ, "Review", rootA.resolve("Review"), rootB.resolve("Review"));
+        assertReviewTreesMatchAccountingForKnownJunkFolderDivergence(differ, rootA.resolve("Review"), rootB.resolve("Review"));
         assertTreesIdentical(differ, "Duplicates", rootA.resolve("Duplicates"), rootB.resolve("Duplicates"));
         assertTreesIdentical(differ, "Library", rootA.resolve("Library"), rootB.resolve("Library"));
 
@@ -98,6 +102,30 @@ class ApplyEngineRealDataParityTest {
         assertThat(diff.identical())
                 .as("%s trees diverged (only-in-reference=%s, only-in-Java=%s)", label, diff.onlyInA(), diff.onlyInB())
                 .isTrue();
+    }
+
+    // apply-cull.ps1 routes 'junk' to Review/<yyyy-MM>/ - a leftover inconsistency in the reference
+    // script itself, since scenery/food already route flatly to Review/Scenery/ and Review/Food/.
+    // ApplyEngine deliberately normalizes this: every category, junk included, routes to
+    // Review/<category>/ (apply-engine.md's locked design decision #2). This filters out ONLY that
+    // specific, known, paired divergence - an entry present as Review/<yyyy-MM>/<name> on the
+    // reference side and as Review/junk/<name> on the Java side, for the exact same <name>.
+    // Anything else (a different category, a missing file, an extra file) is a real divergence.
+    private static final Pattern REVIEW_DATED_LEAF = Pattern.compile("^\\d{4}-\\d{2}/(.+)$");
+
+    private static void assertReviewTreesMatchAccountingForKnownJunkFolderDivergence(
+            MoveDiffer differ, Path treeA, Path treeB) {
+        MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
+        Set<String> unexplainedA = new HashSet<>(diff.onlyInA());
+        Set<String> unexplainedB = new HashSet<>(diff.onlyInB());
+        for (String pathA : diff.onlyInA()) {
+            Matcher matcher = REVIEW_DATED_LEAF.matcher(pathA);
+            if (matcher.matches() && unexplainedB.remove("junk/" + matcher.group(1))) {
+                unexplainedA.remove(pathA);
+            }
+        }
+        assertThat(unexplainedA).as("Review: unexplained entries only in reference").isEmpty();
+        assertThat(unexplainedB).as("Review: unexplained entries only in Java").isEmpty();
     }
 
     // Unreviewable routing has no PS reference to diff against - checked directly instead: every
