@@ -151,6 +151,22 @@ class ApplyEngineTest {
     }
 
     @Test
+    void aFileListedBothAsADecisionAndAsUnreviewableFailsValidationAndMovesNothing(@TempDir Path root) throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(ApplyException.class)
+                .hasMessageContaining("file listed 2 times across shards/unreviewable: " + photo);
+        assertThat(Files.exists(photo)).isTrue();
+    }
+
+    @Test
     void aDecisionsFileWithNoMatchingMontageFailsLoudly(@TempDir Path root) throws IOException {
         Path libraryRoot = root.resolve("Library");
         Path prepDir = prepDir(root);
@@ -426,6 +442,80 @@ class ApplyEngineTest {
     }
 
     @Test
+    void anUnreviewableFileIsMovedToUnreviewableYearMonth(@TempDir Path root) throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        writeFile(undecodable, "not a real image");
+        writeIndex(prepDir, 0, List.of(undecodable), List.of());
+
+        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.unreviewable()).isEqualTo(1);
+        assertThat(Files.exists(undecodable)).isFalse();
+        assertThat(Files.exists(root.resolve("Unreviewable/2019/06/corrupt.heic"))).isTrue();
+    }
+
+    @Test
+    void resumingRecognizesAnAlreadyMovedUnreviewableFileWithoutReprocessingIt(@TempDir Path root) throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        // alreadyMoved is never written to disk under Sorted at all - standing in for a prior,
+        // crashed run that already moved it before this run reads the prep dir.
+        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
+        writeFile(dest, "already-moved");
+        writeMoveRecord(prepDir, alreadyMoved, dest, new Sha256Hasher().hash(dest));
+        writeIndex(prepDir, 0, List.of(alreadyMoved), List.of());
+
+        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.unreviewable()).isEqualTo(1);
+        assertThat(Files.readString(dest)).isEqualTo("already-moved");
+    }
+
+    @Test
+    void aRunWithBothAPendingAndAnAlreadyDoneUnreviewableFileHandlesEachCorrectly(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path pending = root.resolve("Sorted/Photos/2019/06/pending.heic");
+        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/already-moved.heic");
+        writeFile(pending, "not a real image");
+        Path alreadyMovedDest = root.resolve("Unreviewable/2019/06/already-moved.heic");
+        writeFile(alreadyMovedDest, "already-moved");
+        writeMoveRecord(prepDir, alreadyMoved, alreadyMovedDest, new Sha256Hasher().hash(alreadyMovedDest));
+        writeIndex(prepDir, 0, List.of(pending, alreadyMoved), List.of());
+
+        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.unreviewable()).isEqualTo(2);
+        assertThat(Files.exists(pending)).isFalse();
+        assertThat(Files.exists(root.resolve("Unreviewable/2019/06/pending.heic"))).isTrue();
+        assertThat(Files.readString(alreadyMovedDest)).isEqualTo("already-moved");
+    }
+
+    @Test
+    void aMissingUnreviewableFileWithNoMoveRecordAbortsTheWholeRunEvenWhenOtherDecisionsArePending(@TempDir Path root)
+            throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path missingUnreviewable = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move record
+        Path pending = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(pending, "x");
+        writeIndex(prepDir, 1, List.of(missingUnreviewable), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(pending));
+        writeShard(prepDir, "montage-001", classificationJson(pending, "junk", "blurry"));
+
+        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(ApplyException.class)
+                .hasMessageContaining("file not found, and its move could not be verified")
+                .hasMessageContaining(missingUnreviewable.toString());
+        // The whole run aborted before anything moved - the unrelated pending decision is untouched too.
+        assertThat(Files.exists(pending)).isTrue();
+    }
+
+    @Test
     void writesMergedDecisionsAndCleansUpIntermediatesEvenWithZeroDecisions(@TempDir Path root) throws IOException, ApplyException {
         Path libraryRoot = root.resolve("Library");
         Path prepDir = prepDir(root);
@@ -527,8 +617,12 @@ class ApplyEngineTest {
     }
 
     private static void writeIndex(Path prepDir, int photos, List<String> entries) {
+        writeIndex(prepDir, photos, List.of(), entries);
+    }
+
+    private static void writeIndex(Path prepDir, int photos, List<Path> unreviewable, List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
-                new PrepDir("2019-06", prepDir.resolve("base"), photos, List.of(), entries.size(), prepDir, entries));
+                new PrepDir("2019-06", prepDir.resolve("base"), photos, unreviewable, entries.size(), prepDir, entries));
     }
 
     private static void writeSidecar(Path prepDir, String montage, SidecarPhotoEntry... photos) {

@@ -59,6 +59,11 @@ public class PathsConfig implements PathsPort {
         return repoRoot().resolve("Duplicates");
     }
 
+    @Override
+    public Path unreviewable() {
+        return repoRoot().resolve("Unreviewable");
+    }
+
     private static Path resolve(String raw) {
         return Path.of(raw).toAbsolutePath().normalize();
     }

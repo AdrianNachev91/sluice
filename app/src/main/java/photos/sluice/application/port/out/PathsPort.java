@@ -12,6 +12,8 @@ public interface PathsPort {
 
     Path duplicates();
 
+    Path unreviewable();
+
     Path library();
 
     Path logs();

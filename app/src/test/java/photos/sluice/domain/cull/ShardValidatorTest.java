@@ -125,7 +125,8 @@ class ShardValidatorTest {
         var report = validator().validate(
                 List.of(shardFile("montage-001", new Classification(drifted, "junk", "screenshot"))),
                 List.of(dupA, dupB),
-                CATEGORIES);
+                CATEGORIES,
+                List.of());
 
         assertThat(report.heals()).isEmpty();
         assertThat(report.problems()).contains("montage-001[#1]: file out of scope: " + drifted);
@@ -216,7 +217,7 @@ class ShardValidatorTest {
                 shardFile("montage-001", new Classification(A, "junk", "screenshot")),
                 shardFile("montage-002", new Classification(A, "food", "meal")));
 
-        assertThat(report.problems()).contains("file listed 2 times across shards: " + A);
+        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
     }
 
     @Test
@@ -231,7 +232,8 @@ class ShardValidatorTest {
                                 new NearDupChosen(C, "g1", "sharp"),
                                 new NearDupReject(d, "g1", "blurred"))),
                 List.of(A, B, C, d),
-                CATEGORIES);
+                CATEGORIES,
+                List.of());
 
         assertThat(report.problems()).contains(
                 "near-dup group 'g1' spans 2 shards (montage-001, montage-002); a group must stay within one montage");
@@ -245,7 +247,29 @@ class ShardValidatorTest {
                 shardFile("montage-002", new Classification(driftedA, "food", "meal")));
 
         assertThat(report.heals()).hasSize(1);
-        assertThat(report.problems()).contains("file listed 2 times across shards: " + A);
+        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
+    }
+
+    @Test
+    void aFileListedBothAsADecisionAndAsUnreviewableIsReported() {
+        var report = validator().validate(
+                List.of(shardFile("montage-001", new Classification(A, "junk", "screenshot"))),
+                SCOPE,
+                CATEGORIES,
+                List.of(A));
+
+        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
+    }
+
+    @Test
+    void aFileListedTwiceWithinTheUnreviewableListIsReported() {
+        var report = validator().validate(
+                List.of(shardFile("montage-001")),
+                SCOPE,
+                CATEGORIES,
+                List.of(A, A));
+
+        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
     }
 
     @Test
@@ -253,6 +277,7 @@ class ShardValidatorTest {
         var report = validator().validate(
                 List.of(shardFile("montage-001", new Classification(A, "junk", "screenshot"))),
                 SCOPE,
+                List.of(),
                 List.of());
 
         assertThat(report.problems()).contains(
@@ -297,6 +322,6 @@ class ShardValidatorTest {
     }
 
     private ValidationReport validate(ShardFile... shards) {
-        return validator().validate(List.of(shards), SCOPE, CATEGORIES);
+        return validator().validate(List.of(shards), SCOPE, CATEGORIES, List.of());
     }
 }

@@ -13,10 +13,10 @@ import java.util.List;
 // unreviewable lists every candidate this run found but couldn't render a judgeable tile for
 // (undecodable, or real pixels below the reviewable floor). Entries are absolute paths, never
 // mentioned in any montage or sidecar. Without this, a skipped file leaves no trace anywhere on
-// disk. The ApplyEngine is the intended future consumer. It already routes decision-driven
-// files (junk/scenery/food/near-dup) to dedicated folders, and this is one more category for it to
-// route, to Unreviewable/<year>/<month>/. This chunk only reports the list. It never moves the
-// files itself, keeping montage generation side-effect-free and dry-run-safe.
+// disk. ApplyEngine routes every entry here to Unreviewable/<year>/<month>/, alongside its
+// decision-driven routing (junk/scenery/food/near-dup) to their own dedicated folders. Montage
+// generation itself only reports the list - it never moves the files, keeping generation
+// side-effect-free and dry-run-safe.
 public record PrepDir(
         String scope,
         Path basePath,

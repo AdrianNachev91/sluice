@@ -170,6 +170,26 @@ class AnthropicCullerTest {
         assertThat(prepDir.resolve("decisions-002.json")).doesNotExist();
     }
 
+    // index.json's unreviewable list has no shard of its own, but ApplyEngine moves it exactly like
+    // a decision. So the same file appearing in both would double-move at apply time - the same
+    // problem two shards reusing a group id would cause. Caught here, at cull time, not just later.
+    @Test
+    void failsLoudWhenAFileIsListedBothAsADecisionAndInTheUnreviewableList() throws Exception {
+        writeMontage("montage-001", "IMG_0001.jpg");
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 1000, 100));
+
+        assertThatThrownBy(() -> culler().cull(prep(List.of(src("IMG_0001.jpg")), "montage-001"), OPTIONS))
+                .isInstanceOf(CullException.class)
+                .hasMessageContaining("file listed 2 times across shards/unreviewable: " + src("IMG_0001.jpg"));
+        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+    }
+
     @Test
     void retriesOnceWithTheProblemListWhenTheFirstResponseFailsValidation() throws Exception {
         PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
@@ -603,7 +623,11 @@ class AnthropicCullerTest {
     }
 
     private PrepDir prep(String... montages) {
-        return new PrepDir("2019-06", prepDir.resolve("base"), 0, List.of(), montages.length,
+        return prep(List.of(), montages);
+    }
+
+    private PrepDir prep(List<Path> unreviewable, String... montages) {
+        return new PrepDir("2019-06", prepDir.resolve("base"), 0, unreviewable, montages.length,
                 prepDir, List.of(montages));
     }
 

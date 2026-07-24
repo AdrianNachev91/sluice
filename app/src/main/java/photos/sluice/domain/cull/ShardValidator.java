@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
 //   - A group id is a slug: lowercase a-z0-9 runs joined by single hyphens, at most 24 chars. It
 //     becomes part of a Duplicates/YYYY-MM_<slug>/ folder name, so it must stay a short, portable
 //     path segment.
-//   - No file is acted on twice across all shards.
+//   - No file is acted on twice - across all shards, and against the unreviewable list too.
 public final class ShardValidator {
 
     private static final Pattern GROUP_SLUG = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
@@ -49,7 +49,7 @@ public final class ShardValidator {
     }
 
     public ValidationReport validate(List<ShardFile> shards, Collection<Path> sidecarSrcs,
-            List<String> categories) {
+            List<String> categories, Collection<Path> unreviewable) {
         Set<Path> inScope = Set.copyOf(sidecarSrcs);
         Map<String, Path> healableByBasename = healableByBasename(sidecarSrcs);
         Set<String> categorySet = Set.copyOf(categories);
@@ -74,6 +74,9 @@ public final class ShardValidator {
 
         // A single file acted on twice would double-move at apply time. Checked across the merged
         // (heal-corrected) list, since a heal can collapse two differently-typed paths onto one src.
+        // The unreviewable list joins the same count. It has no shard of its own, but ApplyEngine
+        // moves it exactly like a decision - a file listed there AND in a decision would double-move
+        // just the same. A duplicate within the unreviewable list alone would too.
         Map<String, Long> countByFile = new TreeMap<>();
         for (Decision d : decisions) {
             String f = d.file().toString();
@@ -81,9 +84,12 @@ public final class ShardValidator {
                 countByFile.merge(f, 1L, Long::sum);
             }
         }
+        for (Path u : unreviewable) {
+            countByFile.merge(u.toString(), 1L, Long::sum);
+        }
         countByFile.forEach((f, count) -> {
             if (count > 1) {
-                problems.add("file listed " + count + " times across shards: " + f);
+                problems.add("file listed " + count + " times across shards/unreviewable: " + f);
             }
         });
 

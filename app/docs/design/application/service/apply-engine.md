@@ -13,24 +13,41 @@ flowchart TD
     B -- any problem --> Z(["ApplyException -<br/>zero files moved"])
     B -- clean --> C["read the move-record log"]
     C --> D["classify every decision<br/>(see section 3)"]
-    D -- any Unresolved --> Z
-    D -- none --> E["for each decision,<br/>in shard order"]
+    C --> D2["classify every<br/>unreviewable file<br/>(see section 3)"]
+    D --> F{"any Unresolved,<br/>decision or<br/>unreviewable file alike?"}
+    D2 --> F
+    F -- yes --> Z
+    F -- no --> E["for each decision,<br/>in shard order"]
+    F -- no --> E2["for each<br/>unreviewable file"]
     E -- Pending --> G["carry it out<br/>(see section 4) -<br/>records source hash +<br/>destination BEFORE moving"]
     E -- Done --> H["reconcile - backfill only<br/>a missing secondary write,<br/>never re-move"]
-    G --> I["once every decision<br/>is handled"]
+    E2 -- Pending --> G2["move to<br/>Unreviewable/&lt;yyyy&gt;/&lt;mm&gt;/ -<br/>same record-before-move"]
+    E2 -- Done --> H2(["nothing to backfill -<br/>the move alone was<br/>the whole action"])
+    G --> I["once every decision and<br/>unreviewable file is handled"]
     H --> I
+    G2 --> I
+    H2 --> I
     I --> J["write merged decisions.json -<br/>a fresh recount over the<br/>WHOLE decisions array,<br/>not just this run's"]
     J --> K["delete montage-*<br/>and tile-* files"]
-    K --> L(["build ApplyReport -<br/>this run's own counts only,<br/>reconciled decisions excluded"])
+    K --> L(["build ApplyReport -<br/>this run's own decision<br/>counts only, reconciled<br/>decisions excluded"])
 ```
 
 Every problem source is aggregated before anything throws - a bad run is seen and fixed whole, not one error per re-run.
-Classification runs entirely before any decision is carried out too: an Unresolved decision anywhere aborts the whole
-run, the same all-or-nothing guarantee validation itself gives. The decisions.json write and the intermediate cleanup
-always run once classification passes, even when every montage was an all-keeps montage and zero decisions exist. A
-funny decision's hash-index row is written immediately as part of carrying it out, not collected and appended once at
-the end. A decision already Done on a resumed run is reconciled, not reprocessed, so it never re-enters the carry-out
-path. Batching the index row instead would lose it for good, the one time a crash actually lands between decisions.
+Classification runs entirely before any decision or unreviewable file is carried out too. An Unresolved verdict
+anywhere - a decision or an unreviewable file alike - aborts the whole run, the same all-or-nothing guarantee
+validation itself gives. The decisions.json write and the intermediate cleanup always run once classification passes,
+even when every montage was an all-keeps montage and zero decisions exist. A funny decision's hash-index row is
+written immediately as part of carrying it out, not collected and appended once at the end. A decision already Done
+on a resumed run is reconciled, not reprocessed, so it never re-enters the carry-out path. Batching the index row
+instead would lose it for good, the one time a crash actually lands between decisions.
+
+`index.json`'s own `unreviewable` list (paths this run's montage generation found but couldn't render a judgeable
+tile for) rides through the same pipeline as a sibling to the decisions array, not as one more decision type. It has
+no shard, no category, no reason. `ApplyEngine.classifyFile()` is `classify()`'s sibling for a plain `Path`: same
+Pending/Done/Unresolved logic, minus the `NearDupChosen` copy exception (an unreviewable file is always a move).
+Carrying one out reuses `recordThenMove()` exactly as `Classification`/`NearDupReject` do, just with a different
+destination (`Unreviewable/<yyyy>/<mm>/`, the same year/month segments `yearMonthOf()` reads for `Duplicates/`) and no
+secondary write. A Done unreviewable file has nothing left to reconcile.
 
 `ApplyReport` is built twice, at two different scopes, for two different readers. The value returned to the caller
 counts only what *this* invocation itself moved. A decision a prior, crashed run already carried out is not counted
@@ -67,7 +84,7 @@ ShardValidator itself does no I/O: it checks a decision's file against the sidec
 `ApplyEngine` runs one more pass after a clean validation - classifying every decision for resume (see section 3) -
 before moving anything.
 
-## 3. Classifying a decision for resume
+## 3. Classifying a decision (or an unreviewable file) for resume
 
 ```mermaid
 flowchart TD
@@ -86,6 +103,10 @@ A decision whose source file is still on disk is always Pending. A move that nev
 it just needs doing. Every other decision needs its source's disappearance explained before the run can proceed.
 Either it's `NearDupChosen` (never move-based, see below), or a move record proves the move that removed it actually
 happened, or the run refuses.
+
+An unreviewable file follows the same diagram with node D always answered "no" - it has no `NearDupChosen`-shaped
+copy exception, since routing one is always a move. `classifyFile()` is this logic's standalone version for a plain
+`Path`, used because an unreviewable file has no `Decision` behind it to carry through the rest of the diagram.
 
 ### Why a move record, written before the move, not a log written after
 
@@ -172,6 +193,9 @@ never supposed to disappear, so there is no "already done" case for the classifi
 | A near-dup group's chosen photo                                                                            | Copied (not moved) to `Duplicates/`, original stays a Sorted keeper                |
 | A near-dup group's rejected photo                                                                          | Moved to `Duplicates/`                                                             |
 | A near-dup chosen photo's destination already exists (a prior run copied it, then crashed before its note) | Copy skipped; note (re)written wholesale                                           |
+| index.json lists an unreviewable file (couldn't render a judgeable tile at montage time)                   | Moved to `Unreviewable/<yyyy>/<mm>/` - no reason note, nothing to reconcile        |
+| An unreviewable file's move record verifies (destination hash-matches) but its source is gone              | Done - not reprocessed; there is no secondary write to backfill                    |
+| An unreviewable file is missing, with no move record verifying it already ran                              | Unresolved - `ApplyException`, zero files moved (same gate as any decision)        |
 
 ## Related
 

@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -69,9 +70,11 @@ public class ApplyEngine {
     // whole batch in one pass (see validate()). Every decision is then classified against the
     // move-record log (see classify()) before anything runs. A decision whose file is still on disk
     // is pending. One that's gone but hash-verifies at its recorded destination is already done, its
-    // secondary write (if any) reconciled rather than redone. Anything else is unresolved, which
-    // aborts the whole run before a single file moves. Once every decision is handled, the merged
-    // decisions.json is written and the montage/tile intermediates are deleted.
+    // secondary write (if any) reconciled rather than redone. index.json's own unreviewable list goes
+    // through the same classification, via classifyFile() - it has no shard-driven category, just a
+    // plain move once carried out. Anything unresolved, decision or unreviewable file alike, aborts
+    // the whole run before a single file moves. Once every decision and unreviewable file is
+    // handled, the merged decisions.json is written and the montage/tile intermediates are deleted.
     public ApplyReport apply(Path prepDirPath, ApplyOptions options) throws ApplyException {
         PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         ValidationReport validation = validate(prepDirPath, prepDir, options);
@@ -81,10 +84,18 @@ public class ApplyEngine {
         List<Status> statuses = validation.decisions().stream()
                 .map(decision -> classify(decision, moveRecords))
                 .toList();
-        List<String> unresolved = statuses.stream()
-                .filter(Status.Unresolved.class::isInstance)
-                .map(status -> unresolvedMessage(status.decision(), moveRecordLog))
+        List<FileStatus> unreviewableStatuses = prepDir.unreviewable().stream()
+                .map(file -> classifyFile(file, moveRecords))
                 .toList();
+        List<String> unresolved = new ArrayList<>();
+        statuses.stream()
+                .filter(Status.Unresolved.class::isInstance)
+                .map(status -> unresolvedMessage(status.decision().file(), moveRecordLog))
+                .forEach(unresolved::add);
+        unreviewableStatuses.stream()
+                .filter(FileStatus.Unresolved.class::isInstance)
+                .map(status -> unresolvedMessage(status.file(), moveRecordLog))
+                .forEach(unresolved::add);
         if (!unresolved.isEmpty()) {
             throw failure(unresolved);
         }
@@ -97,6 +108,12 @@ public class ApplyEngine {
                 case Status.Done d -> reconcile(d.decision(), d.record());
                 case Status.Unresolved _ -> {} // already aborted the whole run above
             }
+        }
+        for (FileStatus status : unreviewableStatuses) {
+            if (status instanceof FileStatus.Pending(Path file)) {
+                recordThenMove(file, unreviewableDir(file), moveRecordLog);
+            }
+            // Done: the move alone is the whole action - there's no secondary write to reconcile.
         }
 
         var report = new ApplyReport(prepDir.photos(), outcome.byCategory, prepDir.unreviewable().size(),
@@ -162,7 +179,7 @@ public class ApplyEngine {
                 .toList();
         List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
 
-        ValidationReport report = shardValidator.validate(shardFiles, sidecarSrcs, categories);
+        ValidationReport report = shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable());
         problems.addAll(report.problems());
 
         if (!problems.isEmpty()) {
@@ -196,10 +213,31 @@ public class ApplyEngine {
         if (decision instanceof NearDupChosen) {
             return new Status.Unresolved(decision);
         }
-        MoveRecord record = moveRecords.get(decision.file());
+        Optional<MoveRecord> record = verifiedMoveRecord(decision.file(), moveRecords);
+        return record.isPresent()
+                ? new Status.Done(decision, record.get())
+                : new Status.Unresolved(decision);
+    }
+
+    // classify()'s sibling for an unreviewable file. It has no shard-driven category and no
+    // NearDupChosen-shaped copy exception - every unreviewable file is a plain move. So a missing
+    // source is Pending only when a verified move record explains it, Unresolved otherwise.
+    private FileStatus classifyFile(Path file, Map<Path, MoveRecord> moveRecords) {
+        if (mediaStore.exists(file)) {
+            return new FileStatus.Pending(file);
+        }
+        return verifiedMoveRecord(file, moveRecords).isPresent()
+                ? new FileStatus.Done(file)
+                : new FileStatus.Unresolved(file);
+    }
+
+    // The move-record log only proves a move happened when its recorded destination still exists
+    // and still hashes to the recorded value. A record alone is never trusted on its own.
+    private Optional<MoveRecord> verifiedMoveRecord(Path file, Map<Path, MoveRecord> moveRecords) {
+        MoveRecord record = moveRecords.get(file);
         boolean verified = record != null && mediaStore.exists(record.dest())
                 && sha256Port.hash(record.dest()).equals(record.hash());
-        return verified ? new Status.Done(decision, record) : new Status.Unresolved(decision);
+        return verified ? Optional.of(record) : Optional.empty();
     }
 
     // Runs only for a decision classify() already hash-verified as done. It never re-decides the
@@ -242,8 +280,8 @@ public class ApplyEngine {
         return records;
     }
 
-    private static String unresolvedMessage(Decision d, Path moveRecordLog) {
-        return "file not found, and its move could not be verified: " + d.file()
+    private static String unresolvedMessage(Path file, Path moveRecordLog) {
+        return "file not found, and its move could not be verified: " + file
                 + " - if an earlier, crashed run already applied it, the automatic check that would confirm that"
                 + " (a move record matching this file, whose recorded destination still hash-verifies) found"
                 + " none. This needs manual investigation before re-running; see " + moveRecordLog + ".";
@@ -328,6 +366,14 @@ public class ApplyEngine {
         return pathsPort.duplicates().resolve(yearMonthOf(file) + "_" + group);
     }
 
+    // Unlike every other category, which routes flatly to Review/<category>/, an unreviewable file
+    // carries no category or reason to group by. So it keeps the <yyyy>/<mm> structure its Sorted
+    // location already had - the same segments yearMonthOf() reads off for Duplicates.
+    private Path unreviewableDir(Path file) {
+        String[] yearMonth = yearMonthOf(file).split("-", 2);
+        return pathsPort.unreviewable().resolve(yearMonth[0]).resolve(yearMonth[1]);
+    }
+
     // Reserves the exact destination and durably records source-hash-plus-destination BEFORE moving.
     // So a crash any time after this point - during the move itself, or during whatever write
     // normally follows it - still leaves classify() a positive, hash-verified way to tell the move
@@ -403,5 +449,18 @@ public class ApplyEngine {
         record Done(Decision decision, MoveRecord record) implements Status {}
 
         record Unresolved(Decision decision) implements Status {}
+    }
+
+    // classifyFile()'s verdict for one unreviewable file - Status's sibling for a plain Path with no
+    // Decision behind it. Done carries no record: unlike a Classification or NearDupReject, an
+    // unreviewable file has no secondary write to reconcile, so confirming the move alone is enough.
+    private sealed interface FileStatus {
+        Path file();
+
+        record Pending(Path file) implements FileStatus {}
+
+        record Done(Path file) implements FileStatus {}
+
+        record Unresolved(Path file) implements FileStatus {}
     }
 }

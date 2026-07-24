@@ -198,7 +198,7 @@ class AnthropicCuller implements VisionCuller {
                 List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
                 Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
                 if (resumesExistingShard(shardPath, montage, acceptedShards, scopeSrcs,
-                        categoryNames)) {
+                        categoryNames, prep.unreviewable())) {
                     resumed++;
                 } else {
                     MessageCreateParams request = request(model, thinking, systemPrompt,
@@ -208,14 +208,14 @@ class AnthropicCuller implements VisionCuller {
                     inputTokens += response.usage().inputTokens();
                     outputTokens += response.usage().outputTokens();
                     AttemptOutcome outcome = attempt(montage, entries, response, acceptedShards,
-                            scopeSrcs, categoryNames);
+                            scopeSrcs, categoryNames, prep.unreviewable());
                     if (outcome.shard() == null) {
                         Message retryResponse = client.messages().create(retryRequest(request,
                                 responseText(response), prompt.correctionTurn(outcome.problems())));
                         inputTokens += retryResponse.usage().inputTokens();
                         outputTokens += retryResponse.usage().outputTokens();
                         AttemptOutcome retried = attempt(montage, entries, retryResponse,
-                                acceptedShards, scopeSrcs, categoryNames);
+                                acceptedShards, scopeSrcs, categoryNames, prep.unreviewable());
                         if (retried.shard() == null) {
                             throw retryFailedException(prep.scope(), montage, outcome.problems(),
                                     retried.problems());
@@ -237,7 +237,8 @@ class AnthropicCuller implements VisionCuller {
     // shard is not an error here. It reports false, and the caller re-culls the montage, the fresh
     // shard overwriting the bad one.
     private boolean resumesExistingShard(Path shardPath, String montage,
-            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames) {
+            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
+            List<Path> unreviewable) {
         if (!Files.exists(shardPath)) {
             return false;
         }
@@ -247,19 +248,20 @@ class AnthropicCuller implements VisionCuller {
         } catch (UncheckedIOException e) {
             return false;
         }
-        return acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames).isEmpty();
+        return acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames, unreviewable).isEmpty();
     }
 
     // One response's full journey: response text -> candidate shard -> accumulated validation.
     private AttemptOutcome attempt(String montage, List<SidecarPhotoEntry> entries, Message response,
-            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames) {
+            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
+            List<Path> unreviewable) {
         var problems = new ArrayList<String>();
         DecisionShard shard = shardOf(montage, entries, response, problems);
         if (shard == null) {
             return new AttemptOutcome(null, problems);
         }
         List<String> validationProblems =
-                acceptIfValid(montage, shard, acceptedShards, scopeSrcs, categoryNames);
+                acceptIfValid(montage, shard, acceptedShards, scopeSrcs, categoryNames, unreviewable);
         if (!validationProblems.isEmpty()) {
             return new AttemptOutcome(null, validationProblems);
         }
@@ -267,12 +269,15 @@ class AnthropicCuller implements VisionCuller {
     }
 
     // Tentatively adds the shard to the accepted set and validates the whole set against the
-    // scope's full src list. A clean result keeps it and returns no problems. Anything else rolls
-    // the addition back, so a retry or re-cull starts from the same accepted state.
+    // scope's full src list, plus index.json's own unreviewable list. A file listed there and in a
+    // shard would double-move at apply time, same as a file listed in two shards. A clean result
+    // keeps the shard and returns no problems. Anything else rolls the addition back, so a retry or
+    // re-cull starts from the same accepted state.
     private List<String> acceptIfValid(String montage, DecisionShard shard,
-            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames) {
+            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
+            List<Path> unreviewable) {
         acceptedShards.add(new ShardFile(montage, shard));
-        ValidationReport report = validator.validate(acceptedShards, scopeSrcs, categoryNames);
+        ValidationReport report = validator.validate(acceptedShards, scopeSrcs, categoryNames, unreviewable);
         if (!report.problems().isEmpty()) {
             acceptedShards.removeLast();
         }
