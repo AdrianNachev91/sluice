@@ -11,6 +11,7 @@ import photos.sluice.domain.cull.CullScopeSelector;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.MediaType;
 import photos.sluice.domain.scan.MediaTypeDetector;
 
@@ -66,6 +67,11 @@ public class CullMontageRenderer implements MontageRenderer {
 
     @Override
     public PrepDir build(CullScope scope, MontageConfig config) {
+        return build(scope, config, ProgressCallback.NO_OP);
+    }
+
+    @Override
+    public PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress) {
         // Ordering happens before rendering. Batch boundaries (which photos land in montage-001 vs
         // montage-002) must be decided from the full candidate list, not from however MediaStore
         // happened to return files from disk.
@@ -103,6 +109,7 @@ public class CullMontageRenderer implements MontageRenderer {
         mediaStore.ensureDirectory(prepDir);
 
         int tilesPerMontage = config.tilesPerRow() * config.tilesPerRow();
+        int totalMontages = (reviewable.size() + tilesPerMontage - 1) / tilesPerMontage;
         List<String> entries = new ArrayList<>();
         for (int start = 0; start < reviewable.size(); start += tilesPerMontage) {
             int end = Math.min(start + tilesPerMontage, reviewable.size());
@@ -112,6 +119,7 @@ public class CullMontageRenderer implements MontageRenderer {
             String tag = "montage-%03d".formatted(entries.size() + 1);
             writeMontage(prepDir, tag, reviewable.subList(start, end), config);
             entries.add(tag);
+            progress.tick(entries.size(), totalMontages);
         }
 
         // photos reports reviewable.size(), not the raw count found in scope. An unreviewable file

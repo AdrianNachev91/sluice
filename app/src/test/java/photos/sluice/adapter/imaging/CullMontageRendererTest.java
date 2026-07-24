@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -226,6 +227,24 @@ class CullMontageRendererTest {
         assertThat(second.montages()).isEqualTo(1);
         assertThat(Files.exists(staleMontage)).isFalse();
         assertThat(Files.exists(staleSidecar)).isFalse();
+    }
+
+    @Test
+    void progressCallbackTicksOnceForEachMontageWritten(@TempDir Path root) throws IOException {
+        var pathsConfig = pathsConfig(root);
+        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
+        writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z"));
+        writePhoto(juneDir, "c.jpg", Instant.parse("2019-06-03T00:00:00Z"));
+        writePhoto(juneDir, "d.jpg", Instant.parse("2019-06-04T00:00:00Z"));
+        writePhoto(juneDir, "e.jpg", Instant.parse("2019-06-05T00:00:00Z"));
+
+        List<String> ticks = new ArrayList<>();
+        PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(result.montages()).isEqualTo(2);
+        assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
     private static PathsConfig pathsConfig(Path root) {

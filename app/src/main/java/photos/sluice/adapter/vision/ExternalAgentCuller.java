@@ -13,6 +13,7 @@ import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.job.ProgressCallback;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -61,10 +62,18 @@ class ExternalAgentCuller implements VisionCuller {
 
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+        return cull(prep, opts, ProgressCallback.NO_OP);
+    }
+
+    @Override
+    public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
         var problems = new ArrayList<String>();
         var shards = new ArrayList<ShardFile>();
+        int total = prep.entries().size();
+        int current = 0;
         for (String montage : prep.entries()) {
             collectShard(prep.prepDir(), montage, opts.allowPartial(), shards, problems);
+            progress.tick(++current, total);
         }
         problems.addAll(strayShards(prep));
 

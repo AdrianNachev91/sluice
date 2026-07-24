@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -161,6 +162,23 @@ class ExternalAgentCullerTest {
     void returnsAnEmptyReportWhenThePrepDirHasNoMontages(@TempDir Path dir) throws CullException {
         assertThat(culler.cull(prep(dir), options()))
                 .isEqualTo(new CullReport(0, 0, 0, 0));
+    }
+
+    @Test
+    void progressCallbackTicksOnceForEachMontageIncludingOneWithAMissingShard(@TempDir Path dir)
+            throws IOException, CullException {
+        Path junk = dir.resolve("base").resolve("IMG_001.jpg");
+        writeSidecar(dir, "montage-001", junk);
+        writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg")); // no shard written
+        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(junk, "junk", "photo of a monitor"))));
+
+        List<String> ticks = new ArrayList<>();
+        CullReport report = culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial(),
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(report).isEqualTo(new CullReport(1, 1, 0, 0));
+        assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
     private ExternalAgentCuller culler() {

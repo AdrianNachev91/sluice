@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.ProgressCallback;
 
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,10 @@ public class CullDispatcher {
 
     public CullReport cull(PrepDir prep, CullOptions options) throws CullException {
         return select().cull(prep, options);
+    }
+
+    public CullReport cull(PrepDir prep, CullOptions options, ProgressCallback progress) throws CullException {
+        return select().cull(prep, options, progress);
     }
 
     private VisionCuller select() {

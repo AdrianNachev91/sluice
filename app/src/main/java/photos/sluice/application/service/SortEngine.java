@@ -13,6 +13,7 @@ import photos.sluice.domain.dating.ScopeSelector;
 import photos.sluice.domain.dedup.ByteIdenticalDedup;
 import photos.sluice.domain.dedup.ByteIdenticalDedup.DedupPlan;
 import photos.sluice.domain.imaging.LowResGate;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.Confidence;
 import photos.sluice.domain.model.DatedMedia;
 import photos.sluice.domain.model.DateResult;
@@ -76,6 +77,10 @@ public class SortEngine implements SortUseCase {
 
     @Override
     public SortSummary sort(SortScope scope) {
+        return sort(scope, ProgressCallback.NO_OP);
+    }
+
+    public SortSummary sort(SortScope scope, ProgressCallback progress) {
         // Every scanned file is dated before scope narrows anything, not just the files a caller
         // is about to process. OldestYear and OldestN need to compare dates across the whole
         // Inbox to pick the right subset. Scoping on partial date knowledge would pick the wrong
@@ -104,7 +109,7 @@ public class SortEngine implements SortUseCase {
         plan.redundantVsLibrary().forEach(file -> mediaStore.delete(file.path()));
         plan.withinBatchDuplicates().forEach(file -> mediaStore.delete(file.path()));
 
-        RoutingResult routing = routeSurvivors(plan.toSort(), dateByFile);
+        RoutingResult routing = routeSurvivors(plan.toSort(), dateByFile, progress);
 
         sweepOrphanedSidecarsAndEmptyDirectories(scanResult, inScope, consumedSidecars);
 
@@ -176,14 +181,18 @@ public class SortEngine implements SortUseCase {
         return result;
     }
 
-    private RoutingResult routeSurvivors(List<MediaFile> toSort, Map<MediaFile, DateResult> dateByFile) {
+    private RoutingResult routeSurvivors(List<MediaFile> toSort, Map<MediaFile, DateResult> dateByFile,
+            ProgressCallback progress) {
         var routing = new RoutingResult();
+        int total = toSort.size();
+        int current = 0;
         for (MediaFile file : toSort) {
             // Every file here came from inScope, and dateByFile was built from that same list. So
             // this lookup always hits. requireNonNull asserts that invariant rather than silently
             // trusting it.
             DateResult date = Objects.requireNonNull(dateByFile.get(file));
             routeOneSurvivor(file, date, routing);
+            progress.tick(++current, total);
         }
         return routing;
     }

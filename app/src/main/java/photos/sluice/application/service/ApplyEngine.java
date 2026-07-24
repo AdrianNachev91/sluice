@@ -21,6 +21,7 @@ import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.nio.file.Path;
@@ -76,6 +77,10 @@ public class ApplyEngine {
     // the whole run before a single file moves. Once every decision and unreviewable file is
     // handled, the merged decisions.json is written and the montage/tile intermediates are deleted.
     public ApplyReport apply(Path prepDirPath, ApplyOptions options) throws ApplyException {
+        return apply(prepDirPath, options, ProgressCallback.NO_OP);
+    }
+
+    public ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress) throws ApplyException {
         PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         ValidationReport validation = validate(prepDirPath, prepDir, options);
 
@@ -102,18 +107,24 @@ public class ApplyEngine {
 
         Map<String, List<Decision>> nearDupGroups = groupNearDups(validation.decisions());
         var outcome = new ApplyOutcome();
+        // Both loops below can move a file, so both count toward the total a caller is told about -
+        // otherwise progress would reach 100% while unreviewable files are still being moved.
+        int total = statuses.size() + unreviewableStatuses.size();
+        int current = 0;
         for (Status status : statuses) {
             switch (status) {
                 case Status.Pending p -> apply(p.decision(), moveRecordLog, nearDupGroups, outcome);
                 case Status.Done d -> reconcile(d.decision(), d.record());
                 case Status.Unresolved _ -> {} // already aborted the whole run above
             }
+            progress.tick(++current, total);
         }
         for (FileStatus status : unreviewableStatuses) {
             if (status instanceof FileStatus.Pending(Path file)) {
                 recordThenMove(file, unreviewableDir(file), moveRecordLog);
             }
             // Done: the move alone is the whole action - there's no secondary write to reconcile.
+            progress.tick(++current, total);
         }
 
         var report = new ApplyReport(prepDir.photos(), outcome.byCategory, prepDir.unreviewable().size(),

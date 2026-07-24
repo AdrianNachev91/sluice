@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -608,6 +609,30 @@ class ApplyEngineTest {
         assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
                 .isInstanceOf(ApplyException.class)
                 .hasMessageContaining("file not found, and its move could not be verified");
+    }
+
+    @Test
+    void progressCallbackTicksOnceForEachDecisionAndOnceForEachUnreviewableFile(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        writeFile(photo, "junk1");
+        writeFile(undecodable, "not a real image");
+        writeIndex(prepDir, 1, List.of(undecodable), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        List<String> ticks = new ArrayList<>();
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
+                (current, total) -> ticks.add(current + "/" + total));
+
+        // One decision plus one unreviewable file, both real moves - the total must cover both
+        // loops, not just the decisions loop, or progress would reach 100% before the unreviewable
+        // file is actually moved.
+        assertThat(ticks).containsExactly("1/2", "2/2");
+        assertThat(Files.exists(root.resolve("Unreviewable/2019/06/corrupt.heic"))).isTrue();
     }
 
     private static Path prepDir(Path root) throws IOException {

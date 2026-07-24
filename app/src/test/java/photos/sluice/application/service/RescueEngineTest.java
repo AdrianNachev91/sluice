@@ -15,6 +15,8 @@ import photos.sluice.domain.rescue.RescueSummary;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -135,8 +137,33 @@ class RescueEngineTest {
         assertThat(hashIndex.load()).containsOnlyKeys(firstHash, new Sha256Hasher().hash(secondDest));
     }
 
+    @Test
+    void progressCallbackTicksOnceForEveryFileRegardlessOfWhetherItIsRescuedOrSkipped(@TempDir Path root)
+            throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        // "Food" carries no folder-derived date, so each file's outcome depends solely on
+        // dateForOnly - one rescued, one skipped - unlike a dated leaf folder ("2019-06"), where
+        // folderDate() would rescue both regardless of what the DateSource says.
+        writeFile(root.resolve("Review/Food/rescued.jpg"), "keeper");
+        writeFile(root.resolve("Review/Food/skipped.jpg"), "no date");
+
+        List<String> ticks = new ArrayList<>();
+        RescueSummary summary = rescueEngine(root, libraryRoot, dateForOnly("rescued.jpg"), noDate())
+                .rescue("Food", (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(summary.rescued()).isEqualTo(1);
+        assertThat(summary.skipped()).containsExactly("skipped.jpg");
+        assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
     private static DateSource noDate() {
         return (_, _) -> Optional.empty();
+    }
+
+    private static DateSource dateForOnly(String filename) {
+        return (file, _) -> file.path().getFileName().toString().equals(filename)
+                ? Optional.of(LocalDateTime.of(2019, 6, 15, 12, 0))
+                : Optional.empty();
     }
 
     private static RescueEngine rescueEngine(Path repoRoot, Path libraryRoot, DateSource exifSource, DateSource filenameSource) {

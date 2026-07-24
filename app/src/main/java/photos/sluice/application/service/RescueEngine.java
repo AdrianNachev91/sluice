@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.domain.dating.RescueDateResolver;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.MediaType;
@@ -45,6 +46,10 @@ public class RescueEngine implements RescueUseCase {
 
     @Override
     public RescueSummary rescue(String reviewFolder) {
+        return rescue(reviewFolder, ProgressCallback.NO_OP);
+    }
+
+    public RescueSummary rescue(String reviewFolder, ProgressCallback progress) {
         Path reviewRoot = pathsPort.review();
         Path target = resolveWithinReview(reviewRoot, reviewFolder);
         String targetLeaf = target.getFileName().toString();
@@ -55,6 +60,8 @@ public class RescueEngine implements RescueUseCase {
         // never a marker file, so this list's marker entries are still accurate afterward - no
         // need to re-walk the directory a second time.
         List<Path> allFiles = mediaStore.listFiles(target);
+        int total = allFiles.size();
+        int current = 0;
         var outcome = new RescueOutcome();
         // One session for the whole rescue loop. Each rescued file's index row is written and
         // flushed immediately, so a crash mid-run never leaves an already-moved file with no index
@@ -62,6 +69,7 @@ public class RescueEngine implements RescueUseCase {
         try (HashIndexPort.Session session = hashIndexPort.openSession()) {
             for (Path file : allFiles) {
                 rescueOneFile(file, targetLeaf, libraryRoot, outcome, session);
+                progress.tick(++current, total);
             }
         }
 

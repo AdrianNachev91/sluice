@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -157,6 +158,19 @@ class CommitEngineTest {
         Path secondDest = libraryRoot.resolve("Photos/2019/06/b.jpg");
         assertThat(Files.exists(secondDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(firstHash, new Sha256Hasher().hash(secondDest));
+    }
+
+    @Test
+    void progressCallbackTicksOnceForEveryFileWalkedRegardlessOfScope(@TempDir Path root) throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Sorted/Photos/2019/06/in.jpg"), "in");
+        writeFile(root.resolve("Sorted/Photos/2020/01/out.jpg"), "out");
+
+        List<String> ticks = new ArrayList<>();
+        commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null),
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
     private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot) {

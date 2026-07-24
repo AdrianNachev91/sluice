@@ -31,6 +31,7 @@ import photos.sluice.domain.cull.PrepDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -132,6 +133,32 @@ class AnthropicCullerTest {
         assertThat(prepDir.resolve("decisions-002.json")).exists();
         assertThat(report).isEqualTo(new CullReport(2, 0, 2100, 140));
         verify(client).close();
+    }
+
+    @Test
+    void progressCallbackTicksOnceForEachMontageAgainstTheFinalMontageCount() throws Exception {
+        writeMontage("montage-001", "IMG_0001.jpg");
+        writeMontage("montage-002", "IMG_0002.jpg");
+        respondWith(
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 100, 10),
+                response("""
+                        {
+                          "verdicts": [
+                            { "index": 1, "name": "IMG_0002.jpg", "action": "keep" }
+                          ]
+                        }
+                        """, 100, 10));
+
+        List<String> ticks = new ArrayList<>();
+        culler().cull(prep("montage-001", "montage-002"), OPTIONS, (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
     // A stateless call cannot remember the slugs earlier montages picked, so the accumulated

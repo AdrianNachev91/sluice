@@ -10,6 +10,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.ProgressCallback;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -81,6 +82,17 @@ class CullDispatcherTest {
     }
 
     @Test
+    void routesTheProgressCallbackToTheSelectedCuller() throws CullException {
+        var target = new RecordingCuller("anthropic");
+        var dispatcher = new CullDispatcher(List.of(target), settingsFor("anthropic"));
+        ProgressCallback progress = (_, _) -> { };
+
+        dispatcher.cull(PREP, OPTIONS, progress);
+
+        assertThat(target.receivedProgress).isSameAs(progress);
+    }
+
+    @Test
     void failsLoudWhenTwoCullersShareAnId() {
         assertThatThrownBy(() -> new CullDispatcher(
                 List.of(new RecordingCuller("dup"), new RecordingCuller("dup")), settingsFor("dup")))
@@ -122,6 +134,7 @@ class CullDispatcherTest {
         private final CullReport report = new CullReport(0, 0, 0, 0);
         private @Nullable PrepDir receivedPrep;
         private @Nullable CullOptions receivedOptions;
+        private @Nullable ProgressCallback receivedProgress;
 
         private RecordingCuller(String id) {
             this.id = id;
@@ -137,6 +150,12 @@ class CullDispatcherTest {
             this.receivedPrep = prep;
             this.receivedOptions = opts;
             return report;
+        }
+
+        @Override
+        public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) {
+            this.receivedProgress = progress;
+            return cull(prep, opts);
         }
     }
 

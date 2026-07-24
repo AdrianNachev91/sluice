@@ -36,6 +36,7 @@ import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.job.ProgressCallback;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
@@ -166,6 +167,11 @@ class AnthropicCuller implements VisionCuller {
 
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+        return cull(prep, opts, ProgressCallback.NO_OP);
+    }
+
+    @Override
+    public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
         String model = requiredModel();
         boolean thinking = Boolean.TRUE.equals(settings.providerSettings().thinking());
         String systemPrompt = prompt.systemPrompt();
@@ -225,6 +231,7 @@ class AnthropicCuller implements VisionCuller {
                     shardCodec.write(shardPath, outcome.shard());
                     culled++;
                 }
+                progress.tick(ordinal, total);
             }
         } finally {
             client.close();

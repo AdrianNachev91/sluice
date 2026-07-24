@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +44,7 @@ class SortEngineTest {
         Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20210315_photo.jpg"), padded("keeper"));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(summary.photosSorted()).isEqualTo(1);
@@ -56,7 +57,7 @@ class SortEngineTest {
         Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20190615_clip.mp4"), "video bytes");
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.videosSorted()).isEqualTo(1);
         assertThat(Files.exists(root.resolve("Sorted/Videos/2019/06/20190615_clip.mp4"))).isTrue();
@@ -70,7 +71,7 @@ class SortEngineTest {
         Path sidecar = inbox.resolve("photo1.jpg.supplemental-metadata.json");
         writeSidecar(sidecar, LocalDateTime.of(2015, 5, 5, 12, 0, 0));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.sidecarsDeleted()).isEqualTo(1);
         assertThat(Files.exists(sidecar)).isFalse();
@@ -88,7 +89,7 @@ class SortEngineTest {
         Path sidecar = inbox.resolve("photo1.jpg.supplemental-metadata.json");
         writeSidecar(sidecar, LocalDateTime.of(2015, 5, 5, 12, 0, 0));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.sidecarsDeleted()).isEqualTo(1);
         assertThat(Files.exists(sidecar)).isFalse();
@@ -103,7 +104,7 @@ class SortEngineTest {
         Path sidecar = inbox.resolve("20210315_photo.jpg.supplemental-metadata.json");
         Files.writeString(sidecar, "{not valid json");
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         // Mechanism 1 (inline consumption) never touches it. Its date came from filename, not
         // this sidecar, so sidecarsDeleted stays 0. But the whole-Inbox sweep (mechanism 2) is
@@ -122,7 +123,7 @@ class SortEngineTest {
         Path sidecar = albumDir.resolve("20210315_photo.jpg.supplemental-metadata.json");
         Files.writeString(sidecar, "{not valid json");
 
-        newEngine(root).sort(new SortScope.OldestYear());
+        sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(Files.exists(sidecar)).isFalse();
         assertThat(Files.exists(albumDir)).isFalse();
@@ -138,7 +139,7 @@ class SortEngineTest {
         Path futureSidecar = albumDir.resolve("20250101_future.jpg.supplemental-metadata.json");
         writeSidecar(futureSidecar, LocalDateTime.of(2025, 1, 1, 0, 0, 0));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.Year(2019, null));
+        SortSummary summary = sortEngine(root).sort(new SortScope.Year(2019, null));
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/01/20190101_a.jpg"))).isTrue();
@@ -162,7 +163,7 @@ class SortEngineTest {
         Path sidecar = inbox.resolve("20190101_dup.jpg.supplemental-metadata.json");
         Files.writeString(sidecar, "{not valid json");
 
-        SortSummary summary = newEngine(root, hashIndex).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root, hashIndex).sort(new SortScope.OldestYear());
 
         assertThat(summary.reimportsDeleted()).isEqualTo(1);
         assertThat(summary.sidecarsDeleted()).isEqualTo(0);
@@ -180,7 +181,7 @@ class SortEngineTest {
         writeFile(libraryFile, content);
         HashIndexPort hashIndex = seededIndex(root, hash, libraryFile);
 
-        SortSummary summary = newEngine(root, hashIndex).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root, hashIndex).sort(new SortScope.OldestYear());
 
         assertThat(summary.reimportsDeleted()).isEqualTo(1);
         assertThat(summary.photosSorted()).isEqualTo(0);
@@ -197,7 +198,7 @@ class SortEngineTest {
         Path goneLibraryFile = root.resolve("LibraryFixture").resolve("gone.jpg"); // never created
         HashIndexPort hashIndex = seededIndex(root, hash, goneLibraryFile);
 
-        SortSummary summary = newEngine(root, hashIndex).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root, hashIndex).sort(new SortScope.OldestYear());
 
         assertThat(summary.reimportsDeleted()).isEqualTo(0);
         assertThat(summary.photosSorted()).isEqualTo(1);
@@ -211,7 +212,7 @@ class SortEngineTest {
         writeFile(inbox.resolve("20190102_a.jpg"), content);
         writeFile(inbox.resolve("20190102_b.jpg"), content);
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.processed()).isEqualTo(2);
         assertThat(summary.photosSorted()).isEqualTo(1);
@@ -227,7 +228,7 @@ class SortEngineTest {
         Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20190615_tiny.jpg"), "tiny");
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.lowRes()).isEqualTo(1);
         assertThat(summary.photosSorted()).isEqualTo(0);
@@ -241,7 +242,7 @@ class SortEngineTest {
         Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20190615_drawing.svg"), "<svg/>");
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.lowRes()).isEqualTo(0);
         assertThat(summary.photosSorted()).isEqualTo(1);
@@ -253,7 +254,7 @@ class SortEngineTest {
         Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20190615_clip.mp4"), "x");
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.lowRes()).isEqualTo(0);
         assertThat(summary.videosSorted()).isEqualTo(1);
@@ -266,7 +267,7 @@ class SortEngineTest {
         writeFile(file, padded("mystery"));
         setMtime(file, LocalDateTime.of(1990, 1, 1, 0, 0));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.unsorted()).isEqualTo(1);
         assertThat(summary.unsortedFiles()).containsExactly("nodatepattern.jpg");
@@ -282,7 +283,7 @@ class SortEngineTest {
         writeFile(file, padded("mystery2"));
         setMtime(file, LocalDateTime.of(2022, 6, 1, 9, 0, 0));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.photosSorted()).isEqualTo(1);
         assertThat(summary.unsorted()).isEqualTo(0);
@@ -296,7 +297,7 @@ class SortEngineTest {
         writeFile(inbox.resolve("20190101_in.jpg"), padded("in"));
         writeFile(inbox.resolve("20200101_out.jpg"), padded("out"));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.Year(2019, null));
+        SortSummary summary = sortEngine(root).sort(new SortScope.Year(2019, null));
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/01/20190101_in.jpg"))).isTrue();
@@ -310,7 +311,7 @@ class SortEngineTest {
         writeFile(inbox.resolve("20200101_mid.jpg"), padded("mid"));
         writeFile(inbox.resolve("20210101_newest.jpg"), padded("newest"));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestYear());
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestYear());
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/01/20190101_oldest.jpg"))).isTrue();
@@ -325,7 +326,7 @@ class SortEngineTest {
         writeFile(inbox.resolve("20200101_second.jpg"), padded("second"));
         writeFile(inbox.resolve("20210101_third.jpg"), padded("third"));
 
-        SortSummary summary = newEngine(root).sort(new SortScope.OldestN(2));
+        SortSummary summary = sortEngine(root).sort(new SortScope.OldestN(2));
 
         assertThat(summary.processed()).isEqualTo(2);
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/01/20190101_first.jpg"))).isTrue();
@@ -376,7 +377,7 @@ class SortEngineTest {
 
         // All 7 files fit within OldestN(7), so every one is in scope regardless of the 1990/2019
         // date spread. No truncation, no ordering to reason about.
-        SortSummary summary = newEngine(root, hashIndex).sort(new SortScope.OldestN(7));
+        SortSummary summary = sortEngine(root, hashIndex).sort(new SortScope.OldestN(7));
 
         assertThat(summary.processed()).isEqualTo(7);
         assertThat(summary.reimportsDeleted()).isEqualTo(1);
@@ -390,15 +391,27 @@ class SortEngineTest {
                 .isEqualTo(summary.processed());
     }
 
+    @Test
+    void progressCallbackTicksOnceForEachSurvivorAgainstTheFinalSortedCount(@TempDir Path root) throws IOException {
+        Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
+
+        List<String> ticks = new ArrayList<>();
+        sortEngine(root).sort(new SortScope.OldestYear(), (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
     private static Path inboxOf(Path root) {
         return root.resolve("Inbox");
     }
 
-    private SortEngine newEngine(Path root) {
-        return newEngine(root, new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv")));
+    private SortEngine sortEngine(Path root) {
+        return sortEngine(root, new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv")));
     }
 
-    private SortEngine newEngine(Path root, HashIndexPort hashIndex) {
+    private SortEngine sortEngine(Path root, HashIndexPort hashIndex) {
         var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), root.toString(), root.resolve("Inbox").toString()));
         return new SortEngine(pathsConfig, inboxScanner, dateResolver, sha256Port, hashIndex,
