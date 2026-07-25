@@ -13,7 +13,7 @@ little to run.
 - **`photo-sorter`** (cheap, no vision) — dates, de-dupes, and moves files by invoking the `scripts\`
   engines. Handles `sort`, `commit`, `rescue`.
 - **`photo-culler`** (vision) — looks at *downscaled* photos and *montaged* clusters to flag junk and
-  pick the best of a near-duplicate set. Handles `cull` and `organize`.
+  pick the best of a near-duplicate set. Handles `cull` and `curate`.
 
 ## Paths
 - **Repo (local scratch):** `D:\Repos\Sluice` — `Inbox\`, `Sorted\`, `Duplicates\`, `Review\`, `logs\`, `scripts\`, `tools\`.
@@ -29,7 +29,7 @@ little to run.
    - `cull 2019` ← the vision pass over the freshly-sorted `Sorted\`
    - `commit 2019` / `commit all` ← move `Sorted\` keepers into the OneDrive library
    - `rescue Review\Food` ← after you weed a Review folder by hand, promote the leftovers (see below)
-   - `organize 2019` ← sort then cull in one go (no auto-commit)
+   - `curate 2019` ← sort then cull in one go (no auto-commit)
 3. After a cull, review the scratch folders and delete what you don't want:
    - `Duplicates\YYYY-MM_<label>\` — one near-dup group per folder: every candidate under its real
      name plus a `<chosen-filename>.txt` note explaining which was kept and why.
