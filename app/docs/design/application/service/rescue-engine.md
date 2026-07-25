@@ -88,5 +88,7 @@ looked at was actually rescued does cleanup run at all.
 
 ## Related
 
+- How a caller invokes this engine asynchronously with progress reporting: `pipeline.md` in this
+  same design folder.
 - The filesystem effect backing folder dissolution (`removeIfEmptyOfFiles`, and its sibling
   `removeEmptyDirectories`): `media-store.md` in the `adapter/fs` design folder.

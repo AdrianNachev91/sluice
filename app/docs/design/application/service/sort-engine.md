@@ -125,6 +125,8 @@ what's left.
 
 ## Related
 
+- How a caller invokes this engine asynchronously with progress reporting: `pipeline.md` in this
+  same design folder.
 - The filesystem effects this pipeline uses (collision-safe move/copy, existence/size checks,
   appending a reason line): `media-store.md` in the `adapter/fs` design folder.
 - Scope selection itself (`Year`/`OldestN`/`OldestYear`) is delegated to
