@@ -15,6 +15,7 @@ import photos.sluice.domain.rescue.RescueSummary;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -203,6 +204,11 @@ class RescueEngineTest {
         @Override
         public List<Path> listFiles(Path root) {
             return delegate.listFiles(root).stream().sorted().toList();
+        }
+
+        @Override
+        public Instant lastModifiedTime(Path path) {
+            return delegate.lastModifiedTime(path);
         }
 
         @Override

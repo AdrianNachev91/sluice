@@ -57,7 +57,7 @@ class ExternalAgentCuller implements VisionCuller {
 
     @Override
     public String id() {
-        return "external-agent";
+        return VisionCuller.MANUAL_MODE_PROVIDER_ID;
     }
 
     @Override

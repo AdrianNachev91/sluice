@@ -56,6 +56,59 @@ concrete classes, not on those narrower interfaces.
 | The engine call throws mid-run                                   | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                                                                  |
 | Cancellation requested via the returned `JobHandle`              | No effect yet - each of these three calls is a single, non-interruptible engine call with no boundary to check at; becomes meaningful once a multi-stage call (sort followed by a cull) has a boundary between its stages |
 
+## `cull()` / `waitingJobs()` / `resume()`
+
+Three stages chained into one job: prep (`MontageRenderer.build`) -> dispatch
+(`CullDispatcher.cull`, which routes to whichever `VisionCuller` the configured provider selects)
+-> apply (`ApplyEngine.apply`). The dispatch step is where the flow forks, because a
+`CullException` from it means two different things depending on the provider - see
+`VisionCuller.MANUAL_MODE_PROVIDER_ID`'s own doc comment for the full reasoning.
+
+```mermaid
+flowchart TD
+    A["Pipeline.cull(scope)"] --> W{"a WaitingCullJob<br/>already exists for<br/>this scope?"}
+    W -- "yes" --> WZ(["IllegalStateException,<br/>thrown synchronously -<br/>nothing rebuilt"])
+    W -- "no" --> B["JobRunner.submit"]
+    B --> P["prep: MontageRenderer.build<br/>-> PrepDir"]
+    P --> D["dispatch: CullDispatcher.cull<br/>(allowPartial=false on a fresh cull,<br/>caller-supplied on resume)"]
+    D -- "success" --> AP["apply: ApplyEngine.apply"]
+    AP --> APP(["CullJobOutcome.Applied"])
+    D -- "CullException" --> M{"configured provider ==<br/>MANUAL_MODE_PROVIDER_ID?"}
+    M -- "yes" --> WT(["CullJobOutcome.Waiting<br/>- slot released, not a failure"])
+    M -- "no" --> RT(["propagates -<br/>JobHandle.join() throws"])
+```
+
+`resume(prepDir, allowPartial)` re-enters at the dispatch step directly - `cullPrepPort.readIndex()`
+re-reads the existing `PrepDir` from `index.json` instead of `MontageRenderer` regenerating it, so
+no montage is ever rebuilt or re-rendered by a resume. `waitingJobs()` is a plain, un-jobbed read:
+it scans `logs/cull-prep/*/` for a prep dir with `index.json` but no merged `decisions.json` yet
+(see `WaitingCullJob`'s own doc for why this is derived live instead of a persisted list),
+tolerating a transiently-unreadable `index.json` (a concurrent job's own prep dir mid-clear/
+mid-write) by skipping that entry rather than failing the whole scan.
+
+`Pipeline` computes each `WaitingCullJob`'s `ShardTally` (`present`/`valid`/`total`) itself, one
+montage at a time via `ShardValidator`, rather than reusing `ApplyEngine`'s whole-batch
+`validate()`. A cross-shard problem (a near-dup group id reused across two montages) therefore
+doesn't show up in the tally - an accepted simplification for a progress number.
+`ApplyEngine.apply()`'s own full-batch validation is still the actual gate before anything moves.
+
+| Pipeline method                 | What runs                                                           | Phase label(s)                                                      |
+|---------------------------------|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| `cull(CullScope)`               | prep -> dispatch -> (apply if complete)                             | `"Building montages..."`, `"Culling..."`, `"Applying decisions..."` |
+| `waitingJobs()`                 | a plain disk scan, no `JobRunner` involved                          | none                                                                |
+| `resume(Path prepDir, boolean)` | dispatch (re-reading the existing `PrepDir`) -> (apply if complete) | `"Culling..."`, `"Applying decisions..."`                           |
+
+### Scenarios
+
+| Scenario                                                                | Outcome                                                                                                                                              |
+|-------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `cull()` on a scope with no shards dropped yet (fresh manual-mode prep) | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                         |
+| `cull()` called again while that scope's `WaitingCullJob` is unresolved | `IllegalStateException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched |
+| `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved                                                                                                                |
+| `resume()` while a shard is still missing/invalid                       | `CullJobOutcome.Waiting` again, with a freshly recomputed tally                                                                                      |
+| `resume(prepDir, allowPartial=true)` with a shard still missing         | Applies what it has; the missing montage's photos are left in place, untouched                                                                       |
+| `CullException` from an automated (non-manual-mode) provider            | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`                                                                                  |
+
 ## Related
 
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `Pipeline` submits onto): no

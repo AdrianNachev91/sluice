@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -207,6 +208,11 @@ class CommitEngineTest {
         @Override
         public List<Path> listFiles(Path root) {
             return delegate.listFiles(root).stream().sorted().toList();
+        }
+
+        @Override
+        public Instant lastModifiedTime(Path path) {
+            return delegate.lastModifiedTime(path);
         }
 
         @Override

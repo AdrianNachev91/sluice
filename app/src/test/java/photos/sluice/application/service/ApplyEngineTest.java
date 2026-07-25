@@ -771,6 +771,11 @@ class ApplyEngineTest {
         }
 
         @Override
+        public Instant lastModifiedTime(Path path) {
+            return delegate.lastModifiedTime(path);
+        }
+
+        @Override
         public Path copy(Path source, Path destDir) {
             return delegate.copy(source, destDir);
         }

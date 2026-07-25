@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -24,6 +25,15 @@ public class NioMediaStore implements MediaStore {
             return walk.filter(Files::isRegularFile).toList();
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to walk " + root, e);
+        }
+    }
+
+    @Override
+    public Instant lastModifiedTime(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toInstant();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read last modified time of " + path, e);
         }
     }
 

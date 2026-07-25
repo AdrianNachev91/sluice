@@ -11,6 +11,13 @@ import photos.sluice.domain.job.ProgressCallback;
 // signature is uniform and callers never branch on which provider is selected.
 public interface VisionCuller {
 
+    // The id ExternalAgentCuller registers under. A CullException thrown by cull() while this is the
+    // configured provider always means "no complete, valid shard set yet" - the normal manual-mode
+    // pause, never a failure. A caller resolves it into a waiting state. From any other (automated)
+    // provider, a CullException means the model itself could not produce a valid judgement after its
+    // own retries - a genuine failure a caller should propagate.
+    String MANUAL_MODE_PROVIDER_ID = "external-agent";
+
     // Stable identifier the dispatcher matches against the configured provider (for example
     // "external-agent" or "anthropic"). Unique across all registered cullers.
     String id();

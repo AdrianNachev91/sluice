@@ -1,12 +1,17 @@
 package photos.sluice.application.port.out;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 
 public interface MediaStore {
 
     // Every regular file under root, recursively, as absolute paths. Order is unspecified.
     List<Path> listFiles(Path root);
+
+    // When path was last modified. Used where a directory's own age is the signal (e.g. a waiting
+    // cull job's prep dir), not a media file's capture date - that comes from DateSource instead.
+    Instant lastModifiedTime(Path path);
 
     Path move(Path source, Path destDir);
 

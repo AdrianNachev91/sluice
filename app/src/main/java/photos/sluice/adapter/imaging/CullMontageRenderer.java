@@ -1,6 +1,5 @@
 package photos.sluice.adapter.imaging;
 
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
@@ -26,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 // Wires TileRenderer + MontageBuilder + SidecarWriter + PrepIndexWriter behind the MontageRenderer
@@ -103,7 +101,7 @@ public class CullMontageRenderer implements MontageRenderer {
         // reviewable this time around. A stale montage-002.* from that prior run would otherwise
         // survive alongside this run's smaller output, with nothing to indicate it's no longer
         // current.
-        String scopeTag = scopeTag(scope);
+        String scopeTag = CullScope.tag(scope);
         Path prepDir = pathsPort.logs().resolve("cull-prep").resolve(scopeTag);
         clearPrepDir(prepDir);
         mediaStore.ensureDirectory(prepDir);
@@ -181,25 +179,6 @@ public class CullMontageRenderer implements MontageRenderer {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read mtime of " + file, e);
         }
-    }
-
-    private static String scopeTag(CullScope scope) {
-        return switch (scope) {
-            case CullScope.Year(int year, List<Integer> months) -> yearTag(year, months);
-            case CullScope.OldestN(int n) -> "oldest-" + n;
-        };
-    }
-
-    private static String yearTag(int year, @Nullable List<Integer> months) {
-        if (months == null) {
-            return String.valueOf(year);
-        }
-        String monthSuffix = months.stream()
-                .distinct()
-                .sorted()
-                .map("%02d"::formatted)
-                .collect(Collectors.joining("-"));
-        return year + "-" + monthSuffix;
     }
 
     // logs/cull-prep/<scopeTag> is a directory this feature exclusively generates and owns. That's
