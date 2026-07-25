@@ -152,7 +152,8 @@ public class Pipeline {
     }
 
     public JobHandle<SortSummary> sort(SortScope scope) {
-        return jobRunner.submit(_ -> runPhase(SORTING, progress -> sortEngine.sort(scope, progress)));
+        return jobRunner.submit(handle -> runPhase(SORTING,
+                progress -> sortEngine.sort(scope, progress, handle::isCancellationRequested)));
     }
 
     public JobHandle<CommitSummary> commit(CommitScope scope) {
@@ -200,20 +201,20 @@ public class Pipeline {
     // pre-submit one is - the caller would lose the SortSummary describing what already moved. See
     // CurateConflictException's own doc for how that's carried forward instead.
     //
-    // isCancellationRequested() is checked only at this one boundary, never inside the sort or cull
-    // stage itself - a cancellation request has to wait for whichever stage is currently running to
-    // finish on its own. Known gap, not yet closed: SortEngine's own per-file loop is the dominant
-    // real case (a large sort can run long) and is the natural place to add a finer-grained check,
-    // the same way its progress-callback overload already works. Cull's own dispatch loop is a
-    // separate, lower-priority gap - it only bites an automated vision provider looping over
-    // montages; the external-agent provider's dispatch is already a fast, single presence check.
+    // isCancellationRequested() is checked here at the sort/cull boundary, and also inside
+    // SortEngine's own dating and routing passes now via its CancellationSignal overload. A large
+    // sort responds promptly rather than only at this one boundary. Cull's own dispatch loop
+    // remains a separate, lower-priority gap. It only bites an automated vision provider looping
+    // over montages - the external-agent provider's dispatch is already a fast, single presence
+    // check.
     public JobHandle<CurateOutcome> curate(SortScope scope) {
         CullScope known = knownCullScope(scope);
         if (known != null) {
             checkNoWaitingJobFor(known);
         }
         return jobRunner.submit(handle -> {
-            SortSummary sortSummary = runPhase(SORTING, progress -> sortEngine.sort(scope, progress));
+            SortSummary sortSummary = runPhase(SORTING,
+                    progress -> sortEngine.sort(scope, progress, handle::isCancellationRequested));
             if (handle.isCancellationRequested()) {
                 return new CurateOutcome(sortSummary, null);
             }

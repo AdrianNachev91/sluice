@@ -13,6 +13,7 @@ import photos.sluice.domain.dating.ScopeSelector;
 import photos.sluice.domain.dedup.ByteIdenticalDedup;
 import photos.sluice.domain.dedup.ByteIdenticalDedup.DedupPlan;
 import photos.sluice.domain.imaging.LowResGate;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.Confidence;
 import photos.sluice.domain.model.DatedMedia;
@@ -51,6 +52,11 @@ public class SortEngine implements SortUseCase {
     private static final String REASON_LOW_RES = "low-res";
     private static final String REASONS_FILE = "_reasons.txt";
 
+    // Returned when cancellation lands during dating, before any file is moved, deleted, or
+    // written - a clean abort with nothing to report.
+    private static final SortSummary EMPTY_SORT_SUMMARY =
+            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of());
+
     private final PathsPort pathsPort;
     private final InboxScannerPort inboxScanner;
     private final DateResolver dateResolver;
@@ -77,28 +83,34 @@ public class SortEngine implements SortUseCase {
 
     @Override
     public SortSummary sort(SortScope scope) {
-        return sort(scope, ProgressCallback.NO_OP);
+        return sort(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
     public SortSummary sort(SortScope scope, ProgressCallback progress) {
+        return sort(scope, progress, CancellationSignal.NEVER);
+    }
+
+    public SortSummary sort(SortScope scope, ProgressCallback progress, CancellationSignal cancellation) {
         // Every scanned file is dated before scope narrows anything, not just the files a caller
         // is about to process. OldestYear and OldestN need to compare dates across the whole
         // Inbox to pick the right subset. Scoping on partial date knowledge would pick the wrong
         // files.
+        //
+        // Dating is pure in-memory computation. Nothing is moved, deleted, or written yet. A
+        // cancellation seen here is a clean abort with zero side effects. The check exists only to
+        // stop wasted work quickly on the pass most likely to run long: it spans the whole Inbox,
+        // not just the requested scope.
         ScanResult scanResult = inboxScanner.scan(pathsPort.inbox());
-        List<DatedMedia> allDated = scanResult.media().stream()
-                .map(file -> new DatedMedia(file, dateResolver.resolve(file, scanResult.sidecars().get(file))))
-                .toList();
+        List<DatedMedia> allDated = new ArrayList<>();
+        for (MediaFile file : scanResult.media()) {
+            if (cancellation.isCancelled()) {
+                return EMPTY_SORT_SUMMARY;
+            }
+            allDated.add(new DatedMedia(file, dateResolver.resolve(file, scanResult.sidecars().get(file))));
+        }
         List<DatedMedia> inScope = scopeSelector.select(allDated, scope);
         Map<MediaFile, DateResult> dateByFile = new HashMap<>();
         inScope.forEach(dated -> dateByFile.put(dated.file(), dated.date()));
-
-        // Sidecar consumption doesn't depend on what happens to its media file next - deleted as
-        // a duplicate, or kept and sorted. Every in-scope file leaves the Inbox on every branch
-        // below, so its sidecar is already spent regardless of which branch runs. This runs as
-        // its own pass here, before dedup and routing, to keep that independence visible rather
-        // than interleaving it into decisions it doesn't actually depend on.
-        Set<Path> consumedSidecars = consumeSidecars(inScope, scanResult.sidecars());
 
         Set<String> libraryHashes = existingLibraryHashes();
         List<HashedMedia> hashed = inScope.stream()
@@ -109,27 +121,44 @@ public class SortEngine implements SortUseCase {
         plan.redundantVsLibrary().forEach(file -> mediaStore.delete(file.path()));
         plan.withinBatchDuplicates().forEach(file -> mediaStore.delete(file.path()));
 
-        RoutingResult routing = routeSurvivors(plan.toSort(), dateByFile, progress);
+        RoutingResult routing = routeSurvivors(plan.toSort(), dateByFile, progress, cancellation);
 
-        sweepOrphanedSidecarsAndEmptyDirectories(scanResult, inScope, consumedSidecars);
+        // A cancelled routing pass can stop before every survivor is routed. Those unrouted files
+        // never actually left the Inbox, even though scope selection picked them. This is the set
+        // of files that genuinely left this run, covering every outcome bucket: library-redundant,
+        // within-batch duplicate, or actually routed.
+        List<MediaFile> actuallyRemoved = new ArrayList<>(plan.redundantVsLibrary());
+        actuallyRemoved.addAll(plan.withinBatchDuplicates());
+        actuallyRemoved.addAll(routing.routedFiles);
 
-        return new SortSummary(inScope.size(), plan.redundantVsLibrary().size(), plan.withinBatchDuplicates().size(),
-                routing.photosSorted, routing.videosSorted, routing.lowRes, routing.unsorted, consumedSidecars.size(),
-                routing.lowConfidenceFiles, routing.unsortedFiles, routing.yearsSorted);
+        // Sidecar consumption doesn't depend on which bucket a file lands in - deleted as a
+        // duplicate, or routed. It only depends on the file having actually left the Inbox, so
+        // this runs against actuallyRemoved, after routing, rather than the full in-scope list
+        // before it. A file routing never reached keeps its sidecar for a future run.
+        Set<Path> consumedSidecars = consumeSidecars(actuallyRemoved, dateByFile, scanResult.sidecars());
+
+        sweepOrphanedSidecarsAndEmptyDirectories(scanResult, actuallyRemoved, consumedSidecars);
+
+        return new SortSummary(actuallyRemoved.size(), plan.redundantVsLibrary().size(),
+                plan.withinBatchDuplicates().size(), routing.photosSorted, routing.videosSorted, routing.lowRes,
+                routing.unsorted, consumedSidecars.size(), routing.lowConfidenceFiles, routing.unsortedFiles,
+                routing.yearsSorted);
     }
 
-    private Set<Path> consumeSidecars(List<DatedMedia> inScope, Map<MediaFile, TakeoutSidecar> sidecars) {
+    private Set<Path> consumeSidecars(List<MediaFile> actuallyRemoved, Map<MediaFile, DateResult> dateByFile,
+            Map<MediaFile, TakeoutSidecar> sidecars) {
         // An "-edited" copy shares its original's sidecar - TakeoutSidecarPairer maps both media
         // files to the same JSON path. So the same path can come up more than once here. Set.add
         // returns false on the second occurrence, which is what keeps a shared sidecar from being
         // deleted and counted twice.
         Set<Path> deletedSidecars = new HashSet<>();
-        for (DatedMedia dated : inScope) {
-            TakeoutSidecar sidecar = sidecars.get(dated.file());
+        for (MediaFile file : actuallyRemoved) {
+            TakeoutSidecar sidecar = sidecars.get(file);
+            DateResult date = Objects.requireNonNull(dateByFile.get(file));
             // Only a sidecar that actually won the date-resolution chain is spent. One that
             // exists but lost - invalid, or coincidentally name-matched to unrelated JSON - is
             // left alone, per the schema-validation safety rule.
-            if (sidecar != null && dated.date().source().equals(SIDECAR_SOURCE)
+            if (sidecar != null && date.source().equals(SIDECAR_SOURCE)
                     && deletedSidecars.add(sidecar.jsonPath())) {
                 mediaStore.delete(sidecar.jsonPath());
             }
@@ -144,14 +173,14 @@ public class SortEngine implements SortUseCase {
     // incremental year-by-year runs. A directory left empty of all files afterward is then
     // removed.
     //
-    // "Remaining" is derived from the original scan rather than observed directly. Every in-scope
-    // file is guaranteed to have left the Inbox by this point. dedup.plan's three buckets are a
-    // total partition of inScope, and every one of toSort/redundantVsLibrary/withinBatchDuplicates
-    // is either moved or deleted above. So the original scan's media and JSON lists, minus what
-    // this run itself removed, already describe what's left.
-    private void sweepOrphanedSidecarsAndEmptyDirectories(ScanResult scanResult, List<DatedMedia> inScope,
+    // "Remaining" is derived from the original scan rather than observed directly, so the caller
+    // passes exactly the files that actually left the Inbox this run, not every in-scope file. A
+    // cancelled routing pass can stop partway through plan.toSort(). Files still sitting in the
+    // Inbox after that must not be treated as gone, or their sidecar gets deleted out from under
+    // them while they're still there awaiting a future run.
+    private void sweepOrphanedSidecarsAndEmptyDirectories(ScanResult scanResult, List<MediaFile> actuallyRemoved,
             Set<Path> consumedSidecars) {
-        Set<Path> removedMediaPaths = inScope.stream().map(dated -> dated.file().path()).collect(Collectors.toSet());
+        Set<Path> removedMediaPaths = actuallyRemoved.stream().map(MediaFile::path).collect(Collectors.toSet());
         List<Path> remainingMediaPaths = scanResult.media().stream()
                 .map(MediaFile::path)
                 .filter(path -> !removedMediaPaths.contains(path))
@@ -182,16 +211,20 @@ public class SortEngine implements SortUseCase {
     }
 
     private RoutingResult routeSurvivors(List<MediaFile> toSort, Map<MediaFile, DateResult> dateByFile,
-            ProgressCallback progress) {
+            ProgressCallback progress, CancellationSignal cancellation) {
         var routing = new RoutingResult();
         int total = toSort.size();
         int current = 0;
-        for (MediaFile file : toSort) {
+        // Checked after the move so an in-flight file is never interrupted; already-moved files
+        // stay moved, matching the no-undo model.
+        while (current < total && !cancellation.isCancelled()) {
+            MediaFile file = toSort.get(current);
             // Every file here came from inScope, and dateByFile was built from that same list. So
             // this lookup always hits. requireNonNull asserts that invariant rather than silently
             // trusting it.
             DateResult date = Objects.requireNonNull(dateByFile.get(file));
             routeOneSurvivor(file, date, routing);
+            routing.routedFiles.add(file);
             progress.tick(++current, total);
         }
         return routing;
@@ -268,5 +301,6 @@ public class SortEngine implements SortUseCase {
         final List<String> lowConfidenceFiles = new ArrayList<>();
         final List<String> unsortedFiles = new ArrayList<>();
         final Set<Integer> yearsSorted = new HashSet<>();
+        final List<MediaFile> routedFiles = new ArrayList<>();
     }
 }

@@ -15,6 +15,8 @@ import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.dating.DateResolver;
+import photos.sluice.domain.job.CancellationSignal;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
@@ -27,6 +29,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -401,6 +405,81 @@ class SortEngineTest {
         sortEngine(root).sort(new SortScope.OldestYear(), (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
+    @Test
+    void cancelMidDatingAbortsCleanlyWithNothingMovedOrDeleted(@TempDir Path root) throws IOException {
+        Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
+
+        // Dating is checked before each file, so the first poll (for file 1) still runs and the
+        // second (before file 2) cancels - proving the abort happens mid-pass, not merely when
+        // already cancelled going in.
+        AtomicInteger polls = new AtomicInteger();
+        CancellationSignal cancelBeforeSecondFile = () -> polls.incrementAndGet() > 1;
+
+        SortSummary summary =
+                sortEngine(root).sort(new SortScope.OldestYear(), ProgressCallback.NO_OP, cancelBeforeSecondFile);
+
+        assertThat(summary.processed()).isEqualTo(0);
+        assertThat(summary.photosSorted()).isEqualTo(0);
+        assertThat(Files.exists(inbox.resolve("20210101_a.jpg"))).isTrue();
+        assertThat(Files.exists(inbox.resolve("20210102_b.jpg"))).isTrue();
+    }
+
+    @Test
+    void cancelMidRoutingStopsEarlyLeavingAlreadyMovedFilesMovedAndSummaryPartial(@TempDir Path root)
+            throws IOException {
+        Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
+        writeFile(inbox.resolve("20210103_c.jpg"), padded("c"));
+
+        // Cancels once the first survivor's move has already ticked, so routing stops before the
+        // remaining two are even looked at.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        SortSummary summary =
+                sortEngine(root).sort(new SortScope.OldestYear(), cancelAfterFirstTick, cancelled::get);
+
+        assertThat(summary.processed()).isEqualTo(1);
+        assertThat(summary.photosSorted()).isEqualTo(1);
+        Path destDir = root.resolve("Sorted/Photos/2021/01");
+        try (var sorted = Files.list(destDir)) {
+            assertThat(sorted.count()).isEqualTo(1);
+        }
+        try (var remaining = Files.list(inbox)) {
+            assertThat(remaining.count()).isEqualTo(2);
+        }
+    }
+
+    @Test
+    void cancelMidRoutingLeavesAnUnroutedFilesSidecarIntact(@TempDir Path root) throws IOException {
+        Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        Path sidecarA = inbox.resolve("20210101_a.jpg.supplemental-metadata.json");
+        writeSidecar(sidecarA, LocalDateTime.of(2021, 1, 1, 12, 0, 0));
+
+        Path photoB = inbox.resolve("20210102_b.jpg");
+        writeFile(photoB, padded("b"));
+        Path sidecarB = inbox.resolve("20210102_b.jpg.supplemental-metadata.json");
+        writeSidecar(sidecarB, LocalDateTime.of(2021, 1, 2, 12, 0, 0));
+
+        // Cancels once the first survivor (a, scan-order first) has routed, so b is never reached.
+        // Sidecar consumption must only spend a's sidecar - b's media never left the Inbox, so its
+        // sidecar has to survive for a future run.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        SortSummary summary =
+                sortEngine(root).sort(new SortScope.OldestYear(), cancelAfterFirstTick, cancelled::get);
+
+        assertThat(summary.sidecarsDeleted()).isEqualTo(1);
+        assertThat(Files.exists(sidecarA)).isFalse();
+        assertThat(Files.exists(photoB)).isTrue();
+        assertThat(Files.exists(sidecarB)).isTrue();
     }
 
     private static Path inboxOf(Path root) {

@@ -97,6 +97,35 @@ class PipelineTest {
                 "started:Sorting...", "tick:Sorting...:1/2", "tick:Sorting...:2/2", "finished:Sorting...");
     }
 
+    // Proves cancellation reaches SortEngine's own mid-routing check through Pipeline's real
+    // handle::isCancellationRequested wiring, not just through a hand-built CancellationSignal -
+    // SortEngineTest already covers SortEngine's own cancellation semantics directly. BlockingMoves
+    // synchronizes the request with the exact moment the first file's move is in flight, so it lands
+    // mid-pass rather than before the pass even starts.
+    @Test
+    void sortStopsMidRoutingWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir Path root) throws Exception {
+        writeFile(inboxOf(root).resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inboxOf(root).resolve("20210102_b.jpg"), padded("b"));
+        var moveStarted = new CountDownLatch(1);
+        var releaseMove = new CountDownLatch(1);
+        var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+
+        JobHandle<SortSummary> handle = pipeline.sort(new SortScope.OldestYear());
+        moveStarted.await();
+        handle.requestCancellation();
+        releaseMove.countDown();
+        SortSummary summary = handle.join();
+
+        assertThat(summary.processed()).isEqualTo(1);
+        assertThat(summary.photosSorted()).isEqualTo(1);
+        try (var sorted = Files.list(root.resolve("Sorted/Photos/2021/01"))) {
+            assertThat(sorted.count()).isEqualTo(1);
+        }
+        try (var remaining = Files.list(inboxOf(root))) {
+            assertThat(remaining.count()).isEqualTo(1);
+        }
+    }
+
     @Test
     void commitRunsCommitEngineAndReturnsItsSummary(@TempDir Path root) throws IOException {
         var progress = new RecordingProgressPort();
