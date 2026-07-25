@@ -1,11 +1,13 @@
 package photos.sluice.application.service;
 
 import jakarta.annotation.PostConstruct;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
@@ -31,6 +33,7 @@ import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
+import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -43,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 
 // Wires the mechanical engines through JobRunner so a driving adapter (the JavaFX UI, a future CLI)
 // gets a JobHandle back instead of blocking. Progress is bracketed through ProgressPort around
@@ -162,19 +166,136 @@ public class Pipeline {
     // Prep always runs fresh: a scope's montages are rebuilt from Sorted every call, and
     // MontageRenderer.build() clears whatever a stale prior run left in the same prep dir first.
     // That would silently destroy any shards already dropped for a still-unresolved WaitingCullJob
-    // on the same scope. This checks for one and fails loud instead - resume or resolve it first.
-    // Dispatch itself always runs with allowPartial=false: waiving a missing shard is a resume-time
-    // human decision (see dispatchAndApply()), never the default for a first attempt.
+    // on the same scope. checkNoWaitingJobFor() guards against that and fails loud instead - resume
+    // or resolve it first.
+    //
+    // Checked here too, synchronously before submit(), for the earliest possible fail-fast.
+    // buildFreshAndDispatch() below checks the same thing again once actually running - that's
+    // curate()'s only option for an auto-resolved scope; see its own comment.
     public JobHandle<CullJobOutcome> cull(CullScope scope) {
-        String tag = CullScope.tag(scope);
-        Optional<WaitingCullJob> existing = waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst();
-        if (existing.isPresent()) {
-            throw new IllegalStateException("A cull for scope '" + tag + "' is already waiting on shards at "
-                    + existing.get().prepDir() + " - resume or resolve it before starting a new cull for the same scope.");
+        checkNoWaitingJobFor(scope);
+        return jobRunner.submit(_ -> buildFreshAndDispatch(scope));
+    }
+
+    // Sort scope, then cull whatever that sort just populated, as one job. Sequential Java calls
+    // inside this one JobWork - never two chained submit() calls (JobHandle's own doc explains why
+    // no job depends on another's future).
+    //
+    // The target CullScope mirrors scope directly wherever that's knowable up front: an explicit
+    // Year maps straight across, and OldestN carries the same n through to CullScope.OldestN. Sort
+    // itself is never narrowed to fit cull's shape - it always runs its own normal, complete job.
+    //
+    // An OldestN sort can still land files across more than one year. Cull's own OldestN ordering
+    // is by raw mtime, not resolved date (see CullScope's own doc) - exactly what a standalone
+    // cull() call already does with that scope. Nothing new here.
+    //
+    // Only OldestYear can't be mapped ahead of time - its year isn't decided until the sort itself
+    // resolves it. knownCullScope() returns null for it; the real mapping happens after the sort
+    // runs, from SortSummary.yearsSorted().
+    //
+    // A known target CullScope gets the same synchronous, pre-submit checkNoWaitingJobFor()
+    // cull() gets - failing before the sort even starts. OldestYear can't be checked that early.
+    // Its only guard is the same check running again once its year is resolved, after the sort has
+    // already moved real files. That failure can't be a plain IllegalStateException like the
+    // pre-submit one is - the caller would lose the SortSummary describing what already moved. See
+    // CurateConflictException's own doc for how that's carried forward instead.
+    //
+    // isCancellationRequested() is checked only at this one boundary, never inside the sort or cull
+    // stage itself - a cancellation request has to wait for whichever stage is currently running to
+    // finish on its own. Known gap, not yet closed: SortEngine's own per-file loop is the dominant
+    // real case (a large sort can run long) and is the natural place to add a finer-grained check,
+    // the same way its progress-callback overload already works. Cull's own dispatch loop is a
+    // separate, lower-priority gap - it only bites an automated vision provider looping over
+    // montages; the external-agent provider's dispatch is already a fast, single presence check.
+    public JobHandle<CurateOutcome> curate(SortScope scope) {
+        CullScope known = knownCullScope(scope);
+        if (known != null) {
+            checkNoWaitingJobFor(known);
         }
-        return jobRunner.submit(_ -> {
-            PrepDir prep = runPhase(PREPPING, progress -> montageRenderer.build(scope, montageConfig, progress));
-            return dispatchAndApply(prep, false);
+        return jobRunner.submit(handle -> {
+            SortSummary sortSummary = runPhase(SORTING, progress -> sortEngine.sort(scope, progress));
+            if (handle.isCancellationRequested()) {
+                return new CurateOutcome(sortSummary, null);
+            }
+            CullScope cullScope = known != null ? known : oldestYearCullScope(sortSummary);
+            if (cullScope == null) {
+                return new CurateOutcome(sortSummary, null);
+            }
+            if (known == null) {
+                // Only OldestYear reaches here without having already passed this same check
+                // synchronously before the sort ran - the one case that can't be checked that
+                // early. Wrapped narrowly around just this call, not the dispatch/apply that
+                // follows, so a genuine cull failure downstream (a misconfigured provider, for
+                // example) is never mislabeled as this conflict.
+                try {
+                    checkNoWaitingJobFor(cullScope);
+                } catch (IllegalStateException conflict) {
+                    // The sort has already moved real files by this point. CurateConflictException
+                    // carries the SortSummary forward so the caller isn't left blind about what
+                    // already happened.
+                    throw new CurateConflictException(conflict.getMessage(), sortSummary);
+                }
+            }
+            return new CurateOutcome(sortSummary, buildFreshAndDispatch(cullScope));
+        });
+    }
+
+    // Thrown by curate() instead of a plain IllegalStateException when an auto-resolved OldestYear
+    // scope's checkNoWaitingJobFor() conflict surfaces after its sort has already moved real files.
+    // Every other checkNoWaitingJobFor() failure happens before anything runs, so only this one
+    // needs to carry a partial result forward - sortSummary() is what the sort stage already
+    // produced.
+    public static final class CurateConflictException extends IllegalStateException {
+        private final transient SortSummary sortSummary;
+
+        CurateConflictException(String message, SortSummary sortSummary) {
+            super(message);
+            this.sortSummary = sortSummary;
+        }
+
+        public SortSummary sortSummary() {
+            return sortSummary;
+        }
+    }
+
+    // The CullScope scope maps to before the sort ever runs. Null only for OldestYear, whose year
+    // isn't decided until the sort itself resolves it.
+    private static @Nullable CullScope knownCullScope(SortScope scope) {
+        return switch (scope) {
+            case SortScope.Year(int year, MonthRange months) -> new CullScope.Year(year, monthsFromRange(months));
+            case SortScope.OldestN(int n) -> new CullScope.OldestN(n);
+            case SortScope.OldestYear() -> null;
+        };
+    }
+
+    // sortSummary.yearsSorted() is the only place an OldestYear scope's resolved year is ever
+    // reported. Guaranteed to hold at most one element (see its own doc), so any element found is
+    // "the" year. Empty means nothing reached Sorted this run, so there is nothing left to cull.
+    private static @Nullable CullScope oldestYearCullScope(SortSummary sortSummary) {
+        return sortSummary.yearsSorted().stream().findAny()
+                .<CullScope>map(year -> new CullScope.Year(year, null))
+                .orElse(null);
+    }
+
+    private static @Nullable List<Integer> monthsFromRange(@Nullable MonthRange months) {
+        return months == null ? null : IntStream.rangeClosed(months.from(), months.to()).boxed().toList();
+    }
+
+    // Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and curate()'s
+    // cull stage; resume() re-enters at dispatchAndApply() directly instead, since it must never
+    // rebuild an existing prep dir. See checkNoWaitingJobFor()'s own doc for why this check runs
+    // here too, not only at cull()'s synchronous pre-submit call site.
+    private CullJobOutcome buildFreshAndDispatch(CullScope scope) throws Exception {
+        checkNoWaitingJobFor(scope);
+        PrepDir prep = runPhase(PREPPING, progress -> montageRenderer.build(scope, montageConfig, progress));
+        return dispatchAndApply(prep, false);
+    }
+
+    private void checkNoWaitingJobFor(CullScope scope) {
+        String tag = CullScope.tag(scope);
+        waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst().ifPresent(existing -> {
+            throw new IllegalStateException("A cull for scope '" + tag + "' is already waiting on shards at "
+                    + existing.prepDir() + " - resume or resolve it before starting a new cull for the same scope.");
         });
     }
 

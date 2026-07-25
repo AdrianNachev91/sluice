@@ -115,7 +115,7 @@ public class SortEngine implements SortUseCase {
 
         return new SortSummary(inScope.size(), plan.redundantVsLibrary().size(), plan.withinBatchDuplicates().size(),
                 routing.photosSorted, routing.videosSorted, routing.lowRes, routing.unsorted, consumedSidecars.size(),
-                routing.lowConfidenceFiles, routing.unsortedFiles);
+                routing.lowConfidenceFiles, routing.unsortedFiles, routing.yearsSorted);
     }
 
     private Set<Path> consumeSidecars(List<DatedMedia> inScope, Map<MediaFile, TakeoutSidecar> sidecars) {
@@ -226,6 +226,7 @@ public class SortEngine implements SortUseCase {
         Path destDir = pathsPort.sorted().resolve(mediaFolder)
                 .resolve(yearFolder(date.when())).resolve(monthFolder(date.when()));
         mediaStore.move(file.path(), destDir);
+        routing.yearsSorted.add(date.when().getYear());
         if (isVideo) {
             routing.videosSorted++;
         } else {
@@ -266,5 +267,6 @@ public class SortEngine implements SortUseCase {
         int unsorted;
         final List<String> lowConfidenceFiles = new ArrayList<>();
         final List<String> unsortedFiles = new ArrayList<>();
+        final Set<Integer> yearsSorted = new HashSet<>();
     }
 }

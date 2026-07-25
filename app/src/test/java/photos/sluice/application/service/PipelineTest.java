@@ -19,6 +19,7 @@ import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.adapter.vision.JsonCullPrepStore;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
@@ -42,6 +43,7 @@ import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
+import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -51,6 +53,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -58,8 +61,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -382,6 +388,205 @@ class PipelineTest {
         assertThat(Files.exists(photo)).isFalse();
     }
 
+    // Proves the real sort-then-cull round trip, not two separately-mocked halves. A real photo
+    // genuinely leaves Inbox for Sorted, and the SAME job then culls the year it just landed in, all
+    // the way to Applied.
+    //
+    // AutoApproveCuller stands in for a real automated provider (Anthropic/OpenAI/Ollama). It writes
+    // its own valid shard for every montage in one call, the way a real automated culler would
+    // after resolving its own judgements. curate() runs prep, dispatch, and apply inside one
+    // submit() call, with no gap to hand-drop a shard into - unlike the ManualModeCuller tests
+    // above, which need one.
+    @Test
+    void curateSortsThenCullsInOneJobEndToEnd(@TempDir Path root) throws IOException {
+        Path photo = writeInboxPhoto(root, "20190601_photo.jpg");
+        var progress = new RecordingProgressPort();
+
+        CurateOutcome outcome = curatePipeline(root, progress).curate(new SortScope.Year(2019, null)).join();
+
+        assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
+        assertThat(Files.exists(photo)).isFalse();
+        Path sorted = root.resolve("Sorted/Photos/2019/06/20190601_photo.jpg");
+        assertThat(Files.exists(sorted)).isTrue();
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        var applied = (CullJobOutcome.Applied) Objects.requireNonNull(outcome.cullOutcome());
+        assertThat(applied.applyReport().reviewed()).isEqualTo(1);
+        // Untouched: AutoApproveCuller's shard carries no decision for it, so it's implicitly kept.
+        assertThat(Files.exists(sorted)).isTrue();
+        assertThat(progress.events).containsExactly(
+                "started:Sorting...", "tick:Sorting...:1/1", "finished:Sorting...",
+                "started:Building montages...", "tick:Building montages...:1/1", "finished:Building montages...",
+                "started:Culling...", "finished:Culling...",
+                "started:Applying decisions...", "finished:Applying decisions...");
+    }
+
+    @Test
+    void curateWithOldestYearScopeResolvesAndCullsTheYearTheSortPicked(@TempDir Path root) throws IOException {
+        writeInboxPhoto(root, "20190601_photo.jpg");
+
+        CurateOutcome outcome =
+                curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.OldestYear()).join();
+
+        assertThat(outcome.sortSummary().yearsSorted()).containsExactly(2019);
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(Files.exists(root.resolve("logs/cull-prep/2019/index.json"))).isTrue();
+    }
+
+    // An OldestYear scope's target year only exists once the sort resolves it. An empty (or
+    // fully-empty-after-routing) Inbox never resolves one, so there is nothing for the cull stage to
+    // even target. Proven by the absence of a cull-prep dir at all, not just a null cullOutcome.
+    // That shows the cull stage never ran, rather than running over some empty default scope.
+    @Test
+    void curateSkipsCullWhenAnOldestYearSortFindsNothingToSort(@TempDir Path root) throws IOException {
+        Files.createDirectories(inboxOf(root));
+
+        CurateOutcome outcome =
+                curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.OldestYear()).join();
+
+        assertThat(outcome.sortSummary().processed()).isZero();
+        assertThat(outcome.cullOutcome()).isNull();
+        assertThat(Files.exists(root.resolve("logs/cull-prep"))).isFalse();
+    }
+
+    // Sort is never restricted to fit cull's one-scope shape. An OldestN sort still runs its normal,
+    // complete job, and can genuinely land files across more than one year. Proven here by two
+    // photos in different years both getting sorted. Only the cull stage mirrors the same n back
+    // through CullScope.OldestN - the same mtime-ordered scope a standalone cull() call would use.
+    @Test
+    void curateWithOldestNScopeSortsAcrossYearsAndCullsTheSameCount(@TempDir Path root) throws IOException {
+        writeInboxPhoto(root, "20180601_a.jpg", 1);
+        writeInboxPhoto(root, "20190601_b.jpg", 2);
+
+        CurateOutcome outcome =
+                curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.OldestN(2)).join();
+
+        assertThat(outcome.sortSummary().photosSorted()).isEqualTo(2);
+        assertThat(outcome.sortSummary().yearsSorted()).containsExactlyInAnyOrder(2018, 2019);
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        var applied = (CullJobOutcome.Applied) Objects.requireNonNull(outcome.cullOutcome());
+        assertThat(applied.applyReport().reviewed()).isEqualTo(2);
+        assertThat(Files.exists(root.resolve("logs/cull-prep/oldest-2/index.json"))).isTrue();
+    }
+
+    // Mirrors curateRefusesAnExplicitYearScopeAlreadyWaitingOnShards below, for the other scope shape
+    // whose CullScope is known before curate() ever submits a job.
+    @Test
+    void curateRefusesAnOldestNScopeAlreadyWaitingOnShards(@TempDir Path root) throws IOException {
+        Files.createDirectories(inboxOf(root));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = cullPipeline(root, new RecordingProgressPort());
+        pipeline.cull(new CullScope.OldestN(1)).join();
+
+        assertThatThrownBy(() -> pipeline.curate(new SortScope.OldestN(1)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("oldest-1");
+    }
+
+    // The other half of monthsFromRange()'s translation. Every other curate() test passes null
+    // months, so this is the only coverage for an actual MonthRange narrowing down to a specific
+    // CullScope.Year(months) list.
+    @Test
+    void curateWithAnExplicitMonthRangeNarrowsTheCullScopeToThoseMonths(@TempDir Path root) throws IOException {
+        writeInboxPhoto(root, "20190601_june.jpg");
+        writeInboxPhoto(root, "20190815_august.jpg", 3);
+
+        CurateOutcome outcome = curatePipeline(root, new RecordingProgressPort())
+                .curate(new SortScope.Year(2019, new MonthRange(6, 6)))
+                .join();
+
+        assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
+        assertThat(Files.exists(root.resolve("Sorted/Photos/2019/06/20190601_june.jpg"))).isTrue();
+        // August is out of the requested month range, so it's still sitting in Inbox, unsorted.
+        assertThat(Files.exists(root.resolve("Inbox/20190815_august.jpg"))).isTrue();
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(Files.exists(root.resolve("logs/cull-prep/2019-06/index.json"))).isTrue();
+    }
+
+    // An explicit Year scope names its target unconditionally. curate() culls it once sorted
+    // regardless of whether this particular run added anything new there. Unlike OldestYear, which
+    // has no year to cull at all if its own sort found nothing. Here the sort itself finds nothing
+    // new (Inbox is empty), yet a photo already sitting in Sorted from an earlier, uncommitted run
+    // still gets culled.
+    @Test
+    void curateWithAnExplicitYearScopeCullsThatYearEvenWhenThisRunSortedNothingNew(@TempDir Path root)
+            throws IOException {
+        Files.createDirectories(inboxOf(root));
+        Path existing =
+                writePhoto(sortedPhotosDir(root, "2019", "06"), "already-sorted.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+
+        CurateOutcome outcome =
+                curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.Year(2019, null)).join();
+
+        assertThat(outcome.sortSummary().processed()).isZero();
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(Files.exists(existing)).isTrue();
+    }
+
+    // Mirrors cull()'s own "refuses to rebuild a scope with an unresolved WaitingCullJob" contract.
+    // An explicit Year scope's target CullScope is known before curate() ever submits a job, so it
+    // gets the same synchronous, pre-sort fail-fast. Proven here by the sort never running at all:
+    // the pre-existing Sorted photo is still there, untouched, and no second prep dir was written.
+    @Test
+    void curateRefusesAnExplicitYearScopeAlreadyWaitingOnShards(@TempDir Path root) throws IOException {
+        Files.createDirectories(inboxOf(root));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = cullPipeline(root, new RecordingProgressPort());
+        pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        assertThatThrownBy(() -> pipeline.curate(new SortScope.Year(2019, null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("2019");
+    }
+
+    // An OldestYear scope can't get the synchronous pre-sort refusal above - its year isn't known
+    // until the sort resolves it. So this same conflict can only surface after the sort has already
+    // moved real files, and the caller must not lose track of what moved just because the cull stage
+    // was refused. Pipeline.CurateConflictException carries the SortSummary forward for exactly that.
+    @Test
+    void curateWrapsAPostSortConflictInCurateConflictExceptionCarryingTheSortSummary(@TempDir Path root)
+            throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "already-there.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = cullPipeline(root, new RecordingProgressPort());
+        pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path newPhoto = writeInboxPhoto(root, "20190815_new.jpg");
+
+        var handle = curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.OldestYear());
+
+        assertThatThrownBy(handle::join)
+                .isInstanceOf(CompletionException.class)
+                .extracting(Throwable::getCause)
+                .isInstanceOfSatisfying(Pipeline.CurateConflictException.class,
+                        conflict -> assertThat(conflict.sortSummary().photosSorted()).isEqualTo(1));
+        // The sort's own effect survives the refused cull stage - the new photo really did move.
+        assertThat(Files.exists(newPhoto)).isFalse();
+        assertThat(Files.exists(root.resolve("Sorted/Photos/2019/08/20190815_new.jpg"))).isTrue();
+    }
+
+    // Proves the cancellation wiring between curate()'s two stages: cooperative, checked only at the
+    // boundary between them, never mid-engine-call.
+    //
+    // BlockingMoves lets the test synchronize with the exact moment SortEngine is mid-move. It can
+    // then request cancellation before curate()'s post-sort check runs - a real observable signal,
+    // not a guessed sleep. The sort itself still completes in full; its own single move() call is
+    // never interrupted, only delayed. Only the cull stage that would have followed it is skipped.
+    @Test
+    void curateSkipsTheCullStageWhenCancellationIsRequestedBetweenStages(@TempDir Path root) throws Exception {
+        writeInboxPhoto(root, "20190601_photo.jpg");
+        var moveStarted = new CountDownLatch(1);
+        var releaseMove = new CountDownLatch(1);
+        var pipeline = curatePipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+
+        JobHandle<CurateOutcome> handle = pipeline.curate(new SortScope.Year(2019, null));
+        moveStarted.await();
+        handle.requestCancellation();
+        releaseMove.countDown();
+        CurateOutcome outcome = handle.join();
+
+        assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
+        assertThat(outcome.cullOutcome()).isNull();
+        assertThat(Files.exists(root.resolve("logs/cull-prep"))).isFalse();
+    }
+
     private static void waitUntil(Duration timeout, BooleanSupplier condition) {
         Instant deadline = Instant.now().plus(timeout);
         while (!condition.getAsBoolean()) {
@@ -425,6 +630,22 @@ class PipelineTest {
     private static Pipeline cullPipeline(Path root, RecordingProgressPort progress, CullSettings cullSettings,
             List<VisionCuller> cullers) {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers);
+    }
+
+    // curate() tests go through this name, wiring AutoApproveCuller as the configured provider.
+    // curate() runs prep/dispatch/apply in one call, with no gap to hand-drop a shard into the way
+    // the manual-mode cull() tests above do.
+    private static Pipeline curatePipeline(Path root, RecordingProgressPort progress) {
+        return curatePipeline(root, progress, new NioMediaStore());
+    }
+
+    private static Pipeline curatePipeline(Path root, RecordingProgressPort progress, MediaStore mediaStore) {
+        return pipeline(root, progress, mediaStore, autoApproveCullSettings(), List.of(new AutoApproveCuller()));
+    }
+
+    private static CullSettings autoApproveCullSettings() {
+        return new FixedSettings("auto-approve", List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.MANUAL, null));
     }
 
     // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
@@ -522,6 +743,33 @@ class PipelineTest {
         Path file = dir.resolve(name);
         ImageIO.write(image, "jpg", file.toFile());
         Files.setLastModifiedTime(file, FileTime.from(mtime));
+        return file;
+    }
+
+    // Inbox-side sibling of writePhoto() above: that one writes straight into Sorted, where
+    // SortEngine's own low-res gate never runs again, so a small solid-color JPEG is fine there. A
+    // photo that needs to survive an actual sort pass has to clear that gate for real. A solid fill
+    // compresses to only a few KB, well under LowResGate's 50KB floor. Filling every pixel with
+    // random noise instead defeats JPEG compression, so the file clears the floor easily. name must
+    // carry a FilenameSource-recognized date (e.g. "20190601_photo.jpg") since these fixtures have
+    // no EXIF or Takeout JSON.
+    private static Path writeInboxPhoto(Path root, String name) throws IOException {
+        return writeInboxPhoto(root, name, 42);
+    }
+
+    // seed varies the noise, so two calls in the same test never produce byte-identical files that
+    // ByteIdenticalDedup would then collapse into one.
+    private static Path writeInboxPhoto(Path root, String name, long seed) throws IOException {
+        Path file = inboxOf(root).resolve(name);
+        Files.createDirectories(file.getParent());
+        var image = new BufferedImage(PHOTO_WIDTH, PHOTO_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        var random = new Random(seed);
+        for (int y = 0; y < PHOTO_HEIGHT; y++) {
+            for (int x = 0; x < PHOTO_WIDTH; x++) {
+                image.setRGB(x, y, random.nextInt(0xFFFFFF));
+            }
+        }
+        ImageIO.write(image, "jpg", file.toFile());
         return file;
     }
 
@@ -643,6 +891,102 @@ class PipelineTest {
         }
     }
 
+    // Wraps the real NioMediaStore but blocks the first move() call between two latches. A test can
+    // synchronize with the exact moment SortEngine is mid-move this way. That's real observable
+    // proof it hasn't returned yet, not a guessed sleep long enough to "probably" still be running.
+    private static final class BlockingMoves implements MediaStore {
+        private final MediaStore delegate = new NioMediaStore();
+        private final CountDownLatch moveStarted;
+        private final CountDownLatch releaseMove;
+
+        BlockingMoves(CountDownLatch moveStarted, CountDownLatch releaseMove) {
+            this.moveStarted = moveStarted;
+            this.releaseMove = releaseMove;
+        }
+
+        @Override
+        public List<Path> listFiles(Path root) {
+            return delegate.listFiles(root);
+        }
+
+        @Override
+        public Instant lastModifiedTime(Path path) {
+            return delegate.lastModifiedTime(path);
+        }
+
+        @Override
+        public Path move(Path source, Path destDir) {
+            moveStarted.countDown();
+            try {
+                releaseMove.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            return delegate.move(source, destDir);
+        }
+
+        @Override
+        public Path resolveDestination(Path source, Path destDir) {
+            return delegate.resolveDestination(source, destDir);
+        }
+
+        @Override
+        public Path moveTo(Path source, Path destination) {
+            return delegate.moveTo(source, destination);
+        }
+
+        @Override
+        public Path copy(Path source, Path destDir) {
+            return delegate.copy(source, destDir);
+        }
+
+        @Override
+        public void delete(Path path) {
+            delegate.delete(path);
+        }
+
+        @Override
+        public void ensureDirectory(Path dir) {
+            delegate.ensureDirectory(dir);
+        }
+
+        @Override
+        public boolean exists(Path path) {
+            return delegate.exists(path);
+        }
+
+        @Override
+        public long size(Path path) {
+            return delegate.size(path);
+        }
+
+        @Override
+        public void appendLine(Path file, String line) {
+            delegate.appendLine(file, line);
+        }
+
+        @Override
+        public void write(Path file, String content) {
+            delegate.write(file, content);
+        }
+
+        @Override
+        public List<String> readLines(Path file) {
+            return delegate.readLines(file);
+        }
+
+        @Override
+        public void removeEmptyDirectories(Path root) {
+            delegate.removeEmptyDirectories(root);
+        }
+
+        @Override
+        public void removeIfEmptyOfFiles(Path dir) {
+            delegate.removeIfEmptyOfFiles(dir);
+        }
+    }
+
     // Stands in for the real (package-private, unreachable from here) ExternalAgentCuller. Only a
     // completeness check, gating on hasShard() alone rather than full shard validation. That
     // validation is ShardValidator/ApplyEngine's job, already covered by their own tests - and by
@@ -670,6 +1014,36 @@ class PipelineTest {
                 throw new CullException("missing shard(s) for: " + missing);
             }
             return new CullReport(done, prep.entries().size() - done, 0, 0);
+        }
+    }
+
+    // Stands in for a real automated provider (Anthropic/OpenAI/Ollama) that always succeeds on its
+    // first try. It writes its own valid shard for every montage in one call, the way a real
+    // automated culler would after resolving its own judgements. No test needs to hand-drop one
+    // mid-run the way ManualModeCuller's tests do above.
+    //
+    // Unconditional, not gated on hasShard() the way ManualModeCuller is. buildFreshAndDispatch()
+    // always rebuilds the prep dir fresh right before dispatch runs, so a montage here can never
+    // already carry a shard.
+    //
+    // An empty decisions array is still a valid shard. ShardValidator has no "every photo needs a
+    // decision" rule, so every photo in scope is simply left in place, implicitly kept.
+    private static final class AutoApproveCuller implements VisionCuller {
+        @Override
+        public String id() {
+            return "auto-approve";
+        }
+
+        @Override
+        public CullReport cull(PrepDir prep, CullOptions opts) {
+            for (String montage : prep.entries()) {
+                try {
+                    writeShard(prep.prepDir(), montage);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+            return new CullReport(prep.entries().size(), 0, 0, 0);
         }
     }
 
