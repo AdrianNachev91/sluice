@@ -21,12 +21,14 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -682,5 +684,10 @@ class AnthropicCullerTest {
 
     private record FixedSettings(String provider, List<CullCategory> categories,
             CullProviderSettings providerSettings) implements CullSettings {
+
+        @Override
+        public ExternalAgentSettings externalAgent() {
+            return new ExternalAgentSettings(WatchMode.MANUAL, null);
+        }
     }
 }

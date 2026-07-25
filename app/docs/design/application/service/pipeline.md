@@ -109,6 +109,51 @@ doesn't show up in the tally - an accepted simplification for a progress number.
 | `resume(prepDir, allowPartial=true)` with a shard still missing         | Applies what it has; the missing montage's photos are left in place, untouched                                                                       |
 | `CullException` from an automated (non-manual-mode) provider            | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`                                                                                  |
 
+## Watch mode
+
+`cull.externalAgent.mode: watch` (`ExternalAgentSettings`, `WatchMode`) makes every `Waiting`
+outcome from `dispatchAndApply()` arm a `CullWatcher` for that prep dir, on top of the plain
+`Waiting` behavior above. `MANUAL` mode (the default) skips this section entirely - `armWatchIfConfigured`
+returns immediately.
+
+```mermaid
+flowchart TD
+    A["dispatchAndApply() lands<br/>on CullJobOutcome.Waiting"] --> B{"mode == WATCH?"}
+    B -- "no" --> Z(["stay Waiting - unchanged"])
+    B -- "yes" --> C["CullWatcher armed,<br/>polling every watchPollInterval<br/>(2s in production)"]
+    C --> D{"tally fully valid?<br/>(cheap check, no submit)"}
+    D -- "not yet" --> E{"watchTimeout elapsed?"}
+    E -- "no" --> C
+    E -- "yes" --> F(["watcher stops -<br/>drops back to plain manual<br/>Waiting, nothing touched"])
+    D -- "yes" --> G["attempt resume()<br/>via JobRunner.submit()"]
+    G -- "busy (another job running)" --> C
+    G -- "submitted" --> H(["watcher stops -<br/>the submitted job's own outcome<br/>re-arms a fresh watcher if<br/>it lands back in Waiting"])
+```
+
+Deliberately pure polling, not `java.nio.file.WatchService`. A user's working folder can itself be
+a cloud-synced or network folder (a Settings choice) - exactly the folder type known to miss
+filesystem events. Depending on events at all would just relocate that gap. `watchPollInterval` is
+an internal cadence, not a `CullSettings` field - only `mode` and `watchTimeout` are the documented
+user-facing knobs.
+
+`disarmWatch()` runs at the very start of every `dispatchAndApply()` call, regardless of who
+triggered it (a fresh `cull()`, a manual `resume()` click, or a watcher's own auto-resume) - the
+prep dir's watcher, if any, is always retired before a real attempt runs, so a manual click racing
+an armed watcher can never leave two pollers on the same job. `armWatchesForExistingWaitingJobs()`
+(`@PostConstruct`) re-arms every still-waiting job found on disk at startup, since there is no
+persistent job store - restarting the app would otherwise silently stop watching every job armed
+before the restart.
+
+### Scenarios
+
+| Scenario                                                         | Outcome                                                                                           |
+|------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| Watch mode, a valid shard for every montage eventually appears   | The next poll tick's tally check passes, `resume()` is submitted automatically, `Applied` follows |
+| Watch mode, `JobRunner` is busy with an unrelated job when ready | `attemptConsume` returns false; the watcher keeps polling and retries on the next tick            |
+| Watch mode, `watchTimeout` elapses with no fully-valid tally     | Watcher stops on its own; every dropped shard is untouched; a manual `resume()` still works       |
+| Watch mode, app restarts while a job is still waiting            | `armWatchesForExistingWaitingJobs()` re-arms a watcher for it purely from `waitingJobs()`         |
+| Manual mode (default)                                            | No watcher ever arms; behavior is identical to the `cull()`/`resume()` section above              |
+
 ## Related
 
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `Pipeline` submits onto): no

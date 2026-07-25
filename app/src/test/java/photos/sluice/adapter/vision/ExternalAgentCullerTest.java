@@ -8,9 +8,11 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -232,6 +234,11 @@ class ExternalAgentCullerTest {
         @Override
         public CullProviderSettings providerSettings() {
             return new CullProviderSettings(null, null, null, null);
+        }
+
+        @Override
+        public ExternalAgentSettings externalAgent() {
+            return new ExternalAgentSettings(WatchMode.MANUAL, null);
         }
     }
 }

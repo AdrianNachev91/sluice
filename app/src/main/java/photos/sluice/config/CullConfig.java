@@ -4,14 +4,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @ConfigurationProperties(prefix = "sluice.cull")
-public record CullConfig(String provider, CullProviderSettings providerSettings, List<CullCategory> categories)
-        implements CullSettings {
+public record CullConfig(String provider, CullProviderSettings providerSettings, List<CullCategory> categories,
+        ExternalAgentSettings externalAgent) implements CullSettings {
 
     // provider() is supplied by the record's own accessor, satisfying CullSettings so the application
     // layer selects a culler without importing this config record.
@@ -31,6 +33,13 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
         //noinspection ConstantValue
         if (providerSettings == null) {
             providerSettings = new CullProviderSettings(null, null, null, null);
+        }
+        // Same absent-node normalization as providerSettings above - a user who never touches
+        // sluice.cull.external-agent (every non-external-agent provider) gets the MANUAL default
+        // via ExternalAgentSettings' own compact constructor.
+        //noinspection ConstantValue
+        if (externalAgent == null) {
+            externalAgent = new ExternalAgentSettings(WatchMode.MANUAL, null);
         }
         // Two cards sharing a name would silently alias one category, so duplicates fail loud.
         List<String> duplicates = categories.stream()

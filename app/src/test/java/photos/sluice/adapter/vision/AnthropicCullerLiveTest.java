@@ -20,6 +20,7 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
@@ -27,6 +28,7 @@ import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.WatchMode;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -171,5 +173,10 @@ class AnthropicCullerLiveTest {
 
     private record FixedSettings(String provider, List<CullCategory> categories,
             CullProviderSettings providerSettings) implements CullSettings {
+
+        @Override
+        public ExternalAgentSettings externalAgent() {
+            return new ExternalAgentSettings(WatchMode.MANUAL, null);
+        }
     }
 }

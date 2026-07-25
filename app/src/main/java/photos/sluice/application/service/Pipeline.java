@@ -1,5 +1,9 @@
 package photos.sluice.application.service;
 
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.out.ApplyOptions;
@@ -26,22 +30,29 @@ import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
+import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
 
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 // Wires the mechanical engines through JobRunner so a driving adapter (the JavaFX UI, a future CLI)
-// gets a JobHandle back instead of blocking, with progress bracketed through ProgressPort around
+// gets a JobHandle back instead of blocking. Progress is bracketed through ProgressPort around
 // each engine call. Depends on the engines' concrete classes rather than their SortUseCase/
 // CommitUseCase/RescueUseCase port/in interfaces because the progress-callback overloads live only
 // on the concrete types, not on those narrower interfaces.
 @Component
 public class Pipeline {
+
+    private static final Logger log = LoggerFactory.getLogger(Pipeline.class);
 
     private static final String SORTING = "Sorting...";
     private static final String COMMITTING = "Committing...";
@@ -51,6 +62,13 @@ public class Pipeline {
     private static final String APPLYING = "Applying decisions...";
     private static final String DECISIONS_FILE = "decisions.json";
     private static final String INDEX_FILE = "index.json";
+
+    // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
+    // unlike mode/watchTimeout, this cadence isn't a documented user-facing knob, just an internal
+    // responsiveness/overhead tradeoff. Short enough that a human dropping files never perceives the
+    // delay; long enough not to hammer disk or spam re-validation. See the package-private
+    // constructor overload for how tests override it.
+    private static final Duration DEFAULT_WATCH_POLL_INTERVAL = Duration.ofSeconds(2);
 
     private final SortEngine sortEngine;
     private final CommitEngine commitEngine;
@@ -65,12 +83,31 @@ public class Pipeline {
     private final MontageConfig montageConfig;
     private final JobRunner jobRunner;
     private final ProgressPort progressPort;
+    private final Duration watchPollInterval;
     private final ShardValidator shardValidator = new ShardValidator();
+    private final Map<Path, CullWatcher> activeWatches = new ConcurrentHashMap<>();
 
+    // Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
+    // class has exactly one constructor. The package-private test-seam overload below means there
+    // are two, so this one has to be named as the one Spring should use.
+    @Autowired
     public Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
             CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
             MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort) {
+        this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, cullPrepPort,
+                cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort,
+                DEFAULT_WATCH_POLL_INTERVAL);
+    }
+
+    // Test seam: production wiring always goes through the public constructor above, which fixes
+    // the poll cadence at DEFAULT_WATCH_POLL_INTERVAL. Tests exercising real watch-mode timing pass
+    // a much shorter interval here so the behavior proves out in milliseconds, not seconds, without
+    // resorting to a mock clock.
+    Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
+            MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
+            CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
+            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
@@ -84,6 +121,30 @@ public class Pipeline {
         this.montageConfig = montageConfig;
         this.jobRunner = jobRunner;
         this.progressPort = progressPort;
+        this.watchPollInterval = watchPollInterval;
+    }
+
+    // Re-arms a watcher for every still-waiting job found on disk, so watch mode survives an app
+    // restart the same way WAITING_FOR_SHARDS itself does. There is no persistent job store - see
+    // WaitingCullJob's own doc. Without this, restarting the app would silently stop watching every
+    // job that was armed before the restart. A no-op when mode is MANUAL. Public and callable
+    // directly (not just via @PostConstruct) so a test can drive it without a Spring context.
+    //
+    // Also a no-op while a job is currently running. waitingJobs() counts a prep dir as waiting the
+    // moment index.json exists and decisions.json doesn't yet. That's also true of a prep dir
+    // mid-CULLING/mid-APPLYING right now - dispatchAndApply() only writes decisions.json near the
+    // very end of a successful apply. JobRunner only ever runs one job at a time, so a busy runner
+    // could only mean the one job in flight is that prep dir's own. Arming here anyway would risk a
+    // phantom watcher for a job about to resolve to Applied on its own, with nothing left to disarm
+    // it afterward. Any prep dir that's genuinely still waiting gets picked up the next time this
+    // runs once the app is idle again. This is also not the only path that arms a watcher - see
+    // dispatchAndApply()'s own note.
+    @PostConstruct
+    public void armWatchesForExistingWaitingJobs() {
+        if (cullSettings.externalAgent().mode() != WatchMode.WATCH || jobRunner.isBusy()) {
+            return;
+        }
+        waitingJobs().forEach(this::armWatchIfConfigured);
     }
 
     public JobHandle<SortSummary> sort(SortScope scope) {
@@ -99,11 +160,11 @@ public class Pipeline {
     }
 
     // Prep always runs fresh: a scope's montages are rebuilt from Sorted every call, and
-    // MontageRenderer.build() clears whatever a stale prior run left in the same prep dir first. That
-    // would silently destroy any shards already dropped for a still-unresolved WaitingCullJob on the
-    // same scope, so this checks for one and fails loud instead - resume or resolve it first. Dispatch
-    // itself always runs with allowPartial=false: waiving a missing shard is a resume-time human
-    // decision (see dispatchAndApply()), never the default for a first attempt.
+    // MontageRenderer.build() clears whatever a stale prior run left in the same prep dir first.
+    // That would silently destroy any shards already dropped for a still-unresolved WaitingCullJob
+    // on the same scope. This checks for one and fails loud instead - resume or resolve it first.
+    // Dispatch itself always runs with allowPartial=false: waiving a missing shard is a resume-time
+    // human decision (see dispatchAndApply()), never the default for a first attempt.
     public JobHandle<CullJobOutcome> cull(CullScope scope) {
         String tag = CullScope.tag(scope);
         Optional<WaitingCullJob> existing = waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst();
@@ -121,8 +182,8 @@ public class Pipeline {
     // WaitingCullJob's own doc). A prep dir counts as waiting when it has index.json (prep ran) but no
     // decisions.json yet (apply never completed). Not routed through JobRunner - this only reads, so
     // it doesn't compete for the single job slot. A prep dir whose index.json is transiently
-    // unreadable (mid-write by a concurrent cull job) is skipped rather than failing the whole scan -
-    // the same tolerance the external-agent design already gives a shard mid-write.
+    // unreadable (mid-write by a concurrent cull job) is skipped rather than failing the whole scan.
+    // That's the same tolerance the external-agent design already gives a shard mid-write.
     public List<WaitingCullJob> waitingJobs() {
         Path cullPrepRoot = pathsPort.logs().resolve("cull-prep");
         if (!mediaStore.exists(cullPrepRoot)) {
@@ -145,9 +206,9 @@ public class Pipeline {
     }
 
     // Re-reads an existing prep dir (no montages regenerated) and re-runs the same dispatch-then-apply
-    // flow cull() used, this time with the caller's own allowPartial. Resume is safely re-runnable: it
-    // stays read-only until the shard set actually validates, so a resume triggered before every shard
-    // is dropped just throws right back into Waiting with a freshly recomputed tally.
+    // flow cull() used, this time with the caller's own allowPartial. Resume is safely re-runnable.
+    // It stays read-only until the shard set actually validates. A resume triggered before every
+    // shard is dropped just throws right back into Waiting with a freshly recomputed tally.
     public JobHandle<CullJobOutcome> resume(Path prepDir, boolean allowPartial) {
         return jobRunner.submit(_ -> dispatchAndApply(cullPrepPort.readIndex(prepDir), allowPartial));
     }
@@ -157,7 +218,14 @@ public class Pipeline {
     // expected manual-mode pause: resolved into Waiting, run slot released. For any other (automated)
     // provider it's a genuine failure and propagates. That matches CullJobOutcome.Applied's own doc:
     // an automated provider always resolves there or throws, never lands in Waiting.
+    //
+    // disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
+    // cull(), a user's manual resume(), or a watcher's own auto-resume. Whatever watcher was polling
+    // this prep dir is retired the moment any resume attempt actually runs. That means a manual
+    // click racing an armed watcher can never leave two pollers running for the same job. A fresh
+    // watcher gets (re-)armed below only if the outcome is Waiting again.
     private CullJobOutcome dispatchAndApply(PrepDir prep, boolean allowPartial) throws Exception {
+        disarmWatch(prep.prepDir());
         CullReport cullReport;
         try {
             cullReport = runPhase(CULLING,
@@ -166,7 +234,9 @@ public class Pipeline {
             if (!cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
                 throw e;
             }
-            return new CullJobOutcome.Waiting(buildWaitingJob(prep));
+            WaitingCullJob job = buildWaitingJob(prep);
+            armWatchIfConfigured(job);
+            return new CullJobOutcome.Waiting(job);
         }
         ApplyReport applyReport = runPhase(APPLYING,
                 progress -> applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress));
@@ -175,6 +245,81 @@ public class Pipeline {
 
     private WaitingCullJob buildWaitingJob(PrepDir prep) {
         return new WaitingCullJob(prep.scope(), prep.prepDir(), tally(prep), mediaStore.lastModifiedTime(prep.prepDir()));
+    }
+
+    // Starts polling job's prep dir for an auto-resume, unless mode is MANUAL or a watcher is
+    // already active for it. armWatchesForExistingWaitingJobs() and dispatchAndApply()'s own Waiting
+    // branch can both reach here for the same prep dir. The second call is then a no-op rather than
+    // a competing second poller.
+    private void armWatchIfConfigured(WaitingCullJob job) {
+        if (cullSettings.externalAgent().mode() != WatchMode.WATCH) {
+            return;
+        }
+        Path prepDir = job.prepDir();
+        activeWatches.compute(prepDir, (_, existing) -> {
+            if (existing != null && existing.isActive()) {
+                return existing;
+            }
+            // Instant.now() here, not job.since() (the prep dir's own mtime). watchTimeout is
+            // deliberately "how long this watcher keeps polling in one continuous streak," not
+            // "total time since the job first started waiting." A re-arm gets its own full timeout
+            // window instead of inheriting a countdown already run down by an earlier streak. A
+            // fresh app restart or a shard that turned invalid after looking ready are both re-arms.
+            var watcher = new CullWatcher(watchPollInterval, cullSettings.externalAgent().watchTimeout(),
+                    () -> isFullyValid(prepDir), () -> tryAutoResume(prepDir), Instant.now());
+            watcher.start();
+            return watcher;
+        });
+    }
+
+    private void disarmWatch(Path prepDir) {
+        CullWatcher watcher = activeWatches.remove(prepDir);
+        if (watcher != null) {
+            watcher.stop();
+        }
+    }
+
+    // Test seam: whether a watcher is currently polling prepDir. Lets a test prove disarmWatch()'s
+    // own claim - that any dispatchAndApply() call retires an existing watcher, not just the
+    // watcher's own auto-resume trigger. No need to reach into the private activeWatches map.
+    boolean isWatchActive(Path prepDir) {
+        CullWatcher watcher = activeWatches.get(prepDir);
+        return watcher != null && watcher.isActive();
+    }
+
+    // Cheap status check a CullWatcher polls repeatedly: does prepDir's tally already show every
+    // montage present and valid? Deliberately not the heavier resume()/dispatchAndApply() path. A
+    // transiently unreadable index (mid-write by a concurrent process) degrades to "not ready yet"
+    // here rather than propagating - the same tolerance readWaitingJob() already gives this case.
+    private boolean isFullyValid(Path prepDir) {
+        try {
+            ShardTally shards = tally(cullPrepPort.readIndex(prepDir));
+            return shards.valid() == shards.total();
+        } catch (UncheckedIOException e) {
+            return false;
+        }
+    }
+
+    // The heavier action a CullWatcher runs at most once it thinks isFullyValid(). Returns whether
+    // it actually got to run. True means resume()'s own jobRunner.submit() succeeded - the watcher's
+    // job is then done, win or lose (see dispatchAndApply()'s own re-arm-on-Waiting note). False
+    // means the job runner was busy with something else, so the watcher keeps polling and retries.
+    // The submitted job runs and completes fully asynchronously; nothing here waits on it. A failure
+    // there would otherwise vanish silently, so it's logged here instead - the same visibility a
+    // manual Resume gets for free from whatever UI/CLI surfaces its own join()/onComplete() failure.
+    private boolean tryAutoResume(Path prepDir) {
+        JobHandle<CullJobOutcome> handle;
+        try {
+            handle = resume(prepDir, false);
+        } catch (IllegalStateException busy) {
+            return false;
+        }
+        handle.onComplete().whenComplete((_, failure) -> {
+            if (failure != null) {
+                log.warn("Watch-mode auto-resume for {} failed", prepDir, failure);
+            }
+        });
+        return true;
     }
 
     // present/valid computed per montage, one shard at a time, rather than through ApplyEngine's own
@@ -199,8 +344,8 @@ public class Pipeline {
 
     // A sidecar this app wrote itself during prep should always be readable. A transiently unreadable
     // one (mid-write by a concurrent cull job) degrades to "contributes no in-scope files" here,
-    // rather than failing the whole tally - the same tolerance montageShardStatus() already gives an
-    // unparseable shard below.
+    // rather than failing the whole tally. That's the same tolerance montageShardStatus() already
+    // gives an unparseable shard below.
     private List<SidecarPhotoEntry> readSidecar(PrepDir prep, String montage) {
         try {
             return cullPrepPort.readSidecar(prep.prepDir(), montage);
@@ -239,7 +384,7 @@ public class Pipeline {
     }
 
     // Function<ProgressCallback, T> can't wrap cullDispatcher.cull()/applyEngine.apply(), both of
-    // which declare checked exceptions - declares throws Exception itself instead, the same shape
+    // which declare checked exceptions. Declares throws Exception itself instead, the same shape
     // JobWork already uses for the same reason. A lambda that throws nothing still satisfies it.
     @FunctionalInterface
     private interface PhaseWork<T> {

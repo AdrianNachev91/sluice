@@ -17,4 +17,7 @@ public interface CullSettings {
 
     // Connection settings for API-backed providers. Never null; its fields are null when unset.
     CullProviderSettings providerSettings();
+
+    // Tuning for the external-agent provider only. Never null; see ExternalAgentSettings' own doc.
+    ExternalAgentSettings externalAgent();
 }

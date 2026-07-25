@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.CsvLibraryHashIndex;
@@ -24,6 +25,7 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
@@ -39,6 +41,7 @@ import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
+import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -51,11 +54,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -286,7 +291,8 @@ class PipelineTest {
     void cullPropagatesAFailureFromAnAutomatedProviderInsteadOfReturningWaiting(@TempDir Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         var progress = new RecordingProgressPort();
-        var settings = new FixedSettings("anthropic", List.of(new CullCategory("junk", "objectively worthless shots")));
+        var settings = new FixedSettings("anthropic", List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.MANUAL, null));
         var pipeline = cullPipeline(root, progress, settings, List.of(new ThrowingCuller("anthropic")));
 
         var handle = pipeline.cull(new CullScope.Year(2019, null));
@@ -296,6 +302,102 @@ class PipelineTest {
                 .hasCauseInstanceOf(CullException.class);
         assertThat(progress.events).contains("finished:Culling...");
         assertThat(progress.events).noneMatch(event -> event.startsWith("started:Applying"));
+    }
+
+    @Test
+    void cullInWatchModeAutoResumesOnceAValidShardIsDropped(@TempDir Path root) throws IOException {
+        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+                List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        waitUntil(Duration.ofSeconds(2), () -> !Files.exists(photo));
+        assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+        assertThat(pipeline.waitingJobs()).isEmpty();
+    }
+
+    // Regression: disarmWatch() runs at the top of every dispatchAndApply() call, not just the
+    // watcher's own auto-resume trigger - proves a manual resume() retires an armed watcher on its
+    // own, so a manual click racing an armed watcher can never leave two pollers on the same job.
+    // A long poll interval keeps the watcher itself from racing to auto-resume before the manual
+    // resume() below runs - this test is only about the manual path disarming it.
+    @Test
+    void manualResumeDisarmsAnAlreadyArmedWatcher(@TempDir Path root) throws IOException {
+        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path prepDir = waiting.job().prepDir();
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
+    }
+
+    // Proves watch mode survives a restart: nothing calls cull()/resume() on this Pipeline instance
+    // for the job at all - armWatchesForExistingWaitingJobs() (Pipeline's own @PostConstruct, called
+    // directly here since this test has no Spring context) has to discover it on disk and arm a
+    // watcher purely from waitingJobs(), the same as it would after a real app restart.
+    @Test
+    void armWatchesForExistingWaitingJobsAutoResumesAJobItNeverStartedItself(@TempDir Path root) throws IOException {
+        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var manualPipeline = cullPipeline(root, new RecordingProgressPort());
+        var waiting = (CullJobOutcome.Waiting) manualPipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+                List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        watchPipeline.armWatchesForExistingWaitingJobs();
+
+        waitUntil(Duration.ofSeconds(2), () -> !Files.exists(photo));
+        assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+    }
+
+    // A short watchTimeout with no shard ever dropped: the watcher must give up on its own (no
+    // auto-resume attempt) and leave every dropped shard - there are none here - untouched, exactly
+    // the "drops back to manual, all work preserved" contract from watchTimeout's own doc. Manual
+    // resume must still work afterward, proving the job itself was never touched by the timeout.
+    @Test
+    void watchModeGivesUpAfterTimeoutWithoutTouchingTheWaitingJob(@TempDir Path root) throws IOException {
+        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(Duration.ofMillis(60)),
+                List.of(new ManualModeCuller()), Duration.ofMillis(10));
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path prepDir = waiting.job().prepDir();
+
+        // Polls for the real signal - the watcher actually stopping itself once the timeout fires -
+        // instead of guessing a fixed sleep duration long enough to cover it.
+        waitUntil(Duration.ofSeconds(2), () -> !pipeline.isWatchActive(prepDir));
+        assertThat(Files.exists(photo)).isTrue();
+
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(Files.exists(photo)).isFalse();
+    }
+
+    private static void waitUntil(Duration timeout, BooleanSupplier condition) {
+        Instant deadline = Instant.now().plus(timeout);
+        while (!condition.getAsBoolean()) {
+            if (Instant.now().isAfter(deadline)) {
+                throw new AssertionError("condition not met within " + timeout);
+            }
+            try {
+                // The busy-wait this polls for is a real background CullWatcher/JobRunner thread,
+                // not something this test can await via a latch or callback.
+                //noinspection BusyWait
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+        }
     }
 
     private static Path inboxOf(Path root) {
@@ -325,12 +427,26 @@ class PipelineTest {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers);
     }
 
+    // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
+    // interval (via Pipeline's package-private test constructor) so a real auto-resume proves out
+    // fast instead of waiting on the production 2-second cadence.
+    private static Pipeline watchPipeline(Path root, RecordingProgressPort progress, CullSettings cullSettings,
+            List<VisionCuller> cullers, Duration pollInterval) {
+        return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers, pollInterval);
+    }
+
+    private static Pipeline pipeline(Path root, RecordingProgressPort progress, MediaStore mediaStore,
+            CullSettings cullSettings, List<VisionCuller> cullers) {
+        return pipeline(root, progress, mediaStore, cullSettings, cullers, null);
+    }
+
     // The one full wiring every overload above funnels into - real adapters throughout (matching
     // this project's no-mocks test convention), same as the engines below. CullMontageRenderer's
     // HeifDecoder dependency is stubbed to always miss: none of these fixtures are HEIC/AVIF, and
-    // real HEIC/AVIF decode already has its own coverage in TileRendererTest.
+    // real HEIC/AVIF decode already has its own coverage in TileRendererTest. pollInterval null
+    // means "use Pipeline's own production default" - only watchPipeline() ever passes one.
     private static Pipeline pipeline(Path root, RecordingProgressPort progress, MediaStore mediaStore,
-            CullSettings cullSettings, List<VisionCuller> cullers) {
+            CullSettings cullSettings, List<VisionCuller> cullers, @Nullable Duration pollInterval) {
         Path libraryRoot = root.resolve("Library");
         var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
@@ -355,13 +471,25 @@ class PipelineTest {
         // given photo lands in via mtime ordering alone, without depending on batch-size math.
         var montageConfig = new MontageConfig(64, 1);
 
+        if (pollInterval == null) {
+            return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
+                    cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress);
+        }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
-                cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress);
+                cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress,
+                pollInterval);
     }
 
     private static CullSettings defaultCullSettings() {
         return new FixedSettings(VisionCuller.MANUAL_MODE_PROVIDER_ID,
-                List.of(new CullCategory("junk", "objectively worthless shots")));
+                List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.MANUAL, null));
+    }
+
+    private static CullSettings watchCullSettings(@Nullable Duration watchTimeout) {
+        return new FixedSettings(VisionCuller.MANUAL_MODE_PROVIDER_ID,
+                List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.WATCH, watchTimeout));
     }
 
     private static void writeFile(Path file, String content) throws IOException {
@@ -554,7 +682,8 @@ class PipelineTest {
         }
     }
 
-    private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
+    private record FixedSettings(String provider, List<CullCategory> categories, ExternalAgentSettings externalAgent)
+            implements CullSettings {
         @Override
         public CullProviderSettings providerSettings() {
             return new CullProviderSettings(null, null, null, null);

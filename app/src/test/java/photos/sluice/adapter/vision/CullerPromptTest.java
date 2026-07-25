@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -101,6 +103,11 @@ class CullerPromptTest {
         @Override
         public CullProviderSettings providerSettings() {
             return new CullProviderSettings(null, null, null, null);
+        }
+
+        @Override
+        public ExternalAgentSettings externalAgent() {
+            return new ExternalAgentSettings(WatchMode.MANUAL, null);
         }
     }
 }
