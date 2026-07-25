@@ -28,6 +28,8 @@ import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.CancellationSignal;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
@@ -37,6 +39,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -161,6 +165,62 @@ class AnthropicCullerTest {
         culler().cull(prep("montage-001", "montage-002"), OPTIONS, (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
+    @Test
+    void cancellationStopsTheLoopLeavingAlreadyWrittenShardsAndAPartialReport() throws Exception {
+        writeMontage("montage-001", "IMG_0001.jpg");
+        writeMontage("montage-002", "IMG_0002.jpg");
+        writeMontage("montage-003", "IMG_0003.jpg");
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 100, 10));
+
+        // Cancels once montage-001's tick fires. montage-002/003 are never dispatched, so the
+        // client only ever sees one request.
+        var cancelled = new AtomicBoolean(false);
+        ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        CullReport report = culler().cull(
+                prep("montage-001", "montage-002", "montage-003"), OPTIONS, cancelAfterFirstTick, cancelled::get);
+
+        assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
+        assertThat(prepDir.resolve("decisions-001.json")).exists();
+        assertThat(prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(prepDir.resolve("decisions-003.json")).doesNotExist();
+        verify(messages, times(1)).create(any(MessageCreateParams.class));
+        verify(client).close();
+    }
+
+    // The second, pre-retry check is what actually saves the latency. Without it, a cancellation
+    // landing here would still have to wait out a whole extra API round trip before it takes effect.
+    @Test
+    void cancellationAfterAFailedFirstAttemptSkipsTheRetryAndWritesNothing() throws Exception {
+        PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        // The first poll (the while loop's own entry check) must pass so the doomed first attempt
+        // actually runs. The second poll, right before the corrective retry, is where cancellation
+        // lands instead.
+        var polls = new AtomicInteger();
+        CancellationSignal cancelBeforeRetry = () -> polls.incrementAndGet() > 1;
+
+        CullReport report = culler().cull(prep, OPTIONS, ProgressCallback.NO_OP, cancelBeforeRetry);
+
+        // The failed first attempt's tokens still count - that call already cost real money.
+        assertThat(report).isEqualTo(new CullReport(0, 0, 100, 10));
+        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(messages, times(1)).create(any(MessageCreateParams.class));
     }
 
     // A stateless call cannot remember the slugs earlier montages picked, so the accumulated

@@ -40,6 +40,8 @@ import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
+import photos.sluice.domain.job.CancellationSignal;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
@@ -214,9 +216,10 @@ class PipelineTest {
                 "started:Culling...", "finished:Culling...");
     }
 
-    // Regression: cull() used to rebuild a scope's prep dir unconditionally, and MontageRenderer.
-    // build() clears that dir before writing - so re-running cull() on a scope that already has an
-    // unresolved WaitingCullJob would silently destroy any shard already dropped for it.
+    // Regression: cull() used to rebuild a scope's prep dir unconditionally, and
+    // MontageRenderer.build() clears that dir before writing. Re-running cull() on a scope that
+    // already has an unresolved WaitingCullJob would silently destroy any shard already dropped
+    // for it.
     @Test
     void cullRefusesToRebuildAScopeThatAlreadyHasAWaitingJob(@TempDir Path root) throws IOException {
         Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
@@ -339,6 +342,132 @@ class PipelineTest {
         assertThat(progress.events).noneMatch(event -> event.startsWith("started:Applying"));
     }
 
+    // Mid-cull cancellation for an automated provider: Cancel is effectively Pause. The
+    // signal-honoring fake below writes a shard for the one montage it reaches before the signal
+    // trips, then stops without throwing - never a CullException. dispatchAndApply's post-dispatch
+    // cancellation check resolves the outcome to Waiting instead of propagating a failure. Watch
+    // mode is configured on here too, but this path never calls
+    // armWatchIfConfigured() at all. isWatchActive() below is therefore false regardless of
+    // provider - the dedicated provider-gate test further down is what actually proves that gate.
+    @Test
+    void cullCancelledMidDispatchResolvesToWaitingThenResumeCompletes(@TempDir Path root) throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        var firstShardWritten = new CountDownLatch(1);
+        var releaseCull = new CountDownLatch(1);
+        var settings = new FixedSettings("auto-approve",
+                List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.WATCH, null));
+        var pipeline = cullPipeline(root, new RecordingProgressPort(), settings,
+                List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
+
+        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        firstShardWritten.await();
+        handle.requestCancellation();
+        releaseCull.countDown();
+        CullJobOutcome outcome = handle.join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
+        WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
+        Path prepDir = job.prepDir();
+        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
+        assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isFalse();
+        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
+
+        CullJobOutcome resumed = pipeline.resume(prepDir, false).join();
+
+        assertThat(resumed).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isTrue();
+    }
+
+    // Proves the armWatchIfConfigured() provider gate. armWatchesForExistingWaitingJobs()'s
+    // startup scan walks every waiting job on disk regardless of which provider produced it.
+    // dispatchAndApply()'s own call site is different: it can only reach armWatchIfConfigured() when
+    // the provider already matches. So this scan is the one call site the gate actually changes
+    // behavior at. Without it, a leftover mode=WATCH setting would arm a phantom watcher for this
+    // automated provider's own cancelled prep dir, risking an unasked-for, API-spending auto-resume.
+    @Test
+    void armWatchesForExistingWaitingJobsNeverArmsAWatcherForAnAutomatedProvidersWaitingJob(@TempDir Path root)
+            throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        var firstShardWritten = new CountDownLatch(1);
+        var releaseCull = new CountDownLatch(1);
+        var manualSettings = new FixedSettings("auto-approve",
+                List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.MANUAL, null));
+        var manualPipeline = cullPipeline(root, new RecordingProgressPort(), manualSettings,
+                List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
+
+        JobHandle<CullJobOutcome> handle = manualPipeline.cull(new CullScope.Year(2019, null));
+        firstShardWritten.await();
+        handle.requestCancellation();
+        releaseCull.countDown();
+        var waiting = (CullJobOutcome.Waiting) handle.join();
+        Path prepDir = waiting.job().prepDir();
+
+        var watchSettings = new FixedSettings("auto-approve",
+                List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.WATCH, null));
+        var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchSettings, List.of(),
+                Duration.ofMillis(20));
+
+        watchPipeline.armWatchesForExistingWaitingJobs();
+
+        assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
+    }
+
+    // The other cancellation boundary buildFreshAndDispatch() checks: the moment prep just finished
+    // and wrote index.json, before dispatch (and therefore the configured VisionCuller) ever runs.
+    // BlockingListFiles synchronizes the test with the exact moment CullMontageRenderer is
+    // scanning Sorted for candidates, mid-prep. It's the same "block the slow real call, request
+    // cancellation while blocked" technique the sort/curate boundary tests use. NeverCalledCuller
+    // fails the test outright if dispatch runs at all, proving the check short-circuits before it.
+    @Test
+    void cullCancelledRightAfterPreppingResolvesToWaitingWithAZeroTally(@TempDir Path root) throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var listStarted = new CountDownLatch(1);
+        var releaseList = new CountDownLatch(1);
+        var mediaStore = new BlockingListFiles(listStarted, releaseList);
+        var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, defaultCullSettings(),
+                List.of(new NeverCalledCuller()));
+
+        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        listStarted.await();
+        handle.requestCancellation();
+        releaseList.countDown();
+        CullJobOutcome outcome = handle.join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
+        WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
+        assertThat(job.shards()).isEqualTo(new ShardTally(0, 0, 1));
+        assertThat(Files.exists(job.prepDir().resolve("index.json"))).isTrue();
+    }
+
+    // The manual-mode CullException branch must not arm a watcher when cancellation raced
+    // it - an auto-resume moments after a cancel would defy the cancel. Watch mode and the
+    // external-agent provider are both genuinely configured here, so an uncancelled run of this
+    // same pause would arm a watcher (see cullInWatchModeAutoResumesOnceAValidShardIsDropped below).
+    // This proves the simultaneous cancellation is what suppresses it, not just the settings.
+    @Test
+    void manualModePauseDoesNotArmAWatcherWhenCancellationRacedIt(@TempDir Path root) throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var started = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+                List.of(new BlockingIncompleteCuller(started, release)), Duration.ofMillis(20));
+
+        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        started.await();
+        handle.requestCancellation();
+        release.countDown();
+        CullJobOutcome outcome = handle.join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
+        Path prepDir = ((CullJobOutcome.Waiting) outcome).job().prepDir();
+        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
+    }
+
     @Test
     void cullInWatchModeAutoResumesOnceAValidShardIsDropped(@TempDir Path root) throws IOException {
         Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
@@ -354,8 +483,9 @@ class PipelineTest {
     }
 
     // Regression: disarmWatch() runs at the top of every dispatchAndApply() call, not just the
-    // watcher's own auto-resume trigger - proves a manual resume() retires an armed watcher on its
-    // own, so a manual click racing an armed watcher can never leave two pollers on the same job.
+    // watcher's own auto-resume trigger. This proves a manual resume() retires an armed watcher
+    // on its own, so a manual click racing an armed watcher can never leave two pollers on the
+    // same job.
     // A long poll interval keeps the watcher itself from racing to auto-resume before the manual
     // resume() below runs - this test is only about the manual path disarming it.
     @Test
@@ -374,10 +504,11 @@ class PipelineTest {
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
     }
 
-    // Proves watch mode survives a restart: nothing calls cull()/resume() on this Pipeline instance
-    // for the job at all - armWatchesForExistingWaitingJobs() (Pipeline's own @PostConstruct, called
-    // directly here since this test has no Spring context) has to discover it on disk and arm a
-    // watcher purely from waitingJobs(), the same as it would after a real app restart.
+    // Proves watch mode survives a restart: nothing calls cull()/resume() on this Pipeline
+    // instance for the job at all. armWatchesForExistingWaitingJobs() (Pipeline's own
+    // @PostConstruct, called directly here since this test has no Spring context) has to discover
+    // it on disk instead. It arms a watcher purely from waitingJobs(), the same as it would after
+    // a real app restart.
     @Test
     void armWatchesForExistingWaitingJobsAutoResumesAJobItNeverStartedItself(@TempDir Path root) throws IOException {
         Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
@@ -393,8 +524,8 @@ class PipelineTest {
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
 
-    // A short watchTimeout with no shard ever dropped: the watcher must give up on its own (no
-    // auto-resume attempt) and leave every dropped shard - there are none here - untouched, exactly
+    // A short watchTimeout with no shard ever dropped: the watcher must give up on its own, with
+    // no auto-resume attempt. Every dropped shard - there are none here - stays untouched, exactly
     // the "drops back to manual, all work preserved" contract from watchTimeout's own doc. Manual
     // resume must still work afterward, proving the job itself was never touched by the timeout.
     @Test
@@ -568,9 +699,10 @@ class PipelineTest {
     }
 
     // An OldestYear scope can't get the synchronous pre-sort refusal above - its year isn't known
-    // until the sort resolves it. So this same conflict can only surface after the sort has already
-    // moved real files, and the caller must not lose track of what moved just because the cull stage
-    // was refused. Pipeline.CurateConflictException carries the SortSummary forward for exactly that.
+    // until the sort resolves it. So this same conflict can only surface after the sort has
+    // already moved real files. The caller must not lose track of what moved just because the
+    // cull stage was refused. Pipeline.CurateConflictException carries the SortSummary forward for
+    // exactly that.
     @Test
     void curateWrapsAPostSortConflictInCurateConflictExceptionCarryingTheSortSummary(@TempDir Path root)
             throws IOException {
@@ -678,8 +810,8 @@ class PipelineTest {
     }
 
     // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
-    // interval (via Pipeline's package-private test constructor) so a real auto-resume proves out
-    // fast instead of waiting on the production 2-second cadence.
+    // interval (via Pipeline's package-private test constructor). A real auto-resume proves out
+    // fast this way, instead of waiting on the production 2-second cadence.
     private static Pipeline watchPipeline(Path root, RecordingProgressPort progress, CullSettings cullSettings,
             List<VisionCuller> cullers, Duration pollInterval) {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers, pollInterval);
@@ -1016,6 +1148,103 @@ class PipelineTest {
         }
     }
 
+    // Wraps the real NioMediaStore but blocks the first listFiles() call between two latches - the
+    // call CullMontageRenderer.collectCandidates() makes while scanning Sorted for candidates, mid-
+    // PREPPING. Lets a test synchronize a cancellation request with that exact moment, the same
+    // technique BlockingMoves above gives the sort/routing loop.
+    private static final class BlockingListFiles implements MediaStore {
+        private final MediaStore delegate = new NioMediaStore();
+        private final CountDownLatch listStarted;
+        private final CountDownLatch releaseList;
+
+        BlockingListFiles(CountDownLatch listStarted, CountDownLatch releaseList) {
+            this.listStarted = listStarted;
+            this.releaseList = releaseList;
+        }
+
+        @Override
+        public List<Path> listFiles(Path root) {
+            listStarted.countDown();
+            try {
+                releaseList.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            return delegate.listFiles(root);
+        }
+
+        @Override
+        public Instant lastModifiedTime(Path path) {
+            return delegate.lastModifiedTime(path);
+        }
+
+        @Override
+        public Path move(Path source, Path destDir) {
+            return delegate.move(source, destDir);
+        }
+
+        @Override
+        public Path resolveDestination(Path source, Path destDir) {
+            return delegate.resolveDestination(source, destDir);
+        }
+
+        @Override
+        public Path moveTo(Path source, Path destination) {
+            return delegate.moveTo(source, destination);
+        }
+
+        @Override
+        public Path copy(Path source, Path destDir) {
+            return delegate.copy(source, destDir);
+        }
+
+        @Override
+        public void delete(Path path) {
+            delegate.delete(path);
+        }
+
+        @Override
+        public void ensureDirectory(Path dir) {
+            delegate.ensureDirectory(dir);
+        }
+
+        @Override
+        public boolean exists(Path path) {
+            return delegate.exists(path);
+        }
+
+        @Override
+        public long size(Path path) {
+            return delegate.size(path);
+        }
+
+        @Override
+        public void appendLine(Path file, String line) {
+            delegate.appendLine(file, line);
+        }
+
+        @Override
+        public void write(Path file, String content) {
+            delegate.write(file, content);
+        }
+
+        @Override
+        public List<String> readLines(Path file) {
+            return delegate.readLines(file);
+        }
+
+        @Override
+        public void removeEmptyDirectories(Path root) {
+            delegate.removeEmptyDirectories(root);
+        }
+
+        @Override
+        public void removeIfEmptyOfFiles(Path dir) {
+            delegate.removeIfEmptyOfFiles(dir);
+        }
+    }
+
     // Stands in for the real (package-private, unreachable from here) ExternalAgentCuller. Only a
     // completeness check, gating on hasShard() alone rather than full shard validation. That
     // validation is ShardValidator/ApplyEngine's job, already covered by their own tests - and by
@@ -1043,6 +1272,29 @@ class PipelineTest {
                 throw new CullException("missing shard(s) for: " + missing);
             }
             return new CullReport(done, prep.entries().size() - done, 0, 0);
+        }
+    }
+
+    // The same manual-mode "not complete yet" pause as ManualModeCuller above, but blocking
+    // first. That lets a test synchronize a real cancellation with the exact moment dispatch is
+    // in flight, before it throws the CullException. A real external-agent provider would throw
+    // that same exception for a genuinely incomplete shard set.
+    private record BlockingIncompleteCuller(CountDownLatch started, CountDownLatch release) implements VisionCuller {
+        @Override
+        public String id() {
+            return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+        }
+
+        @Override
+        public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+            started.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            throw new CullException("still incomplete");
         }
     }
 
@@ -1082,6 +1334,69 @@ class PipelineTest {
         @Override
         public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
             throw new CullException("the model could not produce a valid judgement");
+        }
+    }
+
+    // A signal-honoring stand-in for an automated provider, the same shape as AnthropicCuller. It
+    // writes a shard for each montage in turn, checking cancellation between them. It blocks after
+    // the first shard, so a test can synchronize a mid-dispatch cancellation with a real observable
+    // signal instead of a guessed sleep. Cancellation is never surfaced as a CullException here. The
+    // loop just stops early and returns whatever partial CullReport it has - the real provider's own
+    // "never throws to signal a cancellation" contract.
+    private record BlockingCancellableCuller(CountDownLatch firstShardWritten, CountDownLatch releaseRemaining)
+            implements VisionCuller {
+
+        @Override
+        public String id() {
+            return "auto-approve";
+        }
+
+        @Override
+        public CullReport cull(PrepDir prep, CullOptions opts) {
+            return cull(prep, opts, ProgressCallback.NO_OP, CancellationSignal.NEVER);
+        }
+
+        @Override
+        public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress,
+                CancellationSignal cancellation) {
+            int total = prep.entries().size();
+            int current = 0;
+            int culled = 0;
+            while (current < total && !cancellation.isCancelled()) {
+                String montage = prep.entries().get(current);
+                current++;
+                try {
+                    writeShard(prep.prepDir(), montage);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                culled++;
+                progress.tick(current, total);
+                if (culled == 1) {
+                    firstShardWritten.countDown();
+                    try {
+                        releaseRemaining.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError(e);
+                    }
+                }
+            }
+            return new CullReport(culled, total - culled, 0, 0);
+        }
+    }
+
+    // Proves buildFreshAndDispatch()'s post-PREPPING cancellation check short-circuits before
+    // dispatch ever runs - any call into this fake fails the test outright.
+    private static final class NeverCalledCuller implements VisionCuller {
+        @Override
+        public String id() {
+            return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+        }
+
+        @Override
+        public CullReport cull(PrepDir prep, CullOptions opts) {
+            throw new AssertionError("dispatch must never run after a post-PREPPING cancellation");
         }
     }
 

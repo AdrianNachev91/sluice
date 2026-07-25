@@ -29,6 +29,7 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
@@ -175,7 +176,7 @@ public class Pipeline {
     // curate()'s only option for an auto-resolved scope; see its own comment.
     public JobHandle<CullJobOutcome> cull(CullScope scope) {
         checkNoWaitingJobFor(scope);
-        return jobRunner.submit(_ -> buildFreshAndDispatch(scope));
+        return jobRunner.submit(handle -> buildFreshAndDispatch(scope, handle::isCancellationRequested));
     }
 
     // Sort scope, then cull whatever that sort just populated, as one job. Sequential Java calls
@@ -237,7 +238,8 @@ public class Pipeline {
                     throw new CurateConflictException(conflict.getMessage(), sortSummary);
                 }
             }
-            return new CurateOutcome(sortSummary, buildFreshAndDispatch(cullScope));
+            return new CurateOutcome(sortSummary,
+                    buildFreshAndDispatch(cullScope, handle::isCancellationRequested));
         });
     }
 
@@ -286,10 +288,17 @@ public class Pipeline {
     // cull stage; resume() re-enters at dispatchAndApply() directly instead, since it must never
     // rebuild an existing prep dir. See checkNoWaitingJobFor()'s own doc for why this check runs
     // here too, not only at cull()'s synchronous pre-submit call site.
-    private CullJobOutcome buildFreshAndDispatch(CullScope scope) throws Exception {
+    private CullJobOutcome buildFreshAndDispatch(CullScope scope, CancellationSignal cancellation) throws Exception {
         checkNoWaitingJobFor(scope);
         PrepDir prep = runPhase(PREPPING, progress -> montageRenderer.build(scope, montageConfig, progress));
-        return dispatchAndApply(prep, false);
+        // Prep just finished and wrote index.json, so a cancellation seen right here resolves
+        // cleanly to Waiting too - a 0/N tally, nothing dispatched yet. No watcher is armed: an
+        // auto-resume moments after a cancel would defy it. Mid-render cancellation itself (while
+        // MontageRenderer.build() is still running) is a separate, not-yet-closed gap.
+        if (cancellation.isCancelled()) {
+            return new CullJobOutcome.Waiting(buildWaitingJob(prep));
+        }
+        return dispatchAndApply(prep, false, cancellation);
     }
 
     private void checkNoWaitingJobFor(CullScope scope) {
@@ -332,33 +341,50 @@ public class Pipeline {
     // It stays read-only until the shard set actually validates. A resume triggered before every
     // shard is dropped just throws right back into Waiting with a freshly recomputed tally.
     public JobHandle<CullJobOutcome> resume(Path prepDir, boolean allowPartial) {
-        return jobRunner.submit(_ -> dispatchAndApply(cullPrepPort.readIndex(prepDir), allowPartial));
+        return jobRunner.submit(handle ->
+                dispatchAndApply(cullPrepPort.readIndex(prepDir), allowPartial, handle::isCancellationRequested));
     }
 
     // A CullException from the dispatch step means different things depending on the configured
     // provider - see VisionCuller.MANUAL_MODE_PROVIDER_ID's own doc. For that provider it's the
     // expected manual-mode pause: resolved into Waiting, run slot released. For any other (automated)
-    // provider it's a genuine failure and propagates. That matches CullJobOutcome.Applied's own doc:
-    // an automated provider always resolves there or throws, never lands in Waiting.
+    // provider it's a genuine failure and propagates - it never throws CullException to signal a
+    // cancellation. An automated provider's cull() still lands in Waiting on cancellation, but via
+    // the cancellation.isCancelled() check further down, after dispatch returns normally rather than
+    // through this catch block.
     //
     // disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
     // cull(), a user's manual resume(), or a watcher's own auto-resume. Whatever watcher was polling
     // this prep dir is retired the moment any resume attempt actually runs. That means a manual
     // click racing an armed watcher can never leave two pollers running for the same job. A fresh
     // watcher gets (re-)armed below only if the outcome is Waiting again.
-    private CullJobOutcome dispatchAndApply(PrepDir prep, boolean allowPartial) throws Exception {
+    private CullJobOutcome dispatchAndApply(PrepDir prep, boolean allowPartial, CancellationSignal cancellation)
+            throws Exception {
         disarmWatch(prep.prepDir());
         CullReport cullReport;
         try {
             cullReport = runPhase(CULLING,
-                    progress -> cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress));
+                    progress -> cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress, cancellation));
         } catch (CullException e) {
             if (!cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
                 throw e;
             }
             WaitingCullJob job = buildWaitingJob(prep);
-            armWatchIfConfigured(job);
+            // Not armed when this CullException is itself the manual-mode pause racing a
+            // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
+            // pause (no cancellation involved) still arms as before.
+            if (!cancellation.isCancelled()) {
+                armWatchIfConfigured(job);
+            }
             return new CullJobOutcome.Waiting(job);
+        }
+        // The one boundary check this method has for an automated provider: dispatch just
+        // returned, either because it finished or because it stopped early on a cancellation. This
+        // doubles as the pre-APPLYING check. It also covers the external-agent flow: its dispatch
+        // never sees a cancellation mid-call, but a cancellation requested right after it still
+        // lands here before apply moves anything.
+        if (cancellation.isCancelled()) {
+            return new CullJobOutcome.Waiting(buildWaitingJob(prep));
         }
         ApplyReport applyReport = runPhase(APPLYING,
                 progress -> applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress));
@@ -369,12 +395,24 @@ public class Pipeline {
         return new WaitingCullJob(prep.scope(), prep.prepDir(), tally(prep), mediaStore.lastModifiedTime(prep.prepDir()));
     }
 
-    // Starts polling job's prep dir for an auto-resume, unless mode is MANUAL or a watcher is
-    // already active for it. armWatchesForExistingWaitingJobs() and dispatchAndApply()'s own Waiting
-    // branch can both reach here for the same prep dir. The second call is then a no-op rather than
-    // a competing second poller.
+    // Starts polling job's prep dir for an auto-resume, unless mode is MANUAL, the configured
+    // provider isn't the external-agent one, or a watcher is already active for it.
+    // armWatchesForExistingWaitingJobs() and dispatchAndApply()'s own Waiting branch can both reach
+    // here for the same prep dir. The second call is then a no-op rather than a competing second
+    // poller.
+    //
+    // Watch mode is an external-agent feature: it exists to notice when the user's own separate
+    // culling agent, running outside this app, drops a shard. The provider check mainly guards
+    // armWatchesForExistingWaitingJobs()'s startup scan, which walks every waiting job on disk
+    // regardless of which provider produced it. dispatchAndApply()'s own call site can only reach
+    // this method when the provider already matches, so the check is redundant there, but harmless.
+    // Without the guard, a leftover external-agent.mode=watch setting combined with
+    // provider=anthropic would arm a phantom watcher for an automated provider's own interrupted
+    // (cancelled) prep dir. A fully-valid tally there would then trigger an unasked-for,
+    // API-spending auto-resume the user never opted into.
     private void armWatchIfConfigured(WaitingCullJob job) {
-        if (cullSettings.externalAgent().mode() != WatchMode.WATCH) {
+        if (cullSettings.externalAgent().mode() != WatchMode.WATCH
+                || !cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
             return;
         }
         Path prepDir = job.prepDir();
@@ -426,9 +464,10 @@ public class Pipeline {
     // it actually got to run. True means resume()'s own jobRunner.submit() succeeded - the watcher's
     // job is then done, win or lose (see dispatchAndApply()'s own re-arm-on-Waiting note). False
     // means the job runner was busy with something else, so the watcher keeps polling and retries.
-    // The submitted job runs and completes fully asynchronously; nothing here waits on it. A failure
-    // there would otherwise vanish silently, so it's logged here instead - the same visibility a
-    // manual Resume gets for free from whatever UI/CLI surfaces its own join()/onComplete() failure.
+    // The submitted job runs and completes fully asynchronously; nothing here waits on it. A
+    // failure there would otherwise vanish silently, so it's logged here instead. That matches the
+    // visibility a manual Resume gets for free from whatever UI/CLI surfaces its own
+    // join()/onComplete() failure.
     private boolean tryAutoResume(Path prepDir) {
         JobHandle<CullJobOutcome> handle;
         try {

@@ -1,6 +1,7 @@
 package photos.sluice.application.port.out;
 
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 
 // A vision provider that turns a prepared montage directory into per-montage decision shards. The
@@ -35,5 +36,15 @@ public interface VisionCuller {
     // instead, so the real work lives in exactly one place.
     default CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
         return cull(prep, opts);
+    }
+
+    // Cancellation-aware sibling of the two above, checked between montages. Defaulted to ignore
+    // cancellation so an implementation with nothing interruptible to check (the external-agent
+    // provider's single presence check) still satisfies the port without overriding this one too.
+    // An automated provider overrides it directly, the same way it overrides the progress-aware
+    // cull() above.
+    default CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress, CancellationSignal cancellation)
+            throws CullException {
+        return cull(prep, opts, progress);
     }
 }

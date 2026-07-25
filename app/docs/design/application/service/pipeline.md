@@ -49,12 +49,13 @@ concrete classes, not on those narrower interfaces.
 
 ## Scenarios
 
-| Scenario                                                         | Outcome                                                                                                                                                                                                                   |
-|------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| A job is already running when `sort`/`commit`/`rescue` is called | `IllegalStateException` immediately; the running job is unaffected, no new job starts                                                                                                                                     |
-| The engine call succeeds                                         | `phaseStarted` -> N ticks -> `phaseFinished`, `JobHandle.join()` returns the engine's summary                                                                                                                             |
-| The engine call throws mid-run                                   | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                                                                  |
-| Cancellation requested via the returned `JobHandle`              | No effect yet - each of these three calls is a single, non-interruptible engine call with no boundary to check at; becomes meaningful once a multi-stage call (sort followed by a cull) has a boundary between its stages |
+| Scenario                                                                | Outcome                                                                                                                                                                   |
+|-------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| A job is already running when `sort`/`commit`/`rescue` is called        | `IllegalStateException` immediately; the running job is unaffected, no new job starts                                                                                     |
+| The engine call succeeds                                                | `phaseStarted` -> N ticks -> `phaseFinished`, `JobHandle.join()` returns the engine's summary                                                                             |
+| The engine call throws mid-run                                          | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                  |
+| Cancellation requested via the returned `JobHandle` (`sort`)            | `SortEngine` checks it once per file in both its dating pass (aborts cleanly, nothing moved) and its routing pass (already-moved files stay moved) - see `sort-engine.md` |
+| Cancellation requested via the returned `JobHandle` (`commit`/`rescue`) | No effect yet - each is a single, non-interruptible engine call with no boundary to check at (planned: the same per-item check `sort` already has)                        |
 
 ## `cull()` / `waitingJobs()` / `resume()`
 
@@ -100,14 +101,48 @@ doesn't show up in the tally - an accepted simplification for a progress number.
 
 ### Scenarios
 
-| Scenario                                                                | Outcome                                                                                                                                              |
-|-------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `cull()` on a scope with no shards dropped yet (fresh manual-mode prep) | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                         |
-| `cull()` called again while that scope's `WaitingCullJob` is unresolved | `IllegalStateException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched |
-| `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved                                                                                                                |
-| `resume()` while a shard is still missing/invalid                       | `CullJobOutcome.Waiting` again, with a freshly recomputed tally                                                                                      |
-| `resume(prepDir, allowPartial=true)` with a shard still missing         | Applies what it has; the missing montage's photos are left in place, untouched                                                                       |
-| `CullException` from an automated (non-manual-mode) provider            | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`                                                                                  |
+| Scenario                                                                | Outcome                                                                                                                                                    |
+|-------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `cull()` on a scope with no shards dropped yet (fresh manual-mode prep) | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                               |
+| `cull()` called again while that scope's `WaitingCullJob` is unresolved | `IllegalStateException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched       |
+| `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved                                                                                                                      |
+| `resume()` while a shard is still missing/invalid                       | `CullJobOutcome.Waiting` again, with a freshly recomputed tally                                                                                            |
+| `resume(prepDir, allowPartial=true)` with a shard still missing         | Applies what it has; the missing montage's photos are left in place, untouched                                                                             |
+| A genuine `CullException` from an automated (non-manual-mode) provider  | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`. A cancellation is a separate path (see Cancellation below) and never reaches this one |
+
+### Cancellation
+
+Cancel is effectively Pause for cull, not a failure. `cull()`/`resume()` both pass
+`handle::isCancellationRequested` through to `buildFreshAndDispatch()`/`dispatchAndApply()`. Two
+boundaries are checked, both resolving to `CullJobOutcome.Waiting` without arming a watcher:
+
+```mermaid
+flowchart TD
+    A["buildFreshAndDispatch(scope)"] --> P["prep: MontageRenderer.build<br/>-> PrepDir"]
+    P --> C1{"cancellation<br/>requested?"}
+    C1 -- "yes" --> W1(["Waiting - 0/N tally,<br/>dispatch never runs"])
+    C1 -- "no" --> D["dispatch: CullDispatcher.cull<br/>(signal passed through)"]
+    D -- "montage loop stops<br/>early on cancellation" --> C2{"cancellation<br/>requested?"}
+    D -- "finishes normally" --> C2
+    C2 -- "yes" --> W2(["Waiting - tally reflects<br/>whatever shards landed"])
+    C2 -- "no" --> AP["apply: ApplyEngine.apply"]
+```
+
+An automated provider's own montage loop (`AnthropicCuller`) checks the signal in its loop
+condition and once more before its corrective retry. A cancellation therefore lands within at
+most one montage call, plus rarely one retry call - never as a thrown `CullException`.
+
+The external-agent provider's dispatch is a single fast completeness check with nothing to
+interrupt mid-call. Its own manual-mode-pause `CullException` still resolves to `Waiting` as
+before. The cancellation check right after that catch skips arming a watcher for it, the same way
+the post-dispatch check does.
+
+| Scenario                                                                        | Outcome                                                                               |
+|---------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
+| Cancellation requested before prep even starts, or seen right after it finishes | `Waiting` with a `0/N` tally - dispatch never runs                                    |
+| Cancellation requested mid-dispatch (an automated provider's montage loop)      | `Waiting` with a tally reflecting however many shards the loop wrote before stopping  |
+| Cancellation requested racing a manual-mode pause's `CullException`             | `Waiting`, same as an uncancelled pause, but no watcher is armed even if `mode=WATCH` |
+| `mode=WATCH` configured with an automated (non-manual-mode) provider            | Never arms a watcher, cancelled or not - watch mode is an external-agent-only feature |
 
 ## Watch mode
 
@@ -186,18 +221,12 @@ that just because the cull stage was refused. `curate()` catches it and rethrows
 `SortSummary` via its own `sortSummary()` accessor. This is the only failure path that needs to
 carry a partial result - every other `checkNoWaitingJobFor()` failure happens before anything runs.
 
-Cancellation is checked once, at the one boundary this job actually has: between the sort stage
-finishing and the cull stage starting. This matches the "coarse, between pipeline stages only"
-cancellation model the other calls have no boundary to use.
-
-That coarseness is a known, not-yet-closed gap. A cancellation request has to wait for whichever
-stage is currently running to finish on its own, and a large sort can run long. `SortEngine`'s own
-per-file loop is the natural place to add a finer-grained check later, the same shape as its
-existing progress-callback overload.
-
-Cull's own dispatch loop is a separate, lower-priority gap. It only matters for an automated vision
-provider looping over montages - the external-agent provider's dispatch is already a fast, single
-presence check.
+The single stage-boundary check between sort finishing and cull starting still exists, but neither
+stage is coarse on its own anymore. `SortEngine`'s own dating and routing passes each check the
+signal per file (see `sort-engine.md`), and `buildFreshAndDispatch()`/`dispatchAndApply()`'s own
+two boundaries (see the Cancellation section above) close the cull side the same way. A large sort
+or a long automated-provider dispatch both respond within about one item's worth of latency, not by
+waiting out the whole remaining stage.
 
 ```mermaid
 flowchart TD

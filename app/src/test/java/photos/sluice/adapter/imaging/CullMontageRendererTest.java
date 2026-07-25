@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 // End-to-end test wiring the real TileRenderer/MontageBuilder/SidecarWriter/PrepIndexWriter behind
 // CullMontageRenderer, over a synthetic Sorted/Photos tree. HeifDecoder is stubbed - HEIC/AVIF
-// decode paths already have real-fixture coverage in TileRendererTest, not this chunk's job to
+// decode paths already have real-fixture coverage in TileRendererTest, not this test's job to
 // re-prove.
 class CullMontageRendererTest {
 

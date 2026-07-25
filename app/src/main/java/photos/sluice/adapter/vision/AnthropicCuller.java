@@ -36,6 +36,7 @@ import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
@@ -75,10 +76,11 @@ import java.util.stream.Collectors;
 // directory whose sidecar or montage image can't be read is broken app output. That fails
 // unchecked too, because the scope needs re-prepping.
 //
-// A montage whose valid shard is already on disk is skipped, so an interrupted run re-invoked on
-// the same prep directory finishes only the remainder. An invalid existing shard is re-culled and
-// overwritten. A stray decisions file naming no current montage is left untouched. CullOptions is
-// not wired yet: every montage needs a shard regardless of allowPartial, and timeout is unhonored.
+// A montage whose valid shard is already on disk is skipped. A run can be interrupted by a crash
+// or by a user cancellation; either way, re-invoking it on the same prep directory finishes only
+// the remainder. An invalid existing shard is re-culled and overwritten. A stray decisions file
+// naming no current montage is left untouched. CullOptions is not wired yet: every montage needs a
+// shard regardless of allowPartial, and timeout is unhonored.
 //
 // The API client is built lazily inside cull(), never at startup, so the app boots without an API
 // key for users on other providers. The factory seam exists for tests to inject a mock client.
@@ -172,6 +174,12 @@ class AnthropicCuller implements VisionCuller {
 
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
+        return cull(prep, opts, progress, CancellationSignal.NEVER);
+    }
+
+    @Override
+    public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress, CancellationSignal cancellation)
+            throws CullException {
         String model = requiredModel();
         boolean thinking = Boolean.TRUE.equals(settings.providerSettings().thinking());
         String systemPrompt = prompt.systemPrompt();
@@ -199,7 +207,12 @@ class AnthropicCuller implements VisionCuller {
         var acceptedShards = new ArrayList<ShardFile>();
         AnthropicClient client = clientFactory.get();
         try {
-            for (String montage : prep.entries()) {
+            // A second check runs below, right before the corrective retry. That halves the
+            // worst-case cancel latency, at the cost of discarding a paid-for first-attempt
+            // response when a cancel lands between it and the retry. Either way, an interrupted
+            // montage writes no shard and the loop ends without throwing.
+            while (ordinal < total && !cancellation.isCancelled()) {
+                String montage = prep.entries().get(ordinal);
                 ordinal++;
                 List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
                 Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
@@ -215,7 +228,7 @@ class AnthropicCuller implements VisionCuller {
                     outputTokens += response.usage().outputTokens();
                     AttemptOutcome outcome = attempt(montage, entries, response, acceptedShards,
                             scopeSrcs, categoryNames, prep.unreviewable());
-                    if (outcome.shard() == null) {
+                    if (outcome.shard() == null && !cancellation.isCancelled()) {
                         Message retryResponse = client.messages().create(retryRequest(request,
                                 responseText(response), prompt.correctionTurn(outcome.problems())));
                         inputTokens += retryResponse.usage().inputTokens();
@@ -223,13 +236,22 @@ class AnthropicCuller implements VisionCuller {
                         AttemptOutcome retried = attempt(montage, entries, retryResponse,
                                 acceptedShards, scopeSrcs, categoryNames, prep.unreviewable());
                         if (retried.shard() == null) {
-                            throw retryFailedException(prep.scope(), montage, outcome.problems(),
-                                    retried.problems());
+                            // A cancellation requested while the retry call itself was in flight
+                            // reaches here too. Thrown only when uncancelled, so a cancel never
+                            // surfaces as a retry-failure CullException, matching the montage-loop
+                            // check above.
+                            if (!cancellation.isCancelled()) {
+                                throw retryFailedException(prep.scope(), montage, outcome.problems(),
+                                        retried.problems());
+                            }
+                        } else {
+                            outcome = retried;
                         }
-                        outcome = retried;
                     }
-                    shardCodec.write(shardPath, outcome.shard());
-                    culled++;
+                    if (outcome.shard() != null) {
+                        shardCodec.write(shardPath, outcome.shard());
+                        culled++;
+                    }
                 }
                 progress.tick(ordinal, total);
             }
