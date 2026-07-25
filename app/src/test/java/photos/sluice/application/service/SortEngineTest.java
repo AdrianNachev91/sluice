@@ -458,7 +458,8 @@ class SortEngineTest {
     @Test
     void cancelMidRoutingLeavesAnUnroutedFilesSidecarIntact(@TempDir Path root) throws IOException {
         Path inbox = inboxOf(root);
-        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        Path photoA = inbox.resolve("20210101_a.jpg");
+        writeFile(photoA, padded("a"));
         Path sidecarA = inbox.resolve("20210101_a.jpg.supplemental-metadata.json");
         writeSidecar(sidecarA, LocalDateTime.of(2021, 1, 1, 12, 0, 0));
 
@@ -467,19 +468,21 @@ class SortEngineTest {
         Path sidecarB = inbox.resolve("20210102_b.jpg.supplemental-metadata.json");
         writeSidecar(sidecarB, LocalDateTime.of(2021, 1, 2, 12, 0, 0));
 
-        // Cancels once the first survivor (a, scan-order first) has routed, so b is never reached.
-        // Sidecar consumption must only spend a's sidecar - b's media never left the Inbox, so its
-        // sidecar has to survive for a future run.
+        // Cancels once the first survivor routed, whichever of a/b that turns out to be - scan
+        // order is filesystem-dependent, not alphabetical. Sidecar consumption must only spend the
+        // routed file's sidecar; the other file's media never left the Inbox, so its own sidecar
+        // has to survive for a future run.
         AtomicBoolean cancelled = new AtomicBoolean(false);
         ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
 
         SortSummary summary =
                 sortEngine(root).sort(new SortScope.OldestYear(), cancelAfterFirstTick, cancelled::get);
 
+        boolean aRouted = !Files.exists(photoA);
         assertThat(summary.sidecarsDeleted()).isEqualTo(1);
-        assertThat(Files.exists(sidecarA)).isFalse();
-        assertThat(Files.exists(photoB)).isTrue();
-        assertThat(Files.exists(sidecarB)).isTrue();
+        assertThat(Files.exists(sidecarA)).isEqualTo(!aRouted);
+        assertThat(Files.exists(photoB)).isEqualTo(aRouted);
+        assertThat(Files.exists(sidecarB)).isEqualTo(aRouted);
     }
 
     private static Path inboxOf(Path root) {
