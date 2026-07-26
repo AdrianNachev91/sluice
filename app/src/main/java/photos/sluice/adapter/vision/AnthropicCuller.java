@@ -30,6 +30,7 @@ import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ShardValidator;
@@ -388,10 +389,10 @@ class AnthropicCuller implements VisionCuller {
             List<Path> unreviewable) {
         acceptedShards.add(new ShardFile(montage, shard));
         ValidationReport report = validator.validate(acceptedShards, scopeSrcs, categoryNames, unreviewable);
-        if (!report.problems().isEmpty()) {
+        if (!report.valid()) {
             acceptedShards.removeLast();
         }
-        return report.problems();
+        return report.findings().stream().map(Finding::describe).toList();
     }
 
     /**

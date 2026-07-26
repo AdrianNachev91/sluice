@@ -4,6 +4,19 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
+import photos.sluice.domain.cull.Finding.DuplicateFileReference;
+import photos.sluice.domain.cull.Finding.FileOutOfScope;
+import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
+import photos.sluice.domain.cull.Finding.InvalidCategory;
+import photos.sluice.domain.cull.Finding.InvalidGroupSlug;
+import photos.sluice.domain.cull.Finding.MissingChosenReason;
+import photos.sluice.domain.cull.Finding.MissingFile;
+import photos.sluice.domain.cull.Finding.MissingGroup;
+import photos.sluice.domain.cull.Finding.MissingMontageField;
+import photos.sluice.domain.cull.Finding.MissingReason;
+import photos.sluice.domain.cull.Finding.MontageFieldMismatch;
+import photos.sluice.domain.cull.Finding.TooFewRejects;
+import photos.sluice.domain.cull.Finding.WrongChosenCount;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 
 import java.nio.file.Path;
@@ -28,7 +41,7 @@ class ShardValidatorTest {
                 new Classification(B, "food", "restaurant meal")));
 
         assertThat(report.valid()).isTrue();
-        assertThat(report.problems()).isEmpty();
+        assertThat(report.findings()).isEmpty();
         assertThat(report.heals()).isEmpty();
         assertThat(report.decisions()).hasSize(2);
     }
@@ -57,8 +70,8 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 new Classification(A, "meme", "funny caption")));
 
-        assertThat(report.problems()).contains(
-                "montage-001[#1]: invalid action 'meme' (allowed: junk, scenery, food, funny)");
+        assertThat(report.findings()).contains(
+                new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny"));
     }
 
     @Test
@@ -66,7 +79,7 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 new Classification(A, "junk", "")));
 
-        assertThat(report.problems()).contains("montage-001[#1]: missing 'reason'");
+        assertThat(report.findings()).contains(new MissingReason("montage-001", 1));
     }
 
     @Test
@@ -74,9 +87,9 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 new NearDupChosen(A, "", "")));
 
-        assertThat(report.problems()).contains(
-                "montage-001[#1]: missing 'group'",
-                "montage-001[#1]: missing 'chosen_reason'");
+        assertThat(report.findings()).contains(
+                new MissingGroup("montage-001", 1),
+                new MissingChosenReason("montage-001", 1));
     }
 
     @Test
@@ -84,9 +97,9 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 new NearDupReject(A, "", "")));
 
-        assertThat(report.problems()).contains(
-                "montage-001[#1]: missing 'group'",
-                "montage-001[#1]: missing 'reason'");
+        assertThat(report.findings()).contains(
+                new MissingGroup("montage-001", 1),
+                new MissingReason("montage-001", 1));
     }
 
     @Test
@@ -94,7 +107,7 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 missingFile()));
 
-        assertThat(report.problems()).contains("montage-001[#1]: missing 'file'");
+        assertThat(report.findings()).contains(new MissingFile("montage-001", 1));
     }
 
     @Test
@@ -103,7 +116,7 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 new Classification(stray, "junk", "screenshot")));
 
-        assertThat(report.problems()).contains("montage-001[#1]: file out of scope: " + stray);
+        assertThat(report.findings()).contains(new FileOutOfScope("montage-001", 1, stray));
     }
 
     @Test
@@ -129,7 +142,7 @@ class ShardValidatorTest {
                 List.of());
 
         assertThat(report.heals()).isEmpty();
-        assertThat(report.problems()).contains("montage-001[#1]: file out of scope: " + drifted);
+        assertThat(report.findings()).contains(new FileOutOfScope("montage-001", 1, drifted));
     }
 
     @Test
@@ -137,8 +150,7 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 new NearDupReject(A, "g1", "blurred")));
 
-        assertThat(report.problems()).contains(
-                "montage-001: near-dup group 'g1' has 0 chosen (need exactly 1)");
+        assertThat(report.findings()).contains(new WrongChosenCount("montage-001", "g1", 0));
     }
 
     @Test
@@ -148,8 +160,7 @@ class ShardValidatorTest {
                 new NearDupChosen(B, "g1", "also sharp"),
                 new NearDupReject(C, "g1", "blurred")));
 
-        assertThat(report.problems()).contains(
-                "montage-001: near-dup group 'g1' has 2 chosen (need exactly 1)");
+        assertThat(report.findings()).contains(new WrongChosenCount("montage-001", "g1", 2));
     }
 
     @Test
@@ -157,8 +168,7 @@ class ShardValidatorTest {
         var report = validate(shardFile("montage-001",
                 new NearDupChosen(A, "g1", "sharp")));
 
-        assertThat(report.problems()).contains(
-                "montage-001: near-dup group 'g1' has 0 reject(s) (need >=1)");
+        assertThat(report.findings()).contains(new TooFewRejects("montage-001", "g1", 0));
     }
 
     @Test
@@ -167,9 +177,7 @@ class ShardValidatorTest {
                 new NearDupChosen(A, "Beach_Day", "sharp"),
                 new NearDupReject(B, "Beach_Day", "blurred")));
 
-        assertThat(report.problems()).contains(
-                "montage-001: near-dup group 'Beach_Day' is not a valid slug "
-                        + "(lowercase a-z0-9, hyphenated, max 24 chars)");
+        assertThat(report.findings()).contains(new InvalidGroupSlug("montage-001", "Beach_Day", 24));
     }
 
     @Test
@@ -179,9 +187,7 @@ class ShardValidatorTest {
                 new NearDupChosen(A, tooLong, "sharp"),
                 new NearDupReject(B, tooLong, "blurred")));
 
-        assertThat(report.problems()).contains(
-                "montage-001: near-dup group '" + tooLong + "' is not a valid slug "
-                        + "(lowercase a-z0-9, hyphenated, max 24 chars)");
+        assertThat(report.findings()).contains(new InvalidGroupSlug("montage-001", tooLong, 24));
     }
 
     @Test
@@ -199,8 +205,7 @@ class ShardValidatorTest {
         var report = validate(new ShardFile("montage-001",
                 new DecisionShard("montage-002", List.of(new Classification(A, "junk", "screenshot")))));
 
-        assertThat(report.problems()).contains(
-                "montage-001: 'montage' is 'montage-002', expected 'montage-001'");
+        assertThat(report.findings()).contains(new MontageFieldMismatch("montage-001", "montage-002"));
     }
 
     @Test
@@ -208,7 +213,7 @@ class ShardValidatorTest {
         var report = validate(new ShardFile("montage-001",
                 new DecisionShard("", List.of(new Classification(A, "junk", "screenshot")))));
 
-        assertThat(report.problems()).contains("montage-001: missing 'montage'");
+        assertThat(report.findings()).contains(new MissingMontageField("montage-001"));
     }
 
     @Test
@@ -217,7 +222,7 @@ class ShardValidatorTest {
                 shardFile("montage-001", new Classification(A, "junk", "screenshot")),
                 shardFile("montage-002", new Classification(A, "food", "meal")));
 
-        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
+        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
     }
 
     @Test
@@ -235,8 +240,8 @@ class ShardValidatorTest {
                 CATEGORIES,
                 List.of());
 
-        assertThat(report.problems()).contains(
-                "near-dup group 'g1' spans 2 shards (montage-001, montage-002); a group must stay within one montage");
+        assertThat(report.findings()).contains(
+                new GroupSpansMultipleMontages("g1", List.of("montage-001", "montage-002")));
     }
 
     @Test
@@ -247,7 +252,7 @@ class ShardValidatorTest {
                 shardFile("montage-002", new Classification(driftedA, "food", "meal")));
 
         assertThat(report.heals()).hasSize(1);
-        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
+        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
     }
 
     @Test
@@ -258,7 +263,7 @@ class ShardValidatorTest {
                 CATEGORIES,
                 List.of(A));
 
-        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
+        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
     }
 
     @Test
@@ -269,7 +274,7 @@ class ShardValidatorTest {
                 CATEGORIES,
                 List.of(A, A));
 
-        assertThat(report.problems()).contains("file listed 2 times across shards/unreviewable: " + A);
+        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
     }
 
     @Test
@@ -280,8 +285,8 @@ class ShardValidatorTest {
                 List.of(),
                 List.of());
 
-        assertThat(report.problems()).contains(
-                "montage-001[#1]: invalid action 'junk' (no categories configured)");
+        assertThat(report.findings()).contains(
+                new InvalidCategory("montage-001", 1, "junk", "no categories configured"));
     }
 
     // A decision with several faults reports all of them at once, not just the first - a bad category
@@ -292,21 +297,35 @@ class ShardValidatorTest {
                 new Classification(A, "meme", ""),       // unknown category + blank reason
                 missingFile())); // blank file
 
-        assertThat(report.problems()).contains(
-                "montage-001[#1]: invalid action 'meme' (allowed: junk, scenery, food, funny)",
-                "montage-001[#1]: missing 'reason'",
-                "montage-001[#2]: missing 'file'");
+        assertThat(report.findings()).contains(
+                new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny"),
+                new MissingReason("montage-001", 1),
+                new MissingFile("montage-001", 2));
     }
 
     @Test
-    void problemsAreOrderedByMontageRegardlessOfInputOrder() {
+    void findingsAreOrderedByMontageRegardlessOfInputOrder() {
         var report = validate(
                 shardFile("montage-002", missingFile()),
                 shardFile("montage-001", missingFile()));
 
-        assertThat(report.problems()).containsExactly(
-                "montage-001[#1]: missing 'file'",
-                "montage-002[#1]: missing 'file'");
+        assertThat(report.findings()).containsExactly(
+                new MissingFile("montage-001", 1),
+                new MissingFile("montage-002", 1));
+    }
+
+    // Proves describe() renders the exact prose an aggregated ApplyException reports, for a
+    // representative sample rather than checking all thirteen finding shapes twice.
+    @Test
+    void describeRendersTheExactProseApplyExceptionReports() {
+        assertThat(new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny").describe())
+                .isEqualTo("montage-001[#1]: invalid action 'meme' (allowed: junk, scenery, food, funny)");
+        assertThat(new MissingFile("montage-001", 2).describe())
+                .isEqualTo("montage-001[#2]: missing 'file'");
+        assertThat(new MontageFieldMismatch("montage-001", "montage-002").describe())
+                .isEqualTo("montage-001: 'montage' is 'montage-002', expected 'montage-001'");
+        assertThat(new GroupSpansMultipleMontages("g1", List.of("montage-001", "montage-002")).describe())
+                .isEqualTo("near-dup group 'g1' spans 2 shards (montage-001, montage-002); a group must stay within one montage");
     }
 
     private ShardValidator validator() {

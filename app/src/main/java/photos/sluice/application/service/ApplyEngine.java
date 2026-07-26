@@ -16,6 +16,7 @@ import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
@@ -262,7 +263,7 @@ public class ApplyEngine {
         List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
 
         ValidationReport report = shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable());
-        problems.addAll(report.problems());
+        report.findings().stream().map(Finding::describe).forEach(problems::add);
 
         if (!problems.isEmpty()) {
             throw failure(problems);
@@ -275,13 +276,13 @@ public class ApplyEngine {
      * filesystem. Whether it still exists on disk, or was already carried out by an earlier run, is
      * this engine's job.
      *
-     * A decision whose source file is still on disk is always pending, regardless of the
+     * <p>A decision whose source file is still on disk is always pending, regardless of the
      * move-record log. A move that never happened needs no verification - it just needs doing.
      * NearDupChosen is a copy, so its source never disappears once the decision genuinely ran. A
      * missing source for it can only mean the file was never there, never that the copy is "done
      * but unconfirmed." There is no move-record path for it.
      *
-     * Every other decision (Classification, NearDupReject) is a move. Once it genuinely runs, its
+     * <p>Every other decision (Classification, NearDupReject) is a move. Once it genuinely runs, its
      * source is gone for good. That's exactly the case a plain exists() check can't tell apart from
      * "never ran" or "ran but crashed before finishing." recordThenMove() closes that gap by durably
      * recording the source's hash and its exact, already-collision-resolved destination BEFORE the
@@ -466,7 +467,7 @@ public class ApplyEngine {
      * for review. Every other category, junk included, routes generically to Review/<category>/
      * with a _reasons.txt note. There is no per-category destination configuration yet.
      *
-     * The index append happens immediately, not batched after the loop. A decision an earlier,
+     * <p>The index append happens immediately, not batched after the loop. A decision an earlier,
      * crashed run already carried out is skipped on resume (reconcile() handles it instead), so it
      * never reaches this method again. A batched append collected only from this run's own outcome
      * would then permanently lose that file's index row.
@@ -491,11 +492,11 @@ public class ApplyEngine {
      * The keeper is copied, not moved. It stays a normal Sorted keeper, with a courtesy copy left
      * for context alongside the rejects it was chosen over.
      *
-     * Unlike every other decision type, its source file is never removed, so classify() never routes
+     * <p>Unlike every other decision type, its source file is never removed, so classify() never routes
      * it through the move-record path. A resumed run would otherwise re-copy it, landing a stray
      * " (2)" duplicate in Duplicates/, and re-appending a now-duplicated note line.
      *
-     * Guarded explicitly here instead: the copy is skipped when the exact destination this decision
+     * <p>Guarded explicitly here instead: the copy is skipped when the exact destination this decision
      * would produce already exists. The note is always (re)written wholesale, never appended to.
      * That makes re-running safe regardless of how far a prior attempt got.
      *

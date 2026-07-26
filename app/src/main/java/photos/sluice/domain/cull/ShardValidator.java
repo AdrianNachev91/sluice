@@ -3,6 +3,19 @@ package photos.sluice.domain.cull;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
+import photos.sluice.domain.cull.Finding.DuplicateFileReference;
+import photos.sluice.domain.cull.Finding.FileOutOfScope;
+import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
+import photos.sluice.domain.cull.Finding.InvalidCategory;
+import photos.sluice.domain.cull.Finding.InvalidGroupSlug;
+import photos.sluice.domain.cull.Finding.MissingChosenReason;
+import photos.sluice.domain.cull.Finding.MissingFile;
+import photos.sluice.domain.cull.Finding.MissingGroup;
+import photos.sluice.domain.cull.Finding.MissingMontageField;
+import photos.sluice.domain.cull.Finding.MissingReason;
+import photos.sluice.domain.cull.Finding.MontageFieldMismatch;
+import photos.sluice.domain.cull.Finding.TooFewRejects;
+import photos.sluice.domain.cull.Finding.WrongChosenCount;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -66,7 +79,7 @@ public final class ShardValidator {
                 ? "no categories configured"
                 : "allowed: " + String.join(", ", categories);
 
-        var problems = new ArrayList<String>();
+        var problems = new ArrayList<Finding>();
         var heals = new ArrayList<String>();
         var decisions = new ArrayList<Decision>();
         // group id -> the montage ids that reference it, for the cross-shard uniqueness check below.
@@ -98,7 +111,7 @@ public final class ShardValidator {
         }
         countByFile.forEach((f, count) -> {
             if (count > 1) {
-                problems.add("file listed " + count + " times across shards/unreviewable: " + f);
+                problems.add(new DuplicateFileReference(f, count));
             }
         });
 
@@ -107,8 +120,7 @@ public final class ShardValidator {
         // into one Duplicates folder at apply time - so reject any group seen in more than one shard.
         montagesByGroup.forEach((group, montages) -> {
             if (montages.size() > 1) {
-                problems.add("near-dup group '" + group + "' spans " + montages.size()
-                        + " shards (" + String.join(", ", montages) + "); a group must stay within one montage");
+                problems.add(new GroupSpansMultipleMontages(group, List.copyOf(montages)));
             }
         });
 
@@ -124,20 +136,20 @@ public final class ShardValidator {
      * @param categorySet a {@link Set} of {@link String} the configured category set
      * @param allowedClause {@link String} message fragment listing allowed categories
      * @param montagesByGroup a {@link Map} of {@link String} to {@link Set} of {@link String} group id to the montage ids referencing it
-     * @param problems a {@link List} of {@link String} accumulated contract violations
+     * @param problems a {@link List} of {@link Finding} accumulated contract violations
      * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
      * @param decisions a {@link List} of {@link Decision} accumulated merged, heal-corrected decisions
      */
     private void validateShard(ShardFile file, Set<Path> inScope, Map<String, Path> healableByBasename,
             Set<String> categorySet, String allowedClause, Map<String, Set<String>> montagesByGroup,
-            List<String> problems, List<String> heals, List<Decision> decisions) {
+            List<Finding> problems, List<String> heals, List<Decision> decisions) {
         String montageId = file.expectedMontage();
         DecisionShard shard = file.shard();
 
         if (shard.montage().isBlank()) {
-            problems.add(montageId + ": missing 'montage'");
+            problems.add(new MissingMontageField(montageId));
         } else if (!shard.montage().equals(montageId)) {
-            problems.add(montageId + ": 'montage' is '" + shard.montage() + "', expected '" + montageId + "'");
+            problems.add(new MontageFieldMismatch(montageId, shard.montage()));
         }
 
         var chosenPerGroup = new HashMap<String, Integer>();
@@ -145,9 +157,8 @@ public final class ShardValidator {
         int index = 0;
         for (Decision decision : shard.decisions()) {
             index++;
-            String at = montageId + "[#" + index + "]";
-            validateFields(decision, at, categorySet, allowedClause, chosenPerGroup, rejectsPerGroup, problems);
-            decisions.add(healFile(decision, at, inScope, healableByBasename, problems, heals));
+            validateFields(decision, montageId, index, categorySet, allowedClause, chosenPerGroup, rejectsPerGroup, problems);
+            decisions.add(healFile(decision, montageId, index, inScope, healableByBasename, problems, heals));
         }
 
         // Each near-dup group within a shard needs exactly one chosen keeper and at least one reject.
@@ -159,15 +170,13 @@ public final class ShardValidator {
             int chosen = chosenPerGroup.getOrDefault(group, 0);
             int rejects = rejectsPerGroup.getOrDefault(group, 0);
             if (chosen != 1) {
-                problems.add(montageId + ": near-dup group '" + group + "' has " + chosen + " chosen (need exactly 1)");
+                problems.add(new WrongChosenCount(montageId, group, chosen));
             }
             if (rejects < 1) {
-                problems.add(montageId + ": near-dup group '" + group + "' has " + rejects + " reject(s) (need >=1)");
+                problems.add(new TooFewRejects(montageId, group, rejects));
             }
             if (!GROUP_SLUG.matcher(group).matches() || group.length() > GROUP_SLUG_MAX_LENGTH) {
-                problems.add(montageId + ": near-dup group '" + group
-                        + "' is not a valid slug (lowercase a-z0-9, hyphenated, max "
-                        + GROUP_SLUG_MAX_LENGTH + " chars)");
+                problems.add(new InvalidGroupSlug(montageId, group, GROUP_SLUG_MAX_LENGTH));
             }
             montagesByGroup.computeIfAbsent(group, _ -> new TreeSet<>()).add(montageId);
         }
@@ -177,42 +186,43 @@ public final class ShardValidator {
      * Validates one decision's required fields and tallies near-dup group membership.
      *
      * @param decision {@link Decision} the decision to validate
-     * @param at {@link String} the location label for problem messages
+     * @param montage {@link String} the montage id this decision belongs to
+     * @param index int the decision's 1-based position within its shard
      * @param categorySet a {@link Set} of {@link String} the configured category set
      * @param allowedClause {@link String} message fragment listing allowed categories
      * @param chosenPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated chosen-keeper count per group
      * @param rejectsPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated reject count per group
-     * @param problems a {@link List} of {@link String} accumulated contract violations
+     * @param problems a {@link List} of {@link Finding} accumulated contract violations
      */
-    private void validateFields(Decision decision, String at, Set<String> categorySet, String allowedClause,
-            Map<String, Integer> chosenPerGroup, Map<String, Integer> rejectsPerGroup, List<String> problems) {
+    private void validateFields(Decision decision, String montage, int index, Set<String> categorySet, String allowedClause,
+            Map<String, Integer> chosenPerGroup, Map<String, Integer> rejectsPerGroup, List<Finding> problems) {
         switch (decision) {
             case Classification c -> {
                 if (!categorySet.contains(c.category())) {
-                    problems.add(at + ": invalid action '" + c.category() + "' (" + allowedClause + ")");
+                    problems.add(new InvalidCategory(montage, index, c.category(), allowedClause));
                 }
                 if (c.reason().isBlank()) {
-                    problems.add(at + ": missing 'reason'");
+                    problems.add(new MissingReason(montage, index));
                 }
             }
             case NearDupChosen c -> {
                 if (c.group().isBlank()) {
-                    problems.add(at + ": missing 'group'");
+                    problems.add(new MissingGroup(montage, index));
                 } else {
                     chosenPerGroup.merge(c.group(), 1, Integer::sum);
                 }
                 if (c.chosenReason().isBlank()) {
-                    problems.add(at + ": missing 'chosen_reason'");
+                    problems.add(new MissingChosenReason(montage, index));
                 }
             }
             case NearDupReject r -> {
                 if (r.group().isBlank()) {
-                    problems.add(at + ": missing 'group'");
+                    problems.add(new MissingGroup(montage, index));
                 } else {
                     rejectsPerGroup.merge(r.group(), 1, Integer::sum);
                 }
                 if (r.reason().isBlank()) {
-                    problems.add(at + ": missing 'reason'");
+                    problems.add(new MissingReason(montage, index));
                 }
             }
         }
@@ -225,18 +235,19 @@ public final class ShardValidator {
      * returned untouched.
      *
      * @param decision {@link Decision} the decision to resolve
-     * @param at {@link String} the location label for problem messages
+     * @param montage {@link String} the montage id this decision belongs to
+     * @param index int the decision's 1-based position within its shard
      * @param inScope a {@link Set} of {@link Path} every in-scope file the montages actually showed
      * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename
-     * @param problems a {@link List} of {@link String} accumulated contract violations
+     * @param problems a {@link List} of {@link Finding} accumulated contract violations
      * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
      * @return {@link Decision} the decision, with its file resolved or unchanged
      */
-    private Decision healFile(Decision decision, String at, Set<Path> inScope,
-            Map<String, Path> healableByBasename, List<String> problems, List<String> heals) {
+    private Decision healFile(Decision decision, String montage, int index, Set<Path> inScope,
+            Map<String, Path> healableByBasename, List<Finding> problems, List<String> heals) {
         Path fileValue = decision.file();
         if (fileValue.toString().isBlank()) {
-            problems.add(at + ": missing 'file'");
+            problems.add(new MissingFile(montage, index));
             return decision;
         }
         if (inScope.contains(fileValue)) {
@@ -244,10 +255,10 @@ public final class ShardValidator {
         }
         Path healed = healableByBasename.get(fileValue.getFileName().toString());
         if (healed != null) {
-            heals.add(at + ": '" + fileValue + "' -> '" + healed + "'");
+            heals.add(Finding.at(montage, index) + ": '" + fileValue + "' -> '" + healed + "'");
             return withFile(decision, healed);
         }
-        problems.add(at + ": file out of scope: " + fileValue);
+        problems.add(new FileOutOfScope(montage, index, fileValue));
         return decision;
     }
 

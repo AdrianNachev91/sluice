@@ -39,7 +39,7 @@ final class ShardTallyCalculator {
      * montages, a file claimed by two different shards) isn't caught here. That montage still
      * counts as valid.
      *
-     * That's an acceptable simplification for a progress-display number - the real gate stays
+     * <p>That's an acceptable simplification for a progress-display number - the real gate stays
      * ApplyEngine.apply()'s full-batch validate(), unchanged by this tally.
      *
      * @param prep {@link PrepDir} the prep dir to tally
@@ -113,7 +113,7 @@ final class ShardTallyCalculator {
         try {
             var shardFile = new ShardFile(montage, cullPrepPort.readShard(prep.prepDir(), montage));
             var report = shardValidator.validate(List.of(shardFile), sidecarSrcs, categories, prep.unreviewable());
-            return new MontageShardStatus(true, report.problems().isEmpty());
+            return new MontageShardStatus(true, report.valid());
         } catch (UncheckedIOException e) {
             // Present but unparseable, so not valid.
             return new MontageShardStatus(true, false);
