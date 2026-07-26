@@ -26,6 +26,21 @@ public record SortSummary(
         List<String> unsortedFiles,
         Set<Integer> yearsSorted) {
 
+    /**
+     * Defensively copies the mutable list/set components.
+     *
+     * @param processed int total in-scope files processed this run
+     * @param reimportsDeleted int redundant Inbox files deleted as already in library
+     * @param byteDupsDeleted int byte-identical duplicates deleted within the batch
+     * @param photosSorted int photos routed into Sorted
+     * @param videosSorted int videos routed into Sorted
+     * @param lowRes int files routed to the low-res bucket
+     * @param unsorted int files routed to Review\Unsorted
+     * @param sidecarsDeleted int consumed Takeout JSON sidecars deleted
+     * @param lowConfidenceFiles a {@link List} of {@link String} filenames sorted on a low-confidence date
+     * @param unsortedFiles a {@link List} of {@link String} filenames routed to Review\Unsorted
+     * @param yearsSorted a {@link Set} of {@link Integer} distinct years any file landed in this run
+     */
     public SortSummary {
         lowConfidenceFiles = List.copyOf(lowConfidenceFiles);
         unsortedFiles = List.copyOf(unsortedFiles);

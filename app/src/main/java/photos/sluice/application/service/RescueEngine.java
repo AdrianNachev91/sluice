@@ -36,6 +36,15 @@ public class RescueEngine implements RescueUseCase {
     private final RescueDateResolver rescueDateResolver;
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
 
+    /**
+     * Creates a rescue engine backed by the given ports.
+     *
+     * @param pathsPort {@link PathsPort} resolves Review and library roots
+     * @param mediaStore {@link MediaStore} file operations on Review and library files
+     * @param sha256Port {@link Sha256Port} hashes rescued files for the index
+     * @param hashIndexPort {@link HashIndexPort} records rescued files in the hash index
+     * @param rescueDateResolver {@link RescueDateResolver} resolves a rescue date per file
+     */
     public RescueEngine(PathsPort pathsPort, MediaStore mediaStore, Sha256Port sha256Port,
             HashIndexPort hashIndexPort, RescueDateResolver rescueDateResolver) {
         this.pathsPort = pathsPort;
@@ -45,15 +54,37 @@ public class RescueEngine implements RescueUseCase {
         this.rescueDateResolver = rescueDateResolver;
     }
 
+    /**
+     * Rescues a Review folder using no-op progress and cancellation.
+     *
+     * @param reviewFolder {@link String} folder name under Review to rescue
+     * @return {@link RescueSummary} summary of rescued and skipped files
+     */
     @Override
     public RescueSummary rescue(String reviewFolder) {
         return rescue(reviewFolder, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
+    /**
+     * Rescues a Review folder, reporting progress, never cancellable.
+     *
+     * @param reviewFolder {@link String} folder name under Review to rescue
+     * @param progress {@link ProgressCallback} progress callback ticked per file
+     * @return {@link RescueSummary} summary of rescued and skipped files
+     */
     public RescueSummary rescue(String reviewFolder, ProgressCallback progress) {
         return rescue(reviewFolder, progress, CancellationSignal.NEVER);
     }
 
+    /**
+     * Promotes every recognized media file still in the named Review folder into the library,
+     * then dissolves the folder if the whole pass completed with nothing skipped.
+     *
+     * @param reviewFolder {@link String} folder name under Review to rescue
+     * @param progress {@link ProgressCallback} progress callback ticked per file
+     * @param cancellation {@link CancellationSignal} checked between files to allow early stop
+     * @return {@link RescueSummary} summary of rescued and skipped files, and whether the folder was removed
+     */
     public RescueSummary rescue(String reviewFolder, ProgressCallback progress, CancellationSignal cancellation) {
         Path reviewRoot = pathsPort.review();
         Path target = resolveWithinReview(reviewRoot, reviewFolder);
@@ -97,9 +128,17 @@ public class RescueEngine implements RescueUseCase {
         return new RescueSummary(outcome.rescued, outcome.skipped, folderRemoved);
     }
 
-    // Checked in this order, and only this order. A non-media file (a stray _reasons.txt, or
-    // anything else left in the folder) is ignored outright - neither rescued nor skipped. Only a
-    // real media file that also has no resolvable date counts as skipped.
+    /**
+     * Checked in this order, and only this order. A non-media file (a stray _reasons.txt, or
+     * anything else left in the folder) is ignored outright - neither rescued nor skipped. Only a
+     * real media file that also has no resolvable date counts as skipped.
+     *
+     * @param file {@link Path} candidate file from the Review folder
+     * @param targetLeaf {@link String} name of the Review folder being rescued
+     * @param libraryRoot {@link Path} root of the library to move rescued files into
+     * @param outcome {@link RescueOutcome} accumulator for rescued count and skipped names
+     * @param session {@link HashIndexPort.Session} hash-index session to append rescued entries
+     */
     private void rescueOneFile(Path file, String targetLeaf, Path libraryRoot, RescueOutcome outcome,
             HashIndexPort.Session session) {
         Optional<MediaType> type = mediaTypeDetector.classify(file);
@@ -119,9 +158,15 @@ public class RescueEngine implements RescueUseCase {
         outcome.rescued++;
     }
 
-    // A caller-supplied folder name must never resolve outside Review via a ".." segment. Normalize
-    // first, then check containment, rather than string-matching for "..". A legitimately dotted
-    // filename could trigger that as a false positive, and a smarter traversal could dodge it.
+    /**
+     * A caller-supplied folder name must never resolve outside Review via a ".." segment. Normalize
+     * first, then check containment, rather than string-matching for "..". A legitimately dotted
+     * filename could trigger that as a false positive, and a smarter traversal could dodge it.
+     *
+     * @param reviewRoot {@link Path} root of the Review folder
+     * @param reviewFolder {@link String} caller-supplied folder name to resolve
+     * @return {@link Path} normalized path guaranteed to stay under reviewRoot
+     */
     private static Path resolveWithinReview(Path reviewRoot, String reviewFolder) {
         Path target = reviewRoot.resolve(reviewFolder).normalize();
         if (!target.startsWith(reviewRoot)) {
@@ -130,10 +175,22 @@ public class RescueEngine implements RescueUseCase {
         return target;
     }
 
+    /**
+     * Formats the year as a four-digit folder name.
+     *
+     * @param when {@link LocalDateTime} the date to format
+     * @return {@link String} the four-digit year folder name
+     */
     private static String yearFolder(LocalDateTime when) {
         return "%04d".formatted(when.getYear());
     }
 
+    /**
+     * Formats the month as a two-digit folder name.
+     *
+     * @param when {@link LocalDateTime} the date to format
+     * @return {@link String} the two-digit month folder name
+     */
     private static String monthFolder(LocalDateTime when) {
         return "%02d".formatted(when.getMonthValue());
     }

@@ -22,6 +22,13 @@ public class FilenameSource implements DateSource {
     private static final Pattern DATE_PATTERN =
             Pattern.compile("(20\\d{2}|19\\d{2})[-_.]?(\\d{2})[-_.]?(\\d{2})");
 
+    /**
+     * Resolves a capture date from a date pattern embedded in the filename.
+     *
+     * @param file {@link MediaFile} the media file whose filename is scanned for a date
+     * @param sidecar {@link TakeoutSidecar} unused for this source
+     * @return an {@link Optional} {@link LocalDateTime}, the parsed date, if the filename matched the date pattern
+     */
     @Override
     public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
         Matcher matcher = DATE_PATTERN.matcher(file.path().getFileName().toString());

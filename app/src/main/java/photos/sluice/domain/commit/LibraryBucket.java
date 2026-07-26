@@ -8,6 +8,12 @@ package photos.sluice.domain.commit;
 public enum LibraryBucket {
     PHOTOS, VIDEOS, FUNNY, OTHER;
 
+    /**
+     * Classifies a Sorted-relative path's first segment into a library bucket.
+     *
+     * @param firstSegment {@link String} the first path segment
+     * @return {@link LibraryBucket} the matching library bucket, or OTHER if unrecognized
+     */
     public static LibraryBucket ofFirstSegment(String firstSegment) {
         return switch (firstSegment) {
             case "Photos" -> PHOTOS;

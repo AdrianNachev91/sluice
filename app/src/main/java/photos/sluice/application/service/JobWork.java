@@ -8,5 +8,11 @@ package photos.sluice.application.service;
 @FunctionalInterface
 public interface JobWork<T> {
 
+    /**
+     * Runs the unit of work, using the handle to poll for cancellation.
+     *
+     * @param handle a {@link JobHandle} of T the handle this work runs under
+     * @return T the job's result
+     */
     T run(JobHandle<T> handle) throws Exception;
 }

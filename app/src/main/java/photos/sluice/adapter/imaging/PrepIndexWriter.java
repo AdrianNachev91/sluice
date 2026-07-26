@@ -19,12 +19,19 @@ public class PrepIndexWriter {
 
     private final JsonMapper mapper;
 
+    /**
+     * Creates a writer using a default JsonMapper.
+     */
     public PrepIndexWriter() {
         this(JsonMapper.builder().build());
     }
 
-    // Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException
-    // catch branch below, which a real write failure can't trigger deterministically.
+    /**
+     * Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException
+     * catch branch below, which a real write failure can't trigger deterministically.
+     *
+     * @param mapper {@link JsonMapper} the JSON mapper to write with
+     */
     PrepIndexWriter(JsonMapper mapper) {
         this.mapper = mapper;
     }
@@ -34,6 +41,12 @@ public class PrepIndexWriter {
             String prepDir, List<String> entries) {
     }
 
+    /**
+     * Writes a prep directory's index as JSON.
+     *
+     * @param indexPath {@link Path} the file to write the index to
+     * @param prepDir {@link PrepDir} the prep directory metadata to serialize
+     */
     public void write(Path indexPath, PrepDir prepDir) {
         var document = new Index(
                 prepDir.scope(),

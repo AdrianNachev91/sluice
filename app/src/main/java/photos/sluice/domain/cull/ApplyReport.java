@@ -23,6 +23,16 @@ public record ApplyReport(
         int nearDupRejects,
         List<String> heals) {
 
+    /**
+     * Defensively copies the mutable collection fields.
+     *
+     * @param reviewed int count of decisions this run acted on
+     * @param byCategory a {@link Map} of {@link String} to {@link Integer} count of files routed per category
+     * @param unreviewable int count of files that could not be judged
+     * @param nearDupGroups int count of near-duplicate groups resolved
+     * @param nearDupRejects int count of near-duplicate rejects moved
+     * @param heals a {@link List} of {@link String} paths auto-corrected via a unique sidecar basename
+     */
     public ApplyReport {
         byCategory = Map.copyOf(byCategory);
         heals = List.copyOf(heals);

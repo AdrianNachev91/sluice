@@ -13,16 +13,33 @@ public class LoggingProgressPort implements ProgressPort {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingProgressPort.class);
 
+    /**
+     * Logs the start of a phase.
+     *
+     * @param phase {@link String} the phase name
+     */
     @Override
     public void phaseStarted(String phase) {
         log.info("{}", phase);
     }
 
+    /**
+     * Logs progress within a phase.
+     *
+     * @param phase {@link String} the phase name
+     * @param current int the current progress count
+     * @param total int the total count for this phase
+     */
     @Override
     public void tick(String phase, int current, int total) {
         log.info("{} {}/{}", phase, current, total);
     }
 
+    /**
+     * Logs the end of a phase.
+     *
+     * @param phase {@link String} the phase name
+     */
     @Override
     public void phaseFinished(String phase) {
         log.info("{} done", phase);

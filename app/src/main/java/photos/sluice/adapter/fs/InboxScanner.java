@@ -29,6 +29,12 @@ public final class InboxScanner implements InboxScannerPort {
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
     private final TakeoutSidecarPairer sidecarPairer = new TakeoutSidecarPairer();
 
+    /**
+     * Recursively scans an inbox tree, classifying media files and pairing Takeout JSON sidecars.
+     *
+     * @param inboxRoot {@link Path} root directory to scan
+     * @return {@link ScanResult} the scanned media, paired sidecars, Takeout mode, and JSON paths
+     */
     @Override
     public ScanResult scan(Path inboxRoot) {
         List<Path> mediaPaths = new ArrayList<>();
@@ -71,6 +77,12 @@ public final class InboxScanner implements InboxScannerPort {
         return new ScanResult(media, sidecars, pairing.takeoutMode(), jsonPaths);
     }
 
+    /**
+     * Checks whether a path is a JSON sidecar file, by extension.
+     *
+     * @param path {@link Path} file to check
+     * @return boolean true if the file name ends with .json
+     */
     private static boolean isJson(Path path) {
         return path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".json");
     }

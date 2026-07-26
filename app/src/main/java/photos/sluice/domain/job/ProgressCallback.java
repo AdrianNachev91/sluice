@@ -9,5 +9,11 @@ public interface ProgressCallback {
 
     ProgressCallback NO_OP = (_, _) -> { };
 
+    /**
+     * Reports one unit of work finished.
+     *
+     * @param current int units completed so far
+     * @param total int total units in this run
+     */
     void tick(int current, int total);
 }

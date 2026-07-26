@@ -18,6 +18,13 @@ import java.util.Optional;
 @Component
 public class MtimeSource implements DateSource {
 
+    /**
+     * Resolves a capture date from the file's last-modified timestamp.
+     *
+     * @param file {@link MediaFile} the media file to read the modification time from
+     * @param sidecar {@link TakeoutSidecar} unused for this source
+     * @return an {@link Optional} {@link LocalDateTime}, the file's last-modified time, if it could be read
+     */
     @Override
     public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
         try {

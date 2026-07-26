@@ -24,10 +24,22 @@ public class CliHeifDecoder implements HeifDecoder {
 
     private final String command;
 
+    /**
+     * Creates a decoder that shells out to the given HEIF-decoding CLI command.
+     *
+     * @param command {@link String} the CLI command name or path to invoke
+     */
     public CliHeifDecoder(String command) {
         this.command = command;
     }
 
+    /**
+     * Decodes a HEIF/HEIC file to a BufferedImage by shelling out to the configured CLI decoder.
+     *
+     * @param file {@link Path} the HEIF/HEIC file to decode
+     * @return an {@link Optional} {@link BufferedImage}, the decoded image, or empty if decoding
+     *     failed for any reason
+     */
     @Override
     public Optional<BufferedImage> decode(Path file) {
         Path output;

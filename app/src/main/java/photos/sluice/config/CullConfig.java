@@ -18,11 +18,18 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
     // provider() is supplied by the record's own accessor, satisfying CullSettings so the application
     // layer selects a culler without importing this config record.
 
-    // categories are the classification cards the culler routes to (junk/scenery/food/funny by
-    // default, extensible by the user). Each card binds directly to the port's CullCategory record,
-    // which enforces its own non-blank invariants. The defaults live in application.yml, this
-    // project's convention for config defaults - the compact constructor only makes the bound list
-    // immutable and null-safe.
+    /**
+     * categories are the classification cards the culler routes to (junk/scenery/food/funny by
+     * default, extensible by the user). Each card binds directly to the port's CullCategory record,
+     * which enforces its own non-blank invariants. The defaults live in application.yml, this
+     * project's convention for config defaults - the compact constructor only makes the bound list
+     * immutable and null-safe.
+     *
+     * @param provider {@link String} the selected cull provider name
+     * @param providerSettings {@link CullProviderSettings} provider-specific settings
+     * @param categories a {@link List} of {@link CullCategory} classification cards the culler routes to
+     * @param externalAgent {@link ExternalAgentSettings} external-agent watch mode settings
+     */
     public CullConfig {
         // Spring can bind null here when the property is absent or written with no value; the IDE
         // can't model that reflective path and reads the guards as always-false.

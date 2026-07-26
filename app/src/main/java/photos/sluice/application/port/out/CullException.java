@@ -7,10 +7,21 @@ package photos.sluice.application.port.out;
 // caller re-runs once the shards are corrected.
 public class CullException extends Exception {
 
+    /**
+     * Creates the exception with an aggregated problem message.
+     *
+     * @param message {@link String} the aggregated validation problems
+     */
     public CullException(String message) {
         super(message);
     }
 
+    /**
+     * Creates the exception with an aggregated problem message and an underlying cause.
+     *
+     * @param message {@link String} the aggregated validation problems
+     * @param cause {@link Throwable} the underlying cause
+     */
     public CullException(String message, Throwable cause) {
         super(message, cause);
     }

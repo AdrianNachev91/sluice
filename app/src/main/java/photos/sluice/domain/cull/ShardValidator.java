@@ -48,6 +48,15 @@ public final class ShardValidator {
     public record ShardFile(String expectedMontage, DecisionShard shard) {
     }
 
+    /**
+     * Validates every shard against the shard contract and merges the results.
+     *
+     * @param shards a {@link List} of {@link ShardFile} the parsed shards paired with their expected montage ids
+     * @param sidecarSrcs a {@link Collection} of {@link Path} every in-scope file the montages actually showed
+     * @param categories a {@link List} of {@link String} the configured category set
+     * @param unreviewable a {@link Collection} of {@link Path} files that could not be rendered for review
+     * @return {@link ValidationReport} the aggregated validation report
+     */
     public ValidationReport validate(List<ShardFile> shards, Collection<Path> sidecarSrcs,
             List<String> categories, Collection<Path> unreviewable) {
         Set<Path> inScope = Set.copyOf(sidecarSrcs);
@@ -106,6 +115,19 @@ public final class ShardValidator {
         return new ValidationReport(problems, heals, decisions);
     }
 
+    /**
+     * Validates one shard's decisions and appends its findings to the shared accumulators.
+     *
+     * @param file {@link ShardFile} the shard paired with its expected montage id
+     * @param inScope a {@link Set} of {@link Path} every in-scope file the montages actually showed
+     * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename
+     * @param categorySet a {@link Set} of {@link String} the configured category set
+     * @param allowedClause {@link String} message fragment listing allowed categories
+     * @param montagesByGroup a {@link Map} of {@link String} to {@link Set} of {@link String} group id to the montage ids referencing it
+     * @param problems a {@link List} of {@link String} accumulated contract violations
+     * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
+     * @param decisions a {@link List} of {@link Decision} accumulated merged, heal-corrected decisions
+     */
     private void validateShard(ShardFile file, Set<Path> inScope, Map<String, Path> healableByBasename,
             Set<String> categorySet, String allowedClause, Map<String, Set<String>> montagesByGroup,
             List<String> problems, List<String> heals, List<Decision> decisions) {
@@ -151,6 +173,17 @@ public final class ShardValidator {
         }
     }
 
+    /**
+     * Validates one decision's required fields and tallies near-dup group membership.
+     *
+     * @param decision {@link Decision} the decision to validate
+     * @param at {@link String} the location label for problem messages
+     * @param categorySet a {@link Set} of {@link String} the configured category set
+     * @param allowedClause {@link String} message fragment listing allowed categories
+     * @param chosenPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated chosen-keeper count per group
+     * @param rejectsPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated reject count per group
+     * @param problems a {@link List} of {@link String} accumulated contract violations
+     */
     private void validateFields(Decision decision, String at, Set<String> categorySet, String allowedClause,
             Map<String, Integer> chosenPerGroup, Map<String, Integer> rejectsPerGroup, List<String> problems) {
         switch (decision) {
@@ -185,10 +218,20 @@ public final class ShardValidator {
         }
     }
 
-    // Returns the decision with its file resolved into scope: unchanged if already in scope, or
-    // re-pointed to the unique sidecar src that shares its basename (a culler retyped the path's
-    // \YYYY\MM\ segment). A blank or unhealable-out-of-scope file is a problem and the decision is
-    // returned untouched.
+    /**
+     * Returns the decision with its file resolved into scope: unchanged if already in scope, or
+     * re-pointed to the unique sidecar src that shares its basename (a culler retyped the path's
+     * \YYYY\MM\ segment). A blank or unhealable-out-of-scope file is a problem and the decision is
+     * returned untouched.
+     *
+     * @param decision {@link Decision} the decision to resolve
+     * @param at {@link String} the location label for problem messages
+     * @param inScope a {@link Set} of {@link Path} every in-scope file the montages actually showed
+     * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename
+     * @param problems a {@link List} of {@link String} accumulated contract violations
+     * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
+     * @return {@link Decision} the decision, with its file resolved or unchanged
+     */
     private Decision healFile(Decision decision, String at, Set<Path> inScope,
             Map<String, Path> healableByBasename, List<String> problems, List<String> heals) {
         Path fileValue = decision.file();
@@ -208,11 +251,16 @@ public final class ShardValidator {
         return decision;
     }
 
-    // basename -> its single owning source file. A basename shared by two or more distinct in-scope
-    // files (the same filename living in different month folders - a camera resets its counter, two
-    // cameras both emit IMG_0001.jpg) is ambiguous and dropped: a drifted decision path whose basename
-    // isn't unique can't be resolved to one owner, so it never auto-heals. The count is over distinct
-    // source paths, which is why a Set collects them per basename.
+    /**
+     * basename -> its single owning source file. A basename shared by two or more distinct in-scope
+     * files (the same filename living in different month folders - a camera resets its counter, two
+     * cameras both emit IMG_0001.jpg) is ambiguous and dropped: a drifted decision path whose basename
+     * isn't unique can't be resolved to one owner, so it never auto-heals. The count is over distinct
+     * source paths, which is why a Set collects them per basename.
+     *
+     * @param sidecarSrcs a {@link Collection} of {@link Path} every in-scope file the montages actually showed
+     * @return a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename
+     */
     private static Map<String, Path> healableByBasename(Collection<Path> sidecarSrcs) {
         Map<String, Set<Path>> srcsByBasename = new HashMap<>();
         for (Path src : sidecarSrcs) {
@@ -227,6 +275,13 @@ public final class ShardValidator {
         return unique;
     }
 
+    /**
+     * Returns a copy of the decision with its file replaced.
+     *
+     * @param decision {@link Decision} the decision to copy
+     * @param file {@link Path} the replacement file path
+     * @return {@link Decision} the decision with the replaced file
+     */
     private static Decision withFile(Decision decision, Path file) {
         return switch (decision) {
             case Classification c -> new Classification(file, c.category(), c.reason());

@@ -30,11 +30,24 @@ public final class TakeoutSidecarPairer {
     private static final Pattern MEDIA_DUP_NUMBERED = Pattern.compile("^(.*?)(\\(\\d+\\))(\\.[^.]+)$");
 
     public record PairingResult(boolean takeoutMode, Map<Path, Path> sidecarsByMedia) {
+        /**
+         * Defensively copies the sidecar-by-media map.
+         *
+         * @param takeoutMode boolean true if any sidecar JSON was found at all
+         * @param sidecarsByMedia a {@link Map} of {@link Path} to {@link Path} sidecar path keyed by the media path it describes
+         */
         public PairingResult {
             sidecarsByMedia = Map.copyOf(sidecarsByMedia);
         }
     }
 
+    /**
+     * Pairs each media file with the Takeout JSON sidecar that describes it, scoped per directory.
+     *
+     * @param mediaPaths a {@link List} of {@link Path} media file paths to pair
+     * @param jsonPaths a {@link List} of {@link Path} sidecar JSON paths available for pairing
+     * @return {@link PairingResult} the pairing result
+     */
     public PairingResult pair(List<Path> mediaPaths, List<Path> jsonPaths) {
         boolean takeoutMode = !jsonPaths.isEmpty();
 
@@ -74,18 +87,28 @@ public final class TakeoutSidecarPairer {
         return new PairingResult(takeoutMode, sidecarsByMedia);
     }
 
-    // A root-level path has no parent to scope pairing by; fall back to the path itself so it
-    // groups with nothing rather than throwing (Collectors.groupingBy rejects a null key).
-    // Package-visible: SidecarSweep reuses this to scope its own orphan check per directory.
+    /**
+     * A root-level path has no parent to scope pairing by; fall back to the path itself so it
+     * groups with nothing rather than throwing (Collectors.groupingBy rejects a null key).
+     * Package-visible: SidecarSweep reuses this to scope its own orphan check per directory.
+     *
+     * @param path {@link Path} the path to derive a directory scope key from
+     * @return {@link Path} the parent directory, or the path itself if it has none
+     */
     static Path directoryKeyOf(Path path) {
         Path parent = path.getParent();
         return parent != null ? parent : path;
     }
 
-    // Derives the media filename a sidecar describes from its base name (json extension already
-    // stripped). Public: SidecarSweep reuses this so the sweep's "which media does this sidecar
-    // belong to" derivation never drifts from the pairer's, and a test reuses it too, for the same
-    // reason - a hand-duplicated copy already drifted out of sync once.
+    /**
+     * Derives the media filename a sidecar describes from its base name (json extension already
+     * stripped). Public: SidecarSweep reuses this so the sweep's "which media does this sidecar
+     * belong to" derivation never drifts from the pairer's, and a test reuses it too, for the same
+     * reason - a hand-duplicated copy already drifted out of sync once.
+     *
+     * @param json {@link Path} the sidecar JSON path
+     * @return {@link String} the owner key identifying the media file it describes
+     */
     public static String ownerKeyOf(Path json) {
         String base = stripJsonExtension(json.getFileName().toString());
         Matcher supplemental = SUPPLEMENTAL.matcher(base);
@@ -99,8 +122,14 @@ public final class TakeoutSidecarPairer {
         return base;
     }
 
-    // Tries the media's own filename first, then its edited-suffix-stripped form - an edited
-    // copy has no sidecar of its own, so it must be looked up under its original's key instead.
+    /**
+     * Tries the media's own filename first, then its edited-suffix-stripped form - an edited
+     * copy has no sidecar of its own, so it must be looked up under its original's key instead.
+     *
+     * @param owners a {@link Map} of {@link String} to {@link Path} owner key to sidecar path index for the media's directory
+     * @param mediaFileName {@link String} the media file's own filename
+     * @return {@link Path} the matching sidecar, if any
+     */
     private static @Nullable Path matchByOwnerKey(@Nullable Map<String, Path> owners, String mediaFileName) {
         if (owners == null) {
             return null;
@@ -117,11 +146,17 @@ public final class TakeoutSidecarPairer {
         return hit;
     }
 
-    // Fallback for when no owner key matches exactly: prefix-match the dir's sidecar base names
-    // against the media name's candidate prefixes (plain name, then dup/edited variants), in
-    // priority order, taking the first prefix with any hit and the shortest-matching sidecar
-    // among that prefix's hits - covers non-standard sidecar naming the owner-key derivation
-    // above doesn't land on exactly.
+    /**
+     * Fallback for when no owner key matches exactly: prefix-match the dir's sidecar base names
+     * against the media name's candidate prefixes (plain name, then dup/edited variants), in
+     * priority order, taking the first prefix with any hit and the shortest-matching sidecar
+     * among that prefix's hits - covers non-standard sidecar naming the owner-key derivation
+     * above doesn't land on exactly.
+     *
+     * @param dirSidecars a {@link List} of {@link Path} sidecar paths in the media's directory
+     * @param mediaFileName {@link String} the media file's own filename
+     * @return {@link Path} the matching sidecar, if any
+     */
     private static @Nullable Path prefixFallback(@Nullable List<Path> dirSidecars, String mediaFileName) {
         if (dirSidecars == null) {
             return null;
@@ -135,10 +170,15 @@ public final class TakeoutSidecarPairer {
         return null;
     }
 
-    // Same candidate identities as matchByOwnerKey (plain name, then edited-stripped), but each
-    // also gets its dup-numbering-reversed form here: owner keys built by ownerKeyOf are already
-    // normalized to this form, but a sidecar's base name on disk is not, so a prefix scan against
-    // raw base names needs the reversal applied to the search term instead.
+    /**
+     * Same candidate identities as matchByOwnerKey (plain name, then edited-stripped), but each
+     * also gets its dup-numbering-reversed form here: owner keys built by ownerKeyOf are already
+     * normalized to this form, but a sidecar's base name on disk is not, so a prefix scan against
+     * raw base names needs the reversal applied to the search term instead.
+     *
+     * @param mediaFileName {@link String} the media file's own filename
+     * @return a {@link List} of {@link String} the candidate prefixes to try against sidecar base names, in priority order
+     */
     private static List<String> candidatePrefixes(String mediaFileName) {
         List<String> prefixes = new ArrayList<>();
         prefixes.add(mediaFileName);
@@ -152,6 +192,12 @@ public final class TakeoutSidecarPairer {
         return prefixes;
     }
 
+    /**
+     * Appends the dup-numbering-reversed form of a filename to the candidate list, if it matches.
+     *
+     * @param prefixes a {@link List} of {@link String} the candidate list to append to
+     * @param mediaFileName {@link String} the filename to reverse the dup-numbering of
+     */
     private static void addDupReversedForm(List<String> prefixes, String mediaFileName) {
         Matcher dup = MEDIA_DUP_NUMBERED.matcher(mediaFileName);
         if (dup.matches()) {
@@ -159,9 +205,15 @@ public final class TakeoutSidecarPairer {
         }
     }
 
-    // Among sidecars whose base name starts with this prefix, the shortest is the closest match
-    // to the prefix itself - a longer one is more likely to be an unrelated sidecar that merely
-    // happens to share the same leading characters.
+    /**
+     * Among sidecars whose base name starts with this prefix, the shortest is the closest match
+     * to the prefix itself - a longer one is more likely to be an unrelated sidecar that merely
+     * happens to share the same leading characters.
+     *
+     * @param dirSidecars a {@link List} of {@link Path} sidecar paths in the media's directory
+     * @param prefix {@link String} the prefix to match sidecar base names against
+     * @return {@link Path} the shortest matching sidecar, if any
+     */
     private static @Nullable Path shortestStartingWith(List<Path> dirSidecars, String prefix) {
         Path best = null;
         int bestLength = Integer.MAX_VALUE;
@@ -175,6 +227,12 @@ public final class TakeoutSidecarPairer {
         return best;
     }
 
+    /**
+     * Strips a trailing ".json" extension, case-insensitively.
+     *
+     * @param name {@link String} the filename to strip
+     * @return {@link String} the name without its ".json" extension, or unchanged if it has none
+     */
     private static String stripJsonExtension(String name) {
         return name.length() >= 5 && name.regionMatches(true, name.length() - 5, ".json", 0, 5)
                 ? name.substring(0, name.length() - 5)

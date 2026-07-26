@@ -131,6 +131,14 @@ class AnthropicCuller implements VisionCuller {
     private final JsonMapper mapper =
             JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
+    /**
+     * Constructs the culler with the default client factory.
+     *
+     * @param prompt {@link CullerPrompt} the prompt builder
+     * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
+     * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
+     * @param settings {@link CullSettings} the cull settings
+     */
     @Autowired
     AnthropicCuller(CullerPrompt prompt, ShardCodec shardCodec, SidecarReader sidecarReader,
             CullSettings settings) {
@@ -138,6 +146,15 @@ class AnthropicCuller implements VisionCuller {
                 () -> defaultClient(settings.providerSettings()));
     }
 
+    /**
+     * Constructs the culler with an injectable client factory, for tests.
+     *
+     * @param prompt {@link CullerPrompt} the prompt builder
+     * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
+     * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
+     * @param settings {@link CullSettings} the cull settings
+     * @param clientFactory a {@link Supplier} of {@link AnthropicClient}, builds the Anthropic client used to call the model
+     */
     AnthropicCuller(CullerPrompt prompt, ShardCodec shardCodec, SidecarReader sidecarReader,
             CullSettings settings, Supplier<AnthropicClient> clientFactory) {
         this.prompt = prompt;
@@ -162,21 +179,54 @@ class AnthropicCuller implements VisionCuller {
     private record AttemptOutcome(@Nullable DecisionShard shard, List<String> problems) {
     }
 
+    /**
+     * Returns this provider's identifier.
+     *
+     * @return {@link String} the provider id, "anthropic"
+     */
     @Override
     public String id() {
         return "anthropic";
     }
 
+    /**
+     * Culls the prep directory's montages with no progress reporting.
+     *
+     * @param prep {@link PrepDir} the prep directory to cull
+     * @param opts {@link CullOptions} cull options
+     * @return {@link CullReport} the cull report
+     * @throws CullException if culling fails
+     */
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
         return cull(prep, opts, ProgressCallback.NO_OP);
     }
 
+    /**
+     * Culls the prep directory's montages with no cancellation support.
+     *
+     * @param prep {@link PrepDir} the prep directory to cull
+     * @param opts {@link CullOptions} cull options
+     * @param progress {@link ProgressCallback} progress callback ticked per montage
+     * @return {@link CullReport} the cull report
+     * @throws CullException if culling fails
+     */
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
         return cull(prep, opts, progress, CancellationSignal.NEVER);
     }
 
+    /**
+     * Culls every montage in the prep directory by calling the configured Anthropic vision model,
+     * resuming from any already-valid shards and honoring cancellation between montages.
+     *
+     * @param prep {@link PrepDir} the prep directory to cull
+     * @param opts {@link CullOptions} cull options
+     * @param progress {@link ProgressCallback} progress callback ticked per montage
+     * @param cancellation {@link CancellationSignal} signal checked between montages to stop early
+     * @return {@link CullReport} the cull report
+     * @throws CullException if a montage's response fails validation and the corrective retry does too
+     */
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress, CancellationSignal cancellation)
             throws CullException {
@@ -261,10 +311,20 @@ class AnthropicCuller implements VisionCuller {
         return new CullReport(culled, resumed, inputTokens, outputTokens);
     }
 
-    // Skips a montage whose existing shard still passes the full contract against everything
-    // accepted so far - the resume path for an interrupted run. An unreadable or contract-breaking
-    // shard is not an error here. It reports false, and the caller re-culls the montage, the fresh
-    // shard overwriting the bad one.
+    /**
+     * Skips a montage whose existing shard still passes the full contract against everything
+     * accepted so far - the resume path for an interrupted run. An unreadable or contract-breaking
+     * shard is not an error here. It reports false, and the caller re-culls the montage, the fresh
+     * shard overwriting the bad one.
+     *
+     * @param shardPath {@link Path} path of the montage's shard file
+     * @param montage {@link String} the montage name
+     * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated on acceptance
+     * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
+     * @param categoryNames a {@link List} of {@link String}, configured cull category names
+     * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
+     * @return boolean true if the existing shard is valid and was accepted
+     */
     private boolean resumesExistingShard(Path shardPath, String montage,
             List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
             List<Path> unreviewable) {
@@ -280,7 +340,18 @@ class AnthropicCuller implements VisionCuller {
         return acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames, unreviewable).isEmpty();
     }
 
-    // One response's full journey: response text -> candidate shard -> accumulated validation.
+    /**
+     * One response's full journey: response text -> candidate shard -> accumulated validation.
+     *
+     * @param montage {@link String} the montage name
+     * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
+     * @param response {@link Message} the model's response to validate
+     * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far
+     * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
+     * @param categoryNames a {@link List} of {@link String}, configured cull category names
+     * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
+     * @return {@link AttemptOutcome} the resulting shard, or the problems found
+     */
     private AttemptOutcome attempt(String montage, List<SidecarPhotoEntry> entries, Message response,
             List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
             List<Path> unreviewable) {
@@ -297,11 +368,21 @@ class AnthropicCuller implements VisionCuller {
         return new AttemptOutcome(shard, List.of());
     }
 
-    // Tentatively adds the shard to the accepted set and validates the whole set against the
-    // scope's full src list, plus index.json's own unreviewable list. A file listed there and in a
-    // shard would double-move at apply time, same as a file listed in two shards. A clean result
-    // keeps the shard and returns no problems. Anything else rolls the addition back, so a retry or
-    // re-cull starts from the same accepted state.
+    /**
+     * Tentatively adds the shard to the accepted set and validates the whole set against the
+     * scope's full src list, plus index.json's own unreviewable list. A file listed there and in a
+     * shard would double-move at apply time, same as a file listed in two shards. A clean result
+     * keeps the shard and returns no problems. Anything else rolls the addition back, so a retry or
+     * re-cull starts from the same accepted state.
+     *
+     * @param montage {@link String} the montage name
+     * @param shard {@link DecisionShard} the candidate shard to validate
+     * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated by this call
+     * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
+     * @param categoryNames a {@link List} of {@link String}, configured cull category names
+     * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
+     * @return a {@link List} of {@link String}, validation problems found, empty if the shard was accepted
+     */
     private List<String> acceptIfValid(String montage, DecisionShard shard,
             List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
             List<Path> unreviewable) {
@@ -313,10 +394,18 @@ class AnthropicCuller implements VisionCuller {
         return report.problems();
     }
 
-    // Turns one montage's response into a candidate shard, or reports every response-level problem
-    // found and returns null. Only what exists solely in the response is checked here: tile-index
-    // coverage and the name match. Everything shard-shaped stays with ShardValidator, the
-    // contract's single source of truth, which the caller runs over the accumulated set.
+    /**
+     * Turns one montage's response into a candidate shard, or reports every response-level problem
+     * found and returns null. Only what exists solely in the response is checked here: tile-index
+     * coverage and the name match. Everything shard-shaped stays with ShardValidator, the
+     * contract's single source of truth, which the caller runs over the accumulated set.
+     *
+     * @param montage {@link String} the montage name
+     * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
+     * @param response {@link Message} the model's response to parse
+     * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
+     * @return {@link DecisionShard} the resulting shard, or null if problems were found
+     */
     private @Nullable DecisionShard shardOf(String montage, List<SidecarPhotoEntry> entries,
             Message response, List<String> problems) {
         RawResponse parsed = parse(response, problems);
@@ -340,9 +429,17 @@ class AnthropicCuller implements VisionCuller {
         return new DecisionShard(montage, decisions);
     }
 
-    // Checks one verdict's response-level contract: index in range and unseen, name matching the
-    // sidecar entry at that index. When the contract holds, the non-keep decision it maps to is
-    // collected.
+    /**
+     * Checks one verdict's response-level contract: index in range and unseen, name matching the
+     * sidecar entry at that index. When the contract holds, the non-keep decision it maps to is
+     * collected.
+     *
+     * @param verdict {@link RawVerdict} the raw verdict to check
+     * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
+     * @param seenIndices a {@link HashSet} of {@link Integer}, indices already claimed by a verdict, mutated by this call
+     * @param decisions a {@link List} of {@link Decision}, accumulator for collected decisions, mutated by this call
+     * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
+     */
     private static void collectDecision(@Nullable RawVerdict verdict, List<SidecarPhotoEntry> entries,
             HashSet<Integer> seenIndices, List<Decision> decisions, List<String> problems) {
         if (verdict == null) {
@@ -377,6 +474,13 @@ class AnthropicCuller implements VisionCuller {
         });
     }
 
+    /**
+     * Parses the response text into a raw verdict list, recording a problem if it can't be parsed.
+     *
+     * @param response {@link Message} the model's response to parse
+     * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
+     * @return {@link RawResponse} the parsed response, or null if it couldn't be parsed
+     */
     private @Nullable RawResponse parse(Message response, List<String> problems) {
         String text = responseText(response);
         if (text.isBlank()) {
@@ -398,6 +502,12 @@ class AnthropicCuller implements VisionCuller {
         }
     }
 
+    /**
+     * Concatenates every text block in the response.
+     *
+     * @param response {@link Message} the model's response
+     * @return {@link String} the response's full text content
+     */
     private static String responseText(Message response) {
         return response.content().stream()
                 .flatMap(block -> block.text().stream())
@@ -405,6 +515,15 @@ class AnthropicCuller implements VisionCuller {
                 .collect(Collectors.joining());
     }
 
+    /**
+     * Builds the exception thrown when a montage's corrective retry still fails validation.
+     *
+     * @param scope {@link String} the cull scope
+     * @param montage {@link String} the montage that failed
+     * @param firstProblems a {@link List} of {@link String}, problems from the first attempt
+     * @param retryProblems a {@link List} of {@link String}, problems from the retry attempt
+     * @return {@link CullException} the exception naming both attempts' problems
+     */
     private static CullException retryFailedException(String scope, String montage,
             List<String> firstProblems, List<String> retryProblems) {
         return new CullException("Cull for " + scope + " failed at " + montage
@@ -415,12 +534,21 @@ class AnthropicCuller implements VisionCuller {
                 + String.join("\n - ", retryProblems));
     }
 
-    // Assembles one montage's complete API request. The image block precedes the text turn per
-    // Anthropic's vision guidance: models resolve references into an image better when the image
-    // comes first. The schema rides along as a structured-output format, so the response text is
-    // the verdict JSON itself, never prose around it. No sampling parameters - current Anthropic
-    // models reject them outright. Thinking is always sent explicitly, never left to the model
-    // generation's own default: disabled unless configured on, adaptive when it is.
+    /**
+     * Assembles one montage's complete API request. The image block precedes the text turn per
+     * Anthropic's vision guidance: models resolve references into an image better when the image
+     * comes first. The schema rides along as a structured-output format, so the response text is
+     * the verdict JSON itself, never prose around it. No sampling parameters - current Anthropic
+     * models reject them outright. Thinking is always sent explicitly, never left to the model
+     * generation's own default: disabled unless configured on, adaptive when it is.
+     *
+     * @param model {@link String} the model id to request
+     * @param thinking boolean whether to enable adaptive thinking
+     * @param systemPrompt {@link String} the shared system prompt
+     * @param userTurn {@link String} the montage's user turn text
+     * @param imageBase64 {@link String} the montage image, base64-encoded
+     * @return {@link MessageCreateParams} the assembled request
+     */
     private static MessageCreateParams request(String model, boolean thinking, String systemPrompt,
             String userTurn, String imageBase64) {
         var builder = MessageCreateParams.builder()
@@ -448,9 +576,16 @@ class AnthropicCuller implements VisionCuller {
         return builder.build();
     }
 
-    // The corrective retry replays the failed exchange on top of the original request. The model's
-    // own reply comes back as an assistant turn, then the problem list asks for corrected JSON.
-    // A blank reply is echoed as a placeholder, since the API rejects empty text blocks.
+    /**
+     * The corrective retry replays the failed exchange on top of the original request. The model's
+     * own reply comes back as an assistant turn, then the problem list asks for corrected JSON.
+     * A blank reply is echoed as a placeholder, since the API rejects empty text blocks.
+     *
+     * @param request {@link MessageCreateParams} the original request to replay
+     * @param responseText {@link String} the model's failed response text
+     * @param correctionTurn {@link String} the follow-up turn listing the problems
+     * @return {@link MessageCreateParams} the request built for the retry call
+     */
     private static MessageCreateParams retryRequest(MessageCreateParams request, String responseText,
             String correctionTurn) {
         return request.toBuilder()
@@ -459,14 +594,26 @@ class AnthropicCuller implements VisionCuller {
                 .build();
     }
 
+    /**
+     * Builds a structured-output schema from a plain map representation.
+     *
+     * @param schema a {@link Map} of {@link String} to {@link Object}, the schema, as a plain nested map
+     * @return {@link JsonOutputFormat.Schema} the built schema
+     */
     private static JsonOutputFormat.Schema schemaOf(Map<String, Object> schema) {
         var builder = JsonOutputFormat.Schema.builder();
         schema.forEach((key, value) -> builder.putAdditionalProperty(key, JsonValue.from(value)));
         return builder.build();
     }
 
-    // The montage image is this app's own prep output, so an unreadable one means the prep
-    // directory is broken. That fails loud and unchecked, same as an unreadable sidecar.
+    /**
+     * The montage image is this app's own prep output, so an unreadable one means the prep
+     * directory is broken. That fails loud and unchecked, same as an unreadable sidecar.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @return {@link String} the montage's JPEG image, base64-encoded
+     */
     private static String montageImageBase64(Path prepDir, String montage) {
         Path imagePath = prepDir.resolve(montage + ".jpg");
         try {
@@ -476,6 +623,11 @@ class AnthropicCuller implements VisionCuller {
         }
     }
 
+    /**
+     * Reads the configured model id, failing loud if it isn't set.
+     *
+     * @return {@link String} the configured model id
+     */
     private String requiredModel() {
         String model = settings.providerSettings().model();
         if (model == null || model.isBlank()) {
@@ -485,7 +637,12 @@ class AnthropicCuller implements VisionCuller {
         return model;
     }
 
-    // Package-private so the live verify can wrap the client this builds instead of its own.
+    /**
+     * Package-private so the live verify can wrap the client this builds instead of its own.
+     *
+     * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
+     * @return {@link AnthropicClient} the built Anthropic client
+     */
     static AnthropicClient defaultClient(CullProviderSettings providerSettings) {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
@@ -504,6 +661,12 @@ class AnthropicCuller implements VisionCuller {
         return builder.build();
     }
 
+    /**
+     * Returns the value, or an empty string if it's null.
+     *
+     * @param value {@link String} the value, possibly null
+     * @return {@link String} the value, or empty string if null
+     */
     private static String orEmpty(@Nullable String value) {
         return value == null ? "" : value;
     }

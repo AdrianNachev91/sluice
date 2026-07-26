@@ -11,12 +11,24 @@ import java.util.List;
 // only once valid() holds.
 public record ValidationReport(List<String> problems, List<String> heals, List<Decision> decisions) {
 
+    /**
+     * Defensively copies the mutable collection fields.
+     *
+     * @param problems a {@link List} of {@link String} every contract violation found
+     * @param heals a {@link List} of {@link String} non-fatal warnings for auto-corrected paths
+     * @param decisions a {@link List} of {@link Decision} the merged, heal-corrected flat decision list
+     */
     public ValidationReport {
         problems = List.copyOf(problems);
         heals = List.copyOf(heals);
         decisions = List.copyOf(decisions);
     }
 
+    /**
+     * Whether every contract check passed.
+     *
+     * @return boolean true if no problems were found
+     */
     public boolean valid() {
         return problems.isEmpty();
     }

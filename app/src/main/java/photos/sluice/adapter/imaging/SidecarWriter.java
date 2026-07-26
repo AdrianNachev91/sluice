@@ -19,12 +19,19 @@ public class SidecarWriter {
 
     private final JsonMapper mapper;
 
+    /**
+     * Creates a writer using a default JsonMapper.
+     */
     public SidecarWriter() {
         this(JsonMapper.builder().build());
     }
 
-    // Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException
-    // catch branch below, which a real write failure can't trigger deterministically.
+    /**
+     * Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException
+     * catch branch below, which a real write failure can't trigger deterministically.
+     *
+     * @param mapper {@link JsonMapper} the JSON mapper to write with
+     */
     SidecarWriter(JsonMapper mapper) {
         this.mapper = mapper;
     }
@@ -35,6 +42,13 @@ public class SidecarWriter {
     private record Sidecar(String montage, List<Photo> photos) {
     }
 
+    /**
+     * Writes a montage's sidecar metadata as JSON.
+     *
+     * @param sidecarPath {@link Path} the file to write the sidecar to
+     * @param montagePath {@link Path} the montage image this sidecar describes
+     * @param photos a {@link List} of {@link SidecarPhotoEntry}, the photo entries to record
+     */
     public void write(Path sidecarPath, Path montagePath, List<SidecarPhotoEntry> photos) {
         var document = new Sidecar(
                 montagePath.toString(),

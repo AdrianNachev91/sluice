@@ -49,22 +49,52 @@ class ExternalAgentCuller implements VisionCuller {
     private final CullSettings settings;
     private final ShardValidator validator = new ShardValidator();
 
+    /**
+     * Constructs the external-agent culler.
+     *
+     * @param shardCodec {@link ShardCodec} reads per-montage shards
+     * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
+     * @param settings {@link CullSettings} the cull settings
+     */
     ExternalAgentCuller(ShardCodec shardCodec, SidecarReader sidecarReader, CullSettings settings) {
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
         this.settings = settings;
     }
 
+    /**
+     * Returns this provider's identifier.
+     *
+     * @return {@link String} the manual-mode provider id
+     */
     @Override
     public String id() {
         return VisionCuller.MANUAL_MODE_PROVIDER_ID;
     }
 
+    /**
+     * Checks the prep directory's shards with no progress reporting.
+     *
+     * @param prep {@link PrepDir} the prep directory to check
+     * @param opts {@link CullOptions} cull options
+     * @return {@link CullReport} the cull report
+     * @throws CullException if any montage's shard is missing or invalid
+     */
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
         return cull(prep, opts, ProgressCallback.NO_OP);
     }
 
+    /**
+     * Verifies that every montage in the prep directory has a present, contract-valid shard,
+     * aggregating every problem found into a single thrown exception.
+     *
+     * @param prep {@link PrepDir} the prep directory to check
+     * @param opts {@link CullOptions} cull options
+     * @param progress {@link ProgressCallback} progress callback ticked per montage
+     * @return {@link CullReport} the cull report
+     * @throws CullException if any montage's shard is missing or invalid
+     */
     @Override
     public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
         var problems = new ArrayList<String>();
@@ -94,11 +124,19 @@ class ExternalAgentCuller implements VisionCuller {
         return new CullReport(shards.size(), prep.entries().size() - shards.size(), 0, 0);
     }
 
-    // Reads one montage's expected shard into the validation list, or records why it can't be. The
-    // recordable reasons: a missing shard (waived by allowPartial), or one the codec can't
-    // represent (malformed JSON, an unknown field, a null entry). A parse failure is reported like
-    // any other contract violation rather than thrown, so it aggregates with the rest of the run's
-    // problems.
+    /**
+     * Reads one montage's expected shard into the validation list, or records why it can't be. The
+     * recordable reasons: a missing shard (waived by allowPartial), or one the codec can't
+     * represent (malformed JSON, an unknown field, a null entry). A parse failure is reported like
+     * any other contract violation rather than thrown, so it aggregates with the rest of the run's
+     * problems.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @param allowPartial boolean whether a missing shard is waived rather than a problem
+     * @param shards a {@link List} of {@link ShardFile}, accumulator for readable shards, mutated by this call
+     * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
+     */
     private void collectShard(Path prepDir, String montage, boolean allowPartial,
             List<ShardFile> shards, List<String> problems) {
         String shardName = MontageNaming.shardFileFor(montage);
@@ -116,10 +154,15 @@ class ExternalAgentCuller implements VisionCuller {
         }
     }
 
-    // A decisions file with no matching montage is a problem in its own right, even when
-    // allowPartial waives missing ones. It usually means the culler numbered a shard wrong, and
-    // its decisions would otherwise be silently ignored. Matched by prefix/suffix, not a strict
-    // decisions-NNN pattern, so a mis-numbered name like decisions-01.json is caught too.
+    /**
+     * A decisions file with no matching montage is a problem in its own right, even when
+     * allowPartial waives missing ones. It usually means the culler numbered a shard wrong, and
+     * its decisions would otherwise be silently ignored. Matched by prefix/suffix, not a strict
+     * decisions-NNN pattern, so a mis-numbered name like decisions-01.json is caught too.
+     *
+     * @param prep {@link PrepDir} the prep directory to scan
+     * @return a {@link List} of {@link String}, problems for every decisions file naming no current montage
+     */
     private static List<String> strayShards(PrepDir prep) {
         List<String> expected = prep.entries().stream()
                 .map(MontageNaming::shardFileFor)
@@ -136,9 +179,14 @@ class ExternalAgentCuller implements VisionCuller {
         }
     }
 
-    // The codec wraps its failures in one or two layers of carrier exceptions whose messages only
-    // repeat the file name. The deepest cause holds the actually useful detail. A message-less
-    // cause falls back to its toString, which at least names the exception type.
+    /**
+     * The codec wraps its failures in one or two layers of carrier exceptions whose messages only
+     * repeat the file name. The deepest cause holds the actually useful detail. A message-less
+     * cause falls back to its toString, which at least names the exception type.
+     *
+     * @param e {@link Throwable} the exception to unwrap
+     * @return {@link String} the deepest cause's message, or its toString if it has none
+     */
     private static String rootMessage(Throwable e) {
         Throwable root = e;
         while (root.getCause() != null) {

@@ -26,6 +26,17 @@ public record PrepDir(
         Path prepDir,
         List<String> entries) {
 
+    /**
+     * Defensively copies the mutable collection fields.
+     *
+     * @param scope {@link String} the on-disk tag identifying this prep dir's scope
+     * @param basePath {@link Path} the base path reported for this scope
+     * @param photos int count of candidates found
+     * @param unreviewable a {@link List} of {@link Path} candidates that couldn't render a judgeable tile
+     * @param montages int count of montages generated
+     * @param prepDir {@link Path} the prep directory path
+     * @param entries a {@link List} of {@link String} the montage entry filenames
+     */
     public PrepDir {
         entries = List.copyOf(entries);
         unreviewable = List.copyOf(unreviewable);

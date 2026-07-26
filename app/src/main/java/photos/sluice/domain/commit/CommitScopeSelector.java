@@ -16,6 +16,13 @@ public final class CommitScopeSelector {
 
     private static final Pattern YEAR_MONTH = Pattern.compile("(\\d{4})/(\\d{2})/");
 
+    /**
+     * Decides whether a Sorted-relative path falls within the given commit scope.
+     *
+     * @param relativePath {@link String} the Sorted-relative file path
+     * @param scope {@link CommitScope} the commit scope to check against
+     * @return boolean true if the path is in scope
+     */
     public boolean isInScope(String relativePath, CommitScope scope) {
         return switch (scope) {
             case All() -> true;
@@ -23,6 +30,14 @@ public final class CommitScopeSelector {
         };
     }
 
+    /**
+     * Checks whether a dated path's year (and optional month range) matches the given scope.
+     *
+     * @param relativePath {@link String} the Sorted-relative file path
+     * @param year int the year to match
+     * @param months {@link MonthRange} optional month range narrowing the year
+     * @return boolean true if the path's date falls within the year and month range
+     */
     private static boolean matchesYear(String relativePath, int year, @Nullable MonthRange months) {
         Matcher matcher = YEAR_MONTH.matcher(relativePath);
         if (!matcher.find()) {

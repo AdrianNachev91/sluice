@@ -31,6 +31,14 @@ public class CommitEngine implements CommitUseCase {
     private final HashIndexPort hashIndexPort;
     private final CommitScopeSelector scopeSelector = new CommitScopeSelector();
 
+    /**
+     * Creates a commit engine wired to its ports.
+     *
+     * @param pathsPort {@link PathsPort} resolves the sorted and library roots
+     * @param mediaStore {@link MediaStore} moves files and prunes empty directories
+     * @param sha256Port {@link Sha256Port} hashes moved files
+     * @param hashIndexPort {@link HashIndexPort} records moved files in the library index
+     */
     public CommitEngine(PathsPort pathsPort, MediaStore mediaStore, Sha256Port sha256Port,
             HashIndexPort hashIndexPort) {
         this.pathsPort = pathsPort;
@@ -39,15 +47,37 @@ public class CommitEngine implements CommitUseCase {
         this.hashIndexPort = hashIndexPort;
     }
 
+    /**
+     * Commits the given scope with no progress reporting or cancellation.
+     *
+     * @param scope {@link CommitScope} files to commit from Sorted
+     * @return {@link CommitSummary} summary of what was committed
+     */
     @Override
     public CommitSummary commit(CommitScope scope) {
         return commit(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
+    /**
+     * Commits the given scope, reporting progress as files move.
+     *
+     * @param scope {@link CommitScope} files to commit from Sorted
+     * @param progress {@link ProgressCallback} callback ticked per file processed
+     * @return {@link CommitSummary} summary of what was committed
+     */
     public CommitSummary commit(CommitScope scope, ProgressCallback progress) {
         return commit(scope, progress, CancellationSignal.NEVER);
     }
 
+    /**
+     * Moves every in-scope Sorted file into the library, updates the hash index, and prunes
+     * directories left empty.
+     *
+     * @param scope {@link CommitScope} files to commit from Sorted
+     * @param progress {@link ProgressCallback} callback ticked per file processed
+     * @param cancellation {@link CancellationSignal} checked between files to allow a clean stop
+     * @return {@link CommitSummary} summary of what was committed
+     */
     public CommitSummary commit(CommitScope scope, ProgressCallback progress, CancellationSignal cancellation) {
         Path sorted = pathsPort.sorted();
         Path library = pathsPort.library();
@@ -88,6 +118,12 @@ public class CommitEngine implements CommitUseCase {
         return new CommitSummary(committed, byBucket);
     }
 
+    /**
+     * Extracts the first path segment (top-level folder) from a relative path.
+     *
+     * @param relativePath {@link String} forward-slash relative path
+     * @return {@link String} the first path segment, or the whole path if there's no slash
+     */
     private static String firstSegment(String relativePath) {
         int slash = relativePath.indexOf('/');
         return slash < 0 ? relativePath : relativePath.substring(0, slash);

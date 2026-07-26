@@ -23,6 +23,12 @@ public class Sha256Hasher implements Sha256Port {
     // there are exact string comparisons.
     private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();
 
+    /**
+     * Computes the SHA-256 hash of a file's contents.
+     *
+     * @param file {@link Path} the file to hash
+     * @return {@link String} the uppercase hex-encoded SHA-256 hash
+     */
     @Override
     public String hash(Path file) {
         MessageDigest digest = newSha256Digest();
@@ -41,6 +47,11 @@ public class Sha256Hasher implements Sha256Port {
         return toUpperHex(digest.digest());
     }
 
+    /**
+     * Creates a new SHA-256 message digest instance.
+     *
+     * @return {@link MessageDigest} a fresh SHA-256 digest
+     */
     private static MessageDigest newSha256Digest() {
         try {
             // SHA-256 is on the JDK's mandatory standard algorithm list, so every conforming JVM
@@ -53,8 +64,14 @@ public class Sha256Hasher implements Sha256Port {
         }
     }
 
-    // Each byte maps to two hex characters by splitting it into its high and low nibble (4-bit
-    // half): >>> 4 isolates the high nibble, & 0x0F masks off everything but the low nibble.
+    /**
+     * Each byte maps to two hex characters by splitting it into its high and low nibble (4-bit
+     * half): {@code >>> 4} isolates the high nibble, {@code & 0x0F} masks off everything but the
+     * low nibble.
+     *
+     * @param bytes byte[] the raw digest bytes
+     * @return {@link String} the uppercase hex encoding of the bytes
+     */
     private static String toUpperHex(byte[] bytes) {
         char[] hex = new char[bytes.length * 2];
         for (int i = 0; i < bytes.length; i++) {

@@ -53,6 +53,11 @@ public class TileRenderer {
 
     private final HeifDecoder heifDecoder;
 
+    /**
+     * Creates a renderer backed by the given HEIF/HEIC/AVIF decoder.
+     *
+     * @param heifDecoder {@link HeifDecoder} the decoder used for HEIF-family formats
+     */
     public TileRenderer(HeifDecoder heifDecoder) {
         this.heifDecoder = heifDecoder;
     }
@@ -65,6 +70,14 @@ public class TileRenderer {
     public record TileResult(BufferedImage image, boolean unreviewable) {
     }
 
+    /**
+     * Renders a tile-sized preview image for a media file, falling back to a placeholder if
+     * decoding fails.
+     *
+     * @param file {@link Path} the media file to render
+     * @param tileSize int the target tile size in pixels
+     * @return {@link TileResult} the rendered tile result
+     */
     public TileResult render(Path file, int tileSize) {
         String extension = MediaTypeDetector.extensionOf(file);
         if (extension.equals("svg")) {
@@ -91,19 +104,47 @@ public class TileRenderer {
                 .orElseGet(() -> placeholderResult(tileSize, placeholderLabel(extension)));
     }
 
+    /**
+     * Builds a placeholder tile result marked unreviewable.
+     *
+     * @param tileSize int the tile size in pixels
+     * @param label {@link String} the label to draw on the placeholder
+     * @return {@link TileResult} the placeholder tile result
+     */
     private static TileResult placeholderResult(int tileSize, String label) {
         return new TileResult(placeholder(tileSize, label), true);
     }
 
+    /**
+     * Picks the placeholder label for a file extension.
+     *
+     * @param extension {@link String} the file extension
+     * @return {@link String} the label to draw on the placeholder tile
+     */
     private static String placeholderLabel(String extension) {
         return RAW_EXTENSIONS.contains(extension) ? extension.toUpperCase(Locale.ROOT) : "NO PREVIEW";
     }
 
+    /**
+     * Renders a raster image file and determines whether its source resolution is judgeable.
+     *
+     * @param file {@link Path} the raster file to render
+     * @param tileSize int the target tile size in pixels
+     * @return an {@link Optional} {@link TileResult}, or empty if decoding failed
+     */
     private static Optional<TileResult> rasterResult(Path file, int tileSize) {
         return renderRaster(file, tileSize)
                 .map(image -> new TileResult(image, isSourceUnreviewable(file)));
     }
 
+    /**
+     * Decodes and resizes a raster image file to the tile size.
+     *
+     * @param file {@link Path} the file to decode
+     * @param tileSize int the target tile size in pixels
+     * @return an {@link Optional} {@link BufferedImage}, the resized image, or empty if decoding
+     *     failed
+     */
     private static Optional<BufferedImage> renderRaster(Path file, int tileSize) {
         try {
             return Optional.ofNullable(
@@ -119,11 +160,16 @@ public class TileRenderer {
         }
     }
 
-    // Thumbnailator's file-based decode (renderRaster above) doesn't expose the source image's
-    // pre-resize dimensions - it decodes and resizes in one step. This is a separate, lightweight
-    // header-only read (same technique ImageDimensionsReader uses), purely to answer "was the
-    // actual decoded source big enough to judge", without touching the already-tested decode path
-    // above or re-decoding the full image.
+    /**
+     * Thumbnailator's file-based decode (renderRaster above) doesn't expose the source image's
+     * pre-resize dimensions - it decodes and resizes in one step. This is a separate, lightweight
+     * header-only read (same technique ImageDimensionsReader uses), purely to answer "was the
+     * actual decoded source big enough to judge", without touching the already-tested decode path
+     * above or re-decoding the full image.
+     *
+     * @param file {@link Path} the file whose source resolution to check
+     * @return boolean true if the source is too small to judge
+     */
     private static boolean isSourceUnreviewable(Path file) {
         try (ImageInputStream stream = ImageIO.createImageInputStream(file.toFile())) {
             if (stream == null) {
@@ -155,15 +201,22 @@ public class TileRenderer {
         }
     }
 
-    // Many RAW formats store their main pixel data in a compression scheme TwelveMonkeys' generic
-    // TIFF reader can't decode. Verified: a real Canon CR2's primary image fails with "Missing
-    // TIFF tag JPEGQTables". But the file still carries a standard EXIF embedded thumbnail. That
-    // thumbnail is a complete, independently-decodable JPEG blob per the EXIF spec, unlike the
-    // TIFF-compressed main image, extractable via its offset/length tags with no need to
-    // understand the RAW format at all. Verified empirically against two real cameras: an old
-    // Canon EOS 20D's recoverable thumbnail is a tiny 160x120 (below the judgeable bar), while a
-    // current Sony ILCE-6700's is a near-full-resolution 6192x4128 (well above it) - modern camera
-    // files are not assumed to have the same tiny-preview problem older ones do.
+    /**
+     * Many RAW formats store their main pixel data in a compression scheme TwelveMonkeys' generic
+     * TIFF reader can't decode. Verified: a real Canon CR2's primary image fails with "Missing
+     * TIFF tag JPEGQTables". But the file still carries a standard EXIF embedded thumbnail. That
+     * thumbnail is a complete, independently-decodable JPEG blob per the EXIF spec, unlike the
+     * TIFF-compressed main image, extractable via its offset/length tags with no need to
+     * understand the RAW format at all. Verified empirically against two real cameras: an old
+     * Canon EOS 20D's recoverable thumbnail is a tiny 160x120 (below the judgeable bar), while a
+     * current Sony ILCE-6700's is a near-full-resolution 6192x4128 (well above it) - modern camera
+     * files are not assumed to have the same tiny-preview problem older ones do.
+     *
+     * @param file {@link Path} the RAW file to extract a thumbnail from
+     * @param tileSize int the target tile size in pixels
+     * @return an {@link Optional} {@link TileResult}, the resized thumbnail tile result, or empty
+     *     if unavailable
+     */
     private static Optional<TileResult> exifThumbnailResult(Path file, int tileSize) {
         try {
             var metadata = ImageMetadataReader.readMetadata(file.toFile());
@@ -190,21 +243,40 @@ public class TileRenderer {
         }
     }
 
-    // The tag's value comes straight from the file's own bytes, not something this code controls.
-    // A corrupted or adversarial file reporting an enormous length must not trigger a huge
-    // allocation. A real EXIF thumbnail is always a small preview image. This cap is generous
-    // relative to any legitimate one - the real Canon CR2 fixture used here is 6162 bytes - while
-    // still ruling out a bogus multi-gigabyte value. Package-private (not private) so
-    // TileRendererTest can exercise the boundary directly.
+    /**
+     * The tag's value comes straight from the file's own bytes, not something this code controls.
+     * A corrupted or adversarial file reporting an enormous length must not trigger a huge
+     * allocation. A real EXIF thumbnail is always a small preview image. This cap is generous
+     * relative to any legitimate one - the real Canon CR2 fixture used here is 6162 bytes - while
+     * still ruling out a bogus multi-gigabyte value. Package-private (not private) so
+     * TileRendererTest can exercise the boundary directly.
+     *
+     * @param length int the claimed thumbnail byte length
+     * @return boolean true if the length is a plausible thumbnail size
+     */
     static boolean isPlausibleThumbnailLength(int length) {
         return length > 0 && length <= MAX_EXIF_THUMBNAIL_BYTES;
     }
 
+    /**
+     * Resizes an already-decoded image and determines whether its resolution is judgeable.
+     *
+     * @param source {@link BufferedImage} the decoded source image
+     * @param tileSize int the target tile size in pixels
+     * @return an {@link Optional} {@link TileResult}, or empty if resizing failed
+     */
     private static Optional<TileResult> resizedResult(BufferedImage source, int tileSize) {
         boolean unreviewable = Math.max(source.getWidth(), source.getHeight()) < MIN_JUDGEABLE_DIMENSION;
         return resize(source, tileSize).map(image -> new TileResult(image, unreviewable));
     }
 
+    /**
+     * Renders an SVG file to a raster image sized to preserve its aspect ratio.
+     *
+     * @param file {@link Path} the SVG file to render
+     * @param tileSize int the target tile size in pixels
+     * @return an {@link Optional} {@link BufferedImage}, or empty if transcoding failed
+     */
     private static Optional<BufferedImage> renderSvg(Path file, int tileSize) {
         // Batik's own default canvas is a fixed 400x400 square, regardless of the document's real
         // aspect ratio, whenever width/height transcoding hints aren't given. Verified directly
@@ -236,11 +308,16 @@ public class TileRenderer {
         return rendered == null ? Optional.empty() : resize(rendered, tileSize);
     }
 
-    // Reads only the root <svg> element's viewBox (preferred) or width/height attributes to
-    // determine the document's real aspect ratio, without doing a full Batik render first.
-    // Falls back to 1.0 (square) - the same default Batik itself uses. That fallback fires when
-    // the file isn't parseable XML at all (e.g. a raster file mislabeled with an .svg extension),
-    // or when it declares neither viewBox nor width/height.
+    /**
+     * Reads only the root {@code <svg>} element's viewBox (preferred) or width/height attributes
+     * to determine the document's real aspect ratio, without doing a full Batik render first.
+     * Falls back to 1.0 (square) - the same default Batik itself uses. That fallback fires when
+     * the file isn't parseable XML at all (e.g. a raster file mislabeled with an .svg extension),
+     * or when it declares neither viewBox nor width/height.
+     *
+     * @param file {@link Path} the SVG file to inspect
+     * @return double the document's width/height aspect ratio
+     */
     private static double svgAspectRatio(Path file) {
         try {
             // Many real-world SVGs (Illustrator exports especially) carry the standard SVG 1.1
@@ -286,6 +363,12 @@ public class TileRenderer {
         return 1.0;
     }
 
+    /**
+     * Parses an SVG viewBox attribute into width/height.
+     *
+     * @param viewBox {@link String} the raw viewBox attribute value
+     * @return double[] the parsed [width, height], or null if not usable
+     */
     private static double @Nullable [] parseViewBox(String viewBox) {
         if (viewBox.isBlank()) {
             return null;
@@ -299,6 +382,12 @@ public class TileRenderer {
         return width > 0 && height > 0 ? new double[] {width, height} : null;
     }
 
+    /**
+     * Parses an SVG length attribute as an absolute number.
+     *
+     * @param length {@link String} the raw length attribute value
+     * @return double the parsed absolute length, or zero if not usable
+     */
     private static double parseLength(String length) {
         // A percentage carries no absolute size on its own - it's relative to a reference
         // viewport this isolated-attribute read has no access to. Treated as unusable rather than
@@ -314,6 +403,13 @@ public class TileRenderer {
         }
     }
 
+    /**
+     * Resizes a decoded image to the tile size.
+     *
+     * @param source {@link BufferedImage} the image to resize
+     * @param tileSize int the target tile size in pixels
+     * @return an {@link Optional} {@link BufferedImage}, or empty if resizing failed
+     */
     private static Optional<BufferedImage> resize(BufferedImage source, int tileSize) {
         try {
             return Optional.ofNullable(Thumbnails.of(source).size(tileSize, tileSize).asBufferedImage());
@@ -326,9 +422,15 @@ public class TileRenderer {
         }
     }
 
-    // Draws a stand-in tile for a file that couldn't be decoded: a solid dark gray square with
-    // the label centered in bold white. Distinct from the montage's own background, so it reads
-    // clearly as "no preview".
+    /**
+     * Draws a stand-in tile for a file that couldn't be decoded: a solid dark gray square with
+     * the label centered in bold white. Distinct from the montage's own background, so it reads
+     * clearly as "no preview".
+     *
+     * @param tileSize int the placeholder's size in pixels
+     * @param label {@link String} the label to draw
+     * @return {@link BufferedImage} the placeholder image
+     */
     private static BufferedImage placeholder(int tileSize, String label) {
         var image = new BufferedImage(tileSize, tileSize, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
@@ -357,16 +459,34 @@ public class TileRenderer {
 
         private @Nullable BufferedImage image;
 
+        /**
+         * Creates the in-memory image Batik renders into.
+         *
+         * @param width int the image width
+         * @param height int the image height
+         * @return {@link BufferedImage} a new ARGB buffered image
+         */
         @Override
         public BufferedImage createImage(int width, int height) {
             return new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         }
 
+        /**
+         * Captures the rendered image instead of writing it to the output stream.
+         *
+         * @param image {@link BufferedImage} the rendered image
+         * @param output {@link TranscoderOutput} unused, required by the Transcoder API
+         */
         @Override
         public void writeImage(BufferedImage image, TranscoderOutput output) {
             this.image = image;
         }
 
+        /**
+         * Returns the captured rendered image.
+         *
+         * @return {@link BufferedImage} the rendered image, or null if not yet rendered
+         */
         @Nullable BufferedImage image() {
             return image;
         }

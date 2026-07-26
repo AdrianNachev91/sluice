@@ -13,6 +13,12 @@ import java.util.stream.Collectors;
 public sealed interface CullScope {
 
     record Year(int year, @Nullable List<Integer> months) implements CullScope {
+        /**
+         * Defensively copies the months list.
+         *
+         * @param year int the scope's year
+         * @param months a {@link List} of {@link Integer} specific months to include, or null for the whole year
+         */
         public Year {
             months = months == null ? null : List.copyOf(months);
         }
@@ -21,10 +27,15 @@ public sealed interface CullScope {
     record OldestN(int n) implements CullScope {
     }
 
-    // The on-disk tag identifying this scope's prep dir (logs/cull-prep/<tag>/). Also PrepDir.scope()
-    // and a WaitingCullJob's own scope() - both carry this same string. Lives here, not in the
-    // adapter that names the directory, so the application layer can compute it too: Pipeline uses
-    // it to recognize an existing waiting job for the same scope before rebuilding its prep dir.
+    /**
+     * The on-disk tag identifying this scope's prep dir (logs/cull-prep/<tag>/). Also PrepDir.scope()
+     * and a WaitingCullJob's own scope() - both carry this same string. Lives here, not in the
+     * adapter that names the directory, so the application layer can compute it too: Pipeline uses
+     * it to recognize an existing waiting job for the same scope before rebuilding its prep dir.
+     *
+     * @param scope {@link CullScope} the cull scope to tag
+     * @return {@link String} the scope's on-disk tag
+     */
     static String tag(CullScope scope) {
         return switch (scope) {
             case Year(int year, List<Integer> months) -> yearTag(year, months);
@@ -32,6 +43,13 @@ public sealed interface CullScope {
         };
     }
 
+    /**
+     * Builds the tag suffix for a year scope, including months when narrowed.
+     *
+     * @param year int the scope's year
+     * @param months a {@link List} of {@link Integer} specific months to include, or null for the whole year
+     * @return {@link String} the year (and optional month suffix) tag
+     */
     private static String yearTag(int year, @Nullable List<Integer> months) {
         if (months == null) {
             return String.valueOf(year);

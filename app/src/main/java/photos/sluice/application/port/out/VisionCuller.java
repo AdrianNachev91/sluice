@@ -19,30 +19,55 @@ public interface VisionCuller {
     // own retries - a genuine failure a caller should propagate.
     String MANUAL_MODE_PROVIDER_ID = "external-agent";
 
-    // Stable identifier the dispatcher matches against the configured provider (for example
-    // "external-agent" or "anthropic"). Unique across all registered cullers.
+    /**
+     * Stable identifier the dispatcher matches against the configured provider (for example
+     * "external-agent" or "anthropic"). Unique across all registered cullers.
+     *
+     * @return {@link String} the provider's stable identifier
+     */
     String id();
 
-    // Ensures every montage in prep has a present, valid decision shard, by whatever means the
-    // implementation obtains the judgements, and returns a report of what the run did and spent.
-    // Throws CullException when a complete, valid set cannot be yielded. The throw is the signal to
-    // whoever is culling to fix the shards and run again. How far opts is honored varies by
-    // provider; each documents its own take.
+    /**
+     * Ensures every montage in prep has a present, valid decision shard, by whatever means the
+     * implementation obtains the judgements, and returns a report of what the run did and spent.
+     * Throws CullException when a complete, valid set cannot be yielded. The throw is the signal to
+     * whoever is culling to fix the shards and run again. How far opts is honored varies by
+     * provider; each documents its own take.
+     *
+     * @param prep {@link PrepDir} the prep directory holding montages to judge
+     * @param opts {@link CullOptions} options controlling how the culler runs
+     * @return {@link CullReport} a report of what the run did and spent
+     */
     CullReport cull(PrepDir prep, CullOptions opts) throws CullException;
 
-    // Progress-aware sibling of cull() above, ticked once per montage processed. Defaulted to
-    // silently ignore progress so an implementation that doesn't override it still satisfies the
-    // port. Each concrete culler overrides this one directly. Its plain cull() delegates to it
-    // instead, so the real work lives in exactly one place.
+    /**
+     * Progress-aware sibling of cull() above, ticked once per montage processed. Defaulted to
+     * silently ignore progress so an implementation that doesn't override it still satisfies the
+     * port. Each concrete culler overrides this one directly. Its plain cull() delegates to it
+     * instead, so the real work lives in exactly one place.
+     *
+     * @param prep {@link PrepDir} the prep directory holding montages to judge
+     * @param opts {@link CullOptions} options controlling how the culler runs
+     * @param progress {@link ProgressCallback} callback ticked once per montage processed
+     * @return {@link CullReport} a report of what the run did and spent
+     */
     default CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
         return cull(prep, opts);
     }
 
-    // Cancellation-aware sibling of the two above, checked between montages. Defaulted to ignore
-    // cancellation so an implementation with nothing interruptible to check (the external-agent
-    // provider's single presence check) still satisfies the port without overriding this one too.
-    // An automated provider overrides it directly, the same way it overrides the progress-aware
-    // cull() above.
+    /**
+     * Cancellation-aware sibling of the two above, checked between montages. Defaulted to ignore
+     * cancellation so an implementation with nothing interruptible to check (the external-agent
+     * provider's single presence check) still satisfies the port without overriding this one too.
+     * An automated provider overrides it directly, the same way it overrides the progress-aware
+     * cull() above.
+     *
+     * @param prep {@link PrepDir} the prep directory holding montages to judge
+     * @param opts {@link CullOptions} options controlling how the culler runs
+     * @param progress {@link ProgressCallback} callback ticked once per montage processed
+     * @param cancellation {@link CancellationSignal} signal checked between montages
+     * @return {@link CullReport} a report of what the run did and spent
+     */
     default CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress, CancellationSignal cancellation)
             throws CullException {
         return cull(prep, opts, progress);

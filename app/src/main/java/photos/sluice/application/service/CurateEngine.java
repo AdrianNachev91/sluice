@@ -23,6 +23,14 @@ final class CurateEngine {
     private final PhaseRunner phaseRunner;
     private final CullEngine cullEngine;
 
+    /**
+     * Creates the engine, wiring it to the given collaborators.
+     *
+     * @param sortEngine {@link SortEngine} performs the sort phase
+     * @param jobRunner {@link JobRunner} submits the combined sort+cull job
+     * @param progressPort {@link ProgressPort} reports phase progress
+     * @param cullEngine {@link CullEngine} performs the cull phase
+     */
     CurateEngine(SortEngine sortEngine, JobRunner jobRunner, ProgressPort progressPort, CullEngine cullEngine) {
         this.sortEngine = sortEngine;
         this.jobRunner = jobRunner;
@@ -30,34 +38,39 @@ final class CurateEngine {
         this.cullEngine = cullEngine;
     }
 
-    // Sort scope, then cull whatever that sort just populated, as one job. Sequential Java calls
-    // inside this one JobWork - never two chained submit() calls (JobHandle's own doc explains why
-    // no job depends on another's future).
-    //
-    // The target CullScope mirrors scope directly wherever that's knowable up front: an explicit
-    // Year maps straight across, and OldestN carries the same n through to CullScope.OldestN. Sort
-    // itself is never narrowed to fit cull's shape - it always runs its own normal, complete job.
-    //
-    // An OldestN sort can still land files across more than one year. Cull's own OldestN ordering
-    // is by raw mtime, not resolved date (see CullScope's own doc) - exactly what a standalone
-    // cull() call already does with that scope. Nothing new here.
-    //
-    // Only OldestYear can't be mapped ahead of time - its year isn't decided until the sort itself
-    // resolves it. knownCullScope() returns null for it; the real mapping happens after the sort
-    // runs, from SortSummary.yearsSorted().
-    //
-    // A known target CullScope gets the same synchronous, pre-submit checkNoWaitingJobFor()
-    // cull() gets - failing before the sort even starts. OldestYear can't be checked that early.
-    // Its only guard is the same check running again once its year is resolved, after the sort has
-    // already moved real files. That failure can't be a plain IllegalStateException like the
-    // pre-submit one is - the caller would lose the SortSummary describing what already moved. See
-    // Pipeline.CurateConflictException's own doc for how that's carried forward instead.
-    //
-    // isCancellationRequested() is checked here at the sort/cull boundary. It's also checked
-    // inside SortEngine's own dating and routing passes via its CancellationSignal overload.
-    // The cull stage's own render/dispatch/apply passes check it too, via buildFreshAndDispatch()'s
-    // and dispatchAndApply()'s own checks. A large sort or cull responds promptly throughout, not
-    // only at this one stage boundary.
+    /**
+     * Sort scope, then cull whatever that sort just populated, as one job. Sequential Java calls
+     * inside this one JobWork - never two chained submit() calls (JobHandle's own doc explains why
+     * no job depends on another's future).
+     *
+     * The target CullScope mirrors scope directly wherever that's knowable up front: an explicit
+     * Year maps straight across, and OldestN carries the same n through to CullScope.OldestN. Sort
+     * itself is never narrowed to fit cull's shape - it always runs its own normal, complete job.
+     *
+     * An OldestN sort can still land files across more than one year. Cull's own OldestN ordering
+     * is by raw mtime, not resolved date (see CullScope's own doc) - exactly what a standalone
+     * cull() call already does with that scope. Nothing new here.
+     *
+     * Only OldestYear can't be mapped ahead of time - its year isn't decided until the sort itself
+     * resolves it. knownCullScope() returns null for it; the real mapping happens after the sort
+     * runs, from SortSummary.yearsSorted().
+     *
+     * A known target CullScope gets the same synchronous, pre-submit checkNoWaitingJobFor()
+     * cull() gets - failing before the sort even starts. OldestYear can't be checked that early.
+     * Its only guard is the same check running again once its year is resolved, after the sort has
+     * already moved real files. That failure can't be a plain IllegalStateException like the
+     * pre-submit one is - the caller would lose the SortSummary describing what already moved. See
+     * Pipeline.CurateConflictException's own doc for how that's carried forward instead.
+     *
+     * isCancellationRequested() is checked here at the sort/cull boundary. It's also checked
+     * inside SortEngine's own dating and routing passes via its CancellationSignal overload.
+     * The cull stage's own render/dispatch/apply passes check it too, via buildFreshAndDispatch()'s
+     * and dispatchAndApply()'s own checks. A large sort or cull responds promptly throughout, not
+     * only at this one stage boundary.
+     *
+     * @param scope {@link SortScope} the sort scope to sort and then cull
+     * @return a {@link JobHandle} of {@link CurateOutcome} handle for the combined sort+cull job
+     */
     JobHandle<CurateOutcome> curate(SortScope scope) {
         CullScope known = knownCullScope(scope);
         if (known != null) {
@@ -93,8 +106,13 @@ final class CurateEngine {
         });
     }
 
-    // The CullScope scope maps to before the sort ever runs. Null only for OldestYear, whose year
-    // isn't decided until the sort itself resolves it.
+    /**
+     * The CullScope scope maps to before the sort ever runs. Null only for OldestYear, whose year
+     * isn't decided until the sort itself resolves it.
+     *
+     * @param scope {@link SortScope} the sort scope to map
+     * @return {@link CullScope} the mapped cull scope, or null for OldestYear
+     */
     private static @Nullable CullScope knownCullScope(SortScope scope) {
         return switch (scope) {
             case SortScope.Year(int year, MonthRange months) -> new CullScope.Year(year, monthsFromRange(months));
@@ -103,15 +121,26 @@ final class CurateEngine {
         };
     }
 
-    // sortSummary.yearsSorted() is the only place an OldestYear scope's resolved year is ever
-    // reported. Guaranteed to hold at most one element (see its own doc), so any element found is
-    // "the" year. Empty means nothing reached Sorted this run, so there is nothing left to cull.
+    /**
+     * sortSummary.yearsSorted() is the only place an OldestYear scope's resolved year is ever
+     * reported. Guaranteed to hold at most one element (see its own doc), so any element found is
+     * "the" year. Empty means nothing reached Sorted this run, so there is nothing left to cull.
+     *
+     * @param sortSummary {@link SortSummary} summary produced by the just-run sort
+     * @return {@link CullScope} the resolved cull scope, or null if nothing to cull
+     */
     private static @Nullable CullScope oldestYearCullScope(SortSummary sortSummary) {
         return sortSummary.yearsSorted().stream().findAny()
                 .<CullScope>map(year -> new CullScope.Year(year, null))
                 .orElse(null);
     }
 
+    /**
+     * Expands a month range into an explicit list of month numbers.
+     *
+     * @param months {@link MonthRange} the range to expand, or null for no restriction
+     * @return a {@link List} of {@link Integer} the list of months in range, or null if months is null
+     */
     private static @Nullable List<Integer> monthsFromRange(@Nullable MonthRange months) {
         return months == null ? null : IntStream.rangeClosed(months.from(), months.to()).boxed().toList();
     }

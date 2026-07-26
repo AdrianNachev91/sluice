@@ -15,6 +15,12 @@ public final class MediaTypeDetector {
     private static final Set<String> VIDEO_EXTENSIONS = Set.of(
             "mp4", "mov", "mkv", "avi", "m4v", "3gp", "webm", "wmv", "mpg", "mpeg", "mts", "m2ts", "flv");
 
+    /**
+     * Classifies a path as a photo or video by its extension.
+     *
+     * @param path {@link Path} the path to classify
+     * @return an {@link Optional} {@link MediaType}, if the extension is recognized
+     */
     public Optional<MediaType> classify(Path path) {
         String extension = extensionOf(path);
         if (PHOTO_EXTENSIONS.contains(extension)) {
@@ -26,6 +32,12 @@ public final class MediaTypeDetector {
         return Optional.empty();
     }
 
+    /**
+     * Extracts a path's file extension, lowercased.
+     *
+     * @param path {@link Path} the path to inspect
+     * @return {@link String} the lowercased extension, or an empty string if there is none
+     */
     public static String extensionOf(Path path) {
         String name = path.getFileName().toString();
         int dot = name.lastIndexOf('.');

@@ -6,9 +6,19 @@ import java.util.Map;
 
 public final class ConfigDirLocator {
 
+    /**
+     * Prevents instantiation of this static utility class.
+     */
     private ConfigDirLocator() {
     }
 
+    /**
+     * Resolves the OS-native config directory for the given OS name and environment.
+     *
+     * @param osName {@link String} the raw OS name (e.g. system property os.name)
+     * @param env a {@link Map} of {@link String} to {@link String} environment variables to resolve paths from
+     * @return {@link Path} the resolved config directory path
+     */
     public static Path locate(String osName, Map<String, String> env) {
         String os = osName.toLowerCase(Locale.ROOT);
         if (os.contains("win")) {

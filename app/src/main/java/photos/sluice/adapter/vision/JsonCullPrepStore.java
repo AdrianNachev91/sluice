@@ -43,20 +43,34 @@ public class JsonCullPrepStore implements CullPrepPort {
     private final SidecarReader sidecarReader;
     private final JsonMapper mapper;
 
-    // Public and no-arg so a test in another package (ApplyEngineTest) can build a real instance
-    // without depending on the package-private ShardCodec/SidecarReader constructor parameters.
-    // Unused by Spring, which resolves the @Autowired constructor below instead.
+    /**
+     * Public and no-arg so a test in another package (ApplyEngineTest) can build a real instance
+     * without depending on the package-private ShardCodec/SidecarReader constructor parameters.
+     * Unused by Spring, which resolves the @Autowired constructor below instead.
+     */
     public JsonCullPrepStore() {
         this(new ShardCodec(), new SidecarReader());
     }
 
+    /**
+     * Constructs the store with the default JSON mapper.
+     *
+     * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
+     * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
+     */
     @Autowired
     JsonCullPrepStore(ShardCodec shardCodec, SidecarReader sidecarReader) {
         this(shardCodec, sidecarReader, JsonMapper.builder().build());
     }
 
-    // Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException catch
-    // branch, which a real write failure can't trigger deterministically.
+    /**
+     * Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException catch
+     * branch, which a real write failure can't trigger deterministically.
+     *
+     * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
+     * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
+     * @param mapper {@link JsonMapper} the JSON mapper used for index and merged-decisions I/O
+     */
     JsonCullPrepStore(ShardCodec shardCodec, SidecarReader sidecarReader, JsonMapper mapper) {
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
@@ -67,6 +81,12 @@ public class JsonCullPrepStore implements CullPrepPort {
             int montages, String prepDir, @Nullable List<String> entries) {
     }
 
+    /**
+     * Reads a prep directory's index.json into a {@link PrepDir}.
+     *
+     * @param prepDir {@link Path} the prep directory to read
+     * @return {@link PrepDir} the parsed prep directory index
+     */
     @Override
     public PrepDir readIndex(Path prepDir) {
         Path path = prepDir.resolve("index.json");
@@ -91,16 +111,37 @@ public class JsonCullPrepStore implements CullPrepPort {
                 unreviewable.stream().map(Path::of).toList(), raw.montages(), Path.of(raw.prepDir()), entries);
     }
 
+    /**
+     * Reads one montage's sidecar photo entries.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @return a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
+     */
     @Override
     public List<SidecarPhotoEntry> readSidecar(Path prepDir, String montage) {
         return sidecarReader.readEntries(prepDir.resolve(montage + ".json"));
     }
 
+    /**
+     * Checks whether a montage's shard file exists.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @return boolean true if the montage's shard file exists
+     */
     @Override
     public boolean hasShard(Path prepDir, String montage) {
         return Files.exists(prepDir.resolve(MontageNaming.shardFileFor(montage)));
     }
 
+    /**
+     * Reads one montage's decision shard.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @return {@link DecisionShard} the montage's decision shard
+     */
     @Override
     public DecisionShard readShard(Path prepDir, String montage) {
         return shardCodec.read(prepDir.resolve(MontageNaming.shardFileFor(montage)));
@@ -119,6 +160,14 @@ public class JsonCullPrepStore implements CullPrepPort {
     private record MergedDecisions(String scope, List<RawDecision> decisions, Summary summary) {
     }
 
+    /**
+     * Writes the run's merged decisions.json, combining every decision with the apply summary.
+     *
+     * @param prepDir {@link Path} the prep directory to write into
+     * @param scope {@link String} the cull scope
+     * @param decisions a {@link List} of {@link Decision}, every decision made across the run
+     * @param report {@link ApplyReport} the apply summary to embed
+     */
     @Override
     public void writeMergedDecisions(Path prepDir, String scope, List<Decision> decisions, ApplyReport report) {
         var document = new MergedDecisions(
@@ -136,9 +185,14 @@ public class JsonCullPrepStore implements CullPrepPort {
         }
     }
 
-    // Mirrors ShardCodec.toRaw's mapping shape, kept separate rather than shared: a per-montage
-    // shard and the merged decisions.json are distinct artifacts with their own DTOs, free to diverge
-    // later without coupling the two.
+    /**
+     * Mirrors ShardCodec.toRaw's mapping shape, kept separate rather than shared: a per-montage
+     * shard and the merged decisions.json are distinct artifacts with their own DTOs, free to diverge
+     * later without coupling the two.
+     *
+     * @param decision {@link Decision} the domain decision to convert
+     * @return {@link RawDecision} the raw DTO representation
+     */
     @SuppressWarnings("DuplicatedCode")
     private static RawDecision toRaw(Decision decision) {
         return switch (decision) {

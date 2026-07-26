@@ -51,6 +51,16 @@ public class CullMontageRenderer implements MontageRenderer {
     private final CullScopeSelector cullScopeSelector = new CullScopeSelector();
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
 
+    /**
+     * Creates a montage renderer wired to its rendering and I/O collaborators.
+     *
+     * @param tileRenderer {@link TileRenderer} renders each candidate to a tile image
+     * @param montageBuilder {@link MontageBuilder} composes tiles into a montage canvas
+     * @param sidecarWriter {@link SidecarWriter} writes the per-montage sidecar metadata
+     * @param prepIndexWriter {@link PrepIndexWriter} writes the prep dir's index file
+     * @param mediaStore {@link MediaStore} lists and checks files on disk
+     * @param pathsPort {@link PathsPort} resolves the Sorted and logs roots
+     */
     public CullMontageRenderer(TileRenderer tileRenderer, MontageBuilder montageBuilder,
             SidecarWriter sidecarWriter, PrepIndexWriter prepIndexWriter, MediaStore mediaStore,
             PathsPort pathsPort) {
@@ -66,11 +76,26 @@ public class CullMontageRenderer implements MontageRenderer {
     private record RenderedCandidate(CullCandidate candidate, TileRenderer.TileResult tile) {
     }
 
+    /**
+     * Builds a prep dir for the given scope using the default progress callback.
+     *
+     * @param scope {@link CullScope} the cull scope to render
+     * @param config {@link MontageConfig} the montage layout configuration
+     * @return {@link PrepDir} the resulting prep dir
+     */
     @Override
     public PrepDir build(CullScope scope, MontageConfig config) {
         return build(scope, config, ProgressCallback.NO_OP);
     }
 
+    /**
+     * Builds a prep dir for the given scope, reporting progress as montages are written.
+     *
+     * @param scope {@link CullScope} the cull scope to render
+     * @param config {@link MontageConfig} the montage layout configuration
+     * @param progress {@link ProgressCallback} callback notified as each montage completes
+     * @return {@link PrepDir} the resulting prep dir
+     */
     @Override
     public PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress) {
         // NEVER never trips, so the cancellation-aware overload below always runs to completion and
@@ -78,6 +103,17 @@ public class CullMontageRenderer implements MontageRenderer {
         return Objects.requireNonNull(build(scope, config, progress, CancellationSignal.NEVER));
     }
 
+    /**
+     * Builds a prep dir for the given scope, checking for cancellation between candidates and
+     * between montages.
+     *
+     * @param scope {@link CullScope} the cull scope to render
+     * @param config {@link MontageConfig} the montage layout configuration
+     * @param progress {@link ProgressCallback} callback notified as each montage completes
+     * @param cancellation {@link CancellationSignal} signal checked between rendering and writing
+     *     steps
+     * @return {@link PrepDir} the resulting prep dir, or null if cancelled before completion
+     */
     @Override
     public @Nullable PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress,
             CancellationSignal cancellation) {
@@ -160,6 +196,13 @@ public class CullMontageRenderer implements MontageRenderer {
         return result;
     }
 
+    /**
+     * Collects photo candidates from the directories the scope selects.
+     *
+     * @param photosRoot {@link Path} the root of the Sorted photos tree
+     * @param scope {@link CullScope} the cull scope determining which directories to scan
+     * @return a {@link List} of {@link CullCandidate}, the candidates found, unordered
+     */
     private List<CullCandidate> collectCandidates(Path photosRoot, CullScope scope) {
         return cullScopeSelector.directoriesToScan(photosRoot, scope).stream()
                 // A requested month directory may not exist (e.g. no photos ever landed there) -
@@ -171,6 +214,14 @@ public class CullMontageRenderer implements MontageRenderer {
                 .toList();
     }
 
+    /**
+     * Composes a batch of rendered candidates into one montage image and its sidecar.
+     *
+     * @param prepDir {@link Path} the prep dir to write into
+     * @param tag {@link String} the montage's file-name tag
+     * @param batch a {@link List} of {@link RenderedCandidate}, the rendered candidates to include
+     * @param config {@link MontageConfig} the montage layout configuration
+     */
     private void writeMontage(Path prepDir, String tag, List<RenderedCandidate> batch, MontageConfig config) {
         List<MontageBuilder.MontageTile> tiles = batch.stream()
                 .map(rendered -> new MontageBuilder.MontageTile(
@@ -194,10 +245,22 @@ public class CullMontageRenderer implements MontageRenderer {
         sidecarWriter.write(prepDir.resolve(tag + ".json"), montageFile, photos);
     }
 
+    /**
+     * Checks whether a file name matches WhatsApp's received-photo naming convention.
+     *
+     * @param path {@link Path} the candidate file path
+     * @return boolean true if the file name looks like a WhatsApp-received photo
+     */
     private static boolean isReceived(Path path) {
         return RECEIVED_PATTERN.matcher(path.getFileName().toString()).find();
     }
 
+    /**
+     * Reads a file's last-modified time.
+     *
+     * @param file {@link Path} the file to inspect
+     * @return {@link Instant} the file's last-modified instant
+     */
     private static Instant mtimeOf(Path file) {
         try {
             return Files.getLastModifiedTime(file).toInstant();
@@ -206,10 +269,14 @@ public class CullMontageRenderer implements MontageRenderer {
         }
     }
 
-    // logs/cull-prep/<scopeTag> is a directory this feature exclusively generates and owns. That's
-    // different from Inbox/Sorted/Review/Duplicates, which the project's media-safety invariant
-    // protects from bulk deletes. Wiping and regenerating it is safe, so a rerun with fewer photos
-    // doesn't leave stale montage files behind from a prior larger run.
+    /**
+     * {@code logs/cull-prep/<scopeTag>} is a directory this feature exclusively generates and
+     * owns. That's different from Inbox/Sorted/Review/Duplicates, which the project's
+     * media-safety invariant protects from bulk deletes. Wiping and regenerating it is safe, so a
+     * rerun with fewer photos doesn't leave stale montage files behind from a prior larger run.
+     *
+     * @param prepDir {@link Path} the prep dir to clear
+     */
     private static void clearPrepDir(Path prepDir) {
         if (!Files.exists(prepDir)) {
             return;
@@ -221,6 +288,11 @@ public class CullMontageRenderer implements MontageRenderer {
         }
     }
 
+    /**
+     * Deletes a single file, letting any failure propagate as unchecked.
+     *
+     * @param path {@link Path} the file to delete
+     */
     private static void deleteQuietly(Path path) {
         try {
             Files.delete(path);

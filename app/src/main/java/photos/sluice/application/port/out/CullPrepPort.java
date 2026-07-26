@@ -17,25 +17,55 @@ import java.util.List;
 // its own.
 public interface CullPrepPort {
 
-    // The prep directory's own index.json, describing the scope it covers and every montage it
-    // expects a shard for. Unchecked failure if missing or unreadable - the app's own prior output,
-    // so a broken one means the prep dir itself is corrupt, not a fixable culling mistake.
+    /**
+     * The prep directory's own index.json, describing the scope it covers and every montage it
+     * expects a shard for. Unchecked failure if missing or unreadable - the app's own prior output,
+     * so a broken one means the prep dir itself is corrupt, not a fixable culling mistake.
+     *
+     * @param prepDir {@link Path} the prep directory to read
+     * @return {@link PrepDir} the parsed prep directory index
+     */
     PrepDir readIndex(Path prepDir);
 
-    // Every photo entry montage's sidecar (montage-NNN.json) lists. Unchecked failure if unreadable
-    // or malformed. The sidecar is this app's own prior output, so a broken one means the prep dir
-    // itself is corrupt, not a fixable culling mistake.
+    /**
+     * Every photo entry montage's sidecar (montage-NNN.json) lists. Unchecked failure if unreadable
+     * or malformed. The sidecar is this app's own prior output, so a broken one means the prep dir
+     * itself is corrupt, not a fixable culling mistake.
+     *
+     * @param prepDir {@link Path} the prep directory holding the sidecar
+     * @param montage {@link String} the montage whose sidecar to read
+     * @return a {@link List} of {@link SidecarPhotoEntry} the sidecar's photo entries
+     */
     List<SidecarPhotoEntry> readSidecar(Path prepDir, String montage);
 
-    // Whether montage's decisions-NNN.json shard is present. Callers check this before readShard.
+    /**
+     * Whether montage's decisions-NNN.json shard is present. Callers check this before readShard.
+     *
+     * @param prepDir {@link Path} the prep directory to check
+     * @param montage {@link String} the montage to check for a shard
+     * @return boolean true if the shard file exists
+     */
     boolean hasShard(Path prepDir, String montage);
 
-    // The decisions-NNN.json shard for montage. Throws UncheckedIOException if the file exists but
-    // cannot be parsed as a shard - callers should check hasShard first.
+    /**
+     * The decisions-NNN.json shard for montage. Throws UncheckedIOException if the file exists but
+     * cannot be parsed as a shard - callers should check hasShard first.
+     *
+     * @param prepDir {@link Path} the prep directory holding the shard
+     * @param montage {@link String} the montage whose shard to read
+     * @return {@link DecisionShard} the parsed decision shard
+     */
     DecisionShard readShard(Path prepDir, String montage);
 
-    // Writes the merged, human-readable record of a completed apply run. That is every non-keep
-    // decision the prep directory held, including ones a prior crashed run already applied, plus
-    // this run's own outcome summary.
+    /**
+     * Writes the merged, human-readable record of a completed apply run. That is every non-keep
+     * decision the prep directory held, including ones a prior crashed run already applied, plus
+     * this run's own outcome summary.
+     *
+     * @param prepDir {@link Path} the prep directory to write into
+     * @param scope {@link String} description of the scope this run covered
+     * @param decisions a {@link List} of {@link Decision} every non-keep decision the run held
+     * @param report {@link ApplyReport} this run's own outcome summary
+     */
     void writeMergedDecisions(Path prepDir, String scope, List<Decision> decisions, ApplyReport report);
 }

@@ -9,11 +9,27 @@ package photos.sluice.application.port.out;
 // "Applying decisions...") rather than a code a listener has to translate.
 public interface ProgressPort {
 
+    /**
+     * Signals that a phase has begun.
+     *
+     * @param phase {@link String} short human-readable label for the phase
+     */
     void phaseStarted(String phase);
 
-    // One already-sized unit of the named phase finished, e.g. phase="Sorting...", current=850,
-    // total=1204.
+    /**
+     * One already-sized unit of the named phase finished, e.g. phase="Sorting...", current=850,
+     * total=1204.
+     *
+     * @param phase {@link String} short human-readable label for the phase
+     * @param current int units completed so far
+     * @param total int total units in the phase
+     */
     void tick(String phase, int current, int total);
 
+    /**
+     * Signals that a phase has finished.
+     *
+     * @param phase {@link String} short human-readable label for the phase
+     */
     void phaseFinished(String phase);
 }

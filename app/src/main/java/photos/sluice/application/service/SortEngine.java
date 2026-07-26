@@ -69,6 +69,17 @@ public class SortEngine implements SortUseCase {
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
     private final SidecarSweep sidecarSweep = new SidecarSweep();
 
+    /**
+     * Creates a SortEngine wired to its ports.
+     *
+     * @param pathsPort {@link PathsPort} resolves the Inbox/Sorted/Review roots
+     * @param inboxScanner {@link InboxScannerPort} scans the Inbox for media and sidecars
+     * @param dateResolver {@link DateResolver} resolves a trusted date per file
+     * @param sha256Port {@link Sha256Port} hashes file contents for dedup
+     * @param hashIndexPort {@link HashIndexPort} looks up hashes already in the library
+     * @param imageDimensionsPort {@link ImageDimensionsPort} reads image pixel dimensions
+     * @param mediaStore {@link MediaStore} moves, deletes, and inspects files
+     */
     public SortEngine(PathsPort pathsPort, InboxScannerPort inboxScanner, DateResolver dateResolver,
             Sha256Port sha256Port, HashIndexPort hashIndexPort, ImageDimensionsPort imageDimensionsPort,
             MediaStore mediaStore) {
@@ -81,15 +92,37 @@ public class SortEngine implements SortUseCase {
         this.mediaStore = mediaStore;
     }
 
+    /**
+     * Sorts the given scope with no progress reporting or cancellation support.
+     *
+     * @param scope {@link SortScope} which files to sort this run
+     * @return {@link SortSummary} summary of what was sorted, deduped, and routed
+     */
     @Override
     public SortSummary sort(SortScope scope) {
         return sort(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
+    /**
+     * Sorts the given scope, reporting progress but not cancellable.
+     *
+     * @param scope {@link SortScope} which files to sort this run
+     * @param progress {@link ProgressCallback} receives per-file progress ticks
+     * @return {@link SortSummary} summary of what was sorted, deduped, and routed
+     */
     public SortSummary sort(SortScope scope, ProgressCallback progress) {
         return sort(scope, progress, CancellationSignal.NEVER);
     }
 
+    /**
+     * Sorts the given scope with progress reporting and cancellation support. The full sort
+     * entry point that the parameter-light overloads delegate to.
+     *
+     * @param scope {@link SortScope} which files to sort this run
+     * @param progress {@link ProgressCallback} receives per-file progress ticks
+     * @param cancellation {@link CancellationSignal} checked to allow a clean early abort
+     * @return {@link SortSummary} summary of what was sorted, deduped, and routed
+     */
     public SortSummary sort(SortScope scope, ProgressCallback progress, CancellationSignal cancellation) {
         // Every scanned file is dated before scope narrows anything, not just the files a caller
         // is about to process. OldestYear and OldestN need to compare dates across the whole
@@ -145,6 +178,15 @@ public class SortEngine implements SortUseCase {
                 routing.yearsSorted);
     }
 
+    /**
+     * Deletes the Takeout JSON sidecar of each removed file whose date the sidecar actually won,
+     * returning the set of sidecar paths deleted.
+     *
+     * @param actuallyRemoved a {@link List} of {@link MediaFile} files that genuinely left the Inbox this run
+     * @param dateByFile a {@link Map} of {@link MediaFile} to {@link DateResult} resolved date for each in-scope file
+     * @param sidecars a {@link Map} of {@link MediaFile} to {@link TakeoutSidecar} sidecar JSON mapped by its owning media file
+     * @return a {@link Set} of {@link Path} paths of the sidecars deleted as consumed
+     */
     private Set<Path> consumeSidecars(List<MediaFile> actuallyRemoved, Map<MediaFile, DateResult> dateByFile,
             Map<MediaFile, TakeoutSidecar> sidecars) {
         // An "-edited" copy shares its original's sidecar - TakeoutSidecarPairer maps both media
@@ -166,18 +208,24 @@ public class SortEngine implements SortUseCase {
         return deletedSidecars;
     }
 
-    // Independent of consumeSidecars above. That method only spends a sidecar whose date actually
-    // won for its file. This sweep instead treats a sidecar as spent purely because its owning
-    // media is gone from its directory now, regardless of why. That catches unmatched sidecars
-    // and ones whose media was deleted as a duplicate, so sidecars never pile up across
-    // incremental year-by-year runs. A directory left empty of all files afterward is then
-    // removed.
-    //
-    // "Remaining" is derived from the original scan rather than observed directly, so the caller
-    // passes exactly the files that actually left the Inbox this run, not every in-scope file. A
-    // cancelled routing pass can stop partway through plan.toSort(). Files still sitting in the
-    // Inbox after that must not be treated as gone, or their sidecar gets deleted out from under
-    // them while they're still there awaiting a future run.
+    /**
+     * Independent of consumeSidecars above. That method only spends a sidecar whose date actually
+     * won for its file. This sweep instead treats a sidecar as spent purely because its owning
+     * media is gone from its directory now, regardless of why. That catches unmatched sidecars
+     * and ones whose media was deleted as a duplicate, so sidecars never pile up across
+     * incremental year-by-year runs. A directory left empty of all files afterward is then
+     * removed.
+     *
+     * "Remaining" is derived from the original scan rather than observed directly, so the caller
+     * passes exactly the files that actually left the Inbox this run, not every in-scope file. A
+     * cancelled routing pass can stop partway through plan.toSort(). Files still sitting in the
+     * Inbox after that must not be treated as gone, or their sidecar gets deleted out from under
+     * them while they're still there awaiting a future run.
+     *
+     * @param scanResult {@link ScanResult} the original whole-Inbox scan
+     * @param actuallyRemoved a {@link List} of {@link MediaFile} files that genuinely left the Inbox this run
+     * @param consumedSidecars a {@link Set} of {@link Path} sidecars already deleted as consumed
+     */
     private void sweepOrphanedSidecarsAndEmptyDirectories(ScanResult scanResult, List<MediaFile> actuallyRemoved,
             Set<Path> consumedSidecars) {
         Set<Path> removedMediaPaths = actuallyRemoved.stream().map(MediaFile::path).collect(Collectors.toSet());
@@ -194,12 +242,16 @@ public class SortEngine implements SortUseCase {
         mediaStore.removeEmptyDirectories(pathsPort.inbox());
     }
 
-    // A hash the index remembers is only treated as "already in the library" if at least one of
-    // its recorded paths still exists on disk. The library lives outside this process's control -
-    // it can be resynced, moved, or pruned independently. A stale index entry pointing at a
-    // since-vanished file must never cause an otherwise-unique Inbox file to be deleted as a false
-    // duplicate. The whole point of the index is that the bytes survive somewhere before anything
-    // gets deleted on its word alone.
+    /**
+     * A hash the index remembers is only treated as "already in the library" if at least one of
+     * its recorded paths still exists on disk. The library lives outside this process's control -
+     * it can be resynced, moved, or pruned independently. A stale index entry pointing at a
+     * since-vanished file must never cause an otherwise-unique Inbox file to be deleted as a false
+     * duplicate. The whole point of the index is that the bytes survive somewhere before anything
+     * gets deleted on its word alone.
+     *
+     * @return a {@link Set} of {@link String} hashes from the index confirmed still present on disk
+     */
     private Set<String> existingLibraryHashes() {
         Set<String> result = new HashSet<>();
         hashIndexPort.load().forEach((hash, paths) -> {
@@ -210,6 +262,15 @@ public class SortEngine implements SortUseCase {
         return result;
     }
 
+    /**
+     * Routes each survivor to its destination in turn, stopping early on cancellation.
+     *
+     * @param toSort a {@link List} of {@link MediaFile} files that survived dedup and are ready to route
+     * @param dateByFile a {@link Map} of {@link MediaFile} to {@link DateResult} resolved date for each in-scope file
+     * @param progress {@link ProgressCallback} receives per-file progress ticks
+     * @param cancellation {@link CancellationSignal} checked between files to allow early stop
+     * @return {@link RoutingResult} tally of the routing outcomes
+     */
     private RoutingResult routeSurvivors(List<MediaFile> toSort, Map<MediaFile, DateResult> dateByFile,
             ProgressCallback progress, CancellationSignal cancellation) {
         var routing = new RoutingResult();
@@ -230,9 +291,15 @@ public class SortEngine implements SortUseCase {
         return routing;
     }
 
-    // Checked in this order, and only this order. An undatable file is routed to Review before
-    // anything else even looks at it - "where should this land by date" is meaningless without
-    // a usable date. The low-res gate only ever runs on a file that already has one.
+    /**
+     * Checked in this order, and only this order. An undatable file is routed to Review before
+     * anything else even looks at it - "where should this land by date" is meaningless without
+     * a usable date. The low-res gate only ever runs on a file that already has one.
+     *
+     * @param file {@link MediaFile} the survivor being routed
+     * @param date {@link DateResult} its resolved date
+     * @param routing {@link RoutingResult} tallies updated with this file's outcome
+     */
     private void routeOneSurvivor(MediaFile file, DateResult date, RoutingResult routing) {
         String leaf = file.path().getFileName().toString();
 
@@ -270,25 +337,59 @@ public class SortEngine implements SortUseCase {
         }
     }
 
+    /**
+     * Checks whether a file falls below the low-resolution threshold for its type.
+     *
+     * @param file {@link MediaFile} the file to check
+     * @param type {@link MediaType} its media type
+     * @param extension {@link String} its file extension
+     * @return boolean true if the file counts as low-res
+     */
     private boolean isLowRes(MediaFile file, MediaType type, String extension) {
         long size = mediaStore.size(file.path());
         Dimensions dimensions = imageDimensionsPort.read(file.path()).orElse(null);
         return LowResGate.isLowRes(size, dimensions, type, extension);
     }
 
+    /**
+     * Moves a file into a Review destination and appends its reason line.
+     *
+     * @param file {@link MediaFile} the file being set aside
+     * @param leaf {@link String} its file name
+     * @param destDir {@link Path} the Review destination folder
+     * @param reason {@link String} short label recorded in the reasons file
+     */
     private void routeToReview(MediaFile file, String leaf, Path destDir, String reason) {
         mediaStore.move(file.path(), destDir);
         mediaStore.appendLine(destDir.resolve(REASONS_FILE), leaf + " - " + reason);
     }
 
+    /**
+     * Formats the year as a four-digit folder name.
+     *
+     * @param when {@link LocalDateTime} the date to format
+     * @return {@link String} the four-digit year folder name
+     */
     private static String yearFolder(LocalDateTime when) {
         return "%04d".formatted(when.getYear());
     }
 
+    /**
+     * Formats the month as a two-digit folder name.
+     *
+     * @param when {@link LocalDateTime} the date to format
+     * @return {@link String} the two-digit month folder name
+     */
     private static String monthFolder(LocalDateTime when) {
         return "%02d".formatted(when.getMonthValue());
     }
 
+    /**
+     * Formats the date as a dashed year-and-month folder name.
+     *
+     * @param when {@link LocalDateTime} the date to format
+     * @return {@link String} the dashed year-and-month folder name
+     */
     private static String yearMonthDash(LocalDateTime when) {
         return yearFolder(when) + "-" + monthFolder(when);
     }

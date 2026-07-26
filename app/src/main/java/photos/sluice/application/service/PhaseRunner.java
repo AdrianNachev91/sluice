@@ -10,13 +10,24 @@ final class PhaseRunner {
 
     private final ProgressPort progressPort;
 
+    /**
+     * Creates a phase runner that reports through the given progress port.
+     *
+     * @param progressPort {@link ProgressPort} sink for phase start/tick/finish events
+     */
     PhaseRunner(ProgressPort progressPort) {
         this.progressPort = progressPort;
     }
 
-    // phaseFinished fires in a finally so the phaseStarted/phaseFinished bracket always closes,
-    // even when the engine call itself throws. A listener otherwise has no signal the phase ever
-    // ended.
+    /**
+     * phaseFinished fires in a finally so the phaseStarted/phaseFinished bracket always closes,
+     * even when the engine call itself throws. A listener otherwise has no signal the phase ever
+     * ended.
+     *
+     * @param phase {@link String} name of the phase being run
+     * @param work a {@link PhaseWork} of T the engine call to bracket
+     * @return T the engine call's result
+     */
     <T> T run(String phase, PhaseWork<T> work) throws Exception {
         progressPort.phaseStarted(phase);
         try {
@@ -31,6 +42,12 @@ final class PhaseRunner {
     // JobWork already uses for the same reason. A lambda that throws nothing still satisfies it.
     @FunctionalInterface
     interface PhaseWork<T> {
+        /**
+         * Runs the engine call, reporting progress through the given callback.
+         *
+         * @param progress {@link ProgressCallback} callback for reporting tick progress
+         * @return T the engine call's result
+         */
         T run(ProgressCallback progress) throws Exception;
     }
 }

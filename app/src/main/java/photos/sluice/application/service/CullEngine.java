@@ -66,6 +66,21 @@ final class CullEngine {
     private final Duration watchPollInterval;
     private final Map<Path, CullWatcher> activeWatches = new ConcurrentHashMap<>();
 
+    /**
+     * Wires together every collaborator this engine dispatches cull jobs through.
+     *
+     * @param montageRenderer {@link MontageRenderer} builds montages from a scope
+     * @param cullDispatcher {@link CullDispatcher} runs the cull phase
+     * @param applyEngine {@link ApplyEngine} runs the apply phase
+     * @param cullPrepPort {@link CullPrepPort} reads/writes prep dir index state
+     * @param cullSettings {@link CullSettings} configured provider and watch-mode settings
+     * @param mediaStore {@link MediaStore} filesystem access for prep dirs
+     * @param pathsPort {@link PathsPort} resolves repo-relative paths
+     * @param montageConfig {@link MontageConfig} montage grid configuration
+     * @param jobRunner {@link JobRunner} runs cull jobs one at a time
+     * @param progressPort {@link ProgressPort} reports phase progress
+     * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
+     */
     CullEngine(MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
             CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
             MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, Duration watchPollInterval) {
@@ -83,21 +98,23 @@ final class CullEngine {
         this.watchPollInterval = watchPollInterval;
     }
 
-    // Re-arms a watcher for every still-waiting job found on disk, so watch mode survives an app
-    // restart the same way WAITING_FOR_SHARDS itself does. There is no persistent job store - see
-    // WaitingCullJob's own doc. Without this, restarting the app would silently stop watching every
-    // job that was armed before the restart. A no-op when mode is MANUAL. Callable directly (not
-    // just via Pipeline's own @PostConstruct) so a test can drive it without a Spring context.
-    //
-    // Also a no-op while a job is currently running. waitingJobs() counts a prep dir as waiting the
-    // moment index.json exists and decisions.json doesn't yet. That's also true of a prep dir
-    // mid-CULLING/mid-APPLYING right now - dispatchAndApply() only writes decisions.json near the
-    // very end of a successful apply. JobRunner only ever runs one job at a time, so a busy runner
-    // could only mean the one job in flight is that prep dir's own. Arming here anyway would risk a
-    // phantom watcher for a job about to resolve to Applied on its own, with nothing left to disarm
-    // it afterward. Any prep dir that's genuinely still waiting gets picked up the next time this
-    // runs once the app is idle again. This is also not the only path that arms a watcher - see
-    // dispatchAndApply()'s own note.
+    /**
+     * Re-arms a watcher for every still-waiting job found on disk, so watch mode survives an app
+     * restart the same way WAITING_FOR_SHARDS itself does. There is no persistent job store - see
+     * WaitingCullJob's own doc. Without this, restarting the app would silently stop watching every
+     * job that was armed before the restart. A no-op when mode is MANUAL. Callable directly (not
+     * just via Pipeline's own @PostConstruct) so a test can drive it without a Spring context.
+     *
+     * Also a no-op while a job is currently running. waitingJobs() counts a prep dir as waiting the
+     * moment index.json exists and decisions.json doesn't yet. That's also true of a prep dir
+     * mid-CULLING/mid-APPLYING right now - dispatchAndApply() only writes decisions.json near the
+     * very end of a successful apply. JobRunner only ever runs one job at a time, so a busy runner
+     * could only mean the one job in flight is that prep dir's own. Arming here anyway would risk a
+     * phantom watcher for a job about to resolve to Applied on its own, with nothing left to disarm
+     * it afterward. Any prep dir that's genuinely still waiting gets picked up the next time this
+     * runs once the app is idle again. This is also not the only path that arms a watcher - see
+     * dispatchAndApply()'s own note.
+     */
     void armWatchesForExistingWaitingJobs() {
         if (cullSettings.externalAgent().mode() != WatchMode.WATCH || jobRunner.isBusy()) {
             return;
@@ -105,35 +122,50 @@ final class CullEngine {
         waitingJobs().forEach(this::armWatchIfConfigured);
     }
 
-    // Prep always runs fresh: a scope's montages are rebuilt from Sorted every call.
-    // MontageRenderer.build() clears whatever a stale prior run left in the same prep dir first.
-    // That would silently destroy any shards already dropped for a still-unresolved WaitingCullJob
-    // on the same scope. checkNoWaitingJobFor() guards against that and fails loud instead - resume
-    // or resolve it first.
-    //
-    // Checked here too, synchronously before submit(), for the earliest possible fail-fast.
-    // buildFreshAndDispatch() below checks the same thing again once actually running - that's
-    // CurateEngine's only option for an auto-resolved scope; see its own comment.
+    /**
+     * Prep always runs fresh: a scope's montages are rebuilt from Sorted every call.
+     * MontageRenderer.build() clears whatever a stale prior run left in the same prep dir first.
+     * That would silently destroy any shards already dropped for a still-unresolved WaitingCullJob
+     * on the same scope. checkNoWaitingJobFor() guards against that and fails loud instead - resume
+     * or resolve it first.
+     *
+     * Checked here too, synchronously before submit(), for the earliest possible fail-fast.
+     * buildFreshAndDispatch() below checks the same thing again once actually running - that's
+     * CurateEngine's only option for an auto-resolved scope; see its own comment.
+     *
+     * @param scope {@link CullScope} the media scope to cull
+     * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
+     */
     JobHandle<CullJobOutcome> cull(CullScope scope) {
         checkNoWaitingJobFor(scope);
         return jobRunner.submit(handle -> buildFreshAndDispatch(scope, handle::isCancellationRequested));
     }
 
-    // Re-reads an existing prep dir (no montages regenerated) and re-runs the same dispatch-then-apply
-    // flow cull() used, this time with the caller's own allowPartial. Resume is safely re-runnable.
-    // It stays read-only until the shard set actually validates. A resume triggered before every
-    // shard is dropped just throws right back into Waiting with a freshly recomputed tally.
+    /**
+     * Re-reads an existing prep dir (no montages regenerated) and re-runs the same dispatch-then-apply
+     * flow cull() used, this time with the caller's own allowPartial. Resume is safely re-runnable.
+     * It stays read-only until the shard set actually validates. A resume triggered before every
+     * shard is dropped just throws right back into Waiting with a freshly recomputed tally.
+     *
+     * @param prepDir {@link Path} the existing prep dir to resume
+     * @param allowPartial boolean whether a partial shard set is acceptable
+     * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
+     */
     JobHandle<CullJobOutcome> resume(Path prepDir, boolean allowPartial) {
         return jobRunner.submit(handle ->
                 dispatchAndApply(cullPrepPort.readIndex(prepDir), allowPartial, handle::isCancellationRequested));
     }
 
-    // Every cull still waiting on shards, derived live off disk rather than a persisted list (see
-    // WaitingCullJob's own doc). A prep dir counts as waiting when it has index.json (prep ran) but no
-    // decisions.json yet (apply never completed). Not routed through JobRunner - this only reads, so
-    // it doesn't compete for the single job slot. A prep dir whose index.json is transiently
-    // unreadable (mid-write by a concurrent cull job) is skipped rather than failing the whole scan.
-    // That's the same tolerance the external-agent design already gives a shard mid-write.
+    /**
+     * Every cull still waiting on shards, derived live off disk rather than a persisted list (see
+     * WaitingCullJob's own doc). A prep dir counts as waiting when it has index.json (prep ran) but no
+     * decisions.json yet (apply never completed). Not routed through JobRunner - this only reads, so
+     * it doesn't compete for the single job slot. A prep dir whose index.json is transiently
+     * unreadable (mid-write by a concurrent cull job) is skipped rather than failing the whole scan.
+     * That's the same tolerance the external-agent design already gives a shard mid-write.
+     *
+     * @return a {@link List} of {@link WaitingCullJob} every cull job still waiting on shards
+     */
     List<WaitingCullJob> waitingJobs() {
         Path cullPrepRoot = pathsPort.logs().resolve("cull-prep");
         if (!mediaStore.exists(cullPrepRoot)) {
@@ -147,14 +179,24 @@ final class CullEngine {
                 .toList();
     }
 
-    // Test seam: whether a watcher is currently polling prepDir. Lets a test prove disarmWatch()'s
-    // own claim - that any dispatchAndApply() call retires an existing watcher, not just the
-    // watcher's own auto-resume trigger. No need to reach into the private activeWatches map.
+    /**
+     * Test seam: whether a watcher is currently polling prepDir. Lets a test prove disarmWatch()'s
+     * own claim - that any dispatchAndApply() call retires an existing watcher, not just the
+     * watcher's own auto-resume trigger. No need to reach into the private activeWatches map.
+     *
+     * @param prepDir {@link Path} the prep dir to check
+     * @return boolean whether a watcher is currently active for it
+     */
     boolean isWatchActive(Path prepDir) {
         CullWatcher watcher = activeWatches.get(prepDir);
         return watcher != null && watcher.isActive();
     }
 
+    /**
+     * Throws if a cull job for scope is already waiting on shards.
+     *
+     * @param scope {@link CullScope} the scope to check
+     */
     void checkNoWaitingJobFor(CullScope scope) {
         String tag = CullScope.tag(scope);
         waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst().ifPresent(existing -> {
@@ -163,10 +205,16 @@ final class CullEngine {
         });
     }
 
-    // Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and
-    // CurateEngine's cull stage; resume() re-enters at dispatchAndApply() directly instead, since it
-    // must never rebuild an existing prep dir. See checkNoWaitingJobFor()'s own doc for why this
-    // check runs here too, not only at cull()'s synchronous pre-submit call site.
+    /**
+     * Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and
+     * CurateEngine's cull stage; resume() re-enters at dispatchAndApply() directly instead, since it
+     * must never rebuild an existing prep dir. See checkNoWaitingJobFor()'s own doc for why this
+     * check runs here too, not only at cull()'s synchronous pre-submit call site.
+     *
+     * @param scope {@link CullScope} the media scope to cull
+     * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
+     * @return {@link CullJobOutcome} the outcome of this cull attempt
+     */
     CullJobOutcome buildFreshAndDispatch(CullScope scope, CancellationSignal cancellation) throws Exception {
         checkNoWaitingJobFor(scope);
         // phaseRunner.run/PhaseWork are shared with sort/commit/rescue, which always return non-null -
@@ -190,6 +238,12 @@ final class CullEngine {
         return dispatchAndApply(prep.get(), false, cancellation);
     }
 
+    /**
+     * Reads prepDir's index and builds the waiting job it represents, if readable.
+     *
+     * @param prepDir {@link Path} the prep dir to read
+     * @return an {@link Optional} {@link WaitingCullJob} the waiting job, or empty if the index is unreadable
+     */
     private Optional<WaitingCullJob> readWaitingJob(Path prepDir) {
         try {
             return Optional.of(buildWaitingJob(cullPrepPort.readIndex(prepDir)));
@@ -198,19 +252,26 @@ final class CullEngine {
         }
     }
 
-    // A CullException from the dispatch step means different things depending on the configured
-    // provider - see VisionCuller.MANUAL_MODE_PROVIDER_ID's own doc. For that provider it's the
-    // expected manual-mode pause: resolved into Waiting, run slot released. For any other (automated)
-    // provider it's a genuine failure and propagates - it never throws CullException to signal a
-    // cancellation. An automated provider's cull() still lands in Waiting on cancellation, but via
-    // the cancellation.isCancelled() check further down, after dispatch returns normally rather than
-    // through this catch block.
-    //
-    // disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
-    // cull(), a user's manual resume(), or a watcher's own auto-resume. Whatever watcher was polling
-    // this prep dir is retired the moment any resume attempt actually runs. That means a manual
-    // click racing an armed watcher can never leave two pollers running for the same job. A fresh
-    // watcher gets (re-)armed below only if the outcome is Waiting again.
+    /**
+     * A CullException from the dispatch step means different things depending on the configured
+     * provider - see VisionCuller.MANUAL_MODE_PROVIDER_ID's own doc. For that provider it's the
+     * expected manual-mode pause: resolved into Waiting, run slot released. For any other (automated)
+     * provider it's a genuine failure and propagates - it never throws CullException to signal a
+     * cancellation. An automated provider's cull() still lands in Waiting on cancellation, but via
+     * the cancellation.isCancelled() check further down, after dispatch returns normally rather than
+     * through this catch block.
+     *
+     * disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
+     * cull(), a user's manual resume(), or a watcher's own auto-resume. Whatever watcher was polling
+     * this prep dir is retired the moment any resume attempt actually runs. That means a manual
+     * click racing an armed watcher can never leave two pollers running for the same job. A fresh
+     * watcher gets (re-)armed below only if the outcome is Waiting again.
+     *
+     * @param prep {@link PrepDir} the prep dir to dispatch and apply
+     * @param allowPartial boolean whether a partial shard set is acceptable
+     * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
+     * @return {@link CullJobOutcome} the outcome of this dispatch-and-apply attempt
+     */
     private CullJobOutcome dispatchAndApply(PrepDir prep, boolean allowPartial, CancellationSignal cancellation)
             throws Exception {
         disarmWatch(prep.prepDir());
@@ -253,26 +314,36 @@ final class CullEngine {
         return new CullJobOutcome.Applied(cullReport, applyReport.get());
     }
 
+    /**
+     * Builds the waiting-job snapshot for a prep dir that isn't fully resolved yet.
+     *
+     * @param prep {@link PrepDir} the prep dir to snapshot
+     * @return {@link WaitingCullJob} the waiting job for that prep dir
+     */
     private WaitingCullJob buildWaitingJob(PrepDir prep) {
         return new WaitingCullJob(
                 prep.scope(), prep.prepDir(), shardTallyCalculator.tally(prep), mediaStore.lastModifiedTime(prep.prepDir()));
     }
 
-    // Starts polling job's prep dir for an auto-resume, unless mode is MANUAL, the configured
-    // provider isn't the external-agent one, or a watcher is already active for it.
-    // armWatchesForExistingWaitingJobs() and dispatchAndApply()'s own Waiting branch can both reach
-    // here for the same prep dir. The second call is then a no-op rather than a competing second
-    // poller.
-    //
-    // Watch mode is an external-agent feature: it exists to notice when the user's own separate
-    // culling agent, running outside this app, drops a shard. The provider check mainly guards
-    // armWatchesForExistingWaitingJobs()'s startup scan, which walks every waiting job on disk
-    // regardless of which provider produced it. dispatchAndApply()'s own call site can only reach
-    // this method when the provider already matches, so the check is redundant there, but harmless.
-    // Without the guard, a leftover external-agent.mode=watch setting combined with
-    // provider=anthropic would arm a phantom watcher for an automated provider's own interrupted
-    // (cancelled) prep dir. A fully-valid tally there would then trigger an unasked-for,
-    // API-spending auto-resume the user never opted into.
+    /**
+     * Starts polling job's prep dir for an auto-resume, unless mode is MANUAL, the configured
+     * provider isn't the external-agent one, or a watcher is already active for it.
+     * armWatchesForExistingWaitingJobs() and dispatchAndApply()'s own Waiting branch can both reach
+     * here for the same prep dir. The second call is then a no-op rather than a competing second
+     * poller.
+     *
+     * Watch mode is an external-agent feature: it exists to notice when the user's own separate
+     * culling agent, running outside this app, drops a shard. The provider check mainly guards
+     * armWatchesForExistingWaitingJobs()'s startup scan, which walks every waiting job on disk
+     * regardless of which provider produced it. dispatchAndApply()'s own call site can only reach
+     * this method when the provider already matches, so the check is redundant there, but harmless.
+     * Without the guard, a leftover external-agent.mode=watch setting combined with
+     * provider=anthropic would arm a phantom watcher for an automated provider's own interrupted
+     * (cancelled) prep dir. A fully-valid tally there would then trigger an unasked-for,
+     * API-spending auto-resume the user never opted into.
+     *
+     * @param job {@link WaitingCullJob} the waiting job to watch
+     */
     private void armWatchIfConfigured(WaitingCullJob job) {
         if (cullSettings.externalAgent().mode() != WatchMode.WATCH
                 || !cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
@@ -295,6 +366,11 @@ final class CullEngine {
         });
     }
 
+    /**
+     * Stops and removes the active watcher for a prep dir, if one exists.
+     *
+     * @param prepDir {@link Path} the prep dir whose watcher should stop
+     */
     private void disarmWatch(Path prepDir) {
         CullWatcher watcher = activeWatches.remove(prepDir);
         if (watcher != null) {
@@ -302,14 +378,19 @@ final class CullEngine {
         }
     }
 
-    // The heavier action a CullWatcher runs at most once it thinks isFullyValid(). Returns whether
-    // it actually got to run. True means resume()'s own jobRunner.submit() succeeded - the watcher's
-    // job is then done, win or lose (see dispatchAndApply()'s own re-arm-on-Waiting note). False
-    // means the job runner was busy with something else, so the watcher keeps polling and retries.
-    // The submitted job runs and completes fully asynchronously; nothing here waits on it. A
-    // failure there would otherwise vanish silently, so it's logged here instead. That matches the
-    // visibility a manual Resume gets for free from whatever UI/CLI surfaces its own
-    // join()/onComplete() failure.
+    /**
+     * The heavier action a CullWatcher runs at most once it thinks isFullyValid(). Returns whether
+     * it actually got to run. True means resume()'s own jobRunner.submit() succeeded - the watcher's
+     * job is then done, win or lose (see dispatchAndApply()'s own re-arm-on-Waiting note). False
+     * means the job runner was busy with something else, so the watcher keeps polling and retries.
+     * The submitted job runs and completes fully asynchronously; nothing here waits on it. A
+     * failure there would otherwise vanish silently, so it's logged here instead. That matches the
+     * visibility a manual Resume gets for free from whatever UI/CLI surfaces its own
+     * join()/onComplete() failure.
+     *
+     * @param prepDir {@link Path} the prep dir to attempt to resume
+     * @return boolean whether the resume attempt was actually submitted
+     */
     private boolean tryAutoResume(Path prepDir) {
         JobHandle<CullJobOutcome> handle;
         try {

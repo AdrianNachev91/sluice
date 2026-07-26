@@ -8,5 +8,11 @@ import photos.sluice.domain.model.SortScope;
 // Sorted to the library; that stays a distinct, explicit step.
 public interface CurateUseCase {
 
+    /**
+     * Sorts scope into Sorted, then culls whatever that sort just populated.
+     *
+     * @param scope {@link SortScope} which Inbox files to sort
+     * @return {@link CurateOutcome} the sort summary plus the resulting cull outcome, if any
+     */
     CurateOutcome curate(SortScope scope);
 }

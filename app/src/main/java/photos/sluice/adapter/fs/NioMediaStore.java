@@ -19,6 +19,12 @@ import java.util.stream.Stream;
 @Component
 public class NioMediaStore implements MediaStore {
 
+    /**
+     * Lists every regular file under a directory tree, recursively.
+     *
+     * @param root {@link Path} directory to walk
+     * @return a {@link List} of {@link Path}, all regular files found under root
+     */
     @Override
     public List<Path> listFiles(Path root) {
         try (Stream<Path> walk = Files.walk(root)) {
@@ -28,6 +34,12 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Reads a file's last-modified timestamp.
+     *
+     * @param path {@link Path} file to check
+     * @return {@link Instant} the file's last-modified instant
+     */
     @Override
     public Instant lastModifiedTime(Path path) {
         try {
@@ -37,16 +49,37 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Moves a file into a destination directory, resolving any name collision first.
+     *
+     * @param source {@link Path} file to move
+     * @param destDir {@link Path} destination directory
+     * @return {@link Path} the file's final path after the move
+     */
     @Override
     public Path move(Path source, Path destDir) {
         return moveTo(source, resolveDestination(source, destDir));
     }
 
+    /**
+     * Computes the collision-free destination path a move would use, without moving anything.
+     *
+     * @param source {@link Path} file that would be moved
+     * @param destDir {@link Path} destination directory
+     * @return {@link Path} the resolved, not-yet-existing destination path
+     */
     @Override
     public Path resolveDestination(Path source, Path destDir) {
         return resolveCollision(destDir, source.getFileName().toString());
     }
 
+    /**
+     * Moves a file to an exact destination path, creating parent directories as needed.
+     *
+     * @param source {@link Path} file to move
+     * @param destination {@link Path} exact target path
+     * @return {@link Path} the destination path
+     */
     @Override
     public Path moveTo(Path source, Path destination) {
         ensureDirectory(destination.getParent());
@@ -58,6 +91,13 @@ public class NioMediaStore implements MediaStore {
         return destination;
     }
 
+    /**
+     * Copies a file into a destination directory, preserving attributes and resolving collisions.
+     *
+     * @param source {@link Path} file to copy
+     * @param destDir {@link Path} destination directory
+     * @return {@link Path} the path of the copy
+     */
     @Override
     public Path copy(Path source, Path destDir) {
         Path dest = prepareDestination(source, destDir);
@@ -72,6 +112,11 @@ public class NioMediaStore implements MediaStore {
         return dest;
     }
 
+    /**
+     * Deletes a single file.
+     *
+     * @param path {@link Path} file to delete
+     */
     @Override
     public void delete(Path path) {
         try {
@@ -81,6 +126,11 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Creates a directory and any missing parent directories.
+     *
+     * @param dir {@link Path} directory to create
+     */
     @Override
     public void ensureDirectory(Path dir) {
         try {
@@ -90,11 +140,23 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Checks whether a path exists.
+     *
+     * @param path {@link Path} path to check
+     * @return boolean true if the path exists
+     */
     @Override
     public boolean exists(Path path) {
         return Files.exists(path);
     }
 
+    /**
+     * Reads a file's size in bytes.
+     *
+     * @param path {@link Path} file to check
+     * @return long the file size in bytes
+     */
     @Override
     public long size(Path path) {
         try {
@@ -104,6 +166,12 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Appends a line of text to a file, creating it if necessary.
+     *
+     * @param file {@link Path} file to append to
+     * @param line {@link String} line of text to append
+     */
     @Override
     public void appendLine(Path file, String line) {
         try {
@@ -114,6 +182,12 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Writes text to a file, replacing any existing content.
+     *
+     * @param file {@link Path} file to write
+     * @param content {@link String} content to write
+     */
     @Override
     public void write(Path file, String content) {
         try {
@@ -124,6 +198,13 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Reads all lines from a file, or an empty list if it does not exist.
+     *
+     * @param file {@link Path} file to read
+     * @return a {@link List} of {@link String}, the file's lines, or an empty list if the file is
+     *     missing
+     */
     @Override
     public List<String> readLines(Path file) {
         if (!Files.exists(file)) {
@@ -136,6 +217,11 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Removes every empty directory under a root, deepest first, collapsing nested chains.
+     *
+     * @param root {@link Path} directory tree to clean up
+     */
     @Override
     public void removeEmptyDirectories(Path root) {
         List<Path> directories;
@@ -152,6 +238,11 @@ public class NioMediaStore implements MediaStore {
                 .forEach(this::deleteIfEmptyOfFiles);
     }
 
+    /**
+     * Removes a directory, and its empty subdirectories, only if it holds no files anywhere.
+     *
+     * @param dir {@link Path} directory to remove if empty of files
+     */
     @Override
     public void removeIfEmptyOfFiles(Path dir) {
         if (!Files.exists(dir) || containsAnyFile(dir)) {
@@ -164,6 +255,11 @@ public class NioMediaStore implements MediaStore {
         deleteIfEmptyOfFiles(dir);
     }
 
+    /**
+     * Deletes a directory if it exists and holds no files anywhere below it.
+     *
+     * @param dir {@link Path} directory to delete if empty of files
+     */
     private void deleteIfEmptyOfFiles(Path dir) {
         if (!Files.exists(dir) || containsAnyFile(dir)) {
             return;
@@ -175,6 +271,12 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Checks whether any regular file exists anywhere under a directory.
+     *
+     * @param dir {@link Path} directory to inspect
+     * @return boolean true if a regular file exists anywhere below dir
+     */
     private static boolean containsAnyFile(Path dir) {
         try (Stream<Path> walk = Files.walk(dir)) {
             return walk.anyMatch(Files::isRegularFile);
@@ -183,13 +285,26 @@ public class NioMediaStore implements MediaStore {
         }
     }
 
+    /**
+     * Ensures the destination directory exists and resolves a collision-free path within it.
+     *
+     * @param source {@link Path} file that will be copied
+     * @param destDir {@link Path} destination directory
+     * @return {@link Path} a collision-free destination path
+     */
     private Path prepareDestination(Path source, Path destDir) {
         ensureDirectory(destDir);
         return resolveCollision(destDir, source.getFileName().toString());
     }
 
-    // First try the original leaf name, then append " (2)", " (3)", ... before the extension
-    // until a free path is found. Never overwrites an existing file.
+    /**
+     * First try the original leaf name, then append " (2)", " (3)", ... before the extension
+     * until a free path is found. Never overwrites an existing file.
+     *
+     * @param destDir {@link Path} destination directory
+     * @param leaf {@link String} file name to place in destDir
+     * @return {@link Path} a path in destDir that does not currently exist
+     */
     private static Path resolveCollision(Path destDir, String leaf) {
         Path candidate = destDir.resolve(leaf);
         if (!Files.exists(candidate)) {
@@ -205,11 +320,23 @@ public class NioMediaStore implements MediaStore {
         return candidate;
     }
 
+    /**
+     * Extracts the file name without its extension.
+     *
+     * @param leaf {@link String} file name
+     * @return {@link String} the file name minus its extension
+     */
     private static String baseName(String leaf) {
         int dot = leaf.lastIndexOf('.');
         return dot <= 0 ? leaf : leaf.substring(0, dot);
     }
 
+    /**
+     * Extracts a file name's extension, including the leading dot.
+     *
+     * @param leaf {@link String} file name
+     * @return {@link String} the extension including its leading dot, or empty string if none
+     */
     private static String extension(String leaf) {
         int dot = leaf.lastIndexOf('.');
         return dot <= 0 ? "" : leaf.substring(dot);

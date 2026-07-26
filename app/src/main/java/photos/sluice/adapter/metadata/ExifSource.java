@@ -24,6 +24,13 @@ public class ExifSource implements DateSource {
     // treat the naive value as if it were already in that zone and convert it.
     private static final DateTimeFormatter EXIF_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss");
 
+    /**
+     * Resolves a capture date from the file's EXIF metadata.
+     *
+     * @param file {@link MediaFile} the media file to read EXIF data from
+     * @param sidecar {@link TakeoutSidecar} unused for this source
+     * @return an {@link Optional} {@link LocalDateTime}, the parsed EXIF date, if present and valid
+     */
     @Override
     public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
         Metadata metadata;
@@ -43,6 +50,12 @@ public class ExifSource implements DateSource {
                 .or(() -> parse(directory.getString(ExifSubIFDDirectory.TAG_DATETIME_DIGITIZED)));
     }
 
+    /**
+     * Parses a raw EXIF date string into a {@link LocalDateTime}.
+     *
+     * @param raw {@link String} the raw EXIF date string, or null
+     * @return an {@link Optional} {@link LocalDateTime}, the parsed date, if the string is present and well-formed
+     */
     private static Optional<LocalDateTime> parse(@Nullable String raw) {
         if (raw == null) {
             return Optional.empty();

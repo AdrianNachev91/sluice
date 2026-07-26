@@ -14,11 +14,22 @@ public final class LowResGate {
     // (TileRenderer) - share the same bar instead of duplicating the literal.
     public static final int MIN_DIMENSION = 640;
 
+    /**
+     * Prevents instantiation of this static utility class.
+     */
     private LowResGate() {
     }
 
-    // extension must already be lowercase (matches MediaTypeDetector's own contract), since the
-    // "svg" comparison here is exact rather than case-insensitive.
+    /**
+     * extension must already be lowercase (matches MediaTypeDetector's own contract), since the
+     * "svg" comparison here is exact rather than case-insensitive.
+     *
+     * @param fileSizeBytes long the file size in bytes
+     * @param dimensions {@link Dimensions} the image dimensions, or null if unknown
+     * @param type {@link MediaType} the media type
+     * @param extension {@link String} the lowercase file extension
+     * @return boolean true if the file counts as low resolution
+     */
     public static boolean isLowRes(
             long fileSizeBytes, @Nullable Dimensions dimensions, MediaType type, String extension) {
         if (type == MediaType.VIDEO || extension.equals("svg")) {

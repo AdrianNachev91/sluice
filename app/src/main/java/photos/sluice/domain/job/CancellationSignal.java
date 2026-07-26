@@ -8,5 +8,10 @@ public interface CancellationSignal {
 
     CancellationSignal NEVER = () -> false;
 
+    /**
+     * Checks whether cancellation has been requested.
+     *
+     * @return boolean true if the caller should stop at the next poll point
+     */
     boolean isCancelled();
 }

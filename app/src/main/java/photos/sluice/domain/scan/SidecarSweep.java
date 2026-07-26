@@ -30,9 +30,15 @@ public final class SidecarSweep {
     // out of sync.
     public static final int MIN_TRUNCATED_OWNER_KEY_LENGTH = 46;
 
-    // remainingMedia and remainingJsonPaths describe the Inbox as it stands right now. This
-    // method has no opinion on how the caller derived "remaining," and does no scanning itself.
-    // Returns the subset of remainingJsonPaths with no owning media left in the same directory.
+    /**
+     * remainingMedia and remainingJsonPaths describe the Inbox as it stands right now. This
+     * method has no opinion on how the caller derived "remaining," and does no scanning itself.
+     * Returns the subset of remainingJsonPaths with no owning media left in the same directory.
+     *
+     * @param remainingMedia a {@link List} of {@link Path} media files still present in the Inbox
+     * @param remainingJsonPaths a {@link List} of {@link Path} sidecar JSON files still present in the Inbox
+     * @return a {@link List} of {@link Path} orphaned sidecar paths with no owning media left
+     */
     public List<Path> findOrphaned(List<Path> remainingMedia, List<Path> remainingJsonPaths) {
         Map<Path, List<String>> mediaNamesByDir = new HashMap<>();
         for (Path media : remainingMedia) {
@@ -51,10 +57,16 @@ public final class SidecarSweep {
         return orphaned;
     }
 
-    // A sidecar name can be a truncated prefix of the media name it describes (Google truncates
-    // long sidecar names). So an exact match isn't the only way a sidecar is still needed - a
-    // long enough owner key matching as a prefix also counts. A short owner key only counts on an
-    // exact match, to avoid mistaking an accidental prefix collision for a truncated name.
+    /**
+     * A sidecar name can be a truncated prefix of the media name it describes (Google truncates
+     * long sidecar names). So an exact match isn't the only way a sidecar is still needed - a
+     * long enough owner key matching as a prefix also counts. A short owner key only counts on an
+     * exact match, to avoid mistaking an accidental prefix collision for a truncated name.
+     *
+     * @param ownerKeyLower {@link String} the lowercased owner key derived from the sidecar
+     * @param mediaNames a {@link List} of {@link String} lowercased media file names in the same directory
+     * @return boolean true if the sidecar is still needed by some media file
+     */
     private static boolean stillNeeded(String ownerKeyLower, List<String> mediaNames) {
         boolean allowPrefixMatch = ownerKeyLower.length() >= MIN_TRUNCATED_OWNER_KEY_LENGTH;
         return mediaNames.stream().anyMatch(name -> name.equals(ownerKeyLower) || (allowPrefixMatch && name.startsWith(ownerKeyLower)));

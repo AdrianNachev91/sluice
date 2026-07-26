@@ -33,6 +33,12 @@ class SidecarReader {
     private record RawSidecar(@Nullable List<@Nullable RawPhoto> photos) {
     }
 
+    /**
+     * Reads every photo entry from a montage's sidecar JSON.
+     *
+     * @param sidecarPath {@link Path} path of the sidecar JSON to read
+     * @return a {@link List} of {@link SidecarPhotoEntry}, every photo entry the sidecar lists
+     */
     public List<SidecarPhotoEntry> readEntries(Path sidecarPath) {
         final RawSidecar raw;
         try (var input = Files.newInputStream(sidecarPath)) {
@@ -61,6 +67,13 @@ class SidecarReader {
                 .toList();
     }
 
+    /**
+     * Converts a raw photo DTO into a {@link SidecarPhotoEntry}, failing loud on any missing field.
+     *
+     * @param photo {@link RawPhoto} the raw photo entry to convert
+     * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
+     * @return {@link SidecarPhotoEntry} the converted photo entry
+     */
     private static SidecarPhotoEntry entryOf(@Nullable RawPhoto photo, Path sidecarPath) {
         if (photo == null) {
             throw new UncheckedIOException("Sidecar " + sidecarPath + " has a null photo entry",
@@ -73,6 +86,14 @@ class SidecarReader {
                 required(photo.received(), "received", sidecarPath));
     }
 
+    /**
+     * Returns a required field's value, failing loud if it's null.
+     *
+     * @param value T the field's value, possibly null
+     * @param field {@link String} the field's name, used only for the error message
+     * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
+     * @return T the non-null value
+     */
     private static <T> T required(@Nullable T value, String field, Path sidecarPath) {
         if (value == null) {
             throw new UncheckedIOException(
@@ -82,6 +103,13 @@ class SidecarReader {
         return value;
     }
 
+    /**
+     * Parses a raw timestamp string, failing loud if it's unparseable.
+     *
+     * @param time {@link String} the raw timestamp string to parse
+     * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
+     * @return {@link Instant} the parsed instant
+     */
     private static Instant timeOf(String time, Path sidecarPath) {
         try {
             return Instant.parse(time);

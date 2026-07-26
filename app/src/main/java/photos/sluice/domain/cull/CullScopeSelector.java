@@ -12,11 +12,17 @@ import java.util.List;
 // results back here for ordering.
 public final class CullScopeSelector {
 
-    // Directories to scan under photosRoot for a scope. Year confines the scan to the requested
-    // month subdirectories (sorted, deduplicated), or the whole year directory when months is null.
-    // That covers every month present, for a caller that wants a whole year without listing every
-    // month explicitly. OldestN scans the whole Photos root, since the N oldest files can come from
-    // any year.
+    /**
+     * Directories to scan under photosRoot for a scope. Year confines the scan to the requested
+     * month subdirectories (sorted, deduplicated), or the whole year directory when months is null.
+     * That covers every month present, for a caller that wants a whole year without listing every
+     * month explicitly. OldestN scans the whole Photos root, since the N oldest files can come from
+     * any year.
+     *
+     * @param photosRoot {@link Path} the Sorted Photos root
+     * @param scope {@link CullScope} the cull scope to resolve
+     * @return a {@link List} of {@link Path} directories to scan for candidates
+     */
     public List<Path> directoriesToScan(Path photosRoot, CullScope scope) {
         return switch (scope) {
             case CullScope.Year(int year, List<Integer> months) -> monthDirectories(photosRoot, year, months);
@@ -24,9 +30,15 @@ public final class CullScopeSelector {
         };
     }
 
-    // The basePath reported in index.json: the year directory for Year, or the whole Photos root
-    // for OldestN. Year's basePath always names the scope's year, even when narrowed to specific
-    // months - not the exact subset scanned within it.
+    /**
+     * The basePath reported in index.json: the year directory for Year, or the whole Photos root
+     * for OldestN. Year's basePath always names the scope's year, even when narrowed to specific
+     * months - not the exact subset scanned within it.
+     *
+     * @param photosRoot {@link Path} the Sorted Photos root
+     * @param scope {@link CullScope} the cull scope to resolve
+     * @return {@link Path} the base path to report for this scope
+     */
     public Path basePath(Path photosRoot, CullScope scope) {
         return switch (scope) {
             case CullScope.Year(int year, List<Integer> _) -> photosRoot.resolve(String.valueOf(year));
@@ -34,8 +46,14 @@ public final class CullScopeSelector {
         };
     }
 
-    // Sorts candidates by mtime ascending. OldestN additionally caps to n - directoriesToScan
-    // already scoped Year to exactly the right files, so Year needs no further limiting here.
+    /**
+     * Sorts candidates by mtime ascending. OldestN additionally caps to n - directoriesToScan
+     * already scoped Year to exactly the right files, so Year needs no further limiting here.
+     *
+     * @param candidates a {@link List} of {@link CullCandidate} the candidates to order
+     * @param scope {@link CullScope} the cull scope being resolved
+     * @return a {@link List} of {@link CullCandidate} the ordered (and possibly capped) candidates
+     */
     public List<CullCandidate> order(List<CullCandidate> candidates, CullScope scope) {
         List<CullCandidate> sorted = candidates.stream()
                 .sorted(Comparator.comparing(CullCandidate::mtime))
@@ -46,6 +64,15 @@ public final class CullScopeSelector {
         };
     }
 
+    /**
+     * Resolves the month subdirectories under a year for a scope, or the whole year directory
+     * when months is null.
+     *
+     * @param photosRoot {@link Path} the Sorted Photos root
+     * @param year int the year to resolve
+     * @param months a {@link List} of {@link Integer} specific months to include, or null for the whole year
+     * @return a {@link List} of {@link Path} the resolved month (or year) directories
+     */
     private static List<Path> monthDirectories(Path photosRoot, int year, @Nullable List<Integer> months) {
         Path yearDir = photosRoot.resolve(String.valueOf(year));
         if (months == null) {

@@ -19,6 +19,12 @@ public class JobRunner {
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final AtomicBoolean busy = new AtomicBoolean(false);
 
+    /**
+     * Starts a job on the executor if none is currently running.
+     *
+     * @param work a {@link JobWork} of T the job logic to execute
+     * @return a {@link JobHandle} of T a handle for the started job
+     */
     public <T> JobHandle<T> submit(JobWork<T> work) {
         if (!busy.compareAndSet(false, true)) {
             throw new IllegalStateException("A job is already running; only one job runs at a time");
@@ -29,15 +35,26 @@ public class JobRunner {
         return handle;
     }
 
-    // Whether a job's work is currently executing, nothing more. It says nothing about whether the
-    // most recent job succeeded or failed - that's only ever knowable through that job's own
-    // JobHandle. A caller can observe this go false a moment before that job's own join()/
-    // onComplete() reports its outcome. That's fine: no filesystem-mutating work is still running
-    // by the time this flips, only the outcome notification is still in flight.
+    /**
+     * Whether a job's work is currently executing, nothing more. It says nothing about whether the
+     * most recent job succeeded or failed - that's only ever knowable through that job's own
+     * JobHandle. A caller can observe this go false a moment before that job's own join()/
+     * onComplete() reports its outcome. That's fine: no filesystem-mutating work is still running
+     * by the time this flips, only the outcome notification is still in flight.
+     *
+     * @return boolean true if a job is currently running
+     */
     public boolean isBusy() {
         return busy.get();
     }
 
+    /**
+     * Executes the job's work and completes the result future with its outcome.
+     *
+     * @param work a {@link JobWork} of T the job logic to execute
+     * @param handle a {@link JobHandle} of T the handle passed to the job's work
+     * @param resultFuture a {@link CompletableFuture} of T the future to complete with the result or failure
+     */
     private <T> void run(JobWork<T> work, JobHandle<T> handle, CompletableFuture<T> resultFuture) {
         T result = null;
         Throwable failure = null;

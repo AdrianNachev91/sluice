@@ -10,6 +10,12 @@ import java.util.Objects;
 // by ShardValidator).
 public record DecisionShard(String montage, List<Decision> decisions) {
 
+    /**
+     * Validates montage is present and defensively copies decisions.
+     *
+     * @param montage {@link String} the montage id this shard covers
+     * @param decisions a {@link List} of {@link Decision} the non-keep decisions for this montage
+     */
     public DecisionShard {
         Objects.requireNonNull(montage, "montage");
         decisions = List.copyOf(decisions);

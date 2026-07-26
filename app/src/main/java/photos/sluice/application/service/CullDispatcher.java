@@ -27,6 +27,12 @@ public class CullDispatcher {
     private final Map<String, VisionCuller> byId;
     private final CullSettings settings;
 
+    /**
+     * Indexes the given cullers by id, failing loud on duplicate ids.
+     *
+     * @param cullers a {@link List} of {@link VisionCuller} the vision cullers to register
+     * @param settings {@link CullSettings} cull provider configuration
+     */
     public CullDispatcher(List<VisionCuller> cullers, CullSettings settings) {
         this.byId = cullers.stream().collect(Collectors.toMap(
                 VisionCuller::id, Function.identity(),
@@ -36,19 +42,48 @@ public class CullDispatcher {
         this.settings = settings;
     }
 
+    /**
+     * Culls using the configured provider.
+     *
+     * @param prep {@link PrepDir} the prep directory to cull
+     * @param options {@link CullOptions} cull behavior options
+     * @return {@link CullReport} the cull report
+     */
     public CullReport cull(PrepDir prep, CullOptions options) throws CullException {
         return select().cull(prep, options);
     }
 
+    /**
+     * Culls using the configured provider, reporting progress.
+     *
+     * @param prep {@link PrepDir} the prep directory to cull
+     * @param options {@link CullOptions} cull behavior options
+     * @param progress {@link ProgressCallback} progress callback
+     * @return {@link CullReport} the cull report
+     */
     public CullReport cull(PrepDir prep, CullOptions options, ProgressCallback progress) throws CullException {
         return select().cull(prep, options, progress);
     }
 
+    /**
+     * Culls using the configured provider, reporting progress and honoring cancellation.
+     *
+     * @param prep {@link PrepDir} the prep directory to cull
+     * @param options {@link CullOptions} cull behavior options
+     * @param progress {@link ProgressCallback} progress callback
+     * @param cancellation {@link CancellationSignal} cancellation signal
+     * @return {@link CullReport} the cull report
+     */
     public CullReport cull(PrepDir prep, CullOptions options, ProgressCallback progress, CancellationSignal cancellation)
             throws CullException {
         return select().cull(prep, options, progress, cancellation);
     }
 
+    /**
+     * Looks up the vision culler registered for the configured provider.
+     *
+     * @return {@link VisionCuller} the selected vision culler
+     */
     private VisionCuller select() {
         String provider = settings.provider();
         VisionCuller culler = byId.get(provider);

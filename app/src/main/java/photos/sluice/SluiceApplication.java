@@ -9,6 +9,11 @@ import java.nio.file.Path;
 @SpringBootApplication
 public class SluiceApplication {
 
+    /**
+     * Starts the Spring Boot application, importing the user's config file if present.
+     *
+     * @param args {@link String}[] command-line arguments
+     */
     static void main(String[] args) {
         Path configFile = ConfigDirLocator.locate(System.getProperty("os.name"), System.getenv())
                 .resolve("config.yml");

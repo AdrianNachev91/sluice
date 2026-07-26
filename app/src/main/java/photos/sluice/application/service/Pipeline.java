@@ -53,9 +53,25 @@ public class Pipeline {
     private final CullEngine cullEngine;
     private final CurateEngine curateEngine;
 
-    // Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
-    // class has exactly one constructor. The package-private test-seam overload below means there
-    // are two, so this one has to be named as the one Spring should use.
+    /**
+     * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
+     * class has exactly one constructor. The package-private test-seam overload below means there
+     * are two, so this one has to be named as the one Spring should use.
+     *
+     * @param sortEngine {@link SortEngine} the sort engine
+     * @param commitEngine {@link CommitEngine} the commit engine
+     * @param rescueEngine {@link RescueEngine} the rescue engine
+     * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
+     * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
+     * @param applyEngine {@link ApplyEngine} applies merged cull decisions
+     * @param cullPrepPort {@link CullPrepPort} prepares cull montages and shards
+     * @param cullSettings {@link CullSettings} user-facing cull configuration
+     * @param mediaStore {@link MediaStore} moves/copies media files
+     * @param pathsPort {@link PathsPort} resolves configured library/inbox paths
+     * @param montageConfig {@link MontageConfig} montage grid sizing configuration
+     * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
+     * @param progressPort {@link ProgressPort} reports phase progress
+     */
     @Autowired
     public Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
@@ -66,10 +82,27 @@ public class Pipeline {
                 DEFAULT_WATCH_POLL_INTERVAL);
     }
 
-    // Test seam: production wiring always goes through the public constructor above, which fixes
-    // the poll cadence at DEFAULT_WATCH_POLL_INTERVAL. Tests exercising real watch-mode timing pass
-    // a much shorter interval here so the behavior proves out in milliseconds, not seconds, without
-    // resorting to a mock clock.
+    /**
+     * Test seam: production wiring always goes through the public constructor above, which fixes
+     * the poll cadence at DEFAULT_WATCH_POLL_INTERVAL. Tests exercising real watch-mode timing pass
+     * a much shorter interval here so the behavior proves out in milliseconds, not seconds, without
+     * resorting to a mock clock.
+     *
+     * @param sortEngine {@link SortEngine} the sort engine
+     * @param commitEngine {@link CommitEngine} the commit engine
+     * @param rescueEngine {@link RescueEngine} the rescue engine
+     * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
+     * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
+     * @param applyEngine {@link ApplyEngine} applies merged cull decisions
+     * @param cullPrepPort {@link CullPrepPort} prepares cull montages and shards
+     * @param cullSettings {@link CullSettings} user-facing cull configuration
+     * @param mediaStore {@link MediaStore} moves/copies media files
+     * @param pathsPort {@link PathsPort} resolves configured library/inbox paths
+     * @param montageConfig {@link MontageConfig} montage grid sizing configuration
+     * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
+     * @param progressPort {@link ProgressPort} reports phase progress
+     * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
+     */
     Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
             CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
@@ -84,51 +117,107 @@ public class Pipeline {
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, cullEngine);
     }
 
-    // Delegates to CullEngine, which does the real work - see its own doc. Public and callable
-    // directly (not just via @PostConstruct) so a test can drive it without a Spring context.
+    /**
+     * Delegates to CullEngine, which does the real work - see its own doc. Public and callable
+     * directly (not just via @PostConstruct) so a test can drive it without a Spring context.
+     */
     @PostConstruct
     public void armWatchesForExistingWaitingJobs() {
         cullEngine.armWatchesForExistingWaitingJobs();
     }
 
+    /**
+     * Runs a sort job as a cancellable background job.
+     *
+     * @param scope {@link SortScope} which files to sort
+     * @return a {@link JobHandle} of {@link SortSummary} a handle to the running job
+     */
     public JobHandle<SortSummary> sort(SortScope scope) {
         return jobRunner.submit(handle -> runPhase(SORTING,
                 progress -> sortEngine.sort(scope, progress, handle::isCancellationRequested)));
     }
 
+    /**
+     * Runs a commit job as a cancellable background job.
+     *
+     * @param scope {@link CommitScope} which files to commit
+     * @return a {@link JobHandle} of {@link CommitSummary} a handle to the running job
+     */
     public JobHandle<CommitSummary> commit(CommitScope scope) {
         return jobRunner.submit(handle -> runPhase(COMMITTING,
                 progress -> commitEngine.commit(scope, progress, handle::isCancellationRequested)));
     }
 
+    /**
+     * Runs a rescue job as a cancellable background job.
+     *
+     * @param reviewFolder {@link String} the Review folder to promote
+     * @return a {@link JobHandle} of {@link RescueSummary} a handle to the running job
+     */
     public JobHandle<RescueSummary> rescue(String reviewFolder) {
         return jobRunner.submit(handle -> runPhase(RESCUING,
                 progress -> rescueEngine.rescue(reviewFolder, progress, handle::isCancellationRequested)));
     }
 
+    /**
+     * Delegates to CullEngine to run a cull job.
+     *
+     * @param scope {@link CullScope} which files to cull
+     * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
+     */
     public JobHandle<CullJobOutcome> cull(CullScope scope) {
         return cullEngine.cull(scope);
     }
 
+    /**
+     * Delegates to CurateEngine to run a sort followed by a cull.
+     *
+     * @param scope {@link SortScope} which files to curate
+     * @return a {@link JobHandle} of {@link CurateOutcome} a handle to the running job
+     */
     public JobHandle<CurateOutcome> curate(SortScope scope) {
         return curateEngine.curate(scope);
     }
 
+    /**
+     * Delegates to CullEngine to resume a waiting cull job.
+     *
+     * @param prepDir {@link Path} the cull prep directory to resume
+     * @param allowPartial boolean whether to proceed with missing shards
+     * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
+     */
     public JobHandle<CullJobOutcome> resume(Path prepDir, boolean allowPartial) {
         return cullEngine.resume(prepDir, allowPartial);
     }
 
+    /**
+     * Delegates to CullEngine to list waiting cull jobs.
+     *
+     * @return a {@link List} of {@link WaitingCullJob} the currently waiting cull jobs
+     */
     public List<WaitingCullJob> waitingJobs() {
         return cullEngine.waitingJobs();
     }
 
-    // Test seam: whether a watcher is currently polling prepDir. Lets a test prove CullEngine's own
-    // disarmWatch() claim - that any dispatchAndApply() call retires an existing watcher, not just
-    // the watcher's own auto-resume trigger.
+    /**
+     * Test seam: whether a watcher is currently polling prepDir. Lets a test prove CullEngine's own
+     * disarmWatch() claim - that any dispatchAndApply() call retires an existing watcher, not just
+     * the watcher's own auto-resume trigger.
+     *
+     * @param prepDir {@link Path} the cull prep directory to check
+     * @return boolean true if a watcher is currently polling it
+     */
     boolean isWatchActive(Path prepDir) {
         return cullEngine.isWatchActive(prepDir);
     }
 
+    /**
+     * Runs work through PhaseRunner, bracketing it with the given phase label.
+     *
+     * @param phase {@link String} the phase label for progress reporting
+     * @param work a {@link PhaseRunner.PhaseWork} of T the work to run
+     * @return T the result of the work
+     */
     private <T> T runPhase(String phase, PhaseRunner.PhaseWork<T> work) throws Exception {
         return phaseRunner.run(phase, work);
     }
@@ -140,11 +229,22 @@ public class Pipeline {
     public static final class CurateConflictException extends IllegalStateException {
         private final transient SortSummary sortSummary;
 
+        /**
+         * Creates the exception carrying the partial sort result.
+         *
+         * @param message {@link String} the exception message
+         * @param sortSummary {@link SortSummary} the sort summary produced before the conflict
+         */
         CurateConflictException(String message, SortSummary sortSummary) {
             super(message);
             this.sortSummary = sortSummary;
         }
 
+        /**
+         * Returns the sort summary produced before the conflict.
+         *
+         * @return {@link SortSummary} the partial sort result
+         */
         public SortSummary sortSummary() {
             return sortSummary;
         }

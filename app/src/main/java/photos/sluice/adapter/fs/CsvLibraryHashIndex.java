@@ -2,6 +2,7 @@ package photos.sluice.adapter.fs;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.HashIndexPort;
+import photos.sluice.application.port.out.HashIndexPort.Session;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.BufferedWriter;
@@ -29,10 +30,21 @@ public class CsvLibraryHashIndex implements HashIndexPort {
 
     private final Path indexFile;
 
+    /**
+     * Creates an index backed by a CSV file at the given path.
+     *
+     * @param indexFile {@link Path} path to the CSV hash index file
+     */
     public CsvLibraryHashIndex(Path indexFile) {
         this.indexFile = indexFile;
     }
 
+    /**
+     * Loads every entry from the index file, grouped by hash.
+     *
+     * @return a {@link Map} of {@link String} to a {@link List} of {@link Path}, grouped by
+     *     their sha256 hash, empty if the index file does not exist
+     */
     @Override
     public Map<String, List<Path>> load() {
         if (!Files.isRegularFile(indexFile)) {
@@ -59,6 +71,12 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         return result;
     }
 
+    /**
+     * Checks whether a hash is already present in the index.
+     *
+     * @param sha256 {@link String} hash to look up
+     * @return boolean true if the hash appears in the index
+     */
     @Override
     public boolean contains(String sha256) {
         // No caching: every caller so far either already holds a pre-loaded Set or calls this
@@ -67,6 +85,11 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         return load().containsKey(sha256);
     }
 
+    /**
+     * Appends a batch of entries to the index file in a single session.
+     *
+     * @param entries a {@link List} of {@link IndexEntry} to append
+     */
     @Override
     public void append(List<IndexEntry> entries) {
         if (entries.isEmpty()) {
@@ -77,6 +100,11 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         }
     }
 
+    /**
+     * Opens a new append session against this index file.
+     *
+     * @return a new {@link Session} for appending entries
+     */
     @Override
     public Session openSession() {
         return new CsvSession();
@@ -90,6 +118,11 @@ public class CsvLibraryHashIndex implements HashIndexPort {
 
         private @Nullable BufferedWriter writer;
 
+        /**
+         * Appends one entry to the index file, opening the writer on first use.
+         *
+         * @param entry {@link IndexEntry} to append
+         */
         @Override
         public void append(IndexEntry entry) {
             try {
@@ -104,6 +137,9 @@ public class CsvLibraryHashIndex implements HashIndexPort {
             }
         }
 
+        /**
+         * Closes the underlying writer, if one was ever opened.
+         */
         @Override
         public void close() {
             if (writer == null) {
@@ -117,6 +153,11 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         }
     }
 
+    /**
+     * Opens the index file for appending, writing a leading newline and/or header as needed.
+     *
+     * @return a {@link BufferedWriter} positioned to append new rows
+     */
     private BufferedWriter openWriter() throws IOException {
         Files.createDirectories(indexFile.getParent());
         boolean exists = Files.isRegularFile(indexFile);
@@ -139,8 +180,13 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         return writer;
     }
 
-    // Reads only the file's last byte via a seek, rather than loading the whole file, since this
-    // check runs on every append and the index can grow to many thousands of rows.
+    /**
+     * Reads only the file's last byte via a seek, rather than loading the whole file, since this
+     * check runs on every append and the index can grow to many thousands of rows.
+     *
+     * @param file {@link Path} file to check
+     * @return boolean true if the file's last byte is a newline character
+     */
     private static boolean endsWithNewline(Path file) throws IOException {
         try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ)) {
             channel.position(channel.size() - 1);
@@ -151,19 +197,42 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         }
     }
 
+    /**
+     * Formats an entry as one quoted CSV row.
+     *
+     * @param entry {@link IndexEntry} to format
+     * @return {@link String} the formatted CSV row
+     */
     private static String formatLine(IndexEntry entry) {
         return quote(entry.sha256()) + "," + quote(entry.path().toString());
     }
 
-    // RFC 4180: a literal quote inside a quoted field is escaped by doubling it.
+    /**
+     * RFC 4180: a literal quote inside a quoted field is escaped by doubling it.
+     *
+     * @param value {@link String} field value to quote
+     * @return {@link String} the quoted, escaped field value
+     */
     private static String quote(String value) {
         return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
+    /**
+     * Strips a leading byte-order-mark character, if present.
+     *
+     * @param line {@link String} line to strip
+     * @return {@link String} the line without a leading BOM
+     */
     private static String stripBom(String line) {
         return !line.isEmpty() && line.charAt(0) == BOM ? line.substring(1) : line;
     }
 
+    /**
+     * Parses one CSV row into an index entry.
+     *
+     * @param line {@link String} CSV row to parse
+     * @return {@link IndexEntry} the parsed index entry
+     */
     private static IndexEntry parseLine(String line) {
         List<String> fields = parseCsvFields(line);
         if (fields.size() != 2) {
@@ -172,11 +241,17 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         return new IndexEntry(fields.get(0), Path.of(fields.get(1)));
     }
 
-    // Hand-rolled instead of pulling in a CSV library: the format is fixed at exactly 2 always-
-    // quoted columns, so this is a small character-by-character state machine rather than a
-    // general-purpose parser. `inQuotes` tracks whether we're inside a quoted field; a `"` seen
-    // while inside one is either an escaped literal quote (doubled - consume both, stay in the
-    // field) or the field's closing quote, disambiguated by peeking at the next character.
+    /**
+     * Hand-rolled instead of pulling in a CSV library: the format is fixed at exactly 2 always-
+     * quoted columns, so this is a small character-by-character state machine rather than a
+     * general-purpose parser. {@code inQuotes} tracks whether we're inside a quoted field; a
+     * {@code "} seen while inside one is either an escaped literal quote (doubled - consume both,
+     * stay in the field) or the field's closing quote, disambiguated by peeking at the next
+     * character.
+     *
+     * @param line {@link String} CSV row to split into fields
+     * @return a {@link List} of {@link String}, the row's field values, in order
+     */
     private static List<String> parseCsvFields(String line) {
         List<String> fields = new ArrayList<>();
         var current = new StringBuilder();

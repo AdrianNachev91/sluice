@@ -8,22 +8,50 @@ import java.util.Map;
 
 public interface HashIndexPort {
 
+    /**
+     * Loads the full hash index.
+     *
+     * @return a {@link Map} of {@link String} to a {@link List} of {@link Path}, every indexed hash mapped to its known paths
+     */
     Map<String, List<Path>> load();
 
+    /**
+     * Checks whether a hash is already present in the index.
+     *
+     * @param sha256 {@link String} the hash to look up
+     * @return boolean true if the hash is already indexed
+     */
     boolean contains(String sha256);
 
+    /**
+     * Appends entries to the index.
+     *
+     * @param entries a {@link List} of {@link IndexEntry} the entries to append
+     */
     void append(List<IndexEntry> entries);
 
-    // For a caller appending many entries over a long-running move loop (Commit/RescueEngine). One
-    // session amortizes the header/leading-newline checks across the whole run instead of redoing
-    // them on every entry. Each entry is still flushed as it's written, so a crash mid-run never
-    // loses an already-moved file's row.
+    /**
+     * For a caller appending many entries over a long-running move loop (Commit/RescueEngine). One
+     * session amortizes the header/leading-newline checks across the whole run instead of redoing
+     * them on every entry. Each entry is still flushed as it's written, so a crash mid-run never
+     * loses an already-moved file's row.
+     *
+     * @return {@link Session} an open session for batched appends
+     */
     Session openSession();
 
     interface Session extends AutoCloseable {
 
+        /**
+         * Appends a single entry within this session.
+         *
+         * @param entry {@link IndexEntry} the entry to append
+         */
         void append(IndexEntry entry);
 
+        /**
+         * Closes the session, flushing any pending state.
+         */
         @Override
         void close();
     }

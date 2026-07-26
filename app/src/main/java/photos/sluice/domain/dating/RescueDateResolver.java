@@ -24,11 +24,24 @@ public class RescueDateResolver {
     private final DateSource exifSource;
     private final DateSource filenameSource;
 
+    /**
+     * Builds the resolver from its two fallback date sources.
+     *
+     * @param exifSource {@link DateSource} resolves from EXIF metadata
+     * @param filenameSource {@link DateSource} resolves from the filename pattern
+     */
     public RescueDateResolver(DateSource exifSource, DateSource filenameSource) {
         this.exifSource = exifSource;
         this.filenameSource = filenameSource;
     }
 
+    /**
+     * Resolves a plausible date for a rescued file, preferring the target folder's own date.
+     *
+     * @param file {@link MediaFile} the media file to date
+     * @param targetLeaf {@link String} the rescue destination's leaf folder name
+     * @return an {@link Optional} {@link LocalDateTime}, if any source produced a plausible one
+     */
     public Optional<LocalDateTime> resolve(MediaFile file, String targetLeaf) {
         return folderDate(targetLeaf)
                 .or(() -> exifSource.resolve(file, null))
@@ -36,6 +49,12 @@ public class RescueDateResolver {
                 .filter(DatePlausibility::isPlausible);
     }
 
+    /**
+     * Parses a dated "yyyy-mm" leaf folder name into its first-of-month date.
+     *
+     * @param targetLeaf {@link String} the rescue destination's leaf folder name
+     * @return an {@link Optional} {@link LocalDateTime}, if the leaf matches the dated pattern
+     */
     private static Optional<LocalDateTime> folderDate(String targetLeaf) {
         Matcher leaf = DATED_LEAF.matcher(targetLeaf);
         if (!leaf.matches()) {

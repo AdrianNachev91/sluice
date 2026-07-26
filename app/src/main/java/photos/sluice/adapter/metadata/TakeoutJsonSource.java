@@ -22,6 +22,13 @@ public class TakeoutJsonSource implements DateSource {
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
+    /**
+     * Resolves a capture date from the Takeout sidecar's photoTakenTime field.
+     *
+     * @param file {@link MediaFile} unused for this source
+     * @param sidecar {@link TakeoutSidecar} the Takeout sidecar JSON to read the timestamp from
+     * @return an {@link Optional} {@link LocalDateTime}, the parsed timestamp, if the sidecar is present and well-formed
+     */
     @Override
     public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
         if (sidecar == null) {

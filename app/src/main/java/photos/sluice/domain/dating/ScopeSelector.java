@@ -17,6 +17,13 @@ import java.util.OptionalInt;
 // affects routing later, not which files are in scope.
 public final class ScopeSelector {
 
+    /**
+     * Selects the subset of dated media in scope for a sort run.
+     *
+     * @param allDated a {@link List} of {@link DatedMedia} every dated media file under consideration
+     * @param scope {@link SortScope} the sort scope to select against
+     * @return a {@link List} of {@link DatedMedia} the media files selected by the scope
+     */
     public List<DatedMedia> select(List<DatedMedia> allDated, SortScope scope) {
         return switch (scope) {
             case Year(int year, MonthRange months) -> selectYear(allDated, year, months);
@@ -25,6 +32,14 @@ public final class ScopeSelector {
         };
     }
 
+    /**
+     * Selects the media dated within a given year, optionally narrowed to a month range.
+     *
+     * @param allDated a {@link List} of {@link DatedMedia} every dated media file under consideration
+     * @param year int the year to select
+     * @param months {@link MonthRange} the month range to narrow to, or null for the whole year
+     * @return a {@link List} of {@link DatedMedia} the media files in scope
+     */
     private static List<DatedMedia> selectYear(List<DatedMedia> allDated, int year, @Nullable MonthRange months) {
         return allDated.stream()
                 .filter(dated -> dated.date().when().getYear() == year)
@@ -32,6 +47,13 @@ public final class ScopeSelector {
                 .toList();
     }
 
+    /**
+     * Selects the n oldest-dated media files.
+     *
+     * @param allDated a {@link List} of {@link DatedMedia} every dated media file under consideration
+     * @param n int how many of the oldest files to select
+     * @return a {@link List} of {@link DatedMedia} the n oldest media files
+     */
     private static List<DatedMedia> selectOldestN(List<DatedMedia> allDated, int n) {
         return allDated.stream()
                 .sorted(Comparator.comparing(dated -> dated.date().when()))
@@ -39,6 +61,12 @@ public final class ScopeSelector {
                 .toList();
     }
 
+    /**
+     * Selects every media file dated within the oldest year present in the set.
+     *
+     * @param allDated a {@link List} of {@link DatedMedia} every dated media file under consideration
+     * @return a {@link List} of {@link DatedMedia} the media files in the oldest year, or an empty list if none are dated
+     */
     private static List<DatedMedia> selectOldestYear(List<DatedMedia> allDated) {
         OptionalInt oldestYear = allDated.stream().mapToInt(dated -> dated.date().when().getYear()).min();
         return oldestYear.isPresent() ? selectYear(allDated, oldestYear.getAsInt(), null) : List.of();

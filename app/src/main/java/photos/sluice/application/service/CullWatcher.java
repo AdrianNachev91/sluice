@@ -50,6 +50,15 @@ final class CullWatcher {
     // Null until start() runs; stop() before start() is a valid no-op (see its own doc).
     private volatile @Nullable ScheduledFuture<?> task;
 
+    /**
+     * Creates a watcher for one waiting cull, not yet running.
+     *
+     * @param pollInterval {@link Duration} how often to check readiness
+     * @param timeout {@link Duration} how long to poll before giving up, or null
+     * @param isReady {@link BooleanSupplier} cheap readiness check
+     * @param attemptConsume {@link BooleanSupplier} the real resume attempt to run once ready
+     * @param armedAt {@link Instant} when this watcher was armed
+     */
     CullWatcher(Duration pollInterval, @Nullable Duration timeout, BooleanSupplier isReady,
             BooleanSupplier attemptConsume, Instant armedAt) {
         this.pollInterval = pollInterval;
@@ -59,14 +68,19 @@ final class CullWatcher {
         this.armedAt = armedAt;
     }
 
+    /**
+     * Begins polling on a fixed delay.
+     */
     void start() {
         task = executor.scheduleWithFixedDelay(
                 this::poll, pollInterval.toMillis(), pollInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    // Cancels the scheduled poll and shuts the watcher's own executor down. Safe to call more than
-    // once - executor.shutdown() is itself idempotent. Also safe to call from inside poll() itself:
-    // ScheduledExecutorService.shutdown() never interrupts the task currently running on it.
+    /**
+     * Cancels the scheduled poll and shuts the watcher's own executor down. Safe to call more than
+     * once - executor.shutdown() is itself idempotent. Also safe to call from inside poll() itself:
+     * ScheduledExecutorService.shutdown() never interrupts the task currently running on it.
+     */
     void stop() {
         ScheduledFuture<?> current = task;
         if (current != null) {
@@ -75,14 +89,21 @@ final class CullWatcher {
         executor.shutdown();
     }
 
+    /**
+     * Reports whether the watcher's executor is still running.
+     *
+     * @return boolean true if not yet shut down
+     */
     boolean isActive() {
         return !executor.isShutdown();
     }
 
-    // A scheduleWithFixedDelay task that throws suppresses every future execution silently, per
-    // ScheduledExecutorService's own contract. Caught broadly here so one bad tick - a transient
-    // read failure the tally check didn't already swallow - degrades to "not ready this tick"
-    // instead of quietly killing the whole watch.
+    /**
+     * A scheduleWithFixedDelay task that throws suppresses every future execution silently, per
+     * ScheduledExecutorService's own contract. Caught broadly here so one bad tick - a transient
+     * read failure the tally check didn't already swallow - degrades to "not ready this tick"
+     * instead of quietly killing the whole watch.
+     */
     private void poll() {
         try {
             pollUnsafe();
@@ -91,6 +112,9 @@ final class CullWatcher {
         }
     }
 
+    /**
+     * Checks the timeout, then checks readiness and attempts one consume.
+     */
     private void pollUnsafe() {
         if (timeout != null && Duration.between(armedAt, Instant.now()).compareTo(timeout) >= 0) {
             stop();

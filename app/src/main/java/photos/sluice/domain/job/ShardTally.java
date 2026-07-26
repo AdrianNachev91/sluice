@@ -7,6 +7,13 @@ package photos.sluice.domain.job;
 // montage count.
 public record ShardTally(int present, int valid, int total) {
 
+    /**
+     * Validates the tally invariants: valid never exceeds present, present never exceeds total.
+     *
+     * @param present int shard files found in the prep dir
+     * @param valid int present shards that also pass validation
+     * @param total int the prep dir's own expected montage count
+     */
     public ShardTally {
         if (valid < 0 || total < 0 || present > total || valid > present) {
             throw new IllegalArgumentException(

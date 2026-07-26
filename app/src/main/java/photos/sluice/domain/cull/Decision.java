@@ -16,6 +16,11 @@ import java.nio.file.Path;
 // that a flat category cannot express. file is the photo's absolute source path.
 public sealed interface Decision {
 
+    /**
+     * The photo's absolute source path.
+     *
+     * @return {@link Path} the decision's source file path
+     */
     Path file();
 
     record Classification(Path file, String category, String reason) implements Decision {}

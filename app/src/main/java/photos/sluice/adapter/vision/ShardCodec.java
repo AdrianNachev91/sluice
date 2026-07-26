@@ -41,12 +41,19 @@ class ShardCodec {
 
     private final JsonMapper mapper;
 
+    /**
+     * Constructs the codec with the default JSON mapper.
+     */
     ShardCodec() {
         this(JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build());
     }
 
-    // Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException catch
-    // branch, which a real read/write failure can't trigger deterministically.
+    /**
+     * Package-private: lets a test inject a mock JsonMapper to exercise the JacksonException catch
+     * branch, which a real read/write failure can't trigger deterministically.
+     *
+     * @param mapper {@link JsonMapper} the JSON mapper used for shard I/O
+     */
     ShardCodec(JsonMapper mapper) {
         this.mapper = mapper;
     }
@@ -63,6 +70,12 @@ class ShardCodec {
     private record RawShard(@Nullable String montage, @Nullable List<@Nullable RawDecision> decisions) {
     }
 
+    /**
+     * Writes a decision shard to disk.
+     *
+     * @param shardPath {@link Path} path of the shard file to write
+     * @param shard {@link DecisionShard} the decision shard to write
+     */
     public void write(Path shardPath, DecisionShard shard) {
         var document = new RawShard(
                 shard.montage(),
@@ -76,6 +89,12 @@ class ShardCodec {
         }
     }
 
+    /**
+     * Reads a decision shard from disk.
+     *
+     * @param shardPath {@link Path} path of the shard file to read
+     * @return {@link DecisionShard} the parsed decision shard
+     */
     public DecisionShard read(Path shardPath) {
         final RawShard raw;
         try (var input = Files.newInputStream(shardPath)) {
@@ -99,6 +118,12 @@ class ShardCodec {
                 rawDecisions.stream().map(ShardCodec::toDomain).toList());
     }
 
+    /**
+     * Converts a domain decision to its raw DTO representation.
+     *
+     * @param decision {@link Decision} the domain decision to convert
+     * @return {@link RawDecision} the raw DTO representation
+     */
     private static RawDecision toRaw(Decision decision) {
         return switch (decision) {
             case Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
@@ -107,6 +132,12 @@ class ShardCodec {
         };
     }
 
+    /**
+     * Converts a raw DTO to its domain decision representation.
+     *
+     * @param raw {@link RawDecision} the raw DTO to convert
+     * @return {@link Decision} the domain decision
+     */
     private static Decision toDomain(@Nullable RawDecision raw) {
         if (raw == null) {
             throw new UncheckedIOException("Shard contains a null decision entry",
@@ -121,6 +152,12 @@ class ShardCodec {
         };
     }
 
+    /**
+     * Returns the value, or an empty string if it's null.
+     *
+     * @param value {@link String} the value, possibly null
+     * @return {@link String} the value, or empty string if null
+     */
     private static String orEmpty(@Nullable String value) {
         return value == null ? "" : value;
     }

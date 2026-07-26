@@ -7,5 +7,11 @@ import java.util.Optional;
 
 public interface ImageDimensionsPort {
 
+    /**
+     * Reads an image's pixel dimensions.
+     *
+     * @param file {@link Path} the image file to inspect
+     * @return an {@link Optional} {@link Dimensions}, or empty if they could not be determined
+     */
     Optional<Dimensions> read(Path file);
 }

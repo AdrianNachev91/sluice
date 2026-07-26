@@ -9,7 +9,12 @@ import java.util.Optional;
 // rather than one per extension.
 public interface HeifDecoder {
 
-    // Empty means no decoder is available or the file couldn't be decoded - callers degrade
-    // gracefully (flag unreviewed-heic, still date-sort) rather than failing the whole run.
+    /**
+     * Empty means no decoder is available or the file couldn't be decoded - callers degrade
+     * gracefully (flag unreviewed-heic, still date-sort) rather than failing the whole run.
+     *
+     * @param file {@link Path} the HEIF/AVIF/HEIC file to decode
+     * @return an {@link Optional} {@link BufferedImage}, or empty if decoding is unavailable or fails
+     */
     Optional<BufferedImage> decode(Path file);
 }

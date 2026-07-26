@@ -15,6 +15,13 @@ public final class ByteIdenticalDedup {
 
     public record DedupPlan(List<MediaFile> toSort, List<MediaFile> redundantVsLibrary,
                              List<MediaFile> withinBatchDuplicates) {
+        /**
+         * Makes the three file lists immutable.
+         *
+         * @param toSort a {@link List} of {@link MediaFile} keeper files to route to Sorted
+         * @param redundantVsLibrary a {@link List} of {@link MediaFile} files byte-identical to something already in the library
+         * @param withinBatchDuplicates a {@link List} of {@link MediaFile} byte-identical duplicates within this batch
+         */
         public DedupPlan {
             toSort = List.copyOf(toSort);
             redundantVsLibrary = List.copyOf(redundantVsLibrary);
@@ -22,6 +29,13 @@ public final class ByteIdenticalDedup {
         }
     }
 
+    /**
+     * Partitions hashed media into keepers, library-redundant files, and in-batch duplicates.
+     *
+     * @param media a {@link List} of {@link HashedMedia} the hashed media to partition
+     * @param libraryHashes a {@link Set} of {@link String} hashes already present in the library
+     * @return {@link DedupPlan} the resulting dedup plan
+     */
     public DedupPlan plan(List<HashedMedia> media, Set<String> libraryHashes) {
         List<MediaFile> toSort = new ArrayList<>();
         List<MediaFile> redundantVsLibrary = new ArrayList<>();

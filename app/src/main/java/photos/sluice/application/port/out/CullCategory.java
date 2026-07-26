@@ -7,6 +7,12 @@ package photos.sluice.application.port.out;
 // degrade cull recall, so construction fails loud instead.
 public record CullCategory(String name, String description) {
 
+    /**
+     * Validates that both name and description are present.
+     *
+     * @param name {@link String} the action id this category carries
+     * @param description {@link String} the "what belongs here" prompt prose
+     */
     public CullCategory {
         // Config binding can pass null reflectively; the IDE reads these guards as always-false.
         //noinspection ConstantValue

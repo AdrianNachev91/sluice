@@ -31,6 +31,13 @@ public class MontageBuilder {
     public record MontageTile(BufferedImage image, String label) {
     }
 
+    /**
+     * Composes a grid montage image from the given tiles.
+     *
+     * @param tiles a {@link List} of {@link MontageTile}, the tiles to lay out in the grid
+     * @param config {@link MontageConfig} the montage grid configuration
+     * @return {@link BufferedImage} the composed montage image
+     */
     public BufferedImage compose(List<MontageTile> tiles, MontageConfig config) {
         if (tiles.isEmpty()) {
             throw new IllegalArgumentException("cannot compose a montage from an empty tile list");
@@ -63,10 +70,20 @@ public class MontageBuilder {
         return canvas;
     }
 
-    // Graphics2D.create(x, y, width, height) translates the origin to the cell's position and
-    // clips to its size, in one call. All coordinate math below is cell-local (0,0-origin). An
-    // overlong label is clipped at the cell's own edge automatically, with no width-measuring or
-    // ellipsis logic needed.
+    /**
+     * Graphics2D.create(x, y, width, height) translates the origin to the cell's position and
+     * clips to its size, in one call. All coordinate math below is cell-local (0,0-origin). An
+     * overlong label is clipped at the cell's own edge automatically, with no width-measuring or
+     * ellipsis logic needed.
+     *
+     * @param parent {@link Graphics2D} the montage canvas graphics context
+     * @param tile {@link MontageTile} the tile to draw in this cell
+     * @param x int the cell's x origin on the canvas
+     * @param y int the cell's y origin on the canvas
+     * @param width int the cell width
+     * @param height int the cell height
+     * @param tileSize int the tile's own image size
+     */
     private static void drawCell(
             Graphics2D parent, MontageTile tile, int x, int y, int width, int height, int tileSize) {
         var cell = (Graphics2D) parent.create(x, y, width, height);
@@ -92,10 +109,14 @@ public class MontageBuilder {
         }
     }
 
-    // Font metrics need a Graphics context to measure, but the canvas height must be known before
-    // one exists. A throwaway 1x1 probe image breaks that chicken/egg problem. Package-private so
-    // the test class can compute the same expected height rather than hardcoding a JDK/OS-dependent
-    // pixel value (this project's CI runs both Ubuntu and Windows).
+    /**
+     * Font metrics need a Graphics context to measure, but the canvas height must be known before
+     * one exists. A throwaway 1x1 probe image breaks that chicken/egg problem. Package-private so
+     * the test class can compute the same expected height rather than hardcoding a JDK/OS-dependent
+     * pixel value (this project's CI runs both Ubuntu and Windows).
+     *
+     * @return int the label band height in pixels
+     */
     static int labelBandHeight() {
         var probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = probe.createGraphics();
@@ -107,6 +128,13 @@ public class MontageBuilder {
         }
     }
 
+    /**
+     * Computes the ceiling of an integer division.
+     *
+     * @param a int the dividend
+     * @param b int the divisor
+     * @return int the ceiling of a divided by b
+     */
     private static int ceilDiv(int a, int b) {
         return (a + b - 1) / b;
     }

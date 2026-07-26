@@ -60,6 +60,16 @@ public class ApplyEngine {
     private final HashIndexPort hashIndexPort;
     private final ShardValidator shardValidator = new ShardValidator();
 
+    /**
+     * Creates an engine wired to its ports.
+     *
+     * @param pathsPort {@link PathsPort} resolves library/review/duplicates paths
+     * @param mediaStore {@link MediaStore} filesystem effects (move, copy, read, write)
+     * @param cullPrepPort {@link CullPrepPort} reads prep-dir index and shards
+     * @param cullSettings {@link CullSettings} configured cull categories
+     * @param sha256Port {@link Sha256Port} hashes files for move verification
+     * @param hashIndexPort {@link HashIndexPort} reads/appends the library hash index
+     */
     public ApplyEngine(PathsPort pathsPort, MediaStore mediaStore, CullPrepPort cullPrepPort,
             CullSettings cullSettings, Sha256Port sha256Port, HashIndexPort hashIndexPort) {
         this.pathsPort = pathsPort;
@@ -70,25 +80,51 @@ public class ApplyEngine {
         this.hashIndexPort = hashIndexPort;
     }
 
-    // Reads the prep directory's index.json and every montage's decision shard, then validates the
-    // whole batch in one pass (see validate()). Every decision is then classified against the
-    // move-record log (see classify()) before anything runs. A decision whose file is still on disk
-    // is pending. One that's gone but hash-verifies at its recorded destination is already done, its
-    // secondary write (if any) reconciled rather than redone. index.json's own unreviewable list goes
-    // through the same classification, via classifyFile() - it has no shard-driven category, just a
-    // plain move once carried out. Anything unresolved, decision or unreviewable file alike, aborts
-    // the whole run before a single file moves. Once every decision and unreviewable file is
-    // handled, the merged decisions.json is written and the montage/tile intermediates are deleted.
+    /**
+     * Reads the prep directory's index.json and every montage's decision shard, then validates the
+     * whole batch in one pass (see validate()). Every decision is then classified against the
+     * move-record log (see classify()) before anything runs. A decision whose file is still on disk
+     * is pending. One that's gone but hash-verifies at its recorded destination is already done, its
+     * secondary write (if any) reconciled rather than redone. index.json's own unreviewable list goes
+     * through the same classification, via classifyFile() - it has no shard-driven category, just a
+     * plain move once carried out. Anything unresolved, decision or unreviewable file alike, aborts
+     * the whole run before a single file moves. Once every decision and unreviewable file is
+     * handled, the merged decisions.json is written and the montage/tile intermediates are deleted.
+     *
+     * @param prepDirPath {@link Path} the prep directory to apply
+     * @param options {@link ApplyOptions} apply behavior flags
+     * @return {@link ApplyReport} the applied run's summary report
+     * @throws ApplyException if validation finds unresolved problems
+     */
     public ApplyReport apply(Path prepDirPath, ApplyOptions options) throws ApplyException {
         return apply(prepDirPath, options, ProgressCallback.NO_OP);
     }
 
+    /**
+     * Applies with progress reporting, using a cancellation signal that never cancels.
+     *
+     * @param prepDirPath {@link Path} the prep directory to apply
+     * @param options {@link ApplyOptions} apply behavior flags
+     * @param progress {@link ProgressCallback} progress callback ticked per file
+     * @return {@link ApplyReport} the applied run's summary report
+     * @throws ApplyException if validation finds unresolved problems
+     */
     public ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress) throws ApplyException {
         // NEVER never trips, so the cancellation-aware overload below always runs to completion
         // and returns non-null here - this just asserts that rather than silently trusting it.
         return Objects.requireNonNull(apply(prepDirPath, options, progress, CancellationSignal.NEVER));
     }
 
+    /**
+     * Applies a prep directory's decisions, cancellable mid-run.
+     *
+     * @param prepDirPath {@link Path} the prep directory to apply
+     * @param options {@link ApplyOptions} apply behavior flags
+     * @param progress {@link ProgressCallback} progress callback ticked per file
+     * @param cancellation {@link CancellationSignal} signal checked between file operations
+     * @return {@link ApplyReport} the applied run's summary report, or null if cancelled
+     * @throws ApplyException if validation finds unresolved problems
+     */
     public @Nullable ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress,
             CancellationSignal cancellation) throws ApplyException {
         PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
@@ -155,11 +191,18 @@ public class ApplyEngine {
         return report;
     }
 
-    // The persisted decisions.json embeds a fresh recount over the whole decisions array it sits
-    // next to. That covers this run's decisions and every prior run's alike, not just the
-    // this-run-only report returned to the caller. decisions.json is overwritten wholesale on every
-    // write, never appended to, so recomputing from the full list each time carries no
-    // double-counting risk.
+    /**
+     * The persisted decisions.json embeds a fresh recount over the whole decisions array it sits
+     * next to. That covers this run's decisions and every prior run's alike, not just the
+     * this-run-only report returned to the caller. decisions.json is overwritten wholesale on every
+     * write, never appended to, so recomputing from the full list each time carries no
+     * double-counting risk.
+     *
+     * @param decisions a {@link List} of {@link Decision} the full decisions array, all runs
+     * @param prepDir {@link PrepDir} the prep directory's index
+     * @param heals a {@link List} of {@link String} healed-shard messages to include
+     * @return {@link ApplyReport} a freshly recomputed summary report
+     */
     private static ApplyReport summarize(List<Decision> decisions, PrepDir prepDir, List<String> heals) {
         Map<String, Integer> byCategory = new TreeMap<>();
         Set<String> groups = new HashSet<>();
@@ -174,11 +217,19 @@ public class ApplyEngine {
         return new ApplyReport(prepDir.photos(), byCategory, prepDir.unreviewable().size(), groups.size(), rejects, heals);
     }
 
-    // Three problem sources feed into one aggregated report before anything throws. A missing
-    // montage shard is skipped only when allowPartial waives it. A decisions file with no matching
-    // montage is always a problem: almost always a culler numbering mistake, and its decisions would
-    // otherwise be silently ignored. The shard contract itself is always checked too. One combined
-    // throw covers the whole to-fix list in a single pass, before any file moves.
+    /**
+     * Three problem sources feed into one aggregated report before anything throws. A missing
+     * montage shard is skipped only when allowPartial waives it. A decisions file with no matching
+     * montage is always a problem: almost always a culler numbering mistake, and its decisions would
+     * otherwise be silently ignored. The shard contract itself is always checked too. One combined
+     * throw covers the whole to-fix list in a single pass, before any file moves.
+     *
+     * @param prepDirPath {@link Path} the prep directory being validated
+     * @param prepDir {@link PrepDir} the prep directory's index
+     * @param options {@link ApplyOptions} apply behavior flags
+     * @return {@link ValidationReport} the validation report of decisions and problems
+     * @throws ApplyException if any problem is found
+     */
     private ValidationReport validate(Path prepDirPath, PrepDir prepDir, ApplyOptions options)
             throws ApplyException {
         var problems = new ArrayList<String>();
@@ -219,24 +270,30 @@ public class ApplyEngine {
         return report;
     }
 
-    // ShardValidator checks a decision's file against the sidecar's in-scope set, not the
-    // filesystem. Whether it still exists on disk, or was already carried out by an earlier run, is
-    // this engine's job.
-    //
-    // A decision whose source file is still on disk is always pending, regardless of the
-    // move-record log. A move that never happened needs no verification - it just needs doing.
-    // NearDupChosen is a copy, so its source never disappears once the decision genuinely ran. A
-    // missing source for it can only mean the file was never there, never that the copy is "done
-    // but unconfirmed." There is no move-record path for it.
-    //
-    // Every other decision (Classification, NearDupReject) is a move. Once it genuinely runs, its
-    // source is gone for good. That's exactly the case a plain exists() check can't tell apart from
-    // "never ran" or "ran but crashed before finishing." recordThenMove() closes that gap by durably
-    // recording the source's hash and its exact, already-collision-resolved destination BEFORE the
-    // move. A missing source can then be positively confirmed as done by re-hashing that one
-    // recorded destination and checking it matches. No guessing at possible destination names
-    // required. No record, a missing destination, or a hash mismatch all mean the same thing. This
-    // engine cannot tell what happened to the file, and refuses rather than guessing.
+    /**
+     * ShardValidator checks a decision's file against the sidecar's in-scope set, not the
+     * filesystem. Whether it still exists on disk, or was already carried out by an earlier run, is
+     * this engine's job.
+     *
+     * A decision whose source file is still on disk is always pending, regardless of the
+     * move-record log. A move that never happened needs no verification - it just needs doing.
+     * NearDupChosen is a copy, so its source never disappears once the decision genuinely ran. A
+     * missing source for it can only mean the file was never there, never that the copy is "done
+     * but unconfirmed." There is no move-record path for it.
+     *
+     * Every other decision (Classification, NearDupReject) is a move. Once it genuinely runs, its
+     * source is gone for good. That's exactly the case a plain exists() check can't tell apart from
+     * "never ran" or "ran but crashed before finishing." recordThenMove() closes that gap by durably
+     * recording the source's hash and its exact, already-collision-resolved destination BEFORE the
+     * move. A missing source can then be positively confirmed as done by re-hashing that one
+     * recorded destination and checking it matches. No guessing at possible destination names
+     * required. No record, a missing destination, or a hash mismatch all mean the same thing. This
+     * engine cannot tell what happened to the file, and refuses rather than guessing.
+     *
+     * @param decision {@link Decision} the decision to classify
+     * @param moveRecords a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
+     * @return {@link Status} this decision's pending/done/unresolved status
+     */
     private Status classify(Decision decision, Map<Path, MoveRecord> moveRecords) {
         if (mediaStore.exists(decision.file())) {
             return new Status.Pending(decision);
@@ -250,9 +307,15 @@ public class ApplyEngine {
                 : new Status.Unresolved(decision);
     }
 
-    // classify()'s sibling for an unreviewable file. It has no shard-driven category and no
-    // NearDupChosen-shaped copy exception - every unreviewable file is a plain move. So a missing
-    // source is Pending only when a verified move record explains it, Unresolved otherwise.
+    /**
+     * classify()'s sibling for an unreviewable file. It has no shard-driven category and no
+     * NearDupChosen-shaped copy exception - every unreviewable file is a plain move. So a missing
+     * source is Pending only when a verified move record explains it, Unresolved otherwise.
+     *
+     * @param file {@link Path} the unreviewable file to classify
+     * @param moveRecords a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
+     * @return {@link FileStatus} this file's pending/done/unresolved status
+     */
     private FileStatus classifyFile(Path file, Map<Path, MoveRecord> moveRecords) {
         if (mediaStore.exists(file)) {
             return new FileStatus.Pending(file);
@@ -262,8 +325,14 @@ public class ApplyEngine {
                 : new FileStatus.Unresolved(file);
     }
 
-    // The move-record log only proves a move happened when its recorded destination still exists
-    // and still hashes to the recorded value. A record alone is never trusted on its own.
+    /**
+     * The move-record log only proves a move happened when its recorded destination still exists
+     * and still hashes to the recorded value. A record alone is never trusted on its own.
+     *
+     * @param file {@link Path} the source path a move record might exist for
+     * @param moveRecords a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
+     * @return an {@link Optional} {@link MoveRecord} the verified move record, if one hash-verifies
+     */
     private Optional<MoveRecord> verifiedMoveRecord(Path file, Map<Path, MoveRecord> moveRecords) {
         MoveRecord record = moveRecords.get(file);
         boolean verified = record != null && mediaStore.exists(record.dest())
@@ -271,17 +340,28 @@ public class ApplyEngine {
         return verified ? Optional.of(record) : Optional.empty();
     }
 
-    // Runs only for a decision classify() already hash-verified as done. It never re-decides the
-    // move itself. It only backfills the one write that could have landed after it and is still
-    // missing: a funny decision's library hash-index row, or a review category's _reasons.txt
-    // line. NearDupReject has no write beyond the move, already fully confirmed by classify()
-    // alone.
+    /**
+     * Runs only for a decision classify() already hash-verified as done. It never re-decides the
+     * move itself. It only backfills the one write that could have landed after it and is still
+     * missing: a funny decision's library hash-index row, or a review category's _reasons.txt
+     * line. NearDupReject has no write beyond the move, already fully confirmed by classify()
+     * alone.
+     *
+     * @param decision {@link Decision} the already-verified-done decision
+     * @param record {@link MoveRecord} the verified move record proving it ran
+     */
     private void reconcile(Decision decision, MoveRecord record) {
         if (decision instanceof Classification c) {
             reconcileClassification(c, record);
         }
     }
 
+    /**
+     * Backfills a classification's secondary write: a funny hash-index row, or a review reason line.
+     *
+     * @param c {@link Classification} the classification decision
+     * @param record {@link MoveRecord} the verified move record
+     */
     private void reconcileClassification(Classification c, MoveRecord record) {
         if (c.category().equals(FUNNY_CATEGORY)) {
             // HashIndexPort.contains(hash) alone isn't enough. The index legitimately allows several
@@ -301,6 +381,12 @@ public class ApplyEngine {
         }
     }
 
+    /**
+     * Parses the move-record log into a map keyed by source path.
+     *
+     * @param moveRecordLog {@link Path} the move-record log file
+     * @return a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
+     */
     private Map<Path, MoveRecord> readMoveRecords(Path moveRecordLog) {
         Map<Path, MoveRecord> records = new HashMap<>();
         for (String line : mediaStore.readLines(moveRecordLog)) {
@@ -312,6 +398,13 @@ public class ApplyEngine {
         return records;
     }
 
+    /**
+     * Builds the diagnostic message for a file that could not be classified.
+     *
+     * @param file {@link Path} the unresolved file
+     * @param moveRecordLog {@link Path} the move-record log to point to
+     * @return {@link String} the diagnostic message
+     */
     private static String unresolvedMessage(Path file, Path moveRecordLog) {
         return "file not found, and its move could not be verified: " + file
                 + " - if an earlier, crashed run already applied it, the automatic check that would confirm that"
@@ -319,14 +412,25 @@ public class ApplyEngine {
                 + " none. This needs manual investigation before re-running; see " + moveRecordLog + ".";
     }
 
+    /**
+     * Builds the aggregated exception for a list of problems.
+     *
+     * @param problems a {@link List} of {@link String} the problem messages to report
+     * @return {@link ApplyException} the exception describing all problems
+     */
     private static ApplyException failure(List<String> problems) {
         return new ApplyException("Shard validation failed - " + problems.size()
                 + " problem(s), nothing applied:\n  - " + String.join("\n  - ", problems));
     }
 
-    // Every near-dup decision (chosen or reject), keyed by group, regardless of whether it will be
-    // skipped this run. A resumed run's chosen-note must still list every reject, including ones a
-    // prior run already moved.
+    /**
+     * Every near-dup decision (chosen or reject), keyed by group, regardless of whether it will be
+     * skipped this run. A resumed run's chosen-note must still list every reject, including ones a
+     * prior run already moved.
+     *
+     * @param decisions a {@link List} of {@link Decision} the full decisions list
+     * @return a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions grouped by group id
+     */
     private static Map<String, List<Decision>> groupNearDups(List<Decision> decisions) {
         Map<String, List<Decision>> byGroup = new HashMap<>();
         for (Decision decision : decisions) {
@@ -340,6 +444,14 @@ public class ApplyEngine {
         return byGroup;
     }
 
+    /**
+     * Dispatches a pending decision to its type-specific apply method.
+     *
+     * @param decision {@link Decision} the pending decision to apply
+     * @param moveRecordLog {@link Path} the move-record log to append to
+     * @param nearDupGroups a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions grouped by group id
+     * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     */
     private void apply(Decision decision, Path moveRecordLog, Map<String, List<Decision>> nearDupGroups, ApplyOutcome outcome) {
         switch (decision) {
             case Classification c -> applyClassification(c, moveRecordLog, outcome);
@@ -348,15 +460,21 @@ public class ApplyEngine {
         }
     }
 
-    // funny is the one category with a fixed destination: the library's flat Funny/ folder. It's
-    // hashed into the library index and gets no reason note, since it's being kept, not set aside
-    // for review. Every other category, junk included, routes generically to Review/<category>/
-    // with a _reasons.txt note. There is no per-category destination configuration yet.
-    //
-    // The index append happens immediately, not batched after the loop. A decision an earlier,
-    // crashed run already carried out is skipped on resume (reconcile() handles it instead), so it
-    // never reaches this method again. A batched append collected only from this run's own outcome
-    // would then permanently lose that file's index row.
+    /**
+     * funny is the one category with a fixed destination: the library's flat Funny/ folder. It's
+     * hashed into the library index and gets no reason note, since it's being kept, not set aside
+     * for review. Every other category, junk included, routes generically to Review/<category>/
+     * with a _reasons.txt note. There is no per-category destination configuration yet.
+     *
+     * The index append happens immediately, not batched after the loop. A decision an earlier,
+     * crashed run already carried out is skipped on resume (reconcile() handles it instead), so it
+     * never reaches this method again. A batched append collected only from this run's own outcome
+     * would then permanently lose that file's index row.
+     *
+     * @param c {@link Classification} the classification decision
+     * @param moveRecordLog {@link Path} the move-record log to append to
+     * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     */
     private void applyClassification(Classification c, Path moveRecordLog, ApplyOutcome outcome) {
         outcome.byCategory.merge(c.category(), 1, Integer::sum);
         boolean funny = c.category().equals(FUNNY_CATEGORY);
@@ -369,16 +487,22 @@ public class ApplyEngine {
         }
     }
 
-    // The keeper is copied, not moved. It stays a normal Sorted keeper, with a courtesy copy left
-    // for context alongside the rejects it was chosen over.
-    //
-    // Unlike every other decision type, its source file is never removed, so classify() never routes
-    // it through the move-record path. A resumed run would otherwise re-copy it, landing a stray
-    // " (2)" duplicate in Duplicates/, and re-appending a now-duplicated note line.
-    //
-    // Guarded explicitly here instead: the copy is skipped when the exact destination this decision
-    // would produce already exists. The note is always (re)written wholesale, never appended to.
-    // That makes re-running safe regardless of how far a prior attempt got.
+    /**
+     * The keeper is copied, not moved. It stays a normal Sorted keeper, with a courtesy copy left
+     * for context alongside the rejects it was chosen over.
+     *
+     * Unlike every other decision type, its source file is never removed, so classify() never routes
+     * it through the move-record path. A resumed run would otherwise re-copy it, landing a stray
+     * " (2)" duplicate in Duplicates/, and re-appending a now-duplicated note line.
+     *
+     * Guarded explicitly here instead: the copy is skipped when the exact destination this decision
+     * would produce already exists. The note is always (re)written wholesale, never appended to.
+     * That makes re-running safe regardless of how far a prior attempt got.
+     *
+     * @param c {@link NearDupChosen} the chosen near-dup decision
+     * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
+     * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     */
     private void applyNearDupChosen(NearDupChosen c, List<Decision> group, ApplyOutcome outcome) {
         Path dupDir = duplicatesDir(c.file(), c.group());
         Path dest = dupDir.resolve(c.file().getFileName().toString());
@@ -389,29 +513,55 @@ public class ApplyEngine {
         outcome.nearDupGroupsChosen.add(c.group());
     }
 
+    /**
+     * Moves a rejected near-dup file into its duplicates group folder.
+     *
+     * @param r {@link NearDupReject} the rejected near-dup decision
+     * @param moveRecordLog {@link Path} the move-record log to append to
+     * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     */
     private void applyNearDupReject(NearDupReject r, Path moveRecordLog, ApplyOutcome outcome) {
         recordThenMove(r.file(), duplicatesDir(r.file(), r.group()), moveRecordLog);
         outcome.nearDupRejects++;
     }
 
+    /**
+     * Resolves a near-dup group's destination folder under Duplicates/.
+     *
+     * @param file {@link Path} a file in the group, used to derive year-month
+     * @param group {@link String} the near-dup group id
+     * @return {@link Path} the group's duplicates folder
+     */
     private Path duplicatesDir(Path file, String group) {
         return pathsPort.duplicates().resolve(yearMonthOf(file) + "_" + group);
     }
 
-    // Unlike every other category, which routes flatly to Review/<category>/, an unreviewable file
-    // carries no category or reason to group by. So it keeps the <yyyy>/<mm> structure its Sorted
-    // location already had - the same segments yearMonthOf() reads off for Duplicates.
+    /**
+     * Unlike every other category, which routes flatly to Review/<category>/, an unreviewable file
+     * carries no category or reason to group by. So it keeps the <yyyy>/<mm> structure its Sorted
+     * location already had - the same segments yearMonthOf() reads off for Duplicates.
+     *
+     * @param file {@link Path} the unreviewable file
+     * @return {@link Path} its destination folder under the unreviewable root
+     */
     private Path unreviewableDir(Path file) {
         String[] yearMonth = yearMonthOf(file).split("-", 2);
         return pathsPort.unreviewable().resolve(yearMonth[0]).resolve(yearMonth[1]);
     }
 
-    // Reserves the exact destination and durably records source-hash-plus-destination BEFORE
-    // moving. That covers a crash any time after this point, whether it lands during the move
-    // itself or during whatever write normally follows it. classify() can then always tell the
-    // move already happened, hash-verified rather than a guess. The hash is computed once and
-    // reused by the caller (e.g. for a funny decision's index row) instead of re-hashing the same
-    // bytes twice.
+    /**
+     * Reserves the exact destination and durably records source-hash-plus-destination BEFORE
+     * moving. That covers a crash any time after this point, whether it lands during the move
+     * itself or during whatever write normally follows it. classify() can then always tell the
+     * move already happened, hash-verified rather than a guess. The hash is computed once and
+     * reused by the caller (e.g. for a funny decision's index row) instead of re-hashing the same
+     * bytes twice.
+     *
+     * @param source {@link Path} the file to move
+     * @param destDir {@link Path} the destination directory
+     * @param moveRecordLog {@link Path} the move-record log to append to
+     * @return {@link MoveOutcome} the resolved destination and source hash
+     */
     private MoveOutcome recordThenMove(Path source, Path destDir, Path moveRecordLog) {
         Path dest = mediaStore.resolveDestination(source, destDir);
         String hash = sha256Port.hash(source);
@@ -420,6 +570,13 @@ public class ApplyEngine {
         return new MoveOutcome(dest, hash);
     }
 
+    /**
+     * Builds the note text recording which file was chosen and why, plus its rejects.
+     *
+     * @param chosen {@link NearDupChosen} the chosen near-dup decision
+     * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
+     * @return {@link String} the note's text
+     */
     private static String chosenNote(NearDupChosen chosen, List<Decision> group) {
         String rejects = group.stream()
                 .filter(NearDupReject.class::isInstance)
@@ -429,11 +586,16 @@ public class ApplyEngine {
         return "Chose " + chosen.file().getFileName() + " - " + chosen.chosenReason() + ". Rejects: " + rejects;
     }
 
-    // A Sorted-relative file always sits under a .../<yyyy>/<MM>/ pair of directories. Read off the
-    // path segments directly rather than pattern-matching the string form. Pattern-matching a string
-    // is separator-sensitive across platforms, and unnecessary here - this app's Sorted layout
-    // already guarantees the segments. Falls back to a clearly-undated marker if that guarantee
-    // somehow doesn't hold (e.g. a file sitting directly under the scope's base path).
+    /**
+     * A Sorted-relative file always sits under a .../<yyyy>/<MM>/ pair of directories. Read off the
+     * path segments directly rather than pattern-matching the string form. Pattern-matching a string
+     * is separator-sensitive across platforms, and unnecessary here - this app's Sorted layout
+     * already guarantees the segments. Falls back to a clearly-undated marker if that guarantee
+     * somehow doesn't hold (e.g. a file sitting directly under the scope's base path).
+     *
+     * @param file {@link Path} the file to derive year-month from
+     * @return {@link String} the "yyyy-MM" string, or an undated marker
+     */
     private static String yearMonthOf(Path file) {
         Path monthDir = file.getParent();
         Path yearDir = monthDir == null ? null : monthDir.getParent();
@@ -445,9 +607,13 @@ public class ApplyEngine {
         return year.matches("\\d{4}") && month.matches("\\d{2}") ? year + "-" + month : UNDATED;
     }
 
-    // Drops the montage contact sheets and tile images once every decision has been carried out -
-    // always, even when zero decisions exist. index.json, the per-montage shards, the move-record
-    // log, and the merged decisions.json are all left in place.
+    /**
+     * Drops the montage contact sheets and tile images once every decision has been carried out -
+     * always, even when zero decisions exist. index.json, the per-montage shards, the move-record
+     * log, and the merged decisions.json are all left in place.
+     *
+     * @param prepDirPath {@link Path} the prep directory to clean up
+     */
     private void cleanupIntermediates(Path prepDirPath) {
         for (Path file : mediaStore.listFiles(prepDirPath)) {
             String name = file.getFileName().toString();
@@ -476,6 +642,11 @@ public class ApplyEngine {
     // isn't Done simply has no Done case to carry one - there is nothing for a caller to
     // null-check.
     private sealed interface Status {
+        /**
+         * The decision this status describes.
+         *
+         * @return {@link Decision} the decision
+         */
         Decision decision();
 
         record Pending(Decision decision) implements Status {}
@@ -489,6 +660,11 @@ public class ApplyEngine {
     // Decision behind it. Done carries no record: unlike a Classification or NearDupReject, an
     // unreviewable file has no secondary write to reconcile, so confirming the move alone is enough.
     private sealed interface FileStatus {
+        /**
+         * The unreviewable file this status describes.
+         *
+         * @return {@link Path} the file path
+         */
         Path file();
 
         record Pending(Path file) implements FileStatus {}

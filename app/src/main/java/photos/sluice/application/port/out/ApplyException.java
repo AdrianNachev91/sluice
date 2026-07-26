@@ -8,10 +8,21 @@ package photos.sluice.application.port.out;
 // moved when this is thrown.
 public class ApplyException extends Exception {
 
+    /**
+     * Creates the exception with an aggregated problem message.
+     *
+     * @param message {@link String} the aggregated validation problems
+     */
     public ApplyException(String message) {
         super(message);
     }
 
+    /**
+     * Creates the exception with an aggregated problem message and an underlying cause.
+     *
+     * @param message {@link String} the aggregated validation problems
+     * @param cause {@link Throwable} the underlying cause
+     */
     public ApplyException(String message, Throwable cause) {
         super(message, cause);
     }
