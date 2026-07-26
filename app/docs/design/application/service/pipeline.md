@@ -1,8 +1,8 @@
 # Pipeline
 
-How `application/service/Pipeline` wraps `SortEngine`/`CommitEngine`/`RescueEngine` (and, once the
-cull/curate flows join it, those too) so a driving caller gets a `JobHandle` back instead of
-blocking, with progress reported through `ProgressPort`
+How `application/service/Pipeline` wraps `SortEngine`/`CommitEngine`/`RescueEngine`/
+`CullDispatcher`/`ApplyEngine` so a driving caller gets a `JobHandle` back instead of blocking, with
+progress reported through `ProgressPort`
 (`app/src/main/java/photos/sluice/application/service/Pipeline.java`,
 `app/src/main/java/photos/sluice/application/service/JobRunner.java`,
 `app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`).
