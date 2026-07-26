@@ -21,13 +21,13 @@ import java.util.function.BooleanSupplier;
 // on events at all would just relocate that gap somewhere less visible. A short poll interval costs
 // nothing a human dropping files by hand would ever notice.
 //
-// isReady is a cheap status check (Pipeline's own shard tally). attemptConsume is the heavier
-// action - a real resume() attempt - run only once isReady says so. attemptConsume returns whether
-// it actually got to run. False means the job runner was busy with something else, so this watcher
-// keeps polling and retries later rather than giving up. True means this watcher's job is done.
-// A resume attempt can still land back in Waiting itself, if a shard went bad between the tally
-// check and the real validation. When that happens, the same Pipeline call that produces that
-// outcome arms a fresh watcher. This instance does not loop on its own.
+// isReady is a cheap status check (CullEngine's own shard tally, via ShardTallyCalculator).
+// attemptConsume is the heavier action - a real resume() attempt - run only once isReady says so.
+// attemptConsume returns whether it actually got to run. False means the job runner was busy with
+// something else, so this watcher keeps polling and retries later rather than giving up. True means
+// this watcher's job is done. A resume attempt can still land back in Waiting itself, if a shard
+// went bad between the tally check and the real validation. When that happens, the same CullEngine
+// call that produces that outcome arms a fresh watcher. This instance does not loop on its own.
 //
 // timeout, when present, only stops polling after that long with no ready check. It never touches
 // the underlying job, matching cull.externalAgent.watchTimeout's "drops back to manual, all work
