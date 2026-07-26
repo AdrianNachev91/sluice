@@ -4,8 +4,9 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.model.SortSummary;
 
 // Curate is sort immediately followed by a cull over whatever that sort just populated.
-// cullOutcome is the same CullJobOutcome a standalone cull() call would produce - Applied or
-// Waiting - so a caller handles it identically regardless of which use case produced it.
+// cullOutcome is the same CullJobOutcome a standalone cull() call would produce - Applied,
+// Waiting, or Cancelled. A caller handles it identically regardless of which use case produced
+// it.
 //
 // It is null in exactly two cases where the cull stage never ran at all. Cancellation was
 // requested between the sort and cull stages. Or scope was OldestYear, and its sort found nothing

@@ -106,6 +106,53 @@ or deleted before the sweep runs. So every in-scope file is guaranteed to have l
 already, and step 1's original scan lists minus what this run itself removed already describe
 what's left.
 
+## 6. Cancellation
+
+```mermaid
+flowchart TD
+    A["dating: for each<br/>scanned file"] --> B{"cancellation<br/>requested?"}
+    B -- yes --> Z(["abort - empty SortSummary,<br/>nothing moved, deleted,<br/>or written"])
+    B -- no --> C["resolve this file's date"]
+    C --> A
+```
+
+```mermaid
+flowchart TD
+    A["routing: for each<br/>survivor to route"] --> B{"more survivors AND<br/>not cancelled?"}
+    B -- no --> Z(["stop - already-routed<br/>files stay routed"])
+    B -- yes --> C["route this file<br/>(see section 4), tick"]
+    C --> A
+```
+
+Checked twice, once per pass, at different granularities. Dating spans the whole Inbox and is pure
+in-memory computation. A cancellation there is a clean abort with zero side effects - an empty
+`SortSummary` comes back before anything moves, deletes, or writes. Routing spans only the in-scope
+survivors and does real file-system work per item (a move, sometimes a `_reasons.txt` append). A
+cancellation there stops after whichever file is currently in flight, leaving every already-routed
+file routed.
+
+A cancelled routing pass changes what "left the Inbox this run" means. `RoutingResult.routedFiles`
+tracks only the survivors actually routed before the stop. `actuallyRemoved` - used for both
+`SortSummary.processed` and the post-run sweep above - is built from that, plus the two dedup
+buckets, rather than the full in-scope list. Section 2's sidecar consumption runs after routing and
+is scoped the same way, so a not-yet-routed file's sidecar is never deleted out from under it while
+the file itself still sits in the Inbox awaiting a future run.
+
+The dedup-deletion step in section 1 ("delete redundant and duplicate files") has no cancellation
+check of its own. A cancellation requested during it is only observed once routing's own per-file
+check runs next. See `pipeline.md`'s Cancellation section for the cross-engine picture.
+
+This is a deliberate omission, not a gap that slipped through review. The two dedup buckets are
+only the actual duplicates found within one scope, a small subset of the batch, and each iteration
+is a single local `mediaStore.delete()` call - no hashing, no image reads, nothing that scales the
+way the whole-Inbox dating pass or the per-file routing pass can. In practice the wait before the
+next checkpoint is negligible. Adding a check here would also cost more than it saves. These loops
+delete files, so a cancellation mid-loop would need the same `actuallyRemoved`-style split routing
+already required - tracking exactly which deletions actually happened, and re-scoping the summary
+and sidecar/sweep logic to match. That's real rework to close a wait that was never actually long.
+Reassessed 2026-07-26 during a full cancellation-coverage review across every engine this project's
+cancellation support touches; the verdict was to leave it as-is.
+
 ## Scenarios
 
 | Scenario                                                                                                                 | Outcome                                                                                                               |
@@ -122,6 +169,8 @@ what's left.
 | Video or `.svg`, however small                                                                                           | Exempt from the low-res gate - sorts normally                                                                         |
 | Sorted photo whose date came only from file-modification time                                                            | Sorts normally, but also listed in `lowConfidenceFiles`                                                               |
 | A Takeout album directory left with no files at all after this run                                                       | Directory removed (cascades up through empty parent directories too)                                                  |
+| Cancellation requested during dating                                                                                     | Clean abort - empty `SortSummary`, Inbox untouched                                                                    |
+| Cancellation requested mid-routing                                                                                       | Already-routed files stay routed; partial `SortSummary`; an unrouted file's sidecar stays intact                      |
 
 ## Related
 

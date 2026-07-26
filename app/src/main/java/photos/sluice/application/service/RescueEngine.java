@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.domain.dating.RescueDateResolver;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 import photos.sluice.domain.model.MediaFile;
@@ -46,19 +47,23 @@ public class RescueEngine implements RescueUseCase {
 
     @Override
     public RescueSummary rescue(String reviewFolder) {
-        return rescue(reviewFolder, ProgressCallback.NO_OP);
+        return rescue(reviewFolder, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
     public RescueSummary rescue(String reviewFolder, ProgressCallback progress) {
+        return rescue(reviewFolder, progress, CancellationSignal.NEVER);
+    }
+
+    public RescueSummary rescue(String reviewFolder, ProgressCallback progress, CancellationSignal cancellation) {
         Path reviewRoot = pathsPort.review();
         Path target = resolveWithinReview(reviewRoot, reviewFolder);
         String targetLeaf = target.getFileName().toString();
         Path libraryRoot = pathsPort.library();
 
         // Snapshotted once, before any move happens, and reused below to find leftover
-        // _reasons.txt markers. Safe: the loop below only ever relocates recognized media files,
-        // never a marker file, so this list's marker entries are still accurate afterward - no
-        // need to re-walk the directory a second time.
+        // _reasons.txt markers. The loop below only ever relocates recognized media files, never a
+        // marker file, so this list's marker entries are still accurate afterward. No need to
+        // re-walk the directory a second time.
         List<Path> allFiles = mediaStore.listFiles(target);
         int total = allFiles.size();
         int current = 0;
@@ -67,17 +72,21 @@ public class RescueEngine implements RescueUseCase {
         // flushed immediately, so a crash mid-run never leaves an already-moved file with no index
         // row. The header/leading-newline checks still only run once, instead of once per file.
         try (HashIndexPort.Session session = hashIndexPort.openSession()) {
-            for (Path file : allFiles) {
-                rescueOneFile(file, targetLeaf, libraryRoot, outcome, session);
+            // Checked after each file, so an in-flight file is never interrupted; already-rescued
+            // files stay rescued, matching the no-undo model.
+            while (current < total && !cancellation.isCancelled()) {
+                rescueOneFile(allFiles.get(current), targetLeaf, libraryRoot, outcome, session);
                 progress.tick(++current, total);
             }
         }
 
         // All-or-nothing per folder: dissolving it (and the marker files inside it) only happens
-        // once every file rescue looked at actually got rescued. A single skipped file anywhere
-        // keeps the whole folder - and everything still in it - untouched.
+        // once the pass reached every file AND none of them were skipped. Checking skipped alone
+        // isn't enough once a pass can stop early. A cancelled run with zero skips so far would
+        // otherwise delete the _reasons.txt markers while unvisited media still sits in the folder.
+        boolean ranToCompletion = current == total;
         boolean folderRemoved = false;
-        if (outcome.skipped.isEmpty()) {
+        if (ranToCompletion && outcome.skipped.isEmpty()) {
             allFiles.stream()
                     .filter(file -> file.getFileName().toString().equals(REASONS_FILE))
                     .forEach(mediaStore::delete);
@@ -110,10 +119,9 @@ public class RescueEngine implements RescueUseCase {
         outcome.rescued++;
     }
 
-    // A caller-supplied folder name must never resolve outside Review via a ".." segment;
-    // normalize first, then check containment, rather than string-matching for ".." (which a
-    // legitimately dotted filename could trigger as a false positive, or a smarter traversal could
-    // dodge).
+    // A caller-supplied folder name must never resolve outside Review via a ".." segment. Normalize
+    // first, then check containment, rather than string-matching for "..". A legitimately dotted
+    // filename could trigger that as a false positive, and a smarter traversal could dodge it.
     private static Path resolveWithinReview(Path reviewRoot, String reviewFolder) {
         Path target = reviewRoot.resolve(reviewFolder).normalize();
         if (!target.startsWith(reviewRoot)) {

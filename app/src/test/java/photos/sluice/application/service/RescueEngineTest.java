@@ -10,6 +10,7 @@ import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.dating.DateSource;
 import photos.sluice.domain.dating.RescueDateResolver;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.rescue.RescueSummary;
 
 import java.io.IOException;
@@ -20,6 +21,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -123,8 +126,8 @@ class RescueEngineTest {
         Path firstDest = libraryRoot.resolve("Photos/2019/06/a.jpg");
         assertThat(Files.exists(firstDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(firstHash);
-        // The crash lands on the second file's move itself, before it touches the filesystem at all
-        // - it's still sitting in Review, and the folder never reached the dissolve check.
+        // The crash lands on the second file's move itself, before it touches the filesystem at
+        // all. It's still sitting in Review, and the folder never reached the dissolve check.
         assertThat(Files.exists(second)).isTrue();
         assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/b.jpg"))).isFalse();
         assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
@@ -143,7 +146,7 @@ class RescueEngineTest {
             throws IOException {
         Path libraryRoot = root.resolve("Library");
         // "Food" carries no folder-derived date, so each file's outcome depends solely on
-        // dateForOnly - one rescued, one skipped - unlike a dated leaf folder ("2019-06"), where
+        // dateForOnly - one rescued, one skipped. A dated leaf folder ("2019-06") would differ:
         // folderDate() would rescue both regardless of what the DateSource says.
         writeFile(root.resolve("Review/Food/rescued.jpg"), "keeper");
         writeFile(root.resolve("Review/Food/skipped.jpg"), "no date");
@@ -155,6 +158,57 @@ class RescueEngineTest {
         assertThat(summary.rescued()).isEqualTo(1);
         assertThat(summary.skipped()).containsExactly("skipped.jpg");
         assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
+    @Test
+    void cancelMidRescueStopsEarlyLeavingAlreadyRescuedFilesRescuedAndTheFolderIntact(@TempDir Path root)
+            throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Review/2019-06/a.jpg"), "a");
+        writeFile(root.resolve("Review/2019-06/b.jpg"), "b");
+        Path reasonsFile = root.resolve("Review/2019-06/_reasons.txt");
+        writeFile(reasonsFile, "b.jpg - low-res");
+
+        // Cancels once the first entry has ticked, so the loop stops before the other two are
+        // even looked at. Neither photo is skipped - both would resolve a date via the folder
+        // name. Scan order across the three entries isn't guaranteed, so exactly which one ticks
+        // first varies; every assertion below holds regardless of which it is.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        RescueSummary summary = rescueEngine(root, libraryRoot, noDate(), noDate())
+                .rescue("2019-06", cancelAfterFirstTick, cancelled::get);
+
+        assertThat(summary.rescued()).isBetween(0, 1);
+        assertThat(summary.skipped()).isEmpty();
+        assertThat(summary.folderRemoved()).isFalse();
+        assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
+        // The actual claim: a pass that reached only none-skipped entries must not be treated as
+        // safe to dissolve. Pre-fix, the gate only checked "nothing skipped" and would still fire
+        // here, deleting this marker even though two of the three entries were never reached.
+        assertThat(Files.exists(reasonsFile)).isTrue();
+        assertThat(regularFileCount(root.resolve("Review/2019-06"))).isEqualTo(3 - summary.rescued());
+        assertThat(regularFileCount(libraryRoot)).isEqualTo(summary.rescued());
+    }
+
+    // regularFileCount()'s own regression test: the cancellation test above calls it on
+    // libraryRoot, which NioMediaStore only creates as a side effect of an actual move. When scan
+    // order puts _reasons.txt first, zero files get rescued before cancellation and libraryRoot
+    // never exists on disk. A bare Files.walk() throws NoSuchFileException in exactly that case.
+    @Test
+    void regularFileCountTreatsAMissingDirectoryAsZeroFilesInsteadOfThrowing(@TempDir Path root) throws IOException {
+        assertThat(regularFileCount(root.resolve("never-created"))).isZero();
+    }
+
+    // Treats a missing root as zero files rather than throwing NoSuchFileException. Callers may
+    // pass a directory (e.g. the library root) that a test scenario never ends up creating.
+    private static long regularFileCount(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return 0;
+        }
+        try (Stream<Path> walk = Files.walk(root)) {
+            return walk.filter(Files::isRegularFile).count();
+        }
     }
 
     private static DateSource noDate() {

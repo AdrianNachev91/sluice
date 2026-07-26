@@ -23,6 +23,7 @@ import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
@@ -38,6 +39,7 @@ import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.CancellationSignal;
@@ -417,14 +419,17 @@ class PipelineTest {
         assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
     }
 
-    // The other cancellation boundary buildFreshAndDispatch() checks: the moment prep just finished
-    // and wrote index.json, before dispatch (and therefore the configured VisionCuller) ever runs.
-    // BlockingListFiles synchronizes the test with the exact moment CullMontageRenderer is
-    // scanning Sorted for candidates, mid-prep. It's the same "block the slow real call, request
-    // cancellation while blocked" technique the sort/curate boundary tests use. NeverCalledCuller
-    // fails the test outright if dispatch runs at all, proving the check short-circuits before it.
+    // MontageRenderer.build() (CullMontageRenderer) is itself cancellation-aware: it checks the
+    // signal before rendering each candidate, entirely before the prep dir is ever cleared or
+    // index.json is written. BlockingListFiles synchronizes the test with the exact moment
+    // CullMontageRenderer is scanning Sorted for candidates, mid-render. "Block the slow real
+    // call, request cancellation while blocked" is the same technique the sort/curate boundary
+    // tests use. A null PrepDir return means nothing is resumable yet. buildFreshAndDispatch()
+    // therefore resolves to CullJobOutcome.Cancelled rather than Waiting, proven here by the
+    // whole cull-prep dir never existing at all. NeverCalledCuller fails the test outright if
+    // dispatch runs at all, proving cancellation stops the job well before that.
     @Test
-    void cullCancelledRightAfterPreppingResolvesToWaitingWithAZeroTally(@TempDir Path root) throws Exception {
+    void cullCancelledMidRenderResolvesToCancelledWithNoPrepDirEverWritten(@TempDir Path root) throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         var listStarted = new CountDownLatch(1);
         var releaseList = new CountDownLatch(1);
@@ -438,10 +443,92 @@ class PipelineTest {
         releaseList.countDown();
         CullJobOutcome outcome = handle.join();
 
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Cancelled.class);
+        assertThat(Files.exists(root.resolve("logs/cull-prep/2019"))).isFalse();
+    }
+
+    // The apply()-side sibling of the render-side test above: ApplyEngine is itself cancellation-
+    // aware too, checked once per decision in its move loop. JunkEverythingCuller writes a real
+    // "junk" classification for every photo (unlike AutoApproveCuller's all-keeps shard), so there
+    // is an actual move loop for BlockingMoveTo to synchronize with. A null ApplyReport means
+    // decisions.json was never written, so the prep dir still reads as a waiting job. Unlike the
+    // mid-render case above, this one resolves to Waiting, not Cancelled - a resumable prep dir
+    // (with its dispatched shards) already exists by this point.
+    @Test
+    void cullCancelledMidApplyResolvesToWaitingWithDecisionsJsonNeverWritten(@TempDir Path root) throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        var moveStarted = new CountDownLatch(1);
+        var releaseMove = new CountDownLatch(1);
+        var mediaStore = new BlockingMoveTo(moveStarted, releaseMove);
+        var settings = new FixedSettings("auto-approve",
+                List.of(new CullCategory("junk", "objectively worthless shots")),
+                new ExternalAgentSettings(WatchMode.MANUAL, null));
+        var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, settings,
+                List.of(new JunkEverythingCuller()));
+
+        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        moveStarted.await();
+        handle.requestCancellation();
+        releaseMove.countDown();
+        CullJobOutcome outcome = handle.join();
+
         assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
-        WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
-        assertThat(job.shards()).isEqualTo(new ShardTally(0, 0, 1));
-        assertThat(Files.exists(job.prepDir().resolve("index.json"))).isTrue();
+        Path prepDir = ((CullJobOutcome.Waiting) outcome).job().prepDir();
+        assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
+        // Exactly one of the two photos was fully processed (moved + recorded) before the
+        // cancellation stopped the loop; scan order between them isn't guaranteed.
+        try (var junked = Files.list(root.resolve("Review/junk"))) {
+            assertThat(junked.filter(p -> p.getFileName().toString().startsWith("IMG_")).count()).isEqualTo(1);
+        }
+        try (var remaining = Files.list(sortedPhotosDir(root, "2019", "06"))) {
+            assertThat(remaining.count()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void commitStopsMidMoveLoopWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir Path root) throws Exception {
+        writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
+        writeFile(root.resolve("Sorted/Photos/2019/07/b.jpg"), "b");
+        var moveStarted = new CountDownLatch(1);
+        var releaseMove = new CountDownLatch(1);
+        var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+
+        JobHandle<CommitSummary> handle = pipeline.commit(new CommitScope.All());
+        moveStarted.await();
+        handle.requestCancellation();
+        releaseMove.countDown();
+        CommitSummary summary = handle.join();
+
+        assertThat(summary.committed()).isEqualTo(1);
+        try (var remaining = Files.walk(root.resolve("Sorted")).filter(Files::isRegularFile)) {
+            assertThat(remaining.count()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void rescueStopsMidMoveLoopWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir Path root) throws Exception {
+        writeFile(root.resolve("Review/2019-06/a.jpg"), "a");
+        writeFile(root.resolve("Review/2019-06/b.jpg"), "b");
+        Path reasonsFile = root.resolve("Review/2019-06/_reasons.txt");
+        writeFile(reasonsFile, "b.jpg - low-res");
+        var moveStarted = new CountDownLatch(1);
+        var releaseMove = new CountDownLatch(1);
+        var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+
+        JobHandle<RescueSummary> handle = pipeline.rescue("2019-06");
+        moveStarted.await();
+        handle.requestCancellation();
+        releaseMove.countDown();
+        RescueSummary summary = handle.join();
+
+        assertThat(summary.rescued()).isEqualTo(1);
+        assertThat(summary.skipped()).isEmpty();
+        // The dissolve gate keeps the folder: the pass never reached every entry, so this marker
+        // must survive even though nothing it did reach was skipped.
+        assertThat(summary.folderRemoved()).isFalse();
+        assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
+        assertThat(Files.exists(reasonsFile)).isTrue();
     }
 
     // The manual-mode CullException branch must not arm a watcher when cancellation raced
@@ -484,10 +571,10 @@ class PipelineTest {
 
     // Regression: disarmWatch() runs at the top of every dispatchAndApply() call, not just the
     // watcher's own auto-resume trigger. This proves a manual resume() retires an armed watcher
-    // on its own, so a manual click racing an armed watcher can never leave two pollers on the
-    // same job.
+    // on its own. A manual click racing an armed watcher can never leave two pollers on the same
+    // job.
     // A long poll interval keeps the watcher itself from racing to auto-resume before the manual
-    // resume() below runs - this test is only about the manual path disarming it.
+    // resume() below runs. This test is only about the manual path disarming it.
     @Test
     void manualResumeDisarmsAnAlreadyArmedWatcher(@TempDir Path root) throws IOException {
         Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
@@ -536,8 +623,7 @@ class PipelineTest {
         var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         Path prepDir = waiting.job().prepDir();
 
-        // Polls for the real signal - the watcher actually stopping itself once the timeout fires -
-        // instead of guessing a fixed sleep duration long enough to cover it.
+        // Polls for the real signal: the watcher actually stopping itself once the timeout fires.
         waitUntil(Duration.ofSeconds(2), () -> !pipeline.isWatchActive(prepDir));
         assertThat(Files.exists(photo)).isTrue();
 
@@ -748,6 +834,29 @@ class PipelineTest {
         assertThat(Files.exists(root.resolve("logs/cull-prep"))).isFalse();
     }
 
+    // Reaches CullJobOutcome.Cancelled through curate()'s own buildFreshAndDispatch() call, not
+    // just a standalone cull(). Both funnel through the same method, but this proves the shared
+    // path really is reached from curate() too. SortEngine doesn't call MediaStore.listFiles, so
+    // BlockingListFiles only blocks once the sort stage has already finished and the cull stage's
+    // render pass starts scanning Sorted for candidates.
+    @Test
+    void curateCancelledMidRenderDuringItsCullStageResolvesToCancelled(@TempDir Path root) throws Exception {
+        writeInboxPhoto(root, "20190601_photo.jpg");
+        var listStarted = new CountDownLatch(1);
+        var releaseList = new CountDownLatch(1);
+        var pipeline = curatePipeline(root, new RecordingProgressPort(), new BlockingListFiles(listStarted, releaseList));
+
+        JobHandle<CurateOutcome> handle = pipeline.curate(new SortScope.Year(2019, null));
+        listStarted.await();
+        handle.requestCancellation();
+        releaseList.countDown();
+        CurateOutcome outcome = handle.join();
+
+        assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Cancelled.class);
+        assertThat(Files.exists(root.resolve("logs/cull-prep/2019"))).isFalse();
+    }
+
     private static void waitUntil(Duration timeout, BooleanSupplier condition) {
         Instant deadline = Instant.now().plus(timeout);
         while (!condition.getAsBoolean()) {
@@ -934,9 +1043,9 @@ class PipelineTest {
         return file;
     }
 
-    // Hand-drops a shard the same shape a real external agent would write, matching ApplyEngineTest's
-    // own writeShard/classificationJson convention - ShardCodec itself is package-private to
-    // adapter.vision and unreachable from here.
+    // Hand-drops a shard the same shape a real external agent would write, matching
+    // ApplyEngineTest's own writeShard/classificationJson convention. ShardCodec itself is
+    // package-private to adapter.vision and unreachable from here.
     private static void writeShard(Path prepDir, String montage, String... decisionsJson) throws IOException {
         String shardName = montage.replaceFirst("^montage-", "decisions-") + ".json";
         Files.writeString(prepDir.resolve(shardName),
@@ -1245,6 +1354,103 @@ class PipelineTest {
         }
     }
 
+    // Wraps the real NioMediaStore but blocks the first moveTo() call between two latches -
+    // ApplyEngine.recordThenMove()'s own move step. Lets a test synchronize a real cancellation
+    // with the exact moment a decision's move is in flight, the same technique BlockingMoves gives
+    // SortEngine/CommitEngine/RescueEngine's own move() call.
+    private static final class BlockingMoveTo implements MediaStore {
+        private final MediaStore delegate = new NioMediaStore();
+        private final CountDownLatch moveStarted;
+        private final CountDownLatch releaseMove;
+
+        BlockingMoveTo(CountDownLatch moveStarted, CountDownLatch releaseMove) {
+            this.moveStarted = moveStarted;
+            this.releaseMove = releaseMove;
+        }
+
+        @Override
+        public List<Path> listFiles(Path root) {
+            return delegate.listFiles(root);
+        }
+
+        @Override
+        public Instant lastModifiedTime(Path path) {
+            return delegate.lastModifiedTime(path);
+        }
+
+        @Override
+        public Path move(Path source, Path destDir) {
+            return delegate.move(source, destDir);
+        }
+
+        @Override
+        public Path resolveDestination(Path source, Path destDir) {
+            return delegate.resolveDestination(source, destDir);
+        }
+
+        @Override
+        public Path moveTo(Path source, Path destination) {
+            moveStarted.countDown();
+            try {
+                releaseMove.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            return delegate.moveTo(source, destination);
+        }
+
+        @Override
+        public Path copy(Path source, Path destDir) {
+            return delegate.copy(source, destDir);
+        }
+
+        @Override
+        public void delete(Path path) {
+            delegate.delete(path);
+        }
+
+        @Override
+        public void ensureDirectory(Path dir) {
+            delegate.ensureDirectory(dir);
+        }
+
+        @Override
+        public boolean exists(Path path) {
+            return delegate.exists(path);
+        }
+
+        @Override
+        public long size(Path path) {
+            return delegate.size(path);
+        }
+
+        @Override
+        public void appendLine(Path file, String line) {
+            delegate.appendLine(file, line);
+        }
+
+        @Override
+        public void write(Path file, String content) {
+            delegate.write(file, content);
+        }
+
+        @Override
+        public List<String> readLines(Path file) {
+            return delegate.readLines(file);
+        }
+
+        @Override
+        public void removeEmptyDirectories(Path root) {
+            delegate.removeEmptyDirectories(root);
+        }
+
+        @Override
+        public void removeIfEmptyOfFiles(Path dir) {
+            delegate.removeIfEmptyOfFiles(dir);
+        }
+    }
+
     // Stands in for the real (package-private, unreachable from here) ExternalAgentCuller. Only a
     // completeness check, gating on hasShard() alone rather than full shard validation. That
     // validation is ShardValidator/ApplyEngine's job, already covered by their own tests - and by
@@ -1320,6 +1526,35 @@ class PipelineTest {
             for (String montage : prep.entries()) {
                 try {
                     writeShard(prep.prepDir(), montage);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+            return new CullReport(prep.entries().size(), 0, 0, 0);
+        }
+    }
+
+    // A sibling of AutoApproveCuller that writes a real "junk" classification for every photo in
+    // every montage, instead of an all-keeps shard. That gives ApplyEngine an actual move loop to
+    // run - and a test something to synchronize with via BlockingMoveTo - rather than zero
+    // decisions.
+    private static final class JunkEverythingCuller implements VisionCuller {
+        private final CullPrepPort cullPrepPort = new JsonCullPrepStore();
+
+        @Override
+        public String id() {
+            return "auto-approve";
+        }
+
+        @Override
+        public CullReport cull(PrepDir prep, CullOptions opts) {
+            for (String montage : prep.entries()) {
+                List<SidecarPhotoEntry> photos = cullPrepPort.readSidecar(prep.prepDir(), montage);
+                String[] decisions = photos.stream()
+                        .map(photo -> classificationJson(photo.src(), "junk", "blurry"))
+                        .toArray(String[]::new);
+                try {
+                    writeShard(prep.prepDir(), montage, decisions);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }

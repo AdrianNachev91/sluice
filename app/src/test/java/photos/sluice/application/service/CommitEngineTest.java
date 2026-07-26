@@ -11,6 +11,7 @@ import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.MonthRange;
 
 import java.io.IOException;
@@ -20,6 +21,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -148,8 +151,9 @@ class CommitEngineTest {
         Path firstDest = libraryRoot.resolve("Photos/2019/06/a.jpg");
         assertThat(Files.exists(firstDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(firstHash);
-        // The crash lands on the second file's move itself, before it touches the filesystem at all
-        // - it's still sitting in Sorted, exactly where an ordinary resumed commit would find it.
+        // The crash lands on the second file's move itself, before it touches the filesystem at
+        // all. It's still sitting in Sorted, exactly where an ordinary resumed commit would find
+        // it.
         assertThat(Files.exists(second)).isTrue();
         assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/b.jpg"))).isFalse();
 
@@ -172,6 +176,33 @@ class CommitEngineTest {
                 (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
+    @Test
+    void cancelMidCommitStopsEarlyLeavingAlreadyCommittedFilesCommittedAndSummaryPartial(@TempDir Path root)
+            throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
+        writeFile(root.resolve("Sorted/Photos/2019/07/b.jpg"), "b");
+
+        // Cancels once the first file's move has already ticked, so the loop stops before the
+        // second file is even looked at. Scan order across the two files isn't guaranteed, so the
+        // assertions below check counts rather than which specific file committed first.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        CommitSummary summary = commitEngine(root, libraryRoot)
+                .commit(new CommitScope.All(), cancelAfterFirstTick, cancelled::get);
+
+        assertThat(summary.committed()).isEqualTo(1);
+        assertThat(regularFileCount(root.resolve("Sorted"))).isEqualTo(1);
+        assertThat(regularFileCount(libraryRoot)).isEqualTo(1);
+    }
+
+    private static long regularFileCount(Path root) throws IOException {
+        try (Stream<Path> walk = Files.walk(root)) {
+            return walk.filter(Files::isRegularFile).count();
+        }
     }
 
     private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot) {

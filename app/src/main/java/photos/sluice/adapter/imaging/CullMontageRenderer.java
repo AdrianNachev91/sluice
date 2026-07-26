@@ -1,5 +1,6 @@
 package photos.sluice.adapter.imaging;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
@@ -10,6 +11,7 @@ import photos.sluice.domain.cull.CullScopeSelector;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.MediaType;
 import photos.sluice.domain.scan.MediaTypeDetector;
@@ -24,18 +26,19 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 // Wires TileRenderer + MontageBuilder + SidecarWriter + PrepIndexWriter behind the MontageRenderer
-// port. Resolves a scope to Sorted photo files, renders each to a tile, and drops unreviewable ones
-// before batching the rest into montages and writing the whole prep dir. MontageBuilder itself never
-// sees the unreviewable flag, so this is the only place left that can act on it.
+// port. Resolves a scope to Sorted photo files and renders each to a tile. Drops unreviewable
+// ones before batching the rest into montages and writing the whole prep dir. MontageBuilder
+// itself never sees the unreviewable flag. This is the only place left that can act on it.
 @Component
 public class CullMontageRenderer implements MontageRenderer {
 
     // WhatsApp's received-photo filename convention. A reliable non-vision prior for received
-    // clutter (documents, screenshots, memes, product shots) - not auto-junk, just a signal for the
+    // clutter (documents, screenshots, memes, product shots), not auto-junk. Just a signal for the
     // culler to scrutinize harder, at zero extra image-token cost.
     private static final Pattern RECEIVED_PATTERN = Pattern.compile("^IMG-\\d{8}-WA\\d", Pattern.CASE_INSENSITIVE);
 
@@ -70,6 +73,14 @@ public class CullMontageRenderer implements MontageRenderer {
 
     @Override
     public PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress) {
+        // NEVER never trips, so the cancellation-aware overload below always runs to completion and
+        // returns non-null here - this just asserts that rather than silently trusting it.
+        return Objects.requireNonNull(build(scope, config, progress, CancellationSignal.NEVER));
+    }
+
+    @Override
+    public @Nullable PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress,
+            CancellationSignal cancellation) {
         // Ordering happens before rendering. Batch boundaries (which photos land in montage-001 vs
         // montage-002) must be decided from the full candidate list, not from however MediaStore
         // happened to return files from disk.
@@ -85,9 +96,17 @@ public class CullMontageRenderer implements MontageRenderer {
         // files are never moved here (see PrepDir's own doc comment). They're only reported, so a
         // caller has something to act on instead of the file just silently staying wherever it
         // already is.
-        List<RenderedCandidate> rendered = ordered.stream()
-                .map(candidate -> new RenderedCandidate(candidate, tileRenderer.render(candidate.path(), config.tileSize())))
-                .toList();
+        //
+        // This is the long pass (one HEIC CLI decode per candidate), and it runs entirely before
+        // clearPrepDir() below. A cancellation seen here leaves disk fully untouched - there is no
+        // partial prep dir for a caller to resume from.
+        List<RenderedCandidate> rendered = new ArrayList<>();
+        for (CullCandidate candidate : ordered) {
+            if (cancellation.isCancelled()) {
+                return null;
+            }
+            rendered.add(new RenderedCandidate(candidate, tileRenderer.render(candidate.path(), config.tileSize())));
+        }
         List<RenderedCandidate> reviewable = rendered.stream()
                 .filter(candidate -> !candidate.tile().unreviewable())
                 .toList();
@@ -110,6 +129,12 @@ public class CullMontageRenderer implements MontageRenderer {
         int totalMontages = (reviewable.size() + tilesPerMontage - 1) / tilesPerMontage;
         List<String> entries = new ArrayList<>();
         for (int start = 0; start < reviewable.size(); start += tilesPerMontage) {
+            // Checked per montage. A partial prep dir stopped here is inert: with no index.json
+            // ever written, it's invisible to waitingJobs(). The next build() call for this scope
+            // clears it via clearPrepDir() above anyway.
+            if (cancellation.isCancelled()) {
+                return null;
+            }
             int end = Math.min(start + tilesPerMontage, reviewable.size());
             // entries.size() + 1, not (start / tilesPerMontage) + 1. Both give the same number
             // today, but entries.size() stays correct even if a future change makes montages
@@ -121,7 +146,7 @@ public class CullMontageRenderer implements MontageRenderer {
         }
 
         // photos reports reviewable.size(), not the raw count found in scope. An unreviewable file
-        // never appears in any montage or sidecar, so counting it here would make this number
+        // never appears in any montage or sidecar. Counting it here would make this number
         // disagree with what a caller can actually see on disk.
         var result = new PrepDir(
                 scopeTag,

@@ -10,6 +10,7 @@ import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitScopeSelector;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 
@@ -19,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 // Moves every in-scope Sorted file into the library at the same relative structure it already
-// has, appends the moved files' hashes to the library index, and prunes Sorted directories left
+// has. Appends the moved files' hashes to the library index, and prunes Sorted directories left
 // empty afterward.
 @Component
 public class CommitEngine implements CommitUseCase {
@@ -40,10 +41,14 @@ public class CommitEngine implements CommitUseCase {
 
     @Override
     public CommitSummary commit(CommitScope scope) {
-        return commit(scope, ProgressCallback.NO_OP);
+        return commit(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
     public CommitSummary commit(CommitScope scope, ProgressCallback progress) {
+        return commit(scope, progress, CancellationSignal.NEVER);
+    }
+
+    public CommitSummary commit(CommitScope scope, ProgressCallback progress, CancellationSignal cancellation) {
         Path sorted = pathsPort.sorted();
         Path library = pathsPort.library();
         Map<LibraryBucket, Integer> byBucket = new EnumMap<>(LibraryBucket.class);
@@ -57,14 +62,17 @@ public class CommitEngine implements CommitUseCase {
         // immediately, so a crash mid-run never leaves an already-moved file with no index row. The
         // header/leading-newline checks still only run once, instead of once per file.
         try (HashIndexPort.Session session = hashIndexPort.openSession()) {
-            for (Path file : files) {
+            // Checked after each file's move, so an in-flight file is never interrupted; already-
+            // committed files stay committed, matching the no-undo model.
+            while (current < total && !cancellation.isCancelled()) {
+                Path file = files.get(current);
                 String relativePath = sorted.relativize(file).toString().replace('\\', '/');
                 if (scopeSelector.isInScope(relativePath, scope)) {
                     String hash = sha256Port.hash(file);
                     Path dest = mediaStore.move(file, library.resolve(relativePath).getParent());
                     session.append(new IndexEntry(hash, dest));
                     // merge rather than a pre-seeded zero per bucket: a scoped commit (e.g. one
-                    // year) never touches most buckets, so byBucket should only ever report the
+                    // year) never touches most buckets. byBucket should only ever report the
                     // ones this run actually populated.
                     byBucket.merge(LibraryBucket.ofFirstSegment(firstSegment(relativePath)), 1, Integer::sum);
                     committed++;
@@ -73,6 +81,8 @@ public class CommitEngine implements CommitUseCase {
             }
         }
 
+        // Runs regardless of whether the pass above was cancelled. It only ever removes
+        // directories that are genuinely empty, so a partial run leaves nothing for it to do wrong.
         mediaStore.removeEmptyDirectories(sorted);
 
         return new CommitSummary(committed, byBucket);

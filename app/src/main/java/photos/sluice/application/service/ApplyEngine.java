@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
@@ -21,6 +22,7 @@ import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 
@@ -31,6 +33,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
@@ -43,9 +46,9 @@ public class ApplyEngine {
     private static final String FUNNY_CATEGORY = "funny";
     private static final String REASONS_FILE = "_reasons.txt";
     private static final String MOVE_RECORD_LOG = "move-records.log";
-    // A control character, not a printable one - guaranteed absent from any path on every mainstream
-    // filesystem, so a record's three fields can be split back apart with zero escaping and no
-    // ambiguity even when a path itself contains spaces, commas, or tabs.
+    // A control character, not a printable one - guaranteed absent from any path on every
+    // mainstream filesystem. A record's three fields can be split back apart with zero escaping
+    // and no ambiguity even when a path itself contains spaces, commas, or tabs.
     private static final String RECORD_DELIMITER = "\u001F";
     private static final String UNDATED = "0000-00";
 
@@ -81,6 +84,13 @@ public class ApplyEngine {
     }
 
     public ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress) throws ApplyException {
+        // NEVER never trips, so the cancellation-aware overload below always runs to completion
+        // and returns non-null here - this just asserts that rather than silently trusting it.
+        return Objects.requireNonNull(apply(prepDirPath, options, progress, CancellationSignal.NEVER));
+    }
+
+    public @Nullable ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress,
+            CancellationSignal cancellation) throws ApplyException {
         PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         ValidationReport validation = validate(prepDirPath, prepDir, options);
 
@@ -107,11 +117,18 @@ public class ApplyEngine {
 
         Map<String, List<Decision>> nearDupGroups = groupNearDups(validation.decisions());
         var outcome = new ApplyOutcome();
-        // Both loops below can move a file, so both count toward the total a caller is told about -
-        // otherwise progress would reach 100% while unreviewable files are still being moved.
+        // Both loops below can move a file, so both count toward the total a caller is told about.
+        // Otherwise progress would reach 100% while unreviewable files are still being moved.
         int total = statuses.size() + unreviewableStatuses.size();
         int current = 0;
+        // Checked per decision, in both loops below. On cancel, the finalizers past this point -
+        // writeMergedDecisions() and cleanupIntermediates() - must not run, so this returns null
+        // outright rather than falling through to them. No decisions.json means the prep dir still
+        // reads as a waiting job (see dispatchAndApply()'s own null handling).
         for (Status status : statuses) {
+            if (cancellation.isCancelled()) {
+                return null;
+            }
             switch (status) {
                 case Status.Pending p -> apply(p.decision(), moveRecordLog, nearDupGroups, outcome);
                 case Status.Done d -> reconcile(d.decision(), d.record());
@@ -120,6 +137,9 @@ public class ApplyEngine {
             progress.tick(++current, total);
         }
         for (FileStatus status : unreviewableStatuses) {
+            if (cancellation.isCancelled()) {
+                return null;
+            }
             if (status instanceof FileStatus.Pending(Path file)) {
                 recordThenMove(file, unreviewableDir(file), moveRecordLog);
             }
@@ -207,15 +227,15 @@ public class ApplyEngine {
     // move-record log. A move that never happened needs no verification - it just needs doing.
     // NearDupChosen is a copy, so its source never disappears once the decision genuinely ran. A
     // missing source for it can only mean the file was never there, never that the copy is "done
-    // but unconfirmed" - there is no move-record path for it.
+    // but unconfirmed." There is no move-record path for it.
     //
     // Every other decision (Classification, NearDupReject) is a move. Once it genuinely runs, its
-    // source is gone for good - exactly the case a plain exists() check can't tell apart from
+    // source is gone for good. That's exactly the case a plain exists() check can't tell apart from
     // "never ran" or "ran but crashed before finishing." recordThenMove() closes that gap by durably
     // recording the source's hash and its exact, already-collision-resolved destination BEFORE the
     // move. A missing source can then be positively confirmed as done by re-hashing that one
-    // recorded destination and checking it matches - no guessing at possible destination names
-    // required. No record, a missing destination, or a hash mismatch all mean the same thing: this
+    // recorded destination and checking it matches. No guessing at possible destination names
+    // required. No record, a missing destination, or a hash mismatch all mean the same thing. This
     // engine cannot tell what happened to the file, and refuses rather than guessing.
     private Status classify(Decision decision, Map<Path, MoveRecord> moveRecords) {
         if (mediaStore.exists(decision.file())) {
@@ -252,9 +272,10 @@ public class ApplyEngine {
     }
 
     // Runs only for a decision classify() already hash-verified as done. It never re-decides the
-    // move itself - only backfills the one write that could have landed after it and still be
-    // missing (a funny decision's library hash-index row, or a review category's _reasons.txt
-    // line). NearDupReject has no write beyond the move, already fully confirmed by classify() alone.
+    // move itself. It only backfills the one write that could have landed after it and is still
+    // missing: a funny decision's library hash-index row, or a review category's _reasons.txt
+    // line. NearDupReject has no write beyond the move, already fully confirmed by classify()
+    // alone.
     private void reconcile(Decision decision, MoveRecord record) {
         if (decision instanceof Classification c) {
             reconcileClassification(c, record);
@@ -385,11 +406,12 @@ public class ApplyEngine {
         return pathsPort.unreviewable().resolve(yearMonth[0]).resolve(yearMonth[1]);
     }
 
-    // Reserves the exact destination and durably records source-hash-plus-destination BEFORE moving.
-    // So a crash any time after this point - during the move itself, or during whatever write
-    // normally follows it - still leaves classify() a positive, hash-verified way to tell the move
-    // already happened, rather than a guess. The hash is computed once and reused by the caller
-    // (e.g. for a funny decision's index row) instead of re-hashing the same bytes twice.
+    // Reserves the exact destination and durably records source-hash-plus-destination BEFORE
+    // moving. That covers a crash any time after this point, whether it lands during the move
+    // itself or during whatever write normally follows it. classify() can then always tell the
+    // move already happened, hash-verified rather than a guess. The hash is computed once and
+    // reused by the caller (e.g. for a funny decision's index row) instead of re-hashing the same
+    // bytes twice.
     private MoveOutcome recordThenMove(Path source, Path destDir, Path moveRecordLog) {
         Path dest = mediaStore.resolveDestination(source, destDir);
         String hash = sha256Port.hash(source);
@@ -445,13 +467,14 @@ public class ApplyEngine {
     // based decision's source was hashed and headed for, recorded before the move itself ran.
     private record MoveRecord(Path dest, String hash) {}
 
-    // The destination and hash recordThenMove() just produced, handed back so a caller (a funny
+    // The destination and hash recordThenMove() just produced. Handed back so a caller (a funny
     // decision's index row) can reuse the same hash instead of re-hashing the file a second time.
     private record MoveOutcome(Path dest, String hash) {}
 
     // classify()'s verdict for one decision. Done carries the MoveRecord that proved it, as a
-    // non-null component. Unlike a single status-plus-nullable-record shape, a decision that isn't
-    // Done simply has no Done case to carry one - so there is nothing for a caller to null-check.
+    // non-null component. Unlike a single status-plus-nullable-record shape, a decision that
+    // isn't Done simply has no Done case to carry one - there is nothing for a caller to
+    // null-check.
     private sealed interface Status {
         Decision decision();
 

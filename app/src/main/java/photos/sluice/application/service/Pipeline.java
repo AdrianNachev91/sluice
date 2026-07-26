@@ -49,11 +49,11 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.IntStream;
 
-// Wires the mechanical engines through JobRunner so a driving adapter (the JavaFX UI, a future CLI)
-// gets a JobHandle back instead of blocking. Progress is bracketed through ProgressPort around
-// each engine call. Depends on the engines' concrete classes rather than their SortUseCase/
-// CommitUseCase/RescueUseCase port/in interfaces because the progress-callback overloads live only
-// on the concrete types, not on those narrower interfaces.
+// Wires the mechanical engines through JobRunner so a driving adapter (the JavaFX UI, a future
+// CLI) gets a JobHandle back instead of blocking. Progress is bracketed through ProgressPort
+// around each engine call. Depends on the engines' concrete classes rather than their
+// SortUseCase/CommitUseCase/RescueUseCase port/in interfaces. The progress-callback overloads
+// live only on the concrete types, not on those narrower interfaces.
 @Component
 public class Pipeline {
 
@@ -158,14 +158,16 @@ public class Pipeline {
     }
 
     public JobHandle<CommitSummary> commit(CommitScope scope) {
-        return jobRunner.submit(_ -> runPhase(COMMITTING, progress -> commitEngine.commit(scope, progress)));
+        return jobRunner.submit(handle -> runPhase(COMMITTING,
+                progress -> commitEngine.commit(scope, progress, handle::isCancellationRequested)));
     }
 
     public JobHandle<RescueSummary> rescue(String reviewFolder) {
-        return jobRunner.submit(_ -> runPhase(RESCUING, progress -> rescueEngine.rescue(reviewFolder, progress)));
+        return jobRunner.submit(handle -> runPhase(RESCUING,
+                progress -> rescueEngine.rescue(reviewFolder, progress, handle::isCancellationRequested)));
     }
 
-    // Prep always runs fresh: a scope's montages are rebuilt from Sorted every call, and
+    // Prep always runs fresh: a scope's montages are rebuilt from Sorted every call.
     // MontageRenderer.build() clears whatever a stale prior run left in the same prep dir first.
     // That would silently destroy any shards already dropped for a still-unresolved WaitingCullJob
     // on the same scope. checkNoWaitingJobFor() guards against that and fails loud instead - resume
@@ -202,12 +204,11 @@ public class Pipeline {
     // pre-submit one is - the caller would lose the SortSummary describing what already moved. See
     // CurateConflictException's own doc for how that's carried forward instead.
     //
-    // isCancellationRequested() is checked here at the sort/cull boundary, and also inside
-    // SortEngine's own dating and routing passes now via its CancellationSignal overload. A large
-    // sort responds promptly rather than only at this one boundary. Cull's own dispatch loop
-    // remains a separate, lower-priority gap. It only bites an automated vision provider looping
-    // over montages - the external-agent provider's dispatch is already a fast, single presence
-    // check.
+    // isCancellationRequested() is checked here at the sort/cull boundary. It's also checked
+    // inside SortEngine's own dating and routing passes via its CancellationSignal overload.
+    // The cull stage's own render/dispatch/apply passes check it too, via buildFreshAndDispatch()'s
+    // and dispatchAndApply()'s own checks. A large sort or cull responds promptly throughout, not
+    // only at this one stage boundary.
     public JobHandle<CurateOutcome> curate(SortScope scope) {
         CullScope known = knownCullScope(scope);
         if (known != null) {
@@ -227,8 +228,8 @@ public class Pipeline {
                 // Only OldestYear reaches here without having already passed this same check
                 // synchronously before the sort ran - the one case that can't be checked that
                 // early. Wrapped narrowly around just this call, not the dispatch/apply that
-                // follows, so a genuine cull failure downstream (a misconfigured provider, for
-                // example) is never mislabeled as this conflict.
+                // follows. That way a genuine cull failure downstream (a misconfigured provider,
+                // for example) is never mislabeled as this conflict.
                 try {
                     checkNoWaitingJobFor(cullScope);
                 } catch (IllegalStateException conflict) {
@@ -245,9 +246,8 @@ public class Pipeline {
 
     // Thrown by curate() instead of a plain IllegalStateException when an auto-resolved OldestYear
     // scope's checkNoWaitingJobFor() conflict surfaces after its sort has already moved real files.
-    // Every other checkNoWaitingJobFor() failure happens before anything runs, so only this one
-    // needs to carry a partial result forward - sortSummary() is what the sort stage already
-    // produced.
+    // Every other checkNoWaitingJobFor() failure happens before anything runs. Only this one needs
+    // to carry a partial result forward - sortSummary() is what the sort stage already produced.
     public static final class CurateConflictException extends IllegalStateException {
         private final transient SortSummary sortSummary;
 
@@ -290,15 +290,25 @@ public class Pipeline {
     // here too, not only at cull()'s synchronous pre-submit call site.
     private CullJobOutcome buildFreshAndDispatch(CullScope scope, CancellationSignal cancellation) throws Exception {
         checkNoWaitingJobFor(scope);
-        PrepDir prep = runPhase(PREPPING, progress -> montageRenderer.build(scope, montageConfig, progress));
+        // runPhase/PhaseWork are shared with sort/commit/rescue, which always return non-null -
+        // keeping T itself non-null there avoids leaking a spurious "might be null" possibility
+        // into those callers. Wrapping the result in Optional here instead keeps that shared
+        // contract clean while still letting this call site express a real null case.
+        Optional<PrepDir> prep = runPhase(PREPPING,
+                progress -> Optional.ofNullable(montageRenderer.build(scope, montageConfig, progress, cancellation)));
+        // Empty means the renderer itself stopped mid-render, before index.json was ever written -
+        // nothing resumable exists yet. The renderer is the completion authority here: this
+        // branches purely on its return value, never on re-checking disk state.
+        if (prep.isEmpty()) {
+            return new CullJobOutcome.Cancelled();
+        }
         // Prep just finished and wrote index.json, so a cancellation seen right here resolves
         // cleanly to Waiting too - a 0/N tally, nothing dispatched yet. No watcher is armed: an
-        // auto-resume moments after a cancel would defy it. Mid-render cancellation itself (while
-        // MontageRenderer.build() is still running) is a separate, not-yet-closed gap.
+        // auto-resume moments after a cancel would defy it.
         if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(buildWaitingJob(prep));
+            return new CullJobOutcome.Waiting(buildWaitingJob(prep.get()));
         }
-        return dispatchAndApply(prep, false, cancellation);
+        return dispatchAndApply(prep.get(), false, cancellation);
     }
 
     private void checkNoWaitingJobFor(CullScope scope) {
@@ -386,9 +396,18 @@ public class Pipeline {
         if (cancellation.isCancelled()) {
             return new CullJobOutcome.Waiting(buildWaitingJob(prep));
         }
-        ApplyReport applyReport = runPhase(APPLYING,
-                progress -> applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress));
-        return new CullJobOutcome.Applied(cullReport, applyReport);
+        Optional<ApplyReport> applyReport = runPhase(APPLYING,
+                progress -> Optional.ofNullable(
+                        applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress, cancellation)));
+        // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
+        // decisions.json was never written. The prep dir still reads as a waiting job, the same
+        // authority rule the renderer's own empty return follows above. No watcher is armed here
+        // either, for the same reason the pre-APPLYING check above doesn't: an auto-resume
+        // moments after a cancel would defy it.
+        if (applyReport.isEmpty()) {
+            return new CullJobOutcome.Waiting(buildWaitingJob(prep));
+        }
+        return new CullJobOutcome.Applied(cullReport, applyReport.get());
     }
 
     private WaitingCullJob buildWaitingJob(PrepDir prep) {
@@ -483,9 +502,10 @@ public class Pipeline {
         return true;
     }
 
-    // present/valid computed per montage, one shard at a time, rather than through ApplyEngine's own
-    // whole-batch validate(). A cross-shard problem (a near-dup group id reused across two montages, a
-    // file claimed by two different shards) isn't caught here, so that montage still counts as valid.
+    // present/valid computed per montage, one shard at a time, rather than through ApplyEngine's
+    // own whole-batch validate(). A cross-shard problem (a near-dup group id reused across two
+    // montages, a file claimed by two different shards) isn't caught here. That montage still
+    // counts as valid.
     // That's an acceptable simplification for a progress-display number - the real gate stays
     // ApplyEngine.apply()'s full-batch validate(), unchanged by this tally.
     private ShardTally tally(PrepDir prep) {
@@ -533,8 +553,9 @@ public class Pipeline {
     private record MontageShardStatus(boolean present, boolean valid) {
     }
 
-    // phaseFinished fires in a finally so the phaseStarted/phaseFinished bracket always closes, even
-    // when the engine call itself throws - a listener otherwise has no signal the phase ever ended.
+    // phaseFinished fires in a finally so the phaseStarted/phaseFinished bracket always closes,
+    // even when the engine call itself throws. A listener otherwise has no signal the phase ever
+    // ended.
     private <T> T runPhase(String phase, PhaseWork<T> work) throws Exception {
         progressPort.phaseStarted(phase);
         try {

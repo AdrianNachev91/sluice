@@ -9,6 +9,8 @@ import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.job.CancellationSignal;
+import photos.sluice.domain.job.ProgressCallback;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -23,6 +25,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -245,6 +248,68 @@ class CullMontageRendererTest {
 
         assertThat(result.montages()).isEqualTo(2);
         assertThat(ticks).containsExactly("1/2", "2/2");
+    }
+
+    @Test
+    void cancellationBeforeRenderingAnyCandidateLeavesNoPrepDirAtAllAndReturnsNull(@TempDir Path root)
+            throws IOException {
+        var pathsConfig = pathsConfig(root);
+        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
+
+        PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), MontageConfig.defaults(),
+                ProgressCallback.NO_OP, () -> true);
+
+        assertThat(result).isNull();
+        assertThat(Files.exists(pathsConfig.logs().resolve("cull-prep").resolve("2019"))).isFalse();
+    }
+
+    @Test
+    void cancellationAfterOneCandidateRendersStillLeavesDiskUntouchedSinceRenderRunsBeforeClearing(
+            @TempDir Path root) throws IOException {
+        var pathsConfig = pathsConfig(root);
+        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
+        writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z"));
+        // Not cancelled for the first candidate's check, cancelled from the second check onward,
+        // so one tile is rendered in memory before the cancellation trips. That proves even a
+        // partially-rendered tile doesn't leave anything on disk, since the render pass runs
+        // entirely before clearPrepDir().
+        AtomicInteger checks = new AtomicInteger();
+        CancellationSignal cancelBeforeSecondCandidate = () -> checks.incrementAndGet() > 1;
+
+        PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
+                ProgressCallback.NO_OP, cancelBeforeSecondCandidate);
+
+        assertThat(result).isNull();
+        assertThat(Files.exists(pathsConfig.logs().resolve("cull-prep").resolve("2019"))).isFalse();
+    }
+
+    @Test
+    void cancellationMidBatchLeavesAPartialInertPrepDirWithNoIndexJson(@TempDir Path root) throws IOException {
+        var pathsConfig = pathsConfig(root);
+        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
+        writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z"));
+        // tilesPerRow=1 puts one photo per montage, so two photos make two montages - the write
+        // loop below stops after the first.
+        var config = new MontageConfig(64, 1);
+        // The signal is checked once per candidate in the render pass first (2 calls, both false
+        // here so both candidates fully render). Then the montage-write loop's own checks begin
+        // (one per montage): false for the first montage, true from the second montage onward.
+        AtomicInteger checks = new AtomicInteger();
+        CancellationSignal cancelBeforeSecondMontage = () -> checks.incrementAndGet() > 3;
+
+        PrepDir result = renderer(pathsConfig)
+                .build(new CullScope.Year(2019, null), config, ProgressCallback.NO_OP, cancelBeforeSecondMontage);
+
+        assertThat(result).isNull();
+        Path prepDir = pathsConfig.logs().resolve("cull-prep").resolve("2019");
+        assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isTrue();
+        assertThat(Files.exists(prepDir.resolve("montage-002.jpg"))).isFalse();
+        // No index.json means this prep dir is invisible to Pipeline.waitingJobs() - inert, and
+        // cleared outright by the next build() call for this scope.
+        assertThat(Files.exists(prepDir.resolve("index.json"))).isFalse();
     }
 
     private static PathsConfig pathsConfig(Path root) {
