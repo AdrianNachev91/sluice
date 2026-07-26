@@ -18,6 +18,9 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.Finding.MissingShard;
+import photos.sluice.domain.cull.Finding.MissingSource;
+import photos.sluice.domain.cull.Finding.StrayShard;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.job.CancellationSignal;
@@ -115,7 +118,9 @@ class ApplyEngineTest {
 
         assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
                 .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("montage-001: no shard");
+                .hasMessageContaining("montage-001: no shard")
+                .isInstanceOfSatisfying(ApplyException.class, e -> assertThat(e.findings())
+                        .containsExactly(new MissingShard("montage-001", "decisions-001.json")));
         assertThat(Files.exists(photo)).isTrue();
     }
 
@@ -184,7 +189,9 @@ class ApplyEngineTest {
 
         assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
                 .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("decisions-002.json: no matching montage");
+                .hasMessageContaining("decisions-002.json: no matching montage")
+                .isInstanceOfSatisfying(ApplyException.class, e ->
+                        assertThat(e.findings()).containsExactly(new StrayShard("decisions-002.json")));
         assertThat(Files.exists(photo)).isTrue();
     }
 
@@ -556,7 +563,9 @@ class ApplyEngineTest {
         assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
                 .isInstanceOf(ApplyException.class)
                 .hasMessageContaining("file not found, and its move could not be verified")
-                .hasMessageContaining(prepDir.resolve("move-records.log").toString());
+                .hasMessageContaining(prepDir.resolve("move-records.log").toString())
+                .isInstanceOfSatisfying(ApplyException.class, e -> assertThat(e.findings())
+                        .containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log"))));
     }
 
     @Test

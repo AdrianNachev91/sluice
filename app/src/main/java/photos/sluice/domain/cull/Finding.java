@@ -3,14 +3,13 @@ package photos.sluice.domain.cull;
 import java.nio.file.Path;
 import java.util.List;
 
-// A single problem found while validating a prep directory's decision shards against the shard
-// contract - one record case per distinct violation shape ShardValidator checks for. describe()
-// renders the exact prose an aggregated ApplyException reports; callers read that rendered text,
-// never a Finding's fields directly. Every case here is a culler content mistake (wrong category,
-// missing reason, a malformed near-dup group) that only a re-cull can fix. There is no
-// engine-level auto-repair for any of them. A later round adds finding cases that DO carry a
-// remedy (a missing source file, a corrupt index) alongside these, at which point a shared
-// remedy-classification accessor lands on this interface too.
+// A single problem found while validating a prep directory. Either a shard-contract violation
+// ShardValidator checks for, or one of ApplyEngine's own batch-level checks - a stray shard, a
+// decision whose file can't be accounted for. describe() renders the exact prose an aggregated
+// ApplyException reports; callers read that rendered text, never a Finding's fields directly.
+// remedy() classifies how (if at all) PrepDirDoctor's troubleshooter can resolve the finding on
+// its own. AUTO is safe to apply unprompted. CHOICE means the user picks from enumerated options.
+// NONE is informational only - a culler content mistake that only a re-cull can fix.
 public sealed interface Finding {
 
     /**
@@ -19,6 +18,23 @@ public sealed interface Finding {
      * @return {@link String} the finding's human-readable description
      */
     String describe();
+
+    /**
+     * How this finding can be resolved. Defaults to NONE; only a finding with a real repair path
+     * overrides it.
+     *
+     * @return {@link Remedy} this finding's remedy classification
+     */
+    default Remedy remedy() {
+        return Remedy.NONE;
+    }
+
+    // AUTO: non-destructive and free, safe for the troubleshooter to apply unprompted. CHOICE:
+    // resolving it loses work or money, so the user picks from enumerated options. NONE:
+    // informational only, no engine-level repair exists.
+    enum Remedy {
+        AUTO, CHOICE, NONE
+    }
 
     record MissingMontageField(String montage) implements Finding {
         @Override
@@ -114,6 +130,60 @@ public sealed interface Finding {
         @Override
         public String describe() {
             return at(montage, index) + ": file out of scope: " + file;
+        }
+    }
+
+    // ApplyEngine's own batch-level checks, below - real failure paths beyond the per-decision
+    // shard contract ShardValidator checks above.
+
+    /**
+     * A decisions-NNN.json file with no montage entry expecting it - almost always a culler
+     * numbering slip. AUTO because a future troubleshooter can usually resolve it on its own, by
+     * renaming the shard into the one montage left unclaimed. An ambiguous case, where more than
+     * one montage is unclaimed, falls back to a user choice instead. That finer-grained
+     * classification isn't modeled yet, so every stray shard reports AUTO for now.
+     */
+    record StrayShard(String shardFile) implements Finding {
+        @Override
+        public String describe() {
+            return shardFile + ": no matching montage";
+        }
+
+        @Override
+        public Remedy remedy() {
+            return Remedy.AUTO;
+        }
+    }
+
+    /**
+     * A montage entry with no shard yet, when a caller has asked not to accept a partial run.
+     * NONE because there is nothing to auto-repair - the montage genuinely hasn't been culled.
+     */
+    record MissingShard(String montage, String expectedFile) implements Finding {
+        @Override
+        public String describe() {
+            return montage + ": no shard " + expectedFile;
+        }
+    }
+
+    /**
+     * A decision's or an unreviewable file's source is gone, and no move record hash-verifies
+     * where it ended up. CHOICE because the user must confirm what happened. The file was
+     * restored (re-diagnose), or it should be skipped (a ledger entry) - the engine cannot tell
+     * which.
+     */
+    record MissingSource(Path file, Path moveRecordLog) implements Finding {
+        @Override
+        public String describe() {
+            return "file not found, and its move could not be verified: " + file
+                    + " - if an earlier, crashed run already applied it, the automatic check that would confirm that"
+                    + " (a move record matching this file, whose recorded destination still hash-verifies) found"
+                    + " none. This needs manual investigation before re-running; see " + moveRecordLog + ".";
+        }
+
+        @Override
+        public Remedy remedy() {
+            return Remedy.CHOICE;
         }
     }
 

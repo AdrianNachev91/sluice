@@ -130,6 +130,9 @@ public class ApplyEngine {
             CancellationSignal cancellation) throws ApplyException {
         PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         ValidationReport validation = validate(prepDirPath, prepDir, options);
+        if (!validation.valid()) {
+            throw failure(validation.findings());
+        }
 
         Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
         Map<Path, MoveRecord> moveRecords = readMoveRecords(moveRecordLog);
@@ -139,17 +142,17 @@ public class ApplyEngine {
         List<FileStatus> unreviewableStatuses = prepDir.unreviewable().stream()
                 .map(file -> classifyFile(file, moveRecords))
                 .toList();
-        List<String> unresolved = new ArrayList<>();
+        List<Finding> missingSource = new ArrayList<>();
         statuses.stream()
                 .filter(Status.Unresolved.class::isInstance)
-                .map(status -> unresolvedMessage(status.decision().file(), moveRecordLog))
-                .forEach(unresolved::add);
+                .map(status -> new Finding.MissingSource(status.decision().file(), moveRecordLog))
+                .forEach(missingSource::add);
         unreviewableStatuses.stream()
                 .filter(FileStatus.Unresolved.class::isInstance)
-                .map(status -> unresolvedMessage(status.file(), moveRecordLog))
-                .forEach(unresolved::add);
-        if (!unresolved.isEmpty()) {
-            throw failure(unresolved);
+                .map(status -> new Finding.MissingSource(status.file(), moveRecordLog))
+                .forEach(missingSource::add);
+        if (!missingSource.isEmpty()) {
+            throw failure(missingSource);
         }
 
         Map<String, List<Decision>> nearDupGroups = groupNearDups(validation.decisions());
@@ -219,27 +222,28 @@ public class ApplyEngine {
     }
 
     /**
-     * Three problem sources feed into one aggregated report before anything throws. A missing
-     * montage shard is skipped only when allowPartial waives it. A decisions file with no matching
-     * montage is always a problem: almost always a culler numbering mistake, and its decisions would
-     * otherwise be silently ignored. The shard contract itself is always checked too. One combined
-     * throw covers the whole to-fix list in a single pass, before any file moves.
+     * Merges three problem sources into one report, never throwing - apply()'s own gate throws on
+     * an invalid result, and PrepDirDoctor reads the identical report read-only. A missing montage
+     * shard is a finding only when allowPartial waives it. PrepDirDoctor always calls with
+     * allowPartial true, so a still-culling prep dir reports on the shards it already has rather
+     * than drowning in "not culled yet" noise. A decisions file with no matching montage is always
+     * a finding: almost always a culler numbering mistake, and its decisions would otherwise be
+     * silently ignored. The shard contract itself is always checked too.
      *
      * @param prepDirPath {@link Path} the prep directory being validated
      * @param prepDir {@link PrepDir} the prep directory's index
      * @param options {@link ApplyOptions} apply behavior flags
-     * @return {@link ValidationReport} the validation report of decisions and problems
-     * @throws ApplyException if any problem is found
+     * @return {@link ValidationReport} the merged validation report of decisions and findings
      */
-    private ValidationReport validate(Path prepDirPath, PrepDir prepDir, ApplyOptions options)
-            throws ApplyException {
-        var problems = new ArrayList<String>();
+    ValidationReport validate(Path prepDirPath, PrepDir prepDir, ApplyOptions options) {
+        var extraFindings = new ArrayList<Finding>();
 
         Set<String> missingMontages = prepDir.entries().stream()
                 .filter(montage -> !cullPrepPort.hasShard(prepDirPath, montage))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (!options.allowPartial()) {
-            missingMontages.forEach(montage -> problems.add(montage + ": no shard " + MontageNaming.shardFileFor(montage)));
+            missingMontages.forEach(montage ->
+                    extraFindings.add(new Finding.MissingShard(montage, MontageNaming.shardFileFor(montage))));
         }
 
         Set<String> expectedShardNames = prepDir.entries().stream()
@@ -250,7 +254,8 @@ public class ApplyEngine {
                 .filter(name -> name.startsWith("decisions-") && name.endsWith(".json"))
                 .filter(name -> !expectedShardNames.contains(name))
                 .sorted()
-                .forEach(name -> problems.add(name + ": no matching montage"));
+                .map(Finding.StrayShard::new)
+                .forEach(extraFindings::add);
 
         List<Path> sidecarSrcs = prepDir.entries().stream()
                 .flatMap(montage -> cullPrepPort.readSidecar(prepDirPath, montage).stream())
@@ -263,12 +268,40 @@ public class ApplyEngine {
         List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
 
         ValidationReport report = shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable());
-        report.findings().stream().map(Finding::describe).forEach(problems::add);
-
-        if (!problems.isEmpty()) {
-            throw failure(problems);
+        if (extraFindings.isEmpty()) {
+            return report;
         }
-        return report;
+        extraFindings.addAll(report.findings());
+        return new ValidationReport(extraFindings, report.heals(), report.decisions());
+    }
+
+    /**
+     * Read-only pass over prepDir's already-validated decisions and unreviewable files, checking
+     * which of them are missing on disk with no move record verifying they were already moved.
+     * Shares classify()/classifyFile() with apply()'s own gate; touches nothing. PrepDirDoctor's own
+     * call site, since apply() runs this same check inline as part of its single classify() pass
+     * rather than calling this method (avoiding a redundant second hash-verification pass).
+     *
+     * @param prepDirPath {@link Path} the prep directory being checked
+     * @param prepDir {@link PrepDir} the prep directory's index
+     * @param decisions a {@link List} of {@link Decision} the validated, heal-corrected decisions
+     * @return a {@link List} of {@link Finding} a MissingSource finding for each unresolved file
+     */
+    List<Finding> checkMissingSources(Path prepDirPath, PrepDir prepDir, List<Decision> decisions) {
+        Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
+        Map<Path, MoveRecord> moveRecords = readMoveRecords(moveRecordLog);
+        var findings = new ArrayList<Finding>();
+        decisions.stream()
+                .map(decision -> classify(decision, moveRecords))
+                .filter(Status.Unresolved.class::isInstance)
+                .map(status -> new Finding.MissingSource(status.decision().file(), moveRecordLog))
+                .forEach(findings::add);
+        prepDir.unreviewable().stream()
+                .map(file -> classifyFile(file, moveRecords))
+                .filter(FileStatus.Unresolved.class::isInstance)
+                .map(status -> new Finding.MissingSource(status.file(), moveRecordLog))
+                .forEach(findings::add);
+        return findings;
     }
 
     /**
@@ -400,28 +433,15 @@ public class ApplyEngine {
     }
 
     /**
-     * Builds the diagnostic message for a file that could not be classified.
+     * Builds the aggregated exception for a list of findings.
      *
-     * @param file {@link Path} the unresolved file
-     * @param moveRecordLog {@link Path} the move-record log to point to
-     * @return {@link String} the diagnostic message
+     * @param findings a {@link List} of {@link Finding} the findings to report
+     * @return {@link ApplyException} the exception describing all findings
      */
-    private static String unresolvedMessage(Path file, Path moveRecordLog) {
-        return "file not found, and its move could not be verified: " + file
-                + " - if an earlier, crashed run already applied it, the automatic check that would confirm that"
-                + " (a move record matching this file, whose recorded destination still hash-verifies) found"
-                + " none. This needs manual investigation before re-running; see " + moveRecordLog + ".";
-    }
-
-    /**
-     * Builds the aggregated exception for a list of problems.
-     *
-     * @param problems a {@link List} of {@link String} the problem messages to report
-     * @return {@link ApplyException} the exception describing all problems
-     */
-    private static ApplyException failure(List<String> problems) {
-        return new ApplyException("Shard validation failed - " + problems.size()
-                + " problem(s), nothing applied:\n  - " + String.join("\n  - ", problems));
+    private static ApplyException failure(List<Finding> findings) {
+        List<String> messages = findings.stream().map(Finding::describe).toList();
+        return new ApplyException("Shard validation failed - " + messages.size()
+                + " problem(s), nothing applied:\n  - " + String.join("\n  - ", messages), findings);
     }
 
     /**
