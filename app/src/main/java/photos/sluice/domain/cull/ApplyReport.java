@@ -9,10 +9,12 @@ import java.util.Map;
 // did this invocation just do". As the summary embedded in the merged decisions.json, the counts
 // instead cover every decision in that same file's decisions array - this run's and every prior run's
 // alike. Otherwise the persisted summary would silently drift from the array sitting right next to
-// it. reviewed and unreviewable are the prep directory's own fixed counts (PrepDir.photos() and
-// PrepDir.unreviewable().size()). Both are carried through for the merged record either way. Unlike
-// byCategory/nearDupGroups/nearDupRejects, they don't shrink when a prior, crashed run already
-// carried some of them out - they describe the prep dir's scope, not this run's own actions.
+// it. reviewed is the prep directory's own fixed count (PrepDir.photos()), carried through for the
+// merged record either way; unlike byCategory/nearDupGroups/nearDupRejects, it doesn't shrink when a
+// prior, crashed run already carried some of it out - it describes the prep dir's scope, not this
+// run's own actions. unreviewable starts from that same fixed scope (PrepDir.unreviewable().size())
+// but can shrink: a file the disposition ledger resolved TRUST_DECISION is no longer counted as
+// unreviewable at all (see ApplyEngine.resolvedUnreviewable()).
 // heals lists every path ShardValidator auto-corrected via a unique sidecar basename, for a caller
 // to surface as non-fatal warnings.
 public record ApplyReport(
@@ -28,7 +30,7 @@ public record ApplyReport(
      *
      * @param reviewed int count of decisions this run acted on
      * @param byCategory a {@link Map} of {@link String} to {@link Integer} count of files routed per category
-     * @param unreviewable int count of files that could not be judged
+     * @param unreviewable int count of files that could not be judged, minus any TRUST_DECISION-resolved
      * @param nearDupGroups int count of near-duplicate groups resolved
      * @param nearDupRejects int count of near-duplicate rejects moved
      * @param heals a {@link List} of {@link String} paths auto-corrected via a unique sidecar basename

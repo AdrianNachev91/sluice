@@ -275,7 +275,7 @@ class AnthropicCullerTest {
 
         assertThatThrownBy(() -> culler().cull(prep(List.of(src("IMG_0001.jpg")), "montage-001"), OPTIONS))
                 .isInstanceOf(CullException.class)
-                .hasMessageContaining("file listed 2 times across shards/unreviewable: " + src("IMG_0001.jpg"));
+                .hasMessageContaining("file listed both as a decision and as unreviewable: " + src("IMG_0001.jpg"));
         assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 

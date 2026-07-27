@@ -107,6 +107,27 @@ public sealed interface Finding {
         }
     }
 
+    /**
+     * A file listed both as a decision (in some montage's shard) and in index.json's own
+     * unreviewable list - the one duplicate-reference shape common and specific enough for a
+     * troubleshooter to offer a real choice, unlike the more general {@link DuplicateFileReference}.
+     * CHOICE because either resolution changes which pile the file ends up in, and the engine cannot
+     * decide that on its own. "Trust the decision" means the shard's verdict applies, and the file is
+     * no longer treated as unreviewable. "Treat as unreviewable" means the decision is dropped, and
+     * the file stays put, unreviewed.
+     */
+    record DecisionUnreviewableOverlap(Decision decision) implements Finding {
+        @Override
+        public String describe() {
+            return "file listed both as a decision and as unreviewable: " + decision.file();
+        }
+
+        @Override
+        public Remedy remedy() {
+            return Remedy.CHOICE;
+        }
+    }
+
     record GroupSpansMultipleMontages(String group, List<String> montages) implements Finding {
         public GroupSpansMultipleMontages {
             montages = List.copyOf(montages);
@@ -138,10 +159,13 @@ public sealed interface Finding {
 
     /**
      * A decisions-NNN.json file with no montage entry expecting it - almost always a culler
-     * numbering slip. AUTO because a future troubleshooter can usually resolve it on its own, by
-     * renaming the shard into the one montage left unclaimed. An ambiguous case, where more than
-     * one montage is unclaimed, falls back to a user choice instead. That finer-grained
-     * classification isn't modeled yet, so every stray shard reports AUTO for now.
+     * numbering slip. Always reports AUTO: this record is a pure value with no I/O, built before
+     * any lookup of which montages are currently unclaimed, so it cannot itself know whether the
+     * repair will turn out ambiguous. The real decision is made when the repair actually runs -
+     * {@link photos.sluice.application.service.ApplyEngine#autoRepairStrayShard} renames the shard
+     * into the one montage left unclaimed when that's unambiguous, or leaves it untouched
+     * otherwise, for {@link photos.sluice.application.service.ApplyEngine#setAsideStrayShard}'s own
+     * CHOICE fallback.
      */
     record StrayShard(String shardFile) implements Finding {
         @Override

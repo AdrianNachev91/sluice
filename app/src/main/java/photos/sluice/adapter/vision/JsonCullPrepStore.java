@@ -147,6 +147,17 @@ public class JsonCullPrepStore implements CullPrepPort {
         return shardCodec.read(prepDir.resolve(MontageNaming.shardFileFor(montage)));
     }
 
+    /**
+     * Reads a shard file directly by its own path.
+     *
+     * @param shardFile {@link Path} the shard file's own path
+     * @return {@link DecisionShard} the parsed decision shard
+     */
+    @Override
+    public DecisionShard readShardFile(Path shardFile) {
+        return shardCodec.read(shardFile);
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record RawDecision(String file, String action, @Nullable String group, @Nullable String reason,
             @JsonProperty("chosen_reason") @Nullable String chosenReason) {

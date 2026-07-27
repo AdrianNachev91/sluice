@@ -90,10 +90,11 @@ class TroubleshooterTest {
     }
 
     @Test
-    void aStrayShardAloneIsLeftUnchangedSinceNoAutoRepairExistsYet(@TempDir Path root) throws IOException, ApplyException {
-        // Renaming an unambiguous stray shard into place isn't built yet. Until it is, a stray-shard-
-        // only diagnosis has no MissingSource finding to trigger reconcile(), so troubleshoot() must
-        // leave it exactly as diagnose() found it rather than silently pretending to have handled it.
+    void aStrayShardWithNoMontageActuallyUnclaimedIsLeftUnchanged(@TempDir Path root) throws IOException, ApplyException {
+        // index.json declares only montage-001, which already has its own shard - so no montage is
+        // unclaimed for the stray decisions-002.json to claim. autoRepairStrayShard()'s unambiguity
+        // gate (exactly one montage currently missing a shard) never holds here, so troubleshoot()
+        // must leave it exactly as diagnose() found it rather than guessing at a repair.
         Path prepDir = prepDir(root);
         Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -107,6 +108,66 @@ class TroubleshooterTest {
         assertThat(report.before().state()).isEqualTo(State.BLOCKED);
         assertThat(report.before().findings()).containsExactly(new StrayShard("decisions-002.json"));
         assertThat(report.reconcile()).isNull();
+        assertThat(report.strayShardsRepaired()).isEmpty();
+        assertThat(report.after()).isEqualTo(report.before());
+    }
+
+    @Test
+    void anUnambiguousStrayShardIsAutoRenamedIntoTheUnclaimedMontageAndTheRunGoesReady(@TempDir Path root)
+            throws IOException, ApplyException {
+        // montage-002 is declared but has no shard yet; a culler numbering slip wrote its decision
+        // into decisions-003.json instead. Every file that shard names is a member of montage-002's
+        // own sidecar, so the repair is unambiguous: it gets renamed into place and the run clears.
+        Path prepDir = prepDir(root);
+        Path claimed = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        Path misnamed = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(claimed, "x");
+        writeFile(misnamed, "y");
+        writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(claimed));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(misnamed));
+        writeShard(prepDir, "montage-001", classificationJson(claimed, "junk", "blurry"));
+        // Written under decisions-003.json - no montage-003 entry exists, so this is the stray. Its
+        // one decision names misnamed, a member of montage-002's own sidecar.
+        Files.writeString(prepDir.resolve("decisions-003.json"),
+                "{ \"montage\": \"montage-002\", \"decisions\": [ %s ] }"
+                        .formatted(classificationJson(misnamed, "junk", "also blurry")));
+
+        TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
+
+        assertThat(report.before().findings()).containsExactly(new StrayShard("decisions-003.json"));
+        assertThat(report.strayShardsRepaired()).containsExactly("decisions-003.json -> montage-002");
+        assertThat(Files.exists(prepDir.resolve("decisions-003.json"))).isFalse();
+        assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isTrue();
+        assertThat(report.after().state()).isEqualTo(State.READY);
+        assertThat(report.after().findings()).isEmpty();
+    }
+
+    @Test
+    void aStrayShardNamingAFileOutsideTheCandidateMontagesSidecarIsLeftForAChoice(@TempDir Path root)
+            throws IOException, ApplyException {
+        // montage-002 is the only unclaimed montage, but the stray shard's decision names a file that
+        // was never part of montage-002's own sidecar - not a genuine numbering slip, so AUTO must
+        // refuse rather than guess. setAsideStrayShard() (or leaving it) is the CHOICE fallback.
+        Path prepDir = prepDir(root);
+        Path claimed = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        Path candidateOnly = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        Path unrelated = root.resolve("Sorted/Photos/2019/06/c.jpg");
+        writeFile(claimed, "x");
+        writeFile(candidateOnly, "y");
+        writeFile(unrelated, "z");
+        writeIndex(prepDir, 3, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(claimed), sidecarEntry(unrelated));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(candidateOnly));
+        writeShard(prepDir, "montage-001", classificationJson(claimed, "junk", "blurry"));
+        Files.writeString(prepDir.resolve("decisions-003.json"),
+                "{ \"montage\": \"montage-002\", \"decisions\": [ %s ] }"
+                        .formatted(classificationJson(unrelated, "junk", "wrong montage entirely")));
+
+        TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
+
+        assertThat(report.strayShardsRepaired()).isEmpty();
+        assertThat(Files.exists(prepDir.resolve("decisions-003.json"))).isTrue();
         assertThat(report.after()).isEqualTo(report.before());
     }
 

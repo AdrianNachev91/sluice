@@ -96,7 +96,9 @@ clean validation - classifying every decision for resume (see section 3) - befor
 flowchart TD
     A["decision"] --> B{"source file<br/>still on disk?"}
     B -- yes --> C(["Pending - process it<br/>normally, regardless of<br/>the move-record log"])
-    B -- no --> D{"NearDupChosen?"}
+    B -- no --> S{"ledger records<br/>SKIPPED_BY_USER<br/>for this file?"}
+    S -- yes --> T(["Skipped - terminal,<br/>like Done: nothing<br/>moved or written, ever"])
+    S -- no --> D{"NearDupChosen?"}
     D -- yes --> E(["Unresolved"])
     D -- no --> F{"a move record<br/>for this file?"}
     F -- no --> E
@@ -106,9 +108,12 @@ flowchart TD
 ```
 
 A decision whose source file is still on disk is always Pending. A move that never happened needs
-no verification - it just needs doing. Every other decision needs its source's disappearance
-explained before the run can proceed. Either it's `NearDupChosen` (never move-based, see below), or
-a move record proves the move that removed it actually happened, or the run refuses.
+no verification - it just needs doing. A file the disposition ledger records as skipped
+(`ApplyEngine.skipMissingSource()` - see section 7) is Skipped regardless of decision type, checked
+before the `NearDupChosen` case: the user gave up on it rather than restoring it, so there is
+nothing left to move or verify. Every other decision needs its source's disappearance explained
+before the run can proceed. Either it's `NearDupChosen` (never move-based, see below), or a move
+record proves the move that removed it actually happened, or the run refuses.
 
 An unreviewable file follows the same diagram with node D always answered "no" - it has no
 `NearDupChosen`-shaped copy exception, since routing one is always a move. `classifyFile()` is this
@@ -260,6 +265,51 @@ Corrupt/missing originals, and every troubleshoot report, are collected the same
 `DisasterDrawer`'s own class doc (`application/service/DisasterDrawer.java`) for the filename format
 and retention rule. `troubleshooter.md` explains what decides whether this reconcile even runs.
 
+## 7. Disposition ledger and CHOICE remedies
+
+`move-records.log` is more than a move log: it is the disposition ledger for every decision and
+unreviewable file the shard/index.json alone can't resolve. A witnessed or reconstructed move
+record (sections 3/6) is one disposition. `ApplyEngine.skipMissingSource()` and
+`ApplyEngine.resolveOverlap()` append two more, each a **CHOICE** remedy a user picks between -
+never guessed at automatically. Neither ever edits a shard or `index.json`; both work by appending
+a ledger entry that `validate()`/`classify()` consult on every later read. `ApplyEngine.readLedger()`
+parses the whole file into three parts in one pass: `moves`, `skipped`, `overlaps`.
+
+```mermaid
+flowchart TD
+    A["Finding.MissingSource"] --> B{"user's choice"}
+    B -- "restored it" --> C(["no engine call -<br/>just re-diagnose"])
+    B -- "skip this file" --> D["skipMissingSource() -<br/>appends SKIPPED_BY_USER<br/>+ timestamp + reason"]
+    D --> E(["classify() reports Skipped -<br/>apply() moves/writes<br/>nothing for it, ever"])
+
+    F["Finding.DecisionUnreviewableOverlap"] --> G{"user's choice"}
+    G -- "trust the decision" --> H["resolveOverlap(TRUST_DECISION)"]
+    G -- "treat as unreviewable" --> I["resolveOverlap(TREAT_AS_UNREVIEWABLE)"]
+    H --> J["validate(): finding suppressed,<br/>file dropped from<br/>resolvedUnreviewable()"]
+    I --> K["validate(): finding suppressed,<br/>decision dropped from<br/>the decisions this run acts on"]
+```
+
+`DecisionUnreviewableOverlap` is `ShardValidator`'s own finding for the narrow
+one-decision-plus-one-unreviewable shape. Every other multi-reference shape stays the general
+`DuplicateFileReference`, which has no CHOICE remedy. `ApplyEngine.resolveOverlaps()` resolves it: a
+post-processing pass `validate()` runs over `ShardValidator`'s own report. A resolved finding is
+suppressed, and the losing side never reaches `apply()` - the decision for `TREAT_AS_UNREVIEWABLE`,
+or the unreviewable listing for `TRUST_DECISION`. `ApplyEngine.resolvedUnreviewable()` is the single
+place `prepDir.unreviewable()` gets filtered against a `TRUST_DECISION` resolution. Every caller
+that used to read `prepDir.unreviewable()` directly - `apply()`, `checkMissingSources()`,
+`reconcile()` - now reads through it instead.
+
+`Finding.StrayShard` gets a third remedy, this one not ledger-based:
+`ApplyEngine.autoRepairStrayShard()`. It is **AUTO** when it's provably unambiguous. Exactly one
+montage in the prep dir currently has no shard, and every file the stray shard's own decisions name
+is also a member of that one candidate montage's sidecar. It renames the stray file into place
+(`decisions-NNN.json` for the candidate montage) with no ledger entry needed - the rename itself is
+the fix. Anything else is left untouched: more than one montage unclaimed, or a decision naming a
+file the candidate's sidecar never showed. `ApplyEngine.setAsideStrayShard()` is the CHOICE fallback
+for that case. It files the stray file into the disaster drawer (never a true delete), so the
+culler can redo that montage from a clean slate. `Troubleshooter` attempts this AUTO repair for
+every `StrayShard` finding it sees, regardless of overall prep-dir state - see `troubleshooter.md`.
+
 ## Scenarios
 
 | Scenario                                                                                                   | Outcome                                                                            |
@@ -282,6 +332,12 @@ and retention rule. `troubleshooter.md` explains what decides whether this recon
 | An unreviewable file's move record verifies (destination hash-matches) but its source is gone              | Done - not reprocessed; there is no secondary write to backfill                    |
 | An unreviewable file is missing, with no move record verifying it already ran                              | Unresolved - `ApplyException`, zero files moved (same gate as any decision)        |
 | Cancellation requested mid-run, in either loop                                                             | `apply()` returns `null` - the finalizers never run, prep dir stays a waiting job  |
+| A file listed both as a decision and in index.json's unreviewable list                                     | Reported as `DecisionUnreviewableOverlap` (CHOICE), not `DuplicateFileReference`   |
+| A missing file the user resolved via `skipMissingSource()`                                                 | Skipped - `apply()` moves/writes nothing for it, ever again                        |
+| An overlap resolved `TRUST_DECISION`                                                                       | The decision applies normally; the file is no longer treated as unreviewable       |
+| An overlap resolved `TREAT_AS_UNREVIEWABLE`                                                                | The file moves to `Unreviewable/<yyyy>/<mm>/`; the decision is dropped             |
+| A stray shard, exactly one montage unclaimed, decisions match that montage's sidecar                       | `autoRepairStrayShard()` (AUTO) renames it into place with no user input           |
+| A stray shard that can't be assigned unambiguously                                                         | Left as a `StrayShard` finding; `setAsideStrayShard()` is the CHOICE fallback      |
 
 ## Related
 

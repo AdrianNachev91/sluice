@@ -58,6 +58,17 @@ public interface CullPrepPort {
     DecisionShard readShard(Path prepDir, String montage);
 
     /**
+     * Reads a shard file by its own path, rather than a montage's canonical name. A stray shard's
+     * filename names no real montage, so it cannot be looked up via {@link #readShard} - a
+     * troubleshooter inspecting one before deciding whether to rename it needs this instead.
+     * Throws UncheckedIOException if the file cannot be parsed as a shard.
+     *
+     * @param shardFile {@link Path} the shard file's own path
+     * @return {@link DecisionShard} the parsed decision shard
+     */
+    DecisionShard readShardFile(Path shardFile);
+
+    /**
      * Writes the merged, human-readable record of a completed apply run. That is every non-keep
      * decision the prep directory held, including ones a prior crashed run already applied, plus
      * this run's own outcome summary.

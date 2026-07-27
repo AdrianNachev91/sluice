@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
+import photos.sluice.domain.cull.Finding.DecisionUnreviewableOverlap;
 import photos.sluice.domain.cull.Finding.DuplicateFileReference;
 import photos.sluice.domain.cull.Finding.FileOutOfScope;
 import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
@@ -256,14 +257,30 @@ class ShardValidatorTest {
     }
 
     @Test
-    void aFileListedBothAsADecisionAndAsUnreviewableIsReported() {
+    void aFileListedBothAsADecisionAndAsUnreviewableIsReportedAsAResolvableOverlap() {
+        var decision = new Classification(A, "junk", "screenshot");
         var report = validator().validate(
-                List.of(shardFile("montage-001", new Classification(A, "junk", "screenshot"))),
+                List.of(shardFile("montage-001", decision)),
                 SCOPE,
                 CATEGORIES,
                 List.of(A));
 
-        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
+        assertThat(report.findings()).containsExactly(new DecisionUnreviewableOverlap(decision));
+    }
+
+    // Distinguishes the resolvable one-decision-plus-one-unreviewable overlap above from every other
+    // multi-reference shape, which has no such resolution and stays the general DuplicateFileReference.
+    @Test
+    void aFileListedTwiceAsADecisionAndOnceAsUnreviewableIsReportedAsAPlainDuplicate() {
+        var report = validator().validate(
+                List.of(
+                        shardFile("montage-001", new Classification(A, "junk", "screenshot")),
+                        shardFile("montage-002", new Classification(A, "food", "meal"))),
+                SCOPE,
+                CATEGORIES,
+                List.of(A));
+
+        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 3));
     }
 
     @Test
@@ -326,6 +343,14 @@ class ShardValidatorTest {
                 .isEqualTo("montage-001: 'montage' is 'montage-002', expected 'montage-001'");
         assertThat(new GroupSpansMultipleMontages("g1", List.of("montage-001", "montage-002")).describe())
                 .isEqualTo("near-dup group 'g1' spans 2 shards (montage-001, montage-002); a group must stay within one montage");
+    }
+
+    @Test
+    void decisionUnreviewableOverlapDescribesTheFileAndCarriesTheChoiceRemedy() {
+        var overlap = new DecisionUnreviewableOverlap(new Classification(A, "junk", "screenshot"));
+
+        assertThat(overlap.describe()).isEqualTo("file listed both as a decision and as unreviewable: " + A);
+        assertThat(overlap.remedy()).isEqualTo(Finding.Remedy.CHOICE);
     }
 
     private ShardValidator validator() {

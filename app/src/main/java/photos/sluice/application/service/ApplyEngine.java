@@ -16,8 +16,10 @@ import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
+import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.MontageNaming;
+import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ReconcileReport;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
@@ -29,6 +31,7 @@ import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,6 +58,12 @@ public class ApplyEngine {
     // state alone, having lost the original log. Both are trusted identically by classify(); the
     // marker is provenance for a human reading the log, not a behavioral distinction.
     private static final String RECONSTRUCTED_MARKER = "RECONSTRUCTED";
+    // The ledger's two CHOICE-remedy dispositions, generalizing move-records.log beyond plain moves
+    // (see the Ledger record below). Both sit in the same field position a move record's own dest
+    // path would occupy - safe, since neither marker is a value a real destination path could ever
+    // equal, the same reasoning RECONSTRUCTED_MARKER above already relies on.
+    private static final String SKIPPED_MARKER = "SKIPPED_BY_USER";
+    private static final String OVERLAP_MARKER = "OVERLAP_RESOLVED";
     // A control character, not a printable one - guaranteed absent from any path on every
     // mainstream filesystem. A record's fields can be split back apart with zero escaping and no
     // ambiguity even when a path itself contains spaces, commas, or tabs.
@@ -146,12 +155,13 @@ public class ApplyEngine {
         }
 
         Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
-        Map<Path, MoveRecord> moveRecords = readMoveRecords(moveRecordLog);
+        Ledger ledger = readLedger(moveRecordLog);
+        List<Path> unreviewableFiles = resolvedUnreviewable(prepDirPath, prepDir);
         List<Status> statuses = validation.decisions().stream()
-                .map(decision -> classify(decision, moveRecords))
+                .map(decision -> classify(decision, ledger))
                 .toList();
-        List<FileStatus> unreviewableStatuses = prepDir.unreviewable().stream()
-                .map(file -> classifyFile(file, moveRecords))
+        List<FileStatus> unreviewableStatuses = unreviewableFiles.stream()
+                .map(file -> classifyFile(file, ledger))
                 .toList();
         List<Finding> missingSource = new ArrayList<>();
         statuses.stream()
@@ -183,6 +193,7 @@ public class ApplyEngine {
             switch (status) {
                 case Status.Pending p -> apply(p.decision(), moveRecordLog, nearDupGroups, outcome);
                 case Status.Done d -> backfillSecondaryWrite(d.decision(), d.record());
+                case Status.Skipped _ -> {} // user gave up on this decision - nothing to do
                 case Status.Unresolved _ -> {} // already aborted the whole run above
             }
             progress.tick(++current, total);
@@ -194,13 +205,13 @@ public class ApplyEngine {
             if (status instanceof FileStatus.Pending(Path file)) {
                 recordThenMove(file, unreviewableDir(file), moveRecordLog);
             }
-            // Done: the move alone is the whole action - there's no secondary write to reconcile.
+            // Done, Skipped: nothing further to do here.
             progress.tick(++current, total);
         }
 
-        var report = new ApplyReport(prepDir.photos(), outcome.byCategory, prepDir.unreviewable().size(),
+        var report = new ApplyReport(prepDir.photos(), outcome.byCategory, unreviewableFiles.size(),
                 outcome.nearDupGroupsChosen.size(), outcome.nearDupRejects, validation.heals());
-        ApplyReport persistedSummary = summarize(validation.decisions(), prepDir, validation.heals());
+        ApplyReport persistedSummary = summarize(validation.decisions(), prepDir, unreviewableFiles.size(), validation.heals());
         cullPrepPort.writeMergedDecisions(prepDirPath, prepDir.scope(), validation.decisions(), persistedSummary);
         cleanupIntermediates(prepDirPath);
         return report;
@@ -215,10 +226,11 @@ public class ApplyEngine {
      *
      * @param decisions a {@link List} of {@link Decision} the full decisions array, all runs
      * @param prepDir {@link PrepDir} the prep directory's index
+     * @param unreviewableCount int prepDir's own unreviewable count, ledger-resolved overlaps already excluded
      * @param heals a {@link List} of {@link String} healed-shard messages to include
      * @return {@link ApplyReport} a freshly recomputed summary report
      */
-    private static ApplyReport summarize(List<Decision> decisions, PrepDir prepDir, List<String> heals) {
+    private static ApplyReport summarize(List<Decision> decisions, PrepDir prepDir, int unreviewableCount, List<String> heals) {
         Map<String, Integer> byCategory = new TreeMap<>();
         Set<String> groups = new HashSet<>();
         int rejects = 0;
@@ -229,7 +241,7 @@ public class ApplyEngine {
                 case NearDupReject _ -> rejects++;
             }
         }
-        return new ApplyReport(prepDir.photos(), byCategory, prepDir.unreviewable().size(), groups.size(), rejects, heals);
+        return new ApplyReport(prepDir.photos(), byCategory, unreviewableCount, groups.size(), rejects, heals);
     }
 
     /**
@@ -278,12 +290,64 @@ public class ApplyEngine {
                 .toList();
         List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
 
-        ValidationReport report = shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable());
+        ValidationReport report = resolveOverlaps(prepDirPath,
+                shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable()));
         if (extraFindings.isEmpty()) {
             return report;
         }
         extraFindings.addAll(report.findings());
         return new ValidationReport(extraFindings, report.heals(), report.decisions());
+    }
+
+    /**
+     * Suppresses a {@link Finding.DecisionUnreviewableOverlap} finding once the disposition ledger
+     * records how the user resolved it, dropping the losing side from the decisions this run acts
+     * on. Shards and index.json are never edited: TREAT_AS_UNREVIEWABLE only removes the decision
+     * from this in-memory list, while a TRUST_DECISION resolution's own unreviewable-side
+     * suppression happens separately, wherever {@link #resolvedUnreviewable} is consulted.
+     *
+     * @param prepDirPath {@link Path} the prep directory being validated
+     * @param report {@link ValidationReport} the shard validator's own report, before ledger resolution
+     * @return {@link ValidationReport} the same report, with resolved overlaps suppressed
+     */
+    private ValidationReport resolveOverlaps(Path prepDirPath, ValidationReport report) {
+        Map<Path, OverlapResolution> overlaps = readLedger(prepDirPath.resolve(MOVE_RECORD_LOG)).overlaps();
+        if (overlaps.isEmpty()) {
+            return report;
+        }
+        var findings = new ArrayList<Finding>();
+        var decisions = new ArrayList<>(report.decisions());
+        for (Finding finding : report.findings()) {
+            if (finding instanceof Finding.DecisionUnreviewableOverlap(Decision decision)
+                    && overlaps.containsKey(decision.file())) {
+                if (overlaps.get(decision.file()) == OverlapResolution.TREAT_AS_UNREVIEWABLE) {
+                    decisions.remove(decision);
+                }
+            } else {
+                findings.add(finding);
+            }
+        }
+        return new ValidationReport(findings, report.heals(), decisions);
+    }
+
+    /**
+     * prepDir's own unreviewable list, minus any file the disposition ledger has resolved with
+     * TRUST_DECISION - the shard's own decision wins for those, so the file is no longer treated as
+     * unreviewable at all. index.json itself is never edited; this filtering happens purely in
+     * memory, every time the list is consulted.
+     *
+     * @param prepDirPath {@link Path} the prep directory being processed
+     * @param prepDir {@link PrepDir} the prep directory's index
+     * @return a {@link List} of {@link Path} prepDir's unreviewable files, TRUST_DECISION-resolved ones excluded
+     */
+    private List<Path> resolvedUnreviewable(Path prepDirPath, PrepDir prepDir) {
+        Map<Path, OverlapResolution> overlaps = readLedger(prepDirPath.resolve(MOVE_RECORD_LOG)).overlaps();
+        if (overlaps.isEmpty()) {
+            return prepDir.unreviewable();
+        }
+        return prepDir.unreviewable().stream()
+                .filter(file -> overlaps.get(file) != OverlapResolution.TRUST_DECISION)
+                .toList();
     }
 
     /**
@@ -300,15 +364,15 @@ public class ApplyEngine {
      */
     List<Finding> checkMissingSources(Path prepDirPath, PrepDir prepDir, List<Decision> decisions) {
         Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
-        Map<Path, MoveRecord> moveRecords = readMoveRecords(moveRecordLog);
+        Ledger ledger = readLedger(moveRecordLog);
         var findings = new ArrayList<Finding>();
         decisions.stream()
-                .map(decision -> classify(decision, moveRecords))
+                .map(decision -> classify(decision, ledger))
                 .filter(Status.Unresolved.class::isInstance)
                 .map(status -> new Finding.MissingSource(status.decision().file(), moveRecordLog))
                 .forEach(findings::add);
-        prepDir.unreviewable().stream()
-                .map(file -> classifyFile(file, moveRecords))
+        resolvedUnreviewable(prepDirPath, prepDir).stream()
+                .map(file -> classifyFile(file, ledger))
                 .filter(FileStatus.Unresolved.class::isInstance)
                 .map(status -> new Finding.MissingSource(status.file(), moveRecordLog))
                 .forEach(findings::add);
@@ -342,6 +406,9 @@ public class ApplyEngine {
         if (!validation.valid()) {
             throw failure(validation.findings());
         }
+        // Read before the log itself gets filed away below - once filed, it holds no ledger entries
+        // to resolve against, and an already-resolved overlap must not revert to unresolved here.
+        List<Path> unreviewableFiles = resolvedUnreviewable(prepDirPath, prepDir);
 
         Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
         if (mediaStore.exists(moveRecordLog)) {
@@ -350,10 +417,94 @@ public class ApplyEngine {
 
         var sweep = new ReconcileSweep(moveRecordLog);
         validation.decisions().forEach(decision -> reconcileDecision(decision, sweep));
-        prepDir.unreviewable().forEach(file -> reconcileFile(file, unreviewableDir(file), sweep));
+        unreviewableFiles.forEach(file -> reconcileFile(file, unreviewableDir(file), sweep));
         resolvePendingMoves(sweep);
 
         return new ReconcileReport(sweep.reconstructed, sweep.stillPending, sweep.missingSource);
+    }
+
+    /**
+     * The MissingSource finding's "skip this file" CHOICE remedy - the alternative to restoring the
+     * file, which needs no engine call at all (just a re-diagnose). Appends a terminal
+     * SKIPPED_BY_USER disposition to prepDir's ledger. classify()/classifyFile() then treat source as
+     * resolved: apply() carries out no move or write for it, and it stops surfacing as a
+     * MissingSource finding. source itself is never touched - if it ever reappears in Sorted, a
+     * future cull of that scope sees it fresh.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
+     * @param source {@link Path} the missing file's original source path, as named by the MissingSource finding
+     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     */
+    public void skipMissingSource(Path prepDirPath, Path source, String reason) {
+        Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
+        mediaStore.appendLine(moveRecordLog, source + RECORD_DELIMITER + SKIPPED_MARKER
+                + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
+    }
+
+    /**
+     * A DecisionUnreviewableOverlap finding's CHOICE remedy: records which of the two conflicting
+     * listings wins for file. Neither the shard nor index.json is ever edited - validate() consults
+     * this ledger entry instead (see {@link #resolveOverlaps} and {@link #resolvedUnreviewable}) to
+     * suppress the finding and drop the losing side from the decisions/unreviewable files a later
+     * apply() acts on.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
+     * @param file {@link Path} the file this overlap concerns, as named by the DecisionUnreviewableOverlap finding
+     * @param resolution {@link OverlapResolution} which listing should win
+     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     */
+    public void resolveOverlap(Path prepDirPath, Path file, OverlapResolution resolution, String reason) {
+        Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
+        mediaStore.appendLine(moveRecordLog, file + RECORD_DELIMITER + OVERLAP_MARKER + RECORD_DELIMITER
+                + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
+    }
+
+    /**
+     * A StrayShard finding's AUTO remedy: renames strayShard's own file into place as the one montage
+     * currently missing a shard. That only runs when the repair is provably unambiguous. Exactly one
+     * montage in prepDir must currently have no shard, and every file the stray shard's own decisions
+     * name must also be a member of that one candidate montage's sidecar. Anything else - more than
+     * one montage unclaimed, or a decision naming a file the candidate montage's sidecar never showed
+     * - is left untouched; {@link #setAsideStrayShard} is the CHOICE fallback for that case.
+     *
+     * @param prepDirPath {@link Path} the prep directory holding the stray shard
+     * @param strayShard {@link Finding.StrayShard} the finding naming the stray shard file
+     * @return an {@link Optional} {@link String} the montage the shard was renamed to claim, empty if
+     *         the repair could not run unambiguously
+     */
+    public Optional<String> autoRepairStrayShard(Path prepDirPath, Finding.StrayShard strayShard) {
+        PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
+        List<String> unclaimed = prepDir.entries().stream()
+                .filter(montage -> !cullPrepPort.hasShard(prepDirPath, montage))
+                .toList();
+        if (unclaimed.size() != 1) {
+            return Optional.empty();
+        }
+        String candidate = unclaimed.getFirst();
+        Path strayPath = prepDirPath.resolve(strayShard.shardFile());
+        DecisionShard content = cullPrepPort.readShardFile(strayPath);
+        Set<Path> candidateSidecarFiles = cullPrepPort.readSidecar(prepDirPath, candidate).stream()
+                .map(SidecarPhotoEntry::src)
+                .collect(Collectors.toSet());
+        boolean unambiguous = content.decisions().stream().map(Decision::file).allMatch(candidateSidecarFiles::contains);
+        if (!unambiguous) {
+            return Optional.empty();
+        }
+        mediaStore.moveTo(strayPath, prepDirPath.resolve(MontageNaming.shardFileFor(candidate)));
+        return Optional.of(candidate);
+    }
+
+    /**
+     * A StrayShard finding's CHOICE fallback when {@link #autoRepairStrayShard} cannot resolve it
+     * unambiguously: files the stray shard's own file into prepDir's disaster drawer, never a true
+     * delete, so the culler can redo that montage from a clean slate.
+     *
+     * @param prepDirPath {@link Path} the prep directory holding the stray shard
+     * @param strayShard {@link Finding.StrayShard} the finding naming the stray shard file
+     * @return {@link Path} the path the stray shard was filed to
+     */
+    public Path setAsideStrayShard(Path prepDirPath, Finding.StrayShard strayShard) {
+        return disasterDrawer.file(prepDirPath, prepDirPath.resolve(strayShard.shardFile()), "stray-shard");
     }
 
     /**
@@ -557,18 +708,25 @@ public class ApplyEngine {
      * required. No record, a missing destination, or a hash mismatch all mean the same thing. This
      * engine cannot tell what happened to the file, and refuses rather than guessing.
      *
+     * <p>A file the disposition ledger records as SKIPPED_BY_USER is Skipped regardless of decision
+     * type, checked before the NearDupChosen case above it: the user gave up on it via
+     * {@link #skipMissingSource}, so there is nothing left to move or verify.
+     *
      * @param decision {@link Decision} the decision to classify
-     * @param moveRecords a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
-     * @return {@link Status} this decision's pending/done/unresolved status
+     * @param ledger {@link Ledger} the parsed disposition ledger
+     * @return {@link Status} this decision's pending/done/skipped/unresolved status
      */
-    private Status classify(Decision decision, Map<Path, MoveRecord> moveRecords) {
+    private Status classify(Decision decision, Ledger ledger) {
         if (mediaStore.exists(decision.file())) {
             return new Status.Pending(decision);
+        }
+        if (ledger.skipped().contains(decision.file())) {
+            return new Status.Skipped(decision);
         }
         if (decision instanceof NearDupChosen) {
             return new Status.Unresolved(decision);
         }
-        Optional<MoveRecord> record = verifiedMoveRecord(decision.file(), moveRecords);
+        Optional<MoveRecord> record = verifiedMoveRecord(decision.file(), ledger.moves());
         return record.isPresent()
                 ? new Status.Done(decision, record.get())
                 : new Status.Unresolved(decision);
@@ -577,17 +735,21 @@ public class ApplyEngine {
     /**
      * classify()'s sibling for an unreviewable file. It has no shard-driven category and no
      * NearDupChosen-shaped copy exception - every unreviewable file is a plain move. So a missing
-     * source is Pending only when a verified move record explains it, Unresolved otherwise.
+     * source is Pending only when a verified move record explains it, Skipped when the user gave up
+     * on it, Unresolved otherwise.
      *
      * @param file {@link Path} the unreviewable file to classify
-     * @param moveRecords a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
-     * @return {@link FileStatus} this file's pending/done/unresolved status
+     * @param ledger {@link Ledger} the parsed disposition ledger
+     * @return {@link FileStatus} this file's pending/done/skipped/unresolved status
      */
-    private FileStatus classifyFile(Path file, Map<Path, MoveRecord> moveRecords) {
+    private FileStatus classifyFile(Path file, Ledger ledger) {
         if (mediaStore.exists(file)) {
             return new FileStatus.Pending(file);
         }
-        return verifiedMoveRecord(file, moveRecords).isPresent()
+        if (ledger.skipped().contains(file)) {
+            return new FileStatus.Skipped(file);
+        }
+        return verifiedMoveRecord(file, ledger.moves()).isPresent()
                 ? new FileStatus.Done(file)
                 : new FileStatus.Unresolved(file);
     }
@@ -649,22 +811,49 @@ public class ApplyEngine {
     }
 
     /**
-     * Parses the move-record log into a map keyed by source path.
+     * Parses the move-record log - the disposition ledger - into its three constituent pieces in one
+     * pass: witnessed/reconstructed move records, sources the user skipped, and files whose
+     * decision/unreviewable overlap the user resolved.
      *
      * @param moveRecordLog {@link Path} the move-record log file
-     * @return a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
+     * @return {@link Ledger} the parsed ledger
      */
-    private Map<Path, MoveRecord> readMoveRecords(Path moveRecordLog) {
-        Map<Path, MoveRecord> records = new HashMap<>();
-        for (String line : mediaStore.readLines(moveRecordLog)) {
-            String[] fields = line.split(RECORD_DELIMITER, -1);
-            boolean witnessed = fields.length == 3;
-            boolean reconstructed = fields.length == 4 && RECONSTRUCTED_MARKER.equals(fields[3]);
-            if (witnessed || reconstructed) {
-                records.put(Path.of(fields[0]), new MoveRecord(Path.of(fields[1]), fields[2]));
-            }
+    private Ledger readLedger(Path moveRecordLog) {
+        var moves = new HashMap<Path, MoveRecord>();
+        var skipped = new HashSet<Path>();
+        var overlaps = new HashMap<Path, OverlapResolution>();
+        mediaStore.readLines(moveRecordLog).forEach(line -> parseLedgerLine(line, moves, skipped, overlaps));
+        return new Ledger(moves, skipped, overlaps);
+    }
+
+    /**
+     * Parses one ledger line into whichever of the three accumulators it belongs to. A move-record
+     * line's own dest field can never equal SKIPPED_MARKER or OVERLAP_MARKER - the same reasoning
+     * RECONSTRUCTED_MARKER already relies on - so checking those markers first, before falling back
+     * to the witnessed/reconstructed move shapes, is unambiguous. An unrecognized shape is silently
+     * ignored, same as before this ledger generalization.
+     *
+     * @param line {@link String} one line of the move-record log
+     * @param moves a {@link Map} of {@link Path} to {@link MoveRecord} accumulated move records
+     * @param skipped a {@link Set} of {@link Path} accumulated sources the user gave up on
+     * @param overlaps a {@link Map} of {@link Path} to {@link OverlapResolution} accumulated overlap resolutions
+     */
+    private static void parseLedgerLine(String line, Map<Path, MoveRecord> moves, Set<Path> skipped,
+            Map<Path, OverlapResolution> overlaps) {
+        String[] fields = line.split(RECORD_DELIMITER, -1);
+        if (fields.length < 2) {
+            return;
         }
-        return records;
+        Path source = Path.of(fields[0]);
+        if (fields.length == 4 && SKIPPED_MARKER.equals(fields[1])) {
+            skipped.add(source);
+        } else if (fields.length == 5 && OVERLAP_MARKER.equals(fields[1])) {
+            overlaps.put(source, OverlapResolution.valueOf(fields[2]));
+        } else if (fields.length == 3) {
+            moves.put(source, new MoveRecord(Path.of(fields[1]), fields[2]));
+        } else if (fields.length == 4 && RECONSTRUCTED_MARKER.equals(fields[3])) {
+            moves.put(source, new MoveRecord(Path.of(fields[1]), fields[2]));
+        }
     }
 
     /**
@@ -897,6 +1086,12 @@ public class ApplyEngine {
     // decision's index row) can reuse the same hash instead of re-hashing the file a second time.
     private record MoveOutcome(Path dest, String hash) {}
 
+    // The move-record log's whole disposition ledger, parsed in one pass: moves covers a witnessed
+    // or reconstructed record, exactly as before this ledger generalization. skipped is every source
+    // skipMissingSource() recorded as given up on. overlaps is every file resolveOverlap() recorded a
+    // DecisionUnreviewableOverlap resolution for.
+    private record Ledger(Map<Path, MoveRecord> moves, Set<Path> skipped, Map<Path, OverlapResolution> overlaps) {}
+
     // classify()'s verdict for one decision. Done carries the MoveRecord that proved it, as a
     // non-null component. Unlike a single status-plus-nullable-record shape, a decision that
     // isn't Done simply has no Done case to carry one - there is nothing for a caller to
@@ -912,6 +1107,10 @@ public class ApplyEngine {
         record Pending(Decision decision) implements Status {}
 
         record Done(Decision decision, MoveRecord record) implements Status {}
+
+        // The user gave up on this decision via skipMissingSource() rather than restoring the file.
+        // Terminal, like Done: apply() carries out no move or write for it, ever again.
+        record Skipped(Decision decision) implements Status {}
 
         record Unresolved(Decision decision) implements Status {}
     }
@@ -930,6 +1129,9 @@ public class ApplyEngine {
         record Pending(Path file) implements FileStatus {}
 
         record Done(Path file) implements FileStatus {}
+
+        // The user gave up on this file via skipMissingSource() rather than restoring it.
+        record Skipped(Path file) implements FileStatus {}
 
         record Unresolved(Path file) implements FileStatus {}
     }

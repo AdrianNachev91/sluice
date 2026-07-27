@@ -91,6 +91,17 @@ class JsonCullPrepStoreTest {
                 .isInstanceOf(UncheckedIOException.class);
     }
 
+    // readShardFile() is readShard()'s sibling for a stray shard, whose own filename names no real
+    // montage - so it reads by the file's own path directly, rather than a montage-derived name.
+    @Test
+    void readShardFileReadsBackAShardByItsOwnPath(@TempDir Path dir) {
+        var shard = new DecisionShard("montage-002", List.of(
+                new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor")));
+        new ShardCodec().write(dir.resolve("decisions-003.json"), shard); // stray: no montage-003 entry anywhere
+
+        assertThat(store.readShardFile(dir.resolve("decisions-003.json"))).isEqualTo(shard);
+    }
+
     @Test
     void hasShardReflectsWhetherTheDecisionsFileExists(@TempDir Path dir) {
         var shard = new DecisionShard("montage-004", List.of());

@@ -3,6 +3,7 @@ package photos.sluice.domain.cull;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
+import photos.sluice.domain.cull.Finding.DecisionUnreviewableOverlap;
 import photos.sluice.domain.cull.Finding.DuplicateFileReference;
 import photos.sluice.domain.cull.Finding.FileOutOfScope;
 import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
@@ -99,21 +100,28 @@ public final class ShardValidator {
         // The unreviewable list joins the same count. It has no shard of its own, but ApplyEngine
         // moves it exactly like a decision - a file listed there AND in a decision would double-move
         // just the same. A duplicate within the unreviewable list alone would too.
-        Map<String, Long> countByFile = new TreeMap<>();
+        //
+        // The exactly-one-decision-plus-exactly-one-unreviewable shape gets its own finding,
+        // DecisionUnreviewableOverlap: common and specific enough that a troubleshooter can offer a
+        // real choice (trust the decision, or treat the file as unreviewable). Every other shape -
+        // two decisions, two unreviewable entries, or three or more references - has no such
+        // resolution, and stays the general DuplicateFileReference.
+        Map<String, List<Decision>> decisionsByFile = new TreeMap<>();
         for (Decision d : decisions) {
             String f = d.file().toString();
             if (!f.isBlank()) {
-                countByFile.merge(f, 1L, Long::sum);
+                decisionsByFile.computeIfAbsent(f, _ -> new ArrayList<>()).add(d);
             }
         }
+        Map<String, Integer> unreviewableCountByFile = new TreeMap<>();
         for (Path u : unreviewable) {
-            countByFile.merge(u.toString(), 1L, Long::sum);
+            unreviewableCountByFile.merge(u.toString(), 1, Integer::sum);
         }
-        countByFile.forEach((f, count) -> {
-            if (count > 1) {
-                problems.add(new DuplicateFileReference(f, count));
-            }
-        });
+        Set<String> allReferencedFiles = new TreeSet<>();
+        allReferencedFiles.addAll(decisionsByFile.keySet());
+        allReferencedFiles.addAll(unreviewableCountByFile.keySet());
+        allReferencedFiles.forEach(f -> checkDuplicateReferences(f,
+                decisionsByFile.getOrDefault(f, List.of()), unreviewableCountByFile.getOrDefault(f, 0), problems));
 
         // A near-dup group belongs to exactly one montage (groups never span montages). The same
         // slug reused across two shards would let two unrelated groups pass independently, then merge
@@ -125,6 +133,30 @@ public final class ShardValidator {
         });
 
         return new ValidationReport(problems, heals, decisions);
+    }
+
+    /**
+     * One file's worth of the duplicate-reference check: exactly one decision paired with exactly
+     * one unreviewable entry is a {@link DecisionUnreviewableOverlap} (has a real CHOICE remedy);
+     * any other multi-reference shape is the general {@link DuplicateFileReference}. A no-op when
+     * f is referenced at most once.
+     *
+     * @param f {@link String} the file path, as it appears in a decision or the unreviewable list
+     * @param decisionsForFile a {@link List} of {@link Decision} every decision naming f
+     * @param unreviewableCount int how many times f appears in the unreviewable list
+     * @param problems a {@link List} of {@link Finding} accumulated contract violations
+     */
+    private static void checkDuplicateReferences(String f, List<Decision> decisionsForFile, int unreviewableCount,
+            List<Finding> problems) {
+        long count = decisionsForFile.size() + unreviewableCount;
+        if (count <= 1) {
+            return;
+        }
+        if (decisionsForFile.size() == 1 && unreviewableCount == 1) {
+            problems.add(new DecisionUnreviewableOverlap(decisionsForFile.getFirst()));
+        } else {
+            problems.add(new DuplicateFileReference(f, count));
+        }
     }
 
     /**

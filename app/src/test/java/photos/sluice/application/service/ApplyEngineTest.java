@@ -21,6 +21,7 @@ import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Finding.MissingShard;
 import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.Finding.StrayShard;
+import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ReconcileReport;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
@@ -35,6 +36,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -173,7 +175,7 @@ class ApplyEngineTest {
 
         assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
                 .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("file listed 2 times across shards/unreviewable: " + photo);
+                .hasMessageContaining("file listed both as a decision and as unreviewable: " + photo);
         assertThat(Files.exists(photo)).isTrue();
     }
 
@@ -961,6 +963,151 @@ class ApplyEngineTest {
         assertThat(report.byCategory()).containsEntry("junk", 1);
         assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt")))
                 .containsExactlyInAnyOrder("a.jpg - blurry", "b.jpg - also blurry");
+    }
+
+    @Test
+    void skipMissingSourceRecordsATerminalDispositionSoApplySucceedsWithoutMovingOrWritingAnything(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path gone = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no move record either
+        Path pending = root.resolve("Sorted/Photos/2019/06/pending.jpg");
+        writeFile(pending, "y");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(gone), sidecarEntry(pending));
+        writeShard(prepDir, "montage-001",
+                classificationJson(gone, "junk", "blurry"),
+                classificationJson(pending, "scenery", "weak composition"));
+        ApplyEngine engine = applyEngine(root, libraryRoot);
+
+        engine.skipMissingSource(prepDir, gone, "confirmed permanently deleted by the user");
+        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.byCategory()).containsEntry("scenery", 1).doesNotContainKey("junk");
+        assertThat(Files.exists(root.resolve("Review/junk"))).isFalse();
+        assertThat(Files.exists(root.resolve("Review/scenery/pending.jpg"))).isTrue();
+    }
+
+    @Test
+    void skipMissingSourceResolvesAMissingUnreviewableFileWithoutMovingAnything(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path gone = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move record either
+        writeIndex(prepDir, 0, List.of(gone), List.of());
+        ApplyEngine engine = applyEngine(root, libraryRoot);
+
+        engine.skipMissingSource(prepDir, gone, "confirmed permanently deleted by the user");
+        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.unreviewable()).isEqualTo(1);
+        assertThat(Files.exists(root.resolve("Unreviewable"))).isFalse();
+    }
+
+    // classify() checks the disposition ledger's Skipped status before its NearDupChosen-shaped copy
+    // exception (design doc: apply-engine.md section 3/7) - a skip must win even for a decision type
+    // that would otherwise always be Unresolved once its source is missing.
+    @Test
+    void skipMissingSourceWinsOverANearDupChosenDecisionThatWouldOtherwiseAlwaysBeUnresolved(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - the photo itself is gone
+        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(reject, "blurry");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
+        writeShard(prepDir, "montage-001",
+                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
+                nearDupRejectJson(reject, "lake-jun19", "blurred"));
+        ApplyEngine engine = applyEngine(root, libraryRoot);
+
+        engine.skipMissingSource(prepDir, chosen, "confirmed the chosen photo itself is gone");
+        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.nearDupGroups()).isZero();
+        assertThat(Files.exists(reject)).isFalse();
+        Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
+        assertThat(Files.exists(dupDir.resolve("a.jpg"))).isFalse();
+        assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
+    }
+
+    @Test
+    void resolveOverlapTrustDecisionAppliesTheDecisionAndDropsTheFileFromUnreviewable(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        ApplyEngine engine = applyEngine(root, libraryRoot);
+
+        engine.resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, "the decision is correct");
+        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.byCategory()).containsEntry("junk", 1);
+        assertThat(report.unreviewable()).isZero();
+        assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
+        assertThat(Files.exists(root.resolve("Unreviewable"))).isFalse();
+    }
+
+    @Test
+    void resolveOverlapTreatAsUnreviewableAppliesTheFileAsUnreviewableAndDropsTheDecision(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        ApplyEngine engine = applyEngine(root, libraryRoot);
+
+        engine.resolveOverlap(prepDir, photo, OverlapResolution.TREAT_AS_UNREVIEWABLE, "the file wasn't actually reviewed");
+        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.byCategory()).doesNotContainKey("junk");
+        assertThat(report.unreviewable()).isEqualTo(1);
+        assertThat(Files.exists(root.resolve("Review/junk"))).isFalse();
+        assertThat(Files.exists(root.resolve("Unreviewable/2019/06/a.jpg"))).isTrue();
+    }
+
+    @Test
+    void autoRepairStrayShardReturnsEmptyWhenMoreThanOneMontageIsUnclaimed(@TempDir Path root) throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(first, "x");
+        writeFile(second, "y");
+        // Both montage-001 and montage-002 lack a shard - the stray below cannot be assigned
+        // unambiguously to either one.
+        writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(first));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(second));
+        writeShard(prepDir, "montage-003", classificationJson(first, "junk", "blurry"));
+
+        Optional<String> repaired = applyEngine(root, libraryRoot)
+                .autoRepairStrayShard(prepDir, new StrayShard("decisions-003.json"));
+
+        assertThat(repaired).isEmpty();
+        assertThat(Files.exists(prepDir.resolve("decisions-003.json"))).isTrue();
+    }
+
+    @Test
+    void setAsideStrayShardFilesItIntoTheDisasterDrawerWithoutDeletingIt(@TempDir Path root) throws IOException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        writeIndex(prepDir, 0, List.of());
+        writeShard(prepDir, "montage-001", classificationJson(root.resolve("Sorted/Photos/2019/06/a.jpg"), "junk", "blurry"));
+
+        Path filed = applyEngine(root, libraryRoot).setAsideStrayShard(prepDir, new StrayShard("decisions-001.json"));
+
+        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isFalse();
+        assertThat(Files.exists(filed)).isTrue();
+        assertThat(filed.getFileName().toString()).contains("stray-shard");
     }
 
     private static Path prepDir(Path root) throws IOException {
