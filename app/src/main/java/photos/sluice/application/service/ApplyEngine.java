@@ -19,6 +19,7 @@ import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.cull.ReconcileReport;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
@@ -31,6 +32,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -47,9 +49,15 @@ public class ApplyEngine {
     private static final String FUNNY_CATEGORY = "funny";
     private static final String REASONS_FILE = "_reasons.txt";
     private static final String MOVE_RECORD_LOG = "move-records.log";
+    // The move-record line format's one additive field. A legacy three-field line (no fourth field)
+    // means WITNESSED - recorded from the source's own hash right before a real move. This exact
+    // marker as the fourth field means RECONSTRUCTED - reconcile() inferred the record from disk
+    // state alone, having lost the original log. Both are trusted identically by classify(); the
+    // marker is provenance for a human reading the log, not a behavioral distinction.
+    private static final String RECONSTRUCTED_MARKER = "RECONSTRUCTED";
     // A control character, not a printable one - guaranteed absent from any path on every
-    // mainstream filesystem. A record's three fields can be split back apart with zero escaping
-    // and no ambiguity even when a path itself contains spaces, commas, or tabs.
+    // mainstream filesystem. A record's fields can be split back apart with zero escaping and no
+    // ambiguity even when a path itself contains spaces, commas, or tabs.
     private static final String RECORD_DELIMITER = "\u001F";
     private static final String UNDATED = "0000-00";
 
@@ -59,6 +67,7 @@ public class ApplyEngine {
     private final CullSettings cullSettings;
     private final Sha256Port sha256Port;
     private final HashIndexPort hashIndexPort;
+    private final DisasterDrawer disasterDrawer;
     private final ShardValidator shardValidator = new ShardValidator();
 
     /**
@@ -70,15 +79,17 @@ public class ApplyEngine {
      * @param cullSettings {@link CullSettings} configured cull categories
      * @param sha256Port {@link Sha256Port} hashes files for move verification
      * @param hashIndexPort {@link HashIndexPort} reads/appends the library hash index
+     * @param disasterDrawer {@link DisasterDrawer} files a prep dir's own unsalvageable artifacts
      */
     public ApplyEngine(PathsPort pathsPort, MediaStore mediaStore, CullPrepPort cullPrepPort,
-            CullSettings cullSettings, Sha256Port sha256Port, HashIndexPort hashIndexPort) {
+            CullSettings cullSettings, Sha256Port sha256Port, HashIndexPort hashIndexPort, DisasterDrawer disasterDrawer) {
         this.pathsPort = pathsPort;
         this.mediaStore = mediaStore;
         this.cullPrepPort = cullPrepPort;
         this.cullSettings = cullSettings;
         this.sha256Port = sha256Port;
         this.hashIndexPort = hashIndexPort;
+        this.disasterDrawer = disasterDrawer;
     }
 
     /**
@@ -171,7 +182,7 @@ public class ApplyEngine {
             }
             switch (status) {
                 case Status.Pending p -> apply(p.decision(), moveRecordLog, nearDupGroups, outcome);
-                case Status.Done d -> reconcile(d.decision(), d.record());
+                case Status.Done d -> backfillSecondaryWrite(d.decision(), d.record());
                 case Status.Unresolved _ -> {} // already aborted the whole run above
             }
             progress.tick(++current, total);
@@ -305,6 +316,228 @@ public class ApplyEngine {
     }
 
     /**
+     * An offline repair for when move-records.log itself cannot be trusted, missing or found with
+     * this run's shards otherwise intact. Any existing log is filed into prepDir's disaster drawer
+     * wholesale, never salvaged line-by-line. The log is then rebuilt from scratch, purely from what
+     * disk state can prove: every already-validated decision and unreviewable file is checked
+     * against the exact destination applying it would have produced, recording the hash of whatever
+     * is found there.
+     *
+     * <p>This is a name-and-location match, not a proof of identity. The original file's own hash
+     * was never recorded anywhere but the log this repair is replacing, so there is nothing to
+     * verify a located file against. A file already sitting untouched needs no record at all -
+     * classify() already treats an existing source as pending regardless of the log. NearDupChosen
+     * never gets a rebuilt record: it is a copy, so a missing source can only mean the photo itself
+     * is gone, never an unconfirmed move. That is the same rule classify() already applies. A file's
+     * destination is only ever reconstructed when it can be identified unambiguously - see
+     * {@link #resolvePendingMoves} for the exact rule and its residual risk.
+     *
+     * @param prepDirPath {@link Path} the prep directory to reconcile
+     * @return {@link ReconcileReport} what the sweep found
+     * @throws ApplyException if the shard contract itself does not validate cleanly
+     */
+    public ReconcileReport reconcile(Path prepDirPath) throws ApplyException {
+        PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
+        ValidationReport validation = validate(prepDirPath, prepDir, new ApplyOptions(true));
+        if (!validation.valid()) {
+            throw failure(validation.findings());
+        }
+
+        Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
+        if (mediaStore.exists(moveRecordLog)) {
+            disasterDrawer.file(prepDirPath, moveRecordLog, "move-records-log");
+        }
+
+        var sweep = new ReconcileSweep(moveRecordLog);
+        validation.decisions().forEach(decision -> reconcileDecision(decision, sweep));
+        prepDir.unreviewable().forEach(file -> reconcileFile(file, unreviewableDir(file), sweep));
+        resolvePendingMoves(sweep);
+
+        return new ReconcileReport(sweep.reconstructed, sweep.stillPending, sweep.missingSource);
+    }
+
+    /**
+     * reconcile()'s per-decision step. A NearDupChosen decision is checked for existence right here,
+     * since it is a copy. A missing source is always missing-source for it, never a pending move -
+     * classify() never has a move-record path for it either, and reconcile() must not pretend
+     * otherwise. Every other decision defers its own existence check entirely to reconcileFile()
+     * below, which every other caller of reconcileFile() also relies on.
+     *
+     * @param decision {@link Decision} the decision to reconcile
+     * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
+     */
+    private void reconcileDecision(Decision decision, ReconcileSweep sweep) {
+        if (decision instanceof NearDupChosen) {
+            if (mediaStore.exists(decision.file())) {
+                sweep.stillPending++;
+            } else {
+                sweep.missingSource.add(new Finding.MissingSource(decision.file(), sweep.moveRecordLog));
+            }
+            return;
+        }
+        reconcileFile(decision.file(), destinationDirFor(decision), sweep);
+    }
+
+    /**
+     * reconcile()'s core per-file step, shared by a move-based decision and an unreviewable file
+     * alike. A file still at its original location needs no record. Otherwise, it is queued as a
+     * pending move - resolvePendingMoves() decides, once every decision has been swept, whether this
+     * file's destination can be identified unambiguously.
+     *
+     * @param file {@link Path} the source file to reconcile
+     * @param destDir {@link Path} the directory a real apply would have moved file into
+     * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
+     */
+    private void reconcileFile(Path file, Path destDir, ReconcileSweep sweep) {
+        if (mediaStore.exists(file)) {
+            sweep.stillPending++;
+            return;
+        }
+        sweep.pendingMoves.add(new PendingMove(file, destDir));
+    }
+
+    /**
+     * Resolves every pending move queued by reconcileFile(), grouped by (destDir, original file
+     * name) - the same key two decisions that started with an identical leaf name would share.
+     *
+     * <p>A permanent flat destination like {@code Funny/} accumulates files across every run the
+     * app has ever applied, not just this sweep. So a group's on-disk collision candidates can
+     * outnumber or fall short of this sweep's own claimants. Reconstruction only happens when the
+     * two counts match exactly. Candidates are then zipped to claimants in decision order, the same
+     * order a real move would have produced them in. Any mismatch means the group is ambiguous. A
+     * mystery file present is a surplus; the genuinely-moved file gone without trace is a deficit.
+     * Either way, every claimant in the group is reported missing rather than guessed at.
+     *
+     * <p>One coincidence this cannot catch: a stranger's file arriving at the exact moment ours
+     * vanishes without a trace still restores count parity. Only the original file's own hash could
+     * tell that case apart from a genuine match, and that hash lived only in the log this repair is
+     * replacing. This residual risk is accepted rather than chased.
+     *
+     * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
+     */
+    private void resolvePendingMoves(ReconcileSweep sweep) {
+        final Map<String, List<PendingMove>> groups = new LinkedHashMap<>();
+        for (PendingMove move : sweep.pendingMoves) {
+            final String key = move.destDir() + RECORD_DELIMITER + move.file().getFileName();
+            groups.computeIfAbsent(key, _ -> new ArrayList<>()).add(move);
+        }
+        groups.values().forEach(claimants -> resolveGroup(claimants, sweep));
+    }
+
+    /**
+     * One (destDir, file name) group's worth of resolvePendingMoves() - see that method's Javadoc for
+     * the unambiguity rule this enforces.
+     *
+     * @param claimants a {@link List} of {@link PendingMove}, this group's claimants in decision order
+     * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
+     */
+    private void resolveGroup(List<PendingMove> claimants, ReconcileSweep sweep) {
+        final PendingMove first = claimants.getFirst();
+        final List<Path> candidates = contiguousCandidates(first.destDir(), first.file().getFileName().toString());
+        if (candidates.size() != claimants.size()) {
+            claimants.forEach(claimant ->
+                    sweep.missingSource.add(new Finding.MissingSource(claimant.file(), sweep.moveRecordLog)));
+            return;
+        }
+        for (int i = 0; i < claimants.size(); i++) {
+            final Path file = claimants.get(i).file();
+            final Path located = candidates.get(i);
+            final String hash = sha256Port.hash(located);
+            mediaStore.appendLine(sweep.moveRecordLog,
+                    file + RECORD_DELIMITER + located + RECORD_DELIMITER + hash + RECORD_DELIMITER + RECONSTRUCTED_MARKER);
+            sweep.reconstructed++;
+        }
+    }
+
+    /**
+     * Every destDir candidate for baseName that exists on disk without a gap - the plain name first,
+     * then " (2)", " (3)", ... stopping at the first missing slot. This is exactly the collision
+     * order a real move would have produced.
+     *
+     * @param destDir {@link Path} the directory to search
+     * @param baseName {@link String} the file's own original name
+     * @return a {@link List} of {@link Path}, every contiguous candidate found, in slot order
+     */
+    private List<Path> contiguousCandidates(Path destDir, String baseName) {
+        final var candidates = new ArrayList<Path>();
+        int slot = 1;
+        Path candidate = destDir.resolve(candidateName(baseName, slot));
+        while (mediaStore.exists(candidate)) {
+            candidates.add(candidate);
+            slot++;
+            candidate = destDir.resolve(candidateName(baseName, slot));
+        }
+        return candidates;
+    }
+
+    /**
+     * The exact destination directory apply() would move decision into - the same per-category or
+     * per-near-dup-group logic applyClassification()/applyNearDupReject() themselves use. Never
+     * called for NearDupChosen: reconcile() always resolves that case before reaching here, since a
+     * copy's missing source has no destination to search in the first place.
+     *
+     * @param decision {@link Decision} the decision to resolve a destination directory for
+     * @return {@link Path} the destination directory
+     */
+    private Path destinationDirFor(Decision decision) {
+        return switch (decision) {
+            case Classification c -> c.category().equals(FUNNY_CATEGORY)
+                    ? pathsPort.library().resolve("Funny")
+                    : pathsPort.review().resolve(c.category());
+            case NearDupReject r -> duplicatesDir(r.file(), r.group());
+            case NearDupChosen _ -> throw new IllegalStateException(
+                    "NearDupChosen never reaches destinationDirFor - reconcileDecision() resolves it first");
+        };
+    }
+
+    /**
+     * The Nth collision candidate for baseName - itself unchanged for slot 1, then " (2)", " (3)",
+     * ... before the extension, matching NioMediaStore's own collision-naming convention exactly.
+     *
+     * @param baseName {@link String} the original file name
+     * @param slot int the 1-based candidate slot
+     * @return {@link String} the candidate file name
+     */
+    private static String candidateName(String baseName, int slot) {
+        if (slot == 1) {
+            return baseName;
+        }
+        int dot = baseName.lastIndexOf('.');
+        String base = dot <= 0 ? baseName : baseName.substring(0, dot);
+        String extension = dot <= 0 ? "" : baseName.substring(dot);
+        return base + " (" + slot + ")" + extension;
+    }
+
+    /**
+     * A file reconcileFile() could not find still sitting at its original location. destDir is the
+     * exact directory a real apply() would have moved it into, carried alongside so
+     * resolvePendingMoves() can group and search without looking the decision back up.
+     *
+     * @param file {@link Path} the source file that could not be found at its original location
+     * @param destDir {@link Path} the directory a real apply() would have moved file into
+     */
+    private record PendingMove(Path file, Path destDir) {
+    }
+
+    /**
+     * reconcile()'s accumulating outcome as it sweeps every decision and unreviewable file in turn.
+     * moveRecordLog is carried here so resolvePendingMoves() can append a freshly reconstructed
+     * record to it. It also names the log in a MissingSource finding, without threading it through
+     * every call as its own parameter.
+     */
+    private static final class ReconcileSweep {
+        final List<PendingMove> pendingMoves = new ArrayList<>();
+        final List<Finding.MissingSource> missingSource = new ArrayList<>();
+        final Path moveRecordLog;
+        int reconstructed;
+        int stillPending;
+
+        ReconcileSweep(Path moveRecordLog) {
+            this.moveRecordLog = moveRecordLog;
+        }
+    }
+
+    /**
      * ShardValidator checks a decision's file against the sidecar's in-scope set, not the
      * filesystem. Whether it still exists on disk, or was already carried out by an earlier run, is
      * this engine's job.
@@ -384,9 +617,9 @@ public class ApplyEngine {
      * @param decision {@link Decision} the already-verified-done decision
      * @param record {@link MoveRecord} the verified move record proving it ran
      */
-    private void reconcile(Decision decision, MoveRecord record) {
+    private void backfillSecondaryWrite(Decision decision, MoveRecord record) {
         if (decision instanceof Classification c) {
-            reconcileClassification(c, record);
+            backfillClassificationWrite(c, record);
         }
     }
 
@@ -396,7 +629,7 @@ public class ApplyEngine {
      * @param c {@link Classification} the classification decision
      * @param record {@link MoveRecord} the verified move record
      */
-    private void reconcileClassification(Classification c, MoveRecord record) {
+    private void backfillClassificationWrite(Classification c, MoveRecord record) {
         if (c.category().equals(FUNNY_CATEGORY)) {
             // HashIndexPort.contains(hash) alone isn't enough. The index legitimately allows several
             // paths under one hash (byte-identical files kept in more than one place). Another entry
@@ -425,7 +658,9 @@ public class ApplyEngine {
         Map<Path, MoveRecord> records = new HashMap<>();
         for (String line : mediaStore.readLines(moveRecordLog)) {
             String[] fields = line.split(RECORD_DELIMITER, -1);
-            if (fields.length == 3) {
+            boolean witnessed = fields.length == 3;
+            boolean reconstructed = fields.length == 4 && RECONSTRUCTED_MARKER.equals(fields[3]);
+            if (witnessed || reconstructed) {
                 records.put(Path.of(fields[0]), new MoveRecord(Path.of(fields[1]), fields[2]));
             }
         }
@@ -488,9 +723,9 @@ public class ApplyEngine {
      * with a _reasons.txt note. There is no per-category destination configuration yet.
      *
      * <p>The index append happens immediately, not batched after the loop. A decision an earlier,
-     * crashed run already carried out is skipped on resume (reconcile() handles it instead), so it
-     * never reaches this method again. A batched append collected only from this run's own outcome
-     * would then permanently lose that file's index row.
+     * crashed run already carried out is skipped on resume (backfillSecondaryWrite() handles it
+     * instead), so it never reaches this method again. A batched append collected only from this
+     * run's own outcome would then permanently lose that file's index row.
      *
      * @param c {@link Classification} the classification decision
      * @param moveRecordLog {@link Path} the move-record log to append to
@@ -499,7 +734,7 @@ public class ApplyEngine {
     private void applyClassification(Classification c, Path moveRecordLog, ApplyOutcome outcome) {
         outcome.byCategory.merge(c.category(), 1, Integer::sum);
         boolean funny = c.category().equals(FUNNY_CATEGORY);
-        Path destDir = funny ? pathsPort.library().resolve("Funny") : pathsPort.review().resolve(c.category());
+        Path destDir = destinationDirFor(c);
         MoveOutcome moved = recordThenMove(c.file(), destDir, moveRecordLog);
         if (funny) {
             hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
@@ -542,7 +777,7 @@ public class ApplyEngine {
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
     private void applyNearDupReject(NearDupReject r, Path moveRecordLog, ApplyOutcome outcome) {
-        recordThenMove(r.file(), duplicatesDir(r.file(), r.group()), moveRecordLog);
+        recordThenMove(r.file(), destinationDirFor(r), moveRecordLog);
         outcome.nearDupRejects++;
     }
 
@@ -651,7 +886,11 @@ public class ApplyEngine {
     }
 
     // One line in the move-record log: the exact, already-collision-resolved destination a move-
-    // based decision's source was hashed and headed for, recorded before the move itself ran.
+    // based decision's source was hashed and headed for, recorded before the move itself ran (or,
+    // for a RECONSTRUCTED record, the destination reconcile() located and hashed after the fact).
+    // classify() trusts a WITNESSED and a RECONSTRUCTED record identically. The marker distinguishing
+    // them in the log's own text is provenance for a human reader, never a behavioral distinction.
+    // It is not itself a field here.
     private record MoveRecord(Path dest, String hash) {}
 
     // The destination and hash recordThenMove() just produced. Handed back so a caller (a funny

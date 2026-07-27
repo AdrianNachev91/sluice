@@ -223,7 +223,8 @@ class PrepDirDoctorTest {
         var cullPrepPort = new JsonCullPrepStore();
         var settings = fixedSettings();
         var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
-        var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, settings, new Sha256Hasher(), hashIndex);
+        var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, settings, new Sha256Hasher(), hashIndex,
+                new DisasterDrawer(mediaStore));
         return new PrepDirDoctor(cullPrepPort, mediaStore, settings, applyEngine);
     }
 

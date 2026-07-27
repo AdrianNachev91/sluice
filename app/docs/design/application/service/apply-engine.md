@@ -20,7 +20,7 @@ flowchart TD
     F -- no --> E["for each decision,<br/>in shard order<br/>(cancellation checked<br/>per item - see section 5)"]
     F -- no --> E2["for each<br/>unreviewable file<br/>(cancellation checked<br/>per item - see section 5)"]
     E -- Pending --> G["carry it out<br/>(see section 4) -<br/>records source hash +<br/>destination BEFORE moving"]
-    E -- Done --> H["reconcile - backfill only<br/>a missing secondary write,<br/>never re-move"]
+    E -- Done --> H["backfill only<br/>a missing secondary write,<br/>never re-move"]
     E2 -- Pending --> G2["move to<br/>Unreviewable/&lt;yyyy&gt;/&lt;mm&gt;/ -<br/>same record-before-move"]
     E2 -- Done --> H2(["nothing to backfill -<br/>the move alone was<br/>the whole action"])
     G --> I["once every decision and<br/>unreviewable file is handled"]
@@ -29,7 +29,7 @@ flowchart TD
     H2 --> I
     I --> J["write merged decisions.json -<br/>a fresh recount over the<br/>WHOLE decisions array,<br/>not just this run's"]
     J --> K["delete montage-*<br/>and tile-* files"]
-    K --> L(["build ApplyReport -<br/>this run's own decision<br/>counts only, reconciled<br/>decisions excluded"])
+    K --> L(["build ApplyReport -<br/>this run's own decision<br/>counts only, backfilled<br/>decisions excluded"])
 ```
 
 Every problem source is aggregated before anything throws - a bad run is seen and fixed whole, not
@@ -39,7 +39,7 @@ the whole run, the same all-or-nothing guarantee validation itself gives. The de
 and the intermediate cleanup always run once classification passes, even when every montage was an
 all-keeps montage and zero decisions exist. A funny decision's hash-index row is written
 immediately as part of carrying it out, not collected and appended once at the end. A decision
-already Done on a resumed run is reconciled, not reprocessed, so it never re-enters the carry-out
+already Done on a resumed run is backfilled, not reprocessed, so it never re-enters the carry-out
 path. Batching the index row instead would lose it for good, the one time a crash actually lands
 between decisions.
 
@@ -51,7 +51,7 @@ Pending/Done/Unresolved logic, minus the `NearDupChosen` copy exception (an unre
 always a move). Carrying one out reuses `recordThenMove()` exactly as
 `Classification`/`NearDupReject` do, just with a different destination (`Unreviewable/<yyyy>/<mm>/`,
 the same year/month segments `yearMonthOf()` reads for `Duplicates/`) and no secondary write. A
-Done unreviewable file has nothing left to reconcile.
+Done unreviewable file has nothing left to backfill.
 
 `ApplyReport` is built twice, at two different scopes, for two different readers. The value
 returned to the caller counts only what *this* invocation itself moved. A decision a prior,
@@ -136,10 +136,10 @@ happened to the file, and it refuses rather than guessing.
 
 Confirming the move this way also settles a `Classification` decision's second write (a library
 hash-index row, or a `_reasons.txt` line) that a crash could have skipped independently of the move
-itself. Once the move is positively confirmed, `ApplyEngine.reconcile()` checks that second write
-directly - `funny` via `HashIndexPort.contains`, everything else via an exact line match in
-`_reasons.txt`. It backfills only if that write is actually missing. Nothing is ever re-moved on
-this path. A reconciled decision also isn't counted in the report `apply()` returns.
+itself. Once the move is positively confirmed, `ApplyEngine.backfillSecondaryWrite()` checks that
+second write directly - `funny` via `HashIndexPort.contains`, everything else via an exact line
+match in `_reasons.txt`. It backfills only if that write is actually missing. Nothing is ever
+re-moved on this path. A backfilled decision also isn't counted in the report `apply()` returns.
 
 ## 4. Carrying out one decision
 
@@ -198,7 +198,7 @@ classifier to confirm.
 flowchart TD
     A["top of the decisions loop,<br/>or the unreviewable-files<br/>loop right after it"] --> B{"cancellation<br/>requested?"}
     B -- yes --> Z(["stop immediately -<br/>skip writeMergedDecisions()<br/>and cleanupIntermediates() -<br/>return null"])
-    B -- no --> C["carry out (or reconcile)<br/>this one item, tick progress"]
+    B -- no --> C["carry out (or backfill)<br/>this one item, tick progress"]
     C --> A
 ```
 
@@ -218,6 +218,48 @@ convention keeps small (tens, not thousands). In practice the wait before the fi
 check is negligible. Reassessed 2026-07-26 during a full cancellation-coverage review across every
 engine this project's cancellation support touches; the verdict was to leave it as-is.
 
+## 6. Offline reconcile
+
+```mermaid
+flowchart TD
+    A["read index.json,<br/>validate<br/>(allowPartial)"] -- any problem --> Z(["ApplyException -<br/>nothing rebuilt"])
+    A -- clean --> B{"move-records.log<br/>exists?"}
+    B -- yes --> C["file it into the<br/>disaster drawer wholesale -<br/>never salvaged line-by-line"]
+    B -- no --> D
+    C --> D["for each decision +<br/>unreviewable file:<br/>source still on disk?"]
+    D -- yes --> E(["stillPending"])
+    D -- no, NearDupChosen --> F(["MissingSource -<br/>a copy's source<br/>never disappears"])
+    D -- no, otherwise --> G["queue as a<br/>pending move<br/>(file, destDir)"]
+    G --> H["group all pending moves<br/>by (destDir, original<br/>file name)"]
+    H --> I["per group: count<br/>contiguous on-disk<br/>candidates vs. claimants"]
+    I -- counts match --> J(["reconstructed - candidates<br/>zipped to claimants in<br/>decision order, hashed,<br/>appended RECONSTRUCTED"])
+    I -- surplus or deficit --> K(["every claimant in the<br/>group -> MissingSource,<br/>nothing written"])
+```
+
+`reconcile()` exists for when `move-records.log` itself can't be trusted - missing or found corrupt
+- while the shard contract is otherwise intact. It never salvages a corrupt log line-by-line;
+hashes are the ground truth, so the whole log is re-derived from disk state and the original is
+filed away for forensics.
+
+The counts-match rule is what keeps a rebuilt record honest. A destination like library `Funny/`
+accumulates files across every run this app has ever applied, not just the run being reconciled. So
+the on-disk collision candidates for a given (destination, name) pair can outnumber or fall short of
+this sweep's own claimants. Reconstruction only happens when the candidate count and claimant count
+for a group match exactly. A surplus is a stranger's file holding a slot; a deficit is the genuinely
+moved file gone without trace. Either way the group is ambiguous, and every claimant in it is
+reported `MissingSource` rather than guessed at. A false refusal costs one click in a later CHOICE
+remedy; a false reconstruction would be a permanent, undetectable lie in the audit trail.
+
+One coincidence this rule cannot catch: a stranger's file arriving at the exact moment the genuine
+file vanishes without trace still restores count parity, and would reconstruct wrongly. Nothing
+short of the original file's own hash - which lived only in the log this repair is replacing - could
+tell that case apart from a genuine match. This residual risk is accepted rather than chased; see
+`ApplyEngine.resolvePendingMoves()`'s own Javadoc for the same rule stated against the code.
+
+Corrupt/missing originals, and every troubleshoot report, are collected the same way: see
+`DisasterDrawer`'s own class doc (`application/service/DisasterDrawer.java`) for the filename format
+and retention rule.
+
 ## Scenarios
 
 | Scenario                                                                                                   | Outcome                                                                            |
@@ -236,7 +278,7 @@ engine this project's cancellation support touches; the verdict was to leave it 
 | A near-dup group's chosen photo                                                                            | Copied (not moved) to `Duplicates/`, original stays a Sorted keeper                |
 | A near-dup group's rejected photo                                                                          | Moved to `Duplicates/`                                                             |
 | A near-dup chosen photo's destination already exists (a prior run copied it, then crashed before its note) | Copy skipped; note (re)written wholesale                                           |
-| index.json lists an unreviewable file (couldn't render a judgeable tile at montage time)                   | Moved to `Unreviewable/<yyyy>/<mm>/` - no reason note, nothing to reconcile        |
+| index.json lists an unreviewable file (couldn't render a judgeable tile at montage time)                   | Moved to `Unreviewable/<yyyy>/<mm>/` - no reason note, nothing to backfill         |
 | An unreviewable file's move record verifies (destination hash-matches) but its source is gone              | Done - not reprocessed; there is no secondary write to backfill                    |
 | An unreviewable file is missing, with no move record verifying it already ran                              | Unresolved - `ApplyException`, zero files moved (same gate as any decision)        |
 | Cancellation requested mid-run, in either loop                                                             | `apply()` returns `null` - the finalizers never run, prep dir stays a waiting job  |

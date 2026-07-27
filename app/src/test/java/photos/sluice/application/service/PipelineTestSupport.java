@@ -166,7 +166,8 @@ final class PipelineTestSupport {
                 new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig);
         var cullPrepPort = new JsonCullPrepStore();
         var cullDispatcher = new CullDispatcher(cullers, cullSettings);
-        var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, cullSettings, sha256Port, hashIndex);
+        var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, cullSettings, sha256Port, hashIndex,
+                new DisasterDrawer(mediaStore));
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
         // given photo lands in via mtime ordering alone, without depending on batch-size math.
         var montageConfig = new MontageConfig(64, 1);

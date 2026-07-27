@@ -15,6 +15,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.service.ApplyEngine;
+import photos.sluice.application.service.DisasterDrawer;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.PrepDir;
@@ -197,8 +198,9 @@ class ApplyEngineRealDataParityTest {
         var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
         var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
-        return new ApplyEngine(pathsConfig, new NioMediaStore(), new JsonCullPrepStore(), fixedSettings(),
-                new Sha256Hasher(), hashIndex);
+        var mediaStore = new NioMediaStore();
+        return new ApplyEngine(pathsConfig, mediaStore, new JsonCullPrepStore(), fixedSettings(),
+                new Sha256Hasher(), hashIndex, new DisasterDrawer(mediaStore));
     }
 
     private static CullSettings fixedSettings() {
