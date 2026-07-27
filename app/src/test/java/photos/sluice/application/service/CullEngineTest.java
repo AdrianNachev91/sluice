@@ -372,9 +372,13 @@ class CullEngineTest {
 
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        waitUntil(Duration.ofSeconds(2), () -> !Files.exists(photo));
+        // Waits on waitingJobs() itself, not just the photo's move. apply() writes decisions.json -
+        // what waitingJobs() actually checks for - only after every decision's file is moved.
+        // Polling the move alone leaves a real window where the photo is gone but the job still
+        // reads as waiting. A CI runner slow/loaded enough to land inside that window flaked here.
+        waitUntil(Duration.ofSeconds(2), () -> pipeline.waitingJobs().isEmpty());
+        assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
-        assertThat(pipeline.waitingJobs()).isEmpty();
     }
 
     // Regression: disarmWatch() runs at the top of every dispatchAndApply() call, not just the
