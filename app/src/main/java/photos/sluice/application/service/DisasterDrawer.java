@@ -16,12 +16,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * {@code <prepDir>/disasters/} is the audit drawer for a prep dir's own recovery events: a
- * move-records.log or index.json this app decided was too damaged to salvage, and (once
- * Troubleshooter lands) every troubleshoot report. Every entry embeds its own filing time in its
- * filename rather than relying on file mtime, which this product already treats as untrustworthy
- * metadata elsewhere. Retention reads that embedded time, never mtime, and leaves any filename it
- * cannot parse alone rather than guessing whether it is safe to delete.
+ * {@code <prepDir>/disasters/} is the audit drawer for a prep dir's own recovery events. A
+ * move-records.log or index.json this app decided was too damaged to salvage gets filed here via
+ * {@link #file}. Every {@link Troubleshooter} report is written here directly via {@link #write}.
+ * Every entry embeds its own filing time in its filename rather than relying on file mtime, which
+ * this product already treats as untrustworthy metadata elsewhere. Retention reads that embedded
+ * time, never mtime, and leaves any filename it cannot parse alone rather than guessing whether it
+ * is safe to delete.
  */
 @Component
 public class DisasterDrawer {
@@ -61,6 +62,25 @@ public class DisasterDrawer {
         String extension = extensionOf(source.getFileName().toString());
         String stamp = TIMESTAMP_FORMAT.format(Instant.now());
         return mediaStore.moveTo(source, uniqueName(drawer, stamp, what, extension));
+    }
+
+    /**
+     * Writes content as a new drawer entry, named the same way {@link #file} names a filed original -
+     * stamped with the current time and what. For a generated artifact (a troubleshoot report) rather
+     * than an existing file being moved out of the way.
+     *
+     * @param prepDir {@link Path} the prep directory whose drawer receives this entry
+     * @param what {@link String} a short slug naming what this entry is
+     * @param content {@link String} the entry's full text content
+     * @return {@link Path} the path content was written to
+     */
+    public Path write(Path prepDir, String what, String content) {
+        Path drawer = prepDir.resolve(DRAWER_DIR);
+        mediaStore.ensureDirectory(drawer);
+        String stamp = TIMESTAMP_FORMAT.format(Instant.now());
+        Path dest = uniqueName(drawer, stamp, what, ".txt");
+        mediaStore.write(dest, content);
+        return dest;
     }
 
     /**

@@ -2,8 +2,12 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
+import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -11,6 +15,7 @@ import photos.sluice.domain.rescue.RescueSummary;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 
@@ -19,10 +24,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.FailingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
+import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
+import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
 import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
+import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
 import static photos.sluice.application.service.PipelineTestSupport.writeFile;
+import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
+import static photos.sluice.application.service.PipelineTestSupport.writeShard;
 
 class PipelineTest {
 
@@ -184,5 +194,41 @@ class PipelineTest {
         assertThat(summary.folderRemoved()).isFalse();
         assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
         assertThat(Files.exists(reasonsFile)).isTrue();
+    }
+
+    // sweepExpiredDisasterDrawers() is Pipeline's own @PostConstruct, called directly here since
+    // this test has no Spring context - the same pattern CullEngineTest's own
+    // armWatchesForExistingWaitingJobs() tests already use.
+    @Test
+    void sweepExpiredDisasterDrawersDeletesOnlyRetentionExpiredEntries(@TempDir Path root) throws IOException {
+        Path drawer = root.resolve("logs/cull-prep/2019-06/disasters");
+        Path oldEntry = drawer.resolve("2019-01-01_00-00-00-move-records-log.log");
+        writeFile(oldEntry, "old");
+        Path freshEntry = drawer.resolve("2099-01-01_00-00-00-move-records-log.log");
+        writeFile(freshEntry, "fresh");
+
+        pipeline(root, new RecordingProgressPort()).sweepExpiredDisasterDrawers();
+
+        assertThat(Files.exists(oldEntry)).isFalse();
+        assertThat(Files.exists(freshEntry)).isTrue();
+    }
+
+    // Proves troubleshoot() actually runs through JobRunner rather than calling Troubleshooter
+    // directly - TroubleshooterTest already covers the diagnose/reconcile/report logic itself in
+    // full, so this only needs one real prep dir to prove the wiring returns its report.
+    @Test
+    void troubleshootRunsAsABackgroundJobAndReturnsTheReport(@TempDir Path root) throws IOException {
+        var progress = new RecordingProgressPort();
+        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = cullPipeline(root, progress);
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        pipeline.resume(prepDir, false).join();
+
+        TroubleshootReport report = pipeline.troubleshoot(prepDir).join();
+
+        assertThat(report.before().state()).isEqualTo(State.COMPLETE);
+        assertThat(report.reconcile()).isNull();
     }
 }

@@ -46,6 +46,28 @@ class DisasterDrawerTest {
     }
 
     @Test
+    void writesContentAsANewTimestampedDrawerEntry(@TempDir Path root) throws IOException {
+        Path prepDir = root.resolve("logs/cull-prep/2019-06");
+
+        Path written = drawer().write(prepDir, "troubleshoot-report", "line one\nline two");
+
+        assertThat(written.getParent()).isEqualTo(prepDir.resolve("disasters"));
+        assertThat(written.getFileName().toString()).matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}-troubleshoot-report\\.txt");
+        assertThat(Files.readAllLines(written)).containsExactly("line one", "line two");
+    }
+
+    @Test
+    void writingTwoReportsGetsTheSecondANumericSuffixInsteadOfOverwritingTheFirst(@TempDir Path root) {
+        Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        DisasterDrawer drawer = drawer();
+
+        Path first = drawer.write(prepDir, "troubleshoot-report", "first");
+        Path second = drawer.write(prepDir, "troubleshoot-report", "second");
+
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
     void sweepExpiredDeletesOnlyDrawerEntriesOlderThanThirtyDays(@TempDir Path root) throws IOException {
         Path cullPrepRoot = root.resolve("logs/cull-prep");
         Path drawer1 = cullPrepRoot.resolve("2019-06/disasters");

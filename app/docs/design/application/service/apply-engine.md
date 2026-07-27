@@ -131,7 +131,7 @@ hashes the source, and appends both to the move-record log. Only then does it ca
 A resumed run whose source has disappeared doesn't need to guess a destination name (`" (2)"`,
 `" (3)"`, ...). It looks up the one exact path this decision was recorded as headed for, and hashes
 whatever sits there. A match is positive proof the move happened, not a guess. A mismatch, a
-missing destination, or no record at all all mean the same thing - this engine cannot tell what
+missing destination, or no record at all mean the same thing - this engine cannot tell what
 happened to the file, and it refuses rather than guessing.
 
 Confirming the move this way also settles a `Classification` decision's second write (a library
@@ -256,9 +256,9 @@ short of the original file's own hash - which lived only in the log this repair 
 tell that case apart from a genuine match. This residual risk is accepted rather than chased; see
 `ApplyEngine.resolvePendingMoves()`'s own Javadoc for the same rule stated against the code.
 
-Corrupt/missing originals, and every troubleshoot report, are collected the same way: see
+Corrupt/missing originals, and every troubleshoot report, are collected the same way - see
 `DisasterDrawer`'s own class doc (`application/service/DisasterDrawer.java`) for the filename format
-and retention rule.
+and retention rule. `troubleshooter.md` explains what decides whether this reconcile even runs.
 
 ## Scenarios
 

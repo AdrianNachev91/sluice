@@ -166,19 +166,23 @@ final class PipelineTestSupport {
                 new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig);
         var cullPrepPort = new JsonCullPrepStore();
         var cullDispatcher = new CullDispatcher(cullers, cullSettings);
+        var disasterDrawer = new DisasterDrawer(mediaStore);
         var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, cullSettings, sha256Port, hashIndex,
-                new DisasterDrawer(mediaStore));
+                disasterDrawer);
+        var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyEngine);
+        var troubleshooter = new Troubleshooter(prepDirDoctor, applyEngine, disasterDrawer);
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
         // given photo lands in via mtime ordering alone, without depending on batch-size math.
         var montageConfig = new MontageConfig(64, 1);
 
         if (pollInterval == null) {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
-                    cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress);
+                    cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress,
+                    disasterDrawer, troubleshooter);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                 cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress,
-                pollInterval);
+                disasterDrawer, troubleshooter, pollInterval);
     }
 
     static CullSettings defaultCullSettings() {

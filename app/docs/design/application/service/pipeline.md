@@ -8,7 +8,11 @@ through `ProgressPort` via `PhaseRunner`
 `app/src/main/java/photos/sluice/application/service/JobRunner.java`,
 `app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`). `cull()`/`waitingJobs()`/
 `resume()` and `curate()` are one-line delegates to `CullEngine`/`CurateEngine` - see
-`cull-engine.md`/`curate-engine.md` for how those actually work.
+`cull-engine.md`/`curate-engine.md` for how those actually work. `troubleshoot(prepDir)` is a
+one-line `JobRunner.submit()` delegate to `Troubleshooter`, with no `PhaseRunner`/`ProgressPort`
+bracketing. `Troubleshooter` has no per-item progress to report, so `JobRunner`'s
+one-job-at-a-time discipline is the whole reason it runs as a job. See `troubleshooter.md` for what
+`Troubleshooter` itself does.
 
 ## How one call works
 
@@ -71,5 +75,6 @@ those narrower interfaces.
 - `RescueEngine`: `rescue-engine.md` in this same design folder.
 - `CommitEngine` has no design doc of its own (one loop, one branch - judged too thin to diagram).
 - `ApplyEngine`: `apply-engine.md` in this same design folder, section 5 for its own cancellation behavior.
+- `Troubleshooter`: `troubleshooter.md` in this same design folder.
 - `CullMontageRenderer`: `cull-montage-renderer.md` in the `adapter/imaging` design folder, its own Cancellation section
   for the render/batch checks `MontageRenderer.build()` does internally.

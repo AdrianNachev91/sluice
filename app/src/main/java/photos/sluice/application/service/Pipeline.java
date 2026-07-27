@@ -15,6 +15,7 @@ import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
@@ -52,6 +53,9 @@ public class Pipeline {
     private final PhaseRunner phaseRunner;
     private final CullEngine cullEngine;
     private final CurateEngine curateEngine;
+    private final DisasterDrawer disasterDrawer;
+    private final Troubleshooter troubleshooter;
+    private final Path cullPrepRoot;
 
     /**
      * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
@@ -71,15 +75,18 @@ public class Pipeline {
      * @param montageConfig {@link MontageConfig} montage grid sizing configuration
      * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
      * @param progressPort {@link ProgressPort} reports phase progress
+     * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
+     * @param troubleshooter {@link Troubleshooter} runs the single-button prep-dir recovery
      */
     @Autowired
     public Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
             CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
-            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort) {
+            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, DisasterDrawer disasterDrawer,
+            Troubleshooter troubleshooter) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, cullPrepPort,
-                cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort,
-                DEFAULT_WATCH_POLL_INTERVAL);
+                cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort, disasterDrawer,
+                troubleshooter, DEFAULT_WATCH_POLL_INTERVAL);
     }
 
     /**
@@ -101,12 +108,15 @@ public class Pipeline {
      * @param montageConfig {@link MontageConfig} montage grid sizing configuration
      * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
      * @param progressPort {@link ProgressPort} reports phase progress
+     * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
+     * @param troubleshooter {@link Troubleshooter} runs the single-button prep-dir recovery
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
     Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
             CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
-            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, Duration watchPollInterval) {
+            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, DisasterDrawer disasterDrawer,
+            Troubleshooter troubleshooter, Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
@@ -115,6 +125,9 @@ public class Pipeline {
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, montageConfig, jobRunner, progressPort, watchPollInterval);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, cullEngine);
+        this.disasterDrawer = disasterDrawer;
+        this.troubleshooter = troubleshooter;
+        this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
     }
 
     /**
@@ -124,6 +137,16 @@ public class Pipeline {
     @PostConstruct
     public void armWatchesForExistingWaitingJobs() {
         cullEngine.armWatchesForExistingWaitingJobs();
+    }
+
+    /**
+     * Delegates to DisasterDrawer to sweep every prep dir's disaster drawer for retention-expired
+     * entries - a corrupt original or a troubleshoot report older than 30 days. Public and callable
+     * directly (not just via @PostConstruct) so a test can drive it without a Spring context.
+     */
+    @PostConstruct
+    public void sweepExpiredDisasterDrawers() {
+        disasterDrawer.sweepExpired(cullPrepRoot);
     }
 
     /**
@@ -197,6 +220,18 @@ public class Pipeline {
      */
     public List<WaitingCullJob> waitingJobs() {
         return cullEngine.waitingJobs();
+    }
+
+    /**
+     * Runs a troubleshoot pass over prepDir as a background job. Routing it through JobRunner buys
+     * the same one-job-at-a-time discipline every other job gets. A reconcile's move-log rewrite can
+     * then never race a concurrent apply/cull/commit against the same prep dir.
+     *
+     * @param prepDir {@link Path} the cull prep directory to troubleshoot
+     * @return a {@link JobHandle} of {@link TroubleshootReport} a handle to the running job
+     */
+    public JobHandle<TroubleshootReport> troubleshoot(Path prepDir) {
+        return jobRunner.submit(_ -> troubleshooter.troubleshoot(prepDir));
     }
 
     /**
