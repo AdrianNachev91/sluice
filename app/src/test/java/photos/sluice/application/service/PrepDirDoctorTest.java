@@ -21,6 +21,7 @@ import photos.sluice.domain.cull.Finding.StrayShard;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.job.WatchMode;
 
@@ -30,6 +31,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 
+import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // Fixture-writing helpers below mirror ApplyEngineTest's own - PrepDirDoctor reuses ApplyEngine's
@@ -249,8 +251,41 @@ class PrepDirDoctorTest {
                 new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny"));
     }
 
+    @Test
+    void purgeCompletedDeletesOnlyCompletedRunsAndReportsSkippedScopesWithTheirState(@TempDir Path root)
+            throws IOException {
+        Path complete = prepDir(root, "complete1");
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(complete, 1, List.of("montage-001"));
+        writeSidecar(complete, "montage-001", sidecarEntry(photo));
+        writeShard(complete, "montage-001", classificationJson(photo, "junk", "blurry"));
+        Files.writeString(complete.resolve("decisions.json"), "{}");
+        Path waiting = prepDir(root, "waiting1");
+        writeIndex(waiting, 1, List.of("montage-001")); // no shard yet - still culling
+
+        PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
+
+        assertThat(report.purged()).containsExactly("complete1");
+        assertThat(report.skipped()).containsExactly(entry("waiting1", State.WAITING));
+        assertThat(Files.exists(complete)).isFalse();
+        assertThat(Files.exists(waiting)).isTrue();
+    }
+
+    @Test
+    void purgeCompletedOnAMissingCullPrepRootReturnsAnEmptyReport(@TempDir Path root) {
+        PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
+
+        assertThat(report.purged()).isEmpty();
+        assertThat(report.skipped()).isEmpty();
+    }
+
     private static Path prepDir(Path root) throws IOException {
-        Path dir = root.resolve("logs/cull-prep/scope1");
+        return prepDir(root, "scope1");
+    }
+
+    private static Path prepDir(Path root, String scope) throws IOException {
+        Path dir = root.resolve("logs/cull-prep").resolve(scope);
         Files.createDirectories(dir);
         return dir;
     }

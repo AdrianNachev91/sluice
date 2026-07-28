@@ -15,6 +15,7 @@ import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.model.SortScope;
@@ -55,6 +56,7 @@ public class Pipeline {
     private final CurateEngine curateEngine;
     private final DisasterDrawer disasterDrawer;
     private final Troubleshooter troubleshooter;
+    private final PrepDirDoctor prepDirDoctor;
     private final Path cullPrepRoot;
     private final Path graveyardRoot;
 
@@ -78,16 +80,17 @@ public class Pipeline {
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
      * @param troubleshooter {@link Troubleshooter} runs the single-button prep-dir recovery
+     * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
      */
     @Autowired
     public Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
             CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
             MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, DisasterDrawer disasterDrawer,
-            Troubleshooter troubleshooter) {
+            Troubleshooter troubleshooter, PrepDirDoctor prepDirDoctor) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, cullPrepPort,
                 cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort, disasterDrawer,
-                troubleshooter, DEFAULT_WATCH_POLL_INTERVAL);
+                troubleshooter, prepDirDoctor, DEFAULT_WATCH_POLL_INTERVAL);
     }
 
     /**
@@ -111,13 +114,14 @@ public class Pipeline {
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
      * @param troubleshooter {@link Troubleshooter} runs the single-button prep-dir recovery
+     * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
     Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
             CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
             MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, DisasterDrawer disasterDrawer,
-            Troubleshooter troubleshooter, Duration watchPollInterval) {
+            Troubleshooter troubleshooter, PrepDirDoctor prepDirDoctor, Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
@@ -128,6 +132,7 @@ public class Pipeline {
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
+        this.prepDirDoctor = prepDirDoctor;
         this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
         this.graveyardRoot = pathsPort.logs().resolve("disasters");
     }
@@ -236,6 +241,17 @@ public class Pipeline {
      */
     public JobHandle<TroubleshootReport> troubleshoot(Path prepDir) {
         return jobRunner.submit(_ -> troubleshooter.troubleshoot(prepDir));
+    }
+
+    /**
+     * Runs a manual, one-button purge of every completed cull run as a background job. Routing it
+     * through JobRunner buys the same one-job-at-a-time discipline every other job gets, so a purge
+     * can never race a re-prep of a scope it's in the middle of deleting.
+     *
+     * @return a {@link JobHandle} of {@link PurgeReport} a handle to the running job
+     */
+    public JobHandle<PurgeReport> purgeCompleted() {
+        return jobRunner.submit(_ -> prepDirDoctor.purgeCompleted(cullPrepRoot));
     }
 
     /**

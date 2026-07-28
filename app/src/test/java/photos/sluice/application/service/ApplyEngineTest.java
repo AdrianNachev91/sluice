@@ -553,8 +553,47 @@ class ApplyEngineTest {
         assertThat(Files.exists(prepDir.resolve("index.json"))).isTrue();
         assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
         assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isFalse();
-        assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isFalse();
         assertThat(Files.exists(prepDir.resolve("tile-001-01.jpg"))).isFalse();
+        // The sidecar shares montage-001's own filename prefix with its contact-sheet image, but it
+        // is JSON ground truth, not a deletable intermediate - it survives cleanup for the prep
+        // dir's whole life (see the idempotency test below for why that matters).
+        assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isTrue();
+    }
+
+    // Proves apply() is idempotent by actually calling it twice on the same prep dir, unlike every
+    // other "resuming after a crash" test in this file, which simulates that state by hand-writing a
+    // move record instead. A real second call needs montage-001's own sidecar to still be readable,
+    // which cleanupIntermediates() only guarantees once it stops deleting sidecars alongside their
+    // contact-sheet images. Idempotency itself needs no special-case code here - it falls out of the
+    // same classify() machinery those hand-simulated tests already exercise.
+    @Test
+    void aSecondApplyOnAnAlreadyCompleteRunIsANoOpThatMovesNothingAndDoesNotDuplicateSecondaryWrites(
+            @TempDir Path root) throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path junk = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        Path meme = root.resolve("Sorted/Photos/2019/06/meme.jpg");
+        writeFile(junk, "blurry");
+        writeFile(meme, "haha");
+        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(junk), sidecarEntry(meme));
+        writeShard(prepDir, "montage-001",
+                classificationJson(junk, "junk", "blurry"),
+                classificationJson(meme, "funny", "genuinely funny"));
+        ApplyEngine engine = applyEngine(root, libraryRoot, hashIndex);
+
+        ApplyReport first = engine.apply(prepDir, new ApplyOptions(false));
+        ApplyReport second = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(first.byCategory()).containsEntry("junk", 1).containsEntry("funny", 1);
+        assertThat(second.byCategory()).isEmpty();
+        Path funnyDest = libraryRoot.resolve("Funny/meme.jpg");
+        assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
+        assertThat(Files.exists(funnyDest)).isTrue();
+        assertThat(Files.readString(root.resolve("Review/junk/_reasons.txt")).lines().toList())
+                .containsExactly("a.jpg - blurry");
+        assertThat(hashIndex.load()).containsOnlyKeys(new Sha256Hasher().hash(funnyDest));
     }
 
     @Test

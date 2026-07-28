@@ -7,6 +7,7 @@ import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
@@ -247,5 +248,25 @@ class PipelineTest {
 
         assertThat(report.before().state()).isEqualTo(State.COMPLETE);
         assertThat(report.reconcile()).isNull();
+    }
+
+    // Proves purgeCompleted() actually runs through JobRunner and reaches PrepDirDoctor, rather
+    // than being wired to nothing. PrepDirDoctorTest already covers purgeCompleted()'s own
+    // diagnose/delete logic in full, so this only needs one completed run to prove the wiring
+    // deletes it.
+    @Test
+    void purgeCompletedRunsAsABackgroundJobAndDeletesTheCompletedRun(@TempDir Path root) throws IOException {
+        var progress = new RecordingProgressPort();
+        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = cullPipeline(root, progress);
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        pipeline.resume(prepDir, false).join();
+
+        PurgeReport report = pipeline.purgeCompleted().join();
+
+        assertThat(report.purged()).containsExactly(prepDir.getFileName().toString());
+        assertThat(Files.exists(prepDir)).isFalse();
     }
 }

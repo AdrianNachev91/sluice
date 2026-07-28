@@ -178,11 +178,11 @@ final class PipelineTestSupport {
         if (pollInterval == null) {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                     cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress,
-                    disasterDrawer, troubleshooter);
+                    disasterDrawer, troubleshooter, prepDirDoctor);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                 cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress,
-                disasterDrawer, troubleshooter, pollInterval);
+                disasterDrawer, troubleshooter, prepDirDoctor, pollInterval);
     }
 
     static CullSettings defaultCullSettings() {

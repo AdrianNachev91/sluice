@@ -1301,15 +1301,18 @@ public class ApplyEngine {
 
     /**
      * Drops the montage contact sheets and tile images once every decision has been carried out -
-     * always, even when zero decisions exist. index.json, the per-montage shards, the move-record
-     * log, and the merged decisions.json are all left in place.
+     * always, even when zero decisions exist. index.json, the per-montage sidecars and shards, the
+     * move-record log, and the merged decisions.json are all left in place. Reuses
+     * {@link #isMontageImage} rather than matching the "montage-" prefix alone, so a montage's own
+     * sidecar JSON - matching that same prefix - survives here too. Keeping the sidecar is what lets
+     * {@link #validate} still find it readable on a later call, so a second apply() on an
+     * already-complete run validates cleanly and returns as a no-op instead of throwing.
      *
      * @param prepDirPath {@link Path} the prep directory to clean up
      */
     private void cleanupIntermediates(Path prepDirPath) {
         for (Path file : mediaStore.listFiles(prepDirPath)) {
-            String name = file.getFileName().toString();
-            if (name.startsWith("montage-") || name.startsWith("tile-")) {
+            if (isMontageImage(file.getFileName().toString())) {
                 mediaStore.delete(file);
             }
         }

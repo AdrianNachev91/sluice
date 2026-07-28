@@ -9,13 +9,17 @@ import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.ValidationReport;
 import photos.sluice.domain.job.ShardTally;
 
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 // Side-effect-free health check for a prep dir. Safe to call any time, before or instead of
 // apply(). It can drive a run-card dashboard as well as a blocked run's troubleshoot screen.
@@ -106,6 +110,52 @@ public class PrepDirDoctor {
         return findings.isEmpty()
                 ? new PrepDirHealth(State.READY, List.of())
                 : new PrepDirHealth(State.BLOCKED, ordered(findings));
+    }
+
+    /**
+     * Manual, one-button housekeeping: hard-deletes every prep dir under cullPrepRoot this sweep
+     * diagnoses COMPLETE, and reports every other one it looked at alongside the state that kept
+     * it. No age-based auto-purge, and no graveyard detour. A completed run holds no image weight
+     * worth salvaging - apply()'s own cleanup already dropped the montage/tile images. Letting go
+     * of its shards, index.json, move-record log, and any disaster drawer is a decision only the
+     * user makes, never a timer.
+     *
+     * @param cullPrepRoot {@link Path} the cull-prep root directory to sweep
+     * @return {@link PurgeReport} every scope purged this sweep, and every scope skipped with its state
+     */
+    public PurgeReport purgeCompleted(Path cullPrepRoot) {
+        if (!mediaStore.exists(cullPrepRoot)) {
+            return new PurgeReport(List.of(), Map.of());
+        }
+        List<Path> prepDirs = mediaStore.listFiles(cullPrepRoot).stream()
+                .filter(file -> file.getFileName().toString().equals(INDEX_FILE))
+                .map(Path::getParent)
+                .distinct()
+                .toList();
+
+        var purged = new ArrayList<String>();
+        var skipped = new LinkedHashMap<String, State>();
+        for (Path prepDir : prepDirs) {
+            String scope = prepDir.getFileName().toString();
+            State state = diagnose(prepDir).state();
+            if (state == State.COMPLETE) {
+                purgeDir(prepDir);
+                purged.add(scope);
+            } else {
+                skipped.put(scope, state);
+            }
+        }
+        return new PurgeReport(purged, skipped);
+    }
+
+    /**
+     * Hard-deletes every file under a completed prepDir, then removes the now-empty directory tree.
+     *
+     * @param prepDir {@link Path} the completed prep directory to delete
+     */
+    private void purgeDir(Path prepDir) {
+        mediaStore.listFiles(prepDir).forEach(mediaStore::delete);
+        mediaStore.removeIfEmptyOfFiles(prepDir);
     }
 
     /**
