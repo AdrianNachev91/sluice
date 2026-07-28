@@ -105,7 +105,7 @@ final class CullEngine {
      * job that was armed before the restart. A no-op when mode is MANUAL. Callable directly (not
      * just via Pipeline's own @PostConstruct) so a test can drive it without a Spring context.
      *
-     * Also a no-op while a job is currently running. waitingJobs() counts a prep dir as waiting the
+     * <p>Also a no-op while a job is currently running. waitingJobs() counts a prep dir as waiting the
      * moment index.json exists and decisions.json doesn't yet. That's also true of a prep dir
      * mid-CULLING/mid-APPLYING right now - dispatchAndApply() only writes decisions.json near the
      * very end of a successful apply. JobRunner only ever runs one job at a time, so a busy runner
@@ -129,7 +129,7 @@ final class CullEngine {
      * on the same scope. checkNoWaitingJobFor() guards against that and fails loud instead - resume
      * or resolve it first.
      *
-     * Checked here too, synchronously before submit(), for the earliest possible fail-fast.
+     * <p>Checked here too, synchronously before submit(), for the earliest possible fail-fast.
      * buildFreshAndDispatch() below checks the same thing again once actually running - that's
      * CurateEngine's only option for an auto-resolved scope; see its own comment.
      *
@@ -261,7 +261,7 @@ final class CullEngine {
      * the cancellation.isCancelled() check further down, after dispatch returns normally rather than
      * through this catch block.
      *
-     * disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
+     * <p>disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
      * cull(), a user's manual resume(), or a watcher's own auto-resume. Whatever watcher was polling
      * this prep dir is retired the moment any resume attempt actually runs. That means a manual
      * click racing an armed watcher can never leave two pollers running for the same job. A fresh
@@ -332,7 +332,7 @@ final class CullEngine {
      * here for the same prep dir. The second call is then a no-op rather than a competing second
      * poller.
      *
-     * Watch mode is an external-agent feature: it exists to notice when the user's own separate
+     * <p>Watch mode is an external-agent feature: it exists to notice when the user's own separate
      * culling agent, running outside this app, drops a shard. The provider check mainly guards
      * armWatchesForExistingWaitingJobs()'s startup scan, which walks every waiting job on disk
      * regardless of which provider produced it. dispatchAndApply()'s own call site can only reach
@@ -367,11 +367,14 @@ final class CullEngine {
     }
 
     /**
-     * Stops and removes the active watcher for a prep dir, if one exists.
+     * Stops and removes the active watcher for a prep dir, if one exists. Giving up on a
+     * still-waiting job must stop it from ever auto-resuming a prep dir that's about to be filed
+     * into the graveyard, so this is package-private rather than private: dispatchAndApply()'s own
+     * call site isn't the only place that needs to retire a watcher.
      *
      * @param prepDir {@link Path} the prep dir whose watcher should stop
      */
-    private void disarmWatch(Path prepDir) {
+    void disarmWatch(Path prepDir) {
         CullWatcher watcher = activeWatches.remove(prepDir);
         if (watcher != null) {
             watcher.stop();

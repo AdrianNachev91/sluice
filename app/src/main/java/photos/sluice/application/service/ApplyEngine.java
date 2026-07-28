@@ -18,6 +18,7 @@ import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.OverlapResolution;
@@ -721,21 +722,41 @@ public class ApplyEngine {
      * a still-waiting job).
      *
      * @param prepDirPath {@link Path} the prep directory to discard
-     * @return {@link Path} the graveyard directory everything worth keeping was filed into
+     * @return {@link DiscardReport} the graveyard directory and how many shards were set aside
      */
-    public Path discard(Path prepDirPath) {
+    public DiscardReport discard(Path prepDirPath) {
+        return discard(prepDirPath, ProgressCallback.NO_OP);
+    }
+
+    /**
+     * Discards with progress reporting, ticked once per file moved or deleted.
+     *
+     * @param prepDirPath {@link Path} the prep directory to discard
+     * @param progress {@link ProgressCallback} progress callback ticked per file
+     * @return {@link DiscardReport} the graveyard directory and how many shards were set aside
+     */
+    public DiscardReport discard(Path prepDirPath, ProgressCallback progress) {
         String scope = prepDirPath.getFileName().toString();
         Path graveyard = pathsPort.logs().resolve("disasters").resolve(scope + "-" + DisasterTimestamp.now());
         mediaStore.ensureDirectory(graveyard);
-        for (Path file : mediaStore.listFiles(prepDirPath)) {
-            if (isMontageImage(file.getFileName().toString())) {
+        List<Path> files = mediaStore.listFiles(prepDirPath);
+        int total = files.size();
+        int current = 0;
+        int shardsSetAside = 0;
+        for (Path file : files) {
+            String name = file.getFileName().toString();
+            if (isMontageImage(name)) {
                 mediaStore.delete(file);
             } else {
                 mediaStore.moveTo(file, graveyard.resolve(prepDirPath.relativize(file)));
+                if (isShardFile(name)) {
+                    shardsSetAside++;
+                }
             }
+            progress.tick(++current, total);
         }
         mediaStore.removeIfEmptyOfFiles(prepDirPath);
-        return graveyard;
+        return new DiscardReport(graveyard, shardsSetAside);
     }
 
     /**
@@ -747,6 +768,18 @@ public class ApplyEngine {
      */
     private static boolean isMontageImage(String name) {
         return name.startsWith("tile-") || (name.startsWith("montage-") && !name.endsWith(".json"));
+    }
+
+    /**
+     * Whether name is one montage's own decision shard ({@code decisions-NNN.json}), as opposed to
+     * the merged {@code decisions.json} a completed apply writes - that one has no hyphen before
+     * the extension, so it never matches.
+     *
+     * @param name {@link String} a file's own leaf name
+     * @return boolean true if name is a montage decision shard
+     */
+    private static boolean isShardFile(String name) {
+        return name.startsWith("decisions-") && name.endsWith(".json");
     }
 
     /**

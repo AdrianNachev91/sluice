@@ -1,8 +1,8 @@
 # Apply engine
 
 How `application/service/ApplyEngine` merges a prep directory's decision shards, validates them,
-carries out every non-keep decision, and leaves the prep directory in a resumable, cleaned-up state
-(`app/src/main/java/photos/sluice/application/service/ApplyEngine.java`, validation rules in
+and carries out every non-keep decision. It leaves the prep directory in a resumable, cleaned-up
+state (`app/src/main/java/photos/sluice/application/service/ApplyEngine.java`, validation rules in
 `domain/cull/ShardValidator`).
 
 ## 1. The apply pipeline
@@ -43,9 +43,9 @@ already Done on a resumed run is backfilled, not reprocessed, so it never re-ent
 path. Batching the index row instead would lose it for good, the one time a crash actually lands
 between decisions.
 
-`index.json`'s own `unreviewable` list (paths this run's montage generation found but couldn't
-render a judgeable tile for) rides through the same pipeline as a sibling to the decisions array,
-not as one more decision type. It has no shard, no category, no reason.
+`index.json`'s own `unreviewable` list holds paths this run's montage generation found but
+couldn't render a judgeable tile for. It rides through the same pipeline as a sibling to the
+decisions array, not as one more decision type, and has no shard, no category, no reason.
 `ApplyEngine.classifyFile()` is `classify()`'s sibling for a plain `Path`: same
 Pending/Done/Unresolved logic, minus the `NearDupChosen` copy exception (an unreviewable file is
 always a move). Carrying one out reuses `recordThenMove()` exactly as
@@ -57,11 +57,11 @@ Done unreviewable file has nothing left to backfill.
 returned to the caller counts only what *this* invocation itself moved. A decision a prior,
 crashed run already carried out is not counted again. That lets a caller report "what did this
 invocation just do." The summary embedded in `decisions.json` is different: a separate, freshly
-recomputed tally over the *whole* decisions array in that same file, this run's and every prior
-run's alike. `decisions.json` is overwritten wholesale each write, never appended to, so nothing is
-lost by recounting it in full every time. Using the this-run-only report for both would leave the
-persisted summary permanently out of step with the array sitting right next to it after any
-resumed run.
+recomputed tally over the *whole* decisions array in that same file. It covers this run's and every
+prior run's decisions alike. `decisions.json` is overwritten wholesale each write, never appended
+to, so nothing is lost by recounting it in full every time. Using the this-run-only report for both
+would leave the persisted summary permanently out of step with the array sitting right next to it
+after any resumed run.
 
 ## 2. Validation
 
@@ -90,10 +90,11 @@ healable basename are always fatal. ShardValidator itself does no I/O: it checks
 against the sidecar-derived set, never the filesystem. So `ApplyEngine` runs one more pass after a
 clean validation - classifying every decision for resume (see section 3) - before moving anything.
 
-The sidecar-derived in-scope set itself isn't read in one flat pass over every montage - a montage
-whose own sidecar can't be read (missing or corrupt) is handled per section 8, either silently
-skipped (not yet culled), reported as a `CorruptSidecar` finding, or resolved per the disposition
-ledger, before the healthy montages' srcs and shards ever reach `ShardValidator`.
+The sidecar-derived in-scope set itself isn't read in one flat pass over every montage. A montage
+whose own sidecar can't be read (missing or corrupt) is handled per section 8. Depending on its
+state, it's either silently skipped (not yet culled), reported as a `CorruptSidecar` finding, or
+resolved per the disposition ledger. Only the healthy montages' srcs and shards ever reach
+`ShardValidator`.
 
 ## 3. Classifying a decision (or an unreviewable file) for resume
 
@@ -115,15 +116,15 @@ flowchart TD
 A decision whose source file is still on disk is always Pending. A move that never happened needs
 no verification - it just needs doing. A file the disposition ledger records as skipped
 (`ApplyEngine.skipMissingSource()` - see section 7) is Skipped regardless of decision type, checked
-before the `NearDupChosen` case: the user gave up on it rather than restoring it, so there is
+before the `NearDupChosen` case. The user gave up on it rather than restoring it, so there is
 nothing left to move or verify. Every other decision needs its source's disappearance explained
 before the run can proceed. Either it's `NearDupChosen` (never move-based, see below), or a move
 record proves the move that removed it actually happened, or the run refuses.
 
 An unreviewable file follows the same diagram with node D always answered "no" - it has no
 `NearDupChosen`-shaped copy exception, since routing one is always a move. `classifyFile()` is this
-logic's standalone version for a plain `Path`, used because an unreviewable file has no `Decision`
-behind it to carry through the rest of the diagram.
+logic's standalone version for a plain `Path`. It exists because an unreviewable file has no
+`Decision` behind it to carry through the rest of the diagram.
 
 ### Why a move record, written before the move, not a log written after
 
@@ -141,15 +142,15 @@ hashes the source, and appends both to the move-record log. Only then does it ca
 A resumed run whose source has disappeared doesn't need to guess a destination name (`" (2)"`,
 `" (3)"`, ...). It looks up the one exact path this decision was recorded as headed for, and hashes
 whatever sits there. A match is positive proof the move happened, not a guess. A mismatch, a
-missing destination, or no record at all mean the same thing - this engine cannot tell what
-happened to the file, and it refuses rather than guessing.
+missing destination, or no record at all mean the same thing: this engine cannot tell what
+happened to the file. It refuses rather than guessing.
 
-Confirming the move this way also settles a `Classification` decision's second write (a library
-hash-index row, or a `_reasons.txt` line) that a crash could have skipped independently of the move
-itself. Once the move is positively confirmed, `ApplyEngine.backfillSecondaryWrite()` checks that
-second write directly - `funny` via `HashIndexPort.contains`, everything else via an exact line
-match in `_reasons.txt`. It backfills only if that write is actually missing. Nothing is ever
-re-moved on this path. A backfilled decision also isn't counted in the report `apply()` returns.
+Confirming the move this way also settles a `Classification` decision's second write - a library
+hash-index row, or a `_reasons.txt` line. A crash could have skipped that write independently of
+the move itself. Once the move is positively confirmed, `ApplyEngine.backfillSecondaryWrite()`
+checks that second write directly - `funny` via `HashIndexPort.contains`, everything else via an
+exact line match in `_reasons.txt`. It backfills only if that write is actually missing. Nothing is
+ever re-moved on this path. A backfilled decision also isn't counted in the report `apply()` returns.
 
 ## 4. Carrying out one decision
 
@@ -193,10 +194,10 @@ got, converges on the same end state instead of compounding.
 That destination check is reliable, but not because `ShardValidator` enforces global uniqueness. It
 only checks that a group id isn't reused *within one prep dir's shards*, not across independent
 runs. The real guarantee is a filesystem one: the destination path encodes the source file's own
-`<yyyy>/<MM>/<basename>` plus the group id, and a `Sorted` `<yyyy>/<MM>/` directory can never hold
-two files with the same basename. So `exists(dest)` can only be true when this exact decision
-already ran, or the same source file was chosen again under the same group in an independent
-re-cull. That's harmless either way, since it would be the identical bytes.
+`<yyyy>/<MM>/<basename>` plus the group id. A `Sorted` `<yyyy>/<MM>/` directory can never hold
+two files with the same basename. So `exists(dest)` being true means one of two things happened.
+Either this exact decision already ran, or the same source file was chosen again under the same
+group in an independent re-cull. That's harmless either way, since it would be the identical bytes.
 
 A source that's missing for a `NearDupChosen` decision is therefore always Unresolved (section 3).
 A copy's source is never supposed to disappear, so there is no "already done" case for the
@@ -212,9 +213,9 @@ flowchart TD
     C --> A
 ```
 
-Checked once per item, at the top of both loops - so an in-flight decision or unreviewable file is
-never interrupted, and everything already carried out before the request stays carried out. On
-cancel, `apply()` returns `null` instead of an `ApplyReport`, and deliberately skips both
+Checked once per item, at the top of both loops. That way an in-flight decision or unreviewable
+file is never interrupted, and everything already carried out before the request stays carried out.
+On cancel, `apply()` returns `null` instead of an `ApplyReport`, and deliberately skips both
 finalizers: writing the merged `decisions.json` and deleting the montage/tile intermediates. With
 no `decisions.json` written, the prep dir still reads exactly like an unresolved cull job.
 `Pipeline` maps a `null` return straight to `CullJobOutcome.Waiting`, the same outcome a genuinely
@@ -223,7 +224,7 @@ run was cancelled; a caller never re-checks disk state to decide.
 
 The `validate()` pass that runs before either loop (section 2) has no cancellation check of its
 own. This is deliberate, not an oversight. It's read-only - shard and sidecar JSON reads, no moves
-or deletes - and bounded by the scope's montage count, which this project's own batching
+or deletes. It's also bounded by the scope's montage count, which this project's own batching
 convention keeps small (tens, not thousands). In practice the wait before the first loop's own
 check is negligible. Reassessed 2026-07-26 during a full cancellation-coverage review across every
 engine this project's cancellation support touches; the verdict was to leave it as-is.
@@ -247,8 +248,8 @@ flowchart TD
 ```
 
 `reconcile()` exists for when `move-records.log` itself can't be trusted - missing or found corrupt
-- while the shard contract is otherwise intact. It never salvages a corrupt log line-by-line;
-hashes are the ground truth, so the whole log is re-derived from disk state and the original is
+- while the shard contract is otherwise intact. It never salvages a corrupt log line-by-line.
+Hashes are the ground truth, so the whole log is re-derived from disk state and the original is
 filed away for forensics.
 
 The counts-match rule is what keeps a rebuilt record honest. A destination like library `Funny/`
@@ -260,10 +261,11 @@ moved file gone without trace. Either way the group is ambiguous, and every clai
 reported `MissingSource` rather than guessed at. A false refusal costs one click in a later CHOICE
 remedy; a false reconstruction would be a permanent, undetectable lie in the audit trail.
 
-One coincidence this rule cannot catch: a stranger's file arriving at the exact moment the genuine
-file vanishes without trace still restores count parity, and would reconstruct wrongly. Nothing
-short of the original file's own hash - which lived only in the log this repair is replacing - could
-tell that case apart from a genuine match. This residual risk is accepted rather than chased; see
+One coincidence this rule cannot catch: a stranger's file can arrive at the exact moment the
+genuine file vanishes without trace. Count parity still holds, so it would reconstruct wrongly.
+Nothing short of the original file's own hash could tell that case apart from a genuine match.
+That hash lived only in the log this repair is replacing. This residual risk is accepted rather
+than chased; see
 `ApplyEngine.resolvePendingMoves()`'s own Javadoc for the same rule stated against the code.
 
 Corrupt/missing originals, and every troubleshoot report, are collected the same way - see
@@ -306,8 +308,8 @@ that used to read `prepDir.unreviewable()` directly - `apply()`, `checkMissingSo
 
 `Finding.StrayShard` gets a third remedy, this one not ledger-based:
 `ApplyEngine.autoRepairStrayShard()`. It is **AUTO** when it's provably unambiguous. Exactly one
-montage in the prep dir currently has no shard, and every file the stray shard's own decisions name
-is also a member of that one candidate montage's sidecar. It renames the stray file into place
+montage in the prep dir currently has no shard. Every file the stray shard's own decisions name is
+also a member of that one candidate montage's sidecar. It renames the stray file into place
 (`decisions-NNN.json` for the candidate montage) with no ledger entry needed - the rename itself is
 the fix. Anything else is left untouched: more than one montage unclaimed, or a decision naming a
 file the candidate's sidecar never showed. `ApplyEngine.setAsideStrayShard()` is the CHOICE fallback
@@ -317,10 +319,10 @@ every `StrayShard` finding it sees, regardless of overall prep-dir state - see `
 
 ## 8. Corrupt or missing index.json / sidecar
 
-Two of this app's own prior-output artifacts can themselves go missing or unreadable -
-`index.json` (the prep dir's own summary) and a montage's own sidecar (`montage-NNN.json`, its
-scope evidence). Neither is a culling mistake; both get an engine-level repair path instead of a
-bare crash.
+This app's own prior output can itself go missing or unreadable in two places. `index.json` (the
+prep dir's own summary) is one; a montage's own sidecar (`montage-NNN.json`, its scope evidence) is
+the other. Neither is a culling mistake; both get an engine-level repair path instead of a bare
+crash.
 
 ```mermaid
 flowchart TD
@@ -333,13 +335,15 @@ flowchart TD
 ```
 
 `rebuildIndex()`'s guard only trusts a *contiguous* montage sequence where *every* sidecar in it
-also parses cleanly - a gap or an unparseable sidecar means the sidecars themselves are also
-damaged, and a silently-smaller rebuilt index would make perfectly healthy shards look stray. The
-unreviewable list is genuinely unrecoverable (no sidecar or shard ever names it), so a rebuilt
-index always reports it empty - a report-line loss, not a safety one, since an unreviewable file is
-never moved either way. `basePath` is reconstructed as the deepest common parent of every surviving
-sidecar's own `src` files - exact for a `Year` scope, an approximation for `OldestN` narrowed to one
-year, but the field is display-only and no engine logic ever consults it.
+also parses cleanly. A gap or an unparseable sidecar means the sidecars themselves are also
+damaged, and a silently-smaller rebuilt index would make perfectly healthy shards look stray.
+
+The unreviewable list is genuinely unrecoverable (no sidecar or shard ever names it), so a
+rebuilt index always reports it empty. That's a report-line loss, not a safety one, since an
+unreviewable file is never moved either way. `basePath` is reconstructed as the deepest common
+parent of every surviving sidecar's own `src` files. That's exact for a `Year` scope, an
+approximation for `OldestN` narrowed to one year. The field is display-only, though, and no engine
+logic ever consults it.
 
 A montage's own sidecar failing to read, with `index.json` itself intact, is a narrower problem -
 `Finding.CorruptSidecar` (CHOICE), handled per-montage inside `validate()`'s own sidecar/shard
@@ -358,27 +362,31 @@ flowchart TD
 ```
 
 `ApplyEngine.resolveCorruptSidecar()` records the user's choice as one more disposition-ledger
-entry (section 7's mechanism, keyed by montage id rather than a file path), and files the sidecar
-itself into the disaster drawer if it's still present - its scope evidence is spent either way once
-a choice is made. `SET_ASIDE` means a future cull of the same scope sees those photos fresh;
-`APPLY_ANYWAY` means every other safety net (files must exist, categories configured, cross-shard
-duplicate check, never-overwrite) still applies, only the membership cross-check is skipped.
+entry (section 7's mechanism, keyed by montage id rather than a file path). It also files the
+sidecar itself into the disaster drawer if it's still present - its scope evidence is spent either
+way once a choice is made. `SET_ASIDE` means a future cull of the same scope sees those photos
+fresh. `APPLY_ANYWAY` means every other safety net (files must exist, categories configured,
+cross-shard duplicate check, never-overwrite) still applies - only the membership cross-check is
+skipped.
 
 ## 9. Last-resort discard
 
 `ApplyEngine.discard()` is the remedy for a prep dir mangled beyond every repair above - it gives up
 on the run entirely rather than resolving it. Every non-image file (shards, sidecars, `index.json`,
 the move-record log, and any disaster drawer, preserving its own relative layout) is moved
-wholesale into a global graveyard, `logs/disasters/<scope>-<timestamp>/` - the scope read straight
-off the prep dir's own folder name, never `index.json`, since the whole point of this remedy is
-that `index.json` (or anything else) might be unreadable. Only the montage/tile contact-sheet
-images are truly deleted - cents to re-render on a fresh cull of the same scope. Library media is
-never touched.
+wholesale into a global graveyard, `logs/disasters/<scope>-<timestamp>/`. The scope is read straight
+off the prep dir's own folder name, never `index.json`. The whole point of this remedy is that
+`index.json` (or anything else) might be unreadable. Only the montage/tile contact-sheet images are
+truly deleted - cents to re-render on a fresh cull of the same scope. Library media is never
+touched. It returns a `DiscardReport` naming the graveyard directory and how many montage decision
+shards (`decisions-NNN.json`) were among the files filed there. That lets a caller tell the user how
+many already-paid vision-model calls this discard gives up on.
 
-This is the raw, ungated mechanism only - a caller should gate it on `PrepDirDoctor` reporting
-anything but `COMPLETE`. `Pipeline.discard()` (a later phase) adds that gate, plus
-watcher-disarming and `JobRunner` wiring, for its own two entry points: this last-resort remedy, and
-giving up on a still-waiting job.
+This is the raw, ungated mechanism only. `Pipeline.discard()` gates it on `PrepDirDoctor` reporting
+anything but `COMPLETE`. It also retires any watcher polling the prep dir first (an auto-resume
+must never fire against a run mid-discard), and wraps it as a `JobRunner` job. Both of this
+remedy's entry points - this last-resort CHOICE, and giving up on a still-waiting job - call that
+one `Pipeline.discard()` method.
 
 ## Scenarios
 

@@ -19,6 +19,7 @@ import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
+import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.Finding.MissingShard;
 import photos.sluice.domain.cull.Finding.MissingSource;
@@ -1300,7 +1301,8 @@ class ApplyEngineTest {
         Files.createDirectories(prepDir.resolve("disasters"));
         Files.writeString(prepDir.resolve("disasters/2026-01-01_00-00-00-something.txt"), "old drawer entry");
 
-        Path graveyard = applyEngine(root, root.resolve("Library")).discard(prepDir);
+        DiscardReport report = applyEngine(root, root.resolve("Library")).discard(prepDir);
+        Path graveyard = report.graveyard();
 
         assertThat(graveyard.getParent()).isEqualTo(root.resolve("logs/disasters"));
         assertThat(graveyard.getFileName().toString()).startsWith("scope1-");
@@ -1311,6 +1313,7 @@ class ApplyEngineTest {
         assertThat(Files.exists(graveyard.resolve("montage-001.jpg"))).isFalse();
         assertThat(Files.exists(graveyard.resolve("tile-001-01.jpg"))).isFalse();
         assertThat(Files.exists(prepDir)).isFalse();
+        assertThat(report.shardsSetAside()).isEqualTo(1);
     }
 
     private static PrepDir readIndex(Path prepDir) {

@@ -8,17 +8,18 @@ through `ProgressPort` via `PhaseRunner`
 `app/src/main/java/photos/sluice/application/service/JobRunner.java`,
 `app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`). `cull()`/`waitingJobs()`/
 `resume()` and `curate()` are one-line delegates to `CullEngine`/`CurateEngine` - see
-`cull-engine.md`/`curate-engine.md` for how those actually work. `troubleshoot(prepDir)` is a
-one-line `JobRunner.submit()` delegate to `Troubleshooter`, with no `PhaseRunner`/`ProgressPort`
-bracketing. `Troubleshooter` has no per-item progress to report, so `JobRunner`'s
-one-job-at-a-time discipline is the whole reason it runs as a job. See `troubleshooter.md` for what
-`Troubleshooter` itself does.
+`cull-engine.md`/`curate-engine.md` for how those actually work. `troubleshoot(prepDir)` and
+`purgeCompleted()` are each a one-line `JobRunner.submit()` delegate (to `Troubleshooter` and
+`PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing - neither has
+per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the whole
+reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each actually
+does.
 
 ## How one call works
 
 ```mermaid
 flowchart TD
-    A["Pipeline.sort/commit/rescue(...)"] --> B["JobRunner.submit(JobWork)"]
+    A["Pipeline.sort/commit/rescue/discard(...)"] --> B["JobRunner.submit(JobWork)"]
     B -- " a job is already running " --> Z(["IllegalStateException,<br/>thrown synchronously -<br/>nothing started"])
     B -- " slot free " --> C["work runs on a<br/>virtual thread;<br/>JobHandle returned<br/>immediately"]
     C --> D["progressPort.phaseStarted(phase)"]
@@ -43,25 +44,37 @@ mid-call would leave a `ProgressPort` listener with a `phaseStarted` event and n
 would look permanently "in progress" even though the
 `JobHandle` itself already reports the failure.
 
-| Pipeline method       | Engine call                             | Phase label       |
-|-----------------------|-----------------------------------------|-------------------|
-| `sort(SortScope)`     | `SortEngine.sort(scope, progress)`      | `"Sorting..."`    |
-| `commit(CommitScope)` | `CommitEngine.commit(scope, progress)`  | `"Committing..."` |
-| `rescue(String)`      | `RescueEngine.rescue(folder, progress)` | `"Rescuing..."`   |
+| Pipeline method       | Engine call                              | Phase label       |
+|-----------------------|------------------------------------------|-------------------|
+| `sort(SortScope)`     | `SortEngine.sort(scope, progress)`       | `"Sorting..."`    |
+| `commit(CommitScope)` | `CommitEngine.commit(scope, progress)`   | `"Committing..."` |
+| `rescue(String)`      | `RescueEngine.rescue(folder, progress)`  | `"Rescuing..."`   |
+| `discard(Path)`       | `ApplyEngine.discard(prepDir, progress)` | `"Discarding..."` |
 
 `Pipeline` depends on these three engines' concrete classes, not their `SortUseCase`/
 `CommitUseCase`/`RescueUseCase` interfaces - the progress-callback overloads only exist on the concrete classes, not on
 those narrower interfaces.
 
+`discard(prepDir)` follows the same `PhaseRunner`-bracketed shape as `sort`/`commit`/`rescue`
+(`"Discarding..."`, ticked once per file `ApplyEngine.discard()` moves or deletes - real work
+worth a progress bar, unlike `troubleshoot`/`purgeCompleted` below), plus two checks neither of
+those three needs: it refuses a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE`
+(`purgeCompleted()` is that state's own verb), and it retires any watcher polling the prep dir
+before the graveyard move starts, so an auto-resume can never fire against a run mid-discard. See
+`apply-engine.md` section 9 for what `discard()` actually moves/deletes, and `cull-engine.md` for
+the watcher it disarms.
+
 ### Scenarios
 
-| Scenario                                                                | Outcome                                                                                                                                                                                       |
-|-------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| A job is already running when `sort`/`commit`/`rescue` is called        | `IllegalStateException` immediately; the running job is unaffected, no new job starts                                                                                                         |
-| The engine call succeeds                                                | `phaseStarted` -> N ticks -> `phaseFinished`, `JobHandle.join()` returns the engine's summary                                                                                                 |
-| The engine call throws mid-run                                          | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                                      |
-| Cancellation requested via the returned `JobHandle` (`sort`)            | `SortEngine` checks it once per file in both its dating pass (aborts cleanly, nothing moved) and its routing pass (already-moved files stay moved) - see `sort-engine.md`                     |
-| Cancellation requested via the returned `JobHandle` (`commit`/`rescue`) | `CommitEngine`/`RescueEngine` each check it once per file in their one move loop; already-moved/rescued files stay that way - see `rescue-engine.md` for `rescue`'s dissolve-gate interaction |
+| Scenario                                                                                 | Outcome                                                                                                                                                                                       |
+|------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| A job is already running when `sort`/`commit`/`rescue`/`discard` is called               | `IllegalStateException` immediately; the running job is unaffected, no new job starts                                                                                                         |
+| The engine call succeeds                                                                 | `phaseStarted` -> N ticks -> `phaseFinished`, `JobHandle.join()` returns the engine's summary                                                                                                 |
+| The engine call throws mid-run                                                           | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                                      |
+| Cancellation requested via the returned `JobHandle` (`sort`)                             | `SortEngine` checks it once per file in both its dating pass (aborts cleanly, nothing moved) and its routing pass (already-moved files stay moved) - see `sort-engine.md`                     |
+| Cancellation requested via the returned `JobHandle` (`commit`/`rescue`)                  | `CommitEngine`/`RescueEngine` each check it once per file in their one move loop; already-moved/rescued files stay that way - see `rescue-engine.md` for `rescue`'s dissolve-gate interaction |
+| `discard(prepDir)` is called on a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE` | `IllegalStateException` immediately - `purgeCompleted()` is that state's own verb, not `discard()`                                                                                            |
+| Cancellation requested via the returned `JobHandle` (`discard`)                          | Not checked - `discard()` has no cancellation signal; once started it runs every file to completion                                                                                           |
 
 ## Related
 
@@ -74,7 +87,9 @@ those narrower interfaces.
 - `SortEngine`: `sort-engine.md` in this same design folder.
 - `RescueEngine`: `rescue-engine.md` in this same design folder.
 - `CommitEngine` has no design doc of its own (one loop, one branch - judged too thin to diagram).
-- `ApplyEngine`: `apply-engine.md` in this same design folder, section 5 for its own cancellation behavior.
+- `ApplyEngine`: `apply-engine.md` in this same design folder, section 5 for its own cancellation behavior,
+  section 9 for `discard()`.
 - `Troubleshooter`: `troubleshooter.md` in this same design folder.
+- `PrepDirDoctor`: `prep-dir-doctor.md` in this same design folder, for `diagnose()` and `purgeCompleted()`.
 - `CullMontageRenderer`: `cull-montage-renderer.md` in the `adapter/imaging` design folder, its own Cancellation section
   for the render/batch checks `MontageRenderer.build()` does internally.

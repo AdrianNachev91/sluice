@@ -6,6 +6,7 @@ import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
@@ -16,7 +17,9 @@ import photos.sluice.domain.rescue.RescueSummary;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 
@@ -24,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.FailingMoves;
+import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
 import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
@@ -31,6 +35,8 @@ import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
 import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
+import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
+import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.writeFile;
 import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 import static photos.sluice.application.service.PipelineTestSupport.writeShard;
@@ -268,5 +274,58 @@ class PipelineTest {
 
         assertThat(report.purged()).containsExactly(prepDir.getFileName().toString());
         assertThat(Files.exists(prepDir)).isFalse();
+    }
+
+    // Proves discard() actually runs through JobRunner and reaches ApplyEngine.discard() -
+    // ApplyEngineTest already covers the graveyard-filing/image-deletion logic itself in full, so
+    // this only needs a still-waiting prep dir to prove the wiring returns its report.
+    @Test
+    void discardRunsAsABackgroundJobAndFilesEverythingIntoTheGraveyard(@TempDir Path root) throws IOException {
+        var progress = new RecordingProgressPort();
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = cullPipeline(root, progress);
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path prepDir = waiting.job().prepDir();
+
+        DiscardReport report = pipeline.discard(prepDir).join();
+
+        assertThat(report.graveyard().getParent()).isEqualTo(root.resolve("logs/disasters"));
+        assertThat(Files.exists(report.graveyard().resolve("index.json"))).isTrue();
+        assertThat(Files.exists(prepDir)).isFalse();
+    }
+
+    // Refusing a COMPLETE run is the gate ApplyEngine.discard() itself deliberately doesn't apply -
+    // purgeCompleted() is that state's own verb, not discard().
+    @Test
+    void discardRefusesACompletedRun(@TempDir Path root) throws IOException {
+        var progress = new RecordingProgressPort();
+        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = cullPipeline(root, progress);
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        pipeline.resume(prepDir, false).join();
+
+        assertThatThrownBy(() -> pipeline.discard(prepDir).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(IllegalStateException.class);
+        assertThat(Files.exists(prepDir)).isTrue();
+    }
+
+    // Regression: a still-armed watcher must never fire an auto-resume against a prep dir mid- or
+    // post-discard. disarmWatch() itself is proven in isolation by CullEngineTest's own
+    // manualResumeDisarmsAnAlreadyArmedWatcher; this proves Pipeline.discard() actually calls it.
+    @Test
+    void discardDisarmsAnAlreadyArmedWatcher(@TempDir Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        Path prepDir = waiting.job().prepDir();
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
+
+        pipeline.discard(prepDir).join();
+
+        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
     }
 }

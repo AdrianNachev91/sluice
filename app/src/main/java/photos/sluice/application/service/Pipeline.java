@@ -14,7 +14,9 @@ import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.job.WaitingCullJob;
@@ -39,6 +41,7 @@ public class Pipeline {
     private static final String SORTING = "Sorting...";
     private static final String COMMITTING = "Committing...";
     private static final String RESCUING = "Rescuing...";
+    private static final String DISCARDING = "Discarding...";
 
     // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
     // unlike mode/watchTimeout, this cadence isn't a documented user-facing knob, just an internal
@@ -57,6 +60,7 @@ public class Pipeline {
     private final DisasterDrawer disasterDrawer;
     private final Troubleshooter troubleshooter;
     private final PrepDirDoctor prepDirDoctor;
+    private final ApplyEngine applyEngine;
     private final Path cullPrepRoot;
     private final Path graveyardRoot;
 
@@ -133,6 +137,7 @@ public class Pipeline {
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
+        this.applyEngine = applyEngine;
         this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
         this.graveyardRoot = pathsPort.logs().resolve("disasters");
     }
@@ -252,6 +257,30 @@ public class Pipeline {
      */
     public JobHandle<PurgeReport> purgeCompleted() {
         return jobRunner.submit(_ -> prepDirDoctor.purgeCompleted(cullPrepRoot));
+    }
+
+    /**
+     * Gives up on prepDir as a background job: refuses a COMPLETE run (purgeCompleted() is that
+     * state's own verb), retires any watcher polling it, then delegates to ApplyEngine.discard()
+     * for the actual file work - filing everything worth keeping into the graveyard and deleting
+     * the montage/tile images. The watcher must be disarmed before the graveyard move starts, or an
+     * auto-resume could fire against a prep dir already being dismantled. Routing through JobRunner
+     * buys the same one-job-at-a-time discipline every other job gets, so a discard can never race
+     * a re-prep of the scope it's giving up on. Shares this one mechanism with the Round 4
+     * last-resort "discard this run and redo" remedy - both entry points call this same method.
+     *
+     * @param prepDir {@link Path} the cull prep directory to discard
+     * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
+     */
+    public JobHandle<DiscardReport> discard(Path prepDir) {
+        return jobRunner.submit(_ -> {
+            if (prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
+                throw new IllegalStateException("Prep dir " + prepDir
+                        + " has already completed - discard refuses a finished run; purge it instead.");
+            }
+            cullEngine.disarmWatch(prepDir);
+            return runPhase(DISCARDING, progress -> applyEngine.discard(prepDir, progress));
+        });
     }
 
     /**
