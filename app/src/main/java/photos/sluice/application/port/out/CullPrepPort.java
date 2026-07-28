@@ -28,6 +28,17 @@ public interface CullPrepPort {
     PrepDir readIndex(Path prepDir);
 
     /**
+     * Writes index.json wholesale, replacing whatever was there before. Used only by {@link
+     * photos.sluice.application.service.ApplyEngine#rebuildIndex} to persist an index reconstructed
+     * from surviving sidecars after the original was found corrupt or missing - a normal cull run
+     * never calls this, since {@code CullMontageRenderer} writes the original via its own adapter.
+     *
+     * @param prepDir {@link Path} the prep directory to write into
+     * @param index {@link PrepDir} the index to persist
+     */
+    void writeIndex(Path prepDir, PrepDir index);
+
+    /**
      * Every photo entry montage's sidecar (montage-NNN.json) lists. Unchecked failure if unreadable
      * or malformed. The sidecar is this app's own prior output, so a broken one means the prep dir
      * itself is corrupt, not a fixable culling mistake.

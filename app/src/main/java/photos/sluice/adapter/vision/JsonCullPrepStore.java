@@ -112,6 +112,54 @@ public class JsonCullPrepStore implements CullPrepPort {
     }
 
     /**
+     * The JSON shape {@link #writeIndex} serializes. Mirrors {@code PrepIndexWriter}'s own Index DTO
+     * one field at a time, kept as a distinct type rather than shared. This reader/writer pair and
+     * {@code CullMontageRenderer}'s own writer are separate call sites for the same JSON shape.
+     * They're free to diverge later without coupling adapter subpackages - neither may depend on
+     * the other's classes, per {@code ArchitectureTest.adaptersAreSiblings}.
+     *
+     * @param scope {@link String} the on-disk tag identifying this prep dir's scope
+     * @param basePath {@link String} the base path reported for this scope
+     * @param photos int count of candidates found
+     * @param unreviewable a {@link List} of {@link String} candidates that couldn't render a judgeable tile
+     * @param montages int count of montages generated
+     * @param prepDir {@link String} the prep directory path
+     * @param entries a {@link List} of {@link String} the montage entry filenames
+     */
+    private record RawIndexOut(String scope, String basePath, int photos, List<String> unreviewable,
+            int montages, String prepDir, List<String> entries) {
+    }
+
+    /**
+     * Writes index.json wholesale - the recovery-time counterpart to {@code CullMontageRenderer}'s
+     * own prep-time write, used only to persist an index {@link
+     * photos.sluice.application.service.ApplyEngine#rebuildIndex} reconstructed from surviving
+     * sidecars.
+     *
+     * @param prepDir {@link Path} the prep directory to write into
+     * @param index {@link PrepDir} the index to persist
+     */
+    @Override
+    public void writeIndex(Path prepDir, PrepDir index) {
+        var document = new RawIndexOut(
+                index.scope(),
+                index.basePath().toString(),
+                index.photos(),
+                index.unreviewable().stream().map(Path::toString).toList(),
+                index.montages(),
+                index.prepDir().toString(),
+                index.entries());
+        Path path = prepDir.resolve("index.json");
+        try (var output = Files.newOutputStream(path)) {
+            mapper.writeValue(output, document);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write prep index " + path, e);
+        } catch (JacksonException e) {
+            throw new UncheckedIOException("Failed to write prep index " + path, new IOException(e));
+        }
+    }
+
+    /**
      * Reads one montage's sidecar photo entries.
      *
      * @param prepDir {@link Path} the prep directory

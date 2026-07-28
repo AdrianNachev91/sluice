@@ -15,6 +15,7 @@ import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
+import photos.sluice.domain.cull.Finding.CorruptIndex;
 import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.Finding.StrayShard;
 import photos.sluice.domain.cull.PrepDir;
@@ -87,6 +88,39 @@ class TroubleshooterTest {
         assertThat(report.before().state()).isEqualTo(State.WAITING);
         assertThat(report.reconcile()).isNull();
         assertThat(report.after()).isEqualTo(report.before());
+    }
+
+    @Test
+    void aCorruptIndexIsAutoRebuiltFromSidecarsAndTheRunProceedsToReady(@TempDir Path root) throws IOException, ApplyException {
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        Files.writeString(prepDir.resolve("index.json"), "not valid json");
+
+        TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
+
+        assertThat(report.before().state()).isEqualTo(State.BLOCKED);
+        assertThat(report.before().findings()).containsExactly(new CorruptIndex(prepDir.resolve("index.json")));
+        assertThat(report.indexRebuilt()).isTrue();
+        assertThat(report.after().state()).isEqualTo(State.READY);
+        assertThat(report.after().findings()).isEmpty();
+    }
+
+    @Test
+    void aCorruptIndexThatCannotBeRebuiltStaysBlockedWithIndexRebuiltFalse(@TempDir Path root) throws IOException, ApplyException {
+        // The sole sidecar is itself unparseable - the rebuild guard has no ground truth to work
+        // from, so it must refuse rather than write a silently-empty index.
+        Path prepDir = prepDir(root);
+        Files.writeString(prepDir.resolve("montage-001.json"), "not valid json");
+        Files.writeString(prepDir.resolve("index.json"), "not valid json");
+
+        TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
+
+        assertThat(report.indexRebuilt()).isFalse();
+        assertThat(report.after()).isEqualTo(report.before());
+        assertThat(report.after().findings()).containsExactly(new CorruptIndex(prepDir.resolve("index.json")));
     }
 
     @Test

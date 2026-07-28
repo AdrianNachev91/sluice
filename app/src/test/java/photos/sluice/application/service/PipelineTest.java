@@ -213,6 +213,23 @@ class PipelineTest {
         assertThat(Files.exists(freshEntry)).isTrue();
     }
 
+    // Pipeline.sweepExpiredDisasterDrawers() (the @PostConstruct hook) sweeps both per-prep-dir
+    // drawers and ApplyEngine.discard()'s global graveyard folders. DisasterDrawerTest already
+    // covers sweepExpiredGraveyard()'s own logic in full, so this only needs one expired and one
+    // fresh graveyard folder to prove the wiring reaches it too.
+    @Test
+    void sweepExpiredDisasterDrawersAlsoSweepsTheDiscardGraveyard(@TempDir Path root) throws IOException {
+        Path oldGraveyard = root.resolve("logs/disasters/scope1-2019-01-01_00-00-00");
+        writeFile(oldGraveyard.resolve("index.json"), "{}");
+        Path freshEntry = root.resolve("logs/disasters/scope1-2099-01-01_00-00-00/index.json");
+        writeFile(freshEntry, "{}");
+
+        pipeline(root, new RecordingProgressPort()).sweepExpiredDisasterDrawers();
+
+        assertThat(Files.exists(oldGraveyard)).isFalse();
+        assertThat(Files.exists(freshEntry)).isTrue();
+    }
+
     // Proves troubleshoot() actually runs through JobRunner rather than calling Troubleshooter
     // directly - TroubleshooterTest already covers the diagnose/reconcile/report logic itself in
     // full, so this only needs one real prep dir to prove the wiring returns its report.

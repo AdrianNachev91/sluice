@@ -103,6 +103,49 @@ class JsonCullPrepStoreTest {
     }
 
     @Test
+    void writeIndexRoundTripsThroughReadIndex(@TempDir Path dir) {
+        var prepDir = new PrepDir("2019-06", dir.resolve("base"), 3, List.of(dir.resolve("skip.jpg")), 1, dir,
+                List.of("montage-001"));
+
+        store.writeIndex(dir, prepDir);
+
+        assertThat(store.readIndex(dir)).isEqualTo(prepDir);
+    }
+
+    @Test
+    void writeIndexReplacesWhateverIndexJsonHeldBefore(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), "not valid json");
+        var rebuilt = new PrepDir("2019-06", dir.resolve("base"), 1, List.of(), 1, dir, List.of("montage-001"));
+
+        store.writeIndex(dir, rebuilt);
+
+        assertThat(store.readIndex(dir)).isEqualTo(rebuilt);
+    }
+
+    @Test
+    void wrapsAnIndexWriteFailureIntoUncheckedIOException(@TempDir Path dir) {
+        Path missingParent = dir.resolve("missing-parent");
+        var prepDir = new PrepDir("2019-06", dir.resolve("base"), 0, List.of(), 0, dir, List.of());
+
+        assertThatThrownBy(() -> store.writeIndex(missingParent, prepDir))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining(missingParent.resolve("index.json").toString());
+    }
+
+    @Test
+    void wrapsAJacksonExceptionDuringIndexWriteIntoUncheckedIOException(@TempDir Path dir) {
+        var mapper = mock(JsonMapper.class);
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+        var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+        var prepDir = new PrepDir("2019-06", dir.resolve("base"), 0, List.of(), 0, dir, List.of());
+
+        assertThatThrownBy(() -> storeWithFailingMapper.writeIndex(dir, prepDir))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasCauseInstanceOf(IOException.class)
+                .cause().hasCauseInstanceOf(JacksonException.class);
+    }
+
+    @Test
     void hasShardReflectsWhetherTheDecisionsFileExists(@TempDir Path dir) {
         var shard = new DecisionShard("montage-004", List.of());
         new ShardCodec().write(dir.resolve("decisions-004.json"), shard);

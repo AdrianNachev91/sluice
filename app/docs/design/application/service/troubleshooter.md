@@ -7,9 +7,17 @@ How `application/service/Troubleshooter` runs the single-button recovery over a 
 
 ```mermaid
 flowchart TD
-    A["diagnose(prepDir)<br/>(PrepDirDoctor)"] --> B{"BLOCKED, with a<br/>MissingSource finding?"}
-    B -- no --> C(["afterReconcile = before,<br/>reconcile = null"])
-    B -- yes --> D["reconcile(prepDir)<br/>(ApplyEngine)"]
+    A["diagnose(prepDir)<br/>(PrepDirDoctor)"] --> A2{"a CorruptIndex<br/>finding present?"}
+    A2 -- no --> B
+    A2 -- yes --> A3["rebuildIndex()<br/>(ApplyEngine)"]
+    A3 --> A4{"rebuilt?"}
+    A4 -- no --> B(["afterIndexRebuild = before"])
+    A4 -- yes --> A5["re-diagnose(prepDir)"]
+    A5 --> A6(["afterIndexRebuild = the<br/>re-diagnosis"])
+    B --> B2{"BLOCKED, with a<br/>MissingSource finding?"}
+    A6 --> B2
+    B2 -- no --> C(["afterReconcile = afterIndexRebuild,<br/>reconcile = null"])
+    B2 -- yes --> D["reconcile(prepDir)<br/>(ApplyEngine)"]
     D --> E["re-diagnose(prepDir)"]
     E --> F(["afterReconcile = the<br/>re-diagnosis"])
     C --> R["for every StrayShard<br/>finding afterReconcile<br/>reports"]
@@ -22,15 +30,23 @@ flowchart TD
     U --> G["render the report text"]
     W --> G
     G --> H["file it into the<br/>disaster drawer"]
-    H --> I(["TroubleshootReport(before,<br/>reconcile,<br/>strayShardsRepaired,<br/>after, text)"])
+    H --> I(["TroubleshootReport(before,<br/>indexRebuilt, reconcile,<br/>strayShardsRepaired,<br/>after, text)"])
 ```
+
+A `CorruptIndex` finding gets `rebuildIndex()` attempted first, in the locked dependency order
+(index before move log before stray shards) - see `apply-engine.md` section 8 for the rebuild guard
+itself. A failed attempt is a pure no-op: nothing is written unless every guard passes, so
+`afterIndexRebuild` just falls back to `before` unchanged. `indexRebuilt` records whether the
+attempt actually succeeded, independent of whatever `before`/`after` end up reporting.
 
 `MissingSource` is the only signal available today that the move-record log itself might be lost or
 unreadable. `PrepDirDoctor` only ever reports one once the shard contract has already validated
-cleanly (see `apply-engine.md`'s own doc). `reconcile()` is exactly the offline repair for that
-situation. Reconcile never runs otherwise - every other `BLOCKED` cause is left exactly as
-diagnosed. Running reconcile unconditionally would also needlessly file away an already-trustworthy
-log, demoting its witnessed provenance to reconstructed for zero benefit.
+cleanly (see `apply-engine.md`'s own doc) - which the index rebuild step above is itself a
+prerequisite for, since nothing can be diagnosed at all without a readable index. `reconcile()` is
+exactly the offline repair for that situation. Reconcile never runs otherwise - every other
+`BLOCKED` cause is left exactly as diagnosed. Running reconcile unconditionally would also
+needlessly file away an already-trustworthy log, demoting its witnessed provenance to reconstructed
+for zero benefit.
 
 `autoRepairStrayShard()` runs next, in the locked dependency order (move log before stray shards -
 until the log is rebuilt, an already-moved file can still look like a stray shard's own missing
@@ -45,10 +61,12 @@ left unclaimed). `autoRepairStrayShard()` itself decides that per its own unambi
 loop. See `apply-engine.md`, section 7, for the unambiguity rule itself and the CHOICE fallback
 (`setAsideStrayShard()`) neither this nor `reconcile()` ever invokes unprompted.
 
-Every disposition-ledger CHOICE remedy (missing-source skip, overlap resolution, stray-shard
-set-aside) needs a real user choice, so none of them run here - they surface unchanged in `after`
-for the UI to offer, via `ApplyEngine.skipMissingSource()`/`resolveOverlap()`/`setAsideStrayShard()`
-directly (`apply-engine.md`, section 7).
+Every disposition-ledger CHOICE remedy (missing-source skip, overlap resolution, corrupt-sidecar
+resolution, stray-shard set-aside) needs a real user choice, so none of them run here - they
+surface unchanged in `after` for the UI to offer, via
+`ApplyEngine.skipMissingSource()`/`resolveOverlap()`/`resolveCorruptSidecar()`/`setAsideStrayShard()`
+directly (`apply-engine.md`, sections 7-8). The last-resort `discard()` is likewise never attempted
+here - it is a standalone action, not gated on any one finding (`apply-engine.md`, section 9).
 
 The rendered report is the same technical, path-and-hash-level detail `Finding.describe()` already
 gives an aggregated `ApplyException` - never layman-friendly copy. A UI maps that friendlier language
@@ -60,6 +78,8 @@ describes for a blocked run's card.
 - The reconcile sweep this triggers: `apply-engine.md`, section 6.
 - The disposition ledger, CHOICE remedies, and the stray-shard AUTO repair this runs:
   `apply-engine.md`, section 7.
+- The index-rebuild AUTO repair this triggers first, and the corrupt-sidecar CHOICE remedy and
+  last-resort discard this never attempts unprompted: `apply-engine.md`, sections 8-9.
 - The diagnosis this reads before and after repair: `PrepDirDoctor.diagnose()`'s own doc comment
   (`application/service/PrepDirDoctor.java`).
 - The drawer entry the rendered report is filed as: `DisasterDrawer`'s own class doc

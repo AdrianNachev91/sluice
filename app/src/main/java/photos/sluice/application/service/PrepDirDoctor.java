@@ -12,6 +12,7 @@ import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.ValidationReport;
 import photos.sluice.domain.job.ShardTally;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
@@ -26,6 +27,7 @@ import java.util.List;
 public class PrepDirDoctor {
 
     private static final String DECISIONS_FILE = "decisions.json";
+    private static final String INDEX_FILE = "index.json";
 
     private final CullPrepPort cullPrepPort;
     private final MediaStore mediaStore;
@@ -67,13 +69,25 @@ public class PrepDirDoctor {
      * means a CHOICE finding never coexists with an AUTO or NONE one in the same report - it only
      * ever surfaces once the shard contract is already clean.
      *
+     * <p>The completion check runs before index.json is ever read, and reads no further than
+     * whether decisions.json exists - a COMPLETE run needs nothing else. A corrupt or missing
+     * index.json past that point reports BLOCKED with a single {@link Finding.CorruptIndex}: with
+     * no readable montage list, nothing else here (the tally, the shard contract, missing sources)
+     * can be computed at all.
+     *
      * @param prepDirPath {@link Path} the prep directory to diagnose
      * @return {@link PrepDirHealth} the prep dir's current state and open findings
      */
     public PrepDirHealth diagnose(Path prepDirPath) {
-        PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         if (mediaStore.exists(prepDirPath.resolve(DECISIONS_FILE))) {
             return new PrepDirHealth(State.COMPLETE, List.of());
+        }
+
+        PrepDir prepDir;
+        try {
+            prepDir = cullPrepPort.readIndex(prepDirPath);
+        } catch (UncheckedIOException e) {
+            return new PrepDirHealth(State.BLOCKED, List.of(new Finding.CorruptIndex(prepDirPath.resolve(INDEX_FILE))));
         }
 
         ValidationReport validation = applyEngine.validate(prepDirPath, prepDir, new ApplyOptions(true));

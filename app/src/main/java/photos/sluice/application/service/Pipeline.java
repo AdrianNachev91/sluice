@@ -56,6 +56,7 @@ public class Pipeline {
     private final DisasterDrawer disasterDrawer;
     private final Troubleshooter troubleshooter;
     private final Path cullPrepRoot;
+    private final Path graveyardRoot;
 
     /**
      * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
@@ -128,6 +129,7 @@ public class Pipeline {
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
+        this.graveyardRoot = pathsPort.logs().resolve("disasters");
     }
 
     /**
@@ -141,12 +143,14 @@ public class Pipeline {
 
     /**
      * Delegates to DisasterDrawer to sweep every prep dir's disaster drawer for retention-expired
-     * entries - a corrupt original or a troubleshoot report older than 30 days. Public and callable
+     * entries - a corrupt original or a troubleshoot report older than 30 days - and, separately,
+     * every ApplyEngine.discard() graveyard folder past that same window. Public and callable
      * directly (not just via @PostConstruct) so a test can drive it without a Spring context.
      */
     @PostConstruct
     public void sweepExpiredDisasterDrawers() {
         disasterDrawer.sweepExpired(cullPrepRoot);
+        disasterDrawer.sweepExpiredGraveyard(graveyardRoot);
     }
 
     /**

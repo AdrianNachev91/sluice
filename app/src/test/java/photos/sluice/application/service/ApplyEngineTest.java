@@ -18,6 +18,8 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CorruptSidecarResolution;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.Finding.MissingShard;
 import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.Finding.StrayShard;
@@ -25,6 +27,7 @@ import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ReconcileReport;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.cull.ValidationReport;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.model.IndexEntry;
@@ -1108,6 +1111,171 @@ class ApplyEngineTest {
         assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isFalse();
         assertThat(Files.exists(filed)).isTrue();
         assertThat(filed.getFileName().toString()).contains("stray-shard");
+    }
+
+    @Test
+    void rebuildIndexRebuildsFromContiguousSidecarsAndFilesTheCorruptOriginal(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeSidecar(prepDir, "montage-001", sidecarEntry(first));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(second));
+        Files.writeString(prepDir.resolve("index.json"), "not valid json");
+
+        Optional<PrepDir> rebuilt = applyEngine(root, root.resolve("Library")).rebuildIndex(prepDir);
+
+        assertThat(rebuilt).isPresent();
+        assertThat(rebuilt.get().entries()).containsExactly("montage-001", "montage-002");
+        assertThat(rebuilt.get().photos()).isEqualTo(2);
+        assertThat(rebuilt.get().unreviewable()).isEmpty();
+        assertThat(rebuilt.get().scope()).isEqualTo("scope1");
+        assertThat(rebuilt.get().basePath()).isEqualTo(root.resolve("Sorted/Photos/2019/06"));
+        // Persisted, not just returned - a later read sees the rebuilt content.
+        assertThat(readIndex(prepDir).entries()).containsExactly("montage-001", "montage-002");
+        Path drawer = prepDir.resolve("disasters");
+        try (var entries = Files.list(drawer)) {
+            assertThat(entries.toList().getFirst().getFileName().toString()).contains("index-json");
+        }
+    }
+
+    @Test
+    void rebuildIndexRefusesWhenTheSidecarSequenceHasAGap(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        writeSidecar(prepDir, "montage-001", sidecarEntry(root.resolve("Sorted/Photos/2019/06/a.jpg")));
+        writeSidecar(prepDir, "montage-003", sidecarEntry(root.resolve("Sorted/Photos/2019/06/c.jpg"))); // montage-002 missing
+
+        Optional<PrepDir> rebuilt = applyEngine(root, root.resolve("Library")).rebuildIndex(prepDir);
+
+        assertThat(rebuilt).isEmpty();
+    }
+
+    @Test
+    void rebuildIndexRefusesWhenAnyContiguousSidecarIsUnparseable(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        writeSidecar(prepDir, "montage-001", sidecarEntry(root.resolve("Sorted/Photos/2019/06/a.jpg")));
+        Files.writeString(prepDir.resolve("montage-002.json"), "not valid json");
+
+        Optional<PrepDir> rebuilt = applyEngine(root, root.resolve("Library")).rebuildIndex(prepDir);
+
+        assertThat(rebuilt).isEmpty();
+    }
+
+    @Test
+    void validateReportsCorruptSidecarForAMontageWithAShardButNoReadableSidecar(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        // No sidecar written for montage-001 at all - stands in for a missing or corrupt one; both
+        // fail the same way (readSidecar() throws UncheckedIOException either way).
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        ValidationReport report = applyEngine(root, root.resolve("Library"))
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true));
+
+        assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
+        assertThat(report.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.CHOICE);
+        assertThat(report.decisions()).isEmpty();
+    }
+
+    @Test
+    void validateSilentlySkipsACorruptSidecarForAMontageWithNoShardYet(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(culled, "x");
+        writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
+
+        ValidationReport report = applyEngine(root, root.resolve("Library"))
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true));
+
+        assertThat(report.findings()).isEmpty();
+    }
+
+    @Test
+    void resolveCorruptSidecarSetAsideExcludesTheMontageEntirelyLeavingItsPhotoInSorted(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        ApplyEngine engine = applyEngine(root, libraryRoot);
+
+        engine.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "redo this batch later");
+        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.byCategory()).isEmpty();
+        assertThat(Files.exists(photo)).isTrue();
+    }
+
+    @Test
+    void resolveCorruptSidecarApplyAnywayTrustsTheShardsOwnDecisionsWithoutAMembershipCheck(@TempDir Path root)
+            throws IOException, ApplyException {
+        Path libraryRoot = root.resolve("Library");
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        // No sidecar ever backs this decision's file - a healthy run would report it FileOutOfScope.
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        ApplyEngine engine = applyEngine(root, libraryRoot);
+
+        engine.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY, "trust the culler's own shard");
+        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.byCategory()).containsEntry("junk", 1);
+        assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
+    }
+
+    @Test
+    void resolveCorruptSidecarFilesTheSidecarFileIntoTheDisasterDrawerWhenStillPresent(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        Files.writeString(prepDir.resolve("montage-001.json"), "not valid json"); // present, but corrupt
+
+        applyEngine(root, root.resolve("Library"))
+                .resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "give up on this batch");
+
+        assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isFalse();
+        Path drawer = prepDir.resolve("disasters");
+        try (var entries = Files.list(drawer)) {
+            List<Path> filed = entries.toList();
+            assertThat(filed).hasSize(1);
+            assertThat(filed.getFirst().getFileName().toString()).contains("corrupt-sidecar-montage-001");
+        }
+    }
+
+    @Test
+    void discardMovesTextArtifactsToAGlobalGraveyardAndDeletesOnlyMontageImages(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        writeFile(prepDir.resolve("montage-001.jpg"), "fake contact sheet");
+        writeFile(prepDir.resolve("tile-001-01.jpg"), "fake tile");
+        Files.createDirectories(prepDir.resolve("disasters"));
+        Files.writeString(prepDir.resolve("disasters/2026-01-01_00-00-00-something.txt"), "old drawer entry");
+
+        Path graveyard = applyEngine(root, root.resolve("Library")).discard(prepDir);
+
+        assertThat(graveyard.getParent()).isEqualTo(root.resolve("logs/disasters"));
+        assertThat(graveyard.getFileName().toString()).startsWith("scope1-");
+        assertThat(Files.exists(graveyard.resolve("index.json"))).isTrue();
+        assertThat(Files.exists(graveyard.resolve("montage-001.json"))).isTrue();
+        assertThat(Files.exists(graveyard.resolve("decisions-001.json"))).isTrue();
+        assertThat(Files.exists(graveyard.resolve("disasters/2026-01-01_00-00-00-something.txt"))).isTrue();
+        assertThat(Files.exists(graveyard.resolve("montage-001.jpg"))).isFalse();
+        assertThat(Files.exists(graveyard.resolve("tile-001-01.jpg"))).isFalse();
+        assertThat(Files.exists(prepDir)).isFalse();
+    }
+
+    private static PrepDir readIndex(Path prepDir) {
+        return new JsonCullPrepStore().readIndex(prepDir);
     }
 
     private static Path prepDir(Path root) throws IOException {

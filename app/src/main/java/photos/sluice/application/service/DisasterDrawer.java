@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
@@ -31,10 +30,13 @@ public class DisasterDrawer {
     private static final Duration RETENTION = Duration.ofDays(30);
     // No colons in the pattern - Windows path segments can't contain them. Seconds resolution is
     // plenty for a human audit trail; nothing ever parses this back to more precision than "is this
-    // older than 30 days."
-    private static final DateTimeFormatter TIMESTAMP_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
+    // older than 30 days." Shared with ApplyEngine.discard()'s global graveyard folders via
+    // DisasterTimestamp, so both stay parseable by the same future retention sweep.
     private static final Pattern TIMESTAMP_PREFIX = Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})-.*");
+    // A discard() graveyard folder's own name is <scope>-<timestamp>, not <timestamp>-<what> - the
+    // timestamp is a trailing, not leading, segment, and scope itself may contain hyphens. Anchored
+    // on the fixed-length timestamp shape at the end of the name rather than splitting on a hyphen.
+    private static final Pattern TIMESTAMP_SUFFIX = Pattern.compile(".*-(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})$");
 
     private final MediaStore mediaStore;
 
@@ -60,7 +62,7 @@ public class DisasterDrawer {
     public Path file(Path prepDir, Path source, String what) {
         Path drawer = prepDir.resolve(DRAWER_DIR);
         String extension = extensionOf(source.getFileName().toString());
-        String stamp = TIMESTAMP_FORMAT.format(Instant.now());
+        String stamp = DisasterTimestamp.now();
         return mediaStore.moveTo(source, uniqueName(drawer, stamp, what, extension));
     }
 
@@ -77,7 +79,7 @@ public class DisasterDrawer {
     public Path write(Path prepDir, String what, String content) {
         Path drawer = prepDir.resolve(DRAWER_DIR);
         mediaStore.ensureDirectory(drawer);
-        String stamp = TIMESTAMP_FORMAT.format(Instant.now());
+        String stamp = DisasterTimestamp.now();
         Path dest = uniqueName(drawer, stamp, what, ".txt");
         mediaStore.write(dest, content);
         return dest;
@@ -105,6 +107,81 @@ public class DisasterDrawer {
     }
 
     /**
+     * Deletes every {@code ApplyEngine.discard()} graveyard folder under graveyardRoot
+     * ({@code logs/disasters/}) whose own {@code <scope>-<timestamp>} name is older than the 30-day
+     * retention window. This is the directory-level counterpart to {@link #sweepExpired}. That
+     * method only ever recognizes a per-prep-dir drawer entry sitting directly inside a literal
+     * {@code disasters/} folder, not a whole graveyard folder discovered by name. A folder whose
+     * name doesn't parse is left alone, never deleted. An expired folder has every file under it
+     * deleted, then the folder itself (and any now-empty subfolder, e.g. a graveyarded
+     * {@code disasters/} drawer) pruned via {@link MediaStore#removeIfEmptyOfFiles}.
+     *
+     * <p>A graveyard folder holding zero files is never discovered here - it is invisible to this
+     * file-based scan. {@code discard()} always creates the folder up front, even when a mangled
+     * prep dir turns out to have nothing worth keeping. Left unswept, but harmless; an empty folder
+     * costs nothing.
+     *
+     * @param graveyardRoot {@link Path} the discard graveyard root ({@code logs/disasters/})
+     * @return int the number of graveyard folders deleted
+     */
+    public int sweepExpiredGraveyard(Path graveyardRoot) {
+        if (!mediaStore.exists(graveyardRoot)) {
+            return 0;
+        }
+        List<Path> allFiles = mediaStore.listFiles(graveyardRoot);
+        List<Path> graveyards = allFiles.stream()
+                .map(file -> graveyardRoot.resolve(graveyardRoot.relativize(file).getName(0)))
+                .distinct()
+                .toList();
+        Instant cutoff = Instant.now().minus(RETENTION);
+        List<Path> expired = graveyards.stream().filter(dir -> isExpiredGraveyard(dir, cutoff)).toList();
+        expired.forEach(dir -> deleteGraveyard(dir, allFiles));
+        return expired.size();
+    }
+
+    /**
+     * Deletes every file under dir (drawn from the already-listed allFiles, never re-walked), then
+     * prunes dir itself once empty of files.
+     *
+     * @param dir {@link Path} the graveyard folder to delete
+     * @param allFiles a {@link List} of {@link Path} every file found under the graveyard root
+     */
+    private void deleteGraveyard(Path dir, List<Path> allFiles) {
+        allFiles.stream().filter(file -> file.startsWith(dir)).forEach(mediaStore::delete);
+        mediaStore.removeIfEmptyOfFiles(dir);
+    }
+
+    /**
+     * Whether a graveyard folder's own filename-embedded timestamp is older than cutoff. A name
+     * that doesn't parse is never expired - it is left alone rather than guessed at.
+     *
+     * @param dir {@link Path} the candidate graveyard folder
+     * @param cutoff {@link Instant} the retention cutoff
+     * @return boolean true if dir was created before cutoff
+     */
+    private static boolean isExpiredGraveyard(Path dir, Instant cutoff) {
+        return parseGraveyardTimestamp(dir.getFileName().toString()).filter(t -> t.isBefore(cutoff)).isPresent();
+    }
+
+    /**
+     * Parses the trailing timestamp off a graveyard folder's own name, if it has one.
+     *
+     * @param name {@link String} the graveyard folder's own name
+     * @return an {@link Optional} {@link Instant} the embedded creation time, if the name parses
+     */
+    private static Optional<Instant> parseGraveyardTimestamp(String name) {
+        Matcher matcher = TIMESTAMP_SUFFIX.matcher(name);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(LocalDateTime.parse(matcher.group(1), DisasterTimestamp.FORMAT).toInstant(ZoneOffset.UTC));
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Whether file sits directly inside a disasters/ drawer.
      *
      * @param file {@link Path} the candidate file
@@ -129,8 +206,8 @@ public class DisasterDrawer {
 
     /**
      * Builds the first candidate name not already occupied under drawer, trying the plain
-     * timestamp-what name first, then a numeric suffix - the same collision idiom MediaStore itself
-     * uses for a real move.
+     * timestamp-what name first, then a numeric suffix. That's the same collision idiom MediaStore
+     * itself uses for a real move.
      *
      * @param drawer {@link Path} the drawer directory
      * @param stamp {@link String} the formatted filing timestamp
@@ -164,7 +241,7 @@ public class DisasterDrawer {
             return Optional.empty();
         }
         try {
-            return Optional.of(LocalDateTime.parse(matcher.group(1), TIMESTAMP_FORMAT).toInstant(ZoneOffset.UTC));
+            return Optional.of(LocalDateTime.parse(matcher.group(1), DisasterTimestamp.FORMAT).toInstant(ZoneOffset.UTC));
         } catch (DateTimeParseException e) {
             return Optional.empty();
         }

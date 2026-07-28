@@ -15,21 +15,26 @@ import java.util.List;
 
 /**
  * The single-button recovery: diagnose a prep dir, run every repair this app can perform
- * unprompted today, re-diagnose, then hand back what was found, what was fixed, and what remains.
- * Two AUTO repairs run today, in the locked dependency order (move log before stray shards - until
- * the log is rebuilt, an already-moved file can still look like a stray shard's own missing match).
- * A {@link Finding.MissingSource} finding is currently the only signal available that the
- * move-record log itself might be lost or unreadable. {@link PrepDirDoctor} only ever reports one
- * once the shard contract is already clean. {@link ApplyEngine#reconcile} is exactly the offline
- * repair for that situation. Reconcile never runs unprompted otherwise: it files any existing log
- * away wholesale, which would needlessly demote an already-trustworthy log's witnessed provenance
- * to reconstructed for no benefit. A {@link Finding.StrayShard} finding gets
- * {@link ApplyEngine#autoRepairStrayShard} attempted for it, unprompted, since that repair is
- * provably safe when it runs at all - it either renames the one unambiguous match or does nothing.
- * Every disposition-ledger CHOICE remedy (missing-source skip, overlap resolution, stray-shard
- * set-aside) needs a real user choice, so none of them run here - they surface unchanged in
- * {@code after} for the UI to offer. No confirmation is asked before any AUTO repair: neither one
- * ever moves or deletes anything the library or Sorted tree holds.
+ * unprompted today, re-diagnose. Then hand back what was found, what was fixed, and what remains.
+ * Three AUTO repairs run today, in the locked dependency order: index before move log before stray
+ * shards. Until the index is readable, nothing else can even be diagnosed. Until the log is
+ * rebuilt, an already-moved file can still look like a stray shard's own missing match.
+ *
+ * <p>A {@link Finding.CorruptIndex} finding gets {@link ApplyEngine#rebuildIndex} attempted for it
+ * first, unprompted. A failed attempt is a pure no-op - nothing is written unless every guard
+ * passes. Everything downstream needs a readable index to even diagnose. A
+ * {@link Finding.MissingSource} finding is currently the only signal available that the move-record
+ * log itself might be lost or unreadable. {@link PrepDirDoctor} only ever reports one once the shard
+ * contract is already clean. {@link ApplyEngine#reconcile} is exactly the offline repair for that
+ * situation. Reconcile never runs unprompted otherwise: it files any existing log away wholesale,
+ * which would needlessly demote an already-trustworthy log's witnessed provenance to reconstructed
+ * for no benefit. A {@link Finding.StrayShard} finding gets
+ * {@link ApplyEngine#autoRepairStrayShard} attempted for it, unprompted. That repair is provably
+ * safe when it runs at all - it either renames the one unambiguous match or does nothing.
+ * Every disposition-ledger CHOICE remedy - missing-source skip, overlap resolution, corrupt-sidecar
+ * resolution, stray-shard set-aside - needs a real user choice. So none of them run here; they
+ * surface unchanged in {@code after} for the UI to offer. No confirmation is asked before any AUTO
+ * repair: none of the three ever move or delete anything the library or Sorted tree holds.
  *
  * <p>Flowchart: {@code app/docs/design/application/service/troubleshooter.md}.
  */
@@ -56,9 +61,10 @@ public class Troubleshooter {
     }
 
     /**
-     * Diagnoses prepDir, reconciles its move log when a MissingSource finding suggests it is
-     * untrustworthy, attempts an AUTO repair for every StrayShard finding left, re-diagnoses, then
-     * files and returns the rendered report.
+     * Diagnoses prepDir, attempts an AUTO index rebuild when a CorruptIndex finding is present, and
+     * reconciles its move log when a MissingSource finding suggests it is untrustworthy. Then it
+     * attempts an AUTO repair for every StrayShard finding left, re-diagnoses, and files and returns
+     * the rendered report.
      *
      * @param prepDir {@link Path} the prep directory to troubleshoot
      * @return {@link TroubleshootReport} what was found, what was fixed, and what remains
@@ -70,17 +76,21 @@ public class Troubleshooter {
      */
     public TroubleshootReport troubleshoot(Path prepDir) throws ApplyException {
         final PrepDirHealth before = prepDirDoctor.diagnose(prepDir);
-        final boolean needsReconcile = before.state() == State.BLOCKED
-                && before.findings().stream().anyMatch(Finding.MissingSource.class::isInstance);
+        final boolean indexRebuilt = before.findings().stream().anyMatch(Finding.CorruptIndex.class::isInstance)
+                && applyEngine.rebuildIndex(prepDir).isPresent();
+        final PrepDirHealth afterIndexRebuild = indexRebuilt ? prepDirDoctor.diagnose(prepDir) : before;
+
+        final boolean needsReconcile = afterIndexRebuild.state() == State.BLOCKED
+                && afterIndexRebuild.findings().stream().anyMatch(Finding.MissingSource.class::isInstance);
         final ReconcileReport reconcile = needsReconcile ? applyEngine.reconcile(prepDir) : null;
-        final PrepDirHealth afterReconcile = needsReconcile ? prepDirDoctor.diagnose(prepDir) : before;
+        final PrepDirHealth afterReconcile = needsReconcile ? prepDirDoctor.diagnose(prepDir) : afterIndexRebuild;
 
         final List<String> strayShardsRepaired = repairStrayShards(prepDir, afterReconcile);
         final PrepDirHealth after = strayShardsRepaired.isEmpty() ? afterReconcile : prepDirDoctor.diagnose(prepDir);
 
-        final String text = render(prepDir, before, reconcile, strayShardsRepaired, after);
+        final String text = render(prepDir, before, indexRebuilt, reconcile, strayShardsRepaired, after);
         disasterDrawer.write(prepDir, REPORT_WHAT, text);
-        return new TroubleshootReport(before, reconcile, strayShardsRepaired, after, text);
+        return new TroubleshootReport(before, indexRebuilt, reconcile, strayShardsRepaired, after, text);
     }
 
     /**
@@ -88,10 +98,10 @@ public class Troubleshooter {
      * StrayShard finding can surface either while WAITING (other montages still being culled) or
      * BLOCKED (culling finished, something else needs a remedy). Unlike a MissingSource finding,
      * PrepDirDoctor never gates it on the shard contract being otherwise complete - so this repair
-     * isn't gated on overall state either. Each attempt re-reads current disk state, so an earlier
-     * repair in this same pass can make a later one possible (one candidate montage claimed) or moot
-     * (nothing left unclaimed). autoRepairStrayShard() itself decides that per its own unambiguity
-     * rule, not this loop.
+     * isn't gated on overall state either. Each attempt re-reads current disk state. That means an
+     * earlier repair in this same pass can make a later one possible (one candidate montage
+     * claimed) or moot (nothing left unclaimed). autoRepairStrayShard() itself decides that per its
+     * own unambiguity rule, not this loop.
      *
      * @param prepDir {@link Path} the prep directory being troubleshot
      * @param diagnosis {@link PrepDirHealth} the diagnosis to read StrayShard findings from
@@ -114,17 +124,21 @@ public class Troubleshooter {
      *
      * @param prepDir {@link Path} the prep directory troubleshot
      * @param before {@link PrepDirHealth} the diagnosis taken before any repair
+     * @param indexRebuilt boolean whether a CorruptIndex finding was AUTO-repaired
      * @param reconcile {@link ReconcileReport} the reconcile outcome, or null if none ran
      * @param strayShardsRepaired a {@link List} of {@link String} every stray shard AUTO-renamed into place
      * @param after {@link PrepDirHealth} the diagnosis taken after any repair
      * @return {@link String} the rendered report text
      */
-    private static String render(Path prepDir, PrepDirHealth before, @Nullable ReconcileReport reconcile,
-            List<String> strayShardsRepaired, PrepDirHealth after) {
+    private static String render(Path prepDir, PrepDirHealth before, boolean indexRebuilt,
+            @Nullable ReconcileReport reconcile, List<String> strayShardsRepaired, PrepDirHealth after) {
         final List<String> lines = new ArrayList<>();
         lines.add("Troubleshoot report for " + prepDir);
         lines.add("Before: " + before.state() + " - " + before.findings().size() + " finding(s)");
         describeAll(before.findings(), lines);
+        lines.add(indexRebuilt
+                ? "Index: rebuilt from surviving sidecars"
+                : "Index: not rebuilt - no CorruptIndex finding, or the rebuild guard refused");
         if (reconcile == null) {
             lines.add("Reconcile: not run - no finding suggested the move log needed rebuilding");
         } else {

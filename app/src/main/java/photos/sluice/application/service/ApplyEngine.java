@@ -12,6 +12,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
@@ -30,6 +31,7 @@ import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,6 +45,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 // Flowchart + scenario table: app/docs/design/application/service/apply-engine.md.
@@ -64,11 +68,19 @@ public class ApplyEngine {
     // equal, the same reasoning RECONSTRUCTED_MARKER above already relies on.
     private static final String SKIPPED_MARKER = "SKIPPED_BY_USER";
     private static final String OVERLAP_MARKER = "OVERLAP_RESOLVED";
+    // A CorruptSidecar finding's own CHOICE resolution, keyed by montage id rather than a file path
+    // - the same ledger, one more disposition shape it can carry.
+    private static final String CORRUPT_SIDECAR_MARKER = "CORRUPT_SIDECAR_RESOLVED";
     // A control character, not a printable one - guaranteed absent from any path on every
     // mainstream filesystem. A record's fields can be split back apart with zero escaping and no
     // ambiguity even when a path itself contains spaces, commas, or tabs.
     private static final String RECORD_DELIMITER = "\u001F";
     private static final String UNDATED = "0000-00";
+    // A montage sidecar's own filename convention (montage-NNN.json), the mirror image of
+    // MontageNaming.shardFileFor - only ApplyEngine.rebuildIndex needs to go the other direction
+    // (recovering the montage id set from whatever sidecars survive on disk), so it isn't promoted
+    // to that shared domain class.
+    private static final Pattern SIDECAR_NAME = Pattern.compile("^montage-(\\d+)\\.json$");
 
     private final PathsPort pathsPort;
     private final MediaStore mediaStore;
@@ -280,17 +292,16 @@ public class ApplyEngine {
                 .map(Finding.StrayShard::new)
                 .forEach(extraFindings::add);
 
-        List<Path> sidecarSrcs = prepDir.entries().stream()
-                .flatMap(montage -> cullPrepPort.readSidecar(prepDirPath, montage).stream())
-                .map(SidecarPhotoEntry::src)
-                .toList();
-        List<ShardFile> shardFiles = prepDir.entries().stream()
-                .filter(montage -> !missingMontages.contains(montage))
-                .map(montage -> new ShardFile(montage, cullPrepPort.readShard(prepDirPath, montage)))
-                .toList();
+        Ledger ledger = readLedger(prepDirPath.resolve(MOVE_RECORD_LOG));
+        var sidecarSrcs = new ArrayList<Path>();
+        var shardFiles = new ArrayList<ShardFile>();
+        for (String montage : prepDir.entries()) {
+            collectMontage(prepDirPath, montage, !missingMontages.contains(montage), ledger,
+                    sidecarSrcs, shardFiles, extraFindings);
+        }
         List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
 
-        ValidationReport report = resolveOverlaps(prepDirPath,
+        ValidationReport report = resolveOverlaps(ledger,
                 shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable()));
         if (extraFindings.isEmpty()) {
             return report;
@@ -300,18 +311,75 @@ public class ApplyEngine {
     }
 
     /**
+     * One montage's worth of validate()'s sidecar/shard collection. A readable sidecar always
+     * contributes its srcs to the in-scope pool, and its shard too once the montage actually has
+     * one. An unreadable sidecar for a montage that hasn't been culled yet is silently skipped - not
+     * yet actionable, the same reasoning missingMontages already gets. Otherwise the disposition
+     * ledger decides. APPLY_ANYWAY trusts the shard's own decisions as their own scope, no sidecar
+     * needed to corroborate them. SET_ASIDE drops the montage entirely - no shard, no srcs, exactly
+     * like a ledger-skipped file. No resolution yet reports a fresh {@link Finding.CorruptSidecar}.
+     *
+     * @param prepDirPath {@link Path} the prep directory being validated
+     * @param montage {@link String} the montage id to collect
+     * @param hasShard boolean whether this montage currently has a shard
+     * @param ledger {@link Ledger} the parsed disposition ledger
+     * @param sidecarSrcs a {@link List} of {@link Path} accumulated in-scope files
+     * @param shardFiles a {@link List} of {@link ShardFile} accumulated shards to validate
+     * @param extraFindings a {@link List} of {@link Finding} accumulated findings beyond the shard contract
+     */
+    private void collectMontage(Path prepDirPath, String montage, boolean hasShard, Ledger ledger,
+            List<Path> sidecarSrcs, List<ShardFile> shardFiles, List<Finding> extraFindings) {
+        Optional<List<Path>> srcs = readSidecarSafely(prepDirPath, montage);
+        if (srcs.isPresent()) {
+            sidecarSrcs.addAll(srcs.get());
+            if (hasShard) {
+                shardFiles.add(new ShardFile(montage, cullPrepPort.readShard(prepDirPath, montage)));
+            }
+            return;
+        }
+        if (!hasShard) {
+            return;
+        }
+        CorruptSidecarResolution resolution = ledger.corruptSidecars().get(montage);
+        if (resolution == CorruptSidecarResolution.APPLY_ANYWAY) {
+            DecisionShard shard = cullPrepPort.readShard(prepDirPath, montage);
+            shard.decisions().forEach(decision -> sidecarSrcs.add(decision.file()));
+            shardFiles.add(new ShardFile(montage, shard));
+        } else if (resolution != CorruptSidecarResolution.SET_ASIDE) {
+            extraFindings.add(new Finding.CorruptSidecar(montage));
+        }
+    }
+
+    /**
+     * Reads one montage's sidecar, translated to the empty case rather than throwing. A
+     * {@link Finding.CorruptSidecar} finding, or its ledger-recorded resolution, is how validate()
+     * reports and recovers from this - never a propagated exception.
+     *
+     * @param prepDirPath {@link Path} the prep directory holding the sidecar
+     * @param montage {@link String} the montage whose sidecar to read
+     * @return an {@link Optional} {@link List} of {@link Path}, the sidecar's own src files, or empty if unreadable
+     */
+    private Optional<List<Path>> readSidecarSafely(Path prepDirPath, String montage) {
+        try {
+            return Optional.of(cullPrepPort.readSidecar(prepDirPath, montage).stream().map(SidecarPhotoEntry::src).toList());
+        } catch (UncheckedIOException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Suppresses a {@link Finding.DecisionUnreviewableOverlap} finding once the disposition ledger
      * records how the user resolved it, dropping the losing side from the decisions this run acts
      * on. Shards and index.json are never edited: TREAT_AS_UNREVIEWABLE only removes the decision
      * from this in-memory list, while a TRUST_DECISION resolution's own unreviewable-side
      * suppression happens separately, wherever {@link #resolvedUnreviewable} is consulted.
      *
-     * @param prepDirPath {@link Path} the prep directory being validated
+     * @param ledger {@link Ledger} the parsed disposition ledger
      * @param report {@link ValidationReport} the shard validator's own report, before ledger resolution
      * @return {@link ValidationReport} the same report, with resolved overlaps suppressed
      */
-    private ValidationReport resolveOverlaps(Path prepDirPath, ValidationReport report) {
-        Map<Path, OverlapResolution> overlaps = readLedger(prepDirPath.resolve(MOVE_RECORD_LOG)).overlaps();
+    private ValidationReport resolveOverlaps(Ledger ledger, ValidationReport report) {
+        Map<Path, OverlapResolution> overlaps = ledger.overlaps();
         if (overlaps.isEmpty()) {
             return report;
         }
@@ -332,7 +400,7 @@ public class ApplyEngine {
 
     /**
      * prepDir's own unreviewable list, minus any file the disposition ledger has resolved with
-     * TRUST_DECISION - the shard's own decision wins for those, so the file is no longer treated as
+     * TRUST_DECISION. The shard's own decision wins for those, so the file is no longer treated as
      * unreviewable at all. index.json itself is never edited; this filtering happens purely in
      * memory, every time the list is consulted.
      *
@@ -354,8 +422,8 @@ public class ApplyEngine {
      * Read-only pass over prepDir's already-validated decisions and unreviewable files, checking
      * which of them are missing on disk with no move record verifying they were already moved.
      * Shares classify()/classifyFile() with apply()'s own gate; touches nothing. PrepDirDoctor's own
-     * call site, since apply() runs this same check inline as part of its single classify() pass
-     * rather than calling this method (avoiding a redundant second hash-verification pass).
+     * call site. apply() runs this same check inline, as part of its single classify() pass, rather
+     * than calling this method - avoiding a redundant second hash-verification pass.
      *
      * @param prepDirPath {@link Path} the prep directory being checked
      * @param prepDir {@link PrepDir} the prep directory's index
@@ -383,7 +451,7 @@ public class ApplyEngine {
      * An offline repair for when move-records.log itself cannot be trusted, missing or found with
      * this run's shards otherwise intact. Any existing log is filed into prepDir's disaster drawer
      * wholesale, never salvaged line-by-line. The log is then rebuilt from scratch, purely from what
-     * disk state can prove: every already-validated decision and unreviewable file is checked
+     * disk state can prove. Every already-validated decision and unreviewable file is checked
      * against the exact destination applying it would have produced, recording the hash of whatever
      * is found there.
      *
@@ -443,10 +511,10 @@ public class ApplyEngine {
 
     /**
      * A DecisionUnreviewableOverlap finding's CHOICE remedy: records which of the two conflicting
-     * listings wins for file. Neither the shard nor index.json is ever edited - validate() consults
-     * this ledger entry instead (see {@link #resolveOverlaps} and {@link #resolvedUnreviewable}) to
-     * suppress the finding and drop the losing side from the decisions/unreviewable files a later
-     * apply() acts on.
+     * listings wins for file. Neither the shard nor index.json is ever edited. validate() consults
+     * this ledger entry instead (see {@link #resolveOverlaps} and {@link #resolvedUnreviewable}),
+     * suppressing the finding and dropping the losing side from the decisions/unreviewable files a
+     * later apply() acts on.
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param file {@link Path} the file this overlap concerns, as named by the DecisionUnreviewableOverlap finding
@@ -460,12 +528,35 @@ public class ApplyEngine {
     }
 
     /**
+     * A CorruptSidecar finding's CHOICE remedy records which way montage's batch was resolved. It
+     * then files its own (corrupt or already-missing) sidecar file into prepDir's disaster drawer if
+     * it is still present. The montage's own scope evidence is spent either way once a choice is
+     * made, so there is nothing left worth preserving in place. validate() consults this ledger
+     * entry (see {@link #collectMontage}) to suppress the finding. It either drops the montage
+     * entirely (SET_ASIDE) or trusts its shard's own decisions as their own scope (APPLY_ANYWAY).
+     *
+     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
+     * @param montage {@link String} the montage id this resolution concerns, as named by the CorruptSidecar finding
+     * @param resolution {@link CorruptSidecarResolution} which way the batch was resolved
+     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     */
+    public void resolveCorruptSidecar(Path prepDirPath, String montage, CorruptSidecarResolution resolution, String reason) {
+        Path sidecarPath = prepDirPath.resolve(montage + ".json");
+        if (mediaStore.exists(sidecarPath)) {
+            disasterDrawer.file(prepDirPath, sidecarPath, "corrupt-sidecar-" + montage);
+        }
+        Path moveRecordLog = prepDirPath.resolve(MOVE_RECORD_LOG);
+        mediaStore.appendLine(moveRecordLog, montage + RECORD_DELIMITER + CORRUPT_SIDECAR_MARKER + RECORD_DELIMITER
+                + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
+    }
+
+    /**
      * A StrayShard finding's AUTO remedy: renames strayShard's own file into place as the one montage
      * currently missing a shard. That only runs when the repair is provably unambiguous. Exactly one
-     * montage in prepDir must currently have no shard, and every file the stray shard's own decisions
+     * montage in prepDir must currently have no shard. Every file the stray shard's own decisions
      * name must also be a member of that one candidate montage's sidecar. Anything else - more than
      * one montage unclaimed, or a decision naming a file the candidate montage's sidecar never showed
-     * - is left untouched; {@link #setAsideStrayShard} is the CHOICE fallback for that case.
+     * - is left untouched. {@link #setAsideStrayShard} is the CHOICE fallback for that case.
      *
      * @param prepDirPath {@link Path} the prep directory holding the stray shard
      * @param strayShard {@link Finding.StrayShard} the finding naming the stray shard file
@@ -496,7 +587,7 @@ public class ApplyEngine {
 
     /**
      * A StrayShard finding's CHOICE fallback when {@link #autoRepairStrayShard} cannot resolve it
-     * unambiguously: files the stray shard's own file into prepDir's disaster drawer, never a true
+     * unambiguously. Files the stray shard's own file into prepDir's disaster drawer, never a true
      * delete, so the culler can redo that montage from a clean slate.
      *
      * @param prepDirPath {@link Path} the prep directory holding the stray shard
@@ -508,8 +599,159 @@ public class ApplyEngine {
     }
 
     /**
+     * A CorruptIndex finding's AUTO remedy: rebuilds index.json from whatever sidecars survive on
+     * disk. Only runs when every montage sidecar can be accounted for - a contiguous
+     * montage-001..NNN run, every one of them actually parseable. A gap or an unparseable sidecar
+     * means the sidecars themselves are also damaged. A silently-smaller rebuilt index would make
+     * healthy shards look stray, so that combined case degrades to needing the last-resort
+     * {@link #discard} instead. Sidecar health is judged before this rebuild, per the locked
+     * dependency order.
+     *
+     * <p>The unreviewable list is genuinely unrecoverable - no sidecar or shard mentions it, since
+     * it was never montaged at all. So a rebuilt index always reports it empty. Losing it costs a
+     * report line, never safety: an unreviewable photo is never moved, so it stays in Sorted for a
+     * future cull to see fresh. scope is read straight off the prep dir's own folder name - the
+     * on-disk convention every real index.json already mirrors. basePath is reconstructed as the
+     * deepest common parent of every surviving sidecar's own src files. That's exact for a Year
+     * scope, an approximation for OldestN spanning a single year. The field is purely a display
+     * value no engine logic ever consults, so the approximation costs nothing beyond a slightly less
+     * precise report line.
+     *
+     * <p>Any existing index.json is filed into prepDir's disaster drawer first, wholesale, mirroring
+     * reconcile()'s own "never salvage a corrupt artifact line-by-line" treatment of the move-record
+     * log. That only happens once every guard above has already passed, so a refused rebuild never
+     * disturbs the original.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose index to rebuild
+     * @return an {@link Optional} {@link PrepDir} the rebuilt index, empty if the guard refused
+     */
+    public Optional<PrepDir> rebuildIndex(Path prepDirPath) {
+        var montageNumbers = new ArrayList<Integer>();
+        for (Path file : mediaStore.listFiles(prepDirPath)) {
+            Matcher matcher = SIDECAR_NAME.matcher(file.getFileName().toString());
+            if (matcher.matches()) {
+                montageNumbers.add(Integer.parseInt(matcher.group(1)));
+            }
+        }
+        montageNumbers.sort(null);
+        if (montageNumbers.isEmpty() || !isContiguousFromOne(montageNumbers)) {
+            return Optional.empty();
+        }
+        List<String> entries = montageNumbers.stream().map("montage-%03d"::formatted).toList();
+
+        var allSrcs = new ArrayList<Path>();
+        int photos = 0;
+        for (String montage : entries) {
+            Optional<List<Path>> srcs = readSidecarSafely(prepDirPath, montage);
+            if (srcs.isEmpty()) {
+                return Optional.empty();
+            }
+            allSrcs.addAll(srcs.get());
+            photos += srcs.get().size();
+        }
+
+        Path indexPath = prepDirPath.resolve("index.json");
+        if (mediaStore.exists(indexPath)) {
+            disasterDrawer.file(prepDirPath, indexPath, "index-json");
+        }
+        var rebuilt = new PrepDir(prepDirPath.getFileName().toString(), commonParent(allSrcs), photos,
+                List.of(), entries.size(), prepDirPath, entries);
+        cullPrepPort.writeIndex(prepDirPath, rebuilt);
+        return Optional.of(rebuilt);
+    }
+
+    /**
+     * Whether sortedNumbers runs 1, 2, 3, ... with no gaps.
+     *
+     * @param sortedNumbers a {@link List} of {@link Integer}, ascending
+     * @return boolean true if the sequence is contiguous starting from 1
+     */
+    private static boolean isContiguousFromOne(List<Integer> sortedNumbers) {
+        for (int i = 0; i < sortedNumbers.size(); i++) {
+            if (sortedNumbers.get(i) != i + 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The deepest directory every file's own parent shares in common. Assumes every file shares a
+     * root - they all come from this one prep dir's own scope, always a single Sorted tree. Two
+     * files on unrelated roots would shrink common past its own root into a null parent.
+     *
+     * @param files a {@link List} of {@link Path}, non-empty
+     * @return {@link Path} the deepest common parent directory
+     */
+    private static Path commonParent(List<Path> files) {
+        Path common = files.getFirst().getParent();
+        for (Path file : files) {
+            Path parent = file.getParent();
+            while (!parent.startsWith(common)) {
+                common = common.getParent();
+            }
+        }
+        return common;
+    }
+
+    /**
+     * The last-resort CHOICE remedy for a prep dir mangled beyond every other repair this round
+     * offers. It gives up on the run entirely, filing everything worth keeping into a global
+     * graveyard and deleting the rest. Every non-image file - shards, sidecars, index.json, the
+     * move-record log, and any disaster drawer, preserving its own relative layout - is moved
+     * wholesale into {@code logs/disasters/<scope>-<timestamp>/}. That gets the same 30-day
+     * retention window every other disaster-drawer artifact does. Only the montage/tile
+     * contact-sheet images are truly deleted; they cost cents to re-render on a fresh cull of the
+     * same scope. Library media is never touched - this method only ever reaches into the prep dir
+     * itself.
+     *
+     * <p>A montage's own sidecar (montage-NNN.json) shares its "montage-" filename prefix with that
+     * montage's contact-sheet image. The two need distinguishing here by more than the prefix alone.
+     * {@code cleanupIntermediates()}'s own filter is deliberately unrelated and separately scheduled,
+     * and doesn't make this distinction. This one checks the extension too, so a sidecar is filed
+     * away as evidence rather than deleted alongside its image.
+     *
+     * <p>scope is read straight off the prep dir's own folder name, never index.json. The whole
+     * point of this remedy is that index.json, or anything else, might be too damaged to read at
+     * all.
+     *
+     * <p>Callers should gate this on {@link PrepDirDoctor} reporting anything but COMPLETE - this is
+     * the raw mechanism, ungated. {@code Pipeline.discard()} adds that gate, plus watcher-disarming
+     * and JobRunner wiring, for its own two entry points (this last-resort remedy, and giving up on
+     * a still-waiting job).
+     *
+     * @param prepDirPath {@link Path} the prep directory to discard
+     * @return {@link Path} the graveyard directory everything worth keeping was filed into
+     */
+    public Path discard(Path prepDirPath) {
+        String scope = prepDirPath.getFileName().toString();
+        Path graveyard = pathsPort.logs().resolve("disasters").resolve(scope + "-" + DisasterTimestamp.now());
+        mediaStore.ensureDirectory(graveyard);
+        for (Path file : mediaStore.listFiles(prepDirPath)) {
+            if (isMontageImage(file.getFileName().toString())) {
+                mediaStore.delete(file);
+            } else {
+                mediaStore.moveTo(file, graveyard.resolve(prepDirPath.relativize(file)));
+            }
+        }
+        mediaStore.removeIfEmptyOfFiles(prepDirPath);
+        return graveyard;
+    }
+
+    /**
+     * Whether name is a montage contact-sheet or tile image, as opposed to a montage's own sidecar
+     * (which shares the "montage-" prefix but is JSON, not an image).
+     *
+     * @param name {@link String} a file's own leaf name
+     * @return boolean true if name is a montage/tile image
+     */
+    private static boolean isMontageImage(String name) {
+        return name.startsWith("tile-") || (name.startsWith("montage-") && !name.endsWith(".json"));
+    }
+
+    /**
      * reconcile()'s per-decision step. A NearDupChosen decision is checked for existence right here,
-     * since it is a copy. A missing source is always missing-source for it, never a pending move -
+     * since it is a copy. A missing source is always missing-source for it, never a pending move.
      * classify() never has a move-record path for it either, and reconcile() must not pretend
      * otherwise. Every other decision defers its own existence check entirely to reconcileFile()
      * below, which every other caller of reconcileFile() also relies on.
@@ -549,7 +791,7 @@ public class ApplyEngine {
 
     /**
      * Resolves every pending move queued by reconcileFile(), grouped by (destDir, original file
-     * name) - the same key two decisions that started with an identical leaf name would share.
+     * name). That's the same key two decisions that started with an identical leaf name would share.
      *
      * <p>A permanent flat destination like {@code Funny/} accumulates files across every run the
      * app has ever applied, not just this sweep. So a group's on-disk collision candidates can
@@ -709,7 +951,7 @@ public class ApplyEngine {
      * engine cannot tell what happened to the file, and refuses rather than guessing.
      *
      * <p>A file the disposition ledger records as SKIPPED_BY_USER is Skipped regardless of decision
-     * type, checked before the NearDupChosen case above it: the user gave up on it via
+     * type, checked before the NearDupChosen case above it. The user gave up on it via
      * {@link #skipMissingSource}, so there is nothing left to move or verify.
      *
      * @param decision {@link Decision} the decision to classify
@@ -772,9 +1014,9 @@ public class ApplyEngine {
     /**
      * Runs only for a decision classify() already hash-verified as done. It never re-decides the
      * move itself. It only backfills the one write that could have landed after it and is still
-     * missing: a funny decision's library hash-index row, or a review category's _reasons.txt
-     * line. NearDupReject has no write beyond the move, already fully confirmed by classify()
-     * alone.
+     * missing. That's a funny decision's library hash-index row, or a review category's
+     * _reasons.txt line. NearDupReject has no write beyond the move, already fully confirmed by
+     * classify() alone.
      *
      * @param decision {@link Decision} the already-verified-done decision
      * @param record {@link MoveRecord} the verified move record proving it ran
@@ -811,9 +1053,10 @@ public class ApplyEngine {
     }
 
     /**
-     * Parses the move-record log - the disposition ledger - into its three constituent pieces in one
-     * pass: witnessed/reconstructed move records, sources the user skipped, and files whose
-     * decision/unreviewable overlap the user resolved.
+     * Parses the move-record log - the disposition ledger - into its four constituent pieces in one
+     * pass. That's witnessed/reconstructed move records, sources the user skipped, files whose
+     * decision/unreviewable overlap the user resolved, and montages whose corrupt sidecar the user
+     * resolved.
      *
      * @param moveRecordLog {@link Path} the move-record log file
      * @return {@link Ledger} the parsed ledger
@@ -822,37 +1065,41 @@ public class ApplyEngine {
         var moves = new HashMap<Path, MoveRecord>();
         var skipped = new HashSet<Path>();
         var overlaps = new HashMap<Path, OverlapResolution>();
-        mediaStore.readLines(moveRecordLog).forEach(line -> parseLedgerLine(line, moves, skipped, overlaps));
-        return new Ledger(moves, skipped, overlaps);
+        var corruptSidecars = new HashMap<String, CorruptSidecarResolution>();
+        mediaStore.readLines(moveRecordLog).forEach(line -> parseLedgerLine(line, moves, skipped, overlaps, corruptSidecars));
+        return new Ledger(moves, skipped, overlaps, corruptSidecars);
     }
 
     /**
-     * Parses one ledger line into whichever of the three accumulators it belongs to. A move-record
-     * line's own dest field can never equal SKIPPED_MARKER or OVERLAP_MARKER - the same reasoning
-     * RECONSTRUCTED_MARKER already relies on - so checking those markers first, before falling back
-     * to the witnessed/reconstructed move shapes, is unambiguous. An unrecognized shape is silently
-     * ignored, same as before this ledger generalization.
+     * Parses one ledger line into whichever of the four accumulators it belongs to. A move-record
+     * line's own dest field can never equal SKIPPED_MARKER, OVERLAP_MARKER, or
+     * CORRUPT_SIDECAR_MARKER - the same reasoning RECONSTRUCTED_MARKER already relies on. So
+     * checking those markers first, before falling back to the witnessed/reconstructed move shapes,
+     * is unambiguous. An unrecognized shape is silently ignored, same as before this ledger
+     * generalization.
      *
      * @param line {@link String} one line of the move-record log
      * @param moves a {@link Map} of {@link Path} to {@link MoveRecord} accumulated move records
      * @param skipped a {@link Set} of {@link Path} accumulated sources the user gave up on
      * @param overlaps a {@link Map} of {@link Path} to {@link OverlapResolution} accumulated overlap resolutions
+     * @param corruptSidecars a {@link Map} of {@link String} to {@link CorruptSidecarResolution} accumulated corrupt-sidecar resolutions, keyed by montage id
      */
     private static void parseLedgerLine(String line, Map<Path, MoveRecord> moves, Set<Path> skipped,
-            Map<Path, OverlapResolution> overlaps) {
+            Map<Path, OverlapResolution> overlaps, Map<String, CorruptSidecarResolution> corruptSidecars) {
         String[] fields = line.split(RECORD_DELIMITER, -1);
         if (fields.length < 2) {
             return;
         }
-        Path source = Path.of(fields[0]);
         if (fields.length == 4 && SKIPPED_MARKER.equals(fields[1])) {
-            skipped.add(source);
+            skipped.add(Path.of(fields[0]));
         } else if (fields.length == 5 && OVERLAP_MARKER.equals(fields[1])) {
-            overlaps.put(source, OverlapResolution.valueOf(fields[2]));
+            overlaps.put(Path.of(fields[0]), OverlapResolution.valueOf(fields[2]));
+        } else if (fields.length == 5 && CORRUPT_SIDECAR_MARKER.equals(fields[1])) {
+            corruptSidecars.put(fields[0], CorruptSidecarResolution.valueOf(fields[2]));
         } else if (fields.length == 3) {
-            moves.put(source, new MoveRecord(Path.of(fields[1]), fields[2]));
+            moves.put(Path.of(fields[0]), new MoveRecord(Path.of(fields[1]), fields[2]));
         } else if (fields.length == 4 && RECONSTRUCTED_MARKER.equals(fields[3])) {
-            moves.put(source, new MoveRecord(Path.of(fields[1]), fields[2]));
+            moves.put(Path.of(fields[0]), new MoveRecord(Path.of(fields[1]), fields[2]));
         }
     }
 
@@ -1089,8 +1336,11 @@ public class ApplyEngine {
     // The move-record log's whole disposition ledger, parsed in one pass: moves covers a witnessed
     // or reconstructed record, exactly as before this ledger generalization. skipped is every source
     // skipMissingSource() recorded as given up on. overlaps is every file resolveOverlap() recorded a
-    // DecisionUnreviewableOverlap resolution for.
-    private record Ledger(Map<Path, MoveRecord> moves, Set<Path> skipped, Map<Path, OverlapResolution> overlaps) {}
+    // DecisionUnreviewableOverlap resolution for. corruptSidecars is every montage
+    // resolveCorruptSidecar() recorded a CorruptSidecar resolution for, keyed by montage id rather
+    // than a file path - the one disposition shape this ledger tracks per-montage, not per-file.
+    private record Ledger(Map<Path, MoveRecord> moves, Set<Path> skipped, Map<Path, OverlapResolution> overlaps,
+            Map<String, CorruptSidecarResolution> corruptSidecars) {}
 
     // classify()'s verdict for one decision. Done carries the MoveRecord that proved it, as a
     // non-null component. Unlike a single status-plus-nullable-record shape, a decision that

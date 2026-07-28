@@ -53,6 +53,75 @@ class PrepDirDoctorTest {
     }
 
     @Test
+    void aCompleteRunReportsCompleteEvenWhenIndexJsonIsCorrupt(@TempDir Path root) throws IOException {
+        // The completion check reads only decisions.json - a COMPLETE run needs nothing else, so a
+        // corrupt index.json past that point (e.g. clobbered after the run already finished) must
+        // never surface as a blocking problem.
+        Path prepDir = prepDir(root);
+        Files.writeString(prepDir.resolve("index.json"), "not valid json");
+        Files.writeString(prepDir.resolve("decisions.json"), "{}");
+
+        PrepDirHealth health = doctor(root).diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.COMPLETE);
+        assertThat(health.findings()).isEmpty();
+    }
+
+    @Test
+    void aCorruptIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        Files.writeString(prepDir.resolve("index.json"), "not valid json");
+
+        PrepDirHealth health = doctor(root).diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.BLOCKED);
+        assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
+        assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.AUTO);
+    }
+
+    @Test
+    void aMissingIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root); // index.json never written at all
+
+        PrepDirHealth health = doctor(root).diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.BLOCKED);
+        assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
+    }
+
+    @Test
+    void aCorruptSidecarForAMontageWithAShardReportsBlockedWithAChoiceRemedyFinding(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        // No sidecar written for montage-001 at all - stands in for a missing or corrupt one.
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        PrepDirHealth health = doctor(root).diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.BLOCKED);
+        assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
+        assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.CHOICE);
+    }
+
+    @Test
+    void aCorruptSidecarForAMontageWithNoShardYetReportsWaitingWithoutAFinding(@TempDir Path root) throws IOException {
+        Path prepDir = prepDir(root);
+        Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(culled, "x");
+        writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
+
+        PrepDirHealth health = doctor(root).diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.WAITING);
+        assertThat(health.findings()).isEmpty();
+    }
+
+    @Test
     void aMontageWithNoShardYetReportsWaitingWithoutAMissingShardFinding(@TempDir Path root) throws IOException {
         Path prepDir = prepDir(root);
         Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");

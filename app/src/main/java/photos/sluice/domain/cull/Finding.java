@@ -191,6 +191,49 @@ public sealed interface Finding {
     }
 
     /**
+     * The prep directory's own index.json cannot be parsed - missing, truncated, or not valid JSON.
+     * Always reports AUTO, the same reasoning {@link StrayShard} already relies on: index.json is a
+     * derived summary (scope, base path, montage entries, photo/montage counts), reconstructible
+     * from the surviving sidecars and the prep dir's own location - everything except the
+     * unreviewable list, which is genuinely lost. {@link
+     * photos.sluice.application.service.ApplyEngine#rebuildIndex} only actually rebuilds when every
+     * sidecar is present, parseable, and forms a contiguous montage-001..NNN run; a gap or an
+     * unparseable sidecar means the rebuild guard refuses, and this finding stays open with no
+     * further engine-level remedy short of the last-resort discard-and-redo.
+     */
+    record CorruptIndex(Path indexPath) implements Finding {
+        @Override
+        public String describe() {
+            return indexPath + ": corrupt or unreadable index.json";
+        }
+
+        @Override
+        public Remedy remedy() {
+            return Remedy.AUTO;
+        }
+    }
+
+    /**
+     * A montage's own sidecar (montage-NNN.json) cannot be parsed, while index.json itself is
+     * intact. CHOICE because the sidecar names that montage's only surviving evidence of what was
+     * actually in scope - the engine cannot decide unprompted whether to give up on that batch or
+     * trust the shard's own decisions at face value. {@link
+     * photos.sluice.application.service.ApplyEngine#resolveCorruptSidecar} records which the user
+     * picked.
+     */
+    record CorruptSidecar(String montage) implements Finding {
+        @Override
+        public String describe() {
+            return montage + ": sidecar unreadable or missing";
+        }
+
+        @Override
+        public Remedy remedy() {
+            return Remedy.CHOICE;
+        }
+    }
+
+    /**
      * A decision's or an unreviewable file's source is gone, and no move record hash-verifies
      * where it ended up. CHOICE because the user must confirm what happened. The file was
      * restored (re-diagnose), or it should be skipped (a ledger entry) - the engine cannot tell

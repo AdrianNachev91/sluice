@@ -90,6 +90,11 @@ healable basename are always fatal. ShardValidator itself does no I/O: it checks
 against the sidecar-derived set, never the filesystem. So `ApplyEngine` runs one more pass after a
 clean validation - classifying every decision for resume (see section 3) - before moving anything.
 
+The sidecar-derived in-scope set itself isn't read in one flat pass over every montage - a montage
+whose own sidecar can't be read (missing or corrupt) is handled per section 8, either silently
+skipped (not yet culled), reported as a `CorruptSidecar` finding, or resolved per the disposition
+ledger, before the healthy montages' srcs and shards ever reach `ShardValidator`.
+
 ## 3. Classifying a decision (or an unreviewable file) for resume
 
 ```mermaid
@@ -310,6 +315,71 @@ for that case. It files the stray file into the disaster drawer (never a true de
 culler can redo that montage from a clean slate. `Troubleshooter` attempts this AUTO repair for
 every `StrayShard` finding it sees, regardless of overall prep-dir state - see `troubleshooter.md`.
 
+## 8. Corrupt or missing index.json / sidecar
+
+Two of this app's own prior-output artifacts can themselves go missing or unreadable -
+`index.json` (the prep dir's own summary) and a montage's own sidecar (`montage-NNN.json`, its
+scope evidence). Neither is a culling mistake; both get an engine-level repair path instead of a
+bare crash.
+
+```mermaid
+flowchart TD
+    A["diagnose() / apply()<br/>reads index.json"] -- unreadable --> B(["Finding.CorruptIndex<br/>(AUTO)"])
+    B --> C["rebuildIndex():<br/>scan for montage-NNN.json<br/>sidecar files"]
+    C --> D{"contiguous 1..N,<br/>every one parseable?"}
+    D -- no --> E(["guard refuses -<br/>Optional.empty(),<br/>nothing written"])
+    D -- yes --> F["file the corrupt<br/>original into the<br/>disaster drawer, if present"]
+    F --> G(["write a fresh index.json:<br/>entries + photos derived<br/>from sidecars, basePath =<br/>deepest common parent,<br/>unreviewable = empty"])
+```
+
+`rebuildIndex()`'s guard only trusts a *contiguous* montage sequence where *every* sidecar in it
+also parses cleanly - a gap or an unparseable sidecar means the sidecars themselves are also
+damaged, and a silently-smaller rebuilt index would make perfectly healthy shards look stray. The
+unreviewable list is genuinely unrecoverable (no sidecar or shard ever names it), so a rebuilt
+index always reports it empty - a report-line loss, not a safety one, since an unreviewable file is
+never moved either way. `basePath` is reconstructed as the deepest common parent of every surviving
+sidecar's own `src` files - exact for a `Year` scope, an approximation for `OldestN` narrowed to one
+year, but the field is display-only and no engine logic ever consults it.
+
+A montage's own sidecar failing to read, with `index.json` itself intact, is a narrower problem -
+`Finding.CorruptSidecar` (CHOICE), handled per-montage inside `validate()`'s own sidecar/shard
+collection loop (`ApplyEngine.collectMontage()`):
+
+```mermaid
+flowchart TD
+    A["one montage"] --> B{"sidecar readable?"}
+    B -- yes --> C(["contributes its srcs<br/>to the in-scope pool,<br/>and its shard too,<br/>if it has one"])
+    B -- no --> D{"montage has<br/>a shard yet?"}
+    D -- no --> E(["silently skipped -<br/>not yet actionable,<br/>same as a still-culling<br/>montage generally"])
+    D -- yes --> F{"ledger resolution<br/>for this montage?"}
+    F -- none yet --> G(["Finding.CorruptSidecar<br/>(CHOICE)"])
+    F -- SET_ASIDE --> H(["montage dropped<br/>entirely - no shard,<br/>no srcs, its photos<br/>stay in Sorted"])
+    F -- APPLY_ANYWAY --> I(["shard's own decision<br/>files seeded into the<br/>in-scope pool - trusted<br/>at face value"])
+```
+
+`ApplyEngine.resolveCorruptSidecar()` records the user's choice as one more disposition-ledger
+entry (section 7's mechanism, keyed by montage id rather than a file path), and files the sidecar
+itself into the disaster drawer if it's still present - its scope evidence is spent either way once
+a choice is made. `SET_ASIDE` means a future cull of the same scope sees those photos fresh;
+`APPLY_ANYWAY` means every other safety net (files must exist, categories configured, cross-shard
+duplicate check, never-overwrite) still applies, only the membership cross-check is skipped.
+
+## 9. Last-resort discard
+
+`ApplyEngine.discard()` is the remedy for a prep dir mangled beyond every repair above - it gives up
+on the run entirely rather than resolving it. Every non-image file (shards, sidecars, `index.json`,
+the move-record log, and any disaster drawer, preserving its own relative layout) is moved
+wholesale into a global graveyard, `logs/disasters/<scope>-<timestamp>/` - the scope read straight
+off the prep dir's own folder name, never `index.json`, since the whole point of this remedy is
+that `index.json` (or anything else) might be unreadable. Only the montage/tile contact-sheet
+images are truly deleted - cents to re-render on a fresh cull of the same scope. Library media is
+never touched.
+
+This is the raw, ungated mechanism only - a caller should gate it on `PrepDirDoctor` reporting
+anything but `COMPLETE`. `Pipeline.discard()` (a later phase) adds that gate, plus
+watcher-disarming and `JobRunner` wiring, for its own two entry points: this last-resort remedy, and
+giving up on a still-waiting job.
+
 ## Scenarios
 
 | Scenario                                                                                                   | Outcome                                                                            |
@@ -338,6 +408,13 @@ every `StrayShard` finding it sees, regardless of overall prep-dir state - see `
 | An overlap resolved `TREAT_AS_UNREVIEWABLE`                                                                | The file moves to `Unreviewable/<yyyy>/<mm>/`; the decision is dropped             |
 | A stray shard, exactly one montage unclaimed, decisions match that montage's sidecar                       | `autoRepairStrayShard()` (AUTO) renames it into place with no user input           |
 | A stray shard that can't be assigned unambiguously                                                         | Left as a `StrayShard` finding; `setAsideStrayShard()` is the CHOICE fallback      |
+| index.json is corrupt or missing, every sidecar contiguous and parseable                                   | `rebuildIndex()` (AUTO) rebuilds it from the sidecars; original filed if present   |
+| index.json is corrupt or missing, a sidecar is also missing or unparseable                                 | Rebuild guard refuses - `CorruptIndex` finding stays open, no engine remedy left   |
+| A montage's sidecar is missing or corrupt, the montage has no shard yet                                    | Silently skipped - not yet actionable, same as any still-culling montage           |
+| A montage's sidecar is missing or corrupt, the montage already has a shard                                 | `CorruptSidecar` finding (CHOICE)                                                  |
+| A `CorruptSidecar` finding resolved `SET_ASIDE`                                                            | Montage dropped entirely; its photos stay in `Sorted` for a future cull            |
+| A `CorruptSidecar` finding resolved `APPLY_ANYWAY`                                                         | Montage's own decisions trusted at face value; membership cross-check skipped      |
+| A prep dir mangled beyond every repair above                                                               | `discard()` (last-resort CHOICE) graveyards its text artifacts, deletes its images |
 
 ## Related
 
