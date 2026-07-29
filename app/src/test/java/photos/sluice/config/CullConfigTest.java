@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import photos.sluice.application.port.out.CullCategory;
+import photos.sluice.domain.job.WatchMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -81,6 +82,15 @@ class CullConfigTest {
                 "sluice.cull.categories[1].name=receipts",
                 "sluice.cull.categories[1].description=Photos of till slips"
         ).run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    void externalAgentDefaultsToManualModeWhenAbsent() {
+        runner.run(context -> {
+            CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
+            assertThat(config.externalAgent().watchTimeout()).isNull();
+        });
     }
 
     @Test
