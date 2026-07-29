@@ -5,47 +5,41 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
-import photos.sluice.adapter.imaging.PrepIndexWriter;
-import photos.sluice.adapter.imaging.SidecarWriter;
-import photos.sluice.adapter.vision.JsonCullPrepStore;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
-import photos.sluice.application.port.out.CullCategory;
-import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MediaStore;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.ApplyReport;
-import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.Finding.MissingShard;
-import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.Finding.StrayShard;
-import photos.sluice.domain.cull.OverlapResolution;
-import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.cull.ReconcileReport;
-import photos.sluice.domain.cull.SidecarPhotoEntry;
-import photos.sluice.domain.cull.ValidationReport;
 import photos.sluice.domain.job.CancellationSignal;
-import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
+import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
+import static photos.sluice.application.service.CullPrepTestSupport.hashIndex;
+import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
+import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
+import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
+import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
+import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
+import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
+import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRecord;
+import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
+import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
 
+// Carrying decisions out against a real filesystem. It covers the moves, copies and secondary
+// writes each decision type produces, resuming a crashed run, cancellation, and the finalizers that
+// close a completed run. Deciding WHAT to carry out belongs to the planner, in ApplyPlannerTest.
 class ApplyEngineTest {
 
     @Test
@@ -386,6 +380,42 @@ class ApplyEngineTest {
                 new Sha256Hasher().hash(firstDest), new Sha256Hasher().hash(secondDest));
     }
 
+    // The move record is written BEFORE the move it describes, never after. This is the one crash
+    // timing that tells the two orderings apart. A crash landing between a completed move and the
+    // next statement leaves the source gone either way. Only a record already on disk can prove
+    // afterwards that the move genuinely happened. Recording after the move would leave that file
+    // permanently unresolvable instead.
+    @Test
+    void aCrashLandingImmediatelyAfterAMoveIsStillProvableAsDoneOnResume(@TempDir Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "blurry");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        // Carries the move out for real, then throws before apply() can run the reasons-note write
+        // that normally follows it.
+        final ApplyEngine crashingEngine = applyEngine(root, libraryRoot, hashIndex(root),
+                new FailingAfterMoves(0, CrashPoint.AFTER_THE_MOVE));
+
+        assertThatThrownBy(() -> crashingEngine.apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("simulated crash");
+
+        final Path dest = root.resolve("Review/junk/a.jpg");
+        assertThat(Files.exists(photo)).isFalse();
+        assertThat(Files.exists(dest)).isTrue();
+
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        // The resumed run proves the move from the record alone, since the source is long gone. It
+        // backfills only the reasons line the crash cost, and counts no work of its own.
+        assertThat(report.byCategory()).isEmpty();
+        assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt"))).containsExactly("a.jpg - blurry");
+    }
+
     @Test
     void aNearDupNoteBuiltOnResumeStillListsARejectAlreadyAppliedInAPriorRun(@TempDir Path root) throws IOException, ApplyException {
         Path libraryRoot = root.resolve("Library");
@@ -555,18 +585,17 @@ class ApplyEngineTest {
         assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
         assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isFalse();
         assertThat(Files.exists(prepDir.resolve("tile-001-01.jpg"))).isFalse();
-        // The sidecar shares montage-001's own filename prefix with its contact-sheet image, but it
-        // is JSON ground truth, not a deletable intermediate - it survives cleanup for the prep
-        // dir's whole life (see the idempotency test below for why that matters).
+        // The sidecar shares montage-001's own filename prefix with its contact-sheet image. It is
+        // JSON ground truth, not a deletable intermediate, so it survives cleanup for the prep dir's
+        // whole life. The idempotency test below shows why that matters.
         assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isTrue();
     }
 
-    // Proves apply() is idempotent by actually calling it twice on the same prep dir, unlike every
-    // other "resuming after a crash" test in this file, which simulates that state by hand-writing a
-    // move record instead. A real second call needs montage-001's own sidecar to still be readable,
-    // which cleanupIntermediates() only guarantees once it stops deleting sidecars alongside their
-    // contact-sheet images. Idempotency itself needs no special-case code here - it falls out of the
-    // same classify() machinery those hand-simulated tests already exercise.
+    // Proves apply() is idempotent by actually calling it twice on the same prep dir. Every other
+    // "resuming after a crash" test in this file simulates that state by hand-writing a move record
+    // instead. A real second call needs montage-001's own sidecar to still be readable, which is
+    // exactly what cleanupIntermediates() preserves. Idempotency itself needs no special-case code
+    // here. It falls out of the same classification machinery those hand-simulated tests exercise.
     @Test
     void aSecondApplyOnAnAlreadyCompleteRunIsANoOpThatMovesNothingAndDoesNotDuplicateSecondaryWrites(
             @TempDir Path root) throws IOException, ApplyException {
@@ -595,79 +624,6 @@ class ApplyEngineTest {
         assertThat(Files.readString(root.resolve("Review/junk/_reasons.txt")).lines().toList())
                 .containsExactly("a.jpg - blurry");
         assertThat(hashIndex.load()).containsOnlyKeys(new Sha256Hasher().hash(funnyDest));
-    }
-
-    @Test
-    void aMissingFileWithNoMoveRecordFailsLoudlyAndRefusesToGuess(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk, no move record either
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
-                .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("file not found, and its move could not be verified")
-                .hasMessageContaining(prepDir.resolve("move-records.log").toString())
-                .isInstanceOfSatisfying(ApplyException.class, e -> assertThat(e.findings())
-                        .containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log"))));
-    }
-
-    @Test
-    void aMissingNearDupChosenFileFailsLoudlyEvenThoughItsNeverAMoveBasedDecision(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk - a copy that never ran
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(reject, "blurry");
-        writeIndex(prepDir, 2, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
-        writeShard(prepDir, "montage-001",
-                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
-                nearDupRejectJson(reject, "lake-jun19", "blurred"));
-
-        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
-                .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("file not found, and its move could not be verified");
-        assertThat(Files.exists(reject)).isTrue();
-    }
-
-    @Test
-    void aMoveRecordWhoseDestinationIsMissingStillFailsLoudlyRatherThanTrustingTheRecordAlone(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
-        // The move record points at a destination that was never actually written - a record alone
-        // is never treated as proof; the destination has to hash-verify too.
-        writeMoveRecord(prepDir, photo, root.resolve("Review/junk/a.jpg"), "not-a-real-hash-value");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
-                .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("file not found, and its move could not be verified");
-    }
-
-    @Test
-    void aMoveRecordWhoseDestinationContentNoLongerMatchesStillFailsLoudly(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
-        Path dest = root.resolve("Review/junk/a.jpg");
-        writeFile(dest, "content changed after the record was written");
-        // A hash that deliberately doesn't match dest's actual content. Stands in for the
-        // destination having been altered (or a different file landing there) after the record
-        // for this decision was written.
-        writeMoveRecord(prepDir, photo, dest, "not-a-real-hash-value");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
-                .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("file not found, and its move could not be verified");
     }
 
     @Test
@@ -760,681 +716,31 @@ class ApplyEngineTest {
         assertThat(Files.exists(root.resolve("Unreviewable/2019/06/corrupt.heic"))).isTrue();
     }
 
-    @Test
-    void reconcileRebuildsAReconstructedRecordForAFileFoundAtItsExpectedDestination(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an already-moved file
-        Path dest = root.resolve("Review/junk/a.jpg");
-        writeFile(dest, "already-moved-content");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.reconstructed()).isEqualTo(1);
-        assertThat(report.stillPending()).isZero();
-        assertThat(report.missingSource()).isEmpty();
-        List<String> lines = Files.readAllLines(prepDir.resolve("move-records.log"));
-        assertThat(lines).hasSize(1);
-        assertThat(lines.getFirst()).contains(dest.toString()).contains("RECONSTRUCTED");
+    // Where the simulated crash lands relative to the move that triggers it. BEFORE_THE_MOVE leaves
+    // the source untouched, the timing a resumed run needs no recovery for at all. AFTER_THE_MOVE
+    // carries the move out first, which is the timing only a move record written beforehand can
+    // explain afterwards.
+    private enum CrashPoint {
+        BEFORE_THE_MOVE, AFTER_THE_MOVE
     }
 
-    @Test
-    void reconcileCountsAFileStillAtItsOriginalLocationAsStillPendingWithNoLogEntry(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.stillPending()).isEqualTo(1);
-        assertThat(report.reconstructed()).isZero();
-        // Nothing to reconstruct means no log line to append - the file is never even recreated.
-        assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
-    }
-
-    @Test
-    void reconcileReportsMissingSourceWhenNoDestinationCandidateExists(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination either
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log")));
-        assertThat(report.reconstructed()).isZero();
-    }
-
-    // Even when a copy already sits at the near-dup group's Duplicates/ destination, a NearDupChosen
-    // decision's missing source is never reconstructed from it - see the rationale below.
-    @Test
-    void reconcileNeverReconstructsANearDupChosenDecision(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - the photo itself is gone
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(reject, "blurry");
-        // Looks exactly like a successful near-dup-chosen copy, sitting right where one would land.
-        // reconcile() must never treat this as proof: a NearDupChosen's source is never removed by a
-        // real run, so a missing one can only mean the photo is genuinely gone.
-        Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
-        writeFile(dupDir.resolve("a.jpg"), "looks-like-a-copy");
-        writeIndex(prepDir, 2, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
-        writeShard(prepDir, "montage-001",
-                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
-                nearDupRejectJson(reject, "lake-jun19", "blurred"));
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.missingSource()).extracting(MissingSource::file).containsExactly(chosen);
-        assertThat(report.stillPending()).isEqualTo(1);
-        assertThat(report.reconstructed()).isZero();
-    }
-
-    @Test
-    void reconcileFilesAnExistingMoveRecordsLogIntoTheDisasterDrawerBeforeRebuilding(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeMoveRecord(prepDir, root.resolve("Sorted/Photos/2019/06/stale.jpg"),
-                root.resolve("Review/junk/stale.jpg"), "stale-hash");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        Path drawer = prepDir.resolve("disasters");
-        assertThat(Files.exists(drawer)).isTrue();
-        try (var entries = Files.list(drawer)) {
-            List<Path> filed = entries.toList();
-            assertThat(filed).hasSize(1);
-            assertThat(filed.getFirst().getFileName().toString()).contains("move-records-log");
-        }
-        // photo is still pending (source untouched), so the sweep has nothing to append - the filed-
-        // away log is not replaced by an empty one.
-        assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
-    }
-
-    @Test
-    void reconcileAssignsCollisionCandidatesInDecisionOrderWhenTwoDecisionsShareAnOriginalFileName(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        // Two different source photos, from different month folders, happen to share a leaf name -
-        // both never re-written to disk. They stand in for an earlier, log-lost run that moved both
-        // into Review/junk/, landing the second at its " (2)" collision suffix. Two claimants, two
-        // contiguous candidates - the counts-match case reconcile() reconstructs.
-        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/07/a.jpg");
-        Path firstDest = root.resolve("Review/junk/a.jpg");
-        Path secondDest = root.resolve("Review/junk/a (2).jpg");
-        writeFile(firstDest, "first-content");
-        writeFile(secondDest, "second-content");
-        writeIndex(prepDir, 2, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second));
-        writeShard(prepDir, "montage-001",
-                classificationJson(first, "junk", "blurry"),
-                classificationJson(second, "junk", "also blurry"));
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.reconstructed()).isEqualTo(2);
-        List<String> lines = Files.readAllLines(prepDir.resolve("move-records.log"));
-        assertThat(lines).hasSize(2);
-        assertThat(lines.get(0)).contains(first.toString()).contains(firstDest.toString());
-        assertThat(lines.get(1)).contains(second.toString()).contains(secondDest.toString());
-    }
-
-    @Test
-    void reconcileRefusesToReconstructWhenAnUnrelatedFileClaimsTheFirstCollisionSlot(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        // Only one decision ever moved here, but the plain-named slot is held by some stranger's
-        // file (e.g. a recycled camera filename from an unrelated run). Our own file landed on
-        // " (2)" instead. Two candidates exist for one claimant - a surplus. reconcile() cannot tell
-        // which candidate is genuinely ours, so it refuses both rather than hashing the wrong one
-        // into a trusted RECONSTRUCTED record.
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written
-        writeFile(root.resolve("Review/junk/a.jpg"), "unrelated-stranger-content");
-        writeFile(root.resolve("Review/junk/a (2).jpg"), "actually-ours");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log")));
-        assertThat(report.reconstructed()).isZero();
-        assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
-    }
-
-    @Test
-    void reconcileRefusesToReconstructWhenTwoClaimantsShareAnOriginalNameButOnlyOneCandidateExists(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        // Two decisions started with the same leaf name, but only the plain-named slot exists on
-        // disk - a deficit. reconcile() cannot tell which claimant it belongs to, so both are
-        // reported missing rather than guessed at.
-        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/07/a.jpg");
-        writeFile(root.resolve("Review/junk/a.jpg"), "only-one-candidate");
-        writeIndex(prepDir, 2, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second));
-        writeShard(prepDir, "montage-001",
-                classificationJson(first, "junk", "blurry"),
-                classificationJson(second, "junk", "also blurry"));
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.missingSource()).containsExactlyInAnyOrder(
-                new MissingSource(first, prepDir.resolve("move-records.log")),
-                new MissingSource(second, prepDir.resolve("move-records.log")));
-        assertThat(report.reconstructed()).isZero();
-        assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
-    }
-
-    @Test
-    void reconcileHandlesAnUnreviewableFileTheSameWayAsADecision(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
-        Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
-        writeFile(dest, "already-moved");
-        writeIndex(prepDir, 0, List.of(undecodable), List.of());
-
-        ReconcileReport report = applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        assertThat(report.reconstructed()).isEqualTo(1);
-        assertThat(Files.readAllLines(prepDir.resolve("move-records.log")).getFirst()).contains(dest.toString());
-    }
-
-    @Test
-    void reconcileThrowsWhenTheShardContractItselfDoesNotValidate(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "meme", "not a configured category"));
-
-        assertThatThrownBy(() -> applyEngine(root, libraryRoot).reconcile(prepDir))
-                .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("invalid action 'meme'");
-    }
-
-    @Test
-    void aReconciledRecordIsTrustedByALaterApplyRunAsIfItHadBeenWitnessed(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - a lost log after a real move
-        Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(pending, "y");
-        writeFile(root.resolve("Review/junk/a.jpg"), "already-moved");
-        writeIndex(prepDir, 2, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(alreadyMoved), sidecarEntry(pending));
-        writeShard(prepDir, "montage-001",
-                classificationJson(alreadyMoved, "junk", "blurry"),
-                classificationJson(pending, "junk", "also blurry"));
-        applyEngine(root, libraryRoot).reconcile(prepDir);
-
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
-
-        // The reconciled decision is recognized as already done, not reprocessed. Only the pending
-        // one counts as this run's own work. Its reasons line is still backfilled, though, since
-        // reconcile() never writes one itself.
-        assertThat(report.byCategory()).containsEntry("junk", 1);
-        assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt")))
-                .containsExactlyInAnyOrder("a.jpg - blurry", "b.jpg - also blurry");
-    }
-
-    @Test
-    void skipMissingSourceRecordsATerminalDispositionSoApplySucceedsWithoutMovingOrWritingAnything(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path gone = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no move record either
-        Path pending = root.resolve("Sorted/Photos/2019/06/pending.jpg");
-        writeFile(pending, "y");
-        writeIndex(prepDir, 2, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(gone), sidecarEntry(pending));
-        writeShard(prepDir, "montage-001",
-                classificationJson(gone, "junk", "blurry"),
-                classificationJson(pending, "scenery", "weak composition"));
-        ApplyEngine engine = applyEngine(root, libraryRoot);
-
-        engine.skipMissingSource(prepDir, gone, "confirmed permanently deleted by the user");
-        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
-
-        assertThat(report.byCategory()).containsEntry("scenery", 1).doesNotContainKey("junk");
-        assertThat(Files.exists(root.resolve("Review/junk"))).isFalse();
-        assertThat(Files.exists(root.resolve("Review/scenery/pending.jpg"))).isTrue();
-    }
-
-    @Test
-    void skipMissingSourceResolvesAMissingUnreviewableFileWithoutMovingAnything(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path gone = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move record either
-        writeIndex(prepDir, 0, List.of(gone), List.of());
-        ApplyEngine engine = applyEngine(root, libraryRoot);
-
-        engine.skipMissingSource(prepDir, gone, "confirmed permanently deleted by the user");
-        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
-
-        assertThat(report.unreviewable()).isEqualTo(1);
-        assertThat(Files.exists(root.resolve("Unreviewable"))).isFalse();
-    }
-
-    // classify() checks the disposition ledger's Skipped status before its NearDupChosen-shaped copy
-    // exception (design doc: apply-engine.md section 3/7) - a skip must win even for a decision type
-    // that would otherwise always be Unresolved once its source is missing.
-    @Test
-    void skipMissingSourceWinsOverANearDupChosenDecisionThatWouldOtherwiseAlwaysBeUnresolved(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - the photo itself is gone
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(reject, "blurry");
-        writeIndex(prepDir, 2, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
-        writeShard(prepDir, "montage-001",
-                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
-                nearDupRejectJson(reject, "lake-jun19", "blurred"));
-        ApplyEngine engine = applyEngine(root, libraryRoot);
-
-        engine.skipMissingSource(prepDir, chosen, "confirmed the chosen photo itself is gone");
-        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
-
-        assertThat(report.nearDupGroups()).isZero();
-        assertThat(Files.exists(reject)).isFalse();
-        Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
-        assertThat(Files.exists(dupDir.resolve("a.jpg"))).isFalse();
-        assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
-    }
-
-    @Test
-    void resolveOverlapTrustDecisionAppliesTheDecisionAndDropsTheFileFromUnreviewable(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        ApplyEngine engine = applyEngine(root, libraryRoot);
-
-        engine.resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, "the decision is correct");
-        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
-
-        assertThat(report.byCategory()).containsEntry("junk", 1);
-        assertThat(report.unreviewable()).isZero();
-        assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
-        assertThat(Files.exists(root.resolve("Unreviewable"))).isFalse();
-    }
-
-    @Test
-    void resolveOverlapTreatAsUnreviewableAppliesTheFileAsUnreviewableAndDropsTheDecision(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        ApplyEngine engine = applyEngine(root, libraryRoot);
-
-        engine.resolveOverlap(prepDir, photo, OverlapResolution.TREAT_AS_UNREVIEWABLE, "the file wasn't actually reviewed");
-        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
-
-        assertThat(report.byCategory()).doesNotContainKey("junk");
-        assertThat(report.unreviewable()).isEqualTo(1);
-        assertThat(Files.exists(root.resolve("Review/junk"))).isFalse();
-        assertThat(Files.exists(root.resolve("Unreviewable/2019/06/a.jpg"))).isTrue();
-    }
-
-    @Test
-    void autoRepairStrayShardReturnsEmptyWhenMoreThanOneMontageIsUnclaimed(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeFile(first, "x");
-        writeFile(second, "y");
-        // Both montage-001 and montage-002 lack a shard - the stray below cannot be assigned
-        // unambiguously to either one.
-        writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(first));
-        writeSidecar(prepDir, "montage-002", sidecarEntry(second));
-        writeShard(prepDir, "montage-003", classificationJson(first, "junk", "blurry"));
-
-        Optional<String> repaired = applyEngine(root, libraryRoot)
-                .autoRepairStrayShard(prepDir, new StrayShard("decisions-003.json"));
-
-        assertThat(repaired).isEmpty();
-        assertThat(Files.exists(prepDir.resolve("decisions-003.json"))).isTrue();
-    }
-
-    @Test
-    void setAsideStrayShardFilesItIntoTheDisasterDrawerWithoutDeletingIt(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        writeIndex(prepDir, 0, List.of());
-        writeShard(prepDir, "montage-001", classificationJson(root.resolve("Sorted/Photos/2019/06/a.jpg"), "junk", "blurry"));
-
-        Path filed = applyEngine(root, libraryRoot).setAsideStrayShard(prepDir, new StrayShard("decisions-001.json"));
-
-        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isFalse();
-        assertThat(Files.exists(filed)).isTrue();
-        assertThat(filed.getFileName().toString()).contains("stray-shard");
-    }
-
-    @Test
-    void rebuildIndexRebuildsFromContiguousSidecarsAndFilesTheCorruptOriginal(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
-        writeSidecar(prepDir, "montage-001", sidecarEntry(first));
-        writeSidecar(prepDir, "montage-002", sidecarEntry(second));
-        Files.writeString(prepDir.resolve("index.json"), "not valid json");
-
-        Optional<PrepDir> rebuilt = applyEngine(root, root.resolve("Library")).rebuildIndex(prepDir);
-
-        assertThat(rebuilt).isPresent();
-        assertThat(rebuilt.get().entries()).containsExactly("montage-001", "montage-002");
-        assertThat(rebuilt.get().photos()).isEqualTo(2);
-        assertThat(rebuilt.get().unreviewable()).isEmpty();
-        assertThat(rebuilt.get().scope()).isEqualTo("scope1");
-        assertThat(rebuilt.get().basePath()).isEqualTo(root.resolve("Sorted/Photos/2019/06"));
-        // Persisted, not just returned - a later read sees the rebuilt content.
-        assertThat(readIndex(prepDir).entries()).containsExactly("montage-001", "montage-002");
-        Path drawer = prepDir.resolve("disasters");
-        try (var entries = Files.list(drawer)) {
-            assertThat(entries.toList().getFirst().getFileName().toString()).contains("index-json");
-        }
-    }
-
-    @Test
-    void rebuildIndexRefusesWhenTheSidecarSequenceHasAGap(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        writeSidecar(prepDir, "montage-001", sidecarEntry(root.resolve("Sorted/Photos/2019/06/a.jpg")));
-        writeSidecar(prepDir, "montage-003", sidecarEntry(root.resolve("Sorted/Photos/2019/06/c.jpg"))); // montage-002 missing
-
-        Optional<PrepDir> rebuilt = applyEngine(root, root.resolve("Library")).rebuildIndex(prepDir);
-
-        assertThat(rebuilt).isEmpty();
-    }
-
-    @Test
-    void rebuildIndexRefusesWhenAnyContiguousSidecarIsUnparseable(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        writeSidecar(prepDir, "montage-001", sidecarEntry(root.resolve("Sorted/Photos/2019/06/a.jpg")));
-        Files.writeString(prepDir.resolve("montage-002.json"), "not valid json");
-
-        Optional<PrepDir> rebuilt = applyEngine(root, root.resolve("Library")).rebuildIndex(prepDir);
-
-        assertThat(rebuilt).isEmpty();
-    }
-
-    @Test
-    void validateReportsCorruptSidecarForAMontageWithAShardButNoReadableSidecar(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        // No sidecar written for montage-001 at all - stands in for a missing or corrupt one; both
-        // fail the same way (readSidecar() throws UncheckedIOException either way).
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-
-        ValidationReport report = applyEngine(root, root.resolve("Library"))
-                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true));
-
-        assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
-        assertThat(report.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.CHOICE);
-        assertThat(report.decisions()).isEmpty();
-    }
-
-    @Test
-    void validateSilentlySkipsACorruptSidecarForAMontageWithNoShardYet(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(culled, "x");
-        writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
-        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
-        // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
-
-        ValidationReport report = applyEngine(root, root.resolve("Library"))
-                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true));
-
-        assertThat(report.findings()).isEmpty();
-    }
-
-    @Test
-    void resolveCorruptSidecarSetAsideExcludesTheMontageEntirelyLeavingItsPhotoInSorted(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        ApplyEngine engine = applyEngine(root, libraryRoot);
-
-        engine.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "redo this batch later");
-        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
-
-        assertThat(report.byCategory()).isEmpty();
-        assertThat(Files.exists(photo)).isTrue();
-    }
-
-    @Test
-    void resolveCorruptSidecarApplyAnywayTrustsTheShardsOwnDecisionsWithoutAMembershipCheck(@TempDir Path root)
-            throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        // No sidecar ever backs this decision's file - a healthy run would report it FileOutOfScope.
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        ApplyEngine engine = applyEngine(root, libraryRoot);
-
-        engine.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY, "trust the culler's own shard");
-        ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
-
-        assertThat(report.byCategory()).containsEntry("junk", 1);
-        assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
-    }
-
-    @Test
-    void resolveCorruptSidecarFilesTheSidecarFileIntoTheDisasterDrawerWhenStillPresent(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        Files.writeString(prepDir.resolve("montage-001.json"), "not valid json"); // present, but corrupt
-
-        applyEngine(root, root.resolve("Library"))
-                .resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "give up on this batch");
-
-        assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isFalse();
-        Path drawer = prepDir.resolve("disasters");
-        try (var entries = Files.list(drawer)) {
-            List<Path> filed = entries.toList();
-            assertThat(filed).hasSize(1);
-            assertThat(filed.getFirst().getFileName().toString()).contains("corrupt-sidecar-montage-001");
-        }
-    }
-
-    @Test
-    void discardMovesTextArtifactsToAGlobalGraveyardAndDeletesOnlyMontageImages(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        writeFile(prepDir.resolve("montage-001.jpg"), "fake contact sheet");
-        writeFile(prepDir.resolve("tile-001-01.jpg"), "fake tile");
-        Files.createDirectories(prepDir.resolve("disasters"));
-        Files.writeString(prepDir.resolve("disasters/2026-01-01_00-00-00-something.txt"), "old drawer entry");
-
-        DiscardReport report = applyEngine(root, root.resolve("Library")).discard(prepDir);
-        Path graveyard = report.graveyard();
-
-        assertThat(graveyard.getParent()).isEqualTo(root.resolve("logs/disasters"));
-        assertThat(graveyard.getFileName().toString()).startsWith("scope1-");
-        assertThat(Files.exists(graveyard.resolve("index.json"))).isTrue();
-        assertThat(Files.exists(graveyard.resolve("montage-001.json"))).isTrue();
-        assertThat(Files.exists(graveyard.resolve("decisions-001.json"))).isTrue();
-        assertThat(Files.exists(graveyard.resolve("disasters/2026-01-01_00-00-00-something.txt"))).isTrue();
-        assertThat(Files.exists(graveyard.resolve("montage-001.jpg"))).isFalse();
-        assertThat(Files.exists(graveyard.resolve("tile-001-01.jpg"))).isFalse();
-        assertThat(Files.exists(prepDir)).isFalse();
-        assertThat(report.shardsSetAside()).isEqualTo(1);
-    }
-
-    private static PrepDir readIndex(Path prepDir) {
-        return new JsonCullPrepStore().readIndex(prepDir);
-    }
-
-    private static Path prepDir(Path root) throws IOException {
-        Path dir = root.resolve("logs/cull-prep/scope1");
-        Files.createDirectories(dir);
-        return dir;
-    }
-
-    private static void writeIndex(Path prepDir, int photos, List<String> entries) {
-        writeIndex(prepDir, photos, List.of(), entries);
-    }
-
-    private static void writeIndex(Path prepDir, int photos, List<Path> unreviewable, List<String> entries) {
-        new PrepIndexWriter().write(prepDir.resolve("index.json"),
-                new PrepDir("2019-06", prepDir.resolve("base"), photos, unreviewable, entries.size(), prepDir, entries));
-    }
-
-    private static void writeSidecar(Path prepDir, String montage, SidecarPhotoEntry... photos) {
-        new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"), List.of(photos));
-    }
-
-    private static SidecarPhotoEntry sidecarEntry(Path src) {
-        return new SidecarPhotoEntry(src, src.getFileName().toString(), Instant.parse("2019-06-15T10:00:00Z"), false);
-    }
-
-    // Matches ApplyEngine's own RECORD_DELIMITER exactly - a control character absent from any real
-    // path, so it can be split back apart with no escaping.
-    private static final String RECORD_DELIMITER = "\u001F";
-
-    // Simulates a move-record line an earlier, crashed run would have written before its move.
-    // Pairs with a hand-placed destination file standing in for that move having actually
-    // happened.
-    private static void writeMoveRecord(Path prepDir, Path source, Path dest, String hash) throws IOException {
-        Files.writeString(prepDir.resolve("move-records.log"),
-                source + RECORD_DELIMITER + dest + RECORD_DELIMITER + hash + System.lineSeparator(),
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-    }
-
-    private static void writeShard(Path prepDir, String montage, String... decisionsJson) throws IOException {
-        String shardName = montage.replaceFirst("^montage-", "decisions-") + ".json";
-        Files.writeString(prepDir.resolve(shardName),
-                "{ \"montage\": \"%s\", \"decisions\": [ %s ] }".formatted(montage, String.join(", ", decisionsJson)));
-    }
-
-    private static String classificationJson(Path file, String category, String reason) {
-        return "{ \"file\": \"%s\", \"action\": \"%s\", \"reason\": \"%s\" }".formatted(jsonEscaped(file), category, reason);
-    }
-
-    private static String nearDupChosenJson(Path file, String group, String chosenReason) {
-        return "{ \"file\": \"%s\", \"action\": \"near-dup-chosen\", \"group\": \"%s\", \"chosen_reason\": \"%s\" }"
-                .formatted(jsonEscaped(file), group, chosenReason);
-    }
-
-    private static String nearDupRejectJson(Path file, String group, String reason) {
-        return "{ \"file\": \"%s\", \"action\": \"near-dup-reject\", \"group\": \"%s\", \"reason\": \"%s\" }"
-                .formatted(jsonEscaped(file), group, reason);
-    }
-
-    private static String jsonEscaped(Path path) {
-        return path.toString().replace("\\", "\\\\");
-    }
-
-    private static void writeFile(Path file, String content) throws IOException {
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, content);
-    }
-
-    private static ApplyEngine applyEngine(Path repoRoot, Path libraryRoot) {
-        return applyEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
-    }
-
-    private static ApplyEngine applyEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex) {
-        return applyEngine(repoRoot, libraryRoot, hashIndex, new NioMediaStore());
-    }
-
-    private static ApplyEngine applyEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex, MediaStore mediaStore) {
-        return new ApplyEngine(pathsConfig(repoRoot, libraryRoot), mediaStore, new JsonCullPrepStore(), fixedSettings(),
-                new Sha256Hasher(), hashIndex, new DisasterDrawer(mediaStore));
-    }
-
-    private static PathsConfig pathsConfig(Path repoRoot, Path libraryRoot) {
-        return new PathsConfig(
-                new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
-    }
-
-    private static CullSettings fixedSettings() {
-        return new FixedSettings("external-agent", List.of(
-                new CullCategory("junk", "junk description"),
-                new CullCategory("scenery", "scenery description"),
-                new CullCategory("food", "food description"),
-                new CullCategory("funny", "funny description")));
-    }
-
-    private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
-
-        @Override
-        public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null, null, null);
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL, null);
-        }
-    }
-
-    // Wraps the real NioMediaStore but throws after a fixed number of successful moveTo() calls -
-    // recordThenMove()'s own move step. That's where a real process crash would land partway through
-    // a single apply() invocation. Deterministically simulates that crash timing. No amount of
-    // pre-seeded state can reproduce it: pre-seeding only proves the engine tolerates ALREADY-crashed
-    // state, not that a crash mid-run leaves the right things durable.
+    // Wraps the real NioMediaStore but throws around a chosen moveTo() call - recordThenMove()'s own
+    // move step. That's where a real process crash would land partway through a single apply()
+    // invocation. Deterministically simulates that crash timing. No amount of pre-seeded state can
+    // reproduce it: pre-seeding only proves the engine tolerates ALREADY-crashed state, not that a
+    // crash mid-run leaves the right things durable.
     private static final class FailingAfterMoves implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
+        private final CrashPoint crashPoint;
         private int movesUntilFailure;
 
         FailingAfterMoves(int movesUntilFailure) {
+            this(movesUntilFailure, CrashPoint.BEFORE_THE_MOVE);
+        }
+
+        FailingAfterMoves(int movesUntilFailure, CrashPoint crashPoint) {
             this.movesUntilFailure = movesUntilFailure;
+            this.crashPoint = crashPoint;
         }
 
         @Override
@@ -1450,6 +756,9 @@ class ApplyEngineTest {
         @Override
         public Path moveTo(Path source, Path destination) {
             if (movesUntilFailure <= 0) {
+                if (crashPoint == CrashPoint.AFTER_THE_MOVE) {
+                    delegate.moveTo(source, destination);
+                }
                 throw new RuntimeException("simulated crash");
             }
             movesUntilFailure--;

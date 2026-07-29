@@ -20,16 +20,16 @@ import java.util.List;
  * shards. Until the index is readable, nothing else can even be diagnosed. Until the log is
  * rebuilt, an already-moved file can still look like a stray shard's own missing match.
  *
- * <p>A {@link Finding.CorruptIndex} finding gets {@link ApplyEngine#rebuildIndex} attempted for it
- * first, unprompted. A failed attempt is a pure no-op - nothing is written unless every guard
+ * <p>A {@link Finding.CorruptIndex} finding gets {@link PrepDirRemedies#rebuildIndex} attempted for
+ * it first, unprompted. A failed attempt is a pure no-op - nothing is written unless every guard
  * passes. Everything downstream needs a readable index to even diagnose. A
  * {@link Finding.MissingSource} finding is currently the only signal available that the move-record
  * log itself might be lost or unreadable. {@link PrepDirDoctor} only ever reports one once the shard
- * contract is already clean. {@link ApplyEngine#reconcile} is exactly the offline repair for that
- * situation. Reconcile never runs unprompted otherwise: it files any existing log away wholesale,
- * which would needlessly demote an already-trustworthy log's witnessed provenance to reconstructed
- * for no benefit. A {@link Finding.StrayShard} finding gets
- * {@link ApplyEngine#autoRepairStrayShard} attempted for it, unprompted. That repair is provably
+ * contract is already clean. {@link ReconcileEngine#reconcile} is exactly the offline repair for
+ * that situation. Reconcile never runs unprompted otherwise: it files any existing log away
+ * wholesale, which would needlessly demote an already-trustworthy log's witnessed provenance to
+ * reconstructed for no benefit. A {@link Finding.StrayShard} finding gets
+ * {@link PrepDirRemedies#autoRepairStrayShard} attempted for it, unprompted. That repair is provably
  * safe when it runs at all - it either renames the one unambiguous match or does nothing.
  * Every disposition-ledger CHOICE remedy - missing-source skip, overlap resolution, corrupt-sidecar
  * resolution, stray-shard set-aside - needs a real user choice. So none of them run here; they
@@ -44,19 +44,23 @@ public class Troubleshooter {
     private static final String REPORT_WHAT = "troubleshoot-report";
 
     private final PrepDirDoctor prepDirDoctor;
-    private final ApplyEngine applyEngine;
+    private final ReconcileEngine reconcileEngine;
+    private final PrepDirRemedies prepDirRemedies;
     private final DisasterDrawer disasterDrawer;
 
     /**
      * Creates a troubleshooter wired to its collaborators.
      *
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses a prep dir before and after repair
-     * @param applyEngine {@link ApplyEngine} runs the offline move-log reconcile and stray-shard repair
+     * @param reconcileEngine {@link ReconcileEngine} runs the offline move-log reconcile
+     * @param prepDirRemedies {@link PrepDirRemedies} runs the index rebuild and stray-shard repair
      * @param disasterDrawer {@link DisasterDrawer} files the rendered report for support hand-off
      */
-    public Troubleshooter(PrepDirDoctor prepDirDoctor, ApplyEngine applyEngine, DisasterDrawer disasterDrawer) {
+    public Troubleshooter(PrepDirDoctor prepDirDoctor, ReconcileEngine reconcileEngine,
+            PrepDirRemedies prepDirRemedies, DisasterDrawer disasterDrawer) {
         this.prepDirDoctor = prepDirDoctor;
-        this.applyEngine = applyEngine;
+        this.reconcileEngine = reconcileEngine;
+        this.prepDirRemedies = prepDirRemedies;
         this.disasterDrawer = disasterDrawer;
     }
 
@@ -77,12 +81,12 @@ public class Troubleshooter {
     public TroubleshootReport troubleshoot(Path prepDir) throws ApplyException {
         final PrepDirHealth before = prepDirDoctor.diagnose(prepDir);
         final boolean indexRebuilt = before.findings().stream().anyMatch(Finding.CorruptIndex.class::isInstance)
-                && applyEngine.rebuildIndex(prepDir).isPresent();
+                && prepDirRemedies.rebuildIndex(prepDir).isPresent();
         final PrepDirHealth afterIndexRebuild = indexRebuilt ? prepDirDoctor.diagnose(prepDir) : before;
 
         final boolean needsReconcile = afterIndexRebuild.state() == State.BLOCKED
                 && afterIndexRebuild.findings().stream().anyMatch(Finding.MissingSource.class::isInstance);
-        final ReconcileReport reconcile = needsReconcile ? applyEngine.reconcile(prepDir) : null;
+        final ReconcileReport reconcile = needsReconcile ? reconcileEngine.reconcile(prepDir) : null;
         final PrepDirHealth afterReconcile = needsReconcile ? prepDirDoctor.diagnose(prepDir) : afterIndexRebuild;
 
         final List<String> strayShardsRepaired = repairStrayShards(prepDir, afterReconcile);
@@ -112,7 +116,7 @@ public class Troubleshooter {
         diagnosis.findings().stream()
                 .filter(Finding.StrayShard.class::isInstance)
                 .map(Finding.StrayShard.class::cast)
-                .forEach(stray -> applyEngine.autoRepairStrayShard(prepDir, stray)
+                .forEach(stray -> prepDirRemedies.autoRepairStrayShard(prepDir, stray)
                         .ifPresent(montage -> repaired.add(stray.shardFile() + " -> " + montage)));
         return repaired;
     }

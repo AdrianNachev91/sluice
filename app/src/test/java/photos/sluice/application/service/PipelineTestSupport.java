@@ -58,9 +58,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.function.BooleanSupplier;
 
 // The real-adapter wiring factory and every fake shared by PipelineTest/CullEngineTest/
-// CurateEngineTest. Each of those three files brings in what it needs via explicit
-// "import static photos.sluice.application.service.PipelineTestSupport.<member>;" lines, so their
-// own test bodies read exactly as they did before the split.
+// CurateEngineTest. Each of those three files pulls in what it needs through explicit static
+// imports, so a test body reads as though the helper were declared locally.
 final class PipelineTestSupport {
 
     private PipelineTestSupport() {
@@ -167,22 +166,28 @@ final class PipelineTestSupport {
         var cullPrepPort = new JsonCullPrepStore();
         var cullDispatcher = new CullDispatcher(cullers, cullSettings);
         var disasterDrawer = new DisasterDrawer(mediaStore);
-        var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, cullSettings, sha256Port, hashIndex,
-                disasterDrawer);
-        var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyEngine);
-        var troubleshooter = new Troubleshooter(prepDirDoctor, applyEngine, disasterDrawer);
+        var moveLedger = new MoveLedger(mediaStore);
+        var cullDestinations = new CullDestinations(pathsConfig);
+        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, cullSettings, sha256Port, moveLedger);
+        var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,
+                moveLedger, applyPlanner);
+        var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
+                cullDestinations, moveLedger, applyPlanner);
+        var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, disasterDrawer, moveLedger);
+        var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyPlanner);
+        var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
         // given photo lands in via mtime ordering alone, without depending on batch-size math.
         var montageConfig = new MontageConfig(64, 1);
 
         if (pollInterval == null) {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
-                    cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress,
-                    disasterDrawer, troubleshooter, prepDirDoctor);
+                    prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig,
+                    new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
-                cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(), progress,
-                disasterDrawer, troubleshooter, prepDirDoctor, pollInterval);
+                prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(),
+                progress, disasterDrawer, troubleshooter, prepDirDoctor, pollInterval);
     }
 
     static CullSettings defaultCullSettings() {

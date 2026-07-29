@@ -3,7 +3,7 @@ package photos.sluice.domain.cull;
 import java.nio.file.Path;
 
 /**
- * {@code ApplyEngine.discard()}'s outcome for one prep dir. graveyard is where every non-image
+ * {@code PrepDirRemedies.discard()}'s outcome for one prep dir. graveyard is where every non-image
  * file - shards, sidecars, index.json, the move-record log, any disaster drawer - was filed for
  * its own 30-day retention window. shardsSetAside counts how many montage decision shards were
  * among them, so a caller can tell the user how many already-paid vision-model calls this discard

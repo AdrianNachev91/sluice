@@ -34,7 +34,7 @@ flowchart TD
 
 `resume(prepDir, allowPartial)` re-enters at the dispatch step directly -
 `cullPrepPort.readIndex()` re-reads the existing `PrepDir` from `index.json` instead of
-`MontageRenderer` regenerating it, so no montage is ever rebuilt or re-rendered by a resume.
+`MontageRenderer` regenerating it, so no montage is ever rebuilt or re-rendered by a résumé.
 `waitingJobs()` is a plain, un-jobbed read: it scans `logs/cull-prep/*/` for a prep dir with
 `index.json` but no merged `decisions.json` yet (see `WaitingCullJob`'s own doc for why this is
 derived live instead of a persisted list), tolerating a transiently-unreadable `index.json` (a
@@ -43,10 +43,10 @@ whole scan.
 
 `CullEngine` computes each `WaitingCullJob`'s `ShardTally` (`present`/`valid`/`total`) via
 `ShardTallyCalculator`, one montage at a time via `ShardValidator`, rather than reusing
-`ApplyEngine`'s whole-batch `validate()`. A cross-shard problem (a near-dup group id reused across
+`ApplyPlanner`'s whole-batch `validate()`. A cross-shard problem (a near-dup group id reused across
 two montages) therefore doesn't show up in the tally - an accepted simplification for a progress
-number. `ApplyEngine.apply()`'s own full-batch validation is still the actual gate before anything
-moves.
+number. `ApplyEngine.apply()`'s own full-batch validation (via `ApplyPlanner.validate()`) is still
+the actual gate before anything moves.
 
 | CullEngine method               | What runs                                                           | Phase label(s)                                                      |
 |---------------------------------|---------------------------------------------------------------------|---------------------------------------------------------------------|
@@ -154,7 +154,7 @@ watching every job armed before the restart.
 ### Scenarios
 
 | Scenario                                                         | Outcome                                                                                           |
-|------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+|------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
 | Watch mode, a valid shard for every montage eventually appears   | The next poll tick's tally check passes, `resume()` is submitted automatically, `Applied` follows |
 | Watch mode, `JobRunner` is busy with an unrelated job when ready | `attemptConsume` returns false; the watcher keeps polling and retries on the next tick            |
 | Watch mode, `watchTimeout` elapses with no fully-valid tally     | Watcher stops on its own; every dropped shard is untouched; a manual `resume()` still works       |
@@ -171,7 +171,7 @@ watching every job armed before the restart.
   dedicated design doc yet - see the source files directly.
 - `ProgressPort` (the out-port `PhaseRunner` reports through): see the source file directly; its
   own doc comment is the source of the "always bracket a phase" contract this page relies on.
-- `ApplyEngine`: `apply-engine.md` in this same design folder, section 5 for its own cancellation
+- `ApplyEngine`: `apply-engine.md` in this same design folder, section 3 for its own cancellation
   behavior.
 - `CullMontageRenderer`: `cull-montage-renderer.md` in the `adapter/imaging` design folder, its own
   Cancellation section for the render/batch checks `MontageRenderer.build()` does internally.

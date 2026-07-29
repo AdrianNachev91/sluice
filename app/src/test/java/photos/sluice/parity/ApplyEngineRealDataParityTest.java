@@ -15,7 +15,9 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.service.ApplyEngine;
-import photos.sluice.application.service.DisasterDrawer;
+import photos.sluice.application.service.ApplyPlanner;
+import photos.sluice.application.service.CullDestinations;
+import photos.sluice.application.service.MoveLedger;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.PrepDir;
@@ -44,7 +46,7 @@ import static org.assertj.core.api.Assertions.fail;
 // CI, and requires real cull-prep output on disk that this test only ever copies from, never
 // writes to.
 //
-// Unlike the sort/commit/rescue parity gates, a plain directory copy isn't enough here: every path
+// Unlike the sort/commit/rescue parity gates, a plain directory copy isn't enough here. Every path
 // a shard, sidecar, or index.json holds is absolute, rooted at the real machine's repo root. This
 // test rewrites that literal root prefix, wherever it appears in the copied JSON text, to each temp
 // root's own path. It also copies the referenced Sorted subtree (index.json's basePath) to the
@@ -111,8 +113,8 @@ class ApplyEngineRealDataParityTest {
     // script itself, since scenery/food already route flatly to Review/Scenery/ and Review/Food/.
     // ApplyEngine deliberately normalizes this: every category, junk included, routes to
     // Review/<category>/ (apply-engine.md's locked design decision #2). This filters out ONLY that
-    // specific, known, paired divergence - an entry present as Review/<yyyy-MM>/<name> on the
-    // reference side and as Review/junk/<name> on the Java side, for the exact same <name>.
+    // specific, known, paired divergence. The pair is an entry present as Review/<yyyy-MM>/<name> on
+    // the reference side and as Review/junk/<name> on the Java side, for the exact same <name>.
     // Anything else (a different category, a missing file, an extra file) is a real divergence.
     private static final Pattern REVIEW_DATED_LEAF = Pattern.compile("^\\d{4}-\\d{2}/(.+)$");
 
@@ -131,11 +133,11 @@ class ApplyEngineRealDataParityTest {
         assertThat(unexplainedB).as("Review: unexplained entries only in Java").isEmpty();
     }
 
-    // Unreviewable routing has no PS reference to diff against - checked directly instead: every
-    // unreviewable path index.json recorded (rewritten into rootB's own coordinate space) has moved
-    // out of Sorted and landed under Unreviewable/<yyyy>/<mm>/. The year/month derivation mirrors
-    // ApplyEngine.yearMonthOf() exactly, UNDATED fallback included, so this stays a true assertion
-    // against the engine's real behavior rather than an assumption that could silently diverge from it.
+    // Unreviewable routing has no PS reference to diff against, so it is checked directly instead.
+    // Every unreviewable path index.json recorded (rewritten into rootB's own coordinate space) has
+    // moved out of Sorted and landed under Unreviewable/<yyyy>/<mm>/. The year/month derivation
+    // mirrors CullDestinations.yearMonthOf() exactly, UNDATED fallback included. That keeps this a
+    // true assertion against the engine's real behavior, not an assumption that could diverge.
     private static void assertUnreviewableFilesRelocated(PrepDir sourcePrepDir, Path sourceRepoRoot, Path rootB) {
         for (Path sourceFile : sourcePrepDir.unreviewable()) {
             Path original = rootB.resolve(sourceRepoRoot.relativize(sourceFile));
@@ -149,7 +151,7 @@ class ApplyEngineRealDataParityTest {
         }
     }
 
-    // Mirrors ApplyEngine.yearMonthOf()'s own parent/grandparent parsing and UNDATED fallback, so
+    // Mirrors CullDestinations.yearMonthOf()'s parent/grandparent parsing and UNDATED fallback, so
     // this test's expectation can never diverge from what the engine itself actually does.
     private static String[] yearMonthOf(Path file) {
         Path monthDir = file.getParent();
@@ -199,8 +201,12 @@ class ApplyEngineRealDataParityTest {
                 new PathsProperties(root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
         var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
         var mediaStore = new NioMediaStore();
-        return new ApplyEngine(pathsConfig, mediaStore, new JsonCullPrepStore(), fixedSettings(),
-                new Sha256Hasher(), hashIndex, new DisasterDrawer(mediaStore));
+        var cullPrepPort = new JsonCullPrepStore();
+        var sha256Port = new Sha256Hasher();
+        var moveLedger = new MoveLedger(mediaStore);
+        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), sha256Port, moveLedger);
+        return new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex,
+                new CullDestinations(pathsConfig), moveLedger, applyPlanner);
     }
 
     private static CullSettings fixedSettings() {
@@ -228,7 +234,7 @@ class ApplyEngineRealDataParityTest {
     // into dest, rewriting every occurrence of fromRoot's literal (JSON-escaped) path prefix to
     // toRoot's. This is the same relocation copyRecursively below applies to the referenced Sorted
     // files. Montage/tile images and any prior decisions.json/move-records.log are deliberately not
-    // copied: this test needs a completed-but-not-yet-applied prep dir, and carrying over a stale
+    // copied. This test needs a completed-but-not-yet-applied prep dir, and carrying over a stale
     // merge record from a previous local run would corrupt the comparison.
     private static void copyPrepDirJson(Path source, Path dest, Path fromRoot, Path toRoot) throws IOException {
         Files.createDirectories(dest);

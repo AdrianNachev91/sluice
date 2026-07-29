@@ -3,9 +3,9 @@ package photos.sluice.domain.cull;
 import java.util.List;
 
 /**
- * {@code ApplyEngine.reconcile()}'s outcome. A move-log rebuild sweeps every already-validated
- * decision and unreviewable file against actual disk state, since move-records.log - the record
- * {@code classify()} would otherwise trust - may itself be missing or corrupt. reconstructed counts
+ * {@code ReconcileEngine.reconcile()}'s outcome. A move-log rebuild sweeps every already-validated
+ * decision and unreviewable file against actual disk state. It exists because move-records.log, the
+ * record {@code classify()} would otherwise trust, may itself be missing or corrupt. reconstructed counts
  * a file reconcile() located at the exact destination the same decision would have produced,
  * recording its hash there. stillPending counts a file still sitting exactly where the culler found
  * it - untouched, nothing to reconstruct. missingSource is every decision or unreviewable file

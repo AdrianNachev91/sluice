@@ -2,18 +2,8 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import photos.sluice.adapter.fs.CsvLibraryHashIndex;
-import photos.sluice.adapter.fs.NioMediaStore;
-import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
-import photos.sluice.adapter.vision.JsonCullPrepStore;
-import photos.sluice.application.port.out.CullCategory;
-import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.Finding.InvalidCategory;
 import photos.sluice.domain.cull.Finding.MissingSource;
@@ -23,7 +13,6 @@ import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
-import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -34,7 +23,7 @@ import java.util.List;
 import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Fixture-writing helpers below mirror ApplyEngineTest's own - PrepDirDoctor reuses ApplyEngine's
+// Fixture-writing helpers below mirror ApplyPlannerTest's own. PrepDirDoctor reuses ApplyPlanner's
 // validate()/checkMissingSources() internally, so the same shard/sidecar/index fixtures apply.
 class PrepDirDoctorTest {
 
@@ -48,7 +37,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         Files.writeString(prepDir.resolve("decisions.json"), "{}");
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.COMPLETE);
         assertThat(health.findings()).isEmpty();
@@ -56,14 +45,14 @@ class PrepDirDoctorTest {
 
     @Test
     void aCompleteRunReportsCompleteEvenWhenIndexJsonIsCorrupt(@TempDir Path root) throws IOException {
-        // The completion check reads only decisions.json - a COMPLETE run needs nothing else, so a
-        // corrupt index.json past that point (e.g. clobbered after the run already finished) must
-        // never surface as a blocking problem.
+        // The completion check reads only decisions.json, since a COMPLETE run needs nothing else.
+        // A corrupt index.json past that point must never surface as a blocking problem. It could
+        // have been clobbered long after the run already finished.
         Path prepDir = prepDir(root);
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
         Files.writeString(prepDir.resolve("decisions.json"), "{}");
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.COMPLETE);
         assertThat(health.findings()).isEmpty();
@@ -74,7 +63,7 @@ class PrepDirDoctorTest {
         Path prepDir = prepDir(root);
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
@@ -85,7 +74,7 @@ class PrepDirDoctorTest {
     void aMissingIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir Path root) throws IOException {
         Path prepDir = prepDir(root); // index.json never written at all
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
@@ -100,7 +89,7 @@ class PrepDirDoctorTest {
         // No sidecar written for montage-001 at all - stands in for a missing or corrupt one.
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
@@ -117,7 +106,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.WAITING);
         assertThat(health.findings()).isEmpty();
@@ -136,7 +125,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         // montage-002 has no shard yet - still being culled.
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.WAITING);
         assertThat(health.findings()).isEmpty();
@@ -151,7 +140,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.READY);
         assertThat(health.findings()).isEmpty();
@@ -166,7 +155,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "meme", "not a configured category"));
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
@@ -184,7 +173,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         writeShard(prepDir, "montage-002"); // no montage-002 entry in index.json - a stray shard
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new StrayShard("decisions-002.json"));
@@ -199,7 +188,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).hasSize(1);
@@ -221,7 +210,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(offContract, "meme", "not a configured category"));
         writeShard(prepDir, "montage-002"); // stray shard, AUTO remedy
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).extracting(Finding::remedy)
@@ -232,8 +221,8 @@ class PrepDirDoctorTest {
     void aShardContractProblemSuppressesMissingSourceCheckingForAnUnrelatedDecision(@TempDir Path root) throws IOException {
         // Guards against a misleading double finding. An off-contract decision already reports
         // InvalidCategory. An unrelated decision in the same batch, whose file is genuinely missing,
-        // must not ALSO surface a MissingSource - the whole batch is already blocked on the shard
-        // contract, the same gate apply() itself enforces before ever checking file existence.
+        // must not ALSO surface a MissingSource. The whole batch is already blocked on the shard
+        // contract, the same gate apply() enforces before ever checking file existence.
         Path prepDir = prepDir(root);
         Path offContract = root.resolve("Sorted/Photos/2019/06/a.jpg");
         Path missingSource = root.resolve("Sorted/Photos/2019/06/b.jpg"); // never written, no move record
@@ -244,7 +233,7 @@ class PrepDirDoctorTest {
                 classificationJson(offContract, "meme", "not a configured category"),
                 classificationJson(missingSource, "junk", "blurry"));
 
-        PrepDirHealth health = doctor(root).diagnose(prepDir);
+        PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
@@ -264,7 +253,7 @@ class PrepDirDoctorTest {
         Path waiting = prepDir(root, "waiting1");
         writeIndex(waiting, 1, List.of("montage-001")); // no shard yet - still culling
 
-        PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
+        PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).containsExactly("complete1");
         assertThat(report.skipped()).containsExactly(entry("waiting1", State.WAITING));
@@ -274,7 +263,7 @@ class PrepDirDoctorTest {
 
     @Test
     void purgeCompletedOnAMissingCullPrepRootReturnsAnEmptyReport(@TempDir Path root) {
-        PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
+        PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).isEmpty();
         assertThat(report.skipped()).isEmpty();
@@ -319,37 +308,7 @@ class PrepDirDoctorTest {
         Files.writeString(file, content);
     }
 
-    private static PrepDirDoctor doctor(Path root) {
-        Path libraryRoot = root.resolve("Library");
-        var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
-        var mediaStore = new NioMediaStore();
-        var cullPrepPort = new JsonCullPrepStore();
-        var settings = fixedSettings();
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
-        var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, settings, new Sha256Hasher(), hashIndex,
-                new DisasterDrawer(mediaStore));
-        return new PrepDirDoctor(cullPrepPort, mediaStore, settings, applyEngine);
-    }
-
-    private static CullSettings fixedSettings() {
-        return new FixedSettings("external-agent", List.of(
-                new CullCategory("junk", "junk description"),
-                new CullCategory("scenery", "scenery description"),
-                new CullCategory("food", "food description"),
-                new CullCategory("funny", "funny description")));
-    }
-
-    private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
-
-        @Override
-        public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null, null, null);
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL, null);
-        }
+    private static PrepDirDoctor doctor() {
+        return CullPrepTestSupport.prepDirDoctor();
     }
 }

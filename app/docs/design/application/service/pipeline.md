@@ -44,25 +44,25 @@ mid-call would leave a `ProgressPort` listener with a `phaseStarted` event and n
 would look permanently "in progress" even though the
 `JobHandle` itself already reports the failure.
 
-| Pipeline method       | Engine call                              | Phase label       |
-|-----------------------|------------------------------------------|-------------------|
-| `sort(SortScope)`     | `SortEngine.sort(scope, progress)`       | `"Sorting..."`    |
-| `commit(CommitScope)` | `CommitEngine.commit(scope, progress)`   | `"Committing..."` |
-| `rescue(String)`      | `RescueEngine.rescue(folder, progress)`  | `"Rescuing..."`   |
-| `discard(Path)`       | `ApplyEngine.discard(prepDir, progress)` | `"Discarding..."` |
+| Pipeline method       | Engine call                                  | Phase label       |
+|-----------------------|----------------------------------------------|-------------------|
+| `sort(SortScope)`     | `SortEngine.sort(scope, progress)`           | `"Sorting..."`    |
+| `commit(CommitScope)` | `CommitEngine.commit(scope, progress)`       | `"Committing..."` |
+| `rescue(String)`      | `RescueEngine.rescue(folder, progress)`      | `"Rescuing..."`   |
+| `discard(Path)`       | `PrepDirRemedies.discard(prepDir, progress)` | `"Discarding..."` |
 
 `Pipeline` depends on these three engines' concrete classes, not their `SortUseCase`/
 `CommitUseCase`/`RescueUseCase` interfaces - the progress-callback overloads only exist on the concrete classes, not on
 those narrower interfaces.
 
 `discard(prepDir)` follows the same `PhaseRunner`-bracketed shape as `sort`/`commit`/`rescue`
-(`"Discarding..."`, ticked once per file `ApplyEngine.discard()` moves or deletes - real work
-worth a progress bar, unlike `troubleshoot`/`purgeCompleted` below), plus two checks neither of
-those three needs: it refuses a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE`
-(`purgeCompleted()` is that state's own verb), and it retires any watcher polling the prep dir
+(`"Discarding..."`, ticked once per file `PrepDirRemedies.discard()` moves or deletes - real work
+worth a progress bar, unlike `troubleshoot`/`purgeCompleted` below). It also adds two checks
+neither of those three needs. It refuses a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE`
+(`purgeCompleted()` is that state's own verb). And it retires any watcher polling the prep dir
 before the graveyard move starts, so an auto-resume can never fire against a run mid-discard. See
-`apply-engine.md` section 9 for what `discard()` actually moves/deletes, and `cull-engine.md` for
-the watcher it disarms.
+`prep-dir-remedies.md` section 3 for what `discard()` actually moves/deletes, and `cull-engine.md`
+for the watcher it disarms.
 
 ### Scenarios
 
@@ -87,8 +87,9 @@ the watcher it disarms.
 - `SortEngine`: `sort-engine.md` in this same design folder.
 - `RescueEngine`: `rescue-engine.md` in this same design folder.
 - `CommitEngine` has no design doc of its own (one loop, one branch - judged too thin to diagram).
-- `ApplyEngine`: `apply-engine.md` in this same design folder, section 5 for its own cancellation behavior,
-  section 9 for `discard()`.
+- `ApplyEngine`: `apply-engine.md` in this same design folder, section 3 for its own cancellation
+  behavior.
+- `PrepDirRemedies`: `prep-dir-remedies.md`, section 3 for `discard()`.
 - `Troubleshooter`: `troubleshooter.md` in this same design folder.
 - `PrepDirDoctor`: `prep-dir-doctor.md` in this same design folder, for `diagnose()` and `purgeCompleted()`.
 - `CullMontageRenderer`: `cull-montage-renderer.md` in the `adapter/imaging` design folder, its own Cancellation section

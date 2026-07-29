@@ -221,7 +221,7 @@ class PipelineTest {
     }
 
     // Pipeline.sweepExpiredDisasterDrawers() (the @PostConstruct hook) sweeps both per-prep-dir
-    // drawers and ApplyEngine.discard()'s global graveyard folders. DisasterDrawerTest already
+    // drawers and PrepDirRemedies.discard()'s global graveyard folders. DisasterDrawerTest already
     // covers sweepExpiredGraveyard()'s own logic in full, so this only needs one expired and one
     // fresh graveyard folder to prove the wiring reaches it too.
     @Test
@@ -238,7 +238,7 @@ class PipelineTest {
     }
 
     // Proves troubleshoot() actually runs through JobRunner rather than calling Troubleshooter
-    // directly - TroubleshooterTest already covers the diagnose/reconcile/report logic itself in
+    // directly. TroubleshooterTest already covers the diagnose/reconcile/report logic itself in
     // full, so this only needs one real prep dir to prove the wiring returns its report.
     @Test
     void troubleshootRunsAsABackgroundJobAndReturnsTheReport(@TempDir Path root) throws IOException {
@@ -276,9 +276,9 @@ class PipelineTest {
         assertThat(Files.exists(prepDir)).isFalse();
     }
 
-    // Proves discard() actually runs through JobRunner and reaches ApplyEngine.discard() -
-    // ApplyEngineTest already covers the graveyard-filing/image-deletion logic itself in full, so
-    // this only needs a still-waiting prep dir to prove the wiring returns its report.
+    // Proves discard() actually runs through JobRunner and reaches PrepDirRemedies.discard().
+    // PrepDirRemediesTest already covers the graveyard-filing/image-deletion logic itself in full,
+    // so this only needs a still-waiting prep dir to prove the wiring returns its report.
     @Test
     void discardRunsAsABackgroundJobAndFilesEverythingIntoTheGraveyard(@TempDir Path root) throws IOException {
         var progress = new RecordingProgressPort();
@@ -294,7 +294,7 @@ class PipelineTest {
         assertThat(Files.exists(prepDir)).isFalse();
     }
 
-    // Refusing a COMPLETE run is the gate ApplyEngine.discard() itself deliberately doesn't apply -
+    // Refusing a COMPLETE run is the gate PrepDirRemedies.discard() itself deliberately doesn't apply -
     // purgeCompleted() is that state's own verb, not discard().
     @Test
     void discardRefusesACompletedRun(@TempDir Path root) throws IOException {

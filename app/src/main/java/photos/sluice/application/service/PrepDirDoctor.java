@@ -21,12 +21,22 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Side-effect-free health check for a prep dir. Safe to call any time, before or instead of
-// apply(). It can drive a run-card dashboard as well as a blocked run's troubleshoot screen.
-// ApplyEngine's own validate()/checkMissingSources() are reused verbatim. allowPartial is always
-// true here, so a still-culling dir reports on the shards it already has rather than flagging
-// every uncalled montage as a finding. That reuse is why a proactive diagnosis and a failed
-// apply's own ApplyException always describe the identical set of findings.
+/**
+ * Health checks for a prep dir, plus the purge that clears completed runs. diagnose() is
+ * side-effect-free and safe to call any time, before or instead of an apply. It can drive a
+ * run-card dashboard as well as a blocked run's troubleshoot screen.
+ *
+ * <p>{@link ApplyPlanner}'s own validate()/checkMissingSources() are reused verbatim. That reuse is
+ * why a proactive diagnosis and a failed apply's own ApplyException always describe the identical
+ * set of findings. The allowPartial flag is always true here, so a still-culling dir reports on the
+ * shards it already has rather than flagging every uncalled montage as a finding.
+ *
+ * <p>Nothing on the diagnosis path can move a file: it reads through the planner, which is the
+ * read-only half of applying. purgeCompleted() is the one method here that deletes, and it only
+ * ever touches a run diagnose() has certified COMPLETE. It never touches media.
+ *
+ * <p>Flowchart: {@code app/docs/design/application/service/prep-dir-doctor.md}.
+ */
 @Component
 public class PrepDirDoctor {
 
@@ -35,22 +45,22 @@ public class PrepDirDoctor {
 
     private final CullPrepPort cullPrepPort;
     private final MediaStore mediaStore;
-    private final ApplyEngine applyEngine;
+    private final ApplyPlanner applyPlanner;
     private final ShardTallyCalculator shardTallyCalculator;
 
     /**
-     * Creates a doctor wired to the same collaborators ApplyEngine and CullEngine already use.
+     * Creates a doctor wired to the same collaborators the apply side already uses.
      *
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir index, sidecars, and shards
      * @param mediaStore {@link MediaStore} filesystem access for prep dirs
      * @param cullSettings {@link CullSettings} configured cull categories, for the shard tally
-     * @param applyEngine {@link ApplyEngine} the merged shard-contract and missing-source checks
+     * @param applyPlanner {@link ApplyPlanner} the merged shard-contract and missing-source checks
      */
     public PrepDirDoctor(CullPrepPort cullPrepPort, MediaStore mediaStore, CullSettings cullSettings,
-            ApplyEngine applyEngine) {
+            ApplyPlanner applyPlanner) {
         this.cullPrepPort = cullPrepPort;
         this.mediaStore = mediaStore;
-        this.applyEngine = applyEngine;
+        this.applyPlanner = applyPlanner;
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings);
     }
 
@@ -70,14 +80,14 @@ public class PrepDirDoctor {
      *
      * <p>Findings are ordered by repair dependency: AUTO-remedied ones first, then CHOICE, then
      * the informational NONE ones. That lets a troubleshooter walk the list top to bottom. It also
-     * means a CHOICE finding never coexists with an AUTO or NONE one in the same report - it only
+     * means a CHOICE finding never coexists with an AUTO or NONE one in the same report. It only
      * ever surfaces once the shard contract is already clean.
      *
      * <p>The completion check runs before index.json is ever read, and reads no further than
      * whether decisions.json exists - a COMPLETE run needs nothing else. A corrupt or missing
-     * index.json past that point reports BLOCKED with a single {@link Finding.CorruptIndex}: with
-     * no readable montage list, nothing else here (the tally, the shard contract, missing sources)
-     * can be computed at all.
+     * index.json past that point reports BLOCKED with a single {@link Finding.CorruptIndex}. With
+     * no readable montage list, nothing else here can be computed at all - not the tally, not the
+     * shard contract, not missing sources.
      *
      * @param prepDirPath {@link Path} the prep directory to diagnose
      * @return {@link PrepDirHealth} the prep dir's current state and open findings
@@ -94,7 +104,7 @@ public class PrepDirDoctor {
             return new PrepDirHealth(State.BLOCKED, List.of(new Finding.CorruptIndex(prepDirPath.resolve(INDEX_FILE))));
         }
 
-        ValidationReport validation = applyEngine.validate(prepDirPath, prepDir, new ApplyOptions(true));
+        ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true));
         ShardTally tally = shardTallyCalculator.tally(prepDir);
         // Missing-source checking is skipped here too, for the same reason it's skipped below: the
         // shard contract is still incomplete. A montage still missing its shard tells nothing about
@@ -106,7 +116,7 @@ public class PrepDirDoctor {
         if (!validation.valid()) {
             return new PrepDirHealth(State.BLOCKED, ordered(validation.findings()));
         }
-        List<Finding> findings = applyEngine.checkMissingSources(prepDirPath, prepDir, validation.decisions());
+        List<Finding> findings = applyPlanner.checkMissingSources(prepDirPath, prepDir, validation.decisions());
         return findings.isEmpty()
                 ? new PrepDirHealth(State.READY, List.of())
                 : new PrepDirHealth(State.BLOCKED, ordered(findings));

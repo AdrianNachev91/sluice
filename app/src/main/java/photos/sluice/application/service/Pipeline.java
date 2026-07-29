@@ -60,7 +60,7 @@ public class Pipeline {
     private final DisasterDrawer disasterDrawer;
     private final Troubleshooter troubleshooter;
     private final PrepDirDoctor prepDirDoctor;
-    private final ApplyEngine applyEngine;
+    private final PrepDirRemedies prepDirRemedies;
     private final Path cullPrepRoot;
     private final Path graveyardRoot;
 
@@ -75,6 +75,7 @@ public class Pipeline {
      * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
      * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
      * @param applyEngine {@link ApplyEngine} applies merged cull decisions
+     * @param prepDirRemedies {@link PrepDirRemedies} discards a prep dir the user gave up on
      * @param cullPrepPort {@link CullPrepPort} prepares cull montages and shards
      * @param cullSettings {@link CullSettings} user-facing cull configuration
      * @param mediaStore {@link MediaStore} moves/copies media files
@@ -89,12 +90,13 @@ public class Pipeline {
     @Autowired
     public Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
-            CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
-            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, DisasterDrawer disasterDrawer,
+            PrepDirRemedies prepDirRemedies, CullPrepPort cullPrepPort, CullSettings cullSettings,
+            MediaStore mediaStore, PathsPort pathsPort, MontageConfig montageConfig, JobRunner jobRunner,
+            ProgressPort progressPort, DisasterDrawer disasterDrawer,
             Troubleshooter troubleshooter, PrepDirDoctor prepDirDoctor) {
-        this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, cullPrepPort,
-                cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort, disasterDrawer,
-                troubleshooter, prepDirDoctor, DEFAULT_WATCH_POLL_INTERVAL);
+        this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
+                cullPrepPort, cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort,
+                disasterDrawer, troubleshooter, prepDirDoctor, DEFAULT_WATCH_POLL_INTERVAL);
     }
 
     /**
@@ -109,6 +111,7 @@ public class Pipeline {
      * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
      * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
      * @param applyEngine {@link ApplyEngine} applies merged cull decisions
+     * @param prepDirRemedies {@link PrepDirRemedies} discards a prep dir the user gave up on
      * @param cullPrepPort {@link CullPrepPort} prepares cull montages and shards
      * @param cullSettings {@link CullSettings} user-facing cull configuration
      * @param mediaStore {@link MediaStore} moves/copies media files
@@ -123,8 +126,9 @@ public class Pipeline {
      */
     Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
             MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
-            CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
-            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, DisasterDrawer disasterDrawer,
+            PrepDirRemedies prepDirRemedies, CullPrepPort cullPrepPort, CullSettings cullSettings,
+            MediaStore mediaStore, PathsPort pathsPort, MontageConfig montageConfig, JobRunner jobRunner,
+            ProgressPort progressPort, DisasterDrawer disasterDrawer,
             Troubleshooter troubleshooter, PrepDirDoctor prepDirDoctor, Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
@@ -137,7 +141,7 @@ public class Pipeline {
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
-        this.applyEngine = applyEngine;
+        this.prepDirRemedies = prepDirRemedies;
         this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
         this.graveyardRoot = pathsPort.logs().resolve("disasters");
     }
@@ -153,9 +157,10 @@ public class Pipeline {
 
     /**
      * Delegates to DisasterDrawer to sweep every prep dir's disaster drawer for retention-expired
-     * entries - a corrupt original or a troubleshoot report older than 30 days - and, separately,
-     * every ApplyEngine.discard() graveyard folder past that same window. Public and callable
-     * directly (not just via @PostConstruct) so a test can drive it without a Spring context.
+     * entries, meaning a corrupt original or a troubleshoot report older than 30 days. It sweeps
+     * every PrepDirRemedies.discard() graveyard folder past that same window too. Public and
+     * callable directly (not just via @PostConstruct) so a test can drive it without a Spring
+     * context.
      */
     @PostConstruct
     public void sweepExpiredDisasterDrawers() {
@@ -250,8 +255,8 @@ public class Pipeline {
 
     /**
      * Runs a manual, one-button purge of every completed cull run as a background job. Routing it
-     * through JobRunner buys the same one-job-at-a-time discipline every other job gets, so a purge
-     * can never race a re-prep of a scope it's in the middle of deleting.
+     * through JobRunner buys the same one-job-at-a-time discipline every other job gets. A purge can
+     * then never race a re-prep of a scope it is in the middle of deleting.
      *
      * @return a {@link JobHandle} of {@link PurgeReport} a handle to the running job
      */
@@ -260,14 +265,14 @@ public class Pipeline {
     }
 
     /**
-     * Gives up on prepDir as a background job: refuses a COMPLETE run (purgeCompleted() is that
-     * state's own verb), retires any watcher polling it, then delegates to ApplyEngine.discard()
-     * for the actual file work - filing everything worth keeping into the graveyard and deleting
-     * the montage/tile images. The watcher must be disarmed before the graveyard move starts, or an
-     * auto-resume could fire against a prep dir already being dismantled. Routing through JobRunner
-     * buys the same one-job-at-a-time discipline every other job gets, so a discard can never race
-     * a re-prep of the scope it's giving up on. Shares this one mechanism with the Round 4
-     * last-resort "discard this run and redo" remedy - both entry points call this same method.
+     * Gives up on prepDir as a background job. It refuses a COMPLETE run, since purgeCompleted() is
+     * that state's own verb. It then retires any watcher polling it and delegates to
+     * PrepDirRemedies.discard() for the actual file work. That files everything worth keeping into
+     * the graveyard and deletes the montage and tile images. The watcher must be disarmed before the
+     * graveyard move starts, or an auto-resume could fire against a prep dir already being
+     * dismantled. Routing through JobRunner buys the same one-job-at-a-time discipline every other
+     * job gets. A discard can then never race a re-prep of the scope it is giving up on. The
+     * last-resort "discard this run and redo" remedy calls this same method.
      *
      * @param prepDir {@link Path} the cull prep directory to discard
      * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
@@ -279,7 +284,7 @@ public class Pipeline {
                         + " has already completed - discard refuses a finished run; purge it instead.");
             }
             cullEngine.disarmWatch(prepDir);
-            return runPhase(DISCARDING, progress -> applyEngine.discard(prepDir, progress));
+            return runPhase(DISCARDING, progress -> prepDirRemedies.discard(prepDir, progress));
         });
     }
 

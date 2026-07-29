@@ -1,27 +1,15 @@
 package photos.sluice.application.port.out;
 
 import java.nio.file.Path;
-import java.time.Instant;
-import java.util.List;
 
-public interface MediaStore {
-
-    /**
-     * Every regular file under root, recursively, as absolute paths. Order is unspecified.
-     *
-     * @param root {@link Path} the directory to scan
-     * @return a {@link List} of {@link Path}, every regular file found, as absolute paths
-     */
-    List<Path> listFiles(Path root);
-
-    /**
-     * When path was last modified. Used where a directory's own age is the signal (e.g. a waiting
-     * cull job's prep dir), not a media file's capture date - that comes from DateSource instead.
-     *
-     * @param path {@link Path} the file or directory to check
-     * @return {@link Instant} the last-modified instant
-     */
-    Instant lastModifiedTime(Path path);
+/**
+ * Media storage as a whole: the inspect-only surface of {@link MediaReader}, plus everything that
+ * changes what is on disk. Every move, copy, write, and delete the app performs goes through here.
+ *
+ * <p>A collaborator that never mutates should take {@link MediaReader} instead, so the mutators
+ * below are simply not reachable from it.
+ */
+public interface MediaStore extends MediaReader {
 
     /**
      * Moves a file into a destination directory.
@@ -33,10 +21,11 @@ public interface MediaStore {
     Path move(Path source, Path destDir);
 
     /**
-     * The exact free path move(source, destDir) would land on, without performing the move - the
-     * first name not already occupied under destDir (source's own leaf, then " (2)", " (3)", ...).
-     * Exists so a caller can durably record where a decision is headed BEFORE moving it, closing the
-     * crash window between "decided the destination" and "the move actually happened."
+     * The exact free path move(source, destDir) would land on, without performing the move. That is
+     * the first name not already occupied under destDir: source's own leaf, then " (2)", " (3)",
+     * and so on. Exists so a caller can durably record where a decision is headed BEFORE moving it.
+     * That closes the crash window between "decided the destination" and "the move actually
+     * happened."
      *
      * @param source {@link Path} the file that would be moved
      * @param destDir {@link Path} the destination directory
@@ -78,22 +67,6 @@ public interface MediaStore {
     void ensureDirectory(Path dir);
 
     /**
-     * Checks whether a path exists.
-     *
-     * @param path {@link Path} the path to check
-     * @return boolean true if the path exists
-     */
-    boolean exists(Path path);
-
-    /**
-     * Reads a file's size.
-     *
-     * @param path {@link Path} the file to measure
-     * @return long the file size in bytes
-     */
-    long size(Path path);
-
-    /**
      * Appends a line to a file, creating it if needed.
      *
      * @param file {@link Path} the file to append to
@@ -110,15 +83,6 @@ public interface MediaStore {
      * @param content {@link String} the full content to write
      */
     void write(Path file, String content);
-
-    /**
-     * Every line of file, in order, or empty if file does not exist - the read-side counterpart to
-     * appendLine, for resuming from a crash-safety log written one line per completed step.
-     *
-     * @param file {@link Path} the file to read
-     * @return a {@link List} of {@link String}, every line in the file, or empty if the file does not exist
-     */
-    List<String> readLines(Path file);
 
     /**
      * Removes every subdirectory under root left empty of all files (root itself is never a

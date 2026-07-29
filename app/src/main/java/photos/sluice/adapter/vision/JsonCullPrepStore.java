@@ -30,9 +30,9 @@ import java.util.Map;
 // Neither class's access needs widening, and no cross-adapter-subpackage dependency is added. The
 // merged decisions.json this class writes, and the index.json it reads back, are each a distinct
 // artifact from a per-montage shard. They get their own small DTOs here rather than reaching into
-// ShardCodec's private encoding. Public (unlike ShardCodec/SidecarReader): ApplyEngine's own tests
-// live outside this package and need a real CullPrepPort. Other engine tests wire real adapters
-// (NioMediaStore, CsvLibraryHashIndex) the same way, instead of a fake.
+// ShardCodec's private encoding. Public (unlike ShardCodec/SidecarReader): the apply-side engines'
+// own tests live outside this package and need a real CullPrepPort. Other engine tests wire real
+// adapters (NioMediaStore, CsvLibraryHashIndex) the same way, instead of a fake.
 @Component
 public class JsonCullPrepStore implements CullPrepPort {
 
@@ -44,7 +44,7 @@ public class JsonCullPrepStore implements CullPrepPort {
     private final JsonMapper mapper;
 
     /**
-     * Public and no-arg so a test in another package (ApplyEngineTest) can build a real instance
+     * Public and no-arg so a test in another package (ApplyPlannerTest) can build a real instance
      * without depending on the package-private ShardCodec/SidecarReader constructor parameters.
      * Unused by Spring, which resolves the @Autowired constructor below instead.
      */
@@ -133,7 +133,7 @@ public class JsonCullPrepStore implements CullPrepPort {
     /**
      * Writes index.json wholesale - the recovery-time counterpart to {@code CullMontageRenderer}'s
      * own prep-time write, used only to persist an index {@link
-     * photos.sluice.application.service.ApplyEngine#rebuildIndex} reconstructed from surviving
+     * photos.sluice.application.service.PrepDirRemedies#rebuildIndex} reconstructed from surviving
      * sidecars.
      *
      * @param prepDir {@link Path} the prep directory to write into
@@ -245,9 +245,9 @@ public class JsonCullPrepStore implements CullPrepPort {
     }
 
     /**
-     * Mirrors ShardCodec.toRaw's mapping shape, kept separate rather than shared: a per-montage
-     * shard and the merged decisions.json are distinct artifacts with their own DTOs, free to diverge
-     * later without coupling the two.
+     * Mirrors ShardCodec.toRaw's mapping shape, kept separate rather than shared. A per-montage
+     * shard and the merged decisions.json are distinct artifacts with their own DTOs, free to
+     * diverge later without coupling the two.
      *
      * @param decision {@link Decision} the domain decision to convert
      * @return {@link RawDecision} the raw DTO representation

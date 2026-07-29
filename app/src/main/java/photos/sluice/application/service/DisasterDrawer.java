@@ -30,7 +30,7 @@ public class DisasterDrawer {
     private static final Duration RETENTION = Duration.ofDays(30);
     // No colons in the pattern - Windows path segments can't contain them. Seconds resolution is
     // plenty for a human audit trail; nothing ever parses this back to more precision than "is this
-    // older than 30 days." Shared with ApplyEngine.discard()'s global graveyard folders via
+    // older than 30 days." Shared with PrepDirRemedies.discard()'s global graveyard folders via
     // DisasterTimestamp, so both stay parseable by the same future retention sweep.
     private static final Pattern TIMESTAMP_PREFIX = Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})-.*");
     // A discard() graveyard folder's own name is <scope>-<timestamp>, not <timestamp>-<what> - the
@@ -88,7 +88,7 @@ public class DisasterDrawer {
     /**
      * Deletes every disaster-drawer entry under cullPrepRoot whose filename-embedded filing time is
      * older than the 30-day retention window. A file whose name doesn't parse as a filed entry is
-     * left alone, never deleted - this drawer only ever removes what it is certain it filed itself.
+     * left alone, never deleted. This drawer only ever removes what it is certain it filed itself.
      *
      * @param cullPrepRoot {@link Path} the root directory holding every prep dir
      * @return int the number of entries deleted
@@ -107,7 +107,7 @@ public class DisasterDrawer {
     }
 
     /**
-     * Deletes every {@code ApplyEngine.discard()} graveyard folder under graveyardRoot
+     * Deletes every {@code PrepDirRemedies.discard()} graveyard folder under graveyardRoot
      * ({@code logs/disasters/}) whose own {@code <scope>-<timestamp>} name is older than the 30-day
      * retention window. This is the directory-level counterpart to {@link #sweepExpired}. That
      * method only ever recognizes a per-prep-dir drawer entry sitting directly inside a literal

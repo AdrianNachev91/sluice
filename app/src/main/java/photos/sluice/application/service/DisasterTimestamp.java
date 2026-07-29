@@ -6,9 +6,9 @@ import java.time.format.DateTimeFormatter;
 
 /**
  * The one shared {@code yyyy-MM-dd_HH-mm-ss} (UTC, colon-free, Windows-safe) timestamp convention
- * every disaster-recovery artifact embeds in its own name - {@link DisasterDrawer}'s per-prep-dir
- * entries and {@link ApplyEngine#discard}'s global graveyard folders alike. Centralized so both stay
- * parseable by the same future retention sweep.
+ * every disaster-recovery artifact embeds in its own name. That covers {@link DisasterDrawer}'s
+ * per-prep-dir entries and {@link PrepDirRemedies#discard}'s global graveyard folders alike.
+ * Centralized so both stay parseable by the same future retention sweep.
  */
 final class DisasterTimestamp {
 

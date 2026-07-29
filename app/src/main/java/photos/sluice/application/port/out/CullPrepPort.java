@@ -10,8 +10,9 @@ import java.nio.file.Path;
 import java.util.List;
 
 // Reads and writes the JSON artifacts a prep directory holds beyond the montage images themselves.
-// That means index.json, the montage sidecars, and the vision step's decision shards (all this
-// app's own prior output), plus the merged decisions.json ApplyEngine writes once a run completes.
+// That means index.json, the montage sidecars, and the vision step's decision shards, all this
+// app's own prior output. It also covers the merged decisions.json ApplyEngine writes once a run
+// completes.
 // Listing which decisions-*.json files exist (for stray-shard detection) stays on the
 // already-generic MediaStore. This port only covers the structured JSON MediaStore cannot parse on
 // its own.
@@ -19,8 +20,8 @@ public interface CullPrepPort {
 
     /**
      * The prep directory's own index.json, describing the scope it covers and every montage it
-     * expects a shard for. Unchecked failure if missing or unreadable - the app's own prior output,
-     * so a broken one means the prep dir itself is corrupt, not a fixable culling mistake.
+     * expects a shard for. Unchecked failure if missing or unreadable. This is the app's own prior
+     * output, so a broken one means the prep dir itself is corrupt, not a fixable culling mistake.
      *
      * @param prepDir {@link Path} the prep directory to read
      * @return {@link PrepDir} the parsed prep directory index
@@ -29,9 +30,10 @@ public interface CullPrepPort {
 
     /**
      * Writes index.json wholesale, replacing whatever was there before. Used only by {@link
-     * photos.sluice.application.service.ApplyEngine#rebuildIndex} to persist an index reconstructed
-     * from surviving sidecars after the original was found corrupt or missing - a normal cull run
-     * never calls this, since {@code CullMontageRenderer} writes the original via its own adapter.
+     * photos.sluice.application.service.PrepDirRemedies#rebuildIndex}, to persist an index
+     * reconstructed from surviving sidecars after the original was found corrupt or missing.
+     * A normal cull run never calls this, since {@code CullMontageRenderer} writes the original
+     * via its own adapter.
      *
      * @param prepDir {@link Path} the prep directory to write into
      * @param index {@link PrepDir} the index to persist
@@ -70,7 +72,7 @@ public interface CullPrepPort {
 
     /**
      * Reads a shard file by its own path, rather than a montage's canonical name. A stray shard's
-     * filename names no real montage, so it cannot be looked up via {@link #readShard} - a
+     * filename names no real montage, so it cannot be looked up via {@link #readShard}. A
      * troubleshooter inspecting one before deciding whether to rename it needs this instead.
      * Throws UncheckedIOException if the file cannot be parsed as a shard.
      *

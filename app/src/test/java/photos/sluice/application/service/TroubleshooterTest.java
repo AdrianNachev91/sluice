@@ -2,19 +2,9 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import photos.sluice.adapter.fs.CsvLibraryHashIndex;
-import photos.sluice.adapter.fs.NioMediaStore;
-import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
-import photos.sluice.adapter.vision.JsonCullPrepStore;
 import photos.sluice.application.port.out.ApplyException;
-import photos.sluice.application.port.out.CullCategory;
-import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.Finding.CorruptIndex;
 import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.Finding.StrayShard;
@@ -22,7 +12,6 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.TroubleshootReport;
-import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,9 +21,9 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Fixture-writing helpers below mirror ApplyEngineTest's and PrepDirDoctorTest's own - Troubleshooter
-// reuses both PrepDirDoctor.diagnose() and ApplyEngine.reconcile() internally, so the same
-// shard/sidecar/index fixtures apply.
+// Fixture-writing helpers below mirror ApplyPlannerTest's and PrepDirDoctorTest's own.
+// Troubleshooter reuses both PrepDirDoctor.diagnose() and ReconcileEngine.reconcile() internally,
+// so the same shard/sidecar/index fixtures apply.
 class TroubleshooterTest {
 
     @Test
@@ -127,8 +116,8 @@ class TroubleshooterTest {
     void aStrayShardWithNoMontageActuallyUnclaimedIsLeftUnchanged(@TempDir Path root) throws IOException, ApplyException {
         // index.json declares only montage-001, which already has its own shard - so no montage is
         // unclaimed for the stray decisions-002.json to claim. autoRepairStrayShard()'s unambiguity
-        // gate (exactly one montage currently missing a shard) never holds here, so troubleshoot()
-        // must leave it exactly as diagnose() found it rather than guessing at a repair.
+        // gate (exactly one montage currently missing a shard) never holds here. troubleshoot() must
+        // therefore leave it exactly as diagnose() found it, rather than guessing at a repair.
         Path prepDir = prepDir(root);
         Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -181,8 +170,8 @@ class TroubleshooterTest {
     void aStrayShardNamingAFileOutsideTheCandidateMontagesSidecarIsLeftForAChoice(@TempDir Path root)
             throws IOException, ApplyException {
         // montage-002 is the only unclaimed montage, but the stray shard's decision names a file that
-        // was never part of montage-002's own sidecar - not a genuine numbering slip, so AUTO must
-        // refuse rather than guess. setAsideStrayShard() (or leaving it) is the CHOICE fallback.
+        // was never part of montage-002's own sidecar. That is not a genuine numbering slip, so AUTO
+        // must refuse rather than guess. setAsideStrayShard() (or leaving it) is the CHOICE fallback.
         Path prepDir = prepDir(root);
         Path claimed = root.resolve("Sorted/Photos/2019/06/a.jpg");
         Path candidateOnly = root.resolve("Sorted/Photos/2019/06/b.jpg");
@@ -302,38 +291,6 @@ class TroubleshooterTest {
     }
 
     private static Troubleshooter troubleshooter(Path root) {
-        Path libraryRoot = root.resolve("Library");
-        var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
-        var mediaStore = new NioMediaStore();
-        var cullPrepPort = new JsonCullPrepStore();
-        var settings = fixedSettings();
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
-        var disasterDrawer = new DisasterDrawer(mediaStore);
-        var applyEngine = new ApplyEngine(pathsConfig, mediaStore, cullPrepPort, settings, new Sha256Hasher(), hashIndex,
-                disasterDrawer);
-        var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, settings, applyEngine);
-        return new Troubleshooter(prepDirDoctor, applyEngine, disasterDrawer);
-    }
-
-    private static CullSettings fixedSettings() {
-        return new FixedSettings("external-agent", List.of(
-                new CullCategory("junk", "junk description"),
-                new CullCategory("scenery", "scenery description"),
-                new CullCategory("food", "food description"),
-                new CullCategory("funny", "funny description")));
-    }
-
-    private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
-
-        @Override
-        public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null, null, null);
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL, null);
-        }
+        return CullPrepTestSupport.troubleshooter(root, root.resolve("Library"));
     }
 }

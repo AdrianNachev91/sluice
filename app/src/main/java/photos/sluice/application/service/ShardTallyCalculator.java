@@ -34,13 +34,13 @@ final class ShardTallyCalculator {
     }
 
     /**
-     * present/valid computed per montage, one shard at a time, rather than through ApplyEngine's
+     * present/valid computed per montage, one shard at a time, rather than through ApplyPlanner's
      * own whole-batch validate(). A cross-shard problem (a near-dup group id reused across two
      * montages, a file claimed by two different shards) isn't caught here. That montage still
      * counts as valid.
      *
      * <p>That's an acceptable simplification for a progress-display number - the real gate stays
-     * ApplyEngine.apply()'s full-batch validate(), unchanged by this tally.
+     * ApplyPlanner's full-batch validate(), unchanged by this tally.
      *
      * @param prep {@link PrepDir} the prep dir to tally
      * @return {@link ShardTally} present/valid/total shard counts

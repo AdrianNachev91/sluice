@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 // A single problem found while validating a prep directory. Either a shard-contract violation
-// ShardValidator checks for, or one of ApplyEngine's own batch-level checks - a stray shard, a
+// ShardValidator checks for, or one of ApplyPlanner's own batch-level checks - a stray shard, a
 // decision whose file can't be accounted for. describe() renders the exact prose an aggregated
 // ApplyException reports; callers read that rendered text, never a Finding's fields directly.
 // remedy() classifies how (if at all) PrepDirDoctor's troubleshooter can resolve the finding on
@@ -109,7 +109,7 @@ public sealed interface Finding {
 
     /**
      * A file listed both as a decision (in some montage's shard) and in index.json's own
-     * unreviewable list - the one duplicate-reference shape common and specific enough for a
+     * unreviewable list. It is the one duplicate-reference shape common and specific enough for a
      * troubleshooter to offer a real choice, unlike the more general {@link DuplicateFileReference}.
      * CHOICE because either resolution changes which pile the file ends up in, and the engine cannot
      * decide that on its own. "Trust the decision" means the shard's verdict applies, and the file is
@@ -154,18 +154,18 @@ public sealed interface Finding {
         }
     }
 
-    // ApplyEngine's own batch-level checks, below - real failure paths beyond the per-decision
+    // ApplyPlanner's own batch-level checks, below - real failure paths beyond the per-decision
     // shard contract ShardValidator checks above.
 
     /**
      * A decisions-NNN.json file with no montage entry expecting it - almost always a culler
      * numbering slip. Always reports AUTO: this record is a pure value with no I/O, built before
-     * any lookup of which montages are currently unclaimed, so it cannot itself know whether the
-     * repair will turn out ambiguous. The real decision is made when the repair actually runs -
-     * {@link photos.sluice.application.service.ApplyEngine#autoRepairStrayShard} renames the shard
-     * into the one montage left unclaimed when that's unambiguous, or leaves it untouched
-     * otherwise, for {@link photos.sluice.application.service.ApplyEngine#setAsideStrayShard}'s own
-     * CHOICE fallback.
+     * any lookup of which montages are currently unclaimed. It cannot itself know whether the
+     * repair will turn out ambiguous. The real decision is made when the repair actually runs.
+     * {@link photos.sluice.application.service.PrepDirRemedies#autoRepairStrayShard} renames the
+     * shard into the one montage left unclaimed when that's unambiguous. Otherwise it leaves the
+     * shard untouched, for {@link
+     * photos.sluice.application.service.PrepDirRemedies#setAsideStrayShard}'s own CHOICE fallback.
      */
     record StrayShard(String shardFile) implements Finding {
         @Override
@@ -192,13 +192,13 @@ public sealed interface Finding {
 
     /**
      * The prep directory's own index.json cannot be parsed - missing, truncated, or not valid JSON.
-     * Always reports AUTO, the same reasoning {@link StrayShard} already relies on: index.json is a
+     * Always reports AUTO, the same reasoning {@link StrayShard} already relies on. index.json is a
      * derived summary (scope, base path, montage entries, photo/montage counts), reconstructible
-     * from the surviving sidecars and the prep dir's own location - everything except the
-     * unreviewable list, which is genuinely lost. {@link
-     * photos.sluice.application.service.ApplyEngine#rebuildIndex} only actually rebuilds when every
-     * sidecar is present, parseable, and forms a contiguous montage-001..NNN run; a gap or an
-     * unparseable sidecar means the rebuild guard refuses, and this finding stays open with no
+     * from the surviving sidecars and the prep dir's own location. Everything except the
+     * unreviewable list survives, and that one is genuinely lost. {@link
+     * photos.sluice.application.service.PrepDirRemedies#rebuildIndex} only actually rebuilds when
+     * every sidecar is present, parseable, and forms a contiguous montage-001..NNN run. A gap or an
+     * unparseable sidecar means the rebuild guard refuses. The finding then stays open with no
      * further engine-level remedy short of the last-resort discard-and-redo.
      */
     record CorruptIndex(Path indexPath) implements Finding {
@@ -216,9 +216,9 @@ public sealed interface Finding {
     /**
      * A montage's own sidecar (montage-NNN.json) cannot be parsed, while index.json itself is
      * intact. CHOICE because the sidecar names that montage's only surviving evidence of what was
-     * actually in scope - the engine cannot decide unprompted whether to give up on that batch or
+     * actually in scope. The engine cannot decide unprompted whether to give up on that batch or
      * trust the shard's own decisions at face value. {@link
-     * photos.sluice.application.service.ApplyEngine#resolveCorruptSidecar} records which the user
+     * photos.sluice.application.service.PrepDirRemedies#resolveCorruptSidecar} records which the user
      * picked.
      */
     record CorruptSidecar(String montage) implements Finding {

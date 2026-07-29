@@ -29,7 +29,7 @@ same, but with `Files.copy` in the last step. The candidate-finding part above, 
 movement, is also exposed on its own as `resolveDestination`. The final move-to-a-path step is
 exposed as `moveTo`. `ApplyEngine` calls them separately. It needs to know a move's exact
 destination before performing it, to durably record a decision's source hash against that
-destination first - see `apply-engine.md`'s move-record section. `moveTo` trusts its caller to
+destination first - see `apply-planner.md`'s move-record section. `moveTo` trusts its caller to
 have already reserved that exact path and does no collision handling of its own.
 
 ## Scenarios
