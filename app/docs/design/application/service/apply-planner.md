@@ -116,7 +116,8 @@ the move itself. Once the move is positively confirmed, `ApplyEngine.backfillSec
 checks that second write directly - `funny` via `HashIndexPort.contains`, everything else via an
 exact line match in `_reasons.txt`. It backfills only if that write is actually missing. Nothing is
 ever re-moved on this path. A backfilled decision also isn't counted in the report `apply()`
-returns. See `apply-engine.md` for `backfillSecondaryWrite()` itself.
+returns. See `apply-engine.md`'s section 1 prose, where `backfillSecondaryWrite()` is named
+directly.
 
 ## Read-only helpers used by other callers
 

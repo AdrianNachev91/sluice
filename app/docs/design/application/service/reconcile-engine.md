@@ -8,8 +8,10 @@ alone, for when the ledger itself cannot be trusted
 
 ```mermaid
 flowchart TD
-    A["read index.json,<br/>validate<br/>(allowPartial)"] -- any problem --> Z(["ApplyException -<br/>nothing rebuilt"])
-    A -- clean --> B{"move-records.log<br/>exists?"}
+    A["read index.json"] --> A2["read the ledger -<br/>one snapshot for this<br/>whole reconcile"]
+    A2 --> A3["validate<br/>(allowPartial)"]
+    A3 -- any problem --> Z(["ApplyException -<br/>nothing rebuilt"])
+    A3 -- clean --> B{"move-records.log<br/>exists?"}
     B -- yes --> C["file it into the<br/>disaster drawer wholesale -<br/>never salvaged line-by-line"]
     B -- no --> D
     C --> D["for each decision +<br/>unreviewable file:<br/>source still on disk?"]
@@ -23,10 +25,12 @@ flowchart TD
 ```
 
 `reconcile()` exists for when `move-records.log` itself can't be trusted, missing or found
-corrupt, while the shard contract is otherwise intact. It first calls `ApplyPlanner.validate()`
-(see `apply-planner.md`) to confirm that contract is actually intact before rebuilding anything
-from disk. It never salvages a corrupt log line-by-line. Hashes are the ground truth, so the whole
-log is re-derived from disk state and the original is filed away for forensics.
+corrupt, while the shard contract is otherwise intact. It reads the ledger into one snapshot
+before doing anything else. That same snapshot is what `validate()` and `resolvedUnreviewable()`
+both consume, and what decides whether the old log even gets filed away. See `move-ledger.md` for
+the ordering rule this follows. It never salvages a corrupt log line-by-line. Hashes are the
+ground truth, so the whole log is re-derived from disk state and the original is filed away for
+forensics.
 
 The counts-match rule is what keeps a rebuilt record honest. A destination like library `Funny/`
 accumulates files across every run this app has ever applied, not just the run being reconciled.

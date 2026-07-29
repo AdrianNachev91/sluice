@@ -43,9 +43,10 @@ the whole run: the same all-or-nothing guarantee validation itself gives. The de
 and the intermediate cleanup always run once classification passes, even when every montage was an
 all-keeps montage and zero decisions exist. A funny decision's hash-index row is written
 immediately as part of carrying it out, not collected and appended once at the end. A decision
-already Done on a resumed run is backfilled, not reprocessed, so it never re-enters the carry-out
-path. Batching the index row instead would lose it for good, the one time a crash actually lands
-between decisions.
+already Done on a resumed run is handled by `backfillSecondaryWrite()`
+(`backfillClassificationWrite()` for a `Classification`), never reprocessed, so it never re-enters
+the carry-out path. Batching the index row instead would lose it for good, the one time a crash
+actually lands between decisions.
 
 `index.json`'s own `unreviewable` list holds paths this run's montage generation found but
 couldn't render a judgeable tile for. It rides through the same pipeline as a sibling to the
