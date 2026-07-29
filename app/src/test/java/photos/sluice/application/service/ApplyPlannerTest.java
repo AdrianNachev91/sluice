@@ -23,6 +23,7 @@ import static photos.sluice.application.service.CullPrepTestSupport.nearDupChose
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
 import static photos.sluice.application.service.CullPrepTestSupport.readIndex;
+import static photos.sluice.application.service.CullPrepTestSupport.readLedger;
 import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
 import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
 import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
@@ -179,7 +180,7 @@ class ApplyPlannerTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
         ValidationReport report = applyPlanner()
-                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true));
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
         assertThat(report.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.CHOICE);
@@ -197,7 +198,7 @@ class ApplyPlannerTest {
         // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
 
         ValidationReport report = applyPlanner()
-                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true));
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).isEmpty();
     }

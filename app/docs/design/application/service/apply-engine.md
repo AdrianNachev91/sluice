@@ -9,11 +9,11 @@ classification are `ApplyPlanner`'s own job; see `apply-planner.md`.
 
 ```mermaid
 flowchart TD
-    A["read index.json"] --> B["validate<br/>(apply-planner.md)"]
+    A["read index.json"] --> A2["read the move-record log -<br/>one snapshot for this<br/>whole run"]
+    A2 --> B["validate<br/>(apply-planner.md)"]
     B -- any problem --> Z(["ApplyException -<br/>zero files moved"])
-    B -- clean --> C["read the move-record log"]
-    C --> D["classify every decision<br/>(apply-planner.md)"]
-    C --> D2["classify every<br/>unreviewable file<br/>(apply-planner.md)"]
+    B -- clean --> D["classify every decision<br/>(apply-planner.md)"]
+    B -- clean --> D2["classify every<br/>unreviewable file<br/>(apply-planner.md)"]
     D --> F{"any Unresolved,<br/>decision or<br/>unreviewable file alike?"}
     D2 --> F
     F -- yes --> Z
@@ -31,6 +31,10 @@ flowchart TD
     J --> K["delete montage-*<br/>and tile-* files"]
     K --> L(["build ApplyReport -<br/>this run's own decision<br/>counts only, backfilled<br/>decisions excluded"])
 ```
+
+The move-record log is read exactly once per run, before `validate()` even starts. That single
+`Ledger` snapshot is what `validate()`, and both classification passes below, all consume. See
+`move-ledger.md` for the snapshot's own rules.
 
 Every problem source is aggregated before anything throws - a bad run is seen and fixed whole, not
 one error per re-run. Classification runs entirely before any decision or unreviewable file is

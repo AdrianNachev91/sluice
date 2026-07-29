@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.Sha256Port;
+import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Finding;
@@ -83,15 +84,17 @@ public class ReconcileEngine {
      */
     public ReconcileReport reconcile(Path prepDirPath) throws ApplyException {
         final PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
-        final ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true));
+        // Snapshot taken before the ledger gets filed away below - see Ledger's own Javadoc. Once
+        // filed, a read returns empty and an already-resolved overlap would wrongly revert to
+        // unresolved here.
+        final Ledger ledger = moveLedger.read(prepDirPath);
+        final ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
         if (!validation.valid()) {
             throw ApplyPlanner.failure(validation.findings());
         }
-        // Read before the ledger itself gets filed away below. Once filed, it holds no entries to
-        // resolve against, and an already-resolved overlap must not revert to unresolved here.
-        final List<Path> unreviewableFiles = applyPlanner.resolvedUnreviewable(prepDirPath, prepDir);
+        final List<Path> unreviewableFiles = applyPlanner.resolvedUnreviewable(prepDir, ledger);
 
-        final Path moveRecordLog = moveLedger.logFor(prepDirPath);
+        final Path moveRecordLog = ledger.log();
         if (mediaStore.exists(moveRecordLog)) {
             disasterDrawer.file(prepDirPath, moveRecordLog, "move-records-log");
         }

@@ -5,6 +5,7 @@ import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth;
@@ -32,8 +33,10 @@ import java.util.Map;
  * shards it already has rather than flagging every uncalled montage as a finding.
  *
  * <p>Nothing on the diagnosis path can move a file: it reads through the planner, which is the
- * read-only half of applying. purgeCompleted() is the one method here that deletes, and it only
- * ever touches a run diagnose() has certified COMPLETE. It never touches media.
+ * read-only half of applying. It also only ever holds a {@link LedgerReader}, never the
+ * write-capable {@link MoveLedger} - diagnosing can take a ledger snapshot, never append one.
+ * purgeCompleted() is the one method here that deletes, and it only ever touches a run diagnose()
+ * has certified COMPLETE. It never touches media.
  *
  * <p>Flowchart: {@code app/docs/design/application/service/prep-dir-doctor.md}.
  */
@@ -46,6 +49,7 @@ public class PrepDirDoctor {
     private final CullPrepPort cullPrepPort;
     private final MediaStore mediaStore;
     private final ApplyPlanner applyPlanner;
+    private final LedgerReader ledgerReader;
     private final ShardTallyCalculator shardTallyCalculator;
 
     /**
@@ -55,12 +59,14 @@ public class PrepDirDoctor {
      * @param mediaStore {@link MediaStore} filesystem access for prep dirs
      * @param cullSettings {@link CullSettings} configured cull categories, for the shard tally
      * @param applyPlanner {@link ApplyPlanner} the merged shard-contract and missing-source checks
+     * @param ledgerReader {@link LedgerReader} takes a read-only move-ledger snapshot per diagnosis
      */
     public PrepDirDoctor(CullPrepPort cullPrepPort, MediaStore mediaStore, CullSettings cullSettings,
-            ApplyPlanner applyPlanner) {
+            ApplyPlanner applyPlanner, LedgerReader ledgerReader) {
         this.cullPrepPort = cullPrepPort;
         this.mediaStore = mediaStore;
         this.applyPlanner = applyPlanner;
+        this.ledgerReader = ledgerReader;
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings);
     }
 
@@ -104,7 +110,9 @@ public class PrepDirDoctor {
             return new PrepDirHealth(State.BLOCKED, List.of(new Finding.CorruptIndex(prepDirPath.resolve(INDEX_FILE))));
         }
 
-        ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true));
+        // One snapshot for this whole diagnosis, taken before either planner call below.
+        Ledger ledger = ledgerReader.read(prepDirPath);
+        ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
         ShardTally tally = shardTallyCalculator.tally(prepDir);
         // Missing-source checking is skipped here too, for the same reason it's skipped below: the
         // shard contract is still incomplete. A montage still missing its shard tells nothing about
@@ -116,7 +124,7 @@ public class PrepDirDoctor {
         if (!validation.valid()) {
             return new PrepDirHealth(State.BLOCKED, ordered(validation.findings()));
         }
-        List<Finding> findings = applyPlanner.checkMissingSources(prepDirPath, prepDir, validation.decisions());
+        List<Finding> findings = applyPlanner.checkMissingSources(prepDir, validation.decisions(), ledger);
         return findings.isEmpty()
                 ? new PrepDirHealth(State.READY, List.of())
                 : new PrepDirHealth(State.BLOCKED, ordered(findings));

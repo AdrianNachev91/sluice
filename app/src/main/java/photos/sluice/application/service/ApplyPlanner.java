@@ -42,7 +42,9 @@ import java.util.stream.Collectors;
  *
  * <p>That read-only property is structural, not a convention. This class holds a
  * {@link MediaReader} rather than a {@code MediaStore}, so no move, copy, write, or delete is
- * reachable from here at all.
+ * reachable from here at all. Every method here also takes its caller's own {@link Ledger}
+ * snapshot rather than reading one itself. This class cannot even read the ledger file on its
+ * own, let alone append to it.
  *
  * <p>Flowchart: {@code app/docs/design/application/service/apply-planner.md}.
  */
@@ -53,7 +55,6 @@ public class ApplyPlanner {
     private final CullPrepPort cullPrepPort;
     private final CullSettings cullSettings;
     private final Sha256Port sha256Port;
-    private final MoveLedger moveLedger;
     private final ShardValidator shardValidator = new ShardValidator();
 
     /**
@@ -63,15 +64,13 @@ public class ApplyPlanner {
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir sidecars and shards
      * @param cullSettings {@link CullSettings} configured cull categories
      * @param sha256Port {@link Sha256Port} hashes a destination to verify a recorded move
-     * @param moveLedger {@link MoveLedger} reads how each decision was already disposed of
      */
     public ApplyPlanner(MediaReader mediaReader, CullPrepPort cullPrepPort, CullSettings cullSettings,
-            Sha256Port sha256Port, MoveLedger moveLedger) {
+            Sha256Port sha256Port) {
         this.mediaReader = mediaReader;
         this.cullPrepPort = cullPrepPort;
         this.cullSettings = cullSettings;
         this.sha256Port = sha256Port;
-        this.moveLedger = moveLedger;
     }
 
     /**
@@ -92,9 +91,10 @@ public class ApplyPlanner {
      * @param prepDirPath {@link Path} the prep directory being validated
      * @param prepDir {@link PrepDir} the prep directory's index
      * @param options {@link ApplyOptions} apply behavior flags
+     * @param ledger {@link Ledger} the caller's own move-ledger snapshot
      * @return {@link ValidationReport} the merged validation report of decisions and findings
      */
-    ValidationReport validate(Path prepDirPath, PrepDir prepDir, ApplyOptions options) {
+    ValidationReport validate(Path prepDirPath, PrepDir prepDir, ApplyOptions options, Ledger ledger) {
         final var extraFindings = new ArrayList<Finding>();
 
         final Set<String> missingMontages = prepDir.entries().stream()
@@ -116,7 +116,6 @@ public class ApplyPlanner {
                 .map(Finding.StrayShard::new)
                 .forEach(extraFindings::add);
 
-        final Ledger ledger = moveLedger.read(prepDirPath);
         final var sidecarSrcs = new ArrayList<Path>();
         final var shardFiles = new ArrayList<ShardFile>();
         for (String montage : prepDir.entries()) {
@@ -211,12 +210,12 @@ public class ApplyPlanner {
      * unreviewable at all. index.json itself is never edited; this filtering happens purely in
      * memory, every time the list is consulted.
      *
-     * @param prepDirPath {@link Path} the prep directory being processed
      * @param prepDir {@link PrepDir} the prep directory's index
+     * @param ledger {@link Ledger} the caller's own move-ledger snapshot
      * @return a {@link List} of {@link Path} prepDir's unreviewable files, TRUST_DECISION-resolved ones excluded
      */
-    List<Path> resolvedUnreviewable(Path prepDirPath, PrepDir prepDir) {
-        final Map<Path, OverlapResolution> overlaps = moveLedger.read(prepDirPath).overlaps();
+    List<Path> resolvedUnreviewable(PrepDir prepDir, Ledger ledger) {
+        final Map<Path, OverlapResolution> overlaps = ledger.overlaps();
         if (overlaps.isEmpty()) {
             return prepDir.unreviewable();
         }
@@ -232,24 +231,22 @@ public class ApplyPlanner {
      * same check inline, as part of its single classify() pass, rather than calling this method -
      * avoiding a redundant second hash-verification pass.
      *
-     * @param prepDirPath {@link Path} the prep directory being checked
      * @param prepDir {@link PrepDir} the prep directory's index
      * @param decisions a {@link List} of {@link Decision} the validated, heal-corrected decisions
+     * @param ledger {@link Ledger} the caller's own move-ledger snapshot
      * @return a {@link List} of {@link Finding} a MissingSource finding for each unresolved file
      */
-    List<Finding> checkMissingSources(Path prepDirPath, PrepDir prepDir, List<Decision> decisions) {
-        final Path moveRecordLog = moveLedger.logFor(prepDirPath);
-        final Ledger ledger = moveLedger.read(prepDirPath);
+    List<Finding> checkMissingSources(PrepDir prepDir, List<Decision> decisions, Ledger ledger) {
         final var findings = new ArrayList<Finding>();
         decisions.stream()
                 .map(decision -> classify(decision, ledger))
                 .filter(Status.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.decision().file(), moveRecordLog))
+                .map(status -> new Finding.MissingSource(status.decision().file(), ledger.log()))
                 .forEach(findings::add);
-        resolvedUnreviewable(prepDirPath, prepDir).stream()
+        resolvedUnreviewable(prepDir, ledger).stream()
                 .map(file -> classifyFile(file, ledger))
                 .filter(FileStatus.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.file(), moveRecordLog))
+                .map(status -> new Finding.MissingSource(status.file(), ledger.log()))
                 .forEach(findings::add);
         return findings;
     }

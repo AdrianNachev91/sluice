@@ -26,10 +26,14 @@ import java.util.Set;
  * destination path can equal one, and that reasoning only holds while a single class owns both
  * sides of it.
  *
+ * <p>A caller reads once per run via {@link #read} and threads the resulting {@link Ledger}
+ * through every consumer that needs it. That snapshot is what {@link LedgerReader} exposes to a
+ * read-only collaborator; only this class can also append to it.
+ *
  * <p>Format reference: {@code app/docs/design/application/service/move-ledger.md}.
  */
 @Component
-public class MoveLedger {
+public class MoveLedger implements LedgerReader {
 
     private static final String MOVE_RECORD_LOG = "move-records.log";
 
@@ -64,30 +68,33 @@ public class MoveLedger {
     }
 
     /**
-     * The ledger file's own path inside a prep directory. Exposed because a
-     * {@code Finding.MissingSource} names the log the caller failed to find its proof in.
+     * The ledger file's own path inside a prep directory.
      *
      * @param prepDirPath {@link Path} the prep directory
      * @return {@link Path} the ledger file's path
      */
-    Path logFor(Path prepDirPath) {
+    private Path logFor(Path prepDirPath) {
         return prepDirPath.resolve(MOVE_RECORD_LOG);
     }
 
     /**
-     * Parses the whole ledger into its four constituent pieces in one pass.
+     * Parses the whole ledger into its four constituent pieces in one pass. A caller takes one
+     * snapshot per run and threads it through every consumer that needs it. See {@link Ledger}'s
+     * own Javadoc for the rules that snapshot must follow.
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger to read
      * @return {@link Ledger} the parsed ledger, empty in every part if no log exists yet
      */
-    Ledger read(Path prepDirPath) {
+    @Override
+    public Ledger read(Path prepDirPath) {
         var moves = new HashMap<Path, MoveRecord>();
         var skipped = new HashSet<Path>();
         var overlaps = new HashMap<Path, OverlapResolution>();
         var corruptSidecars = new HashMap<String, CorruptSidecarResolution>();
         mediaStore.readLines(logFor(prepDirPath))
                 .forEach(line -> parseLine(line, moves, skipped, overlaps, corruptSidecars));
-        return new Ledger(moves, skipped, overlaps, corruptSidecars);
+        return new Ledger(logFor(prepDirPath), Map.copyOf(moves), Set.copyOf(skipped),
+                Map.copyOf(overlaps), Map.copyOf(corruptSidecars));
     }
 
     /**
@@ -194,18 +201,27 @@ public class MoveLedger {
      * @param dest {@link Path} the destination the source was moved to
      * @param hash {@link String} the hash recorded for the moved bytes
      */
-    record MoveRecord(Path dest, String hash) {
+    public record MoveRecord(Path dest, String hash) {
     }
 
     /**
-     * The whole ledger, parsed in one pass into the four dispositions it can carry.
+     * A single snapshot of the whole ledger, parsed in one pass into the four dispositions it can
+     * carry. Every field is an immutable copy, since one snapshot is meant to be shared read-only
+     * across several consumers in the same run.
      *
+     * <p>The disk state this reflects can change: a CHOICE remedy appends, and
+     * {@code ReconcileEngine} files the whole log away before rebuilding it. So a snapshot is only
+     * valid for the run that took it. Never cache one across a service's separate public calls. And
+     * take it first, before any write that same run might make - never after a remedy or a
+     * reconcile the run itself performs.
+     *
+     * @param log {@link Path} the ledger file this snapshot was read from
      * @param moves a {@link Map} of {@link Path} to {@link MoveRecord} every recorded move, keyed by source
      * @param skipped a {@link Set} of {@link Path} every source the user gave up on
      * @param overlaps a {@link Map} of {@link Path} to {@link OverlapResolution} every resolved overlap
      * @param corruptSidecars a {@link Map} of {@link String} to {@link CorruptSidecarResolution} every resolved corrupt sidecar, keyed by montage id
      */
-    record Ledger(Map<Path, MoveRecord> moves, Set<Path> skipped, Map<Path, OverlapResolution> overlaps,
-            Map<String, CorruptSidecarResolution> corruptSidecars) {
+    public record Ledger(Path log, Map<Path, MoveRecord> moves, Set<Path> skipped,
+            Map<Path, OverlapResolution> overlaps, Map<String, CorruptSidecarResolution> corruptSidecars) {
     }
 }

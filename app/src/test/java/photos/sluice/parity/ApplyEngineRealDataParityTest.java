@@ -204,7 +204,7 @@ class ApplyEngineRealDataParityTest {
         var cullPrepPort = new JsonCullPrepStore();
         var sha256Port = new Sha256Hasher();
         var moveLedger = new MoveLedger(mediaStore);
-        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), sha256Port, moveLedger);
+        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), sha256Port);
         return new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex,
                 new CullDestinations(pathsConfig), moveLedger, applyPlanner);
     }

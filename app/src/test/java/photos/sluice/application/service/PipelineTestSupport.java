@@ -168,13 +168,13 @@ final class PipelineTestSupport {
         var disasterDrawer = new DisasterDrawer(mediaStore);
         var moveLedger = new MoveLedger(mediaStore);
         var cullDestinations = new CullDestinations(pathsConfig);
-        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, cullSettings, sha256Port, moveLedger);
+        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, cullSettings, sha256Port);
         var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,
                 moveLedger, applyPlanner);
         var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
                 cullDestinations, moveLedger, applyPlanner);
         var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, disasterDrawer, moveLedger);
-        var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyPlanner);
+        var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyPlanner, moveLedger);
         var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
         // given photo lands in via mtime ordering alone, without depending on batch-size math.

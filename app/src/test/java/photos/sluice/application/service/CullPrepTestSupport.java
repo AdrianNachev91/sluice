@@ -138,8 +138,14 @@ final class CullPrepTestSupport {
     }
 
     static ApplyPlanner applyPlanner(MediaStore mediaStore) {
-        return new ApplyPlanner(mediaStore, new JsonCullPrepStore(), fixedSettings(), new Sha256Hasher(),
-                new MoveLedger(mediaStore));
+        return new ApplyPlanner(mediaStore, new JsonCullPrepStore(), fixedSettings(), new Sha256Hasher());
+    }
+
+    // A caller takes the ledger snapshot and passes it into ApplyPlanner. A test driving the
+    // planner directly reads the real (usually empty) on-disk state the same way a production
+    // caller would, rather than fabricating a Ledger by hand.
+    static MoveLedger.Ledger readLedger(Path prepDir) {
+        return new MoveLedger(new NioMediaStore()).read(prepDir);
     }
 
     static ReconcileEngine reconcileEngine(Path repoRoot, Path libraryRoot) {
@@ -156,7 +162,9 @@ final class CullPrepTestSupport {
     }
 
     static PrepDirDoctor prepDirDoctor() {
-        return new PrepDirDoctor(new JsonCullPrepStore(), new NioMediaStore(), fixedSettings(), applyPlanner());
+        var mediaStore = new NioMediaStore();
+        return new PrepDirDoctor(new JsonCullPrepStore(), mediaStore, fixedSettings(), applyPlanner(),
+                new MoveLedger(mediaStore));
     }
 
     static Troubleshooter troubleshooter(Path repoRoot, Path libraryRoot) {

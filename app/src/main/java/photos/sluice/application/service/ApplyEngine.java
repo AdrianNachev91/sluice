@@ -135,14 +135,14 @@ public class ApplyEngine {
     public @Nullable ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress,
             CancellationSignal cancellation) throws ApplyException {
         final PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
-        final ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, options);
+        // One snapshot for this whole run, taken before anything below could append to the ledger.
+        final Ledger ledger = moveLedger.read(prepDirPath);
+        final ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, options, ledger);
         if (!validation.valid()) {
             throw ApplyPlanner.failure(validation.findings());
         }
 
-        final Path moveRecordLog = moveLedger.logFor(prepDirPath);
-        final Ledger ledger = moveLedger.read(prepDirPath);
-        final List<Path> unreviewableFiles = applyPlanner.resolvedUnreviewable(prepDirPath, prepDir);
+        final List<Path> unreviewableFiles = applyPlanner.resolvedUnreviewable(prepDir, ledger);
         final List<Status> statuses = validation.decisions().stream()
                 .map(decision -> applyPlanner.classify(decision, ledger))
                 .toList();
@@ -152,11 +152,11 @@ public class ApplyEngine {
         final List<Finding> missingSource = new ArrayList<>();
         statuses.stream()
                 .filter(Status.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.decision().file(), moveRecordLog))
+                .map(status -> new Finding.MissingSource(status.decision().file(), ledger.log()))
                 .forEach(missingSource::add);
         unreviewableStatuses.stream()
                 .filter(FileStatus.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.file(), moveRecordLog))
+                .map(status -> new Finding.MissingSource(status.file(), ledger.log()))
                 .forEach(missingSource::add);
         if (!missingSource.isEmpty()) {
             throw ApplyPlanner.failure(missingSource);

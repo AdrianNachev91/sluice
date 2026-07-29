@@ -7,11 +7,13 @@ before anything moves
 and where each decision or unreviewable file already stands for resume.
 
 `ApplyPlanner` is read-only. It changes nothing itself: no move, no copy, no delete, no ledger
-write. That is enforced by the type it holds, not by convention. It takes `MediaReader`, the
-inspect-only half of `MediaStore`, so the mutating methods are not reachable from here and a
-mutation would not compile. `ApplyEngine.apply()` calls `validate()` and then classifies every
-decision through this class before carrying anything out. See `apply-engine.md` section 1 for the
-whole pipeline.
+write. That is enforced by the types it holds, not by convention, on both sides. It takes
+`MediaReader`, the inspect-only half of `MediaStore`, so the filesystem mutators are not reachable
+from here and a mutation would not compile. And it holds no ledger reference at all. Every method
+that needs one takes its caller's own `MoveLedger.Ledger` snapshot as a parameter instead. This
+class cannot even read the ledger file on its own, let alone append to it (see `move-ledger.md`).
+`ApplyEngine.apply()` calls `validate()` and then classifies every decision through this class
+before carrying anything out. See `apply-engine.md` section 1 for the whole pipeline.
 
 ## 1. Validation
 
@@ -119,13 +121,15 @@ returns. See `apply-engine.md` for `backfillSecondaryWrite()` itself.
 ## Read-only helpers used by other callers
 
 `checkMissingSources()` re-runs `classify()`/`classifyFile()` over an already-validated decision
-list, returning a `Finding.MissingSource` for each unresolved one. `ReconcileEngine` and
-`Troubleshooter` use it for a diagnosis pass that touches nothing. `ApplyEngine.apply()` does not
-call it: its own single classification pass already produces the same findings inline, so a second
-hash-verification pass would be redundant. `verifiedMoveRecord()` is the shared check both
-`classify()` and `classifyFile()` use. A move record only counts as proof once its recorded
-destination still exists and still hashes to the recorded value. A record alone is never trusted
-on its own.
+list, returning a `Finding.MissingSource` for each unresolved one. `PrepDirDoctor.diagnose()` is
+its one caller, for a proactive diagnosis pass that touches nothing (see `prep-dir-doctor.md`).
+`Troubleshooter` only ever reaches it indirectly, through that same `diagnose()` call.
+`ReconcileEngine` never calls it - it has its own reconciliation sweep instead (`reconcile-engine.md`).
+`ApplyEngine.apply()` does not call it either: its own single classification pass already produces
+the same findings inline, so a second hash-verification pass would be redundant. `verifiedMoveRecord()`
+is the shared check both `classify()` and `classifyFile()` use. A move record only counts as proof
+once its recorded destination still exists and still hashes to the recorded value. A record alone
+is never trusted on its own.
 
 ## Scenarios
 
