@@ -4,9 +4,12 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.util.Optional;
 
-// AVIF shares HEIF's ISOBMFF-derived structure and is decoded by the same underlying library
-// (libheif brands itself as "an HEIF and AVIF decoder"), so one port covers all three formats
-// rather than one per extension.
+/**
+ * The effect boundary application services use to decode HEIF/AVIF/HEIC images into a standard
+ * in-memory form. AVIF shares HEIF's ISOBMFF-derived structure and is decoded by the same
+ * underlying library ({@code libheif} brands itself as "an HEIF and AVIF decoder"). One port
+ * covers all three formats rather than one per extension.
+ */
 public interface HeifDecoder {
 
     /**

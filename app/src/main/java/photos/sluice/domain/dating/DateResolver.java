@@ -8,9 +8,14 @@ import photos.sluice.domain.model.TakeoutSidecar;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-// Chain order (sidecar -> exif -> filename -> mtime) and the confidence assigned to each position
-// are fixed here, not configurable - a DateSource only ever answers "what date, if any", never how
-// much to trust it.
+/**
+ * Resolves the best available capture date for a media file by walking a fixed chain of
+ * {@link DateSource}s: sidecar, then exif, then filename, then mtime.
+ *
+ * <p>The chain order and the confidence assigned to each position are fixed here, not
+ * configurable. A {@link DateSource} only ever answers what date, if any, it found. It never says
+ * how much to trust that date.
+ */
 public class DateResolver {
 
     private final DateSource sidecarSource;

@@ -12,12 +12,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
 
-// Assembles the text of an automated culling request. The system prompt is the bundled fixed
-// template with the configured category cards rendered into its placeholder. The template owns
-// the prompt engineering; a card contributes only its plain-words name and description. The user
-// turn is built per montage from its sidecar entries. Grid dimensions come from the injected
-// MontageConfig because the sidecar records no grid info. Prompt assembly assumes a cull runs
-// with the same montage config that rendered its prep directory.
+/**
+ * Assembles the text of an automated culling request. The system prompt is the bundled fixed
+ * template with the configured category cards rendered into its placeholder. The template owns
+ * the prompt engineering. A card contributes only its plain-words name and description.
+ *
+ * <p>The user turn is built per montage from its sidecar entries. Grid dimensions come from the
+ * injected {@link MontageConfig} because the sidecar records no grid info. Prompt assembly
+ * assumes a cull runs with the same montage config that rendered its prep directory.
+ */
 @Component
 class CullerPrompt {
 

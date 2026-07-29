@@ -4,6 +4,13 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.model.Dimensions;
 import photos.sluice.domain.model.MediaType;
 
+/**
+ * Decides whether a media file counts as low resolution, based on its file size and, when known,
+ * its pixel dimensions.
+ *
+ * <p>Videos and SVGs are never considered low resolution. Everything else fails the gate below a
+ * small file-size floor, or below a minimum dimension when its size is known.
+ */
 public final class LowResGate {
 
     // 1024-based (KiB), not a decimal 50000-byte threshold.

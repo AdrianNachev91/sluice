@@ -11,6 +11,10 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.List;
 
+/**
+ * Composes a batch of rendered {@link MontageTile}s into a single grid-layout montage image, with
+ * each tile's file name drawn as a caption below it.
+ */
 @Component
 public class MontageBuilder {
 
@@ -26,8 +30,11 @@ public class MontageBuilder {
     private static final float LABEL_FONT_SIZE = 9f;
     private static final int LABEL_VERTICAL_MARGIN = 2;
 
-    // A rendering artifact (holds a BufferedImage), not a domain concept - mirrors TileRenderer's
-    // own TileResult being nested in adapter/imaging rather than domain/cull.
+    /**
+     * A rendering artifact holding a decoded tile image and its caption label, not a domain
+     * concept. This mirrors {@link TileRenderer.TileResult} being nested in
+     * {@code adapter.imaging} rather than {@code domain.cull}.
+     */
     public record MontageTile(BufferedImage image, String label) {
     }
 

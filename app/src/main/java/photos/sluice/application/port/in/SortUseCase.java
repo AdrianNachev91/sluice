@@ -3,6 +3,10 @@ package photos.sluice.application.port.in;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 
+/**
+ * The use case for dating, de-duplicating, and moving a scope of Inbox files into local staging.
+ * This is the mechanical first stage of the pipeline, run before any vision-based culling.
+ */
 public interface SortUseCase {
 
     /**

@@ -13,8 +13,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 
-// Last resort in the chain: filesystem modification time reflects when the file was last touched,
-// not when it was captured, so DateResolver assigns it LOW confidence.
+/**
+ * A {@link DateSource} of last resort, reading a file's filesystem last-modified time. This
+ * reflects when the file was last touched, not when it was captured, so
+ * {@link photos.sluice.domain.dating.DateResolver} assigns it low confidence.
+ */
 @Component
 public class MtimeSource implements DateSource {
 

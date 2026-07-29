@@ -16,7 +16,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 
-// Google Takeout sidecar JSON shape: {"photoTakenTime": {"timestamp": "<unix seconds>", ...}, ...}.
+/**
+ * A {@link DateSource} that reads a capture date from a Google Takeout sidecar's
+ * {@code photoTakenTime} field. The sidecar JSON shape is
+ * {@code {"photoTakenTime": {"timestamp": "<unix seconds>", ...}, ...}}.
+ */
 @Component
 public class TakeoutJsonSource implements DateSource {
 

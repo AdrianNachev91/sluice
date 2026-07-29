@@ -1,10 +1,16 @@
 package photos.sluice.application.service;
 
-// The unit of work JobRunner.submit() runs in the background. Takes the same JobHandle the caller
-// gets back from submit(), so the work itself can poll isCancellationRequested() at its own natural
-// boundaries. Declares throws Exception, like Callable<T>, so it can call straight through to a
-// checked-exception engine method (ApplyEngine.apply(), VisionCuller.cull()) with no
-// wrap-and-rethrow boilerplate at the call site.
+/**
+ * The unit of work {@link JobRunner#submit} runs in the background. It takes the same
+ * {@link JobHandle} the caller gets back from {@code submit}, so the work itself can poll
+ * {@link JobHandle#isCancellationRequested()} at its own natural boundaries.
+ *
+ * <p>Declares {@code throws Exception}, like {@code Callable<T>}. That lets it call straight
+ * through to a checked-exception engine method (for example {@code ApplyEngine.apply()} or
+ * {@code VisionCuller.cull()}) with no wrap-and-rethrow boilerplate at the call site.
+ *
+ * @param <T> the type of result this work produces
+ */
 @FunctionalInterface
 public interface JobWork<T> {
 

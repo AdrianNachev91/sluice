@@ -4,6 +4,10 @@ import photos.sluice.domain.model.ScanResult;
 
 import java.nio.file.Path;
 
+/**
+ * The effect boundary application services use to walk the Inbox tree and report what media it
+ * holds, feeding the sort engine's planning without performing any moves itself.
+ */
 public interface InboxScannerPort {
 
     /**

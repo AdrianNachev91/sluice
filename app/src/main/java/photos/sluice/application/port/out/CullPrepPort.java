@@ -9,13 +9,16 @@ import photos.sluice.domain.cull.SidecarPhotoEntry;
 import java.nio.file.Path;
 import java.util.List;
 
-// Reads and writes the JSON artifacts a prep directory holds beyond the montage images themselves.
-// That means index.json, the montage sidecars, and the vision step's decision shards, all this
-// app's own prior output. It also covers the merged decisions.json ApplyEngine writes once a run
-// completes.
-// Listing which decisions-*.json files exist (for stray-shard detection) stays on the
-// already-generic MediaStore. This port only covers the structured JSON MediaStore cannot parse on
-// its own.
+/**
+ * The effect boundary application services use to read and write the JSON artifacts a prep
+ * directory holds beyond the montage images themselves. That means {@code index.json}, the montage
+ * sidecars, and the vision step's decision shards, all this app's own prior output. It also covers
+ * the merged {@code decisions.json} {@code ApplyEngine} writes once a run completes.
+ *
+ * <p>Listing which {@code decisions-*.json} files exist (for stray-shard detection) stays on the
+ * already-generic {@code MediaStore}. This port only covers the structured JSON {@code MediaStore}
+ * cannot parse on its own.
+ */
 public interface CullPrepPort {
 
     /**

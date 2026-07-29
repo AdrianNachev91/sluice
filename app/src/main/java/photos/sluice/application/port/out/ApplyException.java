@@ -4,14 +4,19 @@ import photos.sluice.domain.cull.Finding;
 
 import java.util.List;
 
-// Thrown by an apply-side engine when the prep directory's shards do not validate cleanly from
-// scratch. That means a missing shard, an off-contract decision, or a decision whose file is
-// neither on disk nor already recorded as applied.
-// The message carries every problem found, aggregated, so a bad run
-// is fixed in one pass instead of one error per re-run. findings() carries the same problems
-// structured, so a failed apply and PrepDirDoctor's own proactive diagnosis feed the identical UI
-// panel. Checked, because this is an expected, recoverable outcome: fix the shards (or re-run the
-// culler) and apply again. Zero files are ever moved when this is thrown.
+/**
+ * Thrown by an apply-side engine when the prep directory's shards do not validate cleanly from
+ * scratch. That means a missing shard, an off-contract decision, or a decision whose file is
+ * neither on disk nor already recorded as applied.
+ *
+ * <p>The message carries every problem found, aggregated, so a bad run is fixed in one pass
+ * instead of one error per re-run. Structured findings are available via {@link #findings()}, so a
+ * failed apply and {@link photos.sluice.application.service.PrepDirDoctor}'s own proactive
+ * diagnosis feed the identical UI panel.
+ *
+ * <p>Checked, because this is an expected, recoverable outcome: fix the shards (or re-run the
+ * culler) and apply again. Zero files are ever moved when this is thrown.
+ */
 public class ApplyException extends Exception {
 
     private final List<Finding> findings;

@@ -9,13 +9,17 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Rescue's own date-resolution chain, deliberately not DateResolver: Takeout sidecars are long
-// gone by rescue time, and a file with no real date signal must be skipped rather than dated from
-// mtime - a rescue never fabricates a date, not even from the filesystem clock. The order also
-// diverges - folder-derived date first, not last - because the Review folder a file already sits
-// in (a dated "yyyy-mm" leaf) encodes a more trustworthy date than a 2-source exif/filename
-// re-derivation could produce; only Food/Scenery/Unsorted (no date in the folder name) actually
-// fall through to exif/filename.
+/**
+ * Resolves a plausible date for a file being rescued out of a {@code Review} folder, using its own
+ * chain rather than {@link DateResolver}'s. By rescue time no Takeout sidecar survives. A file
+ * with no real date signal is skipped rather than dated from mtime. A rescue never fabricates a
+ * date, not even from the filesystem clock.
+ *
+ * <p>The order also differs: a folder-derived date is tried first, not last. The {@code Review}
+ * folder a file already sits in encodes a dated {@code "yyyy-mm"} leaf, which is more trustworthy
+ * than a two-source exif/filename re-derivation could produce. Only Food, Scenery, and Unsorted
+ * folders, whose names carry no date, actually fall through to exif and filename.
+ */
 public class RescueDateResolver {
 
     // Matches the whole target leaf, e.g. "2019-06".

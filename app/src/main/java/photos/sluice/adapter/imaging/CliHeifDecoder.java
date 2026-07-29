@@ -10,14 +10,20 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-// Shells to a libheif-based CLI decoder (heif-convert from the libheif project). This is the
-// one permitted native dependency in the Global Constraints. No metadata/pixel library exists
-// that can decode real HEVC/AV1 pixel data in pure Java.
-// heif-convert is used rather than its newer heif-dec rename. The older name is what both
-// Ubuntu's stock libheif-examples package and upstream's own compatibility alias still
-// guarantee across versions. That avoids a cross-platform version-skew mismatch.
-// The command is looked up on PATH by default (see ImagingConfig). A missing or failing binary
-// degrades to Optional.empty() rather than throwing, matching the port's own contract.
+/**
+ * A {@link HeifDecoder} that shells out to a libheif-based CLI decoder ({@code heif-convert} from
+ * the libheif project). This is the one native dependency permitted under this project's Global
+ * Constraints, since no metadata or pixel library can decode real HEVC/AV1 pixel data in pure
+ * Java.
+ *
+ * <p>{@code heif-convert} is used rather than its newer {@code heif-dec} rename. The older name is
+ * what both Ubuntu's stock {@code libheif-examples} package and upstream's own compatibility alias
+ * still guarantee across versions. That avoids a cross-platform version-skew mismatch.
+ *
+ * <p>The command is looked up on {@code PATH} by default (see {@code ImagingConfig}). A missing or
+ * failing binary degrades to {@link Optional#empty()} rather than throwing, matching this port's
+ * own contract.
+ */
 public class CliHeifDecoder implements HeifDecoder {
 
     private static final long TIMEOUT_SECONDS = 30;

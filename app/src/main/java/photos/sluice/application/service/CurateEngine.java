@@ -11,9 +11,11 @@ import photos.sluice.domain.model.SortSummary;
 import java.util.List;
 import java.util.stream.IntStream;
 
-// Sorts a scope, then culls whatever that sort just populated, as one job. Not a Spring bean -
-// Pipeline builds the one instance it needs, wiring it to the same CullEngine it builds for
-// cull()/resume() itself.
+/**
+ * Sorts a scope, then culls whatever that sort just populated, as one job. Not a Spring bean.
+ * {@link Pipeline} builds the one instance it needs, wiring it to the same {@link CullEngine} it
+ * builds for its own {@code cull}/{@code resume}.
+ */
 final class CurateEngine {
 
     private static final String SORTING = "Sorting...";
@@ -43,26 +45,26 @@ final class CurateEngine {
      * inside this one JobWork - never two chained submit() calls (JobHandle's own doc explains why
      * no job depends on another's future).
      *
-     * The target CullScope mirrors scope directly wherever that's knowable up front: an explicit
+     * <p>The target CullScope mirrors scope directly wherever that's knowable up front: an explicit
      * Year maps straight across, and OldestN carries the same n through to CullScope.OldestN. Sort
      * itself is never narrowed to fit cull's shape - it always runs its own normal, complete job.
      *
-     * An OldestN sort can still land files across more than one year. Cull's own OldestN ordering
+     * <p>An OldestN sort can still land files across more than one year. Cull's own OldestN ordering
      * is by raw mtime, not resolved date (see CullScope's own doc) - exactly what a standalone
      * cull() call already does with that scope. Nothing new here.
      *
-     * Only OldestYear can't be mapped ahead of time - its year isn't decided until the sort itself
+     * <p>Only OldestYear can't be mapped ahead of time - its year isn't decided until the sort itself
      * resolves it. knownCullScope() returns null for it; the real mapping happens after the sort
      * runs, from SortSummary.yearsSorted().
      *
-     * A known target CullScope gets the same synchronous, pre-submit checkNoWaitingJobFor()
+     * <p>A known target CullScope gets the same synchronous, pre-submit checkNoWaitingJobFor()
      * cull() gets - failing before the sort even starts. OldestYear can't be checked that early.
      * Its only guard is the same check running again once its year is resolved, after the sort has
      * already moved real files. That failure can't be a plain IllegalStateException like the
      * pre-submit one is - the caller would lose the SortSummary describing what already moved. See
      * Pipeline.CurateConflictException's own doc for how that's carried forward instead.
      *
-     * isCancellationRequested() is checked here at the sort/cull boundary. It's also checked
+     * <p>isCancellationRequested() is checked here at the sort/cull boundary. It's also checked
      * inside SortEngine's own dating and routing passes via its CancellationSignal overload.
      * The cull stage's own render/dispatch/apply passes check it too, via buildFreshAndDispatch()'s
      * and dispatchAndApply()'s own checks. A large sort or cull responds promptly throughout, not

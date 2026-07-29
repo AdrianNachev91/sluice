@@ -1,10 +1,14 @@
 package photos.sluice.domain.commit;
 
-// Classifies a file by the first path segment of its Sorted-relative (equivalently
-// library-relative, since both trees share the same top-level layout) location: Photos, Videos,
-// or Funny. Used only to tally the commit summary's per-bucket counts. OTHER is a safe fallback
-// for a first segment that isn't one of those three. Nothing in the pipeline produces one today,
-// but ofFirstSegment must still return some value for every possible input.
+/**
+ * Classifies a file by the first path segment of its Sorted-relative location: Photos, Videos, or
+ * Funny. Sorted-relative and library-relative paths are equivalent here, since both trees share the
+ * same top-level layout.
+ *
+ * <p>Used only to tally {@link CommitSummary}'s per-bucket counts. {@code OTHER} is a fallback for a
+ * first segment that isn't one of those three. Nothing in the pipeline produces one today, but
+ * {@code ofFirstSegment} must still return some value for every possible input.
+ */
 public enum LibraryBucket {
     PHOTOS, VIDEOS, FUNNY, OTHER;
 

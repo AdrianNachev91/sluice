@@ -7,6 +7,12 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 
+/**
+ * The effect boundary application services use to render montage contact sheets for a cull scope,
+ * producing the prep directory a vision provider then judges. The progress- and
+ * cancellation-aware overloads both default to the plain {@link #build(CullScope, MontageConfig)}
+ * above, so an implementation with nothing interruptible to report still satisfies the port.
+ */
 public interface MontageRenderer {
 
     /**

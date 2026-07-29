@@ -1,8 +1,13 @@
 package photos.sluice.domain.model;
 
-// A shared value type for narrowing a scoped run to a span of months within a year. Used by both
-// SortScope.Year (Inbox selection) and CommitScope.Year (Sorted selection) - neither concept owns
-// it, so it lives alongside them in domain/model rather than nested under either.
+import photos.sluice.domain.commit.CommitScope;
+
+/**
+ * A shared value type for narrowing a scoped run to a span of months within a year. Both
+ * {@link SortScope.Year} (Inbox selection) and {@link CommitScope.Year} (Sorted selection) use it.
+ * Neither concept owns it, so it lives alongside them in {@code domain.model} rather than nested
+ * under either.
+ */
 public record MonthRange(int from, int to) {
 
     /**

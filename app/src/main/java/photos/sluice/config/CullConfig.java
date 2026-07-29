@@ -11,6 +11,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Binds the {@code sluice.cull} settings: which provider drives the culler, that provider's own
+ * settings, the classification categories it routes photos to, and the external-agent watch mode.
+ *
+ * <p>Implements {@link CullSettings} directly, so the application layer can select and configure a
+ * culler without importing this config record.
+ */
 @ConfigurationProperties(prefix = "sluice.cull")
 public record CullConfig(String provider, CullProviderSettings providerSettings, List<CullCategory> categories,
         ExternalAgentSettings externalAgent) implements CullSettings {

@@ -14,22 +14,33 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 
-// Reads a montage-NNN.json sidecar and returns every photo entry it lists. Callers project the
-// fields they need - the srcs are the authoritative in-scope file set ShardValidator checks
-// decisions against. Fields outside the photo entries (the montage field, anything the writer
-// grows later) stay ignored, because the sidecar's full shape is owned by the writer that produces
-// it. Any failure is loud and unchecked, never part of a cull's fixable-problem report. The
-// sidecar is written by this app, so an unreadable or incomplete one means the prep directory
-// itself is broken. No shard correction can repair that; the scope needs re-prepping.
+/**
+ * Reads a {@code montage-NNN.json} sidecar and returns every photo entry it lists. Callers
+ * project the fields they need. The srcs are the authoritative in-scope file set
+ * {@link photos.sluice.domain.cull.ShardValidator} checks decisions against. Fields outside the
+ * photo entries (the montage field, anything the writer grows later) stay ignored. The sidecar's
+ * full shape is owned by the writer that produces it.
+ *
+ * <p>Any failure is loud and unchecked, never part of a cull's fixable-problem report. The
+ * sidecar is written by this app, so an unreadable or incomplete one means the prep directory
+ * itself is broken. No shard correction can repair that. The scope needs re-prepping.
+ */
 @Component
 class SidecarReader {
 
     private final JsonMapper mapper = JsonMapper.builder().build();
 
+    /**
+     * The JSON shape one photo entry takes in the sidecar. Every field is nullable so a missing
+     * one is reported by name rather than crashing the parse.
+     */
     private record RawPhoto(@Nullable String src, @Nullable String name, @Nullable String time,
             @Nullable Boolean received) {
     }
 
+    /**
+     * The full JSON document a montage's sidecar file holds: its list of photo entries.
+     */
     private record RawSidecar(@Nullable List<@Nullable RawPhoto> photos) {
     }
 

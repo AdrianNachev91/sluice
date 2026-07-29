@@ -28,13 +28,19 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
-// The public facade wiring the mechanical engines through JobRunner so a driving adapter (the
-// JavaFX UI, a future CLI) gets a JobHandle back instead of blocking. Progress is bracketed through
-// ProgressPort around each engine call, via PhaseRunner. Cull/curate orchestration itself lives in
-// CullEngine/CurateEngine; Pipeline builds and wires both, and exposes their methods under one
-// type so a driving adapter depends on a single class. Depends on the engines' concrete classes
-// rather than their SortUseCase/CommitUseCase/RescueUseCase port/in interfaces - the
-// progress-callback overloads live only on the concrete types, not on those narrower interfaces.
+/**
+ * The public facade wiring the mechanical engines through {@link JobRunner}. A driving adapter
+ * (the JavaFX UI, a future CLI) gets a {@link JobHandle} back instead of blocking. Progress is
+ * bracketed through {@link ProgressPort} around each engine call, via {@link PhaseRunner}.
+ *
+ * <p>Cull and curate orchestration live in {@link CullEngine} and {@link CurateEngine}. Pipeline
+ * builds and wires both, then exposes their methods under one type so a driving adapter depends
+ * on a single class.
+ *
+ * <p>Depends on the engines' concrete classes rather than their {@code SortUseCase}/
+ * {@code CommitUseCase}/{@code RescueUseCase} port-in interfaces. The progress-callback overloads
+ * live only on the concrete types, not on those narrower interfaces.
+ */
 @Component
 public class Pipeline {
 
@@ -311,10 +317,13 @@ public class Pipeline {
         return phaseRunner.run(phase, work);
     }
 
-    // Thrown by curate() instead of a plain IllegalStateException when an auto-resolved OldestYear
-    // scope's checkNoWaitingJobFor() conflict surfaces after its sort has already moved real files.
-    // Every other checkNoWaitingJobFor() failure happens before anything runs. Only this one needs
-    // to carry a partial result forward - sortSummary() is what the sort stage already produced.
+    /**
+     * Thrown by {@code curate()} instead of a plain {@link IllegalStateException} when an
+     * auto-resolved {@code OldestYear} scope's {@code checkNoWaitingJobFor()} conflict surfaces
+     * after its sort has already moved real files. Every other {@code checkNoWaitingJobFor()}
+     * failure happens before anything runs. Only this one needs to carry a partial result
+     * forward: {@link #sortSummary()} is what the sort stage already produced.
+     */
     public static final class CurateConflictException extends IllegalStateException {
         private final transient SortSummary sortSummary;
 

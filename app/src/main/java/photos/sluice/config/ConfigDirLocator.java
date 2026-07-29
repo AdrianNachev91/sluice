@@ -4,6 +4,13 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * Computes the OS-native directory Sluice's user config file lives in, given the raw OS name and
+ * the environment variables to resolve paths from.
+ *
+ * <p>Windows resolves under {@code %APPDATA%}, macOS under {@code ~/Library/Application Support},
+ * and other platforms follow the XDG base directory convention.
+ */
 public final class ConfigDirLocator {
 
     /**

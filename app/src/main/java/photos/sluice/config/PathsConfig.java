@@ -9,6 +9,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
+/**
+ * Resolves Sluice's working paths from the bound {@link PathsProperties}. At startup it validates
+ * that the repo root, library root, and inbox all point to directories that actually exist.
+ *
+ * <p>The logs, Sorted, Review, Duplicates, and Unreviewable directories are all derived from the
+ * repo root rather than configured independently.
+ */
 @Component
 public class PathsConfig implements PathsPort {
 

@@ -6,6 +6,11 @@ import photos.sluice.domain.job.WaitingCullJob;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * The use case for running the vision cull over sorted media, including waiting on and resuming
+ * jobs that pause for an external agent's shards. A caller drives the whole cull lifecycle
+ * through this interface: starting a run, listing what is still waiting, and resuming a prep dir.
+ */
 public interface CullUseCase {
 
     /**
@@ -23,6 +28,8 @@ public interface CullUseCase {
      *
      * @return a {@link List} of {@link WaitingCullJob} the currently waiting cull jobs
      */
+    // No UI consumes this port yet, so no caller currently invokes this method through it.
+    @SuppressWarnings("unused")
     List<WaitingCullJob> waitingJobs();
 
     /**

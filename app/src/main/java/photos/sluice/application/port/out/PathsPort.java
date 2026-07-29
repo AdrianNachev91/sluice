@@ -2,6 +2,10 @@ package photos.sluice.application.port.out;
 
 import java.nio.file.Path;
 
+/**
+ * The effect boundary application services and adapters use to read the app's configured folder
+ * roots, so neither imports the config record that supplies them.
+ */
 public interface PathsPort {
 
     /**

@@ -21,9 +21,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-// Promotes every media file still present under a Review folder into the library, re-dated via
-// RescueDateResolver, then dissolves the folder if nothing was left behind. A file with no
-// plausible date is skipped in place, never given a fabricated one.
+/**
+ * Promotes every media file still present under a Review folder into the library, re-dated via
+ * {@link RescueDateResolver}, then dissolves the folder if nothing was left behind. A file with
+ * no plausible date is skipped in place and never given a fabricated one.
+ */
 @Component
 public class RescueEngine implements RescueUseCase {
 
@@ -195,6 +197,10 @@ public class RescueEngine implements RescueUseCase {
         return "%02d".formatted(when.getMonthValue());
     }
 
+    /**
+     * Accumulates one rescue pass's outcome as it goes: how many files were rescued, and the file
+     * names of any skipped for lacking a plausible date.
+     */
     private static final class RescueOutcome {
         int rescued;
         final List<String> skipped = new ArrayList<>();

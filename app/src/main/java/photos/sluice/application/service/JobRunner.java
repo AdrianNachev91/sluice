@@ -7,12 +7,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-// Runs one job at a time so a driving caller (a desktop UI, or a script) can start work and get a
-// typed JobHandle back without blocking. A UI is expected to disable its own Start control while a
-// job runs. The slot is enforced here too, not just at the UI layer. A second submit() while one is
-// still in flight throws, rather than letting two engines move the same tree at once. Virtual
-// threads are always daemon threads, so the executor needs no explicit shutdown for the process to
-// exit cleanly.
+/**
+ * Runs one job at a time so a driving caller (a desktop UI, or a future CLI) can start work
+ * without blocking. It gets a typed {@link JobHandle} back right away.
+ *
+ * <p>A UI is expected to disable its own start control while a job runs. The slot is enforced
+ * here too, not just at the UI layer: a second {@link #submit} call while one is still in flight
+ * throws, rather than letting two engines move the same tree at once.
+ *
+ * <p>Virtual threads are always daemon threads, so the executor needs no explicit shutdown for
+ * the process to exit cleanly.
+ */
 @Component
 public class JobRunner {
 

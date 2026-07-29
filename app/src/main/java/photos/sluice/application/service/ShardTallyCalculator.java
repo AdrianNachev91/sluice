@@ -13,9 +13,11 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.List;
 
-// Computes a WaitingCullJob's present/valid shard counts from its prep dir. Not a Spring bean -
-// CullEngine owns the one instance it needs, built from the same CullPrepPort/CullSettings it
-// already receives.
+/**
+ * Computes a waiting cull job's present/valid shard counts from its prep dir. Not a Spring bean.
+ * {@link CullEngine} owns the one instance it needs, built from the same {@link CullPrepPort} and
+ * {@link CullSettings} it already receives.
+ */
 final class ShardTallyCalculator {
 
     private final CullPrepPort cullPrepPort;
@@ -120,6 +122,10 @@ final class ShardTallyCalculator {
         }
     }
 
+    /**
+     * One montage's shard status: whether its shard file exists at all, and whether it parses and
+     * validates against the prep dir's sidecars and configured categories.
+     */
     private record MontageShardStatus(boolean present, boolean valid) {
     }
 }

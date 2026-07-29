@@ -8,11 +8,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-// Partitions a batch of hashed media into keepers to sort, files byte-identical to something
-// already in the library, and byte-identical duplicates within the batch itself. Produces a plan
-// only - no file is deleted here; the caller acts on redundantVsLibrary/withinBatchDuplicates.
+/**
+ * Partitions a batch of hashed media into keepers to sort, files byte-identical to something
+ * already in the library, and byte-identical duplicates within the batch itself.
+ *
+ * <p>Produces a {@link DedupPlan} only. No file is deleted here; the caller acts on
+ * {@code redundantVsLibrary} and {@code withinBatchDuplicates}.
+ */
 public final class ByteIdenticalDedup {
 
+    /**
+     * The three-way split produced by {@link ByteIdenticalDedup#plan}: files to route to Sorted,
+     * files redundant against the library, and duplicates found within the batch itself.
+     */
     public record DedupPlan(List<MediaFile> toSort, List<MediaFile> redundantVsLibrary,
                              List<MediaFile> withinBatchDuplicates) {
         /**

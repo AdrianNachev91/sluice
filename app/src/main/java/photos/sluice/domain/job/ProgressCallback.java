@@ -1,9 +1,15 @@
 package photos.sluice.domain.job;
 
-// One already-sized unit of work finished (a file sorted, a montage built, a shard applied).
-// total is fixed across every call in a given run, but only known once the caller has computed it.
-// Carrying it on every tick, rather than announcing it separately up front, removes the need to
-// know the total before the work it describes has even started.
+/**
+ * Reports progress one already-sized unit of work at a time: a file sorted, a montage built, a
+ * shard applied.
+ *
+ * <p>{@code total} is fixed across every call in a given run. It is only known once the caller has
+ * computed it.
+ *
+ * <p>Carrying {@code total} on every tick, rather than announcing it separately up front, removes
+ * the need to know the total before the work has even started.
+ */
 @FunctionalInterface
 public interface ProgressCallback {
 

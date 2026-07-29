@@ -25,23 +25,26 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-// The provider for a user whose vision judgement comes from an agent outside this app. That agent
-// reads the montages and drops a decisions-NNN.json shard per montage into the prep directory on
-// its own schedule. cull() is therefore a single-attempt completeness check, never a wait. It verifies that
-// every montage has a present, contract-valid shard right now. Otherwise it throws CullException
-// carrying every problem found: missing shards, unparseable shards, shards for montages that don't
-// exist, and every contract violation ShardValidator reports. Whoever culls gets the whole to-fix
-// list in one pass. The throw is the poke: fix the shards, run again.
-//
-// opts.allowPartial() waives only the missing-shard requirement. Whatever shards do exist must
-// still be fully valid. opts.timeout() is ignored - there is nothing to wait on. The returned
-// report counts waived montages as skipped and carries zero tokens: the judgement happened outside
-// this app, so no model tokens were spent here.
-//
-// Two failure channels, split by who can fix them. Shard problems are the culling agent's to fix
-// and go into the CullException report. The sidecars listing what each montage shows are this
-// app's own output. One that can't be read means the prep dir is broken and the scope needs
-// re-prepping, so that fails loud and unchecked instead.
+/**
+ * The {@link VisionCuller} provider for a user whose vision judgement comes from an agent outside
+ * this app. That agent reads the montages and drops a {@code decisions-NNN.json} shard per
+ * montage into the prep directory on its own schedule. Calling {@code cull()} is therefore a
+ * single-attempt completeness check, never a wait. It verifies that every montage has a present,
+ * contract-valid shard right now. Otherwise it throws {@link CullException} carrying every
+ * problem found: missing shards, unparseable shards, shards for montages that don't exist, and
+ * every contract violation {@link ShardValidator} reports. Whoever culls gets the whole to-fix
+ * list in one pass. The throw is the poke: fix the shards, run again.
+ *
+ * <p>{@code opts.allowPartial()} waives only the missing-shard requirement. Whatever shards do
+ * exist must still be fully valid. {@code opts.timeout()} is ignored, since there is nothing to
+ * wait on. The returned report counts waived montages as skipped and carries zero tokens. The
+ * judgement happened outside this app, so no model tokens were spent here.
+ *
+ * <p>Two failure channels split by who can fix them. Shard problems are the culling agent's to
+ * fix and go into the {@link CullException} report. The sidecars listing what each montage shows
+ * are this app's own output. One that can't be read means the prep dir is broken and the scope
+ * needs re-prepping, so that fails loud and unchecked instead.
+ */
 @Component
 class ExternalAgentCuller implements VisionCuller {
 

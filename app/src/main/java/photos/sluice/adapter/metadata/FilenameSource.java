@@ -13,6 +13,10 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * A {@link DateSource} that reads a capture date from a date pattern embedded in the file's own
+ * name, matching common camera and messaging-app export naming conventions.
+ */
 @Component
 public class FilenameSource implements DateSource {
 

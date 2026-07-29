@@ -31,34 +31,46 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 
-// Validates a prep directory's decision shards against the shard contract - the single source of
-// truth for what a well-formed cull looks like. It reports every representable-but-wrong problem at
-// once, so the vision agent gets its whole to-fix list in one pass instead of one error per re-run;
-// a single decision with a bad category, a blank reason, and an out-of-scope file reports all three.
-// Pure: no I/O. The caller supplies the parsed shards, the authoritative in-scope file list (every
-// montage sidecar's src), and the configured category set.
-//
-// The contract, stated positively:
-//   - A decision's file must be one the montages actually showed - i.e. a member of the sidecar src
-//     set - either directly or after a unique-basename heal. Whether that file still exists on disk
-//     is a separate, later concern; this class does no I/O.
-//   - The shard's montage field must be present and equal to the montage id its filename implies.
-//   - A classification's category must be one of the configured categories, matched exactly.
-//   - Each decision carries its required reasons (reason, or chosen_reason for a near-dup keeper).
-//   - Each near-dup group has exactly one chosen keeper and at least one reject, and belongs to a
-//     single montage - a group id reused across shards is rejected.
-//   - A group id is a slug: lowercase a-z0-9 runs joined by single hyphens, at most 24 chars. It
-//     becomes part of a Duplicates/YYYY-MM_<slug>/ folder name, so it must stay a short, portable
-//     path segment.
-//   - No file is acted on twice - across all shards, and against the unreviewable list too.
+/**
+ * Validates a prep directory's decision shards against the shard contract, the single source of
+ * truth for what a well-formed cull looks like. It reports every representable-but-wrong problem
+ * at once, so the vision agent gets its whole to-fix list in one pass instead of one error per
+ * re-run. A single decision with a bad category, a blank reason, and an out-of-scope file reports
+ * all three.
+ *
+ * <p>Pure: no I/O. The caller supplies the parsed shards, the authoritative in-scope file list
+ * (every montage sidecar's {@code src}), and the configured category set.
+ *
+ * <p>The contract, stated positively:
+ *
+ * <ul>
+ *   <li>A decision's file must be one the montages actually showed, i.e. a member of the sidecar
+ *       {@code src} set, either directly or after a unique-basename heal. Whether that file still
+ *       exists on disk is a separate, later concern; this class does no I/O.
+ *   <li>The shard's {@code montage} field must be present and equal to the montage id its filename
+ *       implies.
+ *   <li>A classification's category must be one of the configured categories, matched exactly.
+ *   <li>Each decision carries its required reasons ({@code reason}, or {@code chosen_reason} for a
+ *       near-dup keeper).
+ *   <li>Each near-dup group has exactly one chosen keeper and at least one reject, and belongs to a
+ *       single montage - a group id reused across shards is rejected.
+ *   <li>A group id is a slug: lowercase {@code a-z0-9} runs joined by single hyphens, at most 24
+ *       characters. It becomes part of a {@code Duplicates/YYYY-MM_<slug>/} folder name, so it
+ *       must stay a short, portable path segment.
+ *   <li>No file is acted on twice, across all shards and against the unreviewable list too.
+ * </ul>
+ */
 public final class ShardValidator {
 
     private static final Pattern GROUP_SLUG = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
     private static final int GROUP_SLUG_MAX_LENGTH = 24;
 
-    // A parsed shard paired with the montage id its on-disk filename implies (decisions-003.json ->
-    // montage-003). The caller derives the id from the filename - the only place that linkage is
-    // known - so the validator can check the shard's self-declared montage field against it.
+    /**
+     * A parsed shard paired with the montage id its on-disk filename implies (e.g.
+     * {@code decisions-003.json} implies {@code montage-003}). The caller derives the id from the
+     * filename, the only place that linkage is known. That lets the validator check the shard's
+     * self-declared {@code montage} field against it.
+     */
     public record ShardFile(String expectedMontage, DecisionShard shard) {
     }
 

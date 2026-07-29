@@ -7,6 +7,12 @@ import photos.sluice.domain.model.TakeoutSidecar;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * A single strategy for deriving a media file's capture date from one specific signal, such as a
+ * Takeout sidecar, EXIF metadata, a filename pattern, or filesystem mtime. Each implementation
+ * only answers whether it found a date; {@link DateResolver} decides which source's answer to
+ * trust.
+ */
 public interface DateSource {
 
     /**

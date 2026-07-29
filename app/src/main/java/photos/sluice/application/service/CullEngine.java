@@ -31,12 +31,17 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Orchestrates a cull job: prep -> dispatch -> apply (buildFreshAndDispatch/dispatchAndApply),
-// waitingJobs()/resume() for a job still sitting on shards, and the watch-mode auto-resume that
-// polls for those shards to land. Not a Spring bean - Pipeline builds the one instance it needs,
-// same as it already builds a CullWatcher per prep dir. checkNoWaitingJobFor() and
-// buildFreshAndDispatch() stay package-private rather than private - CurateEngine's own cull stage
-// reuses both directly instead of duplicating them.
+/**
+ * Orchestrates a whole cull job: prep, then dispatch, then apply (see
+ * {@link #buildFreshAndDispatch}). It also owns {@link #waitingJobs()} and {@link #resume} for a
+ * job still sitting on shards, and the watch-mode auto-resume that polls for those shards to
+ * land.
+ *
+ * <p>Not a Spring bean. {@link Pipeline} builds the one instance it needs, the same way it builds
+ * a {@link CullWatcher} per prep dir. {@link #checkNoWaitingJobFor} and
+ * {@link #buildFreshAndDispatch} stay package-private rather than private, since
+ * {@link CurateEngine}'s own cull stage reuses both directly instead of duplicating them.
+ */
 final class CullEngine {
 
     private static final Logger log = LoggerFactory.getLogger(CullEngine.class);

@@ -15,12 +15,16 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-// Routes a cull to the VisionCuller whose id matches the configured provider. Selection is the whole
-// job here: the chosen culler owns how the shards are obtained. The registered cullers are indexed
-// once by id at construction, where duplicate ids fail loud. The provider lookup runs on each cull()
-// call, not in the constructor. That keeps construction total: it never fails just because no culler
-// matches the configured provider yet. It also means the current provider value decides each call. An
-// unknown provider fails loud.
+/**
+ * Routes a cull to the {@link VisionCuller} whose id matches the configured provider. Selection
+ * is the whole job here: the chosen culler owns how the shards are obtained.
+ *
+ * <p>The registered cullers are indexed once by id at construction, where a duplicate id fails
+ * loud. The provider lookup itself runs on every {@code cull} call rather than in the
+ * constructor. Construction never fails just because no culler matches the configured provider
+ * yet, and each call is decided by whichever provider value is current at that moment. An
+ * unknown provider fails loud.
+ */
 @Component
 public class CullDispatcher {
 

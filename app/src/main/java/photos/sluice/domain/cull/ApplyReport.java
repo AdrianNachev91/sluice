@@ -3,21 +3,28 @@ package photos.sluice.domain.cull;
 import java.util.List;
 import java.util.Map;
 
-// Two distinct uses, two distinct scopes. As ApplyEngine.apply()'s return value, every count
-// reflects only what THIS run itself moved. A decision already carried out by an earlier, crashed
-// run (confirmed done rather than reprocessed) is not counted again. That lets a caller report
-// "what did this invocation just do". As the summary embedded in the merged decisions.json, the
-// counts instead cover every decision in that same file's decisions array. This run's and every
-// prior run's decisions count alike. Otherwise the persisted summary would silently drift from the
-// array sitting right next to it. reviewed is the prep directory's own fixed count
-// (PrepDir.photos()), carried through for the merged record either way. Unlike
-// byCategory/nearDupGroups/nearDupRejects, it doesn't shrink when a prior, crashed run already
-// carried some of it out. It describes the prep dir's scope, not this run's own actions.
-// unreviewable starts from that same fixed scope (PrepDir.unreviewable().size()) but can shrink.
-// A file the disposition ledger resolved TRUST_DECISION is no longer counted as unreviewable at
-// all (see ApplyPlanner.resolvedUnreviewable()).
-// heals lists every path ShardValidator auto-corrected via a unique sidecar basename, for a caller
-// to surface as non-fatal warnings.
+/**
+ * The outcome of one apply run: how many files were routed, by what category, and how many
+ * near-duplicate groups and rejects were resolved.
+ *
+ * <p>This shape serves two distinct uses with two distinct counting rules. As
+ * {@code ApplyEngine.apply()}'s return value, every count reflects
+ * only what this run itself moved. A decision already carried out by an earlier, crashed run
+ * (confirmed done rather than reprocessed) is not counted again, so a caller can report what this
+ * invocation just did. As the summary embedded in the merged {@code decisions.json}, the counts
+ * instead cover every decision in that file's decisions array, this run's and every prior run's
+ * alike. Otherwise the persisted summary would silently drift from the array sitting next to it.
+ *
+ * <p>{@code reviewed} is the prep directory's own fixed count ({@link PrepDir#photos()}), carried
+ * through unchanged either way. Unlike {@code byCategory}/{@code nearDupGroups}/
+ * {@code nearDupRejects}, it never shrinks when a prior, crashed run already carried some of it
+ * out. It describes the prep dir's scope, not this run's own actions. {@code unreviewable} starts
+ * from that same fixed scope ({@link PrepDir#unreviewable()}{@code .size()}) but can shrink: a file
+ * the disposition ledger resolved TRUST_DECISION is no longer counted as unreviewable at all (see
+ * {@code ApplyPlanner.resolvedUnreviewable()}). {@code heals}
+ * lists every path {@link ShardValidator} auto-corrected via a unique sidecar basename, for a
+ * caller to surface as non-fatal warnings.
+ */
 public record ApplyReport(
         int reviewed,
         Map<String, Integer> byCategory,

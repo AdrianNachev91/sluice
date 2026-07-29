@@ -12,9 +12,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.OptionalInt;
 
-// Selects the subset of already-dated media a sort run should process. Uses every record's date
-// regardless of confidence - even an UNSORTABLE one still carries a date. Plausibility only
-// affects routing later, not which files are in scope.
+/**
+ * Selects the subset of already-dated media a sort run should process, based on a
+ * {@link SortScope}. Every record's date is used regardless of its confidence; even an
+ * {@code UNSORTABLE} one still carries a date. Plausibility only affects routing later, not which
+ * files are in scope.
+ */
 public final class ScopeSelector {
 
     /**

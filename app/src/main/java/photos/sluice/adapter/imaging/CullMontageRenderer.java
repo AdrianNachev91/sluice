@@ -30,10 +30,15 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-// Wires TileRenderer + MontageBuilder + SidecarWriter + PrepIndexWriter behind the MontageRenderer
-// port. Resolves a scope to Sorted photo files and renders each to a tile. Drops unreviewable
-// ones before batching the rest into montages and writing the whole prep dir. MontageBuilder
-// itself never sees the unreviewable flag. This is the only place left that can act on it.
+/**
+ * A {@link MontageRenderer} that wires {@link TileRenderer}, {@link MontageBuilder},
+ * {@link SidecarWriter}, and {@link PrepIndexWriter} together. It resolves a cull scope to
+ * {@code Sorted} photo files and renders each to a tile. It drops unreviewable ones before
+ * batching the rest into montages and writing the whole prep directory.
+ *
+ * <p>{@link MontageBuilder} itself never sees the unreviewable flag. This is the only place that
+ * acts on it.
+ */
 @Component
 public class CullMontageRenderer implements MontageRenderer {
 
@@ -72,7 +77,9 @@ public class CullMontageRenderer implements MontageRenderer {
         this.pathsPort = pathsPort;
     }
 
-    // Pairs a candidate with its rendered tile, before the unreviewable filter runs.
+    /**
+     * Pairs a candidate with its rendered tile, before the unreviewable filter runs.
+     */
     private record RenderedCandidate(CullCandidate candidate, TileRenderer.TileResult tile) {
     }
 

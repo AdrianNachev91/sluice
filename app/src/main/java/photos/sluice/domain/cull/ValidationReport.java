@@ -2,13 +2,17 @@ package photos.sluice.domain.cull;
 
 import java.util.List;
 
-// The outcome of validating a prep directory's decision shards against the shard contract. findings
-// is every contract violation found, aggregated across all shards so a bad cull is seen whole rather
-// than one error per re-run; the run is valid only when it is empty. heals are non-fatal warnings for
-// paths auto-corrected via a unique sidecar basename (a culler retyped a \YYYY\MM\ segment). decisions
-// is the merged, heal-corrected flat list every shard contributed, in shard order - the input the
-// apply step moves files from. It is populated best-effort even on an invalid report, but apply reads it
-// only once valid() holds.
+/**
+ * The outcome of validating a prep directory's decision shards against the shard contract.
+ *
+ * <p>{@code findings} is every contract violation found, aggregated across all shards so a bad
+ * cull is seen whole rather than one error per re-run. The run is valid only when it is empty.
+ * {@code heals} are non-fatal warnings for paths auto-corrected via a unique sidecar basename (a
+ * culler retyped a {@code \YYYY\MM\} segment). {@code decisions} is the merged, heal-corrected flat
+ * list every shard contributed, in shard order - the input the apply step moves files from. It is
+ * populated best-effort even on an invalid report, but apply reads it only once {@link #valid()}
+ * holds.
+ */
 public record ValidationReport(List<Finding> findings, List<String> heals, List<Decision> decisions) {
 
     /**

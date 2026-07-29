@@ -13,25 +13,28 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
-// Polls one waiting cull's shard status on a fixed interval until it's fully valid, then attempts
-// exactly one auto-resume. Deliberately pure polling rather than java.nio.file.WatchService. The
-// design doc wants filesystem events because a plain local disk fires them promptly. That reasoning
-// cuts the other way here. Settings lets a user point the working folder at a cloud-synced or
-// network folder. That's exactly the case the same doc already flags as missing events. Depending
-// on events at all would just relocate that gap somewhere less visible. A short poll interval costs
-// nothing a human dropping files by hand would ever notice.
-//
-// isReady is a cheap status check (CullEngine's own shard tally, via ShardTallyCalculator).
-// attemptConsume is the heavier action - a real resume() attempt - run only once isReady says so.
-// attemptConsume returns whether it actually got to run. False means the job runner was busy with
-// something else, so this watcher keeps polling and retries later rather than giving up. True means
-// this watcher's job is done. A resume attempt can still land back in Waiting itself, if a shard
-// went bad between the tally check and the real validation. When that happens, the same CullEngine
-// call that produces that outcome arms a fresh watcher. This instance does not loop on its own.
-//
-// timeout, when present, only stops polling after that long with no ready check. It never touches
-// the underlying job, matching cull.externalAgent.watchTimeout's "drops back to manual, all work
-// preserved" contract.
+/**
+ * Polls one waiting cull's shard status on a fixed interval until it is fully valid, then
+ * attempts exactly one auto-resume. Polling is deliberate here rather than a filesystem-event
+ * watch. Events would normally be preferable for prompt notice on a plain local disk. A
+ * user-configured working folder can point at a cloud-synced or network location instead, exactly
+ * where such events are known to be unreliable. Depending on events at all would just relocate
+ * that gap somewhere less visible. A short poll interval costs nothing a human dropping files by
+ * hand would ever notice.
+ *
+ * <p>{@code isReady} is a cheap status check ({@link CullEngine}'s own shard tally, via
+ * {@link ShardTallyCalculator}). {@code attemptConsume} is the heavier action, a real resume
+ * attempt, run only once {@code isReady} says so. It returns whether it actually got to run.
+ * False means the job runner was busy with something else, so this watcher keeps polling and
+ * retries later rather than giving up. True means this watcher's job is done. A resume attempt
+ * can still land back in Waiting itself if a shard went bad between the tally check and the real
+ * validation. When that happens, the same {@link CullEngine} call that produces that outcome arms
+ * a fresh watcher. This instance does not loop on its own.
+ *
+ * <p>{@code timeout}, when present, only stops polling after that long with no ready check. It
+ * never touches the underlying job, matching the {@code cull.externalAgent.watchTimeout} contract
+ * that dropping back to manual preserves all work.
+ */
 final class CullWatcher {
 
     private static final Logger log = LoggerFactory.getLogger(CullWatcher.class);

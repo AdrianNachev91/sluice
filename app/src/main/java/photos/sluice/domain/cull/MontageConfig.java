@@ -1,5 +1,9 @@
 package photos.sluice.domain.cull;
 
+/**
+ * The pixel size of each square tile in a montage contact sheet, and how many tiles sit in each
+ * row.
+ */
 public record MontageConfig(int tileSize, int tilesPerRow) {
 
     /**

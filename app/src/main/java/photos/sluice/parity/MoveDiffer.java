@@ -9,16 +9,21 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-// Compares the output of two independent sort-engine runs against identical starting inputs,
-// purely by relative path. No adapter dependency - this is plain java.nio.file tree walking, so
-// it needs no port and can run in a plain unit test.
-//
-// Two distinct comparisons share the same underlying set-diff. A destination-tree diff walks two
-// roots (e.g. each run's Sorted+Review) and compares the relative paths found. A delete-set diff
-// compares "what got removed" from each run's own before/after Inbox snapshot instead, since a
-// deleted file leaves no trace to walk and the caller has to derive that set itself.
+/**
+ * Compares the output of two independent sort-engine runs against identical starting inputs,
+ * purely by relative path. It has no adapter dependency. This is plain {@code java.nio.file} tree
+ * walking, so it needs no port and can run in a plain unit test.
+ *
+ * <p>Two distinct comparisons share the same underlying set-diff. A destination-tree diff walks
+ * two roots (e.g. each run's Sorted and Review folders) and compares the relative paths found. A
+ * delete-set diff compares "what got removed" from each run's own before/after Inbox snapshot
+ * instead. A deleted file leaves no trace to walk, so the caller has to derive that set itself.
+ */
 public final class MoveDiffer {
 
+    /**
+     * The result of comparing two sets of relative paths: the paths found only on each side.
+     */
     public record Diff(Set<String> onlyInA, Set<String> onlyInB) {
         /**
          * Checks whether both sides of the diff are empty.

@@ -13,9 +13,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-// Pairs each media file with the Google Takeout JSON sidecar that describes it. Pairing is
-// scoped per parent directory - a same-named sidecar in a different directory never cross-pairs.
-// Flowchart + naming examples: app/docs/design/domain/scan/takeout-sidecar-pairing.md.
+/**
+ * Pairs each media file with the Google Takeout JSON sidecar that describes it. Pairing is scoped
+ * per parent directory: a same-named sidecar in a different directory never cross-pairs.
+ *
+ * <p>Flowchart and naming examples: {@code app/docs/design/domain/scan/takeout-sidecar-pairing.md}.
+ */
 public final class TakeoutSidecarPairer {
 
     // Google appends this suffix to some sidecar names ("name.jpg.supplemental-metadata.json");
@@ -29,6 +32,12 @@ public final class TakeoutSidecarPairer {
     // The media-side form of dup-numbering: "name(1).jpg".
     private static final Pattern MEDIA_DUP_NUMBERED = Pattern.compile("^(.*?)(\\(\\d+\\))(\\.[^.]+)$");
 
+    /**
+     * The outcome of one {@link TakeoutSidecarPairer#pair} call.
+     *
+     * <p>{@code takeoutMode} is true if any sidecar JSON was found at all. {@code sidecarsByMedia}
+     * holds the sidecar path resolved for each media path that got one.
+     */
     public record PairingResult(boolean takeoutMode, Map<Path, Path> sidecarsByMedia) {
         /**
          * Defensively copies the sidecar-by-media map.

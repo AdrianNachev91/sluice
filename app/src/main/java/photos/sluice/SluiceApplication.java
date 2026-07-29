@@ -6,6 +6,11 @@ import photos.sluice.config.ConfigDirLocator;
 
 import java.nio.file.Path;
 
+/**
+ * The application's entry point. It locates the user's optional config file before Spring starts.
+ * That makes its properties available as an ordinary Spring config-import source, alongside the
+ * bundled defaults and any OS environment variables.
+ */
 @SpringBootApplication
 public class SluiceApplication {
 

@@ -5,13 +5,23 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.stream.Collectors;
 
-// The set of ways a cull run's photos can be selected: a specific year (optionally narrowed to
-// months), or the N oldest-by-mtime files present. Months may be an explicit, non-contiguous set,
-// since a contiguous MonthRange (used by SortScope/CommitScope) can't express skipping a single
-// outlier month out of an otherwise-batched year. OldestN orders by raw filesystem mtime, not a
-// resolved date. This differs from SortScope.OldestN, which follows the dating-resolution chain.
+/**
+ * The set of ways a cull run's photos can be selected: a specific year (optionally narrowed to
+ * months), or the N oldest-by-mtime files present.
+ *
+ * <p>Months may be an explicit, non-contiguous set. A contiguous
+ * {@link photos.sluice.domain.model.MonthRange} (used by
+ * {@link photos.sluice.domain.model.SortScope}/{@link photos.sluice.domain.commit.CommitScope})
+ * cannot express skipping a single outlier month out of an otherwise-batched year. {@link OldestN}
+ * orders by raw filesystem mtime, not a resolved date. This differs from
+ * {@link photos.sluice.domain.model.SortScope.OldestN}, which follows the dating-resolution chain.
+ */
 public sealed interface CullScope {
 
+    /**
+     * Selects every candidate dated to a specific year, optionally narrowed to an explicit set of
+     * months.
+     */
     record Year(int year, @Nullable List<Integer> months) implements CullScope {
         /**
          * Defensively copies the months list.
@@ -24,6 +34,10 @@ public sealed interface CullScope {
         }
     }
 
+    /**
+     * Selects the {@code n} oldest candidates by mtime, irrespective of which year or month they
+     * fall in.
+     */
     record OldestN(int n) implements CullScope {
     }
 

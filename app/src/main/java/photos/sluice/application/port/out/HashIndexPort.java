@@ -6,6 +6,11 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * The effect boundary application services use to read and update the persisted hash index that
+ * backs duplicate detection across sort, commit, and rescue runs. Every entry maps a file's
+ * SHA-256 hash to every known path holding those bytes.
+ */
 public interface HashIndexPort {
 
     /**
@@ -40,6 +45,12 @@ public interface HashIndexPort {
      */
     Session openSession();
 
+    /**
+     * A batched-append handle opened by {@link #openSession()} for a caller writing many entries
+     * over a long-running move loop. Amortizes one-time setup (header and leading-newline checks)
+     * across the whole run. Each entry is still flushed as it is appended, so a crash mid-run never
+     * loses an already-moved file's row.
+     */
     interface Session extends AutoCloseable {
 
         /**

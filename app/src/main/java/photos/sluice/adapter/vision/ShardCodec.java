@@ -19,20 +19,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-// Reads and writes a decisions-NNN.json shard - the file an external vision agent drops into the
-// prep directory to record its non-keep decisions for one montage. The pure domain Decision types
-// carry no framework annotations. The whole JSON contract lives in the private RawDecision DTO
-// below. It maps the action string to a subtype: near-dup-chosen and near-dup-reject give the two
-// near-dup shapes. Any other action value is a Classification whose category IS that action string.
-//
-// The read path splits two kinds of bad input. Anything that isn't a representable shard fails loud:
-// an unknown field (FAIL_ON_UNKNOWN), malformed JSON, a null document, or a null decision entry.
-// None can be turned into a Decision, and an unknown field can't even be seen once parsed, so the
-// codec is the only place to catch it. Everything representable-but-wrong is left for ShardValidator,
-// the single source of truth for the shard contract. An absent required field deserializes to null
-// and becomes empty here, so the validator reports it ("missing reason", say) aggregated with the
-// rest of the run's problems, not as a first-error parse crash. Null DTO fields are omitted on write,
-// so a classification shard carries only file/action/reason and never emits an empty group key.
+/**
+ * Reads and writes a {@code decisions-NNN.json} shard, the file an external vision agent drops
+ * into the prep directory to record its non-keep decisions for one montage. The pure domain
+ * {@link Decision} types carry no framework annotations. The whole JSON contract lives in the
+ * private {@code RawDecision} DTO below. It maps the action string to a subtype: {@code
+ * near-dup-chosen} and {@code near-dup-reject} give the two near-dup shapes. Any other action
+ * value is a {@link Classification} whose category is that action string.
+ *
+ * <p>The read path splits two kinds of bad input. Anything that isn't a representable shard fails
+ * loud: an unknown field, malformed JSON, a null document, or a null decision entry. None can be
+ * turned into a {@link Decision}, and an unknown field can't even be seen once parsed. So the
+ * codec is the only place to catch it. Everything representable-but-wrong is left for
+ * {@link photos.sluice.domain.cull.ShardValidator}, the single source of truth for the shard
+ * contract. An absent required field deserializes to null and becomes empty here. The validator
+ * reports it ("missing reason", say), aggregated with the rest of the run's problems, not as a
+ * first-error parse crash. Null DTO fields are omitted on write, so a classification shard
+ * carries only file, action, and reason, and never emits an empty group key.
+ */
 @Component
 class ShardCodec {
 
@@ -58,6 +62,10 @@ class ShardCodec {
         this.mapper = mapper;
     }
 
+    /**
+     * The JSON shape a single decision takes on disk. Every field is nullable so a malformed or
+     * incomplete entry can still be parsed and reported, rather than crashing the whole read.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record RawDecision(
             @Nullable String file,
@@ -67,6 +75,9 @@ class ShardCodec {
             @JsonProperty("chosen_reason") @Nullable String chosenReason) {
     }
 
+    /**
+     * The full JSON document a shard file holds: the montage name and its list of decisions.
+     */
     private record RawShard(@Nullable String montage, @Nullable List<@Nullable RawDecision> decisions) {
     }
 
@@ -125,6 +136,9 @@ class ShardCodec {
      * @return {@link RawDecision} the raw DTO representation
      */
     private static RawDecision toRaw(Decision decision) {
+        // Structurally similar to toDomain()'s switch below, but it maps the opposite direction
+        // over a different type. Collapsing the two into one generic mapper would cost clarity.
+        //noinspection DuplicatedCode
         return switch (decision) {
             case Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
             case NearDupChosen c -> new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());

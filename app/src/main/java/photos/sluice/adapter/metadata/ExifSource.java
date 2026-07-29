@@ -16,6 +16,10 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
 
+/**
+ * A {@link DateSource} that reads a capture date from a media file's embedded EXIF metadata,
+ * preferring the original capture timestamp and falling back to the digitized timestamp.
+ */
 @Component
 public class ExifSource implements DateSource {
 
@@ -43,6 +47,9 @@ public class ExifSource implements DateSource {
             return Optional.empty();
         }
         ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+        // getFirstDirectoryOfType's own signature claims non-null. It returns null in practice
+        // when no directory of that type is present - the IDE can't model that runtime behavior.
+        //noinspection ConstantValue
         if (directory == null) {
             return Optional.empty();
         }

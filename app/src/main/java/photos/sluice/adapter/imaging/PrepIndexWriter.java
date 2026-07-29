@@ -11,9 +11,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-// PrepDir already mirrors index.json's field shape and order 1:1 (see PrepDir's own doc comment).
-// This substitutes String for its Path-typed fields (basePath, prepDir, and each entry in
-// unreviewable), for the same reason as SidecarWriter.
+/**
+ * Writes a {@link PrepDir}'s metadata to disk as {@code index.json}.
+ *
+ * <p>{@link PrepDir} already mirrors the file's field shape and order (see its own doc comment).
+ * This class substitutes {@link String} for its {@link java.nio.file.Path}-typed fields
+ * ({@code basePath}, {@code prepDir}, and each entry in {@code unreviewable}), for the same reason
+ * as {@link SidecarWriter}.
+ */
 @Component
 public class PrepIndexWriter {
 
@@ -36,6 +41,10 @@ public class PrepIndexWriter {
         this.mapper = mapper;
     }
 
+    /**
+     * The on-disk shape of {@code index.json}, mirroring {@link PrepDir} field-for-field with
+     * path values substituted as plain strings.
+     */
     private record Index(
             String scope, String basePath, int photos, List<String> unreviewable, int montages,
             String prepDir, List<String> entries) {

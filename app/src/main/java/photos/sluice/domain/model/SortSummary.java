@@ -3,16 +3,19 @@ package photos.sluice.domain.model;
 import java.util.List;
 import java.util.Set;
 
-// Outcome counters and filename lists from one sort run. processed always equals the sum of
-// reimportsDeleted + byteDupsDeleted + photosSorted + videosSorted + lowRes + unsorted - every
-// in-scope file lands in exactly one of those six buckets. Returned by SortUseCase; printing a
-// human-readable report from it is a caller's job, not this type's.
-//
-// yearsSorted is every distinct year a file actually landed in under Sorted (Photos or Videos)
-// this run. A Year or OldestYear scope always yields at most one, since both narrow to a single
-// year before routing anything. Empty means nothing reached Sorted at all. Pipeline.curate() reads
-// this to learn which year an auto-resolved OldestYear scope actually picked, since nothing else
-// reports it.
+/**
+ * Outcome counters and filename lists from one sort run, returned by the sort use case. The
+ * {@code processed} count is always the sum of six other counters: {@code reimportsDeleted},
+ * {@code byteDupsDeleted}, {@code photosSorted}, {@code videosSorted}, {@code lowRes}, and
+ * {@code unsorted}. Every in-scope file lands in exactly one of those six buckets. Printing a
+ * human-readable report from this record is a caller's job, not this type's.
+ *
+ * <p>The {@code yearsSorted} field is every distinct year a file actually landed in under Sorted
+ * (Photos or Videos) this run. A {@link SortScope.Year} or {@link SortScope.OldestYear} scope
+ * always yields at most one entry, since both narrow to a single year before routing anything.
+ * Empty means nothing reached Sorted at all. A curate run reads this field to learn which year an
+ * auto-resolved {@link SortScope.OldestYear} scope actually picked, since nothing else reports it.
+ */
 public record SortSummary(
         int processed,
         int reimportsDeleted,

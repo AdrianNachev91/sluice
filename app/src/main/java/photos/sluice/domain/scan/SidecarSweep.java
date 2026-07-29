@@ -7,11 +7,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-// Finds Takeout JSON sidecars that are now orphaned. Their owning media file no longer exists
-// anywhere in the sidecar's own directory. Runs after the per-file routing pass, independently of
-// it. A sidecar counts as spent here purely because its media is gone, regardless of which
-// date-resolution source actually won for that file.
-// Flowchart: app/docs/design/domain/scan/sidecar-sweep.md.
+/**
+ * Finds Takeout JSON sidecars that are now orphaned: their owning media file no longer exists
+ * anywhere in the sidecar's own directory. Runs after the per-file routing pass, independently of
+ * it.
+ *
+ * <p>A sidecar counts as spent here purely because its media is gone, regardless of which
+ * date-resolution source actually won for that file.
+ *
+ * <p>Flowchart: {@code app/docs/design/domain/scan/sidecar-sweep.md}.
+ */
 public final class SidecarSweep {
 
     // Google's ".supplemental-metadata" JSON suffix (introduced late 2024) gets truncated once

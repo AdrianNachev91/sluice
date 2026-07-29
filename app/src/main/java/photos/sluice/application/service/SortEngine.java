@@ -40,10 +40,14 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// The one-pass Inbox -> Sorted/Review pipeline. Dates every scanned file, narrows to the
-// requested scope, deletes what's already redundant, and routes undatable/low-res files to
-// Review. Everything else gets sorted. A final whole-Inbox sweep then removes now-orphaned
-// Takeout sidecars and any directory left empty of all files.
+/**
+ * The one-pass Inbox-to-Sorted/Review pipeline. Dates every scanned file, narrows to the
+ * requested scope, deletes what is already redundant, and routes undatable or low-resolution
+ * files to Review. Everything else gets sorted.
+ *
+ * <p>A final whole-Inbox sweep then removes now-orphaned Takeout sidecars and any directory left
+ * empty of all files.
+ */
 @Component
 public class SortEngine implements SortUseCase {
 
@@ -216,7 +220,7 @@ public class SortEngine implements SortUseCase {
      * incremental year-by-year runs. A directory left empty of all files afterward is then
      * removed.
      *
-     * "Remaining" is derived from the original scan rather than observed directly, so the caller
+     * <p>"Remaining" is derived from the original scan rather than observed directly, so the caller
      * passes exactly the files that actually left the Inbox this run, not every in-scope file. A
      * cancelled routing pass can stop partway through plan.toSort(). Files still sitting in the
      * Inbox after that must not be treated as gone, or their sidecar gets deleted out from under
@@ -394,6 +398,11 @@ public class SortEngine implements SortUseCase {
         return yearFolder(when) + "-" + monthFolder(when);
     }
 
+    /**
+     * Accumulates one routing pass's tallies as it goes. Counts per outcome bucket, file names
+     * worth flagging back to the caller (low-confidence dates, unsorted files), the distinct
+     * years actually sorted, and every file the pass routed.
+     */
     private static final class RoutingResult {
         int photosSorted;
         int videosSorted;

@@ -7,6 +7,11 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Classifies a file as a photo or video purely by its extension, against two fixed extension sets.
+ * A path whose extension matches neither set is treated as neither, leaving classification of
+ * anything else (Takeout JSON sidecars, unrecognized formats) to the caller.
+ */
 public final class MediaTypeDetector {
 
     private static final Set<String> PHOTO_EXTENSIONS = Set.of(

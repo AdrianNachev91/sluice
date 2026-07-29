@@ -2,10 +2,16 @@ package photos.sluice.application.port.in;
 
 import photos.sluice.domain.model.SortScope;
 
-// Sort scope's Inbox files into Sorted, then run a cull over whatever that sort just populated.
-// This is the two-step "curate" flow: a convenience for an implementation that wants to offer
-// it as one action instead of two separate calls to SortUseCase and CullUseCase. It never commits
-// Sorted to the library; that stays a distinct, explicit step.
+/**
+ * The use case for the two-step "curate" flow: sort scope's Inbox files into Sorted, then run a
+ * cull over whatever that sort just populated.
+ *
+ * <p>It is a convenience for a caller that wants to offer curate as one action instead of two
+ * separate calls to {@link SortUseCase} and {@link CullUseCase}. It never commits Sorted to the
+ * library; that stays a distinct, explicit step.
+ */
+// No UI implements this port yet, so no caller currently invokes it.
+@SuppressWarnings("unused")
 public interface CurateUseCase {
 
     /**

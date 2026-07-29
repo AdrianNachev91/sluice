@@ -2,18 +2,24 @@ package photos.sluice.domain.cull;
 
 import java.nio.file.Path;
 
-// One non-keep decision the vision step made about a single photo in a montage. Keeps are never
-// represented - an unlisted photo stays where it is. This is a closed set of three shapes:
-//
-//   Classification  - route one photo to a review/library category (junk, scenery, food, funny, or
-//                     a user-defined one). The category is DATA, not a subtype: the configured
-//                     category set can grow without touching this hierarchy. See ShardValidator for
-//                     the "category must be configured" rule.
-//   NearDupChosen   - the keeper of a near-duplicate group; carries chosenReason, not reason.
-//   NearDupReject   - a rejected member of a near-duplicate group; carries the group and a reason.
-//
-// Near-dups keep their own two shapes because they carry a group identity and a chosen/reject split
-// that a flat category cannot express. file is the photo's absolute source path.
+/**
+ * One non-keep decision the vision step made about a single photo in a montage. Keeps are never
+ * represented - an unlisted photo simply stays where it is. This is a closed set of three shapes:
+ *
+ * <ul>
+ *   <li>{@link Classification} routes one photo to a review/library category (junk, scenery, food,
+ *       funny, or a user-defined one). The category is data, not a subtype, so the configured
+ *       category set can grow without touching this hierarchy. See {@link ShardValidator} for the
+ *       "category must be configured" rule.
+ *   <li>{@link NearDupChosen} is the keeper of a near-duplicate group; it carries
+ *       {@code chosenReason}, not {@code reason}.
+ *   <li>{@link NearDupReject} is a rejected member of a near-duplicate group; it carries the group
+ *       and a reason.
+ * </ul>
+ *
+ * <p>Near-dups keep their own two shapes because they carry a group identity and a chosen/reject
+ * split that a flat category cannot express. {@code file} is the photo's absolute source path.
+ */
 public sealed interface Decision {
 
     /**
@@ -23,9 +29,21 @@ public sealed interface Decision {
      */
     Path file();
 
+    /**
+     * Routes one photo to a review or library category, such as junk, scenery, food, funny, or a
+     * user-defined one, with the vision step's reason for that call.
+     */
     record Classification(Path file, String category, String reason) implements Decision {}
 
+    /**
+     * The keeper chosen from a near-duplicate group, with the vision step's reason for picking it
+     * over the group's rejects.
+     */
     record NearDupChosen(Path file, String group, String chosenReason) implements Decision {}
 
+    /**
+     * A rejected member of a near-duplicate group, with the vision step's reason for not keeping
+     * it.
+     */
     record NearDupReject(Path file, String group, String reason) implements Decision {}
 }

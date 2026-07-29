@@ -4,11 +4,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-// The caller's view of a job JobRunner just started. There is no JobId: JobRunner only ever runs
-// one job at a time, so this handle IS that job's identity for as long as it's running. The same
-// instance is also handed to the running JobWork itself, so a long-running pipeline can poll
-// isCancellationRequested() at its own stage boundaries. Cancellation here is cooperative, not a
-// thread interrupt, so a stage already in flight always finishes before a request takes effect.
+/**
+ * The caller's view of a job {@link JobRunner} just started. There is no job id. {@link JobRunner}
+ * only ever runs one job at a time, so this handle is that job's identity for as long as it runs.
+ *
+ * <p>The same instance is also handed to the running {@link JobWork} itself, so a long-running
+ * pipeline can poll {@link #isCancellationRequested()} at its own stage boundaries. Cancellation
+ * here is cooperative, not a thread interrupt, so a stage already in flight always finishes
+ * before a request takes effect.
+ *
+ * @param <T> the type of result the job produces
+ */
 public final class JobHandle<T> {
 
     private final CompletableFuture<T> result;

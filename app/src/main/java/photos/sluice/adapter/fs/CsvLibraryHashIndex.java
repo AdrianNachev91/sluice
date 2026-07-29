@@ -2,7 +2,6 @@ package photos.sluice.adapter.fs;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.HashIndexPort;
-import photos.sluice.application.port.out.HashIndexPort.Session;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.BufferedWriter;
@@ -19,8 +18,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Format matches an existing on-disk hash index this adapter must stay interoperable with:
-// 2 columns, always-quoted, UTF-8 encoded with a leading byte-order mark.
+/**
+ * A {@link HashIndexPort} backed by a two-column CSV file: one row per hashed file, holding its
+ * sha256 hash and its path. The row format is fixed: always-quoted fields, UTF-8 encoding, and an
+ * optional leading byte-order mark. That keeps this adapter interoperable with an existing
+ * on-disk hash index in that exact shape.
+ */
 public class CsvLibraryHashIndex implements HashIndexPort {
 
     private static final String HEADER = "\"sha256\",\"path\"";
@@ -110,10 +113,12 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         return new CsvSession();
     }
 
-    // The writer (and the header/leading-newline checks that precede opening it) is created lazily,
-    // on the session's first append() call, not here. A session that never appends anything - an
-    // empty commit/rescue scope - must leave the index file untouched, exactly like the old
-    // empty-list append() did.
+    /**
+     * A {@link Session} that lazily opens its writer, and performs the header/leading-newline
+     * checks that precede opening it, on the first {@link #append} call rather than on
+     * construction. A session that never appends anything - an empty commit or rescue scope -
+     * leaves the index file untouched.
+     */
     private final class CsvSession implements Session {
 
         private @Nullable BufferedWriter writer;

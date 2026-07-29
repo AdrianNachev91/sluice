@@ -11,9 +11,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-// Path and Instant serialize as plain strings via these private record fields, not Jackson's own
-// Path/Instant handling - Jackson's default Path serializer emits a file:// URI, not the plain
-// path string this project's on-disk contract (and the culler agent reading it) expects.
+/**
+ * Writes a montage's sidecar metadata to disk as JSON.
+ *
+ * <p>{@link java.nio.file.Path} and {@link java.time.Instant} values serialize as plain strings,
+ * via this class's private record fields. Jackson's own {@code Path}/{@code Instant} handling is
+ * not used, since its default {@code Path} serializer emits a {@code file://} URI. This project's
+ * on-disk contract, and the culler agent reading it, expect a plain path string instead.
+ */
 @Component
 public class SidecarWriter {
 
@@ -36,9 +41,17 @@ public class SidecarWriter {
         this.mapper = mapper;
     }
 
+    /**
+     * The on-disk shape of one photo entry within a montage's sidecar: its source path, file
+     * name, timestamp, and whether it looks WhatsApp-received, all as plain strings/primitives.
+     */
     private record Photo(String src, String name, String time, boolean received) {
     }
 
+    /**
+     * The on-disk shape of a montage's sidecar file: the montage image's path and the list of
+     * photo entries it contains.
+     */
     private record Sidecar(String montage, List<Photo> photos) {
     }
 

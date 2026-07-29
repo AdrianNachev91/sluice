@@ -6,10 +6,14 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 
-// Resolves a CullScope against the Sorted "Photos" root: which directories to scan, what basePath
-// to report, and how to order (and, for OldestN, cap) the candidates found there. Pure Path/Instant
-// logic only - the caller does the actual directory listing and mtime reads (I/O), then hands the
-// results back here for ordering.
+/**
+ * Resolves a {@link CullScope} against the Sorted {@code Photos} root. It decides which
+ * directories to scan, what {@code basePath} to report, and how to order (and, for
+ * {@link CullScope.OldestN}, cap) the candidates found there.
+ *
+ * <p>Pure {@link Path}/{@link java.time.Instant} logic only. The caller does the actual directory
+ * listing and mtime reads (I/O), then hands the results back here for ordering.
+ */
 public final class CullScopeSelector {
 
     /**

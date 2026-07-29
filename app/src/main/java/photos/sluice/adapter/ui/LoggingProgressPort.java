@@ -5,9 +5,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ProgressPort;
 
-// The only ProgressPort implementation until a desktop dashboard adapter exists to replace it.
-// Every event is a single log line, so a job is still observable (console, log file) with nothing
-// watching for UI events yet.
+/**
+ * A {@link ProgressPort} that reports every event as a single log line: phase start, tick, and
+ * phase end. That keeps a job observable via the console or log file. This is the only
+ * {@link ProgressPort} implementation until a desktop dashboard adapter exists to replace it.
+ */
 @Component
 public class LoggingProgressPort implements ProgressPort {
 

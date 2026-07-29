@@ -20,9 +20,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
-// Recursively enumerates every regular file under an inbox tree and pairs Takeout JSON sidecars
-// against recognized media files.
-// Flowcharts + scenario table: app/docs/design/adapter/fs/inbox-scanning.md.
+/**
+ * Recursively enumerates every regular file under an inbox tree and pairs Takeout JSON sidecars
+ * against recognized media files.
+ *
+ * <p>Flowcharts and scenario table: {@code app/docs/design/adapter/fs/inbox-scanning.md}.
+ */
 @Component
 public final class InboxScanner implements InboxScannerPort {
 

@@ -19,9 +19,11 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-// Moves every in-scope Sorted file into the library at the same relative structure it already
-// has. Appends the moved files' hashes to the library index, and prunes Sorted directories left
-// empty afterward.
+/**
+ * Moves every in-scope {@code Sorted} file into the library, preserving its relative folder
+ * structure. Appends each moved file's hash to the library index and prunes {@code Sorted}
+ * directories left empty afterward.
+ */
 @Component
 public class CommitEngine implements CommitUseCase {
 

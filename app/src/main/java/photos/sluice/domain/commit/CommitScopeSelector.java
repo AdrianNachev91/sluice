@@ -8,10 +8,13 @@ import photos.sluice.domain.model.MonthRange;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Decides whether a Sorted-relative file path is included in a commit run. A dated path (matching
-// a YYYY/MM segment pair anywhere in it, as produced by Photos/Videos) is scoped by year and
-// month. An undated path (Funny, which carries no YYYY/MM segments) is included only when the run
-// isn't narrowed to a specific year.
+/**
+ * Decides whether a Sorted-relative file path is included in a commit run.
+ *
+ * <p>A dated path, matching a {@code YYYY/MM} segment pair anywhere in it as produced by Photos and
+ * Videos, is scoped by year and month. An undated path such as Funny, which carries no
+ * {@code YYYY/MM} segments, is included only when the run isn't narrowed to a specific year.
+ */
 public final class CommitScopeSelector {
 
     private static final Pattern YEAR_MONTH = Pattern.compile("(\\d{4})/(\\d{2})/");

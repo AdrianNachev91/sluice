@@ -25,14 +25,21 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-// The CullPrepPort implementation. Lives alongside ShardCodec and SidecarReader (same package). This
-// lets it reuse their montage-sidecar and per-montage-shard reading at package-private visibility.
-// Neither class's access needs widening, and no cross-adapter-subpackage dependency is added. The
-// merged decisions.json this class writes, and the index.json it reads back, are each a distinct
-// artifact from a per-montage shard. They get their own small DTOs here rather than reaching into
-// ShardCodec's private encoding. Public (unlike ShardCodec/SidecarReader): the apply-side engines'
-// own tests live outside this package and need a real CullPrepPort. Other engine tests wire real
-// adapters (NioMediaStore, CsvLibraryHashIndex) the same way, instead of a fake.
+/**
+ * The {@link CullPrepPort} implementation. It lives alongside {@link ShardCodec} and
+ * {@link SidecarReader} in the same package. That lets it reuse their montage-sidecar and
+ * per-montage-shard reading at package-private visibility. Neither class's access needs widening,
+ * and no cross-adapter-subpackage dependency is added.
+ *
+ * <p>The merged {@code decisions.json} this class writes, and the {@code index.json} it reads
+ * back, are each a distinct artifact from a per-montage shard. They get their own small DTOs here
+ * rather than reaching into {@link ShardCodec}'s private encoding.
+ *
+ * <p>This class is public, unlike {@link ShardCodec} and {@link SidecarReader}: the apply-side
+ * engines' own tests live outside this package and need a real {@link CullPrepPort}. Other engine
+ * tests wire real adapters ({@code NioMediaStore}, {@code CsvLibraryHashIndex}) the same way,
+ * instead of a fake.
+ */
 @Component
 public class JsonCullPrepStore implements CullPrepPort {
 
@@ -77,6 +84,10 @@ public class JsonCullPrepStore implements CullPrepPort {
         this.mapper = mapper;
     }
 
+    /**
+     * The JSON shape {@link #readIndex} parses: one scope's prep directory index, as written by
+     * this app's own prep step.
+     */
     private record RawIndex(String scope, String basePath, int photos, @Nullable List<String> unreviewable,
             int montages, String prepDir, @Nullable List<String> entries) {
     }
@@ -206,16 +217,28 @@ public class JsonCullPrepStore implements CullPrepPort {
         return shardCodec.read(shardFile);
     }
 
+    /**
+     * The JSON shape one decision takes inside the merged {@code decisions.json}. Null-valued
+     * fields (a classification's unused {@code group}, say) are omitted on write.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record RawDecision(String file, String action, @Nullable String group, @Nullable String reason,
             @JsonProperty("chosen_reason") @Nullable String chosenReason) {
     }
 
+    /**
+     * The run's tallies embedded alongside the decision list in {@code decisions.json}, mirroring
+     * {@link ApplyReport}'s own fields.
+     */
     private record Summary(int reviewed, Map<String, Integer> categories,
             @JsonProperty("near_dup_groups") int nearDupGroups,
             @JsonProperty("near_dup_rejects") int nearDupRejects, int unreviewable) {
     }
 
+    /**
+     * The full JSON document {@link #writeMergedDecisions} writes: the scope, every decision made
+     * across the run, and the apply {@link Summary}.
+     */
     private record MergedDecisions(String scope, List<RawDecision> decisions, Summary summary) {
     }
 

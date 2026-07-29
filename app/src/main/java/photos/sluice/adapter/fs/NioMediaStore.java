@@ -15,7 +15,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 
-// Flowchart + scenario table: app/docs/design/adapter/fs/media-store.md.
+/**
+ * A {@link MediaStore} implementation backed directly by {@code java.nio.file}. It provides every
+ * file-system primitive the domain needs - listing, moving, copying, deleting, collision-free
+ * renaming, and pruning empty directories - so higher layers never touch NIO directly.
+ *
+ * <p>Flowchart and scenario table: {@code app/docs/design/adapter/fs/media-store.md}.
+ */
 @Component
 public class NioMediaStore implements MediaStore {
 

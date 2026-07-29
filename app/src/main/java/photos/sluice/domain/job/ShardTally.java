@@ -1,10 +1,18 @@
 package photos.sluice.domain.job;
 
-// A waiting cull's shard progress, matching the waiting card's own "present/valid/total" wording.
-// present counts every decisions-NNN.json file found in the prep dir, whether or not it parses;
-// valid narrows that to ones that also pass ShardValidator. present can exceed valid (a shard
-// mid-write, or one with a contract violation); neither can exceed total, the prep dir's own
-// montage count.
+import photos.sluice.domain.cull.ShardValidator;
+
+/**
+ * A waiting cull's shard progress, matching the waiting card's own present/valid/total wording.
+ *
+ * <p>{@code present} counts every {@code decisions-NNN.json} file found in the prep dir, whether
+ * or not it parses.
+ *
+ * <p>{@code valid} narrows that to shards that also pass {@link ShardValidator}.
+ *
+ * <p>{@code present} can exceed {@code valid} when a shard is mid-write or has a contract
+ * violation. Neither can exceed {@code total}, the prep dir's own montage count.
+ */
 public record ShardTally(int present, int valid, int total) {
 
     /**

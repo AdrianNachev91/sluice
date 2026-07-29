@@ -21,6 +21,18 @@ import java.util.Iterator;
 import java.util.Optional;
 import java.util.function.Function;
 
+/**
+ * An {@link ImageDimensionsPort} that reads an image's true pixel dimensions from embedded
+ * metadata where possible. It only falls back to a full decode via ImageIO when no usable
+ * metadata exists.
+ *
+ * <p>Camera and container formats can expose more than one directory that might carry dimensions.
+ * A RAW file's multi-image chain can carry multiple Exif SubIFDs, and a HEIC/AVIF file can carry
+ * multiple HEIF directories. Not every directory found is guaranteed to hold the real capture
+ * resolution.
+ * Every candidate directory is checked, and the largest reported dimensions win, so a small
+ * embedded preview or thumbnail can never be mistaken for the true resolution.
+ */
 @Component
 public class ImageDimensionsReader implements ImageDimensionsPort {
 
@@ -45,14 +57,14 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      * tags is checked here, and the largest is trusted - the same largest-not-first principle
      * largestImage() below already applies to the ImageIO fallback.
      *
-     * Trusting the largest is a one-directional safety margin. LowResGate only ever flags a file
+     * <p>Trusting the largest is a one-directional safety margin. LowResGate only ever flags a file
      * low-res when its reported dimensions are small, so under-reporting a real capture's size
      * (the verified Nikon failure mode) is the risk this guards against. A corrupted file whose
      * non-primary SubIFD happens to report an inflated bogus value could in principle cause a
      * genuinely low-res file to escape that flag. It could never cause the reverse: misrouting a
      * real high-res photo as low-res.
      *
-     * HEIC/HEIF/AVIF files can carry their dimensions in a separate HeifDirectory, instead of or
+     * <p>HEIC/HEIF/AVIF files can carry their dimensions in a separate HeifDirectory, instead of or
      * alongside an Exif SubIFD. A real AVIF fixture verified this: it has no embedded EXIF at all,
      * only the container's own native width/height box. A real iPhone HEIC works via the SubIFD
      * path alone, since Apple's own HEIC files do carry full EXIF. A plain AVIF conversion with no

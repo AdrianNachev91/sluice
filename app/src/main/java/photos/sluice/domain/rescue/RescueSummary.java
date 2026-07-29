@@ -2,10 +2,15 @@ package photos.sluice.domain.rescue;
 
 import java.util.List;
 
-// Outcome counters from one rescue run. A file with no plausible date is left in place and
-// counted in skipped rather than rescued - it takes no action a user didn't ask for. folderRemoved
-// is true only when every file rescue looked at was actually rescued, so nothing was left behind
-// to keep the folder alive.
+/**
+ * Outcome counters from one rescue run.
+ *
+ * <p>A file with no plausible date is left in place and counted in {@code skipped} rather than
+ * {@code rescued}. It takes no action the user didn't ask for.
+ *
+ * <p>{@code folderRemoved} is true only when every file rescue looked at was actually rescued, so
+ * nothing was left behind to keep the folder alive.
+ */
 public record RescueSummary(int rescued, List<String> skipped, boolean folderRemoved) {
 
     /**

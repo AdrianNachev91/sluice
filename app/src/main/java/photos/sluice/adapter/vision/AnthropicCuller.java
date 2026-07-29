@@ -56,35 +56,39 @@ import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-// The provider that calls the user's configured Anthropic vision model from inside the app. Each
-// montage is one stateless request: the shared system prompt, the montage JPEG, and the photo
-// table. A structured-output schema constrains the response to a JSON verdict list. The model must
-// return a verdict for every tile; that forces a look at every photo instead of skimming past
-// faint junk, and gives a hard completeness check. Keep verdicts are stripped before the shard is
-// written, so the on-disk contract stays the external-agent one: non-keep decisions only.
-//
-// The model references photos by tile index and filename, never by path. The response is resolved
-// index -> sidecar src here. A name that does not match the sidecar entry at that index fails
-// validation rather than healing. The mismatch signals a mis-keyed tile, and guessing which field
-// to trust could set aside the wrong photo.
-//
-// Failure channels, split by who can fix them. A response that fails validation is a content
-// problem the model itself can often fix. It gets one corrective retry that echoes the failed
-// reply back with the full problem list. A second failure throws checked CullException naming the
-// montage and both attempts' problems. The one-retry cap is deliberate, so a model that cannot
-// cull a montage stops burning tokens. Missing connection settings (model id, API key) are the
-// user's configuration to fix and fail unchecked with the property or variable name. A prep
-// directory whose sidecar or montage image can't be read is broken app output. That fails
-// unchecked too, because the scope needs re-prepping.
-//
-// A montage whose valid shard is already on disk is skipped. A run can be interrupted by a crash
-// or by a user cancellation; either way, re-invoking it on the same prep directory finishes only
-// the remainder. An invalid existing shard is re-culled and overwritten. A stray decisions file
-// naming no current montage is left untouched. CullOptions is not wired yet: every montage needs a
-// shard regardless of allowPartial, and timeout is unhonored.
-//
-// The API client is built lazily inside cull(), never at startup, so the app boots without an API
-// key for users on other providers. The factory seam exists for tests to inject a mock client.
+/**
+ * The {@link VisionCuller} provider that calls the user's configured Anthropic vision model from
+ * inside the app. Each montage is one stateless request: the shared system prompt, the montage
+ * JPEG, and the photo table. A structured-output schema constrains the response to a JSON verdict
+ * list. The model must return a verdict for every tile. That forces a look at every photo instead
+ * of skimming past faint junk, and gives a hard completeness check. Keep verdicts are stripped
+ * before the shard is written, so the on-disk contract stays the external-agent one: non-keep
+ * decisions only.
+ *
+ * <p>The model references photos by tile index and filename, never by path. The response is
+ * resolved index to sidecar src here. A name that does not match the sidecar entry at that index
+ * fails validation rather than healing. The mismatch signals a mis-keyed tile, and guessing which
+ * field to trust could set aside the wrong photo.
+ *
+ * <p>Failure channels split by who can fix them. A response that fails validation is a content
+ * problem the model itself can often fix. It gets one corrective retry that echoes the failed
+ * reply back with the full problem list. A second failure throws checked {@link CullException}
+ * naming the montage and both attempts' problems. The one-retry cap is deliberate, so a model
+ * that cannot cull a montage stops burning tokens. Missing connection settings (model id, API
+ * key) are the user's configuration to fix, and fail unchecked with the property or variable
+ * name. A prep directory whose sidecar or montage image can't be read is broken app output. That
+ * fails unchecked too, because the scope needs re-prepping.
+ *
+ * <p>A montage whose valid shard is already on disk is skipped. A run can be interrupted by a
+ * crash or a user cancellation. Either way, re-invoking it on the same prep directory finishes
+ * only the remainder. An invalid existing shard is re-culled and overwritten. A stray decisions
+ * file naming no current montage is left untouched. {@link CullOptions} is not wired yet. Every
+ * montage needs a shard regardless of allowPartial, and timeout is unhonored.
+ *
+ * <p>The API client is built lazily inside {@link #cull}, never at startup, so the app boots
+ * without an API key for users on other providers. The factory seam exists for tests to inject a
+ * mock client.
+ */
 @Component
 class AnthropicCuller implements VisionCuller {
 
@@ -165,18 +169,25 @@ class AnthropicCuller implements VisionCuller {
         this.clientFactory = clientFactory;
     }
 
-    // The model's verdict for one tile, as the response schema shapes it. Which fields a verdict
-    // needs depends on its action. Absent ones become empty strings, so ShardValidator reports
-    // them aggregated instead of one parse crash per gap.
+    /**
+     * The model's verdict for one tile, as the response schema shapes it. Which fields a verdict
+     * needs depends on its action. Absent ones become empty strings, so {@link ShardValidator}
+     * reports them aggregated instead of one parse crash per gap.
+     */
     private record RawVerdict(@Nullable Integer index, @Nullable String name, @Nullable String action,
             @Nullable String reason, @Nullable String group,
             @JsonProperty("chosen_reason") @Nullable String chosenReason) {
     }
 
+    /**
+     * The full parsed response body: the list of per-tile verdicts the model returned.
+     */
     private record RawResponse(@Nullable List<@Nullable RawVerdict> verdicts) {
     }
 
-    // One attempt's result: the accepted shard, or the problems that rejected it (never both).
+    /**
+     * One attempt's result: the accepted shard, or the problems that rejected it, never both.
+     */
     private record AttemptOutcome(@Nullable DecisionShard shard, List<String> problems) {
     }
 

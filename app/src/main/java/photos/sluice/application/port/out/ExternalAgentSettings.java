@@ -5,12 +5,16 @@ import photos.sluice.domain.job.WatchMode;
 
 import java.time.Duration;
 
-// Tuning for the external-agent provider only - every other provider ignores this. mode selects
-// whether a waiting cull needs an explicit Resume (MANUAL, the default) or is also polled by
-// Pipeline until every shard is present and valid (WATCH). watchTimeout is null by default,
-// meaning a watch never gives up on its own. When set, it only stops polling after that long with
-// no fully-valid tally - it never fails the job, and every shard already dropped stays exactly
-// where it is.
+/**
+ * Tuning for the external-agent provider only. Every other provider ignores this. The {@code mode}
+ * field selects how a waiting cull proceeds. It either needs an explicit Resume ({@code MANUAL},
+ * the default), or gets polled by {@code Pipeline} until every shard is present and valid
+ * ({@code WATCH}).
+ *
+ * <p>{@code watchTimeout} is null by default, meaning a watch never gives up on its own. When set,
+ * it only stops polling after that long with no fully-valid tally. It never fails the job, and
+ * every shard already dropped stays exactly where it is.
+ */
 public record ExternalAgentSettings(WatchMode mode, @Nullable Duration watchTimeout) {
 
     /**

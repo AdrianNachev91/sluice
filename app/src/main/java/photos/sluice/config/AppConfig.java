@@ -12,6 +12,15 @@ import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
 
+/**
+ * The Spring configuration class that wires beans needing constructor arguments Spring cannot
+ * resolve through component scanning alone. That covers ambiguous {@code DateSource} chains, and
+ * adapters that need a config-bound value at construction time.
+ *
+ * <p>It also enables the {@code @ConfigurationProperties} records that carry Sluice's bound
+ * settings: {@link PathsProperties}, {@link MontageConfig}, {@link CullConfig}, and
+ * {@link ImagingConfig}.
+ */
 @Configuration
 @EnableConfigurationProperties({PathsProperties.class, MontageConfig.class, CullConfig.class, ImagingConfig.class})
 public class AppConfig {

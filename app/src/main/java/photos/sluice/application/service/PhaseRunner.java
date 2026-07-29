@@ -3,9 +3,12 @@ package photos.sluice.application.service;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.job.ProgressCallback;
 
-// Brackets a phase's progress events (phaseStarted -> ticks -> phaseFinished) around one engine
-// call. Not a Spring bean - Pipeline, CullEngine, and CurateEngine each own their own instance,
-// built from the same ProgressPort they already receive.
+/**
+ * Brackets a phase's progress events, {@code phaseStarted} then ticks then {@code phaseFinished},
+ * around one engine call. Not a Spring bean. {@link Pipeline}, {@link CullEngine}, and
+ * {@link CurateEngine} each own their own instance, built from the same {@link ProgressPort} they
+ * already receive.
+ */
 final class PhaseRunner {
 
     private final ProgressPort progressPort;
@@ -37,9 +40,15 @@ final class PhaseRunner {
         }
     }
 
-    // Function<ProgressCallback, T> can't wrap cullDispatcher.cull()/applyEngine.apply(), both of
-    // which declare checked exceptions. Declares throws Exception itself instead, the same shape
-    // JobWork already uses for the same reason. A lambda that throws nothing still satisfies it.
+    /**
+     * The engine call {@link PhaseRunner#run} brackets with progress events. A plain
+     * {@code Function<ProgressCallback, T>} cannot wrap a call like {@code cullDispatcher.cull()}
+     * or {@code applyEngine.apply()}, since both declare checked exceptions. This declares
+     * {@code throws Exception} instead, the same shape {@link JobWork} already uses for the same
+     * reason. A lambda that throws nothing still satisfies it.
+     *
+     * @param <T> the type of result the engine call produces
+     */
     @FunctionalInterface
     interface PhaseWork<T> {
         /**

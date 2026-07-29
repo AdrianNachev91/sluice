@@ -2,9 +2,11 @@ package photos.sluice.application.port.out;
 
 import java.util.List;
 
-// The cull configuration the application layer and vision adapters need, behind a port so neither
-// imports the config record that supplies it. The settings bean implements this by exposing the
-// values it already binds.
+/**
+ * The effect boundary the application layer and vision adapters use to read the cull
+ * configuration, so neither imports the config record that supplies it. The settings bean
+ * implements this by exposing the values it already binds.
+ */
 public interface CullSettings {
 
     /**

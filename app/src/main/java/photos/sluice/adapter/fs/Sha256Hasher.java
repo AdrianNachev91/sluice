@@ -12,6 +12,13 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * A {@link Sha256Port} that computes a file's SHA-256 hash by streaming its bytes through a
+ * {@link java.security.DigestInputStream} in fixed-size chunks. This keeps memory use constant
+ * regardless of file size, so hashing a multi-gigabyte video costs no more memory than a small
+ * photo. The result is returned as an uppercase hex string, matching the casing already used by
+ * the on-disk hash index.
+ */
 @Component
 public class Sha256Hasher implements Sha256Port {
 

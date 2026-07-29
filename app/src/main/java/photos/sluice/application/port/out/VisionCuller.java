@@ -4,12 +4,16 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 
-// A vision provider that turns a prepared montage directory into per-montage decision shards. The
-// judgement always comes from a model or agent the user supplies. The app provides no vision of its
-// own. The port abstracts only how those decisions arrive. In one mode the user's agent reads the
-// montages and writes the shards out of band. In another the app calls the user's configured vision
-// model and writes the shards from its response. Either way the work stays inside cull(), so the
-// signature is uniform and callers never branch on which provider is selected.
+/**
+ * The effect boundary application services use to turn a prepared montage directory into
+ * per-montage decision shards. The judgement always comes from a model or agent the user supplies;
+ * the app provides no vision of its own. The port abstracts only how those decisions arrive.
+ *
+ * <p>In one mode the user's agent reads the montages and writes the shards out of band. In another
+ * the app calls the user's configured vision model and writes the shards from its response. Either
+ * way the work stays inside {@link #cull}, so the signature is uniform and callers never branch on
+ * which provider is selected.
+ */
 public interface VisionCuller {
 
     // The id ExternalAgentCuller registers under. A CullException thrown by cull() while this is the

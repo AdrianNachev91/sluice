@@ -33,6 +33,19 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Renders a fixed-size preview tile for a single media file, trying a chain of format-specific
+ * strategies before falling back to a labeled placeholder.
+ *
+ * <p>Most files render via a plain raster decode. HEIC/HEIF/AVIF files route through a
+ * {@link HeifDecoder}. SVG files are transcoded via Batik, preserving their real aspect ratio.
+ * A RAW file whose main image can't be decoded falls back to extracting its embedded EXIF
+ * thumbnail directly from the file's own bytes.
+ *
+ * <p>Alongside the image, every render also decides whether the tile is fit to show a vision
+ * model for a keep/junk judgment. That decision rests on the resolution of the actual preview
+ * recovered, not the file's own claimed capture resolution. See {@link TileResult}.
+ */
 @Component
 public class TileRenderer {
 
@@ -62,11 +75,16 @@ public class TileRenderer {
         this.heifDecoder = heifDecoder;
     }
 
-    // Whether a tile is safe to show a vision model for a keep/junk judgment. False covers two
-    // different underlying cases the same way: a drawn placeholder (no photo content at all), and
-    // a real but too-small recovered preview (photo content exists, but not enough detail to trust
-    // fine judgment calls like blur or a photo-of-a-screen). Both mean the same thing to a caller
-    // assembling a montage: skip the vision pass for this file, route it elsewhere instead.
+    /**
+     * A rendered tile together with whether it is safe to show a vision model for a keep/junk
+     * judgment.
+     *
+     * <p>{@code unreviewable} covers two different underlying cases the same way. One is a drawn
+     * placeholder with no photo content at all. The other is a real but too-small recovered
+     * preview, whose detail isn't enough to trust fine judgment calls like blur or a
+     * photo-of-a-screen. Both mean the same thing to a caller assembling a montage: skip the
+     * vision pass for this file, and route it elsewhere instead.
+     */
     public record TileResult(BufferedImage image, boolean unreviewable) {
     }
 
@@ -451,10 +469,13 @@ public class TileRenderer {
         return image;
     }
 
-    // Batik's Transcoder API writes to a TranscoderOutput (a stream). There's no built-in way to
-    // get a BufferedImage back directly, so this override captures the raster in memory instead.
-    // It's the standard idiom for using Batik as an in-process SVG decoder rather than a
-    // file-to-file tool.
+    /**
+     * Captures Batik's rendered raster directly in memory. Batik's {@code Transcoder} API writes
+     * to a {@link TranscoderOutput} (a stream). There is no built-in way to get a
+     * {@link BufferedImage} back directly, so this override captures the raster itself instead.
+     * This is the standard idiom for using Batik as an in-process SVG decoder rather than a
+     * file-to-file tool.
+     */
     private static final class BufferedImageTranscoder extends ImageTranscoder {
 
         private @Nullable BufferedImage image;
