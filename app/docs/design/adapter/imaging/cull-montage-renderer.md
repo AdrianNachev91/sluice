@@ -2,9 +2,10 @@
 
 How `adapter/imaging/CullMontageRenderer` implements the `MontageRenderer` port
 (`app/src/main/java/photos/sluice/adapter/imaging/CullMontageRenderer.java`). It wires
-`TileRenderer`, `MontageBuilder`, `SidecarWriter`, and `PrepIndexWriter` together: given a
-`CullScope`, it finds the right `Sorted` photo files, renders each to a tile, drops the ones that
-can't be judged, batches the rest into montages, and writes the whole prep directory to disk.
+`TileRenderer`, `MontageBuilder`, `SidecarWriter`, and `PrepIndexWriter` together. Given a
+`CullScope`, it finds the right `Sorted` photo files and renders each to a tile. It then drops
+the ones that can't be judged, batches the rest into montages, and writes the whole prep
+directory to disk.
 
 ## Top-level routing
 
@@ -21,7 +22,7 @@ flowchart TD
 ```
 
 Ordering happens before rendering, and filtering happens before batching. Both choices exist for
-the same reason: once photos are grouped into a montage, there's no way to pull one back out
+the same reason. Once photos are grouped into a montage, there's no way to pull one back out
 without reshuffling every batch after it. Deciding "which files, in what order, are actually going
 to appear" has to be settled before any batch boundary is drawn.
 
@@ -41,7 +42,7 @@ flowchart TD
     H -- OldestN --> J["sort by mtime ascending,<br/>then cap to n"]
 ```
 
-A requested month directory that doesn't exist is skipped silently, not treated as an error - a
+A requested month directory that doesn't exist is skipped silently, not treated as an error. A
 month with nothing sorted into it yet is a normal, expected state, not a caller mistake.
 `CullScopeSelector` never touches disk itself; it's pure `Path`/`Instant` logic, so it stays
 unit-testable without a filesystem.
@@ -56,11 +57,12 @@ flowchart TD
     C -- no --> E["keep in the reviewable list,<br/>in order"]
 ```
 
-`MontageBuilder` has no concept of "skip this tile" - it composes whatever list it's handed. This
-is the only place in the whole pipeline where the `unreviewable` flag can still be acted on, so it
-has to happen here, before batching. An unreviewable file is never moved. It's only reported, in
-`PrepDir.unreviewable` / `index.json`'s `unreviewable` field, so a future caller has something to
-act on instead of the file just silently sitting wherever it already is (see Known limitations).
+`MontageBuilder` has no concept of "skip this tile" - it composes whatever list it's handed.
+This is the only place in the whole pipeline where the `unreviewable` flag can still be acted
+on, so it has to happen here, before batching. An unreviewable file is never moved. It's only
+reported, in `PrepDir.unreviewable` / `index.json`'s `unreviewable` field. That gives a future
+caller something to act on, instead of the file just silently sitting wherever it already is
+(see Known limitations).
 
 ## Batching
 
@@ -93,19 +95,19 @@ Checked in two places, both before doing the (potentially slow) work for the nex
 after:
 
 - **The render pass** (one `TileRenderer.render()` call per candidate, including any HEIC CLI
-  decode) - the long pass, and it runs entirely before the prep dir is ever cleared. A
+  decode) is the long pass. It runs entirely before the prep dir is ever cleared. A
   cancellation seen here means disk is left completely untouched: nothing to clean up, nothing for
   a caller to resume from.
 - **The montage-write loop** - checked once per montage, before writing it. A prep dir stopped
-  mid-loop here is inert: `index.json` is never written, so it's invisible to
+  mid-loop here is inert. `index.json` is never written, so it's invisible to
   `Pipeline.waitingJobs()`, and the next `build()` call for this scope clears it via
   `clearPrepDir()` anyway.
 
 Either case returns `null` instead of a `PrepDir`. That return value is the sole authority on
 whether the run was cancelled - `Pipeline` never re-checks disk state to decide. A `null` this
-early (before `index.json` exists) means there's nothing resumable yet, unlike a cancellation
-later in the cull flow (dispatch or apply), which lands on an already-prepped, genuinely resumable
-`Waiting` job.
+early (before `index.json` exists) means there's nothing resumable yet. That's unlike a
+cancellation later in the cull flow (dispatch or apply), which lands on an already-prepped,
+genuinely resumable `Waiting` job.
 
 ## Scenarios
 
@@ -123,19 +125,19 @@ later in the cull flow (dispatch or apply), which lands on an already-prepped, g
 
 ## Known limitations
 
-- **Unreviewable files are reported, never moved.** `PrepDir.unreviewable` lists them so a caller
-  can see what got skipped, but this class only ever reads files, never moves or deletes anything
-  in `Sorted`. The actual move to `Unreviewable/<year>/<month>/` belongs to the apply step, which
-  acts on culled scopes - keeping this class side-effect-free is also what keeps a cull run
-  dry-run-safe.
+- **Unreviewable files are reported, never moved.** `PrepDir.unreviewable` lists them so
+  a caller can see what got skipped. This class only ever reads files - it never moves
+  or deletes anything in `Sorted`. The actual move to `Unreviewable/<year>/<month>/`
+  belongs to the apply step, which acts on culled scopes. Keeping this class
+  side-effect-free is also what keeps a cull run dry-run-safe.
 - **`OldestN` caps before the unreviewable filter runs.** Capping to `n` happens on the full
   ordered list; filtering happens after. If one of the `n` oldest candidates turns out
-  unreviewable, that slot is simply dropped - it is not backfilled from the next-oldest candidate
+  unreviewable, that slot is simply dropped. It isn't backfilled from the next-oldest candidate
   just outside the window, even though that candidate might itself be reviewable.
-- **`clearPrepDir` always does a full wipe, never an incremental diff.** Every `build()` call for a
-  scope deletes and regenerates the whole prep directory, even when the output would be identical
-  to what's already there. Simpler than diffing, and prep directories are small and cheap to
-  regenerate.
+- **`clearPrepDir` always does a full wipe, never an incremental diff.** Every `build()` call for
+  a scope deletes and regenerates the whole prep directory. That happens even when the output
+  would be identical to what's already there. Simpler than diffing, and prep directories are
+  small and cheap to regenerate.
 
 ## Related
 

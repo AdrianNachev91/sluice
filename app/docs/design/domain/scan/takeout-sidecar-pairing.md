@@ -39,11 +39,12 @@ flowchart TD
     F -- "no candidates left" --> U(["Unpaired"])
 ```
 
-The prefix fallback's candidate list, in order: the plain filename, its dup-number-reversed form
-(if the filename itself has a `(N)` marker), the edited-stripped base, and the edited-stripped
-base's dup-reversed form. It exists for sidecars whose derived owner key doesn't land on an exact
-match - e.g. a non-standard suffix - by falling back to "does some sidecar's name start with
-this," picking the closest (shortest) match if several do.
+The prefix fallback tries four candidates in order: the plain filename, then its
+dup-number-reversed form (if the filename itself has a `(N)` marker). Next comes the
+edited-stripped base, then the edited-stripped base's dup-reversed form. It exists for
+sidecars whose derived owner key doesn't land on an exact match - e.g. a non-standard suffix.
+It falls back to "does some sidecar's name start with this," picking the closest (shortest)
+match if several do.
 
 ## Naming examples
 
@@ -61,8 +62,8 @@ this," picking the closest (shortest) match if several do.
 ## Related
 
 - How media and sidecar lists are built in the first place (the walk over the inbox tree, the
-  media/sidecar/dropped classification): `inbox-scanning.md` in the sibling `adapter/fs` design
-  folder.
+  media/sidecar/dropped classification) is covered separately. See `inbox-scanning.md` in the
+  sibling `adapter/fs` design folder.
 - Risk note: a name-only pairing can't tell a real Takeout sidecar from an unrelated `.json` that
   happens to share a filename prefix. Whatever deletes a consumed sidecar must only do so once it
   has actually been read as valid Takeout metadata, never on name-match alone.

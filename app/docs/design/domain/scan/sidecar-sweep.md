@@ -30,16 +30,17 @@ mechanisms could disagree about the same sidecar.
 
 The prefix check (not just exact equality) exists because Google truncates a sidecar's
 `.supplemental-metadata` suffix once the original filename plus that suffix would exceed roughly
-46 characters (community-documented behavior, not an official Google spec - see
-`SidecarSweep.MIN_TRUNCATED_OWNER_KEY_LENGTH`'s own comment for sources). As long as any part of
+46 characters. This is community-documented behavior, not an official Google spec - see
+`SidecarSweep.MIN_TRUNCATED_OWNER_KEY_LENGTH`'s own comment for sources. As long as any part of
 that suffix still fits, the exact-match branch above already recovers the real filename correctly.
 The prefix branch only matters once the original filename alone is near that cap. Then none of the
 suffix survives, and the JSON's base name is a raw truncated cut of the filename itself. A genuine
 truncation of that kind lands close to 46 characters.
 
 A *shorter* owner key matching some remaining media name as a prefix is far more likely to be an
-accidental collision with an unrelated file than genuine truncation. So the prefix branch is only
-trusted at or above that length. Below it, only an exact match keeps a sidecar alive.
+accidental collision with an unrelated file. Genuine truncation is much less likely at that
+length. So the prefix branch is only trusted at or above that length. Below it, only an exact
+match keeps a sidecar alive.
 
 ## Scenarios
 

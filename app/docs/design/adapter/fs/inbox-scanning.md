@@ -21,8 +21,8 @@ flowchart TD
 
 Directories themselves are walked but never classified - only regular files reach the
 sidecar/media check. A file that is neither a sidecar nor a recognized media extension (a stray
-`.txt`, `.docx`, etc.) is simply excluded from both lists; it is not an error and never surfaces
-anywhere in the result.
+`.txt`, `.docx`, etc.) is simply excluded from both lists. It is not an error, and it never
+surfaces anywhere in the result.
 
 ## 2. Two ways a scan can fail
 
@@ -37,11 +37,11 @@ flowchart TD
     E --> G
 ```
 
-The two failure shapes come from the JDK itself: opening a bad root fails immediately as a checked
-`IOException`, but a failure discovered while the stream is still being consumed - a subdirectory
-that disappears or loses permissions partway through - surfaces as an already-unchecked
-`UncheckedIOException` instead. Both are caught and rewrapped with the same contextual message so a
-caller never has to know which shape triggered it.
+The two failure shapes come from the JDK itself. Opening a bad root fails immediately as a
+checked `IOException`. A failure discovered while the stream is still being consumed - a
+subdirectory that disappears or loses permissions partway through - surfaces as an
+already-unchecked `UncheckedIOException` instead. Both are caught and rewrapped with the same
+contextual message so a caller never has to know which shape triggered it.
 
 ## Scenarios
 
@@ -59,9 +59,9 @@ caller never has to know which shape triggered it.
 
 - Sidecar-matching detail (owner keys, the prefix fallback): `takeout-sidecar-pairing.md` in the
   sibling `domain/scan` design folder.
-- Risk note: pairing is name-based only, so a paired sidecar must be schema-validated as real
+- Risk note: pairing is name-based only. A paired sidecar must be schema-validated as real
   Takeout metadata before anything ever deletes it - never on name-match alone.
 - `ScanResult.jsonPaths` carries every sidecar found, paired or not. `SortEngine` calls this scan
-  once per `sort()` invocation and reuses that full list after routing - minus whatever it
+  once per `sort()` invocation. It reuses that full list after routing - minus whatever it
   consumed itself - to feed `SidecarSweep` and find orphans. See `sidecar-sweep.md` in the
   `domain/scan` design folder.

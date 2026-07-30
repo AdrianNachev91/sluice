@@ -59,10 +59,10 @@ reverse: misrouting a real high-res photo as low-res.
 ### Per-directory tag extraction
 
 - **`subIfdDimensions(ExifSubIFDDirectory)`** - tries the EXIF-specific pixel-dimension tags
-  first (`0xA002`/`0xA003`, what Canon uses), then falls back to the generic TIFF
-  `ImageWidth`/`ImageHeight` tags (`0x0100`/`0x0101`, what Nikon leaves on the SubIFD holding the
-  true capture resolution instead). Both live on a SubIFD, not the container's own top-level
-  directory, so both are trusted equally.
+  first (`0xA002`/`0xA003`, what Canon uses). It then falls back to the generic TIFF
+  `ImageWidth`/`ImageHeight` tags (`0x0100`/`0x0101`, what Nikon leaves on the SubIFD holding
+  the true capture resolution instead). Both live on a SubIFD, not the container's own
+  top-level directory, so both are trusted equally.
 - **`heifDimensions(HeifDirectory)`** - reads `TAG_IMAGE_WIDTH`/`TAG_IMAGE_HEIGHT` directly.
   Verified against a real AVIF fixture with no embedded EXIF at all: metadata-extractor exposes its
   dimensions only here, under a container-native width/height box, not under any `ExifSubIFDDirectory`.
@@ -98,13 +98,14 @@ principle the metadata path applies.
 ## Known limitations
 
 - **The cross-directory-type comparison in `largestOf` has no real-fixture case where both sides
-  are simultaneously present.** Every real fixture in this suite carries dimensions in exactly one
-  directory type or the other, never both. The "both present, pick the larger" branch is covered
-  only by a direct unit test against hand-built values, not an observed real file.
-- **Trusting the largest value is a one-directional safety margin, not a corruption defense.** A
-  corrupted file whose non-primary directory reports an inflated bogus value could in principle
-  cause a genuinely low-res file to escape `LowResGate`'s flag. `TileRenderer`'s montage-time real
-  pixel decode is the independent second check that doesn't share this failure mode.
+  are simultaneously present.** Every fixture here carries just one type's dimensions, never
+  both. The "both present, pick the larger" branch is covered only by a direct unit test against
+  hand-built values, not an observed real file.
+- **Trusting the largest value is a one-directional safety margin, not a corruption
+  defense.** A corrupted file's non-primary directory could report an inflated bogus value.
+  That could, in principle, let a genuinely low-res file escape `LowResGate`'s flag.
+  `TileRenderer`'s montage-time real pixel decode is the independent second check that
+  doesn't share this failure mode.
 
 ## Related
 

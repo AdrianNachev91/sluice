@@ -97,8 +97,8 @@ Two validation layers, split by where the information lives:
   single source of truth. It runs over the whole accepted-so-far set, not the current shard alone,
   because its cross-shard rules can only fire on the full set. A near-dup group id reused by two
   montages, say, is something a stateless call could never avoid on its own. Every run validates
-  against the whole scope's src list, read from all sidecars up front, so "in scope" means the
-  same thing here as for the sibling provider. Earlier shards are known clean, so any fresh
+  against the whole scope's src list, read from all sidecars up front. This makes "in scope" mean
+  the same thing here as for the sibling provider. Earlier shards are known clean, so any fresh
   problem implicates the current montage. Resumed shards join the same set, so the cross-shard
   rules keep firing across the resume boundary.
 

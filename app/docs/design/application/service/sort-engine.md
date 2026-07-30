@@ -95,16 +95,17 @@ flowchart TD
 
 This is independent of section 2's per-file consumption - that mechanism only spends a sidecar
 whose date actually won for its file. The sweep instead catches every other spent sidecar too.
-That includes unmatched ones, and ones whose media left via a different branch (sorted, or deleted
-as a duplicate) than the one that would have consumed their sidecar inline. This is what keeps
-sidecars from piling up across incremental year-by-year runs. `SortSummary.sidecarsDeleted` is not
-incremented here - only section 2's inline consumption counts toward it.
+That includes unmatched ones. It also includes ones whose media left via a different branch
+(sorted, or deleted as a duplicate) than the one that would have consumed their sidecar inline.
+This is what keeps sidecars from piling up across incremental year-by-year runs.
+`SortSummary.sidecarsDeleted` is not incremented here - only section 2's inline consumption counts
+toward it.
 
 "Remaining" is derived from step 1's original scan, not observed directly. `dedup.plan`'s three
 buckets (section 1) are a total partition of every in-scope file, and each bucket is either moved
 or deleted before the sweep runs. So every in-scope file is guaranteed to have left the Inbox
-already, and step 1's original scan lists minus what this run itself removed already describe
-what's left.
+already. Step 1's original scan lists, minus what this run itself removed, already describe what's
+left.
 
 ## 6. Cancellation
 
@@ -134,24 +135,24 @@ file routed.
 A cancelled routing pass changes what "left the Inbox this run" means. `RoutingResult.routedFiles`
 tracks only the survivors actually routed before the stop. `actuallyRemoved` - used for both
 `SortSummary.processed` and the post-run sweep above - is built from that, plus the two dedup
-buckets, rather than the full in-scope list. Section 2's sidecar consumption runs after routing and
-is scoped the same way, so a not-yet-routed file's sidecar is never deleted out from under it while
-the file itself still sits in the Inbox awaiting a future run.
+buckets, rather than the full in-scope list. Section 2's sidecar consumption runs after routing
+and is scoped the same way. So a not-yet-routed file's sidecar is never deleted out from under it,
+while the file itself still sits in the Inbox awaiting a future run.
 
 The dedup-deletion step in section 1 ("delete redundant and duplicate files") has no cancellation
 check of its own. A cancellation requested during it is only observed once routing's own per-file
 check runs next. See `cull-engine.md`'s Cancellation section for the cross-engine picture.
 
 This is a deliberate omission, not a gap that slipped through review. The two dedup buckets are
-only the actual duplicates found within one scope, a small subset of the batch, and each iteration
-is a single local `mediaStore.delete()` call - no hashing, no image reads, nothing that scales the
-way the whole-Inbox dating pass or the per-file routing pass can. In practice the wait before the
-next checkpoint is negligible. Adding a check here would also cost more than it saves. These loops
-delete files, so a cancellation mid-loop would need the same `actuallyRemoved`-style split routing
-already required - tracking exactly which deletions actually happened, and re-scoping the summary
-and sidecar/sweep logic to match. That's real rework to close a wait that was never actually long.
-Reassessed 2026-07-26 during a full cancellation-coverage review across every engine this project's
-cancellation support touches; the verdict was to leave it as-is.
+only the actual duplicates found within one scope, a small subset of the batch. Each iteration is
+a single local `mediaStore.delete()` call. There's no hashing, no image reads, nothing that scales
+the way the whole-Inbox dating pass or the per-file routing pass can. In practice the wait before
+the next checkpoint is negligible. Adding a check here would also cost more than it saves. These
+loops delete files, so a cancellation mid-loop would need the same `actuallyRemoved`-style split
+routing already required. That means tracking exactly which deletions actually happened, and
+re-scoping the summary and sidecar/sweep logic to match. That's real rework to close a wait that
+was never actually long. Reassessed 2026-07-26 during a full cancellation-coverage review across
+every engine this project's cancellation support touches; the verdict was to leave it as-is.
 
 ## Scenarios
 

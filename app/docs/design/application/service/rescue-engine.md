@@ -1,9 +1,8 @@
 # Rescue engine
 
 How `application/service/RescueEngine` promotes the media files still sitting in a Review folder
-into the library, re-dated via `domain/dating/RescueDateResolver`, then dissolves the folder once
-nothing is left behind
-(`app/src/main/java/photos/sluice/application/service/RescueEngine.java`,
+into the library, re-dated via `domain/dating/RescueDateResolver`. Once nothing is left behind, it
+dissolves the folder (`app/src/main/java/photos/sluice/application/service/RescueEngine.java`,
 `app/src/main/java/photos/sluice/domain/dating/RescueDateResolver.java`).
 
 ## 1. The rescue pipeline
@@ -23,10 +22,10 @@ flowchart TD
 ```
 
 A file that isn't a recognized media type (a stray `_reasons.txt`, or anything else left in the
-folder) is never touched - not rescued, not counted as skipped. Only a real media file that has no
-resolvable date is skipped.
+folder) is never touched. It's not rescued, and not counted as skipped. Only a real media file
+that has no resolvable date is skipped.
 
-Cancellation is checked once per file, at the top of the loop - so an in-flight file is never
+Cancellation is checked once per file, at the top of the loop. So an in-flight file is never
 interrupted, and every file already rescued before the request stays rescued. A cancelled pass
 still returns a `RescueSummary`, just a partial one covering only the files it actually reached.
 
@@ -45,12 +44,12 @@ flowchart TD
     F -- no --> E
 ```
 
-Folder-first, not last: a folder whose own name already carries a year and month (`Food`,
-`Scenery`, and `Unsorted` don't) is a more trustworthy signal than re-deriving one from just EXIF
-and the filename, so it short-circuits both when it matches. There is no fallback to a file's
-modification time and no Takeout sidecar lookup - a rescue never fabricates a date, and by the
-time a file reaches Review its sidecar is long gone. The plausibility check runs once, against
-whichever source actually won, not per source.
+Folder-first, not last. A folder whose own name already carries a year and month (`Food`,
+`Scenery`, and `Unsorted` don't) is a more trustworthy signal than EXIF or the filename. That's
+why it short-circuits both when it matches. There is no fallback to a file's modification time and
+no Takeout sidecar lookup. A rescue never fabricates a date, and by the time a file reaches Review
+its sidecar is long gone. The plausibility check runs once, against whichever source actually won,
+not per source.
 
 ## 3. Destination and the hash index
 
@@ -76,7 +75,7 @@ flowchart TD
     E --> F(["folderRemoved = true"])
 ```
 
-This is all-or-nothing per folder, not per file: a single skipped file anywhere in the tree keeps
+This is all-or-nothing per folder, not per file. A single skipped file anywhere in the tree keeps
 the whole folder - and every other file still in it - untouched. Checking "nothing was skipped"
 alone isn't enough once a pass can stop early on cancellation. A cancelled run with zero skips so
 far would otherwise delete the `_reasons.txt` markers while unvisited media still sits in the

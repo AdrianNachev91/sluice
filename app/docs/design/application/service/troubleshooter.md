@@ -34,7 +34,7 @@ flowchart TD
 ```
 
 A `CorruptIndex` finding gets `rebuildIndex()` attempted first, in the locked dependency order
-(index before move log before stray shards) - see `prep-dir-remedies.md` section 2 for the rebuild
+(index before move log before stray shards). See `prep-dir-remedies.md` section 2 for the rebuild
 guard itself. A failed attempt is a pure no-op: nothing is written unless every guard passes, so
 `afterIndexRebuild` just falls back to `before` unchanged. `indexRebuilt` records whether the
 attempt actually succeeded, independent of whatever `before`/`after` end up reporting.
@@ -49,17 +49,18 @@ reconcile unconditionally would also needlessly file away an already-trustworthy
 witnessed provenance to reconstructed for zero benefit.
 
 `autoRepairStrayShard()` (`PrepDirRemedies`) runs next, in the locked dependency order (move log
-before stray shards - until the log is rebuilt, an already-moved file can still look like a stray
-shard's own missing match). Unlike the reconcile gate, this repair isn't gated on overall prep-dir
+before stray shards). Until the log is rebuilt, an already-moved file can still look like a stray
+shard's own missing match. Unlike the reconcile gate, this repair isn't gated on overall prep-dir
 state. A `StrayShard` finding can surface either while `WAITING` (other montages still being
-culled) or `BLOCKED` (culling finished, something else needs a remedy). `PrepDirDoctor` never gates
-it on the shard contract being otherwise complete, the way it gates `MissingSource`.
+culled) or `BLOCKED` (culling finished, something else needs a remedy). `PrepDirDoctor` never
+gates it on the shard contract being otherwise complete, the way it gates `MissingSource`.
 
-Every `StrayShard` finding gets one attempt. Each re-reads current disk state, so an earlier repair
-in the same pass can make a later one possible (one candidate montage claimed) or moot (nothing
-left unclaimed). `autoRepairStrayShard()` itself decides that per its own unambiguity rule, not this
-loop. See `prep-dir-remedies.md`, section 1, for the unambiguity rule itself and the CHOICE
-fallback (`setAsideStrayShard()`) neither this nor `reconcile()` ever invokes unprompted.
+Every `StrayShard` finding gets one attempt. Each re-reads current disk state. So an earlier
+repair in the same pass can make a later one possible (one candidate montage claimed) or moot
+(nothing left unclaimed). `autoRepairStrayShard()` itself decides that per its own unambiguity
+rule, not this loop. See `prep-dir-remedies.md`, section 1, for the unambiguity rule itself and
+the CHOICE fallback (`setAsideStrayShard()`) neither this nor `reconcile()` ever invokes
+unprompted.
 
 Every disposition-ledger CHOICE remedy (missing-source skip, overlap resolution, corrupt-sidecar
 resolution, stray-shard set-aside) needs a real user choice. So none of them run here - they

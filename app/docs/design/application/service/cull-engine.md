@@ -1,9 +1,9 @@
 # Cull engine
 
-How `application/service/CullEngine` orchestrates a cull job - prep (`MontageRenderer.build`) ->
+How `application/service/CullEngine` orchestrates a cull job: prep (`MontageRenderer.build`) ->
 dispatch (`CullDispatcher.cull`, which routes to whichever `VisionCuller` the configured provider
-selects) -> apply (`ApplyEngine.apply`) - and the watch-mode auto-resume that polls a still-waiting
-job for its shards to land
+selects) -> apply (`ApplyEngine.apply`). It also covers the watch-mode auto-resume that polls a
+still-waiting job for its shards to land
 (`app/src/main/java/photos/sluice/application/service/CullEngine.java`,
 `app/src/main/java/photos/sluice/application/service/ShardTallyCalculator.java`,
 `app/src/main/java/photos/sluice/application/service/CullWatcher.java`). `Pipeline` builds the one
@@ -12,9 +12,9 @@ see `pipeline.md` for that facade and for `sort()`/`commit()`/`rescue()`.
 
 ## `cull()` / `waitingJobs()` / `resume()`
 
-The dispatch step is where the flow forks, because a `CullException` from it means two different
-things depending on the provider - see `VisionCuller.MANUAL_MODE_PROVIDER_ID`'s own doc comment for
-the full reasoning.
+The dispatch step is where the flow forks: a `CullException` from it means two different things
+depending on the provider. See `VisionCuller.MANUAL_MODE_PROVIDER_ID`'s own doc comment for the
+full reasoning.
 
 ```mermaid
 flowchart TD
@@ -32,14 +32,13 @@ flowchart TD
     M -- "no" --> RT(["propagates -<br/>JobHandle.join() throws"])
 ```
 
-`resume(prepDir, allowPartial)` re-enters at the dispatch step directly -
-`cullPrepPort.readIndex()` re-reads the existing `PrepDir` from `index.json` instead of
-`MontageRenderer` regenerating it, so no montage is ever rebuilt or re-rendered by a résumé.
-`waitingJobs()` is a plain, un-jobbed read: it scans `logs/cull-prep/*/` for a prep dir with
-`index.json` but no merged `decisions.json` yet (see `WaitingCullJob`'s own doc for why this is
-derived live instead of a persisted list), tolerating a transiently-unreadable `index.json` (a
-concurrent job's own prep dir mid-clear/mid-write) by skipping that entry rather than failing the
-whole scan.
+`resume(prepDir, allowPartial)` re-enters at the dispatch step directly. `cullPrepPort.readIndex()`
+re-reads the existing `PrepDir` from `index.json` instead of `MontageRenderer` regenerating it, so
+no montage is ever rebuilt or re-rendered by a resume. `waitingJobs()` is a plain, un-jobbed read:
+it scans `logs/cull-prep/*/` for a prep dir with `index.json` but no merged `decisions.json` yet.
+See `WaitingCullJob`'s own doc for why this is derived live instead of a persisted list. It
+tolerates a transiently-unreadable `index.json` (a concurrent job's own prep dir
+mid-clear/mid-write) by skipping that entry rather than failing the whole scan.
 
 `CullEngine` computes each `WaitingCullJob`'s `ShardTally` (`present`/`valid`/`total`) via
 `ShardTallyCalculator`, one montage at a time via `ShardValidator`, rather than reusing
@@ -70,8 +69,8 @@ the actual gate before anything moves.
 Cancel is effectively Pause for cull, not a failure, at every boundary except one. `cull()`/
 `resume()` both pass `handle::isCancellationRequested` through to `buildFreshAndDispatch()`/
 `dispatchAndApply()`, and from there into `MontageRenderer.build()` and `ApplyEngine.apply()`
-themselves - every long-running pass in the whole cull flow now checks the same signal, not just
-the two stage boundaries between them:
+themselves. Every long-running pass in the whole cull flow now checks the same signal, not just the
+two stage boundaries between them:
 
 ```mermaid
 flowchart TD
@@ -100,8 +99,8 @@ every other cancellation-triggered `Waiting` in this diagram does.
 `CullJobOutcome.Cancelled` is the one outcome with nothing to resume. The renderer stopped before
 `index.json` was ever written, so there is no prep dir yet to derive a `WaitingCullJob` from. A
 plain re-run of `cull()` on the same scope starts fresh. Every other cancellation path in this
-diagram (mid-dispatch, mid-apply, or right at either stage boundary) lands on `Waiting` instead,
-because a resumable prep dir (and, for mid-dispatch, some shards) already exists by that point.
+diagram (mid-dispatch, mid-apply, or right at either stage boundary) lands on `Waiting` instead. A
+resumable prep dir (and, for mid-dispatch, some shards) already exists by that point.
 
 None of these paths ever arm a watcher, regardless of `mode`: an auto-resume moments after a
 cancel would defy the cancel.
@@ -144,12 +143,12 @@ an internal cadence, not a `CullSettings` field - only `mode` and `watchTimeout`
 user-facing knobs.
 
 `disarmWatch()` runs at the very start of every `dispatchAndApply()` call, regardless of who
-triggered it (a fresh `cull()`, a manual `resume()` click, or a watcher's own auto-resume) - the
-prep dir's watcher, if any, is always retired before a real attempt runs, so a manual click racing
-an armed watcher can never leave two pollers on the same job. `armWatchesForExistingWaitingJobs()`
-(called from `Pipeline`'s own `@PostConstruct`) re-arms every still-waiting job found on disk at
-startup, since there is no persistent job store - restarting the app would otherwise silently stop
-watching every job armed before the restart.
+triggered it (a fresh `cull()`, a manual `resume()` click, or a watcher's own auto-resume). The
+prep dir's watcher, if any, is always retired before a real attempt runs. A manual click racing an
+armed watcher can therefore never leave two pollers on the same job.
+`armWatchesForExistingWaitingJobs()` (called from `Pipeline`'s own `@PostConstruct`) re-arms every
+still-waiting job found on disk at startup. There is no persistent job store, so restarting the app
+would otherwise silently stop watching every job armed before the restart.
 
 ### Scenarios
 
@@ -169,7 +168,7 @@ watching every job armed before the restart.
   cull stage.
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `CullEngine` submits onto): no
   dedicated design doc yet - see the source files directly.
-- `ProgressPort` (the out-port `PhaseRunner` reports through): see the source file directly; its
+- `ProgressPort` (the out-port `PhaseRunner` reports through): see the source file directly. Its
   own doc comment is the source of the "always bracket a phase" contract this page relies on.
 - `ApplyEngine`: `apply-engine.md` in this same design folder, section 3 for its own cancellation
   behavior.

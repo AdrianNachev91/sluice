@@ -1,10 +1,9 @@
 # Curate engine
 
 How `application/service/CurateEngine` sorts a scope, then culls whatever that sort just populated, as one job
-(`app/src/main/java/photos/sluice/application/service/CurateEngine.java`). `Pipeline`
-builds the one `CurateEngine` instance it needs, wiring it to the same `CullEngine` it builds for
-`cull()`/`resume()` itself - see `pipeline.md` for that facade and `cull-engine.md` for
-`buildFreshAndDispatch()`, the cull-stage method this class reuses.
+(`app/src/main/java/photos/sluice/application/service/CurateEngine.java`). `Pipeline` builds the one `CurateEngine`
+instance it needs, wiring it to the same `CullEngine` it builds for `cull()`/`resume()` itself. See `pipeline.md` for
+that facade and `cull-engine.md` for `buildFreshAndDispatch()`, the cull-stage method this class reuses.
 
 ## `curate()`
 
@@ -24,26 +23,24 @@ Only `OldestYear` can't be mapped ahead of time - its year isn't decided until t
 `SortSummary.yearsSorted()` exists for exactly this: it's the only place an auto-resolved `OldestYear` scope's actual
 year is ever reported.
 
-A known target `CullScope` (`Year` or `OldestN`) gets the same synchronous, pre-submit
-`checkNoWaitingJobFor()` `cull()` gets - failing before the sort even starts. `OldestYear` can't be checked that early.
-Its only guard is the same check running again once its resolved year is known, after the sort has already moved real
-files - narrowly, around just that one call, not the dispatch/apply that follows, so a genuine cull failure downstream
-(a misconfigured provider, for example) is never mislabeled as this conflict.
+A known target `CullScope` (`Year` or `OldestN`) gets the same synchronous, pre-submit `checkNoWaitingJobFor()` `cull()`
+gets - failing before the sort even starts. `OldestYear` can't be checked that early. Its only guard is the same check
+running again once its resolved year is known, after the sort has already moved real files. That check sits narrowly
+around just that one call, not the dispatch/apply that follows. This keeps a genuine cull failure downstream (a
+misconfigured provider, for example) from ever being mislabeled as this conflict.
 
 A failure at that later point can't be a plain `IllegalStateException` like the pre-submit one is. The sort already
 moved real files by then. A caller must not lose the `SortSummary` describing that just because the cull stage was
-refused. `curate()` catches it and rethrows
-`Pipeline.CurateConflictException` (an `IllegalStateException` subtype, kept on `Pipeline` itself since that's the
-public facade type a caller catches) instead, carrying the `SortSummary` via its own `sortSummary()` accessor. This is
-the only failure path that needs to carry a partial result - every other `checkNoWaitingJobFor()` failure happens before
-anything runs.
+refused. `curate()` catches it and rethrows `Pipeline.CurateConflictException` instead (an `IllegalStateException`
+subtype, kept on `Pipeline` itself since that's the public facade type a caller catches). It carries the `SortSummary`
+via its own `sortSummary()` accessor. This is the only failure path that needs to carry a partial result - every other
+`checkNoWaitingJobFor()` failure happens before anything runs.
 
 The single stage-boundary check between sort finishing and cull starting still exists, but neither stage is coarse on
-its own anymore. `SortEngine`'s own dating and routing passes each check the signal per file (see `sort-engine.md`), and
-`CullEngine`'s own `buildFreshAndDispatch()`/
-`dispatchAndApply()` boundaries (see `cull-engine.md`'s Cancellation section) close the cull side the same way. A large
-sort or a long automated-provider dispatch both respond within about one item's worth of latency, not by waiting out the
-whole remaining stage.
+its own anymore. `SortEngine`'s own dating and routing passes each check the signal per file (see `sort-engine.md`).
+`CullEngine`'s own `buildFreshAndDispatch()`/ `dispatchAndApply()` boundaries (see `cull-engine.md`'s Cancellation
+section) close the cull side the same way. A large sort or a long automated-provider dispatch both respond within about
+one item's worth of latency, not by waiting out the whole remaining stage.
 
 ```mermaid
 flowchart TD

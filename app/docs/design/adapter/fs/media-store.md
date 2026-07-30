@@ -70,26 +70,28 @@ flowchart TD
     C --> D["dir itself now has<br/>no children left -<br/>delete it too"]
 ```
 
-Unlike `removeEmptyDirectories`, `dir` itself is a delete candidate here - that's the whole point:
-a caller wants the named directory to disappear completely once nothing real is left in it. The
-check is whole-subtree, not top-level-only, and it's all-or-nothing: a single file buried anywhere
-below `dir` blocks the entire operation, leaving even unrelated empty sibling subdirectories
-inside `dir` untouched. The implementation composes the two existing pieces above rather than
-duplicating traversal logic - `removeEmptyDirectories(dir)` for the pruning, then the same
-now-empty-directory delete `removeEmptyDirectories` itself uses, applied to `dir`.
+Unlike `removeEmptyDirectories`, `dir` itself is a delete candidate here. That's the whole
+point: a caller wants the named directory to disappear completely once nothing real is left
+in it. The check is whole-subtree, not top-level-only, and it's all-or-nothing. A single file
+buried anywhere below `dir` blocks the entire operation, leaving even unrelated empty sibling
+subdirectories inside `dir` untouched. The implementation composes the two existing pieces
+above rather than duplicating traversal logic. It reuses `removeEmptyDirectories(dir)` for the
+pruning, then applies to `dir` the same now-empty-directory delete that `removeEmptyDirectories`
+itself uses.
 
 ## Related
 
 - `delete`, `ensureDirectory`, and `listFiles` are thin `Files` wrappers with no branching worth
-  diagramming; all rewrap `IOException` as `UncheckedIOException` with a contextual message,
+  diagramming. All rewrap `IOException` as `UncheckedIOException` with a contextual message,
   matching every other adapter in this package. The same is true of `exists`, `size`, and
   `appendLine`.
 - The main consumer of `move`, `delete`, `exists`, `size`, and `appendLine` is `sort-engine.md` in
   the `application/service` design folder. `listFiles` is used by both `CommitEngine` (walking
-  `Sorted/`) and `RescueEngine` (walking a Review folder) - neither has its own design doc, since
-  each engine's own scope/branching logic (not this port method) is the part worth diagramming, and
-  only `rescue-engine.md` cleared that bar. `copy`, `resolveDestination`, `moveTo`, and `write` are
-  used by `apply-engine.md`'s `ApplyEngine` for near-dup handling and crash-safe resume.
+  `Sorted/`) and `RescueEngine` (walking a Review folder). Neither warrants a design doc for this
+  port method itself - what's worth diagramming is each engine's own scope/branching logic, not
+  `listFiles`. Only `rescue-engine.md` cleared that bar, for `RescueEngine`'s own logic. `copy`,
+  `resolveDestination`, `moveTo`, and `write` are used by `apply-engine.md`'s `ApplyEngine` for
+  near-dup handling and crash-safe resume.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the
   first step (which sidecars count as orphaned) is `sidecar-sweep.md` in the `domain/scan` design
   folder.

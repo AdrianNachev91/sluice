@@ -1,19 +1,19 @@
 # Pipeline
 
-How `application/service/Pipeline` wraps `SortEngine`/`CommitEngine`/`RescueEngine`, and builds and exposes
-`CullEngine`/`CurateEngine`, so a driving caller gets a `JobHandle` back instead of blocking, with progress reported
-through `ProgressPort` via `PhaseRunner`
+How `application/service/Pipeline` wraps `SortEngine`/`CommitEngine`/`RescueEngine`, and builds and
+exposes `CullEngine`/`CurateEngine`. A driving caller gets a `JobHandle` back instead of blocking,
+with progress reported through `ProgressPort` via `PhaseRunner`
 (`app/src/main/java/photos/sluice/application/service/Pipeline.java`,
 `app/src/main/java/photos/sluice/application/service/PhaseRunner.java`,
 `app/src/main/java/photos/sluice/application/service/JobRunner.java`,
-`app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`). `cull()`/`waitingJobs()`/
-`resume()` and `curate()` are one-line delegates to `CullEngine`/`CurateEngine` - see
-`cull-engine.md`/`curate-engine.md` for how those actually work. `troubleshoot(prepDir)` and
-`purgeCompleted()` are each a one-line `JobRunner.submit()` delegate (to `Troubleshooter` and
-`PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing - neither has
-per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the whole
-reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each actually
-does.
+`app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`).
+`cull()`/`waitingJobs()`/`resume()` and `curate()` are one-line delegates to
+`CullEngine`/`CurateEngine` - see `cull-engine.md`/`curate-engine.md` for how those actually work.
+`troubleshoot(prepDir)` and `purgeCompleted()` are each a one-line `JobRunner.submit()` delegate (to
+`Troubleshooter` and `PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing.
+Neither has per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the
+whole reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each
+actually does.
 
 ## How one call works
 
@@ -32,17 +32,16 @@ flowchart TD
     H -- " yes " --> J(["JobHandle.join()<br/>throws CompletionException"])
 ```
 
-The busy check (`B`) is `Pipeline`'s own guaranteed enforcement of "one job at a time" - what it means to a given caller
+The busy check (`B`) is `Pipeline`'s own guaranteed enforcement of "one job at a time". What it means to a given caller
 depends on that caller's own shape. A caller with a persistent, disable-able trigger (a desktop UI's own "start" action)
-can additionally disable it while a job runs, so the check becomes a backstop there. A caller with no such affordance (a
-one-shot command-line invocation) has nothing else standing between two concurrent calls, so the check is that caller's
-actual enforcement, not just a backstop. Either way, catching the exception and showing a plain message is the caller's
-own job, not `Pipeline`'s.
+can additionally disable it while a job runs. The check becomes a backstop there. A caller with no such affordance (a
+one-shot command-line invocation) has nothing else standing between two concurrent calls. That check is therefore that
+caller's actual enforcement, not just a backstop. Either way, catching the exception and showing a plain message is the
+caller's own job, not `Pipeline`'s.
 
 `phaseFinished` (`G`) fires whether or not the engine call throws, via `PhaseRunner`. Without that, a job that dies
-mid-call would leave a `ProgressPort` listener with a `phaseStarted` event and no matching `phaseFinished` - the phase
-would look permanently "in progress" even though the
-`JobHandle` itself already reports the failure.
+mid-call would leave a `ProgressPort` listener with a `phaseStarted` event and no matching `phaseFinished`. The phase
+would look permanently "in progress" even though the `JobHandle` itself already reports the failure.
 
 | Pipeline method       | Engine call                                  | Phase label       |
 |-----------------------|----------------------------------------------|-------------------|
@@ -51,9 +50,8 @@ would look permanently "in progress" even though the
 | `rescue(String)`      | `RescueEngine.rescue(folder, progress)`      | `"Rescuing..."`   |
 | `discard(Path)`       | `PrepDirRemedies.discard(prepDir, progress)` | `"Discarding..."` |
 
-`Pipeline` depends on these three engines' concrete classes, not their `SortUseCase`/
-`CommitUseCase`/`RescueUseCase` interfaces - the progress-callback overloads only exist on the concrete classes, not on
-those narrower interfaces.
+`Pipeline` depends on these three engines' concrete classes, not their `SortUseCase`/`CommitUseCase`/`RescueUseCase`
+interfaces. The progress-callback overloads only exist on the concrete classes, not on those narrower interfaces.
 
 `discard(prepDir)` follows the same `PhaseRunner`-bracketed shape as `sort`/`commit`/`rescue`
 (`"Discarding..."`, ticked once per file `PrepDirRemedies.discard()` moves or deletes - real work
@@ -82,7 +80,7 @@ for the watcher it disarms.
 - `curate-engine.md`: `CurateEngine` - `curate()`, and the `Pipeline.CurateConflictException` type it throws.
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `Pipeline` submits onto): no dedicated design doc
   yet - see the source files directly.
-- `ProgressPort` (the out-port `PhaseRunner` reports through): see the source file directly; its own doc comment is the
+- `ProgressPort` (the out-port `PhaseRunner` reports through): see the source file directly. Its own doc comment is the
   source of the "always bracket a phase" contract this page relies on.
 - `SortEngine`: `sort-engine.md` in this same design folder.
 - `RescueEngine`: `rescue-engine.md` in this same design folder.
