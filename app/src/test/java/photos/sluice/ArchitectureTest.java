@@ -68,7 +68,8 @@ class ArchitectureTest {
     static final ArchRule adaptersReachedOnlyThroughPorts =
             noClasses().that().resideOutsideOfPackages("..adapter..", "..config..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter..")
-                    .as("only config (the composition root) may depend on a concrete adapter; everything else goes through ports");
+                    .as("only config (the composition root) may depend on a concrete adapter; everything else goes " +
+                            "through ports");
 
     // Config is the composition root: it may depend on adapters (to wire them), but the arrow must
     // not point back - an adapter depending on config would mean the wiring layer's concerns leak
@@ -98,12 +99,14 @@ class ArchitectureTest {
     static final ArchRule looseAdapterClassesDoNotReachIntoSubpackages =
             noClasses().that().resideInAPackage("..adapter")
                     .should().dependOnClassesThat().resideInAPackage("..adapter.*..")
-                    .as("a class placed directly in adapter must not depend on an adapter subpackage; depend on its port instead")
+                    .as("a class placed directly in adapter must not depend on an adapter subpackage; depend on its " +
+                            "port instead")
                     .allowEmptyShould(true);
 
     @ArchTest
     static final ArchRule adapterSubpackagesDoNotReachIntoLooseAdapterClasses =
             noClasses().that().resideInAPackage("..adapter.*..")
                     .should().dependOnClassesThat().resideInAPackage("..adapter")
-                    .as("an adapter subpackage must not depend on a class placed directly in adapter; depend on its port instead");
+                    .as("an adapter subpackage must not depend on a class placed directly in adapter; depend on its " +
+                            "port instead");
 }

@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TroubleshooterTest {
 
     @Test
-    void aReadyPrepDirIsReportedUnchangedWithNoReconcileAttempted(@TempDir final Path root) throws IOException, ApplyException {
+    void aReadyPrepDirIsReportedUnchangedWithNoReconcileAttempted(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -43,7 +44,8 @@ class TroubleshooterTest {
     }
 
     @Test
-    void aCompletePrepDirIsReportedUnchangedWithNoReconcileAttempted(@TempDir final Path root) throws IOException, ApplyException {
+    void aCompletePrepDirIsReportedUnchangedWithNoReconcileAttempted(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -60,7 +62,8 @@ class TroubleshooterTest {
     }
 
     @Test
-    void aWaitingPrepDirIsReportedUnchangedWithNoReconcileAttempted(@TempDir final Path root) throws IOException, ApplyException {
+    void aWaitingPrepDirIsReportedUnchangedWithNoReconcileAttempted(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path prepDir = prepDir(root);
         final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
         final Path uncalled = root.resolve("Sorted/Photos/2019/06/b.jpg");
@@ -80,7 +83,8 @@ class TroubleshooterTest {
     }
 
     @Test
-    void aCorruptIndexIsAutoRebuiltFromSidecarsAndTheRunProceedsToReady(@TempDir final Path root) throws IOException, ApplyException {
+    void aCorruptIndexIsAutoRebuiltFromSidecarsAndTheRunProceedsToReady(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -113,7 +117,8 @@ class TroubleshooterTest {
     }
 
     @Test
-    void aStrayShardWithNoMontageActuallyUnclaimedIsLeftUnchanged(@TempDir final Path root) throws IOException, ApplyException {
+    void aStrayShardWithNoMontageActuallyUnclaimedIsLeftUnchanged(@TempDir final Path root) throws IOException,
+            ApplyException {
         // index.json declares only montage-001, which already has its own shard - so no montage is
         // unclaimed for the stray decisions-002.json to claim. autoRepairStrayShard()'s unambiguity
         // gate (exactly one montage currently missing a shard) never holds here. troubleshoot() must
@@ -198,7 +203,8 @@ class TroubleshooterTest {
     void aMissingSourceFindingTriggersReconcileAndClearsOnceItRebuildsTheMissingRecord(@TempDir final Path root)
             throws IOException, ApplyException {
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an already-moved file
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an
+        // already-moved file
         final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "already-moved-content");
         writeIndex(prepDir, 1, List.of("montage-001"));
@@ -220,7 +226,8 @@ class TroubleshooterTest {
     void aMissingSourceThatReconcileCannotAccountForStaysBlockedAfterTroubleshooting(@TempDir final Path root)
             throws IOException, ApplyException {
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination candidate either
+        final Path photo = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination candidate
+        // either
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
@@ -235,7 +242,8 @@ class TroubleshooterTest {
     }
 
     @Test
-    void troubleshootFilesTheRenderedReportIntoTheDisasterDrawer(@TempDir final Path root) throws IOException, ApplyException {
+    void troubleshootFilesTheRenderedReportIntoTheDisasterDrawer(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
@@ -267,7 +275,8 @@ class TroubleshooterTest {
     }
 
     private static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {
-        new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"), List.of(photos));
+        new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"),
+                List.of(photos));
     }
 
     private static SidecarPhotoEntry sidecarEntry(final Path src) {

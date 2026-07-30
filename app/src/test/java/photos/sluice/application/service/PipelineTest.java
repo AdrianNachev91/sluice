@@ -243,7 +243,8 @@ class PipelineTest {
     @Test
     void troubleshootRunsAsABackgroundJobAndReturnsTheReport(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = cullPipeline(root, progress);
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -263,7 +264,8 @@ class PipelineTest {
     @Test
     void purgeCompletedRunsAsABackgroundJobAndDeletesTheCompletedRun(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = cullPipeline(root, progress);
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -299,7 +301,8 @@ class PipelineTest {
     @Test
     void discardRefusesACompletedRun(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = cullPipeline(root, progress);
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();

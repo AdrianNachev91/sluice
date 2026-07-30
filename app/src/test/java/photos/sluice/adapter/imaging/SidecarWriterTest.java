@@ -53,8 +53,10 @@ class SidecarWriterTest {
     void preservesPhotoOrderAcrossMultipleEntries(@TempDir final Path dir) throws IOException {
         final Path sidecarPath = dir.resolve("montage-002.json");
         final Path montagePath = dir.resolve("montage-002.jpg");
-        final var first = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
-        final var second = new SidecarPhotoEntry(dir.resolve("b.jpg"), "b.jpg", Instant.parse("2023-01-02T00:00:00Z"), false);
+        final var first = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"),
+                false);
+        final var second = new SidecarPhotoEntry(dir.resolve("b.jpg"), "b.jpg", Instant.parse("2023-01-02T00:00:00Z")
+                , false);
 
         this.writer.write(sidecarPath, montagePath, List.of(first, second));
 
@@ -82,7 +84,8 @@ class SidecarWriterTest {
     void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
         final Path sidecarPath = dir.resolve("missing-parent").resolve("montage-004.json");
         final Path montagePath = dir.resolve("montage-004.jpg");
-        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
+        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"),
+                false);
 
         assertThatThrownBy(() -> this.writer.write(sidecarPath, montagePath, List.of(photo)))
                 .isInstanceOf(UncheckedIOException.class)
@@ -96,7 +99,8 @@ class SidecarWriterTest {
         final var writerWithFailingMapper = new SidecarWriter(mapper);
         final Path sidecarPath = dir.resolve("montage-005.json");
         final Path montagePath = dir.resolve("montage-005.jpg");
-        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
+        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"),
+                false);
 
         assertThatThrownBy(() -> writerWithFailingMapper.write(sidecarPath, montagePath, List.of(photo)))
                 .isInstanceOf(UncheckedIOException.class)

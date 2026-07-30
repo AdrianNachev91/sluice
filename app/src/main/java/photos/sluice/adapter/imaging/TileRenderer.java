@@ -161,7 +161,7 @@ public class TileRenderer {
      * @param file {@link Path} the file to decode
      * @param tileSize int the target tile size in pixels
      * @return an {@link Optional} {@link BufferedImage}, the resized image, or empty if decoding
-     *     failed
+     * failed
      */
     private static Optional<BufferedImage> renderRaster(final Path file, final int tileSize) {
         try {
@@ -233,7 +233,7 @@ public class TileRenderer {
      * @param file {@link Path} the RAW file to extract a thumbnail from
      * @param tileSize int the target tile size in pixels
      * @return an {@link Optional} {@link TileResult}, the resized thumbnail tile result, or empty
-     *     if unavailable
+     * if unavailable
      */
     private static Optional<TileResult> exifThumbnailResult(final Path file, final int tileSize) {
         try {

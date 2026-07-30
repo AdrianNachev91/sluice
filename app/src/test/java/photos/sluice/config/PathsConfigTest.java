@@ -21,7 +21,8 @@ class PathsConfigTest {
     @Test
     void absolutePathsResolveUnchanged() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
+                absolute.toString()));
 
         assertThat(config.repoRoot()).isEqualTo(absolute);
     }
@@ -29,7 +30,8 @@ class PathsConfigTest {
     @Test
     void logsIsDerivedFromRepoRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
+                absolute.toString()));
 
         assertThat(config.logs()).isEqualTo(absolute.resolve("logs"));
     }
@@ -37,7 +39,8 @@ class PathsConfigTest {
     @Test
     void sortedIsDerivedFromRepoRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
+                absolute.toString()));
 
         assertThat(config.sorted()).isEqualTo(absolute.resolve("Sorted"));
     }
@@ -45,7 +48,8 @@ class PathsConfigTest {
     @Test
     void reviewIsDerivedFromRepoRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(), absolute.toString()));
+        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
+                absolute.toString()));
 
         assertThat(config.review()).isEqualTo(absolute.resolve("Review"));
     }

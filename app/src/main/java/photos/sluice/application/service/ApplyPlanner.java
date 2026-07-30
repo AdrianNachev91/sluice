@@ -94,7 +94,8 @@ public class ApplyPlanner {
      * @param ledger {@link Ledger} the caller's own move-ledger snapshot
      * @return {@link ValidationReport} the merged validation report of decisions and findings
      */
-    ValidationReport validate(final Path prepDirPath, final PrepDir prepDir, final ApplyOptions options, final Ledger ledger) {
+    ValidationReport validate(final Path prepDirPath, final PrepDir prepDir, final ApplyOptions options,
+                              final Ledger ledger) {
         final var extraFindings = new ArrayList<Finding>();
 
         final Set<String> missingMontages = prepDir.entries().stream()
@@ -150,8 +151,10 @@ public class ApplyPlanner {
      * @param shardFiles a {@link List} of {@link ShardFile} accumulated shards to validate
      * @param extraFindings a {@link List} of {@link Finding} accumulated findings beyond the shard contract
      */
-    private void collectMontage(final Path prepDirPath, final String montage, final boolean hasShard, final Ledger ledger,
-                                final List<Path> sidecarSrcs, final List<ShardFile> shardFiles, final List<Finding> extraFindings) {
+    private void collectMontage(final Path prepDirPath, final String montage, final boolean hasShard,
+                                final Ledger ledger,
+                                final List<Path> sidecarSrcs, final List<ShardFile> shardFiles,
+                                final List<Finding> extraFindings) {
         final Optional<List<Path>> srcs = Sidecars.srcsOf(this.cullPrepPort, prepDirPath, montage);
         if (srcs.isPresent()) {
             sidecarSrcs.addAll(srcs.get());

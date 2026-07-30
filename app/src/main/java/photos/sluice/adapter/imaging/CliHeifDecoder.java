@@ -44,7 +44,7 @@ public class CliHeifDecoder implements HeifDecoder {
      *
      * @param file {@link Path} the HEIF/HEIC file to decode
      * @return an {@link Optional} {@link BufferedImage}, the decoded image, or empty if decoding
-     *     failed for any reason
+     * failed for any reason
      */
     @Override
     public Optional<BufferedImage> decode(final Path file) {

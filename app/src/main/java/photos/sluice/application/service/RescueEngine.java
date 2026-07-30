@@ -87,7 +87,8 @@ public class RescueEngine implements RescueUseCase {
      * @param cancellation {@link CancellationSignal} checked between files to allow early stop
      * @return {@link RescueSummary} summary of rescued and skipped files, and whether the folder was removed
      */
-    public RescueSummary rescue(final String reviewFolder, final ProgressCallback progress, final CancellationSignal cancellation) {
+    public RescueSummary rescue(final String reviewFolder, final ProgressCallback progress,
+                                final CancellationSignal cancellation) {
         final Path reviewRoot = this.pathsPort.review();
         final Path target = resolveWithinReview(reviewRoot, reviewFolder);
         final String targetLeaf = target.getFileName().toString();
@@ -141,7 +142,8 @@ public class RescueEngine implements RescueUseCase {
      * @param outcome {@link RescueOutcome} accumulator for rescued count and skipped names
      * @param session {@link HashIndexPort.Session} hash-index session to append rescued entries
      */
-    private void rescueOneFile(final Path file, final String targetLeaf, final Path libraryRoot, final RescueOutcome outcome,
+    private void rescueOneFile(final Path file, final String targetLeaf, final Path libraryRoot,
+                               final RescueOutcome outcome,
                                final HashIndexPort.Session session) {
         final Optional<MediaType> type = this.mediaTypeDetector.classify(file);
         if (type.isEmpty()) {

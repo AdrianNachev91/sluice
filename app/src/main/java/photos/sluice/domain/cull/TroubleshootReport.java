@@ -17,7 +17,7 @@ import java.util.List;
  * layman-friendly copy. That stays a UI-layer concern built on top of this structured data.
  */
 public record TroubleshootReport(PrepDirHealth before, boolean indexRebuilt, @Nullable ReconcileReport reconcile,
-        List<String> strayShardsRepaired, PrepDirHealth after, String text) {
+                                 List<String> strayShardsRepaired, PrepDirHealth after, String text) {
 
     /**
      * Defensively copies the mutable list field.

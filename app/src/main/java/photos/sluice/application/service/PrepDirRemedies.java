@@ -92,7 +92,8 @@ public class PrepDirRemedies {
      * @param resolution {@link OverlapResolution} which listing should win
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
-    public void resolveOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution, final String reason) {
+    public void resolveOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution,
+                               final String reason) {
         this.moveLedger.recordOverlap(prepDirPath, file, resolution, reason);
     }
 
@@ -109,7 +110,8 @@ public class PrepDirRemedies {
      * @param resolution {@link CorruptSidecarResolution} which way the batch was resolved
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
-    public void resolveCorruptSidecar(final Path prepDirPath, final String montage, final CorruptSidecarResolution resolution, final String reason) {
+    public void resolveCorruptSidecar(final Path prepDirPath, final String montage,
+                                      final CorruptSidecarResolution resolution, final String reason) {
         final Path sidecarPath = prepDirPath.resolve(montage + ".json");
         if (this.mediaStore.exists(sidecarPath)) {
             this.disasterDrawer.file(prepDirPath, sidecarPath, "corrupt-sidecar-" + montage);
@@ -129,7 +131,7 @@ public class PrepDirRemedies {
      * @param prepDirPath {@link Path} the prep directory holding the stray shard
      * @param strayShard {@link Finding.StrayShard} the finding naming the stray shard file
      * @return an {@link Optional} {@link String} the montage the shard was renamed to claim, empty if
-     *         the repair could not run unambiguously
+     * the repair could not run unambiguously
      */
     public Optional<String> autoRepairStrayShard(final Path prepDirPath, final Finding.StrayShard strayShard) {
         final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
@@ -296,7 +298,8 @@ public class PrepDirRemedies {
      */
     public DiscardReport discard(final Path prepDirPath, final ProgressCallback progress) {
         final String scope = prepDirPath.getFileName().toString();
-        final Path graveyard = this.pathsPort.logs().resolve("disasters").resolve(scope + "-" + DisasterTimestamp.now());
+        final Path graveyard =
+                this.pathsPort.logs().resolve("disasters").resolve(scope + "-" + DisasterTimestamp.now());
         this.mediaStore.ensureDirectory(graveyard);
         final List<Path> files = this.mediaStore.listFiles(prepDirPath);
         final int total = files.size();

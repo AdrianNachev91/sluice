@@ -54,7 +54,8 @@ class SortEngineRealDataParityTest {
             throws IOException, InterruptedException {
         final String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
         Assumptions.assumeTrue(sourceDirProperty != null && !sourceDirProperty.isBlank(),
-                "sluice.parity.sourceDir must be set to the Takeout/Google Photos folder when sluice.parity.realData=true");
+                "sluice.parity.sourceDir must be set to the Takeout/Google Photos folder when sluice.parity" +
+                        ".realData=true");
         final Path sourceDir = Path.of(sourceDirProperty);
         Assumptions.assumeTrue(Files.isDirectory(sourceDir), "sluice.parity.sourceDir does not exist: " + sourceDir);
 
@@ -98,7 +99,8 @@ class SortEngineRealDataParityTest {
         // Printed on every run, pass or fail: a silent 0-diff pass and a filter-swallowed-a-real-bug
         // pass both print "explained=0" here, so anyone re-reading the log after the fact can tell
         // whether the 46-char divergence filter actually did anything on this run's real data.
-        System.out.printf("[parity] %s: explained-by-46-char-floor=%d, unexplained-only-in-reference=%d, unexplained-only-in-java=%d%n",
+        System.out.printf("[parity] %s: explained-by-46-char-floor=%d, unexplained-only-in-reference=%d, " +
+                        "unexplained-only-in-java=%d%n",
                 label, explained, unexplainedOnlyInA.size(), unexplainedOnlyInB.size());
         if (!unexplainedOnlyInA.isEmpty() || !unexplainedOnlyInB.isEmpty()) {
             fail("%s tree diverged (only-in-reference-unexplained=%s, only-in-Java=%s, explained-by-46-char-floor=%d)",
@@ -128,7 +130,8 @@ class SortEngineRealDataParityTest {
         throw new IllegalStateException("Could not locate scripts/sort.ps1 above " + startingDirectory);
     }
 
-    private static void runReferenceEngine(final Path repoRoot, final Path rootA) throws IOException, InterruptedException {
+    private static void runReferenceEngine(final Path repoRoot, final Path rootA) throws IOException,
+            InterruptedException {
         final Path exifTool = repoRoot.resolve("tools").resolve("exiftool.exe");
         // Process implements Closeable (closes its inherited-IO streams on exit; does not itself wait
         // for or kill the process, so waitFor/destroyForcibly below are still needed).

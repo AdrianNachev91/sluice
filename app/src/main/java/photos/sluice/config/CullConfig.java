@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  */
 @ConfigurationProperties(prefix = "sluice.cull")
 public record CullConfig(String provider, CullProviderSettings providerSettings, List<CullCategory> categories,
-        ExternalAgentSettings externalAgent) implements CullSettings {
+                         ExternalAgentSettings externalAgent) implements CullSettings {
 
     // provider() is supplied by the record's own accessor, satisfying CullSettings so the application
     // layer selects a culler without importing this config record.

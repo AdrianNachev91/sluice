@@ -89,7 +89,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * this app's own prep step.
      */
     private record RawIndex(String scope, String basePath, int photos, @Nullable List<String> unreviewable,
-            int montages, String prepDir, @Nullable List<String> entries) {
+                            int montages, String prepDir, @Nullable List<String> entries) {
     }
 
     /**
@@ -138,7 +138,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param entries a {@link List} of {@link String} the montage entry filenames
      */
     private record RawIndexOut(String scope, String basePath, int photos, List<String> unreviewable,
-            int montages, String prepDir, List<String> entries) {
+                               int montages, String prepDir, List<String> entries) {
     }
 
     /**
@@ -224,7 +224,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record RawDecision(String file, String action, @Nullable String group, @Nullable String reason,
-            @JsonProperty("chosen_reason") @Nullable String chosenReason) {
+                               @JsonProperty("chosen_reason") @Nullable String chosenReason) {
     }
 
     /**
@@ -232,8 +232,8 @@ public class JsonCullPrepStore implements CullPrepPort {
      * {@link ApplyReport}'s own fields.
      */
     private record Summary(int reviewed, Map<String, Integer> categories,
-            @JsonProperty("near_dup_groups") int nearDupGroups,
-            @JsonProperty("near_dup_rejects") int nearDupRejects, int unreviewable) {
+                           @JsonProperty("near_dup_groups") int nearDupGroups,
+                           @JsonProperty("near_dup_rejects") int nearDupRejects, int unreviewable) {
     }
 
     /**
@@ -252,7 +252,8 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param report {@link ApplyReport} the apply summary to embed
      */
     @Override
-    public void writeMergedDecisions(final Path prepDir, final String scope, final List<Decision> decisions, final ApplyReport report) {
+    public void writeMergedDecisions(final Path prepDir, final String scope, final List<Decision> decisions,
+                                     final ApplyReport report) {
         final var document = new MergedDecisions(
                 scope,
                 decisions.stream().map(JsonCullPrepStore::toRaw).toList(),
@@ -280,8 +281,10 @@ public class JsonCullPrepStore implements CullPrepPort {
     private static RawDecision toRaw(final Decision decision) {
         return switch (decision) {
             case final Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
-            case final NearDupChosen c -> new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
-            case final NearDupReject r -> new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
+            case final NearDupChosen c ->
+                    new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
+            case final NearDupReject r ->
+                    new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
         };
     }
 }

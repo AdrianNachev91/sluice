@@ -82,7 +82,8 @@ class ApplyEngineTest {
     }
 
     @Test
-    void nearDupChosenIsCopiedRejectIsMovedAndAChosenNoteListsAllRejects(@TempDir final Path root) throws IOException, ApplyException {
+    void nearDupChosenIsCopiedRejectIsMovedAndAChosenNoteListsAllRejects(@TempDir final Path root) throws IOException
+            , ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
@@ -126,7 +127,8 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aMissingShardWithAllowPartialLeavesThatMontagesPhotosInPlace(@TempDir final Path root) throws IOException, ApplyException {
+    void aMissingShardWithAllowPartialLeavesThatMontagesPhotosInPlace(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path untouched = root.resolve("Sorted/Photos/2019/06/untouched.jpg");
@@ -458,7 +460,8 @@ class ApplyEngineTest {
         // always reprocesses it - it must converge on the same end state rather than compounding.
         final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
         writeFile(dupDir.resolve("a.jpg"), "already-copied");
-        Files.writeString(dupDir.resolve("a.jpg.txt"), "Chose a.jpg - sharpest. Rejects: b.jpg - blurred" + System.lineSeparator());
+        Files.writeString(dupDir.resolve("a.jpg.txt"),
+                "Chose a.jpg - sharpest. Rejects: b.jpg - blurred" + System.lineSeparator());
 
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
@@ -549,7 +552,8 @@ class ApplyEngineTest {
             throws IOException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path missingUnreviewable = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move record
+        final Path missingUnreviewable = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move
+        // record
         final Path pending = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(pending, "x");
         writeIndex(prepDir, 1, List.of(missingUnreviewable), List.of("montage-001"));

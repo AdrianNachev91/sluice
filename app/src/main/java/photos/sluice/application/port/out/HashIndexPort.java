@@ -16,7 +16,8 @@ public interface HashIndexPort {
     /**
      * Loads the full hash index.
      *
-     * @return a {@link Map} of {@link String} to a {@link List} of {@link Path}, every indexed hash mapped to its known paths
+     * @return a {@link Map} of {@link String} to a {@link List} of {@link Path}, every indexed hash mapped to its
+     * known paths
      */
     Map<String, List<Path>> load();
 

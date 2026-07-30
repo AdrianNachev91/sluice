@@ -76,7 +76,8 @@ class CommitEngineTest {
         writeFile(root.resolve("Sorted/Videos/2019/07/in.mp4"), "in");
         writeFile(root.resolve("Sorted/Videos/2019/05/out.mp4"), "out");
 
-        final CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, new MonthRange(6, 8)));
+        final CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019,
+                new MonthRange(6, 8)));
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(Files.exists(libraryRoot.resolve("Videos/2019/07/in.mp4"))).isTrue();
@@ -206,14 +207,17 @@ class CommitEngineTest {
     }
 
     private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot) {
-        return commitEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
+        return commitEngine(repoRoot, libraryRoot,
+                new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
     }
 
-    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex) {
+    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot,
+                                             final CsvLibraryHashIndex hashIndex) {
         return commitEngine(repoRoot, libraryRoot, hashIndex, new NioMediaStore());
     }
 
-    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
+    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot,
+                                             final CsvLibraryHashIndex hashIndex,
                                              final MediaStore mediaStore) {
         final var pathsConfig = new PathsConfig(
                 new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));

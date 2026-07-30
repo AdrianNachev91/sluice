@@ -209,7 +209,7 @@ public class NioMediaStore implements MediaStore {
      *
      * @param file {@link Path} file to read
      * @return a {@link List} of {@link String}, the file's lines, or an empty list if the file is
-     *     missing
+     * missing
      */
     @Override
     public List<String> readLines(final Path file) {

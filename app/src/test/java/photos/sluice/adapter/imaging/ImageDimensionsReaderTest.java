@@ -218,7 +218,8 @@ class ImageDimensionsReaderTest {
     }
 
     private static void writeTwoImageTiff(
-            final Path target, final int firstWidth, final int firstHeight, final int secondWidth, final int secondHeight)
+            final Path target, final int firstWidth, final int firstHeight, final int secondWidth,
+            final int secondHeight)
             throws IOException {
         final Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("TIFF");
         final ImageWriter writer = writers.next();

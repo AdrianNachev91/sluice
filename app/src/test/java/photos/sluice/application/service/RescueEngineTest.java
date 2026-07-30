@@ -132,7 +132,8 @@ class RescueEngineTest {
         assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/b.jpg"))).isFalse();
         assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
 
-        final RescueSummary resumeSummary = rescueEngine(root, libraryRoot, hashIndex, noDate(), noDate()).rescue("2019-06");
+        final RescueSummary resumeSummary = rescueEngine(root, libraryRoot, hashIndex, noDate(), noDate()).rescue(
+                "2019-06");
 
         assertThat(resumeSummary.rescued()).isEqualTo(1);
         assertThat(resumeSummary.folderRemoved()).isTrue();
@@ -221,18 +222,22 @@ class RescueEngineTest {
                 : Optional.empty();
     }
 
-    private static RescueEngine rescueEngine(final Path repoRoot, final Path libraryRoot, final DateSource exifSource, final DateSource filenameSource) {
+    private static RescueEngine rescueEngine(final Path repoRoot, final Path libraryRoot, final DateSource exifSource
+            , final DateSource filenameSource) {
         return rescueEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")),
                 exifSource, filenameSource);
     }
 
-    private static RescueEngine rescueEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
+    private static RescueEngine rescueEngine(final Path repoRoot, final Path libraryRoot,
+                                             final CsvLibraryHashIndex hashIndex,
                                              final DateSource exifSource, final DateSource filenameSource) {
         return rescueEngine(repoRoot, libraryRoot, hashIndex, exifSource, filenameSource, new NioMediaStore());
     }
 
-    private static RescueEngine rescueEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
-                                             final DateSource exifSource, final DateSource filenameSource, final MediaStore mediaStore) {
+    private static RescueEngine rescueEngine(final Path repoRoot, final Path libraryRoot,
+                                             final CsvLibraryHashIndex hashIndex,
+                                             final DateSource exifSource, final DateSource filenameSource,
+                                             final MediaStore mediaStore) {
         final var pathsConfig = new PathsConfig(
                 new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
         final var rescueDateResolver = new RescueDateResolver(exifSource, filenameSource);

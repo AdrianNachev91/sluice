@@ -73,7 +73,8 @@ class CullerPrompt {
      * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
      * @return {@link String} the rendered user turn text
      */
-    String userTurn(final String scope, final String montage, final int ordinal, final int total, final List<SidecarPhotoEntry> entries) {
+    String userTurn(final String scope, final String montage, final int ordinal, final int total,
+                    final List<SidecarPhotoEntry> entries) {
         final var text = new StringBuilder();
         text.append("Scope: ").append(scope)
                 .append(" - sheet ").append(montage.replaceFirst("^montage-", ""))
@@ -121,7 +122,8 @@ class CullerPrompt {
      * bundled resource.
      *
      * @param template {@link String} the prompt template containing the categories placeholder
-     * @param categories a {@link List} of {@link CullCategory}, the configured cull categories to render into the template
+     * @param categories a {@link List} of {@link CullCategory}, the configured cull categories to render into the
+     * template
      * @return {@link String} the template with the categories placeholder replaced
      */
     static String rendered(final String template, final List<CullCategory> categories) {

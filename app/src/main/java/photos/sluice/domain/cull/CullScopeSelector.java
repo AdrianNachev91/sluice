@@ -29,7 +29,8 @@ public final class CullScopeSelector {
      */
     public List<Path> directoriesToScan(final Path photosRoot, final CullScope scope) {
         return switch (scope) {
-            case CullScope.Year(final int year, final List<Integer> months) -> monthDirectories(photosRoot, year, months);
+            case CullScope.Year(final int year, final List<Integer> months) ->
+                    monthDirectories(photosRoot, year, months);
             case CullScope.OldestN _ -> List.of(photosRoot);
         };
     }
@@ -77,7 +78,8 @@ public final class CullScopeSelector {
      * @param months a {@link List} of {@link Integer} specific months to include, or null for the whole year
      * @return a {@link List} of {@link Path} the resolved month (or year) directories
      */
-    private static List<Path> monthDirectories(final Path photosRoot, final int year, final @Nullable List<Integer> months) {
+    private static List<Path> monthDirectories(final Path photosRoot, final int year,
+                                               final @Nullable List<Integer> months) {
         final Path yearDir = photosRoot.resolve(String.valueOf(year));
         if (months == null) {
             return List.of(yearDir);

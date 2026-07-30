@@ -54,7 +54,8 @@ class MoveDifferTest {
 
     @Test
     void diffOfPlainSetsIsSymmetric() {
-        final MoveDiffer.Diff diff = this.differ.diff(Set.of("only-a.jpg", "shared.jpg"), Set.of("shared.jpg", "only-b.jpg"));
+        final MoveDiffer.Diff diff = this.differ.diff(Set.of("only-a.jpg", "shared.jpg"), Set.of("shared.jpg", "only" +
+                "-b.jpg"));
 
         assertThat(diff.onlyInA()).containsExactly("only-a.jpg");
         assertThat(diff.onlyInB()).containsExactly("only-b.jpg");

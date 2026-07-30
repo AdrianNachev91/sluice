@@ -222,7 +222,8 @@ class NioMediaStoreTest {
 
     @Test
     void removeEmptyDirectoriesCollapsesNestedEmptyChainBottomUp(@TempDir final Path root) throws IOException {
-        final Path nested = Files.createDirectories(root.resolve("Takeout").resolve("Google Photos").resolve("2019-06"));
+        final Path nested = Files.createDirectories(root.resolve("Takeout").resolve("Google Photos").resolve("2019-06"
+        ));
 
         this.store.removeEmptyDirectories(root);
 

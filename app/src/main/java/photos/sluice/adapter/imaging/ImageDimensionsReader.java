@@ -72,7 +72,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      *
      * @param file {@link Path} the image file to inspect
      * @return an {@link Optional} {@link Dimensions}, the largest trusted dimensions found across
-     *     SubIFD and HEIF directories, or empty
+     * SubIFD and HEIF directories, or empty
      */
     private static Optional<Dimensions> readMetadataDimensions(final Path file) {
         final Metadata metadata;
@@ -85,8 +85,10 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
             // rather than aborting.
             return Optional.empty();
         }
-        final Dimensions fromSubIfd = largestAcross(metadata.getDirectoriesOfType(ExifSubIFDDirectory.class), ImageDimensionsReader::subIfdDimensions);
-        final Dimensions fromHeif = largestAcross(metadata.getDirectoriesOfType(HeifDirectory.class), ImageDimensionsReader::heifDimensions);
+        final Dimensions fromSubIfd = largestAcross(metadata.getDirectoriesOfType(ExifSubIFDDirectory.class),
+                ImageDimensionsReader::subIfdDimensions);
+        final Dimensions fromHeif = largestAcross(metadata.getDirectoriesOfType(HeifDirectory.class),
+                ImageDimensionsReader::heifDimensions);
         return Optional.ofNullable(largestOf(fromSubIfd, fromHeif));
     }
 
@@ -101,7 +103,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      * @param a {@link Dimensions} the first candidate dimensions, or null
      * @param b {@link Dimensions} the second candidate dimensions, or null
      * @return {@link Dimensions} the larger of the two by maximum dimension, or whichever is
-     *     non-null
+     * non-null
      */
     static @Nullable Dimensions largestOf(final @Nullable Dimensions a, final @Nullable Dimensions b) {
         if (a == null) {
@@ -118,9 +120,9 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      *
      * @param directories a {@link Collection} of T, the directories to inspect
      * @param extractor a {@link Function} of T to {@link Dimensions}, extracts candidate
-     *     dimensions from a single directory
+     * dimensions from a single directory
      * @return {@link Dimensions} the largest dimensions found, or null if none had usable
-     *     dimensions
+     * dimensions
      */
     static <T extends Directory> @Nullable Dimensions largestAcross(
             final Collection<T> directories, final Function<T, @Nullable Dimensions> extractor) {
@@ -147,7 +149,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      *
      * @param directory {@link ExifSubIFDDirectory} the SubIFD directory to inspect
      * @return {@link Dimensions} the directory's width/height as dimensions, or null if neither
-     *     tag pair is present
+     * tag pair is present
      */
     static @Nullable Dimensions subIfdDimensions(final ExifSubIFDDirectory directory) {
         Integer width = directory.getInteger(ExifSubIFDDirectory.TAG_EXIF_IMAGE_WIDTH);
@@ -166,7 +168,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      *
      * @param directory {@link HeifDirectory} the HEIF directory to inspect
      * @return {@link Dimensions} the directory's width/height as dimensions, or null if not
-     *     present
+     * present
      */
     static @Nullable Dimensions heifDimensions(final HeifDirectory directory) {
         final Integer width = directory.getInteger(HeifDirectory.TAG_IMAGE_WIDTH);
@@ -181,7 +183,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      *
      * @param file {@link Path} the image file to decode
      * @return an {@link Optional} {@link Dimensions}, the largest image's dimensions, or empty if
-     *     no reader could handle the file
+     * no reader could handle the file
      */
     private static Optional<Dimensions> readViaImageIo(final Path file) {
         try (final ImageInputStream stream = ImageIO.createImageInputStream(file.toFile())) {
@@ -209,7 +211,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      *
      * @param reader {@link ImageReader} the image reader positioned on an input source
      * @return an {@link Optional} {@link Dimensions}, the largest dimensions found, or empty if
-     *     the reader exposes no images
+     * the reader exposes no images
      */
     private static Optional<Dimensions> largestImage(final ImageReader reader) throws IOException {
         Dimensions largest = null;

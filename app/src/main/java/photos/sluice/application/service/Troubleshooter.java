@@ -73,10 +73,10 @@ public class Troubleshooter {
      * @param prepDir {@link Path} the prep directory to troubleshoot
      * @return {@link TroubleshootReport} what was found, what was fixed, and what remains
      * @throws ApplyException if the shard contract itself does not validate cleanly. Not reachable
-     *         from a MissingSource-triggered reconcile call today. PrepDirDoctor only ever reports
-     *         MissingSource once the shard contract has already validated clean, and reconcile()
-     *         re-runs that identical check. If a later change breaks that invariant and this does
-     *         throw, no report gets filed - the exception propagates before render() runs.
+     *                        from a MissingSource-triggered reconcile call today. PrepDirDoctor only ever reports
+     *                        MissingSource once the shard contract has already validated clean, and reconcile()
+     *                        re-runs that identical check. If a later change breaks that invariant and this does
+     *                        throw, no report gets filed - the exception propagates before render() runs.
      */
     public TroubleshootReport troubleshoot(final Path prepDir) throws ApplyException {
         final PrepDirHealth before = this.prepDirDoctor.diagnose(prepDir);
@@ -90,7 +90,8 @@ public class Troubleshooter {
         final PrepDirHealth afterReconcile = needsReconcile ? this.prepDirDoctor.diagnose(prepDir) : afterIndexRebuild;
 
         final List<String> strayShardsRepaired = this.repairStrayShards(prepDir, afterReconcile);
-        final PrepDirHealth after = strayShardsRepaired.isEmpty() ? afterReconcile : this.prepDirDoctor.diagnose(prepDir);
+        final PrepDirHealth after = strayShardsRepaired.isEmpty() ? afterReconcile :
+                this.prepDirDoctor.diagnose(prepDir);
 
         final String text = render(prepDir, before, indexRebuilt, reconcile, strayShardsRepaired, after);
         this.disasterDrawer.write(prepDir, REPORT_WHAT, text);
@@ -135,7 +136,8 @@ public class Troubleshooter {
      * @return {@link String} the rendered report text
      */
     private static String render(final Path prepDir, final PrepDirHealth before, final boolean indexRebuilt,
-                                 final @Nullable ReconcileReport reconcile, final List<String> strayShardsRepaired, final PrepDirHealth after) {
+                                 final @Nullable ReconcileReport reconcile, final List<String> strayShardsRepaired,
+                                 final PrepDirHealth after) {
         final List<String> lines = new ArrayList<>();
         lines.add("Troubleshoot report for " + prepDir);
         lines.add("Before: " + before.state() + " - " + before.findings().size() + " finding(s)");

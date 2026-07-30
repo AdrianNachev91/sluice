@@ -154,7 +154,8 @@ class CurateEngineTest {
             throws IOException {
         Files.createDirectories(inboxOf(root));
         final Path existing =
-                writePhoto(sortedPhotosDir(root, "2019", "06"), "already-sorted.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+                writePhoto(sortedPhotosDir(root, "2019", "06"), "already-sorted.jpg", Instant.parse("2019-06-01T10:00" +
+                        ":00Z"));
 
         final CurateOutcome outcome =
                 curatePipeline(root, new RecordingProgressPort()).curate(new SortScope.Year(2019, null)).join();
@@ -217,7 +218,8 @@ class CurateEngineTest {
         writeInboxPhoto(root, "20190601_photo.jpg");
         final var moveStarted = new CountDownLatch(1);
         final var releaseMove = new CountDownLatch(1);
-        final var pipeline = curatePipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+        final var pipeline = curatePipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted,
+                releaseMove));
 
         final JobHandle<CurateOutcome> handle = pipeline.curate(new SortScope.Year(2019, null));
         moveStarted.await();
@@ -240,7 +242,8 @@ class CurateEngineTest {
         writeInboxPhoto(root, "20190601_photo.jpg");
         final var listStarted = new CountDownLatch(1);
         final var releaseList = new CountDownLatch(1);
-        final var pipeline = curatePipeline(root, new RecordingProgressPort(), new BlockingListFiles(listStarted, releaseList));
+        final var pipeline = curatePipeline(root, new RecordingProgressPort(), new BlockingListFiles(listStarted,
+                releaseList));
 
         final JobHandle<CurateOutcome> handle = pipeline.curate(new SortScope.Year(2019, null));
         listStarted.await();

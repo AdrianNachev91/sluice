@@ -33,7 +33,8 @@ final class CurateEngine {
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param cullEngine {@link CullEngine} performs the cull phase
      */
-    CurateEngine(final SortEngine sortEngine, final JobRunner jobRunner, final ProgressPort progressPort, final CullEngine cullEngine) {
+    CurateEngine(final SortEngine sortEngine, final JobRunner jobRunner, final ProgressPort progressPort,
+                 final CullEngine cullEngine) {
         this.sortEngine = sortEngine;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
@@ -117,7 +118,8 @@ final class CurateEngine {
      */
     private static @Nullable CullScope knownCullScope(final SortScope scope) {
         return switch (scope) {
-            case SortScope.Year(final int year, final MonthRange months) -> new CullScope.Year(year, monthsFromRange(months));
+            case SortScope.Year(final int year, final MonthRange months) ->
+                    new CullScope.Year(year, monthsFromRange(months));
             case SortScope.OldestN(final int n) -> new CullScope.OldestN(n);
             case SortScope.OldestYear() -> null;
         };

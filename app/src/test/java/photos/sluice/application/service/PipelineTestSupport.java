@@ -129,7 +129,8 @@ final class PipelineTestSupport {
     // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
     // interval (via Pipeline's package-private test constructor). A real auto-resume proves out
     // fast this way, instead of waiting on the production 2-second cadence.
-    static Pipeline watchPipeline(final Path root, final RecordingProgressPort progress, final CullSettings cullSettings,
+    static Pipeline watchPipeline(final Path root, final RecordingProgressPort progress,
+                                  final CullSettings cullSettings,
                                   final List<VisionCuller> cullers, final Duration pollInterval) {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers, pollInterval);
     }
@@ -145,7 +146,8 @@ final class PipelineTestSupport {
     // real HEIC/AVIF decode already has its own coverage in TileRendererTest. pollInterval null
     // means "use Pipeline's own production default" - only watchPipeline() ever passes one.
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
-                             final CullSettings cullSettings, final List<VisionCuller> cullers, final @Nullable Duration pollInterval) {
+                             final CullSettings cullSettings, final List<VisionCuller> cullers,
+                             final @Nullable Duration pollInterval) {
         final Path libraryRoot = root.resolve("Library");
         final var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
@@ -173,7 +175,8 @@ final class PipelineTestSupport {
                 moveLedger, applyPlanner);
         final var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
                 cullDestinations, moveLedger, applyPlanner);
-        final var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, disasterDrawer, moveLedger);
+        final var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, disasterDrawer,
+                moveLedger);
         final var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyPlanner, moveLedger);
         final var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a

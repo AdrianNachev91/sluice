@@ -62,7 +62,8 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void allowPartialWaivesMissingShardsAndReportsThemSkipped(@TempDir final Path dir) throws IOException, CullException {
+    void allowPartialWaivesMissingShardsAndReportsThemSkipped(@TempDir final Path dir) throws IOException,
+            CullException {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         this.writeSidecar(dir, "montage-001", junk);
         this.writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));

@@ -54,7 +54,8 @@ public final class SidecarSweep {
         final List<Path> orphaned = new ArrayList<>();
         for (final Path json : remainingJsonPaths) {
             final String ownerKeyLower = TakeoutSidecarPairer.ownerKeyOf(json).toLowerCase(Locale.ROOT);
-            final List<String> mediaNames = mediaNamesByDir.getOrDefault(TakeoutSidecarPairer.directoryKeyOf(json), List.of());
+            final List<String> mediaNames = mediaNamesByDir.getOrDefault(TakeoutSidecarPairer.directoryKeyOf(json),
+                    List.of());
             if (!stillNeeded(ownerKeyLower, mediaNames)) {
                 orphaned.add(json);
             }

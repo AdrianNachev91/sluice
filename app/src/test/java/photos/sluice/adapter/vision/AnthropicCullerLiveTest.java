@@ -172,7 +172,7 @@ class AnthropicCullerLiveTest {
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,
-            CullProviderSettings providerSettings) implements CullSettings {
+                                 CullProviderSettings providerSettings) implements CullSettings {
 
         @Override
         public ExternalAgentSettings externalAgent() {

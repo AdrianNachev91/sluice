@@ -342,7 +342,8 @@ class ShardValidatorTest {
         assertThat(new MontageFieldMismatch("montage-001", "montage-002").describe())
                 .isEqualTo("montage-001: 'montage' is 'montage-002', expected 'montage-001'");
         assertThat(new GroupSpansMultipleMontages("g1", List.of("montage-001", "montage-002")).describe())
-                .isEqualTo("near-dup group 'g1' spans 2 shards (montage-001, montage-002); a group must stay within one montage");
+                .isEqualTo("near-dup group 'g1' spans 2 shards (montage-001, montage-002); a group must stay within " +
+                        "one montage");
     }
 
     @Test

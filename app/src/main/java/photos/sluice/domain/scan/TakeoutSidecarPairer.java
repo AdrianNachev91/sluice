@@ -43,7 +43,8 @@ public final class TakeoutSidecarPairer {
          * Defensively copies the sidecar-by-media map.
          *
          * @param takeoutMode boolean true if any sidecar JSON was found at all
-         * @param sidecarsByMedia a {@link Map} of {@link Path} to {@link Path} sidecar path keyed by the media path it describes
+         * @param sidecarsByMedia a {@link Map} of {@link Path} to {@link Path} sidecar path keyed by the media path
+         * it describes
          */
         public PairingResult {
             sidecarsByMedia = Map.copyOf(sidecarsByMedia);
@@ -66,7 +67,8 @@ public final class TakeoutSidecarPairer {
         // O(sidecars x media), and lets every media file share the same per-directory index
         // rather than re-deriving owner keys per lookup.
         final Map<Path, List<Path>> jsonsByDir = jsonPaths.stream()
-                .collect(Collectors.groupingBy(TakeoutSidecarPairer::directoryKeyOf, LinkedHashMap::new, Collectors.toList()));
+                .collect(Collectors.groupingBy(TakeoutSidecarPairer::directoryKeyOf, LinkedHashMap::new,
+                        Collectors.toList()));
         final Map<Path, Map<String, Path>> ownersByDir = new HashMap<>();
         jsonsByDir.forEach((dir, sidecars) -> {
             final Map<String, Path> owners = new LinkedHashMap<>();
@@ -135,11 +137,13 @@ public final class TakeoutSidecarPairer {
      * Tries the media's own filename first, then its edited-suffix-stripped form - an edited
      * copy has no sidecar of its own, so it must be looked up under its original's key instead.
      *
-     * @param owners a {@link Map} of {@link String} to {@link Path} owner key to sidecar path index for the media's directory
+     * @param owners a {@link Map} of {@link String} to {@link Path} owner key to sidecar path index for the media's
+     * directory
      * @param mediaFileName {@link String} the media file's own filename
      * @return {@link Path} the matching sidecar, if any
      */
-    private static @Nullable Path matchByOwnerKey(final @Nullable Map<String, Path> owners, final String mediaFileName) {
+    private static @Nullable Path matchByOwnerKey(final @Nullable Map<String, Path> owners,
+                                                  final String mediaFileName) {
         if (owners == null) {
             return null;
         }
@@ -186,7 +190,8 @@ public final class TakeoutSidecarPairer {
      * raw base names needs the reversal applied to the search term instead.
      *
      * @param mediaFileName {@link String} the media file's own filename
-     * @return a {@link List} of {@link String} the candidate prefixes to try against sidecar base names, in priority order
+     * @return a {@link List} of {@link String} the candidate prefixes to try against sidecar base names, in priority
+     * order
      */
     private static List<String> candidatePrefixes(final String mediaFileName) {
         final List<String> prefixes = new ArrayList<>();

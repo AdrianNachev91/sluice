@@ -56,13 +56,16 @@ final class CullPrepTestSupport {
         writeIndex(prepDir, photos, List.of(), entries);
     }
 
-    static void writeIndex(final Path prepDir, final int photos, final List<Path> unreviewable, final List<String> entries) {
+    static void writeIndex(final Path prepDir, final int photos, final List<Path> unreviewable,
+                           final List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
-                new PrepDir("2019-06", prepDir.resolve("base"), photos, unreviewable, entries.size(), prepDir, entries));
+                new PrepDir("2019-06", prepDir.resolve("base"), photos, unreviewable, entries.size(), prepDir,
+                        entries));
     }
 
     static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {
-        new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"), List.of(photos));
+        new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"),
+                List.of(photos));
     }
 
     static SidecarPhotoEntry sidecarEntry(final Path src) {
@@ -84,7 +87,8 @@ final class CullPrepTestSupport {
     }
 
     static String classificationJson(final Path file, final String category, final String reason) {
-        return "{ \"file\": \"%s\", \"action\": \"%s\", \"reason\": \"%s\" }".formatted(jsonEscaped(file), category, reason);
+        return "{ \"file\": \"%s\", \"action\": \"%s\", \"reason\": \"%s\" }".formatted(jsonEscaped(file), category,
+                reason);
     }
 
     static String nearDupChosenJson(final Path file, final String group, final String chosenReason) {
@@ -127,7 +131,8 @@ final class CullPrepTestSupport {
         return applyEngine(repoRoot, libraryRoot, hashIndex, new NioMediaStore());
     }
 
-    static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex, final MediaStore mediaStore) {
+    static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
+                                   final MediaStore mediaStore) {
         return new ApplyEngine(mediaStore, new JsonCullPrepStore(), new Sha256Hasher(), hashIndex,
                 new CullDestinations(pathsConfig(repoRoot, libraryRoot)), new MoveLedger(mediaStore),
                 applyPlanner(mediaStore));

@@ -43,7 +43,8 @@ public final class ScopeSelector {
      * @param months {@link MonthRange} the month range to narrow to, or null for the whole year
      * @return a {@link List} of {@link DatedMedia} the media files in scope
      */
-    private static List<DatedMedia> selectYear(final List<DatedMedia> allDated, final int year, final @Nullable MonthRange months) {
+    private static List<DatedMedia> selectYear(final List<DatedMedia> allDated, final int year,
+                                               final @Nullable MonthRange months) {
         return allDated.stream()
                 .filter(dated -> dated.date().when().getYear() == year)
                 .filter(dated -> months == null || months.includes(dated.date().when().getMonthValue()))
@@ -68,7 +69,8 @@ public final class ScopeSelector {
      * Selects every media file dated within the oldest year present in the set.
      *
      * @param allDated a {@link List} of {@link DatedMedia} every dated media file under consideration
-     * @return a {@link List} of {@link DatedMedia} the media files in the oldest year, or an empty list if none are dated
+     * @return a {@link List} of {@link DatedMedia} the media files in the oldest year, or an empty list if none are
+     * dated
      */
     private static List<DatedMedia> selectOldestYear(final List<DatedMedia> allDated) {
         final OptionalInt oldestYear = allDated.stream().mapToInt(dated -> dated.date().when().getYear()).min();

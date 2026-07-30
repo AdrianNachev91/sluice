@@ -27,7 +27,8 @@ public final class ByteIdenticalDedup {
          * Makes the three file lists immutable.
          *
          * @param toSort a {@link List} of {@link MediaFile} keeper files to route to Sorted
-         * @param redundantVsLibrary a {@link List} of {@link MediaFile} files byte-identical to something already in the library
+         * @param redundantVsLibrary a {@link List} of {@link MediaFile} files byte-identical to something already in
+         * the library
          * @param withinBatchDuplicates a {@link List} of {@link MediaFile} byte-identical duplicates within this batch
          */
         public DedupPlan {

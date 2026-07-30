@@ -15,7 +15,8 @@ public record PurgeReport(List<String> purged, Map<String, PrepDirHealth.State> 
      * Defensively copies the mutable collection fields.
      *
      * @param purged a {@link List} of {@link String} scope tags of completed runs deleted this sweep
-     * @param skipped a {@link Map} of {@link String} to {@link PrepDirHealth.State} scope tags left untouched, with the state that kept them
+     * @param skipped a {@link Map} of {@link String} to {@link PrepDirHealth.State} scope tags left untouched, with
+     * the state that kept them
      */
     public PurgeReport {
         purged = List.copyOf(purged);

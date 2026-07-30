@@ -35,7 +35,7 @@ class SidecarReader {
      * one is reported by name rather than crashing the parse.
      */
     private record RawPhoto(@Nullable String src, @Nullable String name, @Nullable String time,
-            @Nullable Boolean received) {
+                            @Nullable Boolean received) {
     }
 
     /**

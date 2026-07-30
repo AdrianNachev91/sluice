@@ -13,7 +13,8 @@ package photos.sluice.domain.job;
 @FunctionalInterface
 public interface ProgressCallback {
 
-    ProgressCallback NO_OP = (_, _) -> { };
+    ProgressCallback NO_OP = (_, _) -> {
+    };
 
     /**
      * Reports one unit of work finished.

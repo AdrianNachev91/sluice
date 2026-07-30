@@ -78,7 +78,8 @@ public class CullDispatcher {
      * @param cancellation {@link CancellationSignal} cancellation signal
      * @return {@link CullReport} the cull report
      */
-    public CullReport cull(final PrepDir prep, final CullOptions options, final ProgressCallback progress, final CancellationSignal cancellation)
+    public CullReport cull(final PrepDir prep, final CullOptions options, final ProgressCallback progress,
+                           final CancellationSignal cancellation)
             throws CullException {
         return this.select().cull(prep, options, progress, cancellation);
     }

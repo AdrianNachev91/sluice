@@ -141,8 +141,10 @@ class ShardCodec {
         //noinspection DuplicatedCode
         return switch (decision) {
             case final Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
-            case final NearDupChosen c -> new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
-            case final NearDupReject r -> new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
+            case final NearDupChosen c ->
+                    new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
+            case final NearDupReject r ->
+                    new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
         };
     }
 

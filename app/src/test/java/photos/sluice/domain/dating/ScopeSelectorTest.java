@@ -24,7 +24,8 @@ class ScopeSelectorTest {
         final DatedMedia dec = dated("dec.jpg", 2019, 12, 1);
         final DatedMedia otherYear = dated("other.jpg", 2020, 1, 1);
 
-        final List<DatedMedia> result = this.selector.select(List.of(jan, dec, otherYear), new SortScope.Year(2019, null));
+        final List<DatedMedia> result = this.selector.select(List.of(jan, dec, otherYear), new SortScope.Year(2019,
+                null));
 
         assertThat(result).containsExactly(jan, dec);
     }
@@ -57,7 +58,8 @@ class ScopeSelectorTest {
         final DatedMedia middle = dated("mid.jpg", 2018, 1, 1);
         final DatedMedia newest = dated("new.jpg", 2021, 1, 1);
 
-        final List<DatedMedia> result = this.selector.select(List.of(newest, oldest, middle), new SortScope.OldestYear());
+        final List<DatedMedia> result = this.selector.select(List.of(newest, oldest, middle),
+                new SortScope.OldestYear());
 
         assertThat(result).containsExactly(oldest);
     }

@@ -86,9 +86,12 @@ final class CullEngine {
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      */
-    CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
-               final CullPrepPort cullPrepPort, final CullSettings cullSettings, final MediaStore mediaStore, final PathsPort pathsPort,
-               final MontageConfig montageConfig, final JobRunner jobRunner, final ProgressPort progressPort, final Duration watchPollInterval) {
+    CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
+               final ApplyEngine applyEngine,
+               final CullPrepPort cullPrepPort, final CullSettings cullSettings, final MediaStore mediaStore,
+               final PathsPort pathsPort,
+               final MontageConfig montageConfig, final JobRunner jobRunner, final ProgressPort progressPort,
+               final Duration watchPollInterval) {
         this.montageRenderer = montageRenderer;
         this.cullDispatcher = cullDispatcher;
         this.applyEngine = applyEngine;
@@ -158,7 +161,8 @@ final class CullEngine {
      */
     JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         return this.jobRunner.submit(handle ->
-                this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial, handle::isCancellationRequested));
+                this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
+                        handle::isCancellationRequested));
     }
 
     /**
@@ -227,7 +231,8 @@ final class CullEngine {
         // into those callers. Wrapping the result in Optional here instead keeps that shared
         // contract clean while still letting this call site express a real null case.
         final Optional<PrepDir> prep = this.phaseRunner.run(PREPPING,
-                progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.montageConfig, progress, cancellation)));
+                progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.montageConfig, progress,
+                        cancellation)));
         // Empty means the renderer itself stopped mid-render, before index.json was ever written -
         // nothing resumable exists yet. The renderer is the completion authority here: this
         // branches purely on its return value, never on re-checking disk state.
@@ -277,13 +282,15 @@ final class CullEngine {
      * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
      * @return {@link CullJobOutcome} the outcome of this dispatch-and-apply attempt
      */
-    private CullJobOutcome dispatchAndApply(final PrepDir prep, final boolean allowPartial, final CancellationSignal cancellation)
+    private CullJobOutcome dispatchAndApply(final PrepDir prep, final boolean allowPartial,
+                                            final CancellationSignal cancellation)
             throws Exception {
         this.disarmWatch(prep.prepDir());
         final CullReport cullReport;
         try {
             cullReport = this.phaseRunner.run(CULLING,
-                    progress -> this.cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress, cancellation));
+                    progress -> this.cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress,
+                            cancellation));
         } catch (final CullException e) {
             if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
                 throw e;
@@ -307,7 +314,8 @@ final class CullEngine {
         }
         final Optional<ApplyReport> applyReport = this.phaseRunner.run(APPLYING,
                 progress -> Optional.ofNullable(
-                        this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress, cancellation)));
+                        this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress,
+                                cancellation)));
         // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
         // decisions.json was never written. The prep dir still reads as a waiting job, the same
         // authority rule the renderer's own empty return follows above. No watcher is armed here
@@ -327,7 +335,8 @@ final class CullEngine {
      */
     private WaitingCullJob buildWaitingJob(final PrepDir prep) {
         return new WaitingCullJob(
-                prep.scope(), prep.prepDir(), this.shardTallyCalculator.tally(prep), this.mediaStore.lastModifiedTime(prep.prepDir()));
+                prep.scope(), prep.prepDir(), this.shardTallyCalculator.tally(prep),
+                this.mediaStore.lastModifiedTime(prep.prepDir()));
     }
 
     /**
@@ -364,8 +373,10 @@ final class CullEngine {
             // "total time since the job first started waiting." A re-arm gets its own full timeout
             // window instead of inheriting a countdown already run down by an earlier streak. A
             // fresh app restart or a shard that turned invalid after looking ready are both re-arms.
-            final var watcher = new CullWatcher(this.watchPollInterval, this.cullSettings.externalAgent().watchTimeout(),
-                    () -> this.shardTallyCalculator.isFullyValid(prepDir), () -> this.tryAutoResume(prepDir), Instant.now());
+            final var watcher = new CullWatcher(this.watchPollInterval,
+                    this.cullSettings.externalAgent().watchTimeout(),
+                    () -> this.shardTallyCalculator.isFullyValid(prepDir), () -> this.tryAutoResume(prepDir),
+                    Instant.now());
             watcher.start();
             return watcher;
         });

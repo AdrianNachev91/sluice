@@ -67,7 +67,8 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param pathsPort {@link PathsPort} resolves the Sorted and logs roots
      */
     public CullMontageRenderer(final TileRenderer tileRenderer, final MontageBuilder montageBuilder,
-                               final SidecarWriter sidecarWriter, final PrepIndexWriter prepIndexWriter, final MediaStore mediaStore,
+                               final SidecarWriter sidecarWriter, final PrepIndexWriter prepIndexWriter,
+                               final MediaStore mediaStore,
                                final PathsPort pathsPort) {
         this.tileRenderer = tileRenderer;
         this.montageBuilder = montageBuilder;
@@ -118,7 +119,7 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param config {@link MontageConfig} the montage layout configuration
      * @param progress {@link ProgressCallback} callback notified as each montage completes
      * @param cancellation {@link CancellationSignal} signal checked between rendering and writing
-     *     steps
+     * steps
      * @return {@link PrepDir} the resulting prep dir, or null if cancelled before completion
      */
     @Override
@@ -148,7 +149,8 @@ public class CullMontageRenderer implements MontageRenderer {
             if (cancellation.isCancelled()) {
                 return null;
             }
-            rendered.add(new RenderedCandidate(candidate, this.tileRenderer.render(candidate.path(), config.tileSize())));
+            rendered.add(new RenderedCandidate(candidate, this.tileRenderer.render(candidate.path(),
+                    config.tileSize())));
         }
         final List<RenderedCandidate> reviewable = rendered.stream()
                 .filter(candidate -> !candidate.tile().unreviewable())
@@ -229,7 +231,8 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param batch a {@link List} of {@link RenderedCandidate}, the rendered candidates to include
      * @param config {@link MontageConfig} the montage layout configuration
      */
-    private void writeMontage(final Path prepDir, final String tag, final List<RenderedCandidate> batch, final MontageConfig config) {
+    private void writeMontage(final Path prepDir, final String tag, final List<RenderedCandidate> batch,
+                              final MontageConfig config) {
         final List<MontageBuilder.MontageTile> tiles = batch.stream()
                 .map(rendered -> new MontageBuilder.MontageTile(
                         rendered.tile().image(), rendered.candidate().path().getFileName().toString()))

@@ -158,7 +158,8 @@ public final class ShardValidator {
      * @param unreviewableCount int how many times f appears in the unreviewable list
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      */
-    private static void checkDuplicateReferences(final String f, final List<Decision> decisionsForFile, final int unreviewableCount,
+    private static void checkDuplicateReferences(final String f, final List<Decision> decisionsForFile,
+                                                 final int unreviewableCount,
                                                  final List<Finding> problems) {
         final long count = decisionsForFile.size() + unreviewableCount;
         if (count <= 1) {
@@ -176,16 +177,20 @@ public final class ShardValidator {
      *
      * @param file {@link ShardFile} the shard paired with its expected montage id
      * @param inScope a {@link Set} of {@link Path} every in-scope file the montages actually showed
-     * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename
+     * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique
+     * basename
      * @param categorySet a {@link Set} of {@link String} the configured category set
      * @param allowedClause {@link String} message fragment listing allowed categories
-     * @param montagesByGroup a {@link Map} of {@link String} to {@link Set} of {@link String} group id to the montage ids referencing it
+     * @param montagesByGroup a {@link Map} of {@link String} to {@link Set} of {@link String} group id to the
+     * montage ids referencing it
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
      * @param decisions a {@link List} of {@link Decision} accumulated merged, heal-corrected decisions
      */
-    private void validateShard(final ShardFile file, final Set<Path> inScope, final Map<String, Path> healableByBasename,
-                               final Set<String> categorySet, final String allowedClause, final Map<String, Set<String>> montagesByGroup,
+    private void validateShard(final ShardFile file, final Set<Path> inScope,
+                               final Map<String, Path> healableByBasename,
+                               final Set<String> categorySet, final String allowedClause, final Map<String,
+                    Set<String>> montagesByGroup,
                                final List<Finding> problems, final List<String> heals, final List<Decision> decisions) {
         final String montageId = file.expectedMontage();
         final DecisionShard shard = file.shard();
@@ -201,7 +206,8 @@ public final class ShardValidator {
         int index = 0;
         for (final Decision decision : shard.decisions()) {
             index++;
-            this.validateFields(decision, montageId, index, categorySet, allowedClause, chosenPerGroup, rejectsPerGroup, problems);
+            this.validateFields(decision, montageId, index, categorySet, allowedClause, chosenPerGroup,
+                    rejectsPerGroup, problems);
             decisions.add(this.healFile(decision, montageId, index, inScope, healableByBasename, problems, heals));
         }
 
@@ -234,12 +240,15 @@ public final class ShardValidator {
      * @param index int the decision's 1-based position within its shard
      * @param categorySet a {@link Set} of {@link String} the configured category set
      * @param allowedClause {@link String} message fragment listing allowed categories
-     * @param chosenPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated chosen-keeper count per group
+     * @param chosenPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated chosen-keeper count per
+     * group
      * @param rejectsPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated reject count per group
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      */
-    private void validateFields(final Decision decision, final String montage, final int index, final Set<String> categorySet, final String allowedClause,
-                                final Map<String, Integer> chosenPerGroup, final Map<String, Integer> rejectsPerGroup, final List<Finding> problems) {
+    private void validateFields(final Decision decision, final String montage, final int index,
+                                final Set<String> categorySet, final String allowedClause,
+                                final Map<String, Integer> chosenPerGroup, final Map<String, Integer> rejectsPerGroup
+            , final List<Finding> problems) {
         switch (decision) {
             case final Classification c -> {
                 if (!categorySet.contains(c.category())) {
@@ -282,13 +291,15 @@ public final class ShardValidator {
      * @param montage {@link String} the montage id this decision belongs to
      * @param index int the decision's 1-based position within its shard
      * @param inScope a {@link Set} of {@link Path} every in-scope file the montages actually showed
-     * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename
+     * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique
+     * basename
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
      * @return {@link Decision} the decision, with its file resolved or unchanged
      */
     private Decision healFile(final Decision decision, final String montage, final int index, final Set<Path> inScope,
-                              final Map<String, Path> healableByBasename, final List<Finding> problems, final List<String> heals) {
+                              final Map<String, Path> healableByBasename, final List<Finding> problems,
+                              final List<String> heals) {
         final Path fileValue = decision.file();
         if (fileValue.toString().isBlank()) {
             problems.add(new MissingFile(montage, index));

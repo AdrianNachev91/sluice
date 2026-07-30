@@ -22,7 +22,8 @@ class InboxScannerTest {
 
     @Test
     void nestedTakeoutTreePairsEndToEnd(@TempDir final Path inbox) throws IOException {
-        final Path album = Files.createDirectories(inbox.resolve("Takeout").resolve("Google Photos").resolve("2019-06"));
+        final Path album = Files.createDirectories(inbox.resolve("Takeout").resolve("Google Photos").resolve("2019-06"
+        ));
         final Path photo = album.resolve("IMG_1234.jpg");
         Files.writeString(photo, "photo bytes");
         Files.writeString(album.resolve("IMG_1234.jpg.json"), "{}");
@@ -31,7 +32,8 @@ class InboxScannerTest {
 
         assertThat(result.takeoutMode()).isTrue();
         assertThat(result.media()).containsExactly(new MediaFile(photo));
-        assertThat(result.sidecars()).containsEntry(new MediaFile(photo), new TakeoutSidecar(album.resolve("IMG_1234.jpg.json")));
+        assertThat(result.sidecars()).containsEntry(new MediaFile(photo), new TakeoutSidecar(album.resolve("IMG_1234" +
+                ".jpg.json")));
     }
 
     @Test

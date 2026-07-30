@@ -106,7 +106,8 @@ class RescueEngineRealDataParityTest {
 
     private static RescueEngine rescueEngine(final Path root) {
         final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
+                new PathsProperties(root.toString(), root.resolve("Library").toString(),
+                        root.resolve("Inbox").toString()));
         final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
         final var rescueDateResolver = new RescueDateResolver(new ExifSource(), new FilenameSource());
         return new RescueEngine(pathsConfig, new NioMediaStore(), new Sha256Hasher(), hashIndex, rescueDateResolver);

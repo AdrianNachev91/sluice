@@ -26,7 +26,8 @@ class MediaTypeDetectorTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"mp4", "mov", "mkv", "avi", "m4v", "3gp", "webm", "wmv", "mpg", "mpeg", "mts", "m2ts", "flv"})
+    @ValueSource(strings = {"mp4", "mov", "mkv", "avi", "m4v", "3gp", "webm", "wmv", "mpg", "mpeg", "mts", "m2ts",
+            "flv"})
     void classifiesVideoExtensions(final String extension) {
         final Optional<MediaType> result = this.detector.classify(Path.of("VID_1234." + extension));
 

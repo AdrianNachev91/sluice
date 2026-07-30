@@ -37,7 +37,8 @@ class JsonCullPrepStoreTest {
 
     @Test
     void readsBackASidecarWrittenBySidecarWriter(@TempDir final Path dir) {
-        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-06-15T10:30:00Z"), false);
+        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-06-15T10:30:00Z"),
+                false);
         new SidecarWriter().write(dir.resolve("montage-001.json"), dir.resolve("montage-001.jpg"), List.of(photo));
 
         final List<SidecarPhotoEntry> entries = this.store.readSidecar(dir, "montage-001");

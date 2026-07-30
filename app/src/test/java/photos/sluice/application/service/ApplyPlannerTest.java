@@ -91,7 +91,8 @@ class ApplyPlannerTest {
     void aMissingNearDupChosenFileFailsLoudlyEvenThoughItsNeverAMoveBasedDecision(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk - a copy that never ran
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk - a copy that never
+        // ran
         final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(reject, "blurry");
         writeIndex(prepDir, 2, List.of("montage-001"));

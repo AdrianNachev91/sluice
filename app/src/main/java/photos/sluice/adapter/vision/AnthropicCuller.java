@@ -158,7 +158,8 @@ class AnthropicCuller implements VisionCuller {
      * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
      * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
      * @param settings {@link CullSettings} the cull settings
-     * @param clientFactory a {@link Supplier} of {@link AnthropicClient}, builds the Anthropic client used to call the model
+     * @param clientFactory a {@link Supplier} of {@link AnthropicClient}, builds the Anthropic client used to call
+     * the model
      */
     AnthropicCuller(final CullerPrompt prompt, final ShardCodec shardCodec, final SidecarReader sidecarReader,
                     final CullSettings settings, final Supplier<AnthropicClient> clientFactory) {
@@ -175,8 +176,8 @@ class AnthropicCuller implements VisionCuller {
      * reports them aggregated instead of one parse crash per gap.
      */
     private record RawVerdict(@Nullable Integer index, @Nullable String name, @Nullable String action,
-            @Nullable String reason, @Nullable String group,
-            @JsonProperty("chosen_reason") @Nullable String chosenReason) {
+                              @Nullable String reason, @Nullable String group,
+                              @JsonProperty("chosen_reason") @Nullable String chosenReason) {
     }
 
     /**
@@ -240,7 +241,8 @@ class AnthropicCuller implements VisionCuller {
      * @throws CullException if a montage's response fails validation and the corrective retry does too
      */
     @Override
-    public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress, final CancellationSignal cancellation)
+    public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress,
+                           final CancellationSignal cancellation)
             throws CullException {
         final String model = this.requiredModel();
         final boolean thinking = Boolean.TRUE.equals(this.settings.providerSettings().thinking());
@@ -338,7 +340,8 @@ class AnthropicCuller implements VisionCuller {
      * @return boolean true if the existing shard is valid and was accepted
      */
     private boolean resumesExistingShard(final Path shardPath, final String montage,
-                                         final List<ShardFile> acceptedShards, final List<Path> scopeSrcs, final List<String> categoryNames,
+                                         final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
+                                         final List<String> categoryNames,
                                          final List<Path> unreviewable) {
         if (!Files.exists(shardPath)) {
             return false;
@@ -365,7 +368,8 @@ class AnthropicCuller implements VisionCuller {
      * @return {@link AttemptOutcome} the resulting shard, or the problems found
      */
     private AttemptOutcome attempt(final String montage, final List<SidecarPhotoEntry> entries, final Message response,
-                                   final List<ShardFile> acceptedShards, final List<Path> scopeSrcs, final List<String> categoryNames,
+                                   final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
+                                   final List<String> categoryNames,
                                    final List<Path> unreviewable) {
         final var problems = new ArrayList<String>();
         final DecisionShard shard = this.shardOf(montage, entries, response, problems);
@@ -396,7 +400,8 @@ class AnthropicCuller implements VisionCuller {
      * @return a {@link List} of {@link String}, validation problems found, empty if the shard was accepted
      */
     private List<String> acceptIfValid(final String montage, final DecisionShard shard,
-                                       final List<ShardFile> acceptedShards, final List<Path> scopeSrcs, final List<String> categoryNames,
+                                       final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
+                                       final List<String> categoryNames,
                                        final List<Path> unreviewable) {
         acceptedShards.add(new ShardFile(montage, shard));
         final ValidationReport report = this.validator.validate(acceptedShards, scopeSrcs, categoryNames, unreviewable);
@@ -448,12 +453,14 @@ class AnthropicCuller implements VisionCuller {
      *
      * @param verdict {@link RawVerdict} the raw verdict to check
      * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
-     * @param seenIndices a {@link HashSet} of {@link Integer}, indices already claimed by a verdict, mutated by this call
+     * @param seenIndices a {@link HashSet} of {@link Integer}, indices already claimed by a verdict, mutated by this
+     * call
      * @param decisions a {@link List} of {@link Decision}, accumulator for collected decisions, mutated by this call
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
      */
     private static void collectDecision(final @Nullable RawVerdict verdict, final List<SidecarPhotoEntry> entries,
-                                        final HashSet<Integer> seenIndices, final List<Decision> decisions, final List<String> problems) {
+                                        final HashSet<Integer> seenIndices, final List<Decision> decisions,
+                                        final List<String> problems) {
         if (verdict == null) {
             problems.add("null verdict entry");
             return;
@@ -537,7 +544,8 @@ class AnthropicCuller implements VisionCuller {
      * @return {@link CullException} the exception naming both attempts' problems
      */
     private static CullException retryFailedException(final String scope, final String montage,
-                                                      final List<String> firstProblems, final List<String> retryProblems) {
+                                                      final List<String> firstProblems,
+                                                      final List<String> retryProblems) {
         return new CullException("Cull for " + scope + " failed at " + montage
                 + " and a corrective retry did not fix it."
                 + "\nFirst attempt (" + firstProblems.size() + " problem(s)):\n - "

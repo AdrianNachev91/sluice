@@ -13,7 +13,7 @@ import java.util.Map;
  * alone does not expose those.
  */
 public record ScanResult(List<MediaFile> media, Map<MediaFile, TakeoutSidecar> sidecars, boolean takeoutMode,
-        List<Path> jsonPaths) {
+                         List<Path> jsonPaths) {
     /**
      * Defensively copies the mutable collection components.
      *

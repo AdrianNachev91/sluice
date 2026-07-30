@@ -75,7 +75,8 @@ public class ApplyEngine {
      * @param applyPlanner {@link ApplyPlanner} validates the batch and classifies each decision
      */
     public ApplyEngine(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final Sha256Port sha256Port,
-                       final HashIndexPort hashIndexPort, final CullDestinations cullDestinations, final MoveLedger moveLedger,
+                       final HashIndexPort hashIndexPort, final CullDestinations cullDestinations,
+                       final MoveLedger moveLedger,
                        final ApplyPlanner applyPlanner) {
         this.mediaStore = mediaStore;
         this.cullPrepPort = cullPrepPort;
@@ -132,7 +133,8 @@ public class ApplyEngine {
      * @return {@link ApplyReport} the applied run's summary report, or null if cancelled
      * @throws ApplyException if validation finds unresolved problems
      */
-    public @Nullable ApplyReport apply(final Path prepDirPath, final ApplyOptions options, final ProgressCallback progress,
+    public @Nullable ApplyReport apply(final Path prepDirPath, final ApplyOptions options,
+                                       final ProgressCallback progress,
                                        final CancellationSignal cancellation) throws ApplyException {
         final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
         // One snapshot for this whole run, taken before anything below could append to the ledger.
@@ -217,7 +219,8 @@ public class ApplyEngine {
      * @param heals a {@link List} of {@link String} healed-shard messages to include
      * @return {@link ApplyReport} a freshly recomputed summary report
      */
-    private static ApplyReport summarize(final List<Decision> decisions, final PrepDir prepDir, final int unreviewableCount,
+    private static ApplyReport summarize(final List<Decision> decisions, final PrepDir prepDir,
+                                         final int unreviewableCount,
                                          final List<String> heals) {
         final Map<String, Integer> byCategory = new TreeMap<>();
         final Set<String> groups = new HashSet<>();
@@ -280,7 +283,8 @@ public class ApplyEngine {
      * prior run already moved.
      *
      * @param decisions a {@link List} of {@link Decision} the full decisions list
-     * @return a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions grouped by group id
+     * @return a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions grouped by
+     * group id
      */
     private static Map<String, List<Decision>> groupNearDups(final List<Decision> decisions) {
         final Map<String, List<Decision>> byGroup = new HashMap<>();
@@ -300,7 +304,8 @@ public class ApplyEngine {
      *
      * @param decision {@link Decision} the pending decision to apply
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
-     * @param nearDupGroups a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions grouped by group id
+     * @param nearDupGroups a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions
+     * grouped by group id
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
     private void apply(final Decision decision, final Path prepDirPath, final Map<String, List<Decision>> nearDupGroups,

@@ -87,7 +87,8 @@ class CullDispatcherTest {
     void routesTheProgressCallbackToTheSelectedCuller() throws CullException {
         final var target = new RecordingCuller("anthropic");
         final var dispatcher = new CullDispatcher(List.of(target), settingsFor("anthropic"));
-        final ProgressCallback progress = (_, _) -> { };
+        final ProgressCallback progress = (_, _) -> {
+        };
 
         dispatcher.cull(PREP, OPTIONS, progress);
 

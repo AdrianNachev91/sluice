@@ -71,7 +71,8 @@ public class DateResolver {
      * @param sidecar {@link TakeoutSidecar} the file's Takeout sidecar, if any
      * @return an {@link Optional} {@link DateResult}, if the source resolved a date
      */
-    private static Optional<DateResult> tryResolve(final DateSource source, final String name, final Confidence confidence,
+    private static Optional<DateResult> tryResolve(final DateSource source, final String name,
+                                                   final Confidence confidence,
                                                    final MediaFile file, final TakeoutSidecar sidecar) {
         return source.resolve(file, sidecar).map(when -> new DateResult(when, confidence, name));
     }

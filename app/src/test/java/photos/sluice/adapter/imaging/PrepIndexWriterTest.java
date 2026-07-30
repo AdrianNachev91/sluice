@@ -29,7 +29,8 @@ class PrepIndexWriterTest {
         final Path basePath = dir.resolve("Sorted");
         final Path prepDir = dir.resolve("prep");
         final Path corrupt = dir.resolve("corrupt.cr2");
-        final var prep = new PrepDir("2023", basePath, 42, List.of(corrupt), 2, prepDir, List.of("montage-001", "montage-002"));
+        final var prep = new PrepDir("2023", basePath, 42, List.of(corrupt), 2, prepDir, List.of("montage-001",
+                "montage-002"));
 
         this.writer.write(indexPath, prep);
 

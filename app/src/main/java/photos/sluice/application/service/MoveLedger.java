@@ -106,7 +106,8 @@ public class MoveLedger implements LedgerReader {
      * @param hash {@link String} the source's hash, taken before the move
      */
     void recordMove(final Path prepDirPath, final Path source, final Path dest, final String hash) {
-        this.mediaStore.appendLine(this.logFor(prepDirPath), source + RECORD_DELIMITER + dest + RECORD_DELIMITER + hash);
+        this.mediaStore.appendLine(this.logFor(prepDirPath),
+                source + RECORD_DELIMITER + dest + RECORD_DELIMITER + hash);
     }
 
     /**
@@ -143,7 +144,8 @@ public class MoveLedger implements LedgerReader {
      * @param resolution {@link OverlapResolution} which listing should win
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
-    void recordOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution, final String reason) {
+    void recordOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution,
+                       final String reason) {
         this.mediaStore.appendLine(this.logFor(prepDirPath), file + RECORD_DELIMITER + OVERLAP_MARKER + RECORD_DELIMITER
                 + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
@@ -157,7 +159,8 @@ public class MoveLedger implements LedgerReader {
      * @param resolution {@link CorruptSidecarResolution} which way the batch was resolved
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
-    void recordCorruptSidecar(final Path prepDirPath, final String montage, final CorruptSidecarResolution resolution, final String reason) {
+    void recordCorruptSidecar(final Path prepDirPath, final String montage, final CorruptSidecarResolution resolution
+            , final String reason) {
         this.mediaStore.appendLine(this.logFor(prepDirPath), montage + RECORD_DELIMITER + CORRUPT_SIDECAR_MARKER
                 + RECORD_DELIMITER + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
@@ -172,10 +175,12 @@ public class MoveLedger implements LedgerReader {
      * @param moves a {@link Map} of {@link Path} to {@link MoveRecord} accumulated move records
      * @param skipped a {@link Set} of {@link Path} accumulated sources the user gave up on
      * @param overlaps a {@link Map} of {@link Path} to {@link OverlapResolution} accumulated overlap resolutions
-     * @param corruptSidecars a {@link Map} of {@link String} to {@link CorruptSidecarResolution} accumulated corrupt-sidecar resolutions, keyed by montage id
+     * @param corruptSidecars a {@link Map} of {@link String} to {@link CorruptSidecarResolution} accumulated
+     * corrupt-sidecar resolutions, keyed by montage id
      */
     private static void parseLine(final String line, final Map<Path, MoveRecord> moves, final Set<Path> skipped,
-                                  final Map<Path, OverlapResolution> overlaps, final Map<String, CorruptSidecarResolution> corruptSidecars) {
+                                  final Map<Path, OverlapResolution> overlaps, final Map<String,
+                    CorruptSidecarResolution> corruptSidecars) {
         final String[] fields = line.split(RECORD_DELIMITER, -1);
         if (fields.length < 2) {
             return;
@@ -219,9 +224,10 @@ public class MoveLedger implements LedgerReader {
      * @param moves a {@link Map} of {@link Path} to {@link MoveRecord} every recorded move, keyed by source
      * @param skipped a {@link Set} of {@link Path} every source the user gave up on
      * @param overlaps a {@link Map} of {@link Path} to {@link OverlapResolution} every resolved overlap
-     * @param corruptSidecars a {@link Map} of {@link String} to {@link CorruptSidecarResolution} every resolved corrupt sidecar, keyed by montage id
+     * @param corruptSidecars a {@link Map} of {@link String} to {@link CorruptSidecarResolution} every resolved
+     * corrupt sidecar, keyed by montage id
      */
     public record Ledger(Path log, Map<Path, MoveRecord> moves, Set<Path> skipped,
-            Map<Path, OverlapResolution> overlaps, Map<String, CorruptSidecarResolution> corruptSidecars) {
+                         Map<Path, OverlapResolution> overlaps, Map<String, CorruptSidecarResolution> corruptSidecars) {
     }
 }

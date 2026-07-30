@@ -40,7 +40,8 @@ class ReconcileEngineTest {
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an already-moved file
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an
+        // already-moved file
         final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "already-moved-content");
         writeIndex(prepDir, 1, List.of("montage-001"));
@@ -88,7 +89,8 @@ class ReconcileEngineTest {
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
-        assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log")));
+        assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records" +
+                ".log")));
         assertThat(report.reconstructed()).isZero();
     }
 
@@ -196,7 +198,8 @@ class ReconcileEngineTest {
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
-        assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log")));
+        assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records" +
+                ".log")));
         assertThat(report.reconstructed()).isZero();
         assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
     }
@@ -228,7 +231,8 @@ class ReconcileEngineTest {
     }
 
     @Test
-    void reconcileHandlesAnUnreviewableFileTheSameWayAsADecision(@TempDir final Path root) throws IOException, ApplyException {
+    void reconcileHandlesAnUnreviewableFileTheSameWayAsADecision(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
@@ -262,7 +266,8 @@ class ReconcileEngineTest {
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - a lost log after a real move
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - a lost log after a
+        // real move
         final Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(pending, "y");
         writeFile(root.resolve("Review/junk/a.jpg"), "already-moved");
@@ -292,7 +297,8 @@ class ReconcileEngineTest {
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - moved by a run whose log was lost
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - moved by a run whose log
+        // was lost
         writeFile(root.resolve("Review/junk/a.jpg"), "already-moved");
         writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));

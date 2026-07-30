@@ -112,7 +112,8 @@ public class PrepDirDoctor {
 
         // One snapshot for this whole diagnosis, taken before either planner call below.
         final Ledger ledger = this.ledgerReader.read(prepDirPath);
-        final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
+        final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true),
+                ledger);
         final ShardTally tally = this.shardTallyCalculator.tally(prepDir);
         // Missing-source checking is skipped here too, for the same reason it's skipped below: the
         // shard contract is still incomplete. A montage still missing its shard tells nothing about

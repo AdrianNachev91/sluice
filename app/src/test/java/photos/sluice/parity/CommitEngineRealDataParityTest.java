@@ -86,7 +86,8 @@ class CommitEngineRealDataParityTest {
         throw new IllegalStateException("Could not locate scripts/commit.ps1 above " + startingDirectory);
     }
 
-    private static void runReferenceEngine(final Path repoRoot, final Path rootA) throws IOException, InterruptedException {
+    private static void runReferenceEngine(final Path repoRoot, final Path rootA) throws IOException,
+            InterruptedException {
         try (final Process process = new ProcessBuilder(
                 "powershell.exe", "-NoProfile", "-NonInteractive",
                 "-File", repoRoot.resolve("scripts").resolve("commit.ps1").toString(),
@@ -106,7 +107,8 @@ class CommitEngineRealDataParityTest {
 
     private static CommitEngine commitEngine(final Path root) {
         final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
+                new PathsProperties(root.toString(), root.resolve("Library").toString(),
+                        root.resolve("Inbox").toString()));
         final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
         return new CommitEngine(pathsConfig, new NioMediaStore(), new Sha256Hasher(), hashIndex);
     }

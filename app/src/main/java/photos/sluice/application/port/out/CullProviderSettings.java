@@ -13,5 +13,5 @@ import org.jspecify.annotations.Nullable;
  * app still starts for everyone else.
  */
 public record CullProviderSettings(@Nullable String model, @Nullable String endpoint,
-        @Nullable Boolean thinking, @Nullable Integer maxRetries) {
+                                   @Nullable Boolean thinking, @Nullable Integer maxRetries) {
 }

@@ -119,7 +119,8 @@ public sealed interface Finding {
     record WrongChosenCount(String montage, String group, int chosen) implements Finding {
         @Override
         public String describe() {
-            return this.montage + ": near-dup group '" + this.group + "' has " + this.chosen + " chosen (need exactly 1)";
+            return this.montage + ": near-dup group '" + this.group + "' has " + this.chosen + " chosen (need exactly" +
+                    " 1)";
         }
     }
 

@@ -92,7 +92,8 @@ public class MontageBuilder {
      * @param tileSize int the tile's own image size
      */
     private static void drawCell(
-            final Graphics2D parent, final MontageTile tile, final int x, final int y, final int width, final int height, final int tileSize) {
+            final Graphics2D parent, final MontageTile tile, final int x, final int y, final int width,
+            final int height, final int tileSize) {
         final var cell = (Graphics2D) parent.create(x, y, width, height);
         try {
             cell.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

@@ -285,7 +285,8 @@ class PrepDirDoctorTest {
     }
 
     private static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {
-        new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"), List.of(photos));
+        new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"),
+                List.of(photos));
     }
 
     private static SidecarPhotoEntry sidecarEntry(final Path src) {

@@ -80,7 +80,8 @@ public class CommitEngine implements CommitUseCase {
      * @param cancellation {@link CancellationSignal} checked between files to allow a clean stop
      * @return {@link CommitSummary} summary of what was committed
      */
-    public CommitSummary commit(final CommitScope scope, final ProgressCallback progress, final CancellationSignal cancellation) {
+    public CommitSummary commit(final CommitScope scope, final ProgressCallback progress,
+                                final CancellationSignal cancellation) {
         final Path sorted = this.pathsPort.sorted();
         final Path library = this.pathsPort.library();
         final Map<LibraryBucket, Integer> byBucket = new EnumMap<>(LibraryBucket.class);

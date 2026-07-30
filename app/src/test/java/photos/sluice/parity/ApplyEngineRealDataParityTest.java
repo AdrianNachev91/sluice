@@ -67,7 +67,8 @@ class ApplyEngineRealDataParityTest {
             throws IOException, InterruptedException, ApplyException {
         final String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
         Assumptions.assumeTrue(sourceDirProperty != null && !sourceDirProperty.isBlank(),
-                "sluice.parity.sourceDir must be set to a completed cull-prep directory when sluice.parity.realData=true");
+                "sluice.parity.sourceDir must be set to a completed cull-prep directory when sluice.parity" +
+                        ".realData=true");
         final Path sourceDir = Path.of(sourceDirProperty);
         Assumptions.assumeTrue(Files.isDirectory(sourceDir), "sluice.parity.sourceDir does not exist: " + sourceDir);
         final String leaf = sourceDir.getFileName().toString();
@@ -89,7 +90,8 @@ class ApplyEngineRealDataParityTest {
         applyEngine(rootB).apply(prepDirB, new ApplyOptions(false));
 
         final MoveDiffer differ = new MoveDiffer();
-        assertReviewTreesMatchAccountingForKnownJunkFolderDivergence(differ, rootA.resolve("Review"), rootB.resolve("Review"));
+        assertReviewTreesMatchAccountingForKnownJunkFolderDivergence(differ, rootA.resolve("Review"), rootB.resolve(
+                "Review"));
         assertTreesIdentical(differ, "Duplicates", rootA.resolve("Duplicates"), rootB.resolve("Duplicates"));
         assertTreesIdentical(differ, "Library", rootA.resolve("Library"), rootB.resolve("Library"));
 
@@ -102,7 +104,8 @@ class ApplyEngineRealDataParityTest {
         assertUnreviewableFilesRelocated(sourcePrepDir, sourceRepoRoot, rootB);
     }
 
-    private static void assertTreesIdentical(final MoveDiffer differ, final String label, final Path treeA, final Path treeB) {
+    private static void assertTreesIdentical(final MoveDiffer differ, final String label, final Path treeA,
+                                             final Path treeB) {
         final MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
         assertThat(diff.identical())
                 .as("%s trees diverged (only-in-reference=%s, only-in-Java=%s)", label, diff.onlyInA(), diff.onlyInB())
@@ -138,7 +141,8 @@ class ApplyEngineRealDataParityTest {
     // moved out of Sorted and landed under Unreviewable/<yyyy>/<mm>/. The year/month derivation
     // mirrors CullDestinations.yearMonthOf() exactly, UNDATED fallback included. That keeps this a
     // true assertion against the engine's real behavior, not an assumption that could diverge.
-    private static void assertUnreviewableFilesRelocated(final PrepDir sourcePrepDir, final Path sourceRepoRoot, final Path rootB) {
+    private static void assertUnreviewableFilesRelocated(final PrepDir sourcePrepDir, final Path sourceRepoRoot,
+                                                         final Path rootB) {
         for (final Path sourceFile : sourcePrepDir.unreviewable()) {
             final Path original = rootB.resolve(sourceRepoRoot.relativize(sourceFile));
             assertThat(Files.exists(original)).as("unreviewable file left behind: %s", original).isFalse();
@@ -198,7 +202,8 @@ class ApplyEngineRealDataParityTest {
 
     private static ApplyEngine applyEngine(final Path root) {
         final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
+                new PathsProperties(root.toString(), root.resolve("Library").toString(),
+                        root.resolve("Inbox").toString()));
         final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
         final var mediaStore = new NioMediaStore();
         final var cullPrepPort = new JsonCullPrepStore();

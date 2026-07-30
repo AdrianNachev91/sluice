@@ -116,7 +116,8 @@ class ExternalAgentCuller implements VisionCuller {
                 .map(SidecarPhotoEntry::src)
                 .toList();
         final List<String> categoryNames = this.settings.categories().stream().map(CullCategory::name).toList();
-        final ValidationReport report = this.validator.validate(shards, sidecarSrcs, categoryNames, prep.unreviewable());
+        final ValidationReport report = this.validator.validate(shards, sidecarSrcs, categoryNames,
+                prep.unreviewable());
         report.findings().stream().map(Finding::describe).forEach(problems::add);
 
         if (!problems.isEmpty()) {

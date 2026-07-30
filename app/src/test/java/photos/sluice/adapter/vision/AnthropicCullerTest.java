@@ -162,7 +162,8 @@ class AnthropicCullerTest {
                         """, 100, 10));
 
         final List<String> ticks = new ArrayList<>();
-        this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS, (current, total) -> ticks.add(current + "/" + total));
+        this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS, (current, total) -> ticks.add(current +
+                "/" + total));
 
         assertThat(ticks).containsExactly("1/2", "2/2");
     }
@@ -273,9 +274,11 @@ class AnthropicCullerTest {
                 }
                 """, 1000, 100));
 
-        assertThatThrownBy(() -> this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"),
+                OPTIONS))
                 .isInstanceOf(CullException.class)
-                .hasMessageContaining("file listed both as a decision and as unreviewable: " + this.src("IMG_0001.jpg"));
+                .hasMessageContaining("file listed both as a decision and as unreviewable: " + this.src("IMG_0001" +
+                        ".jpg"));
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 
@@ -635,7 +638,9 @@ class AnthropicCullerTest {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         final var culler = new AnthropicCuller(cullerPrompt(settings(null)), new ShardCodec(),
                 new SidecarReader(), settings(null),
-                () -> { throw new AssertionError("client must not be built without a model"); });
+                () -> {
+                    throw new AssertionError("client must not be built without a model");
+                });
 
         assertThatThrownBy(() -> culler.cull(prep, OPTIONS))
                 .isInstanceOf(IllegalStateException.class)
@@ -743,7 +748,7 @@ class AnthropicCullerTest {
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,
-            CullProviderSettings providerSettings) implements CullSettings {
+                                 CullProviderSettings providerSettings) implements CullSettings {
 
         @Override
         public ExternalAgentSettings externalAgent() {

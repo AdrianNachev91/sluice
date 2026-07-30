@@ -95,9 +95,12 @@ public class Pipeline {
      */
     @Autowired
     public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
-                    final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
-                    final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
-                    final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig, final JobRunner jobRunner,
+                    final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
+                    final ApplyEngine applyEngine,
+                    final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort,
+                    final CullSettings cullSettings,
+                    final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig,
+                    final JobRunner jobRunner,
                     final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
                     final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
@@ -133,7 +136,8 @@ public class Pipeline {
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
              final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
              final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
-             final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig, final JobRunner jobRunner,
+             final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig,
+             final JobRunner jobRunner,
              final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
              final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor, final Duration watchPollInterval) {
         this.sortEngine = sortEngine;

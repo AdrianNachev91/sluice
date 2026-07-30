@@ -157,7 +157,8 @@ class CullMontageRendererTest {
             @TempDir final Path root) throws IOException {
         final var pathsConfig = pathsConfig(root);
         final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
-        final Path oldestCorrupt = writeCorruptFile(juneDir, "oldest-corrupt.jpg", Instant.parse("2019-06-01T00:00:00Z"));
+        final Path oldestCorrupt = writeCorruptFile(juneDir, "oldest-corrupt.jpg", Instant.parse("2019-06-01T00:00" +
+                ":00Z"));
         writePhoto(juneDir, "second-oldest.jpg", Instant.parse("2019-06-02T00:00:00Z"));
         writePhoto(juneDir, "third-oldest.jpg", Instant.parse("2019-06-03T00:00:00Z"));
 

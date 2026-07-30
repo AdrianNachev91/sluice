@@ -29,7 +29,8 @@ class ConfigDirLocatorTest {
 
     @Test
     void linuxUsesXdgConfigHomeWhenSet() {
-        final Path dir = ConfigDirLocator.locate("Linux", Map.of("XDG_CONFIG_HOME", "/home/pat/.config", "HOME", "/home/pat"));
+        final Path dir = ConfigDirLocator.locate("Linux", Map.of("XDG_CONFIG_HOME", "/home/pat/.config", "HOME",
+                "/home/pat"));
         assertThat(dir).isEqualTo(Path.of("/home/pat/.config/sluice"));
     }
 

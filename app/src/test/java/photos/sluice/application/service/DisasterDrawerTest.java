@@ -24,7 +24,8 @@ class DisasterDrawerTest {
         final Path filed = drawer().file(prepDir, source, "move-records-log");
 
         assertThat(filed.getParent()).isEqualTo(prepDir.resolve("disasters"));
-        assertThat(filed.getFileName().toString()).matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}-move-records-log\\.log");
+        assertThat(filed.getFileName().toString()).matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}-move-records" +
+                "-log\\.log");
         assertThat(Files.exists(source)).isFalse();
         assertThat(Files.readString(filed)).isEqualTo("stale content");
     }
@@ -52,7 +53,8 @@ class DisasterDrawerTest {
         final Path written = drawer().write(prepDir, "troubleshoot-report", "line one\nline two");
 
         assertThat(written.getParent()).isEqualTo(prepDir.resolve("disasters"));
-        assertThat(written.getFileName().toString()).matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}-troubleshoot-report\\.txt");
+        assertThat(written.getFileName().toString()).matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}-troubleshoot" +
+                "-report\\.txt");
         assertThat(Files.readAllLines(written)).containsExactly("line one", "line two");
     }
 

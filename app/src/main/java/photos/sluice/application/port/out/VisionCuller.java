@@ -72,7 +72,8 @@ public interface VisionCuller {
      * @param cancellation {@link CancellationSignal} signal checked between montages
      * @return {@link CullReport} a report of what the run did and spent
      */
-    default CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress, final CancellationSignal cancellation)
+    default CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress,
+                            final CancellationSignal cancellation)
             throws CullException {
         return this.cull(prep, opts, progress);
     }

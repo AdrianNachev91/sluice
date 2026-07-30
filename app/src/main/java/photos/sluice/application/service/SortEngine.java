@@ -85,7 +85,8 @@ public class SortEngine implements SortUseCase {
      * @param mediaStore {@link MediaStore} moves, deletes, and inspects files
      */
     public SortEngine(final PathsPort pathsPort, final InboxScannerPort inboxScanner, final DateResolver dateResolver,
-                      final Sha256Port sha256Port, final HashIndexPort hashIndexPort, final ImageDimensionsPort imageDimensionsPort,
+                      final Sha256Port sha256Port, final HashIndexPort hashIndexPort,
+                      final ImageDimensionsPort imageDimensionsPort,
                       final MediaStore mediaStore) {
         this.pathsPort = pathsPort;
         this.inboxScanner = inboxScanner;
@@ -127,7 +128,8 @@ public class SortEngine implements SortUseCase {
      * @param cancellation {@link CancellationSignal} checked to allow a clean early abort
      * @return {@link SortSummary} summary of what was sorted, deduped, and routed
      */
-    public SortSummary sort(final SortScope scope, final ProgressCallback progress, final CancellationSignal cancellation) {
+    public SortSummary sort(final SortScope scope, final ProgressCallback progress,
+                            final CancellationSignal cancellation) {
         // Every scanned file is dated before scope narrows anything, not just the files a caller
         // is about to process. OldestYear and OldestN need to compare dates across the whole
         // Inbox to pick the right subset. Scoping on partial date knowledge would pick the wrong
@@ -188,10 +190,12 @@ public class SortEngine implements SortUseCase {
      *
      * @param actuallyRemoved a {@link List} of {@link MediaFile} files that genuinely left the Inbox this run
      * @param dateByFile a {@link Map} of {@link MediaFile} to {@link DateResult} resolved date for each in-scope file
-     * @param sidecars a {@link Map} of {@link MediaFile} to {@link TakeoutSidecar} sidecar JSON mapped by its owning media file
+     * @param sidecars a {@link Map} of {@link MediaFile} to {@link TakeoutSidecar} sidecar JSON mapped by its owning
+     * media file
      * @return a {@link Set} of {@link Path} paths of the sidecars deleted as consumed
      */
-    private Set<Path> consumeSidecars(final List<MediaFile> actuallyRemoved, final Map<MediaFile, DateResult> dateByFile,
+    private Set<Path> consumeSidecars(final List<MediaFile> actuallyRemoved,
+                                      final Map<MediaFile, DateResult> dateByFile,
                                       final Map<MediaFile, TakeoutSidecar> sidecars) {
         // An "-edited" copy shares its original's sidecar - TakeoutSidecarPairer maps both media
         // files to the same JSON path. So the same path can come up more than once here. Set.add
@@ -230,7 +234,8 @@ public class SortEngine implements SortUseCase {
      * @param actuallyRemoved a {@link List} of {@link MediaFile} files that genuinely left the Inbox this run
      * @param consumedSidecars a {@link Set} of {@link Path} sidecars already deleted as consumed
      */
-    private void sweepOrphanedSidecarsAndEmptyDirectories(final ScanResult scanResult, final List<MediaFile> actuallyRemoved,
+    private void sweepOrphanedSidecarsAndEmptyDirectories(final ScanResult scanResult,
+                                                          final List<MediaFile> actuallyRemoved,
                                                           final Set<Path> consumedSidecars) {
         final Set<Path> removedMediaPaths = actuallyRemoved.stream().map(MediaFile::path).collect(Collectors.toSet());
         final List<Path> remainingMediaPaths = scanResult.media().stream()

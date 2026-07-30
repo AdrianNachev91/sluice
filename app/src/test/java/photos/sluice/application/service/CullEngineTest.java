@@ -77,7 +77,8 @@ class CullEngineTest {
     // for it.
     @Test
     void cullRefusesToRebuildAScopeThatAlreadyHasAWaitingJob(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
@@ -109,7 +110,8 @@ class CullEngineTest {
 
     @Test
     void resumeAppliesOnceAValidShardIsDropped(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -126,7 +128,8 @@ class CullEngineTest {
 
     @Test
     void resumeBracketsTheApplyingPhaseOnTheAppliedPath(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var progress = new RecordingProgressPort();
         final var pipeline = cullPipeline(root, progress);
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
@@ -184,7 +187,8 @@ class CullEngineTest {
     void cullPropagatesAFailureFromAnAutomatedProviderInsteadOfReturningWaiting(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final var progress = new RecordingProgressPort();
-        final var settings = new FixedSettings("anthropic", List.of(new CullCategory("junk", "objectively worthless shots")),
+        final var settings = new FixedSettings("anthropic", List.of(new CullCategory("junk", "objectively worthless " +
+                "shots")),
                 new ExternalAgentSettings(WatchMode.MANUAL, null));
         final var pipeline = cullPipeline(root, progress, settings, List.of(new ThrowingCuller("anthropic")));
 
@@ -365,7 +369,8 @@ class CullEngineTest {
 
     @Test
     void cullInWatchModeAutoResumesOnceAValidShardIsDropped(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
@@ -389,7 +394,8 @@ class CullEngineTest {
     // resume() below runs. This test is only about the manual path disarming it.
     @Test
     void manualResumeDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
@@ -410,7 +416,8 @@ class CullEngineTest {
     // a real app restart.
     @Test
     void armWatchesForExistingWaitingJobsAutoResumesAJobItNeverStartedItself(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var manualPipeline = cullPipeline(root, new RecordingProgressPort());
         final var waiting = (CullJobOutcome.Waiting) manualPipeline.cull(new CullScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
@@ -429,7 +436,8 @@ class CullEngineTest {
     // resume must still work afterward, proving the job itself was never touched by the timeout.
     @Test
     void watchModeGivesUpAfterTimeoutWithoutTouchingTheWaitingJob(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
         final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(Duration.ofMillis(60)),
                 List.of(new ManualModeCuller()), Duration.ofMillis(10));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();

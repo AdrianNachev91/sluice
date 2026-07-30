@@ -110,7 +110,8 @@ class PrepDirRemediesTest {
     // A skip is the remedy for a file that has gone missing. Once that file is back, there is
     // nothing left for the skip to excuse, so the decision applies normally.
     @Test
-    void aSkippedDecisionWhoseFileIsRestoredIsAppliedNormally(@TempDir final Path root) throws IOException, ApplyException {
+    void aSkippedDecisionWhoseFileIsRestoredIsAppliedNormally(@TempDir final Path root) throws IOException,
+            ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path restored = root.resolve("Sorted/Photos/2019/06/a.jpg");
@@ -162,7 +163,8 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.resolveOverlap(prepDir, photo, OverlapResolution.TREAT_AS_UNREVIEWABLE, "the file wasn't actually reviewed");
+        remedies.resolveOverlap(prepDir, photo, OverlapResolution.TREAT_AS_UNREVIEWABLE, "the file wasn't actually " +
+                "reviewed");
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).doesNotContainKey("junk");
@@ -198,9 +200,11 @@ class PrepDirRemediesTest {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         writeIndex(prepDir, 0, List.of());
-        writeShard(prepDir, "montage-001", classificationJson(root.resolve("Sorted/Photos/2019/06/a.jpg"), "junk", "blurry"));
+        writeShard(prepDir, "montage-001", classificationJson(root.resolve("Sorted/Photos/2019/06/a.jpg"), "junk",
+                "blurry"));
 
-        final Path filed = prepDirRemedies(root, libraryRoot).setAsideStrayShard(prepDir, new StrayShard("decisions-001.json"));
+        final Path filed = prepDirRemedies(root, libraryRoot).setAsideStrayShard(prepDir, new StrayShard("decisions" +
+                "-001.json"));
 
         assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isFalse();
         assertThat(Files.exists(filed)).isTrue();
@@ -236,7 +240,8 @@ class PrepDirRemediesTest {
     void rebuildIndexRefusesWhenTheSidecarSequenceHasAGap(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
         writeSidecar(prepDir, "montage-001", sidecarEntry(root.resolve("Sorted/Photos/2019/06/a.jpg")));
-        writeSidecar(prepDir, "montage-003", sidecarEntry(root.resolve("Sorted/Photos/2019/06/c.jpg"))); // montage-002 missing
+        writeSidecar(prepDir, "montage-003", sidecarEntry(root.resolve("Sorted/Photos/2019/06/c.jpg"))); // montage
+        // -002 missing
 
         final Optional<PrepDir> rebuilt = prepDirRemedies(root, root.resolve("Library")).rebuildIndex(prepDir);
 
@@ -266,7 +271,8 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "redo this batch later");
+        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "redo this batch " +
+                "later");
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).isEmpty();
@@ -286,7 +292,8 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY, "trust the culler's own shard");
+        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY, "trust the " +
+                "culler's own shard");
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("junk", 1);
@@ -300,7 +307,8 @@ class PrepDirRemediesTest {
         Files.writeString(prepDir.resolve("montage-001.json"), "not valid json"); // present, but corrupt
 
         prepDirRemedies(root, root.resolve("Library"))
-                .resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "give up on this batch");
+                .resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "give up on this " +
+                        "batch");
 
         assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isFalse();
         final Path drawer = prepDir.resolve("disasters");

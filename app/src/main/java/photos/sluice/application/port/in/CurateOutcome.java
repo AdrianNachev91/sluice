@@ -18,7 +18,7 @@ import photos.sluice.domain.model.SortSummary;
  *
  * @param sortSummary {@link SortSummary} summary of the sort stage
  * @param cullOutcome {@link CullJobOutcome} the resulting cull outcome, or null if the cull stage
- *     never ran
+ * never ran
  */
 public record CurateOutcome(SortSummary sortSummary, @Nullable CullJobOutcome cullOutcome) {
 }

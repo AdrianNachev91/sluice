@@ -46,7 +46,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * Loads every entry from the index file, grouped by hash.
      *
      * @return a {@link Map} of {@link String} to a {@link List} of {@link Path}, grouped by
-     *     their sha256 hash, empty if the index file does not exist
+     * their sha256 hash, empty if the index file does not exist
      */
     @Override
     public Map<String, List<Path>> load() {
@@ -138,7 +138,8 @@ public class CsvLibraryHashIndex implements HashIndexPort {
                 this.writer.newLine();
                 this.writer.flush();
             } catch (final IOException e) {
-                throw new UncheckedIOException("Failed to append to hash index " + CsvLibraryHashIndex.this.indexFile, e);
+                throw new UncheckedIOException("Failed to append to hash index " + CsvLibraryHashIndex.this.indexFile
+                        , e);
             }
         }
 

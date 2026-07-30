@@ -59,7 +59,8 @@ public class ReconcileEngine {
      * @param applyPlanner {@link ApplyPlanner} validates the shard contract before any rebuild
      */
     public ReconcileEngine(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final Sha256Port sha256Port,
-                           final DisasterDrawer disasterDrawer, final CullDestinations cullDestinations, final MoveLedger moveLedger,
+                           final DisasterDrawer disasterDrawer, final CullDestinations cullDestinations,
+                           final MoveLedger moveLedger,
                            final ApplyPlanner applyPlanner) {
         this.mediaStore = mediaStore;
         this.cullPrepPort = cullPrepPort;
@@ -88,7 +89,8 @@ public class ReconcileEngine {
         // filed, a read returns empty and an already-resolved overlap would wrongly revert to
         // unresolved here.
         final Ledger ledger = this.moveLedger.read(prepDirPath);
-        final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
+        final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true),
+                ledger);
         if (!validation.valid()) {
             throw ApplyPlanner.failure(validation.findings());
         }

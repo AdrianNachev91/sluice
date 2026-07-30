@@ -243,7 +243,8 @@ class TileRendererTest {
             "640, false",
             "639, true"
     })
-    void aSourceAtTheJudgeableBoundary(final int dimension, final boolean expectedUnreviewable, @TempDir final Path tempDir)
+    void aSourceAtTheJudgeableBoundary(final int dimension, final boolean expectedUnreviewable,
+                                       @TempDir final Path tempDir)
             throws IOException {
         final Path file = tempDir.resolve("boundary.jpg");
         writeJpeg(file, dimension, dimension);

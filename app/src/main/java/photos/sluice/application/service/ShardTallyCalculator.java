@@ -107,14 +107,16 @@ final class ShardTallyCalculator {
      * @param categories a {@link List} of {@link String} the configured cull category names
      * @return {@link MontageShardStatus} the montage's presence and validity
      */
-    private MontageShardStatus montageShardStatus(final PrepDir prep, final String montage, final List<Path> sidecarSrcs,
+    private MontageShardStatus montageShardStatus(final PrepDir prep, final String montage,
+                                                  final List<Path> sidecarSrcs,
                                                   final List<String> categories) {
         if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
             return new MontageShardStatus(false, false);
         }
         try {
             final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage));
-            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, categories, prep.unreviewable());
+            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, categories,
+                    prep.unreviewable());
             return new MontageShardStatus(true, report.valid());
         } catch (final UncheckedIOException e) {
             // Present but unparseable, so not valid.
