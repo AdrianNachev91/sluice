@@ -65,13 +65,13 @@ class AnthropicCullerTest {
 
     @Test
     void reservesTheAnthropicProviderId() {
-        assertThat(culler().id()).isEqualTo("anthropic");
+        assertThat(this.culler().id()).isEqualTo("anthropic");
     }
 
     @Test
     void writesAValidatedShardAndReportsTokenTotals() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg", "IMG_0003.jpg", "IMG_0004.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg", "IMG_0003.jpg", "IMG_0004.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "keep" },
@@ -84,21 +84,21 @@ class AnthropicCullerTest {
                 }
                 """, 1200, 340));
 
-        final CullReport report = culler().cull(prep, OPTIONS);
+        final CullReport report = this.culler().cull(prep, OPTIONS);
 
-        final DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.montage()).isEqualTo("montage-001");
         assertThat(shard.decisions()).containsExactly(
-                new Classification(src("IMG_0002.jpg"), "junk", "photo of a screen"),
-                new NearDupChosen(src("IMG_0003.jpg"), "beach", "sharpest of the burst"),
-                new NearDupReject(src("IMG_0004.jpg"), "beach", "blurrier than IMG_0003.jpg"));
+                new Classification(this.src("IMG_0002.jpg"), "junk", "photo of a screen"),
+                new NearDupChosen(this.src("IMG_0003.jpg"), "beach", "sharpest of the burst"),
+                new NearDupReject(this.src("IMG_0004.jpg"), "beach", "blurrier than IMG_0003.jpg"));
         assertThat(report).isEqualTo(new CullReport(1, 0, 1200, 340));
     }
 
     @Test
     void anAllKeepsResponseWritesAnEmptyShardMarkingTheMontageReviewed() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "keep" },
@@ -107,17 +107,17 @@ class AnthropicCullerTest {
                 }
                 """, 800, 90));
 
-        culler().cull(prep, OPTIONS);
+        this.culler().cull(prep, OPTIONS);
 
-        final DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.decisions()).isEmpty();
     }
 
     @Test
     void cullsEveryMontageSumsTokensAndClosesTheClient() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg");
-        writeMontage("montage-002", "IMG_0002.jpg");
-        respondWith(
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(
                 response("""
                         {
                           "verdicts": [
@@ -133,19 +133,19 @@ class AnthropicCullerTest {
                         }
                         """, 1100, 40));
 
-        final CullReport report = culler().cull(prep("montage-001", "montage-002"), OPTIONS);
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
 
-        assertThat(prepDir.resolve("decisions-001.json")).exists();
-        assertThat(prepDir.resolve("decisions-002.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
         assertThat(report).isEqualTo(new CullReport(2, 0, 2100, 140));
-        verify(client).close();
+        verify(this.client).close();
     }
 
     @Test
     void progressCallbackTicksOnceForEachMontageAgainstTheFinalMontageCount() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg");
-        writeMontage("montage-002", "IMG_0002.jpg");
-        respondWith(
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(
                 response("""
                         {
                           "verdicts": [
@@ -162,17 +162,17 @@ class AnthropicCullerTest {
                         """, 100, 10));
 
         final List<String> ticks = new ArrayList<>();
-        culler().cull(prep("montage-001", "montage-002"), OPTIONS, (current, total) -> ticks.add(current + "/" + total));
+        this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS, (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
     @Test
     void cancellationStopsTheLoopLeavingAlreadyWrittenShardsAndAPartialReport() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg");
-        writeMontage("montage-002", "IMG_0002.jpg");
-        writeMontage("montage-003", "IMG_0003.jpg");
-        respondWith(response("""
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
@@ -185,23 +185,23 @@ class AnthropicCullerTest {
         final var cancelled = new AtomicBoolean(false);
         final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
 
-        final CullReport report = culler().cull(
-                prep("montage-001", "montage-002", "montage-003"), OPTIONS, cancelAfterFirstTick, cancelled::get);
+        final CullReport report = this.culler().cull(
+                this.prep("montage-001", "montage-002", "montage-003"), OPTIONS, cancelAfterFirstTick, cancelled::get);
 
         assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
-        assertThat(prepDir.resolve("decisions-001.json")).exists();
-        assertThat(prepDir.resolve("decisions-002.json")).doesNotExist();
-        assertThat(prepDir.resolve("decisions-003.json")).doesNotExist();
-        verify(messages, times(1)).create(any(MessageCreateParams.class));
-        verify(client).close();
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(this.prepDir.resolve("decisions-003.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        verify(this.client).close();
     }
 
     // The second, pre-retry check is what actually saves the latency. Without it, a cancellation
     // landing here would still have to wait out a whole extra API round trip before it takes effect.
     @Test
     void cancellationAfterAFailedFirstAttemptSkipsTheRetryAndWritesNothing() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "WRONG.jpg", "action": "keep" }
@@ -215,21 +215,21 @@ class AnthropicCullerTest {
         final var polls = new AtomicInteger();
         final CancellationSignal cancelBeforeRetry = () -> polls.incrementAndGet() > 1;
 
-        final CullReport report = culler().cull(prep, OPTIONS, ProgressCallback.NO_OP, cancelBeforeRetry);
+        final CullReport report = this.culler().cull(prep, OPTIONS, ProgressCallback.NO_OP, cancelBeforeRetry);
 
         // The failed first attempt's tokens still count - that call already cost real money.
         assertThat(report).isEqualTo(new CullReport(0, 0, 100, 10));
-        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
-        verify(messages, times(1)).create(any(MessageCreateParams.class));
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
     }
 
     // A stateless call cannot remember the slugs earlier montages picked, so the accumulated
     // cross-shard validation is what enforces group-id uniqueness across the run.
     @Test
     void failsLoudWhenTwoMontagesReuseANearDupGroupId() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
-        writeMontage("montage-002", "IMG_0003.jpg", "IMG_0004.jpg");
-        respondWith(
+        this.writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
+        this.writeMontage("montage-002", "IMG_0003.jpg", "IMG_0004.jpg");
+        this.respondWith(
                 response("""
                         {
                           "verdicts": [
@@ -251,12 +251,12 @@ class AnthropicCullerTest {
                         }
                         """, 1000, 100));
 
-        assertThatThrownBy(() -> culler().cull(prep("montage-001", "montage-002"), OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("montage-002")
                 .hasMessageContaining("near-dup group 'beach' spans 2 shards");
-        assertThat(prepDir.resolve("decisions-001.json")).exists();
-        assertThat(prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
     }
 
     // index.json's unreviewable list has no shard of its own, but ApplyEngine moves it exactly like
@@ -264,8 +264,8 @@ class AnthropicCullerTest {
     // problem two shards reusing a group id would cause. Caught here, at cull time, not just later.
     @Test
     void failsLoudWhenAFileIsListedBothAsADecisionAndInTheUnreviewableList() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg");
-        respondWith(response("""
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
@@ -273,16 +273,16 @@ class AnthropicCullerTest {
                 }
                 """, 1000, 100));
 
-        assertThatThrownBy(() -> culler().cull(prep(List.of(src("IMG_0001.jpg")), "montage-001"), OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS))
                 .isInstanceOf(CullException.class)
-                .hasMessageContaining("file listed both as a decision and as unreviewable: " + src("IMG_0001.jpg"));
-        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+                .hasMessageContaining("file listed both as a decision and as unreviewable: " + this.src("IMG_0001.jpg"));
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 
     @Test
     void retriesOnceWithTheProblemListWhenTheFirstResponseFailsValidation() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(
                 response("""
                         {
                           "verdicts": [
@@ -298,15 +298,15 @@ class AnthropicCullerTest {
                         }
                         """, 120, 30));
 
-        final CullReport report = culler().cull(prep, OPTIONS);
+        final CullReport report = this.culler().cull(prep, OPTIONS);
 
-        final DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.decisions()).containsExactly(
-                new Classification(src("IMG_0001.jpg"), "junk", "screenshot"));
+                new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
         // Both attempts' tokens count: the failed first call cost real money too.
         assertThat(report).isEqualTo(new CullReport(1, 0, 220, 40));
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        verify(messages, times(2)).create(captor.capture());
+        verify(this.messages, times(2)).create(captor.capture());
         final MessageCreateParams retry = captor.getAllValues().getLast();
         assertThat(retry.messages()).hasSize(3);
         assertThat(retry.messages().get(1).role()).isEqualTo(MessageParam.Role.ASSISTANT);
@@ -322,8 +322,8 @@ class AnthropicCullerTest {
     // montage twice stops burning tokens right there.
     @Test
     void failsAfterOneRetryAggregatingBothAttemptsProblems() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "WRONG.jpg", "action": "keep" }
@@ -331,23 +331,23 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        assertThatThrownBy(() -> culler().cull(prep, OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("a corrective retry did not fix it")
                 .hasMessageContaining("First attempt (1 problem(s))")
                 .hasMessageContaining("Retry (1 problem(s))");
-        verify(messages, times(2))
+        verify(this.messages, times(2))
                 .create(any(MessageCreateParams.class));
-        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 
     // A failed attempt must roll its tentative shard back out of the accepted set. Poisoned
     // leftovers would surface as phantom problems when a later montage is validated.
     @Test
     void aFailedFirstAttemptLeavesTheAcceptedSetCleanForLaterMontages() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg");
-        writeMontage("montage-002", "IMG_0002.jpg");
-        respondWith(
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(
                 response("""
                         {
                           "verdicts": [
@@ -370,20 +370,20 @@ class AnthropicCullerTest {
                         }
                         """, 200, 20));
 
-        final CullReport report = culler().cull(prep("montage-001", "montage-002"), OPTIONS);
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
 
-        assertThat(new ShardCodec().read(prepDir.resolve("decisions-001.json")).decisions())
-                .containsExactly(new Classification(src("IMG_0001.jpg"), "junk", "blurry"));
-        assertThat(new ShardCodec().read(prepDir.resolve("decisions-002.json")).decisions())
-                .containsExactly(new Classification(src("IMG_0002.jpg"), "junk", "screenshot"));
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
+                .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "blurry"));
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-002.json")).decisions())
+                .containsExactly(new Classification(this.src("IMG_0002.jpg"), "junk", "screenshot"));
         assertThat(report).isEqualTo(new CullReport(2, 0, 420, 60));
     }
 
     // The API rejects empty text blocks, so a blank reply cannot be echoed verbatim on retry.
     @Test
     void aBlankResponseRetriesWithAPlaceholderEcho() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(
                 response("", 100, 10),
                 response("""
                         {
@@ -393,12 +393,12 @@ class AnthropicCullerTest {
                         }
                         """, 120, 30));
 
-        final CullReport report = culler().cull(prep, OPTIONS);
+        final CullReport report = this.culler().cull(prep, OPTIONS);
 
-        assertThat(new ShardCodec().read(prepDir.resolve("decisions-001.json")).decisions()).isEmpty();
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions()).isEmpty();
         assertThat(report).isEqualTo(new CullReport(1, 0, 220, 40));
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        verify(messages, times(2)).create(captor.capture());
+        verify(this.messages, times(2)).create(captor.capture());
         final MessageCreateParams retry = captor.getAllValues().getLast();
         assertThat(retry.messages().get(1).content().string().orElseThrow()).isEqualTo("(empty response)");
         assertThat(retry.messages().get(2).content().string().orElseThrow())
@@ -407,11 +407,11 @@ class AnthropicCullerTest {
 
     @Test
     void resumesAMontageWhoseValidShardAlreadyExists() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg");
-        writeMontage("montage-002", "IMG_0002.jpg");
-        new ShardCodec().write(prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
-                List.of(new Classification(src("IMG_0001.jpg"), "junk", "photo of a screen"))));
-        respondWith(response("""
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", "photo of a screen"))));
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0002.jpg", "action": "keep" }
@@ -419,11 +419,11 @@ class AnthropicCullerTest {
                 }
                 """, 500, 50));
 
-        final CullReport report = culler().cull(prep("montage-001", "montage-002"), OPTIONS);
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
 
         assertThat(report).isEqualTo(new CullReport(1, 1, 500, 50));
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        verify(messages).create(captor.capture());
+        verify(this.messages).create(captor.capture());
         // The one request that went out is montage-002's, still numbered 2 of 2: a skip does not
         // renumber the sheets that follow it.
         assertThat(captor.getValue().messages().getFirst().content().blockParams().orElseThrow()
@@ -432,9 +432,9 @@ class AnthropicCullerTest {
 
     @Test
     void reCullsAMontageWhoseExistingShardIsUnreadable() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        Files.writeString(prepDir.resolve("decisions-001.json"), "not a shard at all");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        Files.writeString(this.prepDir.resolve("decisions-001.json"), "not a shard at all");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
@@ -442,21 +442,21 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        final CullReport report = culler().cull(prep, OPTIONS);
+        final CullReport report = this.culler().cull(prep, OPTIONS);
 
         assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
-        final DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.decisions()).containsExactly(
-                new Classification(src("IMG_0001.jpg"), "junk", "screenshot"));
+                new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
     }
 
     @Test
     void reCullsAMontageWhoseExistingShardBreaksTheContract() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         // Parseable, but a blank reason breaks the shard contract - resume must decline it.
-        new ShardCodec().write(prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
-                List.of(new Classification(src("IMG_0001.jpg"), "junk", ""))));
-        respondWith(response("""
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", ""))));
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "screenshot" }
@@ -464,24 +464,24 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        final CullReport report = culler().cull(prep, OPTIONS);
+        final CullReport report = this.culler().cull(prep, OPTIONS);
 
         assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
-        final DecisionShard shard = new ShardCodec().read(prepDir.resolve("decisions-001.json"));
+        final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.decisions()).containsExactly(
-                new Classification(src("IMG_0001.jpg"), "junk", "screenshot"));
+                new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
     }
 
     // A resumed shard joins the accumulated set, so the cross-shard rules keep firing across the
     // resume boundary. A later montage cannot reuse a group id an earlier run's shard claimed.
     @Test
     void aResumedShardStillBlocksALaterGroupIdReuse() throws Exception {
-        writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
-        writeMontage("montage-002", "IMG_0003.jpg", "IMG_0004.jpg");
-        new ShardCodec().write(prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
-                List.of(new NearDupChosen(src("IMG_0001.jpg"), "beach", "sharpest"),
-                        new NearDupReject(src("IMG_0002.jpg"), "beach", "blurrier"))));
-        respondWith(response("""
+        this.writeMontage("montage-001", "IMG_0001.jpg", "IMG_0002.jpg");
+        this.writeMontage("montage-002", "IMG_0003.jpg", "IMG_0004.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new NearDupChosen(this.src("IMG_0001.jpg"), "beach", "sharpest"),
+                        new NearDupReject(this.src("IMG_0002.jpg"), "beach", "blurrier"))));
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0003.jpg", "action": "near-dup-chosen", "group": "beach",
@@ -492,7 +492,7 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        assertThatThrownBy(() -> culler().cull(prep("montage-001", "montage-002"), OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("montage-002")
                 .hasMessageContaining("near-dup group 'beach' spans 2 shards");
@@ -500,8 +500,8 @@ class AnthropicCullerTest {
 
     @Test
     void thinkingIsExplicitlyDisabledByDefault() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
@@ -509,18 +509,18 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        culler().cull(prep, OPTIONS);
+        this.culler().cull(prep, OPTIONS);
 
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        verify(messages).create(captor.capture());
+        verify(this.messages).create(captor.capture());
         assertThat(captor.getValue().thinking().orElseThrow().isDisabled()).isTrue();
         assertThat(captor.getValue().maxTokens()).isEqualTo(8192);
     }
 
     @Test
     void configuredThinkingSendsAdaptiveWithAHigherTokenCeiling() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
@@ -528,18 +528,18 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        culler(settingsWithThinking()).cull(prep, OPTIONS);
+        this.culler(settingsWithThinking()).cull(prep, OPTIONS);
 
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        verify(messages).create(captor.capture());
+        verify(this.messages).create(captor.capture());
         assertThat(captor.getValue().thinking().orElseThrow().isAdaptive()).isTrue();
         assertThat(captor.getValue().maxTokens()).isEqualTo(16384);
     }
 
     @Test
     void sendsSystemPromptMontageImageAndPhotoTable() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
@@ -547,10 +547,10 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        culler().cull(prep, OPTIONS);
+        this.culler().cull(prep, OPTIONS);
 
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        verify(messages).create(captor.capture());
+        verify(this.messages).create(captor.capture());
         final MessageCreateParams request = captor.getValue();
         assertThat(request.model().asString()).isEqualTo("claude-sonnet-5");
         assertThat(request.system().orElseThrow().string().orElseThrow())
@@ -561,7 +561,7 @@ class AnthropicCullerTest {
         final String imageData = blocks.getFirst().image().orElseThrow()
                 .source().base64().orElseThrow().data();
         assertThat(imageData).isEqualTo(
-                Base64.getEncoder().encodeToString(Files.readAllBytes(prepDir.resolve("montage-001.jpg"))));
+                Base64.getEncoder().encodeToString(Files.readAllBytes(this.prepDir.resolve("montage-001.jpg"))));
         assertThat(blocks.getLast().text().orElseThrow().text())
                 .contains("Scope: 2019-06")
                 .contains("1. IMG_0001.jpg");
@@ -570,8 +570,8 @@ class AnthropicCullerTest {
 
     @Test
     void failsLoudWhenAVerdictNamesTheWrongPhoto() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "WRONG.jpg", "action": "keep" }
@@ -579,16 +579,16 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        assertThatThrownBy(() -> culler().cull(prep, OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("verdict 1 names 'WRONG.jpg' but photo 1 is 'IMG_0001.jpg'");
-        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 
     @Test
     void failsLoudWhenAVerdictIsMissing() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
@@ -596,16 +596,16 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        assertThatThrownBy(() -> culler().cull(prep, OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("no verdict for photo 2 (IMG_0002.jpg)");
-        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 
     @Test
     void failsLoudWhenAnActionIsNotAConfiguredCategory() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("""
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("""
                 {
                   "verdicts": [
                     { "index": 1, "name": "IMG_0001.jpg", "action": "trash", "reason": "blurry" }
@@ -613,18 +613,18 @@ class AnthropicCullerTest {
                 }
                 """, 100, 10));
 
-        assertThatThrownBy(() -> culler().cull(prep, OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("invalid action 'trash'");
-        assertThat(prepDir.resolve("decisions-001.json")).doesNotExist();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 
     @Test
     void failsLoudWhenTheResponseIsNotTheVerdictJson() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
-        respondWith(response("not json at all", 100, 10));
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(response("not json at all", 100, 10));
 
-        assertThatThrownBy(() -> culler().cull(prep, OPTIONS))
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("montage-001")
                 .hasMessageContaining("not valid verdict JSON");
@@ -632,7 +632,7 @@ class AnthropicCullerTest {
 
     @Test
     void failsLoudWhenTheModelIsNotConfigured() throws Exception {
-        final PrepDir prep = prepWithOneMontage("IMG_0001.jpg");
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         final var culler = new AnthropicCuller(cullerPrompt(settings(null)), new ShardCodec(),
                 new SidecarReader(), settings(null),
                 () -> { throw new AssertionError("client must not be built without a model"); });
@@ -643,17 +643,17 @@ class AnthropicCullerTest {
     }
 
     private AnthropicCuller culler() {
-        return culler(settings("claude-sonnet-5"));
+        return this.culler(settings("claude-sonnet-5"));
     }
 
     private AnthropicCuller culler(final CullSettings settings) {
-        when(client.messages()).thenReturn(messages);
+        when(this.client.messages()).thenReturn(this.messages);
         return new AnthropicCuller(cullerPrompt(settings), new ShardCodec(), new SidecarReader(),
-                settings, () -> client);
+                settings, () -> this.client);
     }
 
     private void respondWith(final Message first, final Message... rest) {
-        when(messages.create(any(MessageCreateParams.class))).thenReturn(first, rest);
+        when(this.messages.create(any(MessageCreateParams.class))).thenReturn(first, rest);
     }
 
     private static Message response(final String json, final long inputTokens, final long outputTokens) {
@@ -686,8 +686,8 @@ class AnthropicCullerTest {
     }
 
     private PrepDir prepWithOneMontage(final String... names) throws IOException {
-        writeMontage("montage-001", names);
-        return prep("montage-001");
+        this.writeMontage("montage-001", names);
+        return this.prep("montage-001");
     }
 
     // One montage whose sidecar lists the given photos, plus its montage JPEG (any bytes do: the
@@ -700,28 +700,28 @@ class AnthropicCullerTest {
             }
             photos.append("""
                     { "src": "%s", "name": "%s", "time": "2019-06-20T15:00:10Z", "received": false }"""
-                    .formatted(jsonEscaped(src(name)), name));
+                    .formatted(jsonEscaped(this.src(name)), name));
         }
-        Files.writeString(prepDir.resolve(montage + ".json"), """
+        Files.writeString(this.prepDir.resolve(montage + ".json"), """
                 {
                   "montage": "%s",
                   "photos": [ %s ]
                 }
                 """.formatted(montage, photos));
-        Files.write(prepDir.resolve(montage + ".jpg"), new byte[] {1, 2, 3, 4});
+        Files.write(this.prepDir.resolve(montage + ".jpg"), new byte[] {1, 2, 3, 4});
     }
 
     private PrepDir prep(final String... montages) {
-        return prep(List.of(), montages);
+        return this.prep(List.of(), montages);
     }
 
     private PrepDir prep(final List<Path> unreviewable, final String... montages) {
-        return new PrepDir("2019-06", prepDir.resolve("base"), 0, unreviewable, montages.length,
-                prepDir, List.of(montages));
+        return new PrepDir("2019-06", this.prepDir.resolve("base"), 0, unreviewable, montages.length,
+                this.prepDir, List.of(montages));
     }
 
     private Path src(final String name) {
-        return prepDir.resolve("sorted").resolve(name);
+        return this.prepDir.resolve("sorted").resolve(name);
     }
 
     private static String jsonEscaped(final Path path) {

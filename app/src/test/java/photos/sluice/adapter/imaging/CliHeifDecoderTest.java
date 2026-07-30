@@ -23,7 +23,7 @@ class CliHeifDecoderTest {
     // not just that a process gets launched.
     @Test
     void decodesARealHeicFixtureToItsFullResolution() {
-        final Optional<BufferedImage> result = decoder.decode(FIXTURES.resolve("dating/iphone-exif.heic"));
+        final Optional<BufferedImage> result = this.decoder.decode(FIXTURES.resolve("dating/iphone-exif.heic"));
 
         assertThat(result).isPresent();
         assertThat(result.get().getWidth()).isEqualTo(4032);
@@ -35,7 +35,7 @@ class CliHeifDecoderTest {
     // the HEVC fixture above. Dimensions cross-checked with `magick identify` (1600x1063).
     @Test
     void decodesARealAvifFixtureToItsFullResolution() {
-        final Optional<BufferedImage> result = decoder.decode(FIXTURES.resolve("cull/arctic-sky.avif"));
+        final Optional<BufferedImage> result = this.decoder.decode(FIXTURES.resolve("cull/arctic-sky.avif"));
 
         assertThat(result).isPresent();
         assertThat(result.get().getWidth()).isEqualTo(1600);
@@ -64,7 +64,7 @@ class CliHeifDecoderTest {
         final Path file = tempDir.resolve("garbage.heic");
         Files.writeString(file, "not a real heic file", StandardCharsets.US_ASCII);
 
-        final Optional<BufferedImage> result = decoder.decode(file);
+        final Optional<BufferedImage> result = this.decoder.decode(file);
 
         assertThat(result).isEmpty();
     }

@@ -92,7 +92,7 @@ class ShardCodec {
                 shard.montage(),
                 shard.decisions().stream().map(ShardCodec::toRaw).toList());
         try (final var output = Files.newOutputStream(shardPath)) {
-            mapper.writeValue(output, document);
+            this.mapper.writeValue(output, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write shard " + shardPath, e);
         } catch (final JacksonException e) {
@@ -109,7 +109,7 @@ class ShardCodec {
     public DecisionShard read(final Path shardPath) {
         final RawShard raw;
         try (final var input = Files.newInputStream(shardPath)) {
-            raw = mapper.readValue(input, RawShard.class);
+            raw = this.mapper.readValue(input, RawShard.class);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read shard " + shardPath, e);
         } catch (final JacksonException e) {

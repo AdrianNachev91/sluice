@@ -83,26 +83,26 @@ public class ReconcileEngine {
      * @throws ApplyException if the shard contract itself does not validate cleanly
      */
     public ReconcileReport reconcile(final Path prepDirPath) throws ApplyException {
-        final PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
+        final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
         // Snapshot taken before the ledger gets filed away below - see Ledger's own Javadoc. Once
         // filed, a read returns empty and an already-resolved overlap would wrongly revert to
         // unresolved here.
-        final Ledger ledger = moveLedger.read(prepDirPath);
-        final ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
+        final Ledger ledger = this.moveLedger.read(prepDirPath);
+        final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
         if (!validation.valid()) {
             throw ApplyPlanner.failure(validation.findings());
         }
-        final List<Path> unreviewableFiles = applyPlanner.resolvedUnreviewable(prepDir, ledger);
+        final List<Path> unreviewableFiles = this.applyPlanner.resolvedUnreviewable(prepDir, ledger);
 
         final Path moveRecordLog = ledger.log();
-        if (mediaStore.exists(moveRecordLog)) {
-            disasterDrawer.file(prepDirPath, moveRecordLog, "move-records-log");
+        if (this.mediaStore.exists(moveRecordLog)) {
+            this.disasterDrawer.file(prepDirPath, moveRecordLog, "move-records-log");
         }
 
         final var sweep = new ReconcileSweep(prepDirPath, moveRecordLog);
-        validation.decisions().forEach(decision -> reconcileDecision(decision, sweep));
-        unreviewableFiles.forEach(file -> reconcileFile(file, cullDestinations.unreviewableDir(file), sweep));
-        resolvePendingMoves(sweep);
+        validation.decisions().forEach(decision -> this.reconcileDecision(decision, sweep));
+        unreviewableFiles.forEach(file -> this.reconcileFile(file, this.cullDestinations.unreviewableDir(file), sweep));
+        this.resolvePendingMoves(sweep);
 
         return new ReconcileReport(sweep.reconstructed, sweep.stillPending, sweep.missingSource);
     }
@@ -118,14 +118,14 @@ public class ReconcileEngine {
      */
     private void reconcileDecision(final Decision decision, final ReconcileSweep sweep) {
         if (decision instanceof NearDupChosen) {
-            if (mediaStore.exists(decision.file())) {
+            if (this.mediaStore.exists(decision.file())) {
                 sweep.stillPending++;
             } else {
                 sweep.missingSource.add(new Finding.MissingSource(decision.file(), sweep.moveRecordLog));
             }
             return;
         }
-        reconcileFile(decision.file(), cullDestinations.destinationDirFor(decision), sweep);
+        this.reconcileFile(decision.file(), this.cullDestinations.destinationDirFor(decision), sweep);
     }
 
     /**
@@ -138,7 +138,7 @@ public class ReconcileEngine {
      * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
      */
     private void reconcileFile(final Path file, final Path destDir, final ReconcileSweep sweep) {
-        if (mediaStore.exists(file)) {
+        if (this.mediaStore.exists(file)) {
             sweep.stillPending++;
             return;
         }
@@ -170,7 +170,7 @@ public class ReconcileEngine {
             final String key = move.destDir() + MoveLedger.RECORD_DELIMITER + move.file().getFileName();
             groups.computeIfAbsent(key, _ -> new ArrayList<>()).add(move);
         }
-        groups.values().forEach(claimants -> resolveGroup(claimants, sweep));
+        groups.values().forEach(claimants -> this.resolveGroup(claimants, sweep));
     }
 
     /**
@@ -182,7 +182,7 @@ public class ReconcileEngine {
      */
     private void resolveGroup(final List<PendingMove> claimants, final ReconcileSweep sweep) {
         final PendingMove first = claimants.getFirst();
-        final List<Path> candidates = contiguousCandidates(first.destDir(), first.file().getFileName().toString());
+        final List<Path> candidates = this.contiguousCandidates(first.destDir(), first.file().getFileName().toString());
         if (candidates.size() != claimants.size()) {
             claimants.forEach(claimant ->
                     sweep.missingSource.add(new Finding.MissingSource(claimant.file(), sweep.moveRecordLog)));
@@ -191,7 +191,7 @@ public class ReconcileEngine {
         for (int i = 0; i < claimants.size(); i++) {
             final Path file = claimants.get(i).file();
             final Path located = candidates.get(i);
-            moveLedger.recordReconstructed(sweep.prepDirPath, file, located, sha256Port.hash(located));
+            this.moveLedger.recordReconstructed(sweep.prepDirPath, file, located, this.sha256Port.hash(located));
             sweep.reconstructed++;
         }
     }
@@ -209,7 +209,7 @@ public class ReconcileEngine {
         final var candidates = new ArrayList<Path>();
         int slot = 1;
         Path candidate = destDir.resolve(CullDestinations.candidateName(baseName, slot));
-        while (mediaStore.exists(candidate)) {
+        while (this.mediaStore.exists(candidate)) {
             candidates.add(candidate);
             slot++;
             candidate = destDir.resolve(CullDestinations.candidateName(baseName, slot));

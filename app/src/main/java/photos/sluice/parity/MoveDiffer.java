@@ -31,7 +31,7 @@ public final class MoveDiffer {
          * @return boolean true if there are no differences on either side
          */
         public boolean identical() {
-            return onlyInA.isEmpty() && onlyInB.isEmpty();
+            return this.onlyInA.isEmpty() && this.onlyInB.isEmpty();
         }
     }
 
@@ -64,7 +64,7 @@ public final class MoveDiffer {
      * @return {@link Diff} the set-diff between the two trees
      */
     public Diff diffTrees(final Path rootA, final Path rootB) {
-        return diff(relativeFilePaths(rootA), relativeFilePaths(rootB));
+        return this.diff(this.relativeFilePaths(rootA), this.relativeFilePaths(rootB));
     }
 
     /**

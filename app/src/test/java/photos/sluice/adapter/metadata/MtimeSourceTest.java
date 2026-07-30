@@ -24,7 +24,7 @@ class MtimeSourceTest {
         final LocalDateTime modifiedAt = LocalDateTime.of(2019, 6, 20, 8, 0, 0);
         Files.setLastModifiedTime(file, FileTime.from(modifiedAt.atZone(ZoneId.systemDefault()).toInstant()));
 
-        final Optional<LocalDateTime> result = source.resolve(new MediaFile(file), null);
+        final Optional<LocalDateTime> result = this.source.resolve(new MediaFile(file), null);
 
         assertThat(result).contains(modifiedAt);
     }
@@ -33,7 +33,7 @@ class MtimeSourceTest {
     void returnsEmptyWhenFileDoesNotExist() {
         final var file = new MediaFile(Path.of("does-not-exist.jpg"));
 
-        final Optional<LocalDateTime> result = source.resolve(file, null);
+        final Optional<LocalDateTime> result = this.source.resolve(file, null);
 
         assertThat(result).isEmpty();
     }

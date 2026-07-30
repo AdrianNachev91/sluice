@@ -48,8 +48,8 @@ public class RescueDateResolver {
      */
     public Optional<LocalDateTime> resolve(final MediaFile file, final String targetLeaf) {
         return folderDate(targetLeaf)
-                .or(() -> exifSource.resolve(file, null))
-                .or(() -> filenameSource.resolve(file, null))
+                .or(() -> this.exifSource.resolve(file, null))
+                .or(() -> this.filenameSource.resolve(file, null))
                 .filter(DatePlausibility::isPlausible);
     }
 

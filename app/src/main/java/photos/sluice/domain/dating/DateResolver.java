@@ -47,10 +47,10 @@ public class DateResolver {
      * @return {@link DateResult} the resolved date, confidence, and source
      */
     public DateResult resolve(final MediaFile file, final TakeoutSidecar sidecar) {
-        final DateResult result = tryResolve(sidecarSource, "sidecar", Confidence.TRUSTED, file, sidecar)
-                .or(() -> tryResolve(exifSource, "exif", Confidence.TRUSTED, file, sidecar))
-                .or(() -> tryResolve(filenameSource, "filename", Confidence.TRUSTED, file, sidecar))
-                .or(() -> tryResolve(mtimeSource, "mtime", Confidence.LOW, file, sidecar))
+        final DateResult result = tryResolve(this.sidecarSource, "sidecar", Confidence.TRUSTED, file, sidecar)
+                .or(() -> tryResolve(this.exifSource, "exif", Confidence.TRUSTED, file, sidecar))
+                .or(() -> tryResolve(this.filenameSource, "filename", Confidence.TRUSTED, file, sidecar))
+                .or(() -> tryResolve(this.mtimeSource, "mtime", Confidence.LOW, file, sidecar))
                 // Every source failing (e.g. the file vanished mid-scan) still needs a DateResult:
                 // the caller routes on the confidence marker, not on this placeholder date.
                 .orElseGet(() -> new DateResult(LocalDateTime.now(), Confidence.UNSORTABLE, "none"));

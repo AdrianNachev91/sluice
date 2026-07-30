@@ -18,7 +18,7 @@ class CullConfigTest {
 
     @Test
     void bundledDefaultProviderIsExternalAgent() {
-        runner.run(context -> {
+        this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.provider()).isEqualTo("external-agent");
             // With sluice.cull.provider-settings.* absent, the settings object still exists (the
@@ -32,7 +32,7 @@ class CullConfigTest {
 
     @Test
     void explicitPropertyOverridesProvider() {
-        runner.withPropertyValues("sluice.cull.provider=anthropic")
+        this.runner.withPropertyValues("sluice.cull.provider=anthropic")
                 .run(context -> {
                     final CullConfig config = context.getBean(CullConfig.class);
                     assertThat(config.provider()).isEqualTo("anthropic");
@@ -41,7 +41,7 @@ class CullConfigTest {
 
     @Test
     void bundledDefaultCategoriesAreTheStandardFourCards() {
-        runner.run(context -> {
+        this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories()).extracting(CullCategory::name)
                     .containsExactly("junk", "scenery", "food", "funny");
@@ -53,7 +53,7 @@ class CullConfigTest {
         // Photos of screens are the single most-missed junk class; the bundled card's description
         // is what teaches an automated provider to catch them. Guard the phrase so a future
         // rewording of the defaults can't silently drop the emphasis.
-        runner.run(context -> {
+        this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories().getFirst().description()).contains("photo of a screen");
         });
@@ -61,7 +61,7 @@ class CullConfigTest {
 
     @Test
     void explicitPropertiesOverrideCategories() {
-        runner.withPropertyValues(
+        this.runner.withPropertyValues(
                 "sluice.cull.categories[0].name=receipts",
                 "sluice.cull.categories[0].description=Paper receipts and invoices",
                 "sluice.cull.categories[1].name=pets",
@@ -76,7 +76,7 @@ class CullConfigTest {
 
     @Test
     void rejectsTwoCardsSharingAName() {
-        runner.withPropertyValues(
+        this.runner.withPropertyValues(
                 "sluice.cull.categories[0].name=receipts",
                 "sluice.cull.categories[0].description=Paper receipts and invoices",
                 "sluice.cull.categories[1].name=receipts",
@@ -86,7 +86,7 @@ class CullConfigTest {
 
     @Test
     void externalAgentDefaultsToManualModeWhenAbsent() {
-        runner.run(context -> {
+        this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
             assertThat(config.externalAgent().watchTimeout()).isNull();
@@ -95,7 +95,7 @@ class CullConfigTest {
 
     @Test
     void providerSettingsBindWhenAllFieldsPresent() {
-        runner.withPropertyValues(
+        this.runner.withPropertyValues(
                 "sluice.cull.provider=anthropic",
                 "sluice.cull.provider-settings.model=claude-sonnet-5",
                 "sluice.cull.provider-settings.endpoint=https://api.anthropic.com",

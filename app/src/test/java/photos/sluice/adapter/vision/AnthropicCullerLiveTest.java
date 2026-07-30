@@ -91,12 +91,12 @@ class AnthropicCullerLiveTest {
         // read, the absent endpoint override, and the transport-retry knob.
         final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings());
         final var culler = new AnthropicCuller(new CullerPrompt(settings, new MontageConfig(224, 2)),
-                new ShardCodec(), new SidecarReader(), settings, () -> tamperingClient(real));
+                new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real));
 
         final CullReport report = culler.cull(prep, new CullOptions(false, null));
 
-        assertThat(liveCalls).isEqualTo(2);
-        assertThat(tampered).isTrue();
+        assertThat(this.liveCalls).isEqualTo(2);
+        assertThat(this.tampered).isTrue();
         assertThat(report.montagesCulled()).isEqualTo(1);
         assertThat(report.montagesSkipped()).isZero();
         assertThat(report.inputTokens()).isPositive();
@@ -141,7 +141,7 @@ class AnthropicCullerLiveTest {
         final MessageService tamperingMessages = mock(MessageService.class, delegatesTo(real.messages()));
         doAnswer(invocation -> {
             final Message response = real.messages().create(invocation.<MessageCreateParams>getArgument(0));
-            return ++liveCalls == 1 ? tamper(response) : response;
+            return ++this.liveCalls == 1 ? this.tamper(response) : response;
         }).when(tamperingMessages).create(any(MessageCreateParams.class));
         final AnthropicClient wrapper = mock(AnthropicClient.class, delegatesTo(real));
         doReturn(tamperingMessages).when(wrapper).messages();
@@ -158,7 +158,7 @@ class AnthropicCullerLiveTest {
                 .collect(Collectors.joining());
         for (final String name : PHOTO_NAMES) {
             if (text.contains(name)) {
-                tampered = true;
+                this.tampered = true;
                 final String flipped = text.replaceFirst(Pattern.quote(name), "TAMPERED_0001.jpg");
                 return response.toBuilder()
                         .content(List.of(ContentBlock.ofText(TextBlock.builder()

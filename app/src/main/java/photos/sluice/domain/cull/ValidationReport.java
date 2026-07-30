@@ -34,6 +34,6 @@ public record ValidationReport(List<Finding> findings, List<String> heals, List<
      * @return boolean true if no findings were reported
      */
     public boolean valid() {
-        return findings.isEmpty();
+        return this.findings.isEmpty();
     }
 }

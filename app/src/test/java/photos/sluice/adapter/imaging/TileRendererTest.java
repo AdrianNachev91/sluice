@@ -36,7 +36,7 @@ class TileRendererTest {
         final Path jpeg = tempDir.resolve("landscape.jpg");
         writeJpeg(jpeg, 1280, 640);
 
-        final TileResult result = renderer.render(jpeg, TILE_SIZE);
+        final TileResult result = this.renderer.render(jpeg, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -49,7 +49,7 @@ class TileRendererTest {
         final Path jpeg = tempDir.resolve("portrait.jpg");
         writeJpeg(jpeg, 640, 1280);
 
-        final TileResult result = renderer.render(jpeg, TILE_SIZE);
+        final TileResult result = this.renderer.render(jpeg, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE / 2);
@@ -58,7 +58,7 @@ class TileRendererTest {
 
     @Test
     void rendersARealSvgFixtureToABoundedTile() {
-        final TileResult result = renderer.render(FIXTURES.resolve("rectangle.svg"), TILE_SIZE);
+        final TileResult result = this.renderer.render(FIXTURES.resolve("rectangle.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -74,7 +74,7 @@ class TileRendererTest {
     // actually preserved, not just that some bounded image came out.
     @Test
     void rendersARealGradientSvgFixturePreservingItsViewBoxAspectRatio() {
-        final TileResult result = renderer.render(FIXTURES.resolve("gradient.svg"), TILE_SIZE);
+        final TileResult result = this.renderer.render(FIXTURES.resolve("gradient.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -88,7 +88,7 @@ class TileRendererTest {
     // external-entity-blocking defense parses it correctly while still rejecting XXE attacks.
     @Test
     void aDoctypeDeclaredSvgStillGetsItsRealAspectRatio() {
-        final TileResult result = renderer.render(FIXTURES.resolve("doctype-viewbox-only.svg"), TILE_SIZE);
+        final TileResult result = this.renderer.render(FIXTURES.resolve("doctype-viewbox-only.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -101,7 +101,7 @@ class TileRendererTest {
     // synthesized case.
     @Test
     void aFileWithSvgExtensionThatIsActuallyPngFallsBackToRasterDecode() {
-        final TileResult result = renderer.render(FIXTURES.resolve("defqon_2027_overlay.svg"), TILE_SIZE);
+        final TileResult result = this.renderer.render(FIXTURES.resolve("defqon_2027_overlay.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(Math.max(result.image().getWidth(), result.image().getHeight())).isEqualTo(TILE_SIZE);
@@ -109,7 +109,7 @@ class TileRendererTest {
 
     @Test
     void unknownCorruptFileFallsBackToAPlaceholder() {
-        final TileResult result = renderer.render(FIXTURES.resolve("not-an-image.dat"), TILE_SIZE);
+        final TileResult result = this.renderer.render(FIXTURES.resolve("not-an-image.dat"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -129,7 +129,7 @@ class TileRendererTest {
     void realCanonCr2FixtureFallsBackToItsExifThumbnailWhenThePrimaryDecodeFails() {
         final Path cr2 = FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
 
-        final TileResult result = renderer.render(cr2, TILE_SIZE);
+        final TileResult result = this.renderer.render(cr2, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -145,7 +145,7 @@ class TileRendererTest {
     void realModernSonyArwFixtureRecoversAJudgeablePreview() {
         final Path arw = FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
 
-        final TileResult result = renderer.render(arw, TILE_SIZE);
+        final TileResult result = this.renderer.render(arw, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(Math.max(result.image().getWidth(), result.image().getHeight())).isEqualTo(TILE_SIZE);
@@ -173,7 +173,7 @@ class TileRendererTest {
     // (CR2 above) from "nothing at all is recoverable" (this case).
     @Test
     void aFileWithRawExtensionAndNoRealImageContentAtAllFallsBackToAPlaceholder() {
-        final TileResult result = renderer.render(FIXTURES.resolve("fake-corrupt.cr2"), TILE_SIZE);
+        final TileResult result = this.renderer.render(FIXTURES.resolve("fake-corrupt.cr2"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -189,7 +189,7 @@ class TileRendererTest {
     void realNikonNefFixtureDecodesARealButTooSmallEmbeddedThumbnail() {
         final Path nef = FIXTURES.resolve("raw-samples/nikon-d40.nef");
 
-        final TileResult result = renderer.render(nef, TILE_SIZE);
+        final TileResult result = this.renderer.render(nef, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -201,7 +201,7 @@ class TileRendererTest {
     // dependency actually decodes real WebP bytes, not just that a reader is present.
     @Test
     void rendersARealWebpFixtureToABoundedTile() {
-        final TileResult result = renderer.render(FIXTURES.resolve("webp-sample.webp"), TILE_SIZE);
+        final TileResult result = this.renderer.render(FIXTURES.resolve("webp-sample.webp"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(Math.max(result.image().getWidth(), result.image().getHeight())).isEqualTo(TILE_SIZE);
@@ -213,7 +213,7 @@ class TileRendererTest {
         final Path file = tempDir.resolve("photo." + format);
         ImageIO.write(blankImage(960, 640), format, file.toFile());
 
-        final TileResult result = renderer.render(file, TILE_SIZE);
+        final TileResult result = this.renderer.render(file, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -228,7 +228,7 @@ class TileRendererTest {
         final Path tiny = tempDir.resolve("tiny.jpg");
         writeJpeg(tiny, 300, 200);
 
-        final TileResult result = renderer.render(tiny, TILE_SIZE);
+        final TileResult result = this.renderer.render(tiny, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -248,7 +248,7 @@ class TileRendererTest {
         final Path file = tempDir.resolve("boundary.jpg");
         writeJpeg(file, dimension, dimension);
 
-        final TileResult result = renderer.render(file, TILE_SIZE);
+        final TileResult result = this.renderer.render(file, TILE_SIZE);
 
         assertThat(result.unreviewable()).isEqualTo(expectedUnreviewable);
     }
@@ -334,7 +334,7 @@ class TileRendererTest {
         final Path tiff = tempDir.resolve("two-page.tiff");
         writeTwoPageTiff(tiff, 50, 50, Color.RED, 2000, 2000, Color.BLUE);
 
-        final TileResult result = renderer.render(tiff, TILE_SIZE);
+        final TileResult result = this.renderer.render(tiff, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         final int centerX = result.image().getWidth() / 2;

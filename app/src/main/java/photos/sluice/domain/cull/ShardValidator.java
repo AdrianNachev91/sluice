@@ -103,7 +103,7 @@ public final class ShardValidator {
                 .toList();
 
         for (final ShardFile file : ordered) {
-            validateShard(file, inScope, healableByBasename, categorySet, allowedClause,
+            this.validateShard(file, inScope, healableByBasename, categorySet, allowedClause,
                     montagesByGroup, problems, heals, decisions);
         }
 
@@ -201,8 +201,8 @@ public final class ShardValidator {
         int index = 0;
         for (final Decision decision : shard.decisions()) {
             index++;
-            validateFields(decision, montageId, index, categorySet, allowedClause, chosenPerGroup, rejectsPerGroup, problems);
-            decisions.add(healFile(decision, montageId, index, inScope, healableByBasename, problems, heals));
+            this.validateFields(decision, montageId, index, categorySet, allowedClause, chosenPerGroup, rejectsPerGroup, problems);
+            decisions.add(this.healFile(decision, montageId, index, inScope, healableByBasename, problems, heals));
         }
 
         // Each near-dup group within a shard needs exactly one chosen keeper and at least one reject.

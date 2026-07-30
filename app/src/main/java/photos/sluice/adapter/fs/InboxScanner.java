@@ -51,7 +51,7 @@ public final class InboxScanner implements InboxScannerPort {
                 // never appears in the scan result.
                 if (isJson(path)) {
                     jsonPaths.add(path);
-                } else if (mediaTypeDetector.classify(path).isPresent()) {
+                } else if (this.mediaTypeDetector.classify(path).isPresent()) {
                     mediaPaths.add(path);
                 }
             });
@@ -65,7 +65,7 @@ public final class InboxScanner implements InboxScannerPort {
             throw new UncheckedIOException("Failed to scan inbox " + inboxRoot, e.getCause());
         }
 
-        final PairingResult pairing = sidecarPairer.pair(mediaPaths, jsonPaths);
+        final PairingResult pairing = this.sidecarPairer.pair(mediaPaths, jsonPaths);
 
         final List<MediaFile> media = new ArrayList<>();
         for (final Path path : mediaPaths) {

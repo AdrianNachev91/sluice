@@ -57,7 +57,7 @@ public class CommitEngine implements CommitUseCase {
      */
     @Override
     public CommitSummary commit(final CommitScope scope) {
-        return commit(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
+        return this.commit(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
     /**
@@ -68,7 +68,7 @@ public class CommitEngine implements CommitUseCase {
      * @return {@link CommitSummary} summary of what was committed
      */
     public CommitSummary commit(final CommitScope scope, final ProgressCallback progress) {
-        return commit(scope, progress, CancellationSignal.NEVER);
+        return this.commit(scope, progress, CancellationSignal.NEVER);
     }
 
     /**
@@ -81,27 +81,27 @@ public class CommitEngine implements CommitUseCase {
      * @return {@link CommitSummary} summary of what was committed
      */
     public CommitSummary commit(final CommitScope scope, final ProgressCallback progress, final CancellationSignal cancellation) {
-        final Path sorted = pathsPort.sorted();
-        final Path library = pathsPort.library();
+        final Path sorted = this.pathsPort.sorted();
+        final Path library = this.pathsPort.library();
         final Map<LibraryBucket, Integer> byBucket = new EnumMap<>(LibraryBucket.class);
         int committed = 0;
 
-        final List<Path> files = mediaStore.listFiles(sorted);
+        final List<Path> files = this.mediaStore.listFiles(sorted);
         final int total = files.size();
         int current = 0;
 
         // One session for the whole move loop. Each moved file's index row is written and flushed
         // immediately, so a crash mid-run never leaves an already-moved file with no index row. The
         // header/leading-newline checks still only run once, instead of once per file.
-        try (final HashIndexPort.Session session = hashIndexPort.openSession()) {
+        try (final HashIndexPort.Session session = this.hashIndexPort.openSession()) {
             // Checked after each file's move, so an in-flight file is never interrupted; already-
             // committed files stay committed, matching the no-undo model.
             while (current < total && !cancellation.isCancelled()) {
                 final Path file = files.get(current);
                 final String relativePath = sorted.relativize(file).toString().replace('\\', '/');
-                if (scopeSelector.isInScope(relativePath, scope)) {
-                    final String hash = sha256Port.hash(file);
-                    final Path dest = mediaStore.move(file, library.resolve(relativePath).getParent());
+                if (this.scopeSelector.isInScope(relativePath, scope)) {
+                    final String hash = this.sha256Port.hash(file);
+                    final Path dest = this.mediaStore.move(file, library.resolve(relativePath).getParent());
                     session.append(new IndexEntry(hash, dest));
                     // merge rather than a pre-seeded zero per bucket: a scoped commit (e.g. one
                     // year) never touches most buckets. byBucket should only ever report the
@@ -115,7 +115,7 @@ public class CommitEngine implements CommitUseCase {
 
         // Runs regardless of whether the pass above was cancelled. It only ever removes
         // directories that are genuinely empty, so a partial run leaves nothing for it to do wrong.
-        mediaStore.removeEmptyDirectories(sorted);
+        this.mediaStore.removeEmptyDirectories(sorted);
 
         return new CommitSummary(committed, byBucket);
     }

@@ -64,7 +64,7 @@ public class NioMediaStore implements MediaStore {
      */
     @Override
     public Path move(final Path source, final Path destDir) {
-        return moveTo(source, resolveDestination(source, destDir));
+        return this.moveTo(source, this.resolveDestination(source, destDir));
     }
 
     /**
@@ -88,7 +88,7 @@ public class NioMediaStore implements MediaStore {
      */
     @Override
     public Path moveTo(final Path source, final Path destination) {
-        ensureDirectory(destination.getParent());
+        this.ensureDirectory(destination.getParent());
         try {
             Files.move(source, destination);
         } catch (final IOException e) {
@@ -106,7 +106,7 @@ public class NioMediaStore implements MediaStore {
      */
     @Override
     public Path copy(final Path source, final Path destDir) {
-        final Path dest = prepareDestination(source, destDir);
+        final Path dest = this.prepareDestination(source, destDir);
         try {
             // Unlike move (a rename, where attributes ride along for free), a plain copy is not
             // required to preserve timestamps - and the date-resolution fallback chain relies on
@@ -257,8 +257,8 @@ public class NioMediaStore implements MediaStore {
         // Every subdirectory below dir is now known empty of files too (containsAnyFile already
         // checked the whole subtree), so this prunes all of them bottom-up, leaving dir itself
         // with no children - at which point it is safe to remove too.
-        removeEmptyDirectories(dir);
-        deleteIfEmptyOfFiles(dir);
+        this.removeEmptyDirectories(dir);
+        this.deleteIfEmptyOfFiles(dir);
     }
 
     /**
@@ -299,7 +299,7 @@ public class NioMediaStore implements MediaStore {
      * @return {@link Path} a collision-free destination path
      */
     private Path prepareDestination(final Path source, final Path destDir) {
-        ensureDirectory(destDir);
+        this.ensureDirectory(destDir);
         return resolveCollision(destDir, source.getFileName().toString());
     }
 

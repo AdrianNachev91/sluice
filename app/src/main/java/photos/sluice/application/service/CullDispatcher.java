@@ -54,7 +54,7 @@ public class CullDispatcher {
      * @return {@link CullReport} the cull report
      */
     public CullReport cull(final PrepDir prep, final CullOptions options) throws CullException {
-        return select().cull(prep, options);
+        return this.select().cull(prep, options);
     }
 
     /**
@@ -66,7 +66,7 @@ public class CullDispatcher {
      * @return {@link CullReport} the cull report
      */
     public CullReport cull(final PrepDir prep, final CullOptions options, final ProgressCallback progress) throws CullException {
-        return select().cull(prep, options, progress);
+        return this.select().cull(prep, options, progress);
     }
 
     /**
@@ -80,7 +80,7 @@ public class CullDispatcher {
      */
     public CullReport cull(final PrepDir prep, final CullOptions options, final ProgressCallback progress, final CancellationSignal cancellation)
             throws CullException {
-        return select().cull(prep, options, progress, cancellation);
+        return this.select().cull(prep, options, progress, cancellation);
     }
 
     /**
@@ -89,11 +89,11 @@ public class CullDispatcher {
      * @return {@link VisionCuller} the selected vision culler
      */
     private VisionCuller select() {
-        final String provider = settings.provider();
-        final VisionCuller culler = byId.get(provider);
+        final String provider = this.settings.provider();
+        final VisionCuller culler = this.byId.get(provider);
         if (culler == null) {
             throw new IllegalStateException("No vision culler registered for provider '" + provider
-                    + "'. Registered: " + byId.keySet());
+                    + "'. Registered: " + this.byId.keySet());
         }
         return culler;
     }

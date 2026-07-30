@@ -53,7 +53,7 @@ class SidecarReader {
     public List<SidecarPhotoEntry> readEntries(final Path sidecarPath) {
         final RawSidecar raw;
         try (final var input = Files.newInputStream(sidecarPath)) {
-            raw = mapper.readValue(input, RawSidecar.class);
+            raw = this.mapper.readValue(input, RawSidecar.class);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read sidecar " + sidecarPath, e);
         } catch (final JacksonException e) {

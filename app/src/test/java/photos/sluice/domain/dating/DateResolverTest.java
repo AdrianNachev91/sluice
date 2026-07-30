@@ -34,7 +34,7 @@ class DateResolverTest {
         final LocalDateTime sidecarDate = LocalDateTime.of(2015, 5, 5, 12, 0, 0);
         final var sidecar = new TakeoutSidecar(writeSidecar(dir, sidecarDate));
 
-        final DateResult result = resolver.resolve(file, sidecar);
+        final DateResult result = this.resolver.resolve(file, sidecar);
 
         assertThat(result).isEqualTo(new DateResult(sidecarDate, Confidence.TRUSTED, "sidecar"));
     }
@@ -43,7 +43,7 @@ class DateResolverTest {
     void exifWinsWhenNoSidecar() {
         final var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
 
-        final DateResult result = resolver.resolve(file, null);
+        final DateResult result = this.resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDateTime.of(2021, 3, 15, 10, 30, 0), Confidence.TRUSTED, "exif"));
@@ -53,7 +53,7 @@ class DateResolverTest {
     void resolvesHeicExifWithoutExiftool() {
         final var file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
 
-        final DateResult result = resolver.resolve(file, null);
+        final DateResult result = this.resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDateTime.of(2018, 2, 5, 15, 11, 44), Confidence.TRUSTED, "exif"));
@@ -63,7 +63,7 @@ class DateResolverTest {
     void filenameWinsWhenNoSidecarAndNoExif() {
         final var file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
 
-        final DateResult result = resolver.resolve(file, null);
+        final DateResult result = this.resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDate.of(2021, 3, 15).atStartOfDay(), Confidence.TRUSTED, "filename"));
@@ -74,7 +74,7 @@ class DateResolverTest {
         // 1999 predates the plausibility floor, but only LOW-confidence sources are guarded.
         final var file = new MediaFile(Path.of("IMG_19990101_120000.jpg"));
 
-        final DateResult result = resolver.resolve(file, null);
+        final DateResult result = this.resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDate.of(1999, 1, 1).atStartOfDay(), Confidence.TRUSTED, "filename"));
@@ -87,7 +87,7 @@ class DateResolverTest {
         final LocalDateTime mtime = LocalDateTime.of(2022, 6, 1, 9, 0, 0);
         Files.setLastModifiedTime(file, FileTime.from(mtime.atZone(ZoneId.systemDefault()).toInstant()));
 
-        final DateResult result = resolver.resolve(new MediaFile(file), null);
+        final DateResult result = this.resolver.resolve(new MediaFile(file), null);
 
         assertThat(result).isEqualTo(new DateResult(mtime, Confidence.LOW, "mtime"));
     }
@@ -99,7 +99,7 @@ class DateResolverTest {
         final LocalDateTime preYear2000 = LocalDateTime.of(1995, 1, 1, 0, 0, 0);
         Files.setLastModifiedTime(file, FileTime.from(preYear2000.atZone(ZoneId.systemDefault()).toInstant()));
 
-        final DateResult result = resolver.resolve(new MediaFile(file), null);
+        final DateResult result = this.resolver.resolve(new MediaFile(file), null);
 
         // The guard only flips the confidence; the date and source name it rejected are preserved
         // so the caller can still report what was found, not just that it was unsortable.
@@ -113,7 +113,7 @@ class DateResolverTest {
         final LocalDateTime tenYearsOut = LocalDateTime.now().plusYears(10).withNano(0);
         Files.setLastModifiedTime(file, FileTime.from(tenYearsOut.atZone(ZoneId.systemDefault()).toInstant()));
 
-        final DateResult result = resolver.resolve(new MediaFile(file), null);
+        final DateResult result = this.resolver.resolve(new MediaFile(file), null);
 
         assertThat(result).isEqualTo(new DateResult(tenYearsOut, Confidence.UNSORTABLE, "mtime"));
     }
@@ -123,7 +123,7 @@ class DateResolverTest {
         // No sidecar, no exif (nonexistent path), no date-pattern filename, and no mtime to read.
         final var file = new MediaFile(Path.of("does-not-exist/plain-file.jpg"));
 
-        final DateResult result = resolver.resolve(file, null);
+        final DateResult result = this.resolver.resolve(file, null);
 
         assertThat(result.confidence()).isEqualTo(Confidence.UNSORTABLE);
         assertThat(result.source()).isEqualTo("none");

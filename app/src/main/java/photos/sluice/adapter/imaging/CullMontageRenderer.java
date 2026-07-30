@@ -92,7 +92,7 @@ public class CullMontageRenderer implements MontageRenderer {
      */
     @Override
     public PrepDir build(final CullScope scope, final MontageConfig config) {
-        return build(scope, config, ProgressCallback.NO_OP);
+        return this.build(scope, config, ProgressCallback.NO_OP);
     }
 
     /**
@@ -107,7 +107,7 @@ public class CullMontageRenderer implements MontageRenderer {
     public PrepDir build(final CullScope scope, final MontageConfig config, final ProgressCallback progress) {
         // NEVER never trips, so the cancellation-aware overload below always runs to completion and
         // returns non-null here - this just asserts that rather than silently trusting it.
-        return Objects.requireNonNull(build(scope, config, progress, CancellationSignal.NEVER));
+        return Objects.requireNonNull(this.build(scope, config, progress, CancellationSignal.NEVER));
     }
 
     /**
@@ -127,9 +127,9 @@ public class CullMontageRenderer implements MontageRenderer {
         // Ordering happens before rendering. Batch boundaries (which photos land in montage-001 vs
         // montage-002) must be decided from the full candidate list, not from however MediaStore
         // happened to return files from disk.
-        final Path photosRoot = pathsPort.sorted().resolve("Photos");
+        final Path photosRoot = this.pathsPort.sorted().resolve("Photos");
         final List<CullCandidate> ordered =
-                cullScopeSelector.order(collectCandidates(photosRoot, scope), scope);
+                this.cullScopeSelector.order(this.collectCandidates(photosRoot, scope), scope);
 
         // Render every candidate's tile up front and split off the unreviewable ones here, before
         // any batching decision is made. MontageBuilder composes whatever list it's handed with no
@@ -148,7 +148,7 @@ public class CullMontageRenderer implements MontageRenderer {
             if (cancellation.isCancelled()) {
                 return null;
             }
-            rendered.add(new RenderedCandidate(candidate, tileRenderer.render(candidate.path(), config.tileSize())));
+            rendered.add(new RenderedCandidate(candidate, this.tileRenderer.render(candidate.path(), config.tileSize())));
         }
         final List<RenderedCandidate> reviewable = rendered.stream()
                 .filter(candidate -> !candidate.tile().unreviewable())
@@ -164,9 +164,9 @@ public class CullMontageRenderer implements MontageRenderer {
         // survive alongside this run's smaller output, with nothing to indicate it's no longer
         // current.
         final String scopeTag = CullScope.tag(scope);
-        final Path prepDir = pathsPort.logs().resolve("cull-prep").resolve(scopeTag);
+        final Path prepDir = this.pathsPort.logs().resolve("cull-prep").resolve(scopeTag);
         clearPrepDir(prepDir);
-        mediaStore.ensureDirectory(prepDir);
+        this.mediaStore.ensureDirectory(prepDir);
 
         final int tilesPerMontage = config.tilesPerRow() * config.tilesPerRow();
         final int totalMontages = (reviewable.size() + tilesPerMontage - 1) / tilesPerMontage;
@@ -183,7 +183,7 @@ public class CullMontageRenderer implements MontageRenderer {
             // today, but entries.size() stays correct even if a future change makes montages
             // variable-sized rather than a fixed tilesPerMontage each.
             final String tag = "montage-%03d".formatted(entries.size() + 1);
-            writeMontage(prepDir, tag, reviewable.subList(start, end), config);
+            this.writeMontage(prepDir, tag, reviewable.subList(start, end), config);
             entries.add(tag);
             progress.tick(entries.size(), totalMontages);
         }
@@ -193,13 +193,13 @@ public class CullMontageRenderer implements MontageRenderer {
         // disagree with what a caller can actually see on disk.
         final var result = new PrepDir(
                 scopeTag,
-                cullScopeSelector.basePath(photosRoot, scope),
+                this.cullScopeSelector.basePath(photosRoot, scope),
                 reviewable.size(),
                 unreviewable,
                 entries.size(),
                 prepDir,
                 entries);
-        prepIndexWriter.write(prepDir.resolve("index.json"), result);
+        this.prepIndexWriter.write(prepDir.resolve("index.json"), result);
         return result;
     }
 
@@ -211,12 +211,12 @@ public class CullMontageRenderer implements MontageRenderer {
      * @return a {@link List} of {@link CullCandidate}, the candidates found, unordered
      */
     private List<CullCandidate> collectCandidates(final Path photosRoot, final CullScope scope) {
-        return cullScopeSelector.directoriesToScan(photosRoot, scope).stream()
+        return this.cullScopeSelector.directoriesToScan(photosRoot, scope).stream()
                 // A requested month directory may not exist (e.g. no photos ever landed there) -
                 // skipped silently rather than treated as an error.
-                .filter(mediaStore::exists)
-                .flatMap(dir -> mediaStore.listFiles(dir).stream())
-                .filter(file -> mediaTypeDetector.classify(file).filter(MediaType.PHOTO::equals).isPresent())
+                .filter(this.mediaStore::exists)
+                .flatMap(dir -> this.mediaStore.listFiles(dir).stream())
+                .filter(file -> this.mediaTypeDetector.classify(file).filter(MediaType.PHOTO::equals).isPresent())
                 .map(file -> new CullCandidate(file, mtimeOf(file)))
                 .toList();
     }
@@ -234,7 +234,7 @@ public class CullMontageRenderer implements MontageRenderer {
                 .map(rendered -> new MontageBuilder.MontageTile(
                         rendered.tile().image(), rendered.candidate().path().getFileName().toString()))
                 .toList();
-        final BufferedImage canvas = montageBuilder.compose(tiles, config);
+        final BufferedImage canvas = this.montageBuilder.compose(tiles, config);
         final Path montageFile = prepDir.resolve(tag + ".jpg");
         try {
             ImageIO.write(canvas, "jpg", montageFile.toFile());
@@ -249,7 +249,7 @@ public class CullMontageRenderer implements MontageRenderer {
                         rendered.candidate().mtime(),
                         isReceived(rendered.candidate().path())))
                 .toList();
-        sidecarWriter.write(prepDir.resolve(tag + ".json"), montageFile, photos);
+        this.sidecarWriter.write(prepDir.resolve(tag + ".json"), montageFile, photos);
     }
 
     /**

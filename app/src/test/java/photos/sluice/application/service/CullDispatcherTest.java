@@ -116,7 +116,7 @@ class CullDispatcherTest {
 
         @Override
         public String provider() {
-            return provider;
+            return this.provider;
         }
 
         @Override
@@ -149,20 +149,20 @@ class CullDispatcherTest {
 
         @Override
         public String id() {
-            return id;
+            return this.id;
         }
 
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             this.receivedPrep = prep;
             this.receivedOptions = opts;
-            return report;
+            return this.report;
         }
 
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress) {
             this.receivedProgress = progress;
-            return cull(prep, opts);
+            return this.cull(prep, opts);
         }
     }
 

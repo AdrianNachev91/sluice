@@ -24,7 +24,7 @@ class ScopeSelectorTest {
         final DatedMedia dec = dated("dec.jpg", 2019, 12, 1);
         final DatedMedia otherYear = dated("other.jpg", 2020, 1, 1);
 
-        final List<DatedMedia> result = selector.select(List.of(jan, dec, otherYear), new SortScope.Year(2019, null));
+        final List<DatedMedia> result = this.selector.select(List.of(jan, dec, otherYear), new SortScope.Year(2019, null));
 
         assertThat(result).containsExactly(jan, dec);
     }
@@ -35,7 +35,7 @@ class ScopeSelectorTest {
         final DatedMedia outOfRange = dated("sept.jpg", 2019, 9, 1);
         final var scope = new SortScope.Year(2019, new MonthRange(6, 8));
 
-        final List<DatedMedia> result = selector.select(List.of(inRange, outOfRange), scope);
+        final List<DatedMedia> result = this.selector.select(List.of(inRange, outOfRange), scope);
 
         assertThat(result).containsExactly(inRange);
     }
@@ -46,7 +46,7 @@ class ScopeSelectorTest {
         final DatedMedia july = dated("july.jpg", 2019, 7, 1);
         final var scope = new SortScope.Year(2019, MonthRange.of(6));
 
-        final List<DatedMedia> result = selector.select(List.of(june, july), scope);
+        final List<DatedMedia> result = this.selector.select(List.of(june, july), scope);
 
         assertThat(result).containsExactly(june);
     }
@@ -57,14 +57,14 @@ class ScopeSelectorTest {
         final DatedMedia middle = dated("mid.jpg", 2018, 1, 1);
         final DatedMedia newest = dated("new.jpg", 2021, 1, 1);
 
-        final List<DatedMedia> result = selector.select(List.of(newest, oldest, middle), new SortScope.OldestYear());
+        final List<DatedMedia> result = this.selector.select(List.of(newest, oldest, middle), new SortScope.OldestYear());
 
         assertThat(result).containsExactly(oldest);
     }
 
     @Test
     void oldestYearOnEmptyInputReturnsEmpty() {
-        final List<DatedMedia> result = selector.select(List.of(), new SortScope.OldestYear());
+        final List<DatedMedia> result = this.selector.select(List.of(), new SortScope.OldestYear());
 
         assertThat(result).isEmpty();
     }
@@ -77,7 +77,7 @@ class ScopeSelectorTest {
         final DatedMedia latest = dated("d.jpg", 2020, 1, 1);
 
         final List<DatedMedia> result =
-                selector.select(List.of(latest, tiedSecond, earliest, tiedFirst), new SortScope.OldestN(3));
+                this.selector.select(List.of(latest, tiedSecond, earliest, tiedFirst), new SortScope.OldestN(3));
 
         assertThat(result).containsExactly(earliest, tiedSecond, tiedFirst);
     }
@@ -86,7 +86,7 @@ class ScopeSelectorTest {
     void oldestNLargerThanAvailableInputReturnsAll() {
         final DatedMedia only = dated("only.jpg", 2019, 1, 1);
 
-        final List<DatedMedia> result = selector.select(List.of(only), new SortScope.OldestN(50));
+        final List<DatedMedia> result = this.selector.select(List.of(only), new SortScope.OldestN(50));
 
         assertThat(result).containsExactly(only);
     }

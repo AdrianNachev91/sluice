@@ -51,11 +51,11 @@ class CullerPrompt {
      * @return {@link String} the rendered system prompt
      */
     String systemPrompt() {
-        if (settings.categories().isEmpty()) {
+        if (this.settings.categories().isEmpty()) {
             throw new IllegalStateException("No cull categories configured (sluice.cull.categories); "
                     + "an automated cull needs at least one");
         }
-        return rendered(template, settings.categories());
+        return rendered(this.template, this.settings.categories());
     }
 
     /**
@@ -79,7 +79,7 @@ class CullerPrompt {
                 .append(" - sheet ").append(montage.replaceFirst("^montage-", ""))
                 .append(" (").append(ordinal).append(" of ").append(total).append(")\n");
         text.append("Grid: ").append(entries.size()).append(" photos in rows of ")
-                .append(montageConfig.tilesPerRow())
+                .append(this.montageConfig.tilesPerRow())
                 .append(", numbered left-to-right then top-to-bottom.\n");
         text.append("Photos:\n");
         for (int i = 0; i < entries.size(); i++) {

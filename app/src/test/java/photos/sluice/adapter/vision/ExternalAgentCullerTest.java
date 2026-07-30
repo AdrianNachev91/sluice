@@ -28,34 +28,34 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ExternalAgentCullerTest {
 
     private final ShardCodec codec = new ShardCodec();
-    private final ExternalAgentCuller culler = culler();
+    private final ExternalAgentCuller culler = this.culler();
 
     @Test
     void idIsExternalAgent() {
-        assertThat(culler.id()).isEqualTo("external-agent");
+        assertThat(this.culler.id()).isEqualTo("external-agent");
     }
 
     @Test
     void reportsEveryMontageCulledWhenEachHasAValidShard(@TempDir final Path dir) throws IOException, CullException {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         final Path keeper = dir.resolve("base").resolve("IMG_002.jpg");
-        writeSidecar(dir, "montage-001", junk);
-        writeSidecar(dir, "montage-002", keeper);
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+        this.writeSidecar(dir, "montage-001", junk);
+        this.writeSidecar(dir, "montage-002", keeper);
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "photo of a monitor"))));
         // An all-keeps montage still answers with a shard - an empty decisions list, not no file.
-        codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
+        this.codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
-        assertThat(culler.cull(prep(dir, "montage-001", "montage-002"), options()))
+        assertThat(this.culler.cull(this.prep(dir, "montage-001", "montage-002"), options()))
                 .isEqualTo(new CullReport(2, 0, 0, 0));
     }
 
     @Test
     void throwsNamingEveryMontageMissingItsShard(@TempDir final Path dir) throws IOException {
-        writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
-        writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
+        this.writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
+        this.writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
 
-        assertThatThrownBy(() -> culler.cull(prep(dir, "montage-001", "montage-002"), options()))
+        assertThatThrownBy(() -> this.culler.cull(this.prep(dir, "montage-001", "montage-002"), options()))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("montage-001: no shard decisions-001.json")
                 .hasMessageContaining("montage-002: no shard decisions-002.json");
@@ -64,24 +64,24 @@ class ExternalAgentCullerTest {
     @Test
     void allowPartialWaivesMissingShardsAndReportsThemSkipped(@TempDir final Path dir) throws IOException, CullException {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
-        writeSidecar(dir, "montage-001", junk);
-        writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+        this.writeSidecar(dir, "montage-001", junk);
+        this.writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "blurry document"))));
 
-        assertThat(culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial()))
+        assertThat(this.culler.cull(this.prep(dir, "montage-001", "montage-002"), allowPartial()))
                 .isEqualTo(new CullReport(1, 1, 0, 0));
     }
 
     @Test
     void allowPartialStillRejectsAnInvalidShard(@TempDir final Path dir) throws IOException {
         final Path photo = dir.resolve("base").resolve("IMG_001.jpg");
-        writeSidecar(dir, "montage-001", photo);
-        writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+        this.writeSidecar(dir, "montage-001", photo);
+        this.writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(photo, "blurry", "not a configured category"))));
 
-        assertThatThrownBy(() -> culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial()))
+        assertThatThrownBy(() -> this.culler.cull(this.prep(dir, "montage-001", "montage-002"), allowPartial()))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("invalid action 'blurry'")
                 .hasMessageNotContaining("no shard");
@@ -90,22 +90,22 @@ class ExternalAgentCullerTest {
     @Test
     void rejectsAShardWithNoMatchingMontage(@TempDir final Path dir) throws IOException {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
-        writeSidecar(dir, "montage-001", junk);
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+        this.writeSidecar(dir, "montage-001", junk);
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "photo of a receipt"))));
-        codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
+        this.codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
-        assertThatThrownBy(() -> culler.cull(prep(dir, "montage-001"), options()))
+        assertThatThrownBy(() -> this.culler.cull(this.prep(dir, "montage-001"), options()))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("decisions-002.json: no matching montage");
     }
 
     @Test
     void rejectsAStrayShardEvenWhenAllowPartialWaivesMissingOnes(@TempDir final Path dir) throws IOException {
-        writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
-        codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
+        this.writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
+        this.codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
-        assertThatThrownBy(() -> culler.cull(prep(dir, "montage-001"), allowPartial()))
+        assertThatThrownBy(() -> this.culler.cull(this.prep(dir, "montage-001"), allowPartial()))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("decisions-002.json: no matching montage")
                 .hasMessageNotContaining("no shard decisions-001.json");
@@ -113,11 +113,11 @@ class ExternalAgentCullerTest {
 
     @Test
     void reportsAnUnparseableShardAmongTheRunsProblems(@TempDir final Path dir) throws IOException {
-        writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
-        writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
+        this.writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
+        this.writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
         Files.writeString(dir.resolve("decisions-001.json"), "{ not json");
 
-        assertThatThrownBy(() -> culler.cull(prep(dir, "montage-001", "montage-002"), options()))
+        assertThatThrownBy(() -> this.culler.cull(this.prep(dir, "montage-001", "montage-002"), options()))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("decisions-001.json: ")
                 .hasMessageContaining("montage-002: no shard decisions-002.json");
@@ -126,12 +126,12 @@ class ExternalAgentCullerTest {
     @Test
     void aggregatesValidatorProblemsIntoTheThrow(@TempDir final Path dir) throws IOException {
         final Path photo = dir.resolve("base").resolve("IMG_001.jpg");
-        writeSidecar(dir, "montage-001", photo);
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+        this.writeSidecar(dir, "montage-001", photo);
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(dir.resolve("elsewhere").resolve("OTHER.jpg"), "junk", "meme"),
                         new Classification(photo, "junk", ""))));
 
-        assertThatThrownBy(() -> culler.cull(prep(dir, "montage-001"), options()))
+        assertThatThrownBy(() -> this.culler.cull(this.prep(dir, "montage-001"), options()))
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("file out of scope")
                 .hasMessageContaining("missing 'reason'");
@@ -140,29 +140,29 @@ class ExternalAgentCullerTest {
     @Test
     void healsADriftedPathThroughTheSidecarBasename(@TempDir final Path dir) throws IOException {
         final Path actual = dir.resolve("base").resolve("2019").resolve("06").resolve("IMG_001.jpg");
-        writeSidecar(dir, "montage-001", actual);
+        this.writeSidecar(dir, "montage-001", actual);
         // The culler retyped the \YYYY\MM\ segment; the unique basename resolves it back into scope.
         final Path drifted = dir.resolve("base").resolve("2019").resolve("07").resolve("IMG_001.jpg");
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(drifted, "junk", "photo of a screen"))));
 
-        assertThatCode(() -> culler.cull(prep(dir, "montage-001"), options()))
+        assertThatCode(() -> this.culler.cull(this.prep(dir, "montage-001"), options()))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void failsLoudWhenASidecarIsUnreadable(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("montage-001.json"), "{ not json");
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001", List.of()));
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001", List.of()));
 
-        assertThatThrownBy(() -> culler.cull(prep(dir, "montage-001"), options()))
+        assertThatThrownBy(() -> this.culler.cull(this.prep(dir, "montage-001"), options()))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("montage-001.json");
     }
 
     @Test
     void returnsAnEmptyReportWhenThePrepDirHasNoMontages(@TempDir final Path dir) throws CullException {
-        assertThat(culler.cull(prep(dir), options()))
+        assertThat(this.culler.cull(this.prep(dir), options()))
                 .isEqualTo(new CullReport(0, 0, 0, 0));
     }
 
@@ -170,13 +170,13 @@ class ExternalAgentCullerTest {
     void progressCallbackTicksOnceForEachMontageIncludingOneWithAMissingShard(@TempDir final Path dir)
             throws IOException, CullException {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
-        writeSidecar(dir, "montage-001", junk);
-        writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg")); // no shard written
-        codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+        this.writeSidecar(dir, "montage-001", junk);
+        this.writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg")); // no shard written
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "photo of a monitor"))));
 
         final List<String> ticks = new ArrayList<>();
-        final CullReport report = culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial(),
+        final CullReport report = this.culler.cull(this.prep(dir, "montage-001", "montage-002"), allowPartial(),
                 (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(report).isEqualTo(new CullReport(1, 1, 0, 0));

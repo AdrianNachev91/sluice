@@ -19,7 +19,7 @@ class MoveDifferTest {
         final Path treeA = write(root.resolve("a"), "Photos/2021/03/img.jpg");
         final Path treeB = write(root.resolve("b"), "Photos/2021/03/img.jpg");
 
-        final MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
+        final MoveDiffer.Diff diff = this.differ.diffTrees(treeA, treeB);
 
         assertThat(diff.identical()).isTrue();
     }
@@ -29,7 +29,7 @@ class MoveDifferTest {
         final Path treeA = write(root.resolve("a"), "Photos/2021/03/img.jpg", "Review/Unsorted/stray.jpg");
         final Path treeB = write(root.resolve("b"), "Photos/2021/03/img.jpg");
 
-        final MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
+        final MoveDiffer.Diff diff = this.differ.diffTrees(treeA, treeB);
 
         assertThat(diff.identical()).isFalse();
         assertThat(diff.onlyInA()).containsExactly("Review/Unsorted/stray.jpg");
@@ -40,21 +40,21 @@ class MoveDifferTest {
     void relativePathsAreForwardSlashNormalized(@TempDir final Path root) throws IOException {
         final Path tree = write(root.resolve("a"), "Videos/2019/07/clip.mp4");
 
-        final Set<String> relative = differ.relativeFilePaths(tree);
+        final Set<String> relative = this.differ.relativeFilePaths(tree);
 
         assertThat(relative).containsExactly("Videos/2019/07/clip.mp4");
     }
 
     @Test
     void missingRootIsTreatedAsEmptyTree(@TempDir final Path root) {
-        final Set<String> relative = differ.relativeFilePaths(root.resolve("never-created"));
+        final Set<String> relative = this.differ.relativeFilePaths(root.resolve("never-created"));
 
         assertThat(relative).isEmpty();
     }
 
     @Test
     void diffOfPlainSetsIsSymmetric() {
-        final MoveDiffer.Diff diff = differ.diff(Set.of("only-a.jpg", "shared.jpg"), Set.of("shared.jpg", "only-b.jpg"));
+        final MoveDiffer.Diff diff = this.differ.diff(Set.of("only-a.jpg", "shared.jpg"), Set.of("shared.jpg", "only-b.jpg"));
 
         assertThat(diff.onlyInA()).containsExactly("only-a.jpg");
         assertThat(diff.onlyInB()).containsExactly("only-b.jpg");

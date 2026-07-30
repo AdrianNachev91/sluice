@@ -29,21 +29,21 @@ class ImageDimensionsReaderTest {
 
     @Test
     void readsExifSubIfdDimensionsFromIphoneHeic() {
-        final Optional<Dimensions> result = reader.read(FIXTURES.resolve("iphone-exif.heic"));
+        final Optional<Dimensions> result = this.reader.read(FIXTURES.resolve("iphone-exif.heic"));
 
         assertThat(result).contains(new Dimensions(4032, 3024));
     }
 
     @Test
     void fallsBackToImageIoWhenNoExifPresent() {
-        final Optional<Dimensions> result = reader.read(FIXTURES.resolve("no-exif.jpg"));
+        final Optional<Dimensions> result = this.reader.read(FIXTURES.resolve("no-exif.jpg"));
 
         assertThat(result).contains(new Dimensions(2, 2));
     }
 
     @Test
     void returnsEmptyWhenFileIsNotAnImage() {
-        final Optional<Dimensions> result = reader.read(FIXTURES.resolve("not-an-image.txt"));
+        final Optional<Dimensions> result = this.reader.read(FIXTURES.resolve("not-an-image.txt"));
 
         assertThat(result).isEmpty();
     }
@@ -53,7 +53,7 @@ class ImageDimensionsReaderTest {
         final Path tiff = tempDir.resolve("multi-image.tiff");
         writeTwoImageTiff(tiff, 64, 64, 512, 400);
 
-        final Optional<Dimensions> result = reader.read(tiff);
+        final Optional<Dimensions> result = this.reader.read(tiff);
 
         assertThat(result).contains(new Dimensions(512, 400));
     }
@@ -65,7 +65,7 @@ class ImageDimensionsReaderTest {
     void readsTrueCaptureResolutionFromARealCr2WithASingleSubIfd() {
         final Path cr2 = CULL_FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
 
-        final Optional<Dimensions> result = reader.read(cr2);
+        final Optional<Dimensions> result = this.reader.read(cr2);
 
         assertThat(result).contains(new Dimensions(3504, 2336));
     }
@@ -79,7 +79,7 @@ class ImageDimensionsReaderTest {
     void readsTrueCaptureResolutionFromARealNefWhereTheFirstSubIfdHasNoDimensions() {
         final Path nef = CULL_FIXTURES.resolve("raw-samples/nikon-d40.nef");
 
-        final Optional<Dimensions> result = reader.read(nef);
+        final Optional<Dimensions> result = this.reader.read(nef);
 
         assertThat(result).contains(new Dimensions(3040, 2014));
     }
@@ -92,7 +92,7 @@ class ImageDimensionsReaderTest {
     void readsTrueCaptureResolutionFromARealModernSonyArw() {
         final Path arw = CULL_FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
 
-        final Optional<Dimensions> result = reader.read(arw);
+        final Optional<Dimensions> result = this.reader.read(arw);
 
         assertThat(result).contains(new Dimensions(6656, 4608));
     }
@@ -104,7 +104,7 @@ class ImageDimensionsReaderTest {
     // matching the file's actual known dimensions.
     @Test
     void readsDimensionsFromARealAvifFixtureViaItsHeifDirectory() {
-        final Optional<Dimensions> result = reader.read(CULL_FIXTURES.resolve("arctic-sky.avif"));
+        final Optional<Dimensions> result = this.reader.read(CULL_FIXTURES.resolve("arctic-sky.avif"));
 
         assertThat(result).contains(new Dimensions(1600, 1063));
     }
@@ -115,7 +115,7 @@ class ImageDimensionsReaderTest {
     // alone.
     @Test
     void readsDimensionsFromARealWebpFixture() {
-        final Optional<Dimensions> result = reader.read(CULL_FIXTURES.resolve("webp-sample.webp"));
+        final Optional<Dimensions> result = this.reader.read(CULL_FIXTURES.resolve("webp-sample.webp"));
 
         assertThat(result).contains(new Dimensions(1024, 772));
     }
@@ -126,7 +126,7 @@ class ImageDimensionsReaderTest {
         final Path file = tempDir.resolve("photo." + format);
         ImageIO.write(blankImage(300, 200), format, file.toFile());
 
-        final Optional<Dimensions> result = reader.read(file);
+        final Optional<Dimensions> result = this.reader.read(file);
 
         assertThat(result).contains(new Dimensions(300, 200));
     }

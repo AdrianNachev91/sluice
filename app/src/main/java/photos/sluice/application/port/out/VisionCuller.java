@@ -56,7 +56,7 @@ public interface VisionCuller {
      * @return {@link CullReport} a report of what the run did and spent
      */
     default CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress) throws CullException {
-        return cull(prep, opts);
+        return this.cull(prep, opts);
     }
 
     /**
@@ -74,6 +74,6 @@ public interface VisionCuller {
      */
     default CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress, final CancellationSignal cancellation)
             throws CullException {
-        return cull(prep, opts, progress);
+        return this.cull(prep, opts, progress);
     }
 }

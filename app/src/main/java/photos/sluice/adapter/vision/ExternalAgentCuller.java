@@ -86,7 +86,7 @@ class ExternalAgentCuller implements VisionCuller {
      */
     @Override
     public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
-        return cull(prep, opts, ProgressCallback.NO_OP);
+        return this.cull(prep, opts, ProgressCallback.NO_OP);
     }
 
     /**
@@ -106,17 +106,17 @@ class ExternalAgentCuller implements VisionCuller {
         final int total = prep.entries().size();
         int current = 0;
         for (final String montage : prep.entries()) {
-            collectShard(prep.prepDir(), montage, opts.allowPartial(), shards, problems);
+            this.collectShard(prep.prepDir(), montage, opts.allowPartial(), shards, problems);
             progress.tick(++current, total);
         }
         problems.addAll(strayShards(prep));
 
         final List<Path> sidecarSrcs = prep.entries().stream()
-                .flatMap(montage -> sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json")).stream())
+                .flatMap(montage -> this.sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json")).stream())
                 .map(SidecarPhotoEntry::src)
                 .toList();
-        final List<String> categoryNames = settings.categories().stream().map(CullCategory::name).toList();
-        final ValidationReport report = validator.validate(shards, sidecarSrcs, categoryNames, prep.unreviewable());
+        final List<String> categoryNames = this.settings.categories().stream().map(CullCategory::name).toList();
+        final ValidationReport report = this.validator.validate(shards, sidecarSrcs, categoryNames, prep.unreviewable());
         report.findings().stream().map(Finding::describe).forEach(problems::add);
 
         if (!problems.isEmpty()) {
@@ -152,7 +152,7 @@ class ExternalAgentCuller implements VisionCuller {
             return;
         }
         try {
-            shards.add(new ShardFile(montage, shardCodec.read(shardPath)));
+            shards.add(new ShardFile(montage, this.shardCodec.read(shardPath)));
         } catch (final UncheckedIOException e) {
             problems.add(shardName + ": " + rootMessage(e));
         }

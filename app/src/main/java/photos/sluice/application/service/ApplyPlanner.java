@@ -98,7 +98,7 @@ public class ApplyPlanner {
         final var extraFindings = new ArrayList<Finding>();
 
         final Set<String> missingMontages = prepDir.entries().stream()
-                .filter(montage -> !cullPrepPort.hasShard(prepDirPath, montage))
+                .filter(montage -> !this.cullPrepPort.hasShard(prepDirPath, montage))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (!options.allowPartial()) {
             missingMontages.forEach(montage ->
@@ -108,7 +108,7 @@ public class ApplyPlanner {
         final Set<String> expectedShardNames = prepDir.entries().stream()
                 .map(MontageNaming::shardFileFor)
                 .collect(Collectors.toSet());
-        mediaReader.listFiles(prepDirPath).stream()
+        this.mediaReader.listFiles(prepDirPath).stream()
                 .map(file -> file.getFileName().toString())
                 .filter(MontageNaming::isShardFile)
                 .filter(name -> !expectedShardNames.contains(name))
@@ -119,13 +119,13 @@ public class ApplyPlanner {
         final var sidecarSrcs = new ArrayList<Path>();
         final var shardFiles = new ArrayList<ShardFile>();
         for (final String montage : prepDir.entries()) {
-            collectMontage(prepDirPath, montage, !missingMontages.contains(montage), ledger,
+            this.collectMontage(prepDirPath, montage, !missingMontages.contains(montage), ledger,
                     sidecarSrcs, shardFiles, extraFindings);
         }
-        final List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
+        final List<String> categories = this.cullSettings.categories().stream().map(CullCategory::name).toList();
 
         final ValidationReport report = resolveOverlaps(ledger,
-                shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable()));
+                this.shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable()));
         if (extraFindings.isEmpty()) {
             return report;
         }
@@ -152,11 +152,11 @@ public class ApplyPlanner {
      */
     private void collectMontage(final Path prepDirPath, final String montage, final boolean hasShard, final Ledger ledger,
                                 final List<Path> sidecarSrcs, final List<ShardFile> shardFiles, final List<Finding> extraFindings) {
-        final Optional<List<Path>> srcs = Sidecars.srcsOf(cullPrepPort, prepDirPath, montage);
+        final Optional<List<Path>> srcs = Sidecars.srcsOf(this.cullPrepPort, prepDirPath, montage);
         if (srcs.isPresent()) {
             sidecarSrcs.addAll(srcs.get());
             if (hasShard) {
-                shardFiles.add(new ShardFile(montage, cullPrepPort.readShard(prepDirPath, montage)));
+                shardFiles.add(new ShardFile(montage, this.cullPrepPort.readShard(prepDirPath, montage)));
             }
             return;
         }
@@ -165,7 +165,7 @@ public class ApplyPlanner {
         }
         final CorruptSidecarResolution resolution = ledger.corruptSidecars().get(montage);
         if (resolution == CorruptSidecarResolution.APPLY_ANYWAY) {
-            final DecisionShard shard = cullPrepPort.readShard(prepDirPath, montage);
+            final DecisionShard shard = this.cullPrepPort.readShard(prepDirPath, montage);
             shard.decisions().forEach(decision -> sidecarSrcs.add(decision.file()));
             shardFiles.add(new ShardFile(montage, shard));
         } else if (resolution != CorruptSidecarResolution.SET_ASIDE) {
@@ -239,12 +239,12 @@ public class ApplyPlanner {
     List<Finding> checkMissingSources(final PrepDir prepDir, final List<Decision> decisions, final Ledger ledger) {
         final var findings = new ArrayList<Finding>();
         decisions.stream()
-                .map(decision -> classify(decision, ledger))
+                .map(decision -> this.classify(decision, ledger))
                 .filter(Status.Unresolved.class::isInstance)
                 .map(status -> new Finding.MissingSource(status.decision().file(), ledger.log()))
                 .forEach(findings::add);
-        resolvedUnreviewable(prepDir, ledger).stream()
-                .map(file -> classifyFile(file, ledger))
+        this.resolvedUnreviewable(prepDir, ledger).stream()
+                .map(file -> this.classifyFile(file, ledger))
                 .filter(FileStatus.Unresolved.class::isInstance)
                 .map(status -> new Finding.MissingSource(status.file(), ledger.log()))
                 .forEach(findings::add);
@@ -282,7 +282,7 @@ public class ApplyPlanner {
      * @return {@link Status} this decision's pending/done/skipped/unresolved status
      */
     Status classify(final Decision decision, final Ledger ledger) {
-        if (mediaReader.exists(decision.file())) {
+        if (this.mediaReader.exists(decision.file())) {
             return new Status.Pending(decision);
         }
         if (ledger.skipped().contains(decision.file())) {
@@ -291,7 +291,7 @@ public class ApplyPlanner {
         if (decision instanceof NearDupChosen) {
             return new Status.Unresolved(decision);
         }
-        final Optional<MoveRecord> record = verifiedMoveRecord(decision.file(), ledger.moves());
+        final Optional<MoveRecord> record = this.verifiedMoveRecord(decision.file(), ledger.moves());
         return record.isPresent()
                 ? new Status.Done(decision, record.get())
                 : new Status.Unresolved(decision);
@@ -308,13 +308,13 @@ public class ApplyPlanner {
      * @return {@link FileStatus} this file's pending/done/skipped/unresolved status
      */
     FileStatus classifyFile(final Path file, final Ledger ledger) {
-        if (mediaReader.exists(file)) {
+        if (this.mediaReader.exists(file)) {
             return new FileStatus.Pending(file);
         }
         if (ledger.skipped().contains(file)) {
             return new FileStatus.Skipped(file);
         }
-        return verifiedMoveRecord(file, ledger.moves()).isPresent()
+        return this.verifiedMoveRecord(file, ledger.moves()).isPresent()
                 ? new FileStatus.Done(file)
                 : new FileStatus.Unresolved(file);
     }
@@ -329,8 +329,8 @@ public class ApplyPlanner {
      */
     private Optional<MoveRecord> verifiedMoveRecord(final Path file, final Map<Path, MoveRecord> moveRecords) {
         final MoveRecord record = moveRecords.get(file);
-        final boolean verified = record != null && mediaReader.exists(record.dest())
-                && sha256Port.hash(record.dest()).equals(record.hash());
+        final boolean verified = record != null && this.mediaReader.exists(record.dest())
+                && this.sha256Port.hash(record.dest()).equals(record.hash());
         return verified ? Optional.of(record) : Optional.empty();
     }
 

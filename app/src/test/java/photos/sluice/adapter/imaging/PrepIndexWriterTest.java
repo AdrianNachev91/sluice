@@ -31,7 +31,7 @@ class PrepIndexWriterTest {
         final Path corrupt = dir.resolve("corrupt.cr2");
         final var prep = new PrepDir("2023", basePath, 42, List.of(corrupt), 2, prepDir, List.of("montage-001", "montage-002"));
 
-        writer.write(indexPath, prep);
+        this.writer.write(indexPath, prep);
 
         final String json = Files.readString(indexPath, StandardCharsets.UTF_8);
         assertThat(json).isEqualToIgnoringWhitespace("""
@@ -52,7 +52,7 @@ class PrepIndexWriterTest {
         final Path indexPath = dir.resolve("missing-parent").resolve("index.json");
         final var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
 
-        assertThatThrownBy(() -> writer.write(indexPath, prep))
+        assertThatThrownBy(() -> this.writer.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(indexPath.toString());
     }

@@ -37,7 +37,7 @@ class SidecarReaderTest {
                 jsonEscaped(dir.resolve("IMG_001.jpg")),
                 jsonEscaped(dir.resolve("IMG_002.jpg"))));
 
-        assertThat(reader.readEntries(sidecar)).containsExactly(
+        assertThat(this.reader.readEntries(sidecar)).containsExactly(
                 new SidecarPhotoEntry(dir.resolve("IMG_001.jpg"), "IMG_001.jpg",
                         Instant.parse("2019-06-20T15:00:10Z"), false),
                 new SidecarPhotoEntry(dir.resolve("IMG_002.jpg"), "IMG_002.jpg",
@@ -60,14 +60,14 @@ class SidecarReaderTest {
                 }
                 """.formatted(jsonEscaped(dir.resolve("IMG_001.jpg"))));
 
-        assertThat(reader.readEntries(sidecar)).containsExactly(
+        assertThat(this.reader.readEntries(sidecar)).containsExactly(
                 new SidecarPhotoEntry(dir.resolve("IMG_001.jpg"), "IMG_001.jpg",
                         Instant.parse("2019-06-20T15:00:10Z"), false));
     }
 
     @Test
     void failsLoudWhenTheSidecarFileIsMissing(@TempDir final Path dir) {
-        assertThatThrownBy(() -> reader.readEntries(dir.resolve("montage-404.json")))
+        assertThatThrownBy(() -> this.reader.readEntries(dir.resolve("montage-404.json")))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("montage-404.json");
     }
@@ -77,7 +77,7 @@ class SidecarReaderTest {
         final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, "{ not json");
 
-        assertThatThrownBy(() -> reader.readEntries(sidecar))
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("montage-001.json");
     }
@@ -87,7 +87,7 @@ class SidecarReaderTest {
         final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, "null");
 
-        assertThatThrownBy(() -> reader.readEntries(sidecar))
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("has no photos array");
     }
@@ -98,7 +98,7 @@ class SidecarReaderTest {
         Files.writeString(sidecar, """
                 { "montage": "montage-001.jpg" }""");
 
-        assertThatThrownBy(() -> reader.readEntries(sidecar))
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("has no photos array");
     }
@@ -109,7 +109,7 @@ class SidecarReaderTest {
         Files.writeString(sidecar, """
                 { "montage": "montage-001.jpg", "photos": [] }""");
 
-        assertThatThrownBy(() -> reader.readEntries(sidecar))
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("lists no photos");
     }
@@ -120,7 +120,7 @@ class SidecarReaderTest {
         Files.writeString(sidecar, """
                 { "photos": [ null ] }""");
 
-        assertThatThrownBy(() -> reader.readEntries(sidecar))
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("null photo entry");
     }
@@ -130,9 +130,9 @@ class SidecarReaderTest {
     void failsLoudOnAPhotoEntryMissingARequiredField(final String missing, @TempDir final Path dir) throws IOException {
         final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
-                { "photos": [ %s ] }""".formatted(photoWithout(missing, dir)));
+                { "photos": [ %s ] }""".formatted(this.photoWithout(missing, dir)));
 
-        assertThatThrownBy(() -> reader.readEntries(sidecar))
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("photo entry missing '" + missing + "'");
     }
@@ -144,7 +144,7 @@ class SidecarReaderTest {
                 { "photos": [ { "src": "%s", "name": "IMG_001.jpg", "time": "20-06-2019 15:00",
                   "received": false } ] }""".formatted(jsonEscaped(dir.resolve("IMG_001.jpg"))));
 
-        assertThatThrownBy(() -> reader.readEntries(sidecar))
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("unparseable time '20-06-2019 15:00'");
     }

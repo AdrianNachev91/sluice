@@ -49,9 +49,9 @@ public class CullDestinations {
     Path destinationDirFor(final Decision decision) {
         return switch (decision) {
             case final Classification c -> c.category().equals(FUNNY_CATEGORY)
-                    ? pathsPort.library().resolve("Funny")
-                    : pathsPort.review().resolve(c.category());
-            case final NearDupReject r -> duplicatesDir(r.file(), r.group());
+                    ? this.pathsPort.library().resolve("Funny")
+                    : this.pathsPort.review().resolve(c.category());
+            case final NearDupReject r -> this.duplicatesDir(r.file(), r.group());
             case NearDupChosen _ -> throw new IllegalStateException(
                     "NearDupChosen has no move destination - a chosen keeper is copied, never moved");
         };
@@ -65,7 +65,7 @@ public class CullDestinations {
      * @return {@link Path} the group's duplicates folder
      */
     Path duplicatesDir(final Path file, final String group) {
-        return pathsPort.duplicates().resolve(yearMonthOf(file) + "_" + group);
+        return this.pathsPort.duplicates().resolve(yearMonthOf(file) + "_" + group);
     }
 
     /**
@@ -78,7 +78,7 @@ public class CullDestinations {
      */
     Path unreviewableDir(final Path file) {
         final String[] yearMonth = yearMonthOf(file).split("-", 2);
-        return pathsPort.unreviewable().resolve(yearMonth[0]).resolve(yearMonth[1]);
+        return this.pathsPort.unreviewable().resolve(yearMonth[0]).resolve(yearMonth[1]);
     }
 
     /**

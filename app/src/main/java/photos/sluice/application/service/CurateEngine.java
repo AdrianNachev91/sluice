@@ -76,11 +76,11 @@ final class CurateEngine {
     JobHandle<CurateOutcome> curate(final SortScope scope) {
         final CullScope known = knownCullScope(scope);
         if (known != null) {
-            cullEngine.checkNoWaitingJobFor(known);
+            this.cullEngine.checkNoWaitingJobFor(known);
         }
-        return jobRunner.submit(handle -> {
-            final SortSummary sortSummary = phaseRunner.run(SORTING,
-                    progress -> sortEngine.sort(scope, progress, handle::isCancellationRequested));
+        return this.jobRunner.submit(handle -> {
+            final SortSummary sortSummary = this.phaseRunner.run(SORTING,
+                    progress -> this.sortEngine.sort(scope, progress, handle::isCancellationRequested));
             if (handle.isCancellationRequested()) {
                 return new CurateOutcome(sortSummary, null);
             }
@@ -95,7 +95,7 @@ final class CurateEngine {
                 // follows. That way a genuine cull failure downstream (a misconfigured provider,
                 // for example) is never mislabeled as this conflict.
                 try {
-                    cullEngine.checkNoWaitingJobFor(cullScope);
+                    this.cullEngine.checkNoWaitingJobFor(cullScope);
                 } catch (final IllegalStateException conflict) {
                     // The sort has already moved real files by this point. CurateConflictException
                     // carries the SortSummary forward so the caller isn't left blind about what
@@ -104,7 +104,7 @@ final class CurateEngine {
                 }
             }
             return new CurateOutcome(sortSummary,
-                    cullEngine.buildFreshAndDispatch(cullScope, handle::isCancellationRequested));
+                    this.cullEngine.buildFreshAndDispatch(cullScope, handle::isCancellationRequested));
         });
     }
 

@@ -91,9 +91,9 @@ public class MoveLedger implements LedgerReader {
         final var skipped = new HashSet<Path>();
         final var overlaps = new HashMap<Path, OverlapResolution>();
         final var corruptSidecars = new HashMap<String, CorruptSidecarResolution>();
-        mediaStore.readLines(logFor(prepDirPath))
+        this.mediaStore.readLines(this.logFor(prepDirPath))
                 .forEach(line -> parseLine(line, moves, skipped, overlaps, corruptSidecars));
-        return new Ledger(logFor(prepDirPath), Map.copyOf(moves), Set.copyOf(skipped),
+        return new Ledger(this.logFor(prepDirPath), Map.copyOf(moves), Set.copyOf(skipped),
                 Map.copyOf(overlaps), Map.copyOf(corruptSidecars));
     }
 
@@ -106,7 +106,7 @@ public class MoveLedger implements LedgerReader {
      * @param hash {@link String} the source's hash, taken before the move
      */
     void recordMove(final Path prepDirPath, final Path source, final Path dest, final String hash) {
-        mediaStore.appendLine(logFor(prepDirPath), source + RECORD_DELIMITER + dest + RECORD_DELIMITER + hash);
+        this.mediaStore.appendLine(this.logFor(prepDirPath), source + RECORD_DELIMITER + dest + RECORD_DELIMITER + hash);
     }
 
     /**
@@ -119,7 +119,7 @@ public class MoveLedger implements LedgerReader {
      * @param hash {@link String} the hash of whatever was found at dest
      */
     void recordReconstructed(final Path prepDirPath, final Path source, final Path dest, final String hash) {
-        mediaStore.appendLine(logFor(prepDirPath), source + RECORD_DELIMITER + dest + RECORD_DELIMITER
+        this.mediaStore.appendLine(this.logFor(prepDirPath), source + RECORD_DELIMITER + dest + RECORD_DELIMITER
                 + hash + RECORD_DELIMITER + RECONSTRUCTED_MARKER);
     }
 
@@ -131,7 +131,7 @@ public class MoveLedger implements LedgerReader {
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
     void recordSkip(final Path prepDirPath, final Path source, final String reason) {
-        mediaStore.appendLine(logFor(prepDirPath), source + RECORD_DELIMITER + SKIPPED_MARKER
+        this.mediaStore.appendLine(this.logFor(prepDirPath), source + RECORD_DELIMITER + SKIPPED_MARKER
                 + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
 
@@ -144,7 +144,7 @@ public class MoveLedger implements LedgerReader {
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
     void recordOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution, final String reason) {
-        mediaStore.appendLine(logFor(prepDirPath), file + RECORD_DELIMITER + OVERLAP_MARKER + RECORD_DELIMITER
+        this.mediaStore.appendLine(this.logFor(prepDirPath), file + RECORD_DELIMITER + OVERLAP_MARKER + RECORD_DELIMITER
                 + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
 
@@ -158,7 +158,7 @@ public class MoveLedger implements LedgerReader {
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
     void recordCorruptSidecar(final Path prepDirPath, final String montage, final CorruptSidecarResolution resolution, final String reason) {
-        mediaStore.appendLine(logFor(prepDirPath), montage + RECORD_DELIMITER + CORRUPT_SIDECAR_MARKER
+        this.mediaStore.appendLine(this.logFor(prepDirPath), montage + RECORD_DELIMITER + CORRUPT_SIDECAR_MARKER
                 + RECORD_DELIMITER + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
 

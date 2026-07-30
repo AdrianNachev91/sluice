@@ -75,8 +75,8 @@ final class CullWatcher {
      * Begins polling on a fixed delay.
      */
     void start() {
-        task = executor.scheduleWithFixedDelay(
-                this::poll, pollInterval.toMillis(), pollInterval.toMillis(), TimeUnit.MILLISECONDS);
+        this.task = this.executor.scheduleWithFixedDelay(
+                this::poll, this.pollInterval.toMillis(), this.pollInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -85,11 +85,11 @@ final class CullWatcher {
      * ScheduledExecutorService.shutdown() never interrupts the task currently running on it.
      */
     void stop() {
-        final ScheduledFuture<?> current = task;
+        final ScheduledFuture<?> current = this.task;
         if (current != null) {
             current.cancel(false);
         }
-        executor.shutdown();
+        this.executor.shutdown();
     }
 
     /**
@@ -98,7 +98,7 @@ final class CullWatcher {
      * @return boolean true if not yet shut down
      */
     boolean isActive() {
-        return !executor.isShutdown();
+        return !this.executor.isShutdown();
     }
 
     /**
@@ -109,7 +109,7 @@ final class CullWatcher {
      */
     private void poll() {
         try {
-            pollUnsafe();
+            this.pollUnsafe();
         } catch (final RuntimeException e) {
             log.warn("Cull watcher poll failed, will retry next tick", e);
         }
@@ -119,12 +119,12 @@ final class CullWatcher {
      * Checks the timeout, then checks readiness and attempts one consume.
      */
     private void pollUnsafe() {
-        if (timeout != null && Duration.between(armedAt, Instant.now()).compareTo(timeout) >= 0) {
-            stop();
+        if (this.timeout != null && Duration.between(this.armedAt, Instant.now()).compareTo(this.timeout) >= 0) {
+            this.stop();
             return;
         }
-        if (isReady.getAsBoolean() && attemptConsume.getAsBoolean()) {
-            stop();
+        if (this.isReady.getAsBoolean() && this.attemptConsume.getAsBoolean()) {
+            this.stop();
         }
     }
 }

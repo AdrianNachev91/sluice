@@ -79,21 +79,21 @@ public class Troubleshooter {
      *         throw, no report gets filed - the exception propagates before render() runs.
      */
     public TroubleshootReport troubleshoot(final Path prepDir) throws ApplyException {
-        final PrepDirHealth before = prepDirDoctor.diagnose(prepDir);
+        final PrepDirHealth before = this.prepDirDoctor.diagnose(prepDir);
         final boolean indexRebuilt = before.findings().stream().anyMatch(Finding.CorruptIndex.class::isInstance)
-                && prepDirRemedies.rebuildIndex(prepDir).isPresent();
-        final PrepDirHealth afterIndexRebuild = indexRebuilt ? prepDirDoctor.diagnose(prepDir) : before;
+                && this.prepDirRemedies.rebuildIndex(prepDir).isPresent();
+        final PrepDirHealth afterIndexRebuild = indexRebuilt ? this.prepDirDoctor.diagnose(prepDir) : before;
 
         final boolean needsReconcile = afterIndexRebuild.state() == State.BLOCKED
                 && afterIndexRebuild.findings().stream().anyMatch(Finding.MissingSource.class::isInstance);
-        final ReconcileReport reconcile = needsReconcile ? reconcileEngine.reconcile(prepDir) : null;
-        final PrepDirHealth afterReconcile = needsReconcile ? prepDirDoctor.diagnose(prepDir) : afterIndexRebuild;
+        final ReconcileReport reconcile = needsReconcile ? this.reconcileEngine.reconcile(prepDir) : null;
+        final PrepDirHealth afterReconcile = needsReconcile ? this.prepDirDoctor.diagnose(prepDir) : afterIndexRebuild;
 
-        final List<String> strayShardsRepaired = repairStrayShards(prepDir, afterReconcile);
-        final PrepDirHealth after = strayShardsRepaired.isEmpty() ? afterReconcile : prepDirDoctor.diagnose(prepDir);
+        final List<String> strayShardsRepaired = this.repairStrayShards(prepDir, afterReconcile);
+        final PrepDirHealth after = strayShardsRepaired.isEmpty() ? afterReconcile : this.prepDirDoctor.diagnose(prepDir);
 
         final String text = render(prepDir, before, indexRebuilt, reconcile, strayShardsRepaired, after);
-        disasterDrawer.write(prepDir, REPORT_WHAT, text);
+        this.disasterDrawer.write(prepDir, REPORT_WHAT, text);
         return new TroubleshootReport(before, indexRebuilt, reconcile, strayShardsRepaired, after, text);
     }
 
@@ -116,7 +116,7 @@ public class Troubleshooter {
         diagnosis.findings().stream()
                 .filter(Finding.StrayShard.class::isInstance)
                 .map(Finding.StrayShard.class::cast)
-                .forEach(stray -> prepDirRemedies.autoRepairStrayShard(prepDir, stray)
+                .forEach(stray -> this.prepDirRemedies.autoRepairStrayShard(prepDir, stray)
                         .ifPresent(montage -> repaired.add(stray.shardFile() + " -> " + montage)));
         return repaired;
     }

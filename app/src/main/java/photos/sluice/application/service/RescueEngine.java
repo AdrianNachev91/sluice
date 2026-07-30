@@ -64,7 +64,7 @@ public class RescueEngine implements RescueUseCase {
      */
     @Override
     public RescueSummary rescue(final String reviewFolder) {
-        return rescue(reviewFolder, ProgressCallback.NO_OP, CancellationSignal.NEVER);
+        return this.rescue(reviewFolder, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
     /**
@@ -75,7 +75,7 @@ public class RescueEngine implements RescueUseCase {
      * @return {@link RescueSummary} summary of rescued and skipped files
      */
     public RescueSummary rescue(final String reviewFolder, final ProgressCallback progress) {
-        return rescue(reviewFolder, progress, CancellationSignal.NEVER);
+        return this.rescue(reviewFolder, progress, CancellationSignal.NEVER);
     }
 
     /**
@@ -88,27 +88,27 @@ public class RescueEngine implements RescueUseCase {
      * @return {@link RescueSummary} summary of rescued and skipped files, and whether the folder was removed
      */
     public RescueSummary rescue(final String reviewFolder, final ProgressCallback progress, final CancellationSignal cancellation) {
-        final Path reviewRoot = pathsPort.review();
+        final Path reviewRoot = this.pathsPort.review();
         final Path target = resolveWithinReview(reviewRoot, reviewFolder);
         final String targetLeaf = target.getFileName().toString();
-        final Path libraryRoot = pathsPort.library();
+        final Path libraryRoot = this.pathsPort.library();
 
         // Snapshotted once, before any move happens, and reused below to find leftover
         // _reasons.txt markers. The loop below only ever relocates recognized media files, never a
         // marker file, so this list's marker entries are still accurate afterward. No need to
         // re-walk the directory a second time.
-        final List<Path> allFiles = mediaStore.listFiles(target);
+        final List<Path> allFiles = this.mediaStore.listFiles(target);
         final int total = allFiles.size();
         int current = 0;
         final var outcome = new RescueOutcome();
         // One session for the whole rescue loop. Each rescued file's index row is written and
         // flushed immediately, so a crash mid-run never leaves an already-moved file with no index
         // row. The header/leading-newline checks still only run once, instead of once per file.
-        try (final HashIndexPort.Session session = hashIndexPort.openSession()) {
+        try (final HashIndexPort.Session session = this.hashIndexPort.openSession()) {
             // Checked after each file, so an in-flight file is never interrupted; already-rescued
             // files stay rescued, matching the no-undo model.
             while (current < total && !cancellation.isCancelled()) {
-                rescueOneFile(allFiles.get(current), targetLeaf, libraryRoot, outcome, session);
+                this.rescueOneFile(allFiles.get(current), targetLeaf, libraryRoot, outcome, session);
                 progress.tick(++current, total);
             }
         }
@@ -122,9 +122,9 @@ public class RescueEngine implements RescueUseCase {
         if (ranToCompletion && outcome.skipped.isEmpty()) {
             allFiles.stream()
                     .filter(file -> file.getFileName().toString().equals(REASONS_FILE))
-                    .forEach(mediaStore::delete);
-            mediaStore.removeIfEmptyOfFiles(target);
-            folderRemoved = !mediaStore.exists(target);
+                    .forEach(this.mediaStore::delete);
+            this.mediaStore.removeIfEmptyOfFiles(target);
+            folderRemoved = !this.mediaStore.exists(target);
         }
 
         return new RescueSummary(outcome.rescued, outcome.skipped, folderRemoved);
@@ -143,19 +143,19 @@ public class RescueEngine implements RescueUseCase {
      */
     private void rescueOneFile(final Path file, final String targetLeaf, final Path libraryRoot, final RescueOutcome outcome,
                                final HashIndexPort.Session session) {
-        final Optional<MediaType> type = mediaTypeDetector.classify(file);
+        final Optional<MediaType> type = this.mediaTypeDetector.classify(file);
         if (type.isEmpty()) {
             return;
         }
-        final Optional<LocalDateTime> date = rescueDateResolver.resolve(new MediaFile(file), targetLeaf);
+        final Optional<LocalDateTime> date = this.rescueDateResolver.resolve(new MediaFile(file), targetLeaf);
         if (date.isEmpty()) {
             outcome.skipped.add(file.getFileName().toString());
             return;
         }
         final Path destDir = libraryRoot.resolve(type.get() == MediaType.VIDEO ? "Videos" : "Photos")
                 .resolve(yearFolder(date.get())).resolve(monthFolder(date.get()));
-        final String hash = sha256Port.hash(file);
-        final Path dest = mediaStore.move(file, destDir);
+        final String hash = this.sha256Port.hash(file);
+        final Path dest = this.mediaStore.move(file, destDir);
         session.append(new IndexEntry(hash, dest));
         outcome.rescued++;
     }

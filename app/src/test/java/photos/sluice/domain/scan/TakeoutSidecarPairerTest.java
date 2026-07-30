@@ -16,7 +16,7 @@ class TakeoutSidecarPairerTest {
     void noJsonFilesMeansNotTakeoutMode() {
         final List<Path> media = List.of(Path.of("dir/IMG_1234.jpg"));
 
-        final PairingResult result = pairer.pair(media, List.of());
+        final PairingResult result = this.pairer.pair(media, List.of());
 
         assertThat(result.takeoutMode()).isFalse();
         assertThat(result.sidecarsByMedia()).isEmpty();
@@ -27,7 +27,7 @@ class TakeoutSidecarPairerTest {
         final List<Path> media = List.of(Path.of("dir/IMG_1234.jpg"));
         final List<Path> json = List.of(Path.of("dir/IMG_1234.jpg.json"));
 
-        final PairingResult result = pairer.pair(media, json);
+        final PairingResult result = this.pairer.pair(media, json);
 
         assertThat(result.takeoutMode()).isTrue();
     }
@@ -37,7 +37,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("dir/IMG_1234.jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.sidecarsByMedia()).containsEntry(media, json);
     }
@@ -47,7 +47,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("dir/IMG_1234.jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.supplemental-metadata.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.sidecarsByMedia()).containsEntry(media, json);
     }
@@ -59,7 +59,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("dir/IMG_1234(1).jpg");
         final Path json = Path.of("dir/IMG_1234.jpg(1).json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.sidecarsByMedia()).containsEntry(media, json);
     }
@@ -69,7 +69,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("dir/IMG_1234-edited.jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.sidecarsByMedia()).containsEntry(media, json);
     }
@@ -82,7 +82,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("dir/IMG_1234.jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.someextra.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.sidecarsByMedia()).containsEntry(media, json);
     }
@@ -96,7 +96,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("dir/IMG_1234(1).jpg");
         final Path json = Path.of("dir/IMG_1234.jpg(1).extra.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.sidecarsByMedia()).containsEntry(media, json);
     }
@@ -107,7 +107,7 @@ class TakeoutSidecarPairerTest {
         final Path longerMatch = Path.of("dir/IMG_1234.jpg.aaaa.json");
         final Path shorterMatch = Path.of("dir/IMG_1234.jpg.a.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(longerMatch, shorterMatch));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(longerMatch, shorterMatch));
 
         assertThat(result.sidecarsByMedia()).containsEntry(media, shorterMatch);
     }
@@ -117,7 +117,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("dir/IMG_5678.jpg");
         final Path json = Path.of("dir/IMG_1234.jpg.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.sidecarsByMedia()).doesNotContainKey(media);
     }
@@ -127,7 +127,7 @@ class TakeoutSidecarPairerTest {
         final Path mediaInDirA = Path.of("dirA/IMG_1234.jpg");
         final Path jsonInDirB = Path.of("dirB/IMG_1234.jpg.json");
 
-        final PairingResult result = pairer.pair(List.of(mediaInDirA), List.of(jsonInDirB));
+        final PairingResult result = this.pairer.pair(List.of(mediaInDirA), List.of(jsonInDirB));
 
         assertThat(result.sidecarsByMedia()).doesNotContainKey(mediaInDirA);
     }
@@ -137,7 +137,7 @@ class TakeoutSidecarPairerTest {
         final Path media = Path.of("IMG_1234.jpg");
         final Path json = Path.of("IMG_1234.jpg.json");
 
-        final PairingResult result = pairer.pair(List.of(media), List.of(json));
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
 
         assertThat(result.takeoutMode()).isTrue();
         assertThat(result.sidecarsByMedia()).doesNotContainKey(media);

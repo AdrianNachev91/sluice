@@ -31,7 +31,7 @@ class SidecarWriterTest {
         final var photo = new SidecarPhotoEntry(
                 dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-06-15T10:30:00Z"), false);
 
-        writer.write(sidecarPath, montagePath, List.of(photo));
+        this.writer.write(sidecarPath, montagePath, List.of(photo));
 
         final String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
         assertThat(json).isEqualToIgnoringWhitespace("""
@@ -56,7 +56,7 @@ class SidecarWriterTest {
         final var first = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
         final var second = new SidecarPhotoEntry(dir.resolve("b.jpg"), "b.jpg", Instant.parse("2023-01-02T00:00:00Z"), false);
 
-        writer.write(sidecarPath, montagePath, List.of(first, second));
+        this.writer.write(sidecarPath, montagePath, List.of(first, second));
 
         final String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
         final int indexA = json.indexOf("a.jpg");
@@ -72,7 +72,7 @@ class SidecarWriterTest {
                 dir.resolve("IMG-20230615-WA0001.jpg"), "IMG-20230615-WA0001.jpg",
                 Instant.parse("2023-06-15T10:30:00Z"), true);
 
-        writer.write(sidecarPath, montagePath, List.of(photo));
+        this.writer.write(sidecarPath, montagePath, List.of(photo));
 
         final String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
         assertThat(json).contains("\"received\":true");
@@ -84,7 +84,7 @@ class SidecarWriterTest {
         final Path montagePath = dir.resolve("montage-004.jpg");
         final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
 
-        assertThatThrownBy(() -> writer.write(sidecarPath, montagePath, List.of(photo)))
+        assertThatThrownBy(() -> this.writer.write(sidecarPath, montagePath, List.of(photo)))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(sidecarPath.toString());
     }

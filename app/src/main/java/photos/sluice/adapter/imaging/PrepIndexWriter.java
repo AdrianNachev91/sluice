@@ -56,6 +56,7 @@ public class PrepIndexWriter {
      * @param indexPath {@link Path} the file to write the index to
      * @param prepDir {@link PrepDir} the prep directory metadata to serialize
      */
+    @SuppressWarnings("DuplicatedCode")
     public void write(final Path indexPath, final PrepDir prepDir) {
         final var document = new Index(
                 prepDir.scope(),
@@ -66,7 +67,7 @@ public class PrepIndexWriter {
                 prepDir.prepDir().toString(),
                 prepDir.entries());
         try (final var output = Files.newOutputStream(indexPath)) {
-            mapper.writeValue(output, document);
+            this.mapper.writeValue(output, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write prep index " + indexPath, e);
         } catch (final JacksonException e) {

@@ -95,7 +95,7 @@ public class ApplyEngine {
      * @throws ApplyException if validation finds unresolved problems
      */
     public ApplyReport apply(final Path prepDirPath, final ApplyOptions options) throws ApplyException {
-        return apply(prepDirPath, options, ProgressCallback.NO_OP);
+        return this.apply(prepDirPath, options, ProgressCallback.NO_OP);
     }
 
     /**
@@ -110,7 +110,7 @@ public class ApplyEngine {
     public ApplyReport apply(final Path prepDirPath, final ApplyOptions options, final ProgressCallback progress) throws ApplyException {
         // NEVER never trips, so the cancellation-aware overload below always runs to completion
         // and returns non-null here - this just asserts that rather than silently trusting it.
-        return Objects.requireNonNull(apply(prepDirPath, options, progress, CancellationSignal.NEVER));
+        return Objects.requireNonNull(this.apply(prepDirPath, options, progress, CancellationSignal.NEVER));
     }
 
     /**
@@ -134,20 +134,20 @@ public class ApplyEngine {
      */
     public @Nullable ApplyReport apply(final Path prepDirPath, final ApplyOptions options, final ProgressCallback progress,
                                        final CancellationSignal cancellation) throws ApplyException {
-        final PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
+        final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
         // One snapshot for this whole run, taken before anything below could append to the ledger.
-        final Ledger ledger = moveLedger.read(prepDirPath);
-        final ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, options, ledger);
+        final Ledger ledger = this.moveLedger.read(prepDirPath);
+        final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, options, ledger);
         if (!validation.valid()) {
             throw ApplyPlanner.failure(validation.findings());
         }
 
-        final List<Path> unreviewableFiles = applyPlanner.resolvedUnreviewable(prepDir, ledger);
+        final List<Path> unreviewableFiles = this.applyPlanner.resolvedUnreviewable(prepDir, ledger);
         final List<Status> statuses = validation.decisions().stream()
-                .map(decision -> applyPlanner.classify(decision, ledger))
+                .map(decision -> this.applyPlanner.classify(decision, ledger))
                 .toList();
         final List<FileStatus> unreviewableStatuses = unreviewableFiles.stream()
-                .map(file -> applyPlanner.classifyFile(file, ledger))
+                .map(file -> this.applyPlanner.classifyFile(file, ledger))
                 .toList();
         final List<Finding> missingSource = new ArrayList<>();
         statuses.stream()
@@ -177,8 +177,8 @@ public class ApplyEngine {
                 return null;
             }
             switch (status) {
-                case final Status.Pending p -> apply(p.decision(), prepDirPath, nearDupGroups, outcome);
-                case final Status.Done d -> backfillSecondaryWrite(d.decision(), d.record());
+                case final Status.Pending p -> this.apply(p.decision(), prepDirPath, nearDupGroups, outcome);
+                case final Status.Done d -> this.backfillSecondaryWrite(d.decision(), d.record());
                 case Status.Skipped _ -> {} // user gave up on this decision - nothing to do
                 case Status.Unresolved _ -> {} // already aborted the whole run above
             }
@@ -189,7 +189,7 @@ public class ApplyEngine {
                 return null;
             }
             if (status instanceof FileStatus.Pending(final Path file)) {
-                recordThenMove(file, cullDestinations.unreviewableDir(file), prepDirPath);
+                this.recordThenMove(file, this.cullDestinations.unreviewableDir(file), prepDirPath);
             }
             // Done, Skipped: nothing further to do here.
             progress.tick(++current, total);
@@ -199,8 +199,8 @@ public class ApplyEngine {
                 outcome.nearDupGroupsChosen.size(), outcome.nearDupRejects, validation.heals());
         final ApplyReport persistedSummary = summarize(validation.decisions(), prepDir, unreviewableFiles.size(),
                 validation.heals());
-        cullPrepPort.writeMergedDecisions(prepDirPath, prepDir.scope(), validation.decisions(), persistedSummary);
-        cleanupIntermediates(prepDirPath);
+        this.cullPrepPort.writeMergedDecisions(prepDirPath, prepDir.scope(), validation.decisions(), persistedSummary);
+        this.cleanupIntermediates(prepDirPath);
         return report;
     }
 
@@ -243,7 +243,7 @@ public class ApplyEngine {
      */
     private void backfillSecondaryWrite(final Decision decision, final MoveRecord record) {
         if (decision instanceof final Classification c) {
-            backfillClassificationWrite(c, record);
+            this.backfillClassificationWrite(c, record);
         }
     }
 
@@ -259,17 +259,17 @@ public class ApplyEngine {
             // paths under one hash (byte-identical files kept in more than one place). Another entry
             // sharing this hash would wrongly read as "this decision's own row is already there" -
             // the path has to match too.
-            final boolean alreadyIndexed = hashIndexPort.load()
+            final boolean alreadyIndexed = this.hashIndexPort.load()
                     .getOrDefault(record.hash(), List.of())
                     .contains(record.dest());
             if (!alreadyIndexed) {
-                hashIndexPort.append(List.of(new IndexEntry(record.hash(), record.dest())));
+                this.hashIndexPort.append(List.of(new IndexEntry(record.hash(), record.dest())));
             }
         } else {
-            final Path reasonsFile = cullDestinations.destinationDirFor(c).resolve(REASONS_FILE);
+            final Path reasonsFile = this.cullDestinations.destinationDirFor(c).resolve(REASONS_FILE);
             final String line = c.file().getFileName() + " - " + c.reason();
-            if (!mediaStore.readLines(reasonsFile).contains(line)) {
-                mediaStore.appendLine(reasonsFile, line);
+            if (!this.mediaStore.readLines(reasonsFile).contains(line)) {
+                this.mediaStore.appendLine(reasonsFile, line);
             }
         }
     }
@@ -306,9 +306,9 @@ public class ApplyEngine {
     private void apply(final Decision decision, final Path prepDirPath, final Map<String, List<Decision>> nearDupGroups,
                        final ApplyOutcome outcome) {
         switch (decision) {
-            case final Classification c -> applyClassification(c, prepDirPath, outcome);
-            case final NearDupChosen c -> applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome);
-            case final NearDupReject r -> applyNearDupReject(r, prepDirPath, outcome);
+            case final Classification c -> this.applyClassification(c, prepDirPath, outcome);
+            case final NearDupChosen c -> this.applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome);
+            case final NearDupReject r -> this.applyNearDupReject(r, prepDirPath, outcome);
         }
     }
 
@@ -327,12 +327,12 @@ public class ApplyEngine {
      */
     private void applyClassification(final Classification c, final Path prepDirPath, final ApplyOutcome outcome) {
         outcome.byCategory.merge(c.category(), 1, Integer::sum);
-        final Path destDir = cullDestinations.destinationDirFor(c);
-        final MoveOutcome moved = recordThenMove(c.file(), destDir, prepDirPath);
+        final Path destDir = this.cullDestinations.destinationDirFor(c);
+        final MoveOutcome moved = this.recordThenMove(c.file(), destDir, prepDirPath);
         if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
-            hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
+            this.hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
         } else {
-            mediaStore.appendLine(destDir.resolve(REASONS_FILE), c.file().getFileName() + " - " + c.reason());
+            this.mediaStore.appendLine(destDir.resolve(REASONS_FILE), c.file().getFileName() + " - " + c.reason());
         }
     }
 
@@ -353,12 +353,12 @@ public class ApplyEngine {
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
     private void applyNearDupChosen(final NearDupChosen c, final List<Decision> group, final ApplyOutcome outcome) {
-        final Path dupDir = cullDestinations.duplicatesDir(c.file(), c.group());
+        final Path dupDir = this.cullDestinations.duplicatesDir(c.file(), c.group());
         final Path dest = dupDir.resolve(c.file().getFileName().toString());
-        if (!mediaStore.exists(dest)) {
-            mediaStore.copy(c.file(), dupDir);
+        if (!this.mediaStore.exists(dest)) {
+            this.mediaStore.copy(c.file(), dupDir);
         }
-        mediaStore.write(dupDir.resolve(c.file().getFileName() + ".txt"), chosenNote(c, group));
+        this.mediaStore.write(dupDir.resolve(c.file().getFileName() + ".txt"), chosenNote(c, group));
         outcome.nearDupGroupsChosen.add(c.group());
     }
 
@@ -370,7 +370,7 @@ public class ApplyEngine {
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
     private void applyNearDupReject(final NearDupReject r, final Path prepDirPath, final ApplyOutcome outcome) {
-        recordThenMove(r.file(), cullDestinations.destinationDirFor(r), prepDirPath);
+        this.recordThenMove(r.file(), this.cullDestinations.destinationDirFor(r), prepDirPath);
         outcome.nearDupRejects++;
     }
 
@@ -388,10 +388,10 @@ public class ApplyEngine {
      * @return {@link MoveOutcome} the resolved destination and source hash
      */
     private MoveOutcome recordThenMove(final Path source, final Path destDir, final Path prepDirPath) {
-        final Path dest = mediaStore.resolveDestination(source, destDir);
-        final String hash = sha256Port.hash(source);
-        moveLedger.recordMove(prepDirPath, source, dest, hash);
-        mediaStore.moveTo(source, dest);
+        final Path dest = this.mediaStore.resolveDestination(source, destDir);
+        final String hash = this.sha256Port.hash(source);
+        this.moveLedger.recordMove(prepDirPath, source, dest, hash);
+        this.mediaStore.moveTo(source, dest);
         return new MoveOutcome(dest, hash);
     }
 
@@ -423,9 +423,9 @@ public class ApplyEngine {
      * @param prepDirPath {@link Path} the prep directory to clean up
      */
     private void cleanupIntermediates(final Path prepDirPath) {
-        for (final Path file : mediaStore.listFiles(prepDirPath)) {
+        for (final Path file : this.mediaStore.listFiles(prepDirPath)) {
             if (MontageNaming.isMontageImage(file.getFileName().toString())) {
-                mediaStore.delete(file);
+                this.mediaStore.delete(file);
             }
         }
     }

@@ -54,7 +54,7 @@ public class CliHeifDecoder implements HeifDecoder {
         } catch (IOException _) {
             return Optional.empty();
         }
-        try (final Process process = new ProcessBuilder(command, "--quiet", file.toString(), output.toString())
+        try (final Process process = new ProcessBuilder(this.command, "--quiet", file.toString(), output.toString())
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()) {

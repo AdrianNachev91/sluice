@@ -113,7 +113,7 @@ public class TileRenderer {
             // AVIF shares HEIC/HEIF's ISOBMFF container. It's decodable by the same libheif
             // library, just with an AV1 payload instead of HEVC. Routed through the same port so a
             // real libheif-backed adapter picks up AVIF for free, with no separate decoder needed.
-            return heifDecoder.decode(file)
+            return this.heifDecoder.decode(file)
                     .flatMap(image -> resizedResult(image, tileSize))
                     .orElseGet(() -> placeholderResult(tileSize, extension.toUpperCase(Locale.ROOT)));
         }
@@ -509,7 +509,7 @@ public class TileRenderer {
          * @return {@link BufferedImage} the rendered image, or null if not yet rendered
          */
         @Nullable BufferedImage image() {
-            return image;
+            return this.image;
         }
     }
 }

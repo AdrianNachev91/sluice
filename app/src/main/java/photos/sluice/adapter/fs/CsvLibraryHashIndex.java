@@ -50,12 +50,12 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      */
     @Override
     public Map<String, List<Path>> load() {
-        if (!Files.isRegularFile(indexFile)) {
+        if (!Files.isRegularFile(this.indexFile)) {
             return Map.of();
         }
         final Map<String, List<Path>> result = new LinkedHashMap<>();
         try {
-            final List<String> lines = Files.readAllLines(indexFile, StandardCharsets.UTF_8);
+            final List<String> lines = Files.readAllLines(this.indexFile, StandardCharsets.UTF_8);
             for (int i = 0; i < lines.size(); i++) {
                 // The BOM (if present) and the header row only ever appear on line 0.
                 final String line = i == 0 ? stripBom(lines.get(i)) : lines.get(i);
@@ -69,7 +69,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
                 }
             }
         } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to read hash index " + indexFile, e);
+            throw new UncheckedIOException("Failed to read hash index " + this.indexFile, e);
         }
         return result;
     }
@@ -85,7 +85,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         // No caching: every caller so far either already holds a pre-loaded Set or calls this
         // rarely enough that re-reading the file each time is not worth the staleness risk of a
         // cache that could drift if the file is modified outside this process.
-        return load().containsKey(sha256);
+        return this.load().containsKey(sha256);
     }
 
     /**
@@ -98,7 +98,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         if (entries.isEmpty()) {
             return;
         }
-        try (final Session session = openSession()) {
+        try (final Session session = this.openSession()) {
             entries.forEach(session::append);
         }
     }
@@ -131,14 +131,14 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         @Override
         public void append(final IndexEntry entry) {
             try {
-                if (writer == null) {
-                    writer = openWriter();
+                if (this.writer == null) {
+                    this.writer = CsvLibraryHashIndex.this.openWriter();
                 }
-                writer.write(formatLine(entry));
-                writer.newLine();
-                writer.flush();
+                this.writer.write(formatLine(entry));
+                this.writer.newLine();
+                this.writer.flush();
             } catch (final IOException e) {
-                throw new UncheckedIOException("Failed to append to hash index " + indexFile, e);
+                throw new UncheckedIOException("Failed to append to hash index " + CsvLibraryHashIndex.this.indexFile, e);
             }
         }
 
@@ -147,13 +147,13 @@ public class CsvLibraryHashIndex implements HashIndexPort {
          */
         @Override
         public void close() {
-            if (writer == null) {
+            if (this.writer == null) {
                 return;
             }
             try {
-                writer.close();
+                this.writer.close();
             } catch (final IOException e) {
-                throw new UncheckedIOException("Failed to close hash index " + indexFile, e);
+                throw new UncheckedIOException("Failed to close hash index " + CsvLibraryHashIndex.this.indexFile, e);
             }
         }
     }
@@ -164,16 +164,16 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @return a {@link BufferedWriter} positioned to append new rows
      */
     private BufferedWriter openWriter() throws IOException {
-        Files.createDirectories(indexFile.getParent());
-        final boolean exists = Files.isRegularFile(indexFile);
-        final long size = exists ? Files.size(indexFile) : 0;
+        Files.createDirectories(this.indexFile.getParent());
+        final boolean exists = Files.isRegularFile(this.indexFile);
+        final long size = exists ? Files.size(this.indexFile) : 0;
         final boolean writeHeader = !exists || size == 0;
         // Defensive: the file can arrive here without a trailing newline (a manual edit, an
         // editor that strips trailing whitespace, an interrupted write). Appending straight
         // onto such a line would merge it with the next row into one unparsable line and
         // break load() for the whole file.
-        final boolean needsLeadingNewline = size > 0 && !endsWithNewline(indexFile);
-        final BufferedWriter writer = Files.newBufferedWriter(indexFile, StandardCharsets.UTF_8,
+        final boolean needsLeadingNewline = size > 0 && !endsWithNewline(this.indexFile);
+        final BufferedWriter writer = Files.newBufferedWriter(this.indexFile, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         if (needsLeadingNewline) {
             writer.newLine();

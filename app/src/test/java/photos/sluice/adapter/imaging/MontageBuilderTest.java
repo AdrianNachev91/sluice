@@ -25,7 +25,7 @@ class MontageBuilderTest {
 
     @Test
     void throwsForAnEmptyTileList() {
-        assertThatThrownBy(() -> builder.compose(List.of(), MontageConfig.defaults()))
+        assertThatThrownBy(() -> this.builder.compose(List.of(), MontageConfig.defaults()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -34,7 +34,7 @@ class MontageBuilderTest {
         final var config = new MontageConfig(TILE_SIZE, 1);
         final var tile = new MontageTile(solidImage(TILE_SIZE, TILE_SIZE, Color.RED), "a.jpg");
 
-        final BufferedImage montage = builder.compose(List.of(tile), config);
+        final BufferedImage montage = this.builder.compose(List.of(tile), config);
 
         assertThat(montage.getWidth()).isEqualTo(TILE_SIZE + 2 * CELL_PADDING);
         assertThat(montage.getHeight())
@@ -46,7 +46,7 @@ class MontageBuilderTest {
         final var config = new MontageConfig(TILE_SIZE, 3);
         final List<MontageTile> tiles = solidTiles(6);
 
-        final BufferedImage montage = builder.compose(tiles, config);
+        final BufferedImage montage = this.builder.compose(tiles, config);
 
         final int cellWidth = TILE_SIZE + 2 * CELL_PADDING;
         final int cellHeight = TILE_SIZE + MontageBuilder.labelBandHeight() + 2 * CELL_PADDING;
@@ -59,7 +59,7 @@ class MontageBuilderTest {
         final var config = new MontageConfig(TILE_SIZE, 3);
         final List<MontageTile> tiles = solidTiles(4);
 
-        final BufferedImage montage = builder.compose(tiles, config);
+        final BufferedImage montage = this.builder.compose(tiles, config);
 
         final int cellWidth = TILE_SIZE + 2 * CELL_PADDING;
         final int cellHeight = TILE_SIZE + MontageBuilder.labelBandHeight() + 2 * CELL_PADDING;
@@ -78,7 +78,7 @@ class MontageBuilderTest {
         final var config = new MontageConfig(TILE_SIZE, 1);
         final var tile = new MontageTile(solidImage(TILE_SIZE, TILE_SIZE / 2, Color.RED), "a.jpg");
 
-        final BufferedImage montage = builder.compose(List.of(tile), config);
+        final BufferedImage montage = this.builder.compose(List.of(tile), config);
 
         final int centerX = CELL_PADDING + TILE_SIZE / 2;
         assertThat(new Color(montage.getRGB(centerX, CELL_PADDING + TILE_SIZE / 2))).isEqualTo(Color.RED);
@@ -93,7 +93,7 @@ class MontageBuilderTest {
         final var config = new MontageConfig(TILE_SIZE, 1);
         final var tile = new MontageTile(solidImage(TILE_SIZE / 2, TILE_SIZE, Color.RED), "a.jpg");
 
-        final BufferedImage montage = builder.compose(List.of(tile), config);
+        final BufferedImage montage = this.builder.compose(List.of(tile), config);
 
         final int centerY = CELL_PADDING + TILE_SIZE / 2;
         assertThat(new Color(montage.getRGB(CELL_PADDING + TILE_SIZE / 2, centerY))).isEqualTo(Color.RED);
@@ -108,7 +108,7 @@ class MontageBuilderTest {
         final var config = new MontageConfig(TILE_SIZE, 1);
         final var tile = new MontageTile(solidImage(TILE_SIZE, TILE_SIZE, Color.RED), "a.jpg");
 
-        final BufferedImage montage = builder.compose(List.of(tile), config);
+        final BufferedImage montage = this.builder.compose(List.of(tile), config);
 
         final int imageCenter = CELL_PADDING + TILE_SIZE / 2;
         assertThat(new Color(montage.getRGB(imageCenter, imageCenter))).isEqualTo(Color.RED);
@@ -132,7 +132,7 @@ class MontageBuilderTest {
         final var firstTile = new MontageTile(solidImage(TILE_SIZE, TILE_SIZE, Color.RED), longLabel);
         final var secondTile = new MontageTile(solidImage(TILE_SIZE, TILE_SIZE, Color.BLUE), "b.jpg");
 
-        final BufferedImage montage = builder.compose(List.of(firstTile, secondTile), config);
+        final BufferedImage montage = this.builder.compose(List.of(firstTile, secondTile), config);
 
         final int cellWidth = TILE_SIZE + 2 * CELL_PADDING;
         // The second tile's own image area is unaffected by the first cell's overflowing label.

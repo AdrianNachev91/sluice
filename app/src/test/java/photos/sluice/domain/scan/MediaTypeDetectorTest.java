@@ -20,7 +20,7 @@ class MediaTypeDetectorTest {
             "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2", "svg", "avif"
     })
     void classifiesPhotoExtensions(final String extension) {
-        final Optional<MediaType> result = detector.classify(Path.of("IMG_1234." + extension));
+        final Optional<MediaType> result = this.detector.classify(Path.of("IMG_1234." + extension));
 
         assertThat(result).contains(MediaType.PHOTO);
     }
@@ -28,7 +28,7 @@ class MediaTypeDetectorTest {
     @ParameterizedTest
     @ValueSource(strings = {"mp4", "mov", "mkv", "avi", "m4v", "3gp", "webm", "wmv", "mpg", "mpeg", "mts", "m2ts", "flv"})
     void classifiesVideoExtensions(final String extension) {
-        final Optional<MediaType> result = detector.classify(Path.of("VID_1234." + extension));
+        final Optional<MediaType> result = this.detector.classify(Path.of("VID_1234." + extension));
 
         assertThat(result).contains(MediaType.VIDEO);
     }
@@ -36,7 +36,7 @@ class MediaTypeDetectorTest {
     @ParameterizedTest
     @ValueSource(strings = {"JPG", "Mp4", "HEIC"})
     void classificationIsCaseInsensitive(final String extension) {
-        final Optional<MediaType> result = detector.classify(Path.of("IMG_1234." + extension));
+        final Optional<MediaType> result = this.detector.classify(Path.of("IMG_1234." + extension));
 
         assertThat(result).isPresent();
     }
@@ -44,14 +44,14 @@ class MediaTypeDetectorTest {
     @ParameterizedTest
     @ValueSource(strings = {"txt", "json", "ini", "ds_store"})
     void returnsEmptyForUnrecognizedExtension(final String extension) {
-        final Optional<MediaType> result = detector.classify(Path.of("file." + extension));
+        final Optional<MediaType> result = this.detector.classify(Path.of("file." + extension));
 
         assertThat(result).isEmpty();
     }
 
     @Test
     void returnsEmptyForFileWithNoExtension() {
-        final Optional<MediaType> result = detector.classify(Path.of("README"));
+        final Optional<MediaType> result = this.detector.classify(Path.of("README"));
 
         assertThat(result).isEmpty();
     }

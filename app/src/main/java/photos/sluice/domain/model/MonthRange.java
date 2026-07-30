@@ -27,6 +27,6 @@ public record MonthRange(int from, int to) {
      * @return boolean true if month is within from and to inclusive
      */
     public boolean includes(final int month) {
-        return month >= from && month <= to;
+        return month >= this.from && month <= this.to;
     }
 }

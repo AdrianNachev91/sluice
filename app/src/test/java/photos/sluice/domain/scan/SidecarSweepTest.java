@@ -16,14 +16,14 @@ class SidecarSweepTest {
         final Path media = Path.of("Inbox", "2019-06", "photo1.jpg");
         final Path json = Path.of("Inbox", "2019-06", "photo1.jpg.json");
 
-        assertThat(sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
+        assertThat(this.sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
     }
 
     @Test
     void sidecarWhoseMediaIsGoneIsOrphaned() {
         final Path json = Path.of("Inbox", "2019-06", "photo1.jpg.json");
 
-        assertThat(sweep.findOrphaned(List.of(), List.of(json))).containsExactly(json);
+        assertThat(this.sweep.findOrphaned(List.of(), List.of(json))).containsExactly(json);
     }
 
     @Test
@@ -31,7 +31,7 @@ class SidecarSweepTest {
         final Path media = Path.of("Inbox", "2020-07", "photo1.jpg");
         final Path json = Path.of("Inbox", "2019-06", "photo1.jpg.json");
 
-        assertThat(sweep.findOrphaned(List.of(media), List.of(json))).containsExactly(json);
+        assertThat(this.sweep.findOrphaned(List.of(media), List.of(json))).containsExactly(json);
     }
 
     @Test
@@ -44,7 +44,7 @@ class SidecarSweepTest {
         final Path media = Path.of("Inbox", longBase + ".jpg");
         final Path json = Path.of("Inbox", longBase.substring(0, 48) + ".json");
 
-        assertThat(sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
+        assertThat(this.sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
     }
 
     @Test
@@ -56,7 +56,7 @@ class SidecarSweepTest {
         final Path media = Path.of("Inbox", longBase + ".jpg");
         final Path json = Path.of("Inbox", longBase.substring(0, 45) + ".json");
 
-        assertThat(sweep.findOrphaned(List.of(media), List.of(json))).containsExactly(json);
+        assertThat(this.sweep.findOrphaned(List.of(media), List.of(json))).containsExactly(json);
     }
 
     @Test
@@ -66,7 +66,7 @@ class SidecarSweepTest {
         final Path unrelatedMedia = Path.of("Inbox", "img_vacation.jpg");
         final Path json = Path.of("Inbox", "img.json");
 
-        assertThat(sweep.findOrphaned(List.of(unrelatedMedia), List.of(json))).containsExactly(json);
+        assertThat(this.sweep.findOrphaned(List.of(unrelatedMedia), List.of(json))).containsExactly(json);
     }
 
     @Test
@@ -74,7 +74,7 @@ class SidecarSweepTest {
         final Path media = Path.of("Inbox", "PHOTO1.JPG");
         final Path json = Path.of("Inbox", "photo1.jpg.json");
 
-        assertThat(sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
+        assertThat(this.sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
     }
 
     @Test
@@ -82,8 +82,8 @@ class SidecarSweepTest {
         final Path media = Path.of("Inbox", "photo1.jpg");
         final Path json = Path.of("Inbox", "photo1.jpg.supplemental-metadata.json");
 
-        assertThat(sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
-        assertThat(sweep.findOrphaned(List.of(), List.of(json))).containsExactly(json);
+        assertThat(this.sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
+        assertThat(this.sweep.findOrphaned(List.of(), List.of(json))).containsExactly(json);
     }
 
     @Test
@@ -92,7 +92,7 @@ class SidecarSweepTest {
         final Path media = Path.of("Inbox", "photo1(1).jpg");
         final Path json = Path.of("Inbox", "photo1.jpg(1).json");
 
-        assertThat(sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
+        assertThat(this.sweep.findOrphaned(List.of(media), List.of(json))).isEmpty();
     }
 
     @Test
@@ -101,7 +101,7 @@ class SidecarSweepTest {
         final Path keptJson = Path.of("Inbox", "keep.jpg.json");
         final Path orphanedJson = Path.of("Inbox", "gone.jpg.json");
 
-        assertThat(sweep.findOrphaned(List.of(keptMedia), List.of(keptJson, orphanedJson)))
+        assertThat(this.sweep.findOrphaned(List.of(keptMedia), List.of(keptJson, orphanedJson)))
                 .containsExactly(orphanedJson);
     }
 }

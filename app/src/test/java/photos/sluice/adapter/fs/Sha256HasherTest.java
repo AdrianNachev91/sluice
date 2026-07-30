@@ -25,13 +25,13 @@ class Sha256HasherTest {
         final Path file = dir.resolve("fixture.txt");
         Files.writeString(file, FIXTURE_CONTENT, StandardCharsets.UTF_8);
 
-        assertThat(hasher.hash(file)).isEqualTo(FIXTURE_SHA256);
+        assertThat(this.hasher.hash(file)).isEqualTo(FIXTURE_SHA256);
     }
 
     @Test
     void missingFileWrapsIoExceptionUnchecked(@TempDir final Path dir) {
         final Path missing = dir.resolve("does-not-exist.txt");
 
-        assertThatThrownBy(() -> hasher.hash(missing)).isInstanceOf(UncheckedIOException.class);
+        assertThatThrownBy(() -> this.hasher.hash(missing)).isInstanceOf(UncheckedIOException.class);
     }
 }

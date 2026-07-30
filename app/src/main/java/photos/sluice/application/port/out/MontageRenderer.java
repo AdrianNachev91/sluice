@@ -36,7 +36,7 @@ public interface MontageRenderer {
      * @return {@link PrepDir} the prep directory holding the built montages
      */
     default PrepDir build(final CullScope scope, final MontageConfig config, final ProgressCallback progress) {
-        return build(scope, config);
+        return this.build(scope, config);
     }
 
     /**
@@ -55,6 +55,6 @@ public interface MontageRenderer {
      */
     default @Nullable PrepDir build(final CullScope scope, final MontageConfig config, final ProgressCallback progress,
                                     final CancellationSignal cancellation) {
-        return build(scope, config, progress);
+        return this.build(scope, config, progress);
     }
 }

@@ -31,14 +31,14 @@ class TakeoutJsonSourceTest {
                   }
                 }""".formatted(epochSeconds));
 
-        final Optional<LocalDateTime> result = source.resolve(anyFile, new TakeoutSidecar(sidecar));
+        final Optional<LocalDateTime> result = this.source.resolve(this.anyFile, new TakeoutSidecar(sidecar));
 
         assertThat(result).contains(photoTakenAt);
     }
 
     @Test
     void returnsEmptyWhenSidecarAbsent() {
-        final Optional<LocalDateTime> result = source.resolve(anyFile, null);
+        final Optional<LocalDateTime> result = this.source.resolve(this.anyFile, null);
 
         assertThat(result).isEmpty();
     }
@@ -52,7 +52,7 @@ class TakeoutJsonSourceTest {
                   }
                 }""");
 
-        final Optional<LocalDateTime> result = source.resolve(anyFile, new TakeoutSidecar(sidecar));
+        final Optional<LocalDateTime> result = this.source.resolve(this.anyFile, new TakeoutSidecar(sidecar));
 
         assertThat(result).isEmpty();
     }
@@ -64,7 +64,7 @@ class TakeoutJsonSourceTest {
                   "title": "IMG_0001.jpg"
                 }""");
 
-        final Optional<LocalDateTime> result = source.resolve(anyFile, new TakeoutSidecar(sidecar));
+        final Optional<LocalDateTime> result = this.source.resolve(this.anyFile, new TakeoutSidecar(sidecar));
 
         assertThat(result).isEmpty();
     }
@@ -73,7 +73,7 @@ class TakeoutJsonSourceTest {
     void returnsEmptyOnMalformedJson(@TempDir final Path dir) throws IOException {
         final Path sidecar = writeSidecar(dir, "{not valid json");
 
-        final Optional<LocalDateTime> result = source.resolve(anyFile, new TakeoutSidecar(sidecar));
+        final Optional<LocalDateTime> result = this.source.resolve(this.anyFile, new TakeoutSidecar(sidecar));
 
         assertThat(result).isEmpty();
     }
@@ -88,7 +88,7 @@ class TakeoutJsonSourceTest {
                   }
                 }""");
 
-        final Optional<LocalDateTime> result = source.resolve(anyFile, new TakeoutSidecar(sidecar));
+        final Optional<LocalDateTime> result = this.source.resolve(this.anyFile, new TakeoutSidecar(sidecar));
 
         assertThat(result).isEmpty();
     }

@@ -33,7 +33,7 @@ public final class JobHandle<T> {
      * Marks cancellation as requested for this job.
      */
     public void requestCancellation() {
-        cancellationRequested.set(true);
+        this.cancellationRequested.set(true);
     }
 
     /**
@@ -42,7 +42,7 @@ public final class JobHandle<T> {
      * @return boolean true if cancellation was requested
      */
     public boolean isCancellationRequested() {
-        return cancellationRequested.get();
+        return this.cancellationRequested.get();
     }
 
     /**
@@ -51,7 +51,7 @@ public final class JobHandle<T> {
      * @return T the job's result
      */
     public T join() {
-        return result.join();
+        return this.result.join();
     }
 
     /**
@@ -62,6 +62,6 @@ public final class JobHandle<T> {
      * @return a {@link CompletionStage} of T a read-only completion stage for this job's result
      */
     public CompletionStage<T> onComplete() {
-        return result.minimalCompletionStage();
+        return this.result.minimalCompletionStage();
     }
 }

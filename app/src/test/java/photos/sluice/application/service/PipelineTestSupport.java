@@ -285,17 +285,17 @@ final class PipelineTestSupport {
 
         @Override
         public void phaseStarted(final String phase) {
-            events.add("started:" + phase);
+            this.events.add("started:" + phase);
         }
 
         @Override
         public void tick(final String phase, final int current, final int total) {
-            events.add("tick:" + phase + ":" + current + "/" + total);
+            this.events.add("tick:" + phase + ":" + current + "/" + total);
         }
 
         @Override
         public void phaseFinished(final String phase) {
-            events.add("finished:" + phase);
+            this.events.add("finished:" + phase);
         }
     }
 
@@ -306,12 +306,12 @@ final class PipelineTestSupport {
 
         @Override
         public List<Path> listFiles(final Path root) {
-            return delegate.listFiles(root);
+            return this.delegate.listFiles(root);
         }
 
         @Override
         public Instant lastModifiedTime(final Path path) {
-            return delegate.lastModifiedTime(path);
+            return this.delegate.lastModifiedTime(path);
         }
 
         @Override
@@ -321,62 +321,62 @@ final class PipelineTestSupport {
 
         @Override
         public Path resolveDestination(final Path source, final Path destDir) {
-            return delegate.resolveDestination(source, destDir);
+            return this.delegate.resolveDestination(source, destDir);
         }
 
         @Override
         public Path moveTo(final Path source, final Path destination) {
-            return delegate.moveTo(source, destination);
+            return this.delegate.moveTo(source, destination);
         }
 
         @Override
         public Path copy(final Path source, final Path destDir) {
-            return delegate.copy(source, destDir);
+            return this.delegate.copy(source, destDir);
         }
 
         @Override
         public void delete(final Path path) {
-            delegate.delete(path);
+            this.delegate.delete(path);
         }
 
         @Override
         public void ensureDirectory(final Path dir) {
-            delegate.ensureDirectory(dir);
+            this.delegate.ensureDirectory(dir);
         }
 
         @Override
         public boolean exists(final Path path) {
-            return delegate.exists(path);
+            return this.delegate.exists(path);
         }
 
         @Override
         public long size(final Path path) {
-            return delegate.size(path);
+            return this.delegate.size(path);
         }
 
         @Override
         public void appendLine(final Path file, final String line) {
-            delegate.appendLine(file, line);
+            this.delegate.appendLine(file, line);
         }
 
         @Override
         public void write(final Path file, final String content) {
-            delegate.write(file, content);
+            this.delegate.write(file, content);
         }
 
         @Override
         public List<String> readLines(final Path file) {
-            return delegate.readLines(file);
+            return this.delegate.readLines(file);
         }
 
         @Override
         public void removeEmptyDirectories(final Path root) {
-            delegate.removeEmptyDirectories(root);
+            this.delegate.removeEmptyDirectories(root);
         }
 
         @Override
         public void removeIfEmptyOfFiles(final Path dir) {
-            delegate.removeIfEmptyOfFiles(dir);
+            this.delegate.removeIfEmptyOfFiles(dir);
         }
     }
 
@@ -395,84 +395,84 @@ final class PipelineTestSupport {
 
         @Override
         public List<Path> listFiles(final Path root) {
-            return delegate.listFiles(root);
+            return this.delegate.listFiles(root);
         }
 
         @Override
         public Instant lastModifiedTime(final Path path) {
-            return delegate.lastModifiedTime(path);
+            return this.delegate.lastModifiedTime(path);
         }
 
         @Override
         public Path move(final Path source, final Path destDir) {
-            moveStarted.countDown();
+            this.moveStarted.countDown();
             try {
-                releaseMove.await();
+                this.releaseMove.await();
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return delegate.move(source, destDir);
+            return this.delegate.move(source, destDir);
         }
 
         @Override
         public Path resolveDestination(final Path source, final Path destDir) {
-            return delegate.resolveDestination(source, destDir);
+            return this.delegate.resolveDestination(source, destDir);
         }
 
         @Override
         public Path moveTo(final Path source, final Path destination) {
-            return delegate.moveTo(source, destination);
+            return this.delegate.moveTo(source, destination);
         }
 
         @Override
         public Path copy(final Path source, final Path destDir) {
-            return delegate.copy(source, destDir);
+            return this.delegate.copy(source, destDir);
         }
 
         @Override
         public void delete(final Path path) {
-            delegate.delete(path);
+            this.delegate.delete(path);
         }
 
         @Override
         public void ensureDirectory(final Path dir) {
-            delegate.ensureDirectory(dir);
+            this.delegate.ensureDirectory(dir);
         }
 
         @Override
         public boolean exists(final Path path) {
-            return delegate.exists(path);
+            return this.delegate.exists(path);
         }
 
         @Override
         public long size(final Path path) {
-            return delegate.size(path);
+            return this.delegate.size(path);
         }
 
         @Override
         public void appendLine(final Path file, final String line) {
-            delegate.appendLine(file, line);
+            this.delegate.appendLine(file, line);
         }
 
         @Override
         public void write(final Path file, final String content) {
-            delegate.write(file, content);
+            this.delegate.write(file, content);
         }
 
         @Override
         public List<String> readLines(final Path file) {
-            return delegate.readLines(file);
+            return this.delegate.readLines(file);
         }
 
         @Override
         public void removeEmptyDirectories(final Path root) {
-            delegate.removeEmptyDirectories(root);
+            this.delegate.removeEmptyDirectories(root);
         }
 
         @Override
         public void removeIfEmptyOfFiles(final Path dir) {
-            delegate.removeIfEmptyOfFiles(dir);
+            this.delegate.removeIfEmptyOfFiles(dir);
         }
     }
 
@@ -492,84 +492,84 @@ final class PipelineTestSupport {
 
         @Override
         public List<Path> listFiles(final Path root) {
-            listStarted.countDown();
+            this.listStarted.countDown();
             try {
-                releaseList.await();
+                this.releaseList.await();
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return delegate.listFiles(root);
+            return this.delegate.listFiles(root);
         }
 
         @Override
         public Instant lastModifiedTime(final Path path) {
-            return delegate.lastModifiedTime(path);
+            return this.delegate.lastModifiedTime(path);
         }
 
         @Override
         public Path move(final Path source, final Path destDir) {
-            return delegate.move(source, destDir);
+            return this.delegate.move(source, destDir);
         }
 
         @Override
         public Path resolveDestination(final Path source, final Path destDir) {
-            return delegate.resolveDestination(source, destDir);
+            return this.delegate.resolveDestination(source, destDir);
         }
 
         @Override
         public Path moveTo(final Path source, final Path destination) {
-            return delegate.moveTo(source, destination);
+            return this.delegate.moveTo(source, destination);
         }
 
         @Override
         public Path copy(final Path source, final Path destDir) {
-            return delegate.copy(source, destDir);
+            return this.delegate.copy(source, destDir);
         }
 
         @Override
         public void delete(final Path path) {
-            delegate.delete(path);
+            this.delegate.delete(path);
         }
 
         @Override
         public void ensureDirectory(final Path dir) {
-            delegate.ensureDirectory(dir);
+            this.delegate.ensureDirectory(dir);
         }
 
         @Override
         public boolean exists(final Path path) {
-            return delegate.exists(path);
+            return this.delegate.exists(path);
         }
 
         @Override
         public long size(final Path path) {
-            return delegate.size(path);
+            return this.delegate.size(path);
         }
 
         @Override
         public void appendLine(final Path file, final String line) {
-            delegate.appendLine(file, line);
+            this.delegate.appendLine(file, line);
         }
 
         @Override
         public void write(final Path file, final String content) {
-            delegate.write(file, content);
+            this.delegate.write(file, content);
         }
 
         @Override
         public List<String> readLines(final Path file) {
-            return delegate.readLines(file);
+            return this.delegate.readLines(file);
         }
 
         @Override
         public void removeEmptyDirectories(final Path root) {
-            delegate.removeEmptyDirectories(root);
+            this.delegate.removeEmptyDirectories(root);
         }
 
         @Override
         public void removeIfEmptyOfFiles(final Path dir) {
-            delegate.removeIfEmptyOfFiles(dir);
+            this.delegate.removeIfEmptyOfFiles(dir);
         }
     }
 
@@ -589,84 +589,84 @@ final class PipelineTestSupport {
 
         @Override
         public List<Path> listFiles(final Path root) {
-            return delegate.listFiles(root);
+            return this.delegate.listFiles(root);
         }
 
         @Override
         public Instant lastModifiedTime(final Path path) {
-            return delegate.lastModifiedTime(path);
+            return this.delegate.lastModifiedTime(path);
         }
 
         @Override
         public Path move(final Path source, final Path destDir) {
-            return delegate.move(source, destDir);
+            return this.delegate.move(source, destDir);
         }
 
         @Override
         public Path resolveDestination(final Path source, final Path destDir) {
-            return delegate.resolveDestination(source, destDir);
+            return this.delegate.resolveDestination(source, destDir);
         }
 
         @Override
         public Path moveTo(final Path source, final Path destination) {
-            moveStarted.countDown();
+            this.moveStarted.countDown();
             try {
-                releaseMove.await();
+                this.releaseMove.await();
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return delegate.moveTo(source, destination);
+            return this.delegate.moveTo(source, destination);
         }
 
         @Override
         public Path copy(final Path source, final Path destDir) {
-            return delegate.copy(source, destDir);
+            return this.delegate.copy(source, destDir);
         }
 
         @Override
         public void delete(final Path path) {
-            delegate.delete(path);
+            this.delegate.delete(path);
         }
 
         @Override
         public void ensureDirectory(final Path dir) {
-            delegate.ensureDirectory(dir);
+            this.delegate.ensureDirectory(dir);
         }
 
         @Override
         public boolean exists(final Path path) {
-            return delegate.exists(path);
+            return this.delegate.exists(path);
         }
 
         @Override
         public long size(final Path path) {
-            return delegate.size(path);
+            return this.delegate.size(path);
         }
 
         @Override
         public void appendLine(final Path file, final String line) {
-            delegate.appendLine(file, line);
+            this.delegate.appendLine(file, line);
         }
 
         @Override
         public void write(final Path file, final String content) {
-            delegate.write(file, content);
+            this.delegate.write(file, content);
         }
 
         @Override
         public List<String> readLines(final Path file) {
-            return delegate.readLines(file);
+            return this.delegate.readLines(file);
         }
 
         @Override
         public void removeEmptyDirectories(final Path root) {
-            delegate.removeEmptyDirectories(root);
+            this.delegate.removeEmptyDirectories(root);
         }
 
         @Override
         public void removeIfEmptyOfFiles(final Path dir) {
-            delegate.removeIfEmptyOfFiles(dir);
+            this.delegate.removeIfEmptyOfFiles(dir);
         }
     }
 
@@ -713,9 +713,9 @@ final class PipelineTestSupport {
 
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
-            started.countDown();
+            this.started.countDown();
             try {
-                release.await();
+                this.release.await();
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
@@ -769,7 +769,7 @@ final class PipelineTestSupport {
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             for (final String montage : prep.entries()) {
-                final List<SidecarPhotoEntry> photos = cullPrepPort.readSidecar(prep.prepDir(), montage);
+                final List<SidecarPhotoEntry> photos = this.cullPrepPort.readSidecar(prep.prepDir(), montage);
                 final String[] decisions = photos.stream()
                         .map(photo -> classificationJson(photo.src(), "junk", "blurry"))
                         .toArray(String[]::new);
@@ -808,7 +808,7 @@ final class PipelineTestSupport {
 
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
-            return cull(prep, opts, ProgressCallback.NO_OP, CancellationSignal.NEVER);
+            return this.cull(prep, opts, ProgressCallback.NO_OP, CancellationSignal.NEVER);
         }
 
         @Override
@@ -828,9 +828,9 @@ final class PipelineTestSupport {
                 culled++;
                 progress.tick(current, total);
                 if (culled == 1) {
-                    firstShardWritten.countDown();
+                    this.firstShardWritten.countDown();
                     try {
-                        releaseRemaining.await();
+                        this.releaseRemaining.await();
                     } catch (final InterruptedException e) {
                         Thread.currentThread().interrupt();
                         throw new AssertionError(e);

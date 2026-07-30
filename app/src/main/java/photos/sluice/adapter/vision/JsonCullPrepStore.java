@@ -103,7 +103,7 @@ public class JsonCullPrepStore implements CullPrepPort {
         final Path path = prepDir.resolve("index.json");
         final RawIndex raw;
         try (final var input = Files.newInputStream(path)) {
-            raw = mapper.readValue(input, RawIndex.class);
+            raw = this.mapper.readValue(input, RawIndex.class);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read prep index " + path, e);
         } catch (final JacksonException e) {
@@ -151,6 +151,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param index {@link PrepDir} the index to persist
      */
     @Override
+    @SuppressWarnings("DuplicatedCode")
     public void writeIndex(final Path prepDir, final PrepDir index) {
         final var document = new RawIndexOut(
                 index.scope(),
@@ -162,7 +163,7 @@ public class JsonCullPrepStore implements CullPrepPort {
                 index.entries());
         final Path path = prepDir.resolve("index.json");
         try (final var output = Files.newOutputStream(path)) {
-            mapper.writeValue(output, document);
+            this.mapper.writeValue(output, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write prep index " + path, e);
         } catch (final JacksonException e) {
@@ -179,7 +180,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      */
     @Override
     public List<SidecarPhotoEntry> readSidecar(final Path prepDir, final String montage) {
-        return sidecarReader.readEntries(prepDir.resolve(montage + ".json"));
+        return this.sidecarReader.readEntries(prepDir.resolve(montage + ".json"));
     }
 
     /**
@@ -203,7 +204,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      */
     @Override
     public DecisionShard readShard(final Path prepDir, final String montage) {
-        return shardCodec.read(prepDir.resolve(MontageNaming.shardFileFor(montage)));
+        return this.shardCodec.read(prepDir.resolve(MontageNaming.shardFileFor(montage)));
     }
 
     /**
@@ -214,7 +215,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      */
     @Override
     public DecisionShard readShardFile(final Path shardFile) {
-        return shardCodec.read(shardFile);
+        return this.shardCodec.read(shardFile);
     }
 
     /**
@@ -259,7 +260,7 @@ public class JsonCullPrepStore implements CullPrepPort {
                         report.nearDupRejects(), report.unreviewable()));
         final Path path = prepDir.resolve("decisions.json");
         try (final var output = Files.newOutputStream(path)) {
-            mapper.writeValue(output, document);
+            this.mapper.writeValue(output, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write merged decisions " + path, e);
         } catch (final JacksonException e) {

@@ -32,11 +32,11 @@ final class PhaseRunner {
      * @return T the engine call's result
      */
     <T> T run(final String phase, final PhaseWork<T> work) throws Exception {
-        progressPort.phaseStarted(phase);
+        this.progressPort.phaseStarted(phase);
         try {
-            return work.run((current, total) -> progressPort.tick(phase, current, total));
+            return work.run((current, total) -> this.progressPort.tick(phase, current, total));
         } finally {
-            progressPort.phaseFinished(phase);
+            this.progressPort.phaseFinished(phase);
         }
     }
 

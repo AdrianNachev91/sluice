@@ -31,12 +31,12 @@ public class JobRunner {
      * @return a {@link JobHandle} of T a handle for the started job
      */
     public <T> JobHandle<T> submit(final JobWork<T> work) {
-        if (!busy.compareAndSet(false, true)) {
+        if (!this.busy.compareAndSet(false, true)) {
             throw new IllegalStateException("A job is already running; only one job runs at a time");
         }
         final var resultFuture = new CompletableFuture<T>();
         final var handle = new JobHandle<>(resultFuture);
-        executor.execute(() -> run(work, handle, resultFuture));
+        this.executor.execute(() -> this.run(work, handle, resultFuture));
         return handle;
     }
 
@@ -50,7 +50,7 @@ public class JobRunner {
      * @return boolean true if a job is currently running
      */
     public boolean isBusy() {
-        return busy.get();
+        return this.busy.get();
     }
 
     /**
@@ -76,7 +76,7 @@ public class JobRunner {
         // Freed before the future completes, never in a finally after it. That way a caller
         // chaining off join()/onComplete() can never observe isBusy() still true for the job it
         // just saw finish.
-        busy.set(false);
+        this.busy.set(false);
         if (failure != null) {
             resultFuture.completeExceptionally(failure);
         } else {

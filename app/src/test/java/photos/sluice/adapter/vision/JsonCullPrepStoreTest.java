@@ -40,7 +40,7 @@ class JsonCullPrepStoreTest {
         final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-06-15T10:30:00Z"), false);
         new SidecarWriter().write(dir.resolve("montage-001.json"), dir.resolve("montage-001.jpg"), List.of(photo));
 
-        final List<SidecarPhotoEntry> entries = store.readSidecar(dir, "montage-001");
+        final List<SidecarPhotoEntry> entries = this.store.readSidecar(dir, "montage-001");
 
         assertThat(entries).containsExactly(photo);
     }
@@ -51,7 +51,7 @@ class JsonCullPrepStoreTest {
                 List.of("montage-001"));
         new PrepIndexWriter().write(dir.resolve("index.json"), prepDir);
 
-        assertThat(store.readIndex(dir)).isEqualTo(prepDir);
+        assertThat(this.store.readIndex(dir)).isEqualTo(prepDir);
     }
 
     @Test
@@ -60,7 +60,7 @@ class JsonCullPrepStoreTest {
                 { "scope": "2019-06", "basePath": "%s", "photos": 0, "montages": 0, "prepDir": "%s" }
                 """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
 
-        final PrepDir prepDir = store.readIndex(dir);
+        final PrepDir prepDir = this.store.readIndex(dir);
 
         assertThat(prepDir.unreviewable()).isEmpty();
         assertThat(prepDir.entries()).isEmpty();
@@ -70,7 +70,7 @@ class JsonCullPrepStoreTest {
     void readIndexOnANullDocumentThrowsUnchecked(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), "null");
 
-        assertThatThrownBy(() -> store.readIndex(dir))
+        assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(UncheckedIOException.class);
     }
 
@@ -80,14 +80,14 @@ class JsonCullPrepStoreTest {
                 new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor")));
         new ShardCodec().write(dir.resolve("decisions-002.json"), shard);
 
-        assertThat(store.readShard(dir, "montage-002")).isEqualTo(shard);
+        assertThat(this.store.readShard(dir, "montage-002")).isEqualTo(shard);
     }
 
     @Test
     void readShardOnMalformedContentThrowsUnchecked(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("decisions-003.json"), "{ not valid json");
 
-        assertThatThrownBy(() -> store.readShard(dir, "montage-003"))
+        assertThatThrownBy(() -> this.store.readShard(dir, "montage-003"))
                 .isInstanceOf(UncheckedIOException.class);
     }
 
@@ -99,7 +99,7 @@ class JsonCullPrepStoreTest {
                 new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor")));
         new ShardCodec().write(dir.resolve("decisions-003.json"), shard); // stray: no montage-003 entry anywhere
 
-        assertThat(store.readShardFile(dir.resolve("decisions-003.json"))).isEqualTo(shard);
+        assertThat(this.store.readShardFile(dir.resolve("decisions-003.json"))).isEqualTo(shard);
     }
 
     @Test
@@ -107,9 +107,9 @@ class JsonCullPrepStoreTest {
         final var prepDir = new PrepDir("2019-06", dir.resolve("base"), 3, List.of(dir.resolve("skip.jpg")), 1, dir,
                 List.of("montage-001"));
 
-        store.writeIndex(dir, prepDir);
+        this.store.writeIndex(dir, prepDir);
 
-        assertThat(store.readIndex(dir)).isEqualTo(prepDir);
+        assertThat(this.store.readIndex(dir)).isEqualTo(prepDir);
     }
 
     @Test
@@ -117,9 +117,9 @@ class JsonCullPrepStoreTest {
         Files.writeString(dir.resolve("index.json"), "not valid json");
         final var rebuilt = new PrepDir("2019-06", dir.resolve("base"), 1, List.of(), 1, dir, List.of("montage-001"));
 
-        store.writeIndex(dir, rebuilt);
+        this.store.writeIndex(dir, rebuilt);
 
-        assertThat(store.readIndex(dir)).isEqualTo(rebuilt);
+        assertThat(this.store.readIndex(dir)).isEqualTo(rebuilt);
     }
 
     @Test
@@ -127,7 +127,7 @@ class JsonCullPrepStoreTest {
         final Path missingParent = dir.resolve("missing-parent");
         final var prepDir = new PrepDir("2019-06", dir.resolve("base"), 0, List.of(), 0, dir, List.of());
 
-        assertThatThrownBy(() -> store.writeIndex(missingParent, prepDir))
+        assertThatThrownBy(() -> this.store.writeIndex(missingParent, prepDir))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(missingParent.resolve("index.json").toString());
     }
@@ -150,8 +150,8 @@ class JsonCullPrepStoreTest {
         final var shard = new DecisionShard("montage-004", List.of());
         new ShardCodec().write(dir.resolve("decisions-004.json"), shard);
 
-        assertThat(store.hasShard(dir, "montage-004")).isTrue();
-        assertThat(store.hasShard(dir, "montage-005")).isFalse();
+        assertThat(this.store.hasShard(dir, "montage-004")).isTrue();
+        assertThat(this.store.hasShard(dir, "montage-005")).isFalse();
     }
 
     @Test
@@ -165,7 +165,7 @@ class JsonCullPrepStoreTest {
                 new NearDupReject(reject, "lake-jun20", "softer focus"));
         final var report = new ApplyReport(3, Map.of("junk", 1), 0, 1, 1, List.of());
 
-        store.writeMergedDecisions(dir, "2019-06", decisions, report);
+        this.store.writeMergedDecisions(dir, "2019-06", decisions, report);
 
         final String json = Files.readString(dir.resolve("decisions.json"), StandardCharsets.UTF_8);
         assertThat(json).isEqualToIgnoringWhitespace("""
@@ -192,7 +192,7 @@ class JsonCullPrepStoreTest {
         final Path missingParent = dir.resolve("missing-parent");
         final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
 
-        assertThatThrownBy(() -> store.writeMergedDecisions(missingParent, "2019-06", List.of(), report))
+        assertThatThrownBy(() -> this.store.writeMergedDecisions(missingParent, "2019-06", List.of(), report))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(missingParent.resolve("decisions.json").toString());
     }

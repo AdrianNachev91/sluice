@@ -17,36 +17,36 @@ class CullScopeSelectorTest {
     void directoriesToScanForYearWithMonthsReturnsSortedDeduplicatedMonthDirs() {
         final var scope = new CullScope.Year(2019, List.of(8, 6, 6, 7));
 
-        assertThat(selector.directoriesToScan(photosRoot, scope)).containsExactly(
-                photosRoot.resolve("2019").resolve("06"),
-                photosRoot.resolve("2019").resolve("07"),
-                photosRoot.resolve("2019").resolve("08"));
+        assertThat(this.selector.directoriesToScan(this.photosRoot, scope)).containsExactly(
+                this.photosRoot.resolve("2019").resolve("06"),
+                this.photosRoot.resolve("2019").resolve("07"),
+                this.photosRoot.resolve("2019").resolve("08"));
     }
 
     @Test
     void directoriesToScanForYearWithNullMonthsReturnsWholeYearDir() {
         final var scope = new CullScope.Year(2019, null);
 
-        assertThat(selector.directoriesToScan(photosRoot, scope))
-                .containsExactly(photosRoot.resolve("2019"));
+        assertThat(this.selector.directoriesToScan(this.photosRoot, scope))
+                .containsExactly(this.photosRoot.resolve("2019"));
     }
 
     @Test
     void directoriesToScanForOldestNReturnsWholePhotosRoot() {
-        assertThat(selector.directoriesToScan(photosRoot, new CullScope.OldestN(50)))
-                .containsExactly(photosRoot);
+        assertThat(this.selector.directoriesToScan(this.photosRoot, new CullScope.OldestN(50)))
+                .containsExactly(this.photosRoot);
     }
 
     @Test
     void basePathForYearIsTheYearDirEvenWhenNarrowedToSpecificMonths() {
         final var scope = new CullScope.Year(2019, List.of(6));
 
-        assertThat(selector.basePath(photosRoot, scope)).isEqualTo(photosRoot.resolve("2019"));
+        assertThat(this.selector.basePath(this.photosRoot, scope)).isEqualTo(this.photosRoot.resolve("2019"));
     }
 
     @Test
     void basePathForOldestNIsThePhotosRoot() {
-        assertThat(selector.basePath(photosRoot, new CullScope.OldestN(50))).isEqualTo(photosRoot);
+        assertThat(this.selector.basePath(this.photosRoot, new CullScope.OldestN(50))).isEqualTo(this.photosRoot);
     }
 
     @Test
@@ -55,7 +55,7 @@ class CullScopeSelectorTest {
         final var middle = candidate("b.jpg", "2019-06-02T00:00:00Z");
         final var newest = candidate("c.jpg", "2019-06-03T00:00:00Z");
 
-        final var ordered = selector.order(
+        final var ordered = this.selector.order(
                 List.of(newest, oldest, middle), new CullScope.Year(2019, null));
 
         assertThat(ordered).containsExactly(oldest, middle, newest);
@@ -67,7 +67,7 @@ class CullScopeSelectorTest {
         final var middle = candidate("b.jpg", "2019-06-02T00:00:00Z");
         final var newest = candidate("c.jpg", "2019-06-03T00:00:00Z");
 
-        final var ordered = selector.order(
+        final var ordered = this.selector.order(
                 List.of(newest, oldest, middle), new CullScope.OldestN(2));
 
         assertThat(ordered).containsExactly(oldest, middle);
@@ -78,7 +78,7 @@ class CullScopeSelectorTest {
         final var oldest = candidate("a.jpg", "2019-06-01T00:00:00Z");
         final var newest = candidate("b.jpg", "2019-06-02T00:00:00Z");
 
-        final var ordered = selector.order(List.of(newest, oldest), new CullScope.OldestN(50));
+        final var ordered = this.selector.order(List.of(newest, oldest), new CullScope.OldestN(50));
 
         assertThat(ordered).containsExactly(oldest, newest);
     }

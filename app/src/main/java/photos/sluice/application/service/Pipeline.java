@@ -143,7 +143,7 @@ public class Pipeline {
         this.phaseRunner = new PhaseRunner(progressPort);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, montageConfig, jobRunner, progressPort, watchPollInterval);
-        this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, cullEngine);
+        this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, this.cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
@@ -158,7 +158,7 @@ public class Pipeline {
      */
     @PostConstruct
     public void armWatchesForExistingWaitingJobs() {
-        cullEngine.armWatchesForExistingWaitingJobs();
+        this.cullEngine.armWatchesForExistingWaitingJobs();
     }
 
     /**
@@ -170,8 +170,8 @@ public class Pipeline {
      */
     @PostConstruct
     public void sweepExpiredDisasterDrawers() {
-        disasterDrawer.sweepExpired(cullPrepRoot);
-        disasterDrawer.sweepExpiredGraveyard(graveyardRoot);
+        this.disasterDrawer.sweepExpired(this.cullPrepRoot);
+        this.disasterDrawer.sweepExpiredGraveyard(this.graveyardRoot);
     }
 
     /**
@@ -181,8 +181,8 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link SortSummary} a handle to the running job
      */
     public JobHandle<SortSummary> sort(final SortScope scope) {
-        return jobRunner.submit(handle -> runPhase(SORTING,
-                progress -> sortEngine.sort(scope, progress, handle::isCancellationRequested)));
+        return this.jobRunner.submit(handle -> this.runPhase(SORTING,
+                progress -> this.sortEngine.sort(scope, progress, handle::isCancellationRequested)));
     }
 
     /**
@@ -192,8 +192,8 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CommitSummary} a handle to the running job
      */
     public JobHandle<CommitSummary> commit(final CommitScope scope) {
-        return jobRunner.submit(handle -> runPhase(COMMITTING,
-                progress -> commitEngine.commit(scope, progress, handle::isCancellationRequested)));
+        return this.jobRunner.submit(handle -> this.runPhase(COMMITTING,
+                progress -> this.commitEngine.commit(scope, progress, handle::isCancellationRequested)));
     }
 
     /**
@@ -203,8 +203,8 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link RescueSummary} a handle to the running job
      */
     public JobHandle<RescueSummary> rescue(final String reviewFolder) {
-        return jobRunner.submit(handle -> runPhase(RESCUING,
-                progress -> rescueEngine.rescue(reviewFolder, progress, handle::isCancellationRequested)));
+        return this.jobRunner.submit(handle -> this.runPhase(RESCUING,
+                progress -> this.rescueEngine.rescue(reviewFolder, progress, handle::isCancellationRequested)));
     }
 
     /**
@@ -214,7 +214,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
      */
     public JobHandle<CullJobOutcome> cull(final CullScope scope) {
-        return cullEngine.cull(scope);
+        return this.cullEngine.cull(scope);
     }
 
     /**
@@ -224,7 +224,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CurateOutcome} a handle to the running job
      */
     public JobHandle<CurateOutcome> curate(final SortScope scope) {
-        return curateEngine.curate(scope);
+        return this.curateEngine.curate(scope);
     }
 
     /**
@@ -235,7 +235,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
      */
     public JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
-        return cullEngine.resume(prepDir, allowPartial);
+        return this.cullEngine.resume(prepDir, allowPartial);
     }
 
     /**
@@ -244,7 +244,7 @@ public class Pipeline {
      * @return a {@link List} of {@link WaitingCullJob} the currently waiting cull jobs
      */
     public List<WaitingCullJob> waitingJobs() {
-        return cullEngine.waitingJobs();
+        return this.cullEngine.waitingJobs();
     }
 
     /**
@@ -256,7 +256,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link TroubleshootReport} a handle to the running job
      */
     public JobHandle<TroubleshootReport> troubleshoot(final Path prepDir) {
-        return jobRunner.submit(_ -> troubleshooter.troubleshoot(prepDir));
+        return this.jobRunner.submit(_ -> this.troubleshooter.troubleshoot(prepDir));
     }
 
     /**
@@ -267,7 +267,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link PurgeReport} a handle to the running job
      */
     public JobHandle<PurgeReport> purgeCompleted() {
-        return jobRunner.submit(_ -> prepDirDoctor.purgeCompleted(cullPrepRoot));
+        return this.jobRunner.submit(_ -> this.prepDirDoctor.purgeCompleted(this.cullPrepRoot));
     }
 
     /**
@@ -284,13 +284,13 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
      */
     public JobHandle<DiscardReport> discard(final Path prepDir) {
-        return jobRunner.submit(_ -> {
-            if (prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
+        return this.jobRunner.submit(_ -> {
+            if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new IllegalStateException("Prep dir " + prepDir
                         + " has already completed - discard refuses a finished run; purge it instead.");
             }
-            cullEngine.disarmWatch(prepDir);
-            return runPhase(DISCARDING, progress -> prepDirRemedies.discard(prepDir, progress));
+            this.cullEngine.disarmWatch(prepDir);
+            return this.runPhase(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
         });
     }
 
@@ -303,7 +303,7 @@ public class Pipeline {
      * @return boolean true if a watcher is currently polling it
      */
     boolean isWatchActive(final Path prepDir) {
-        return cullEngine.isWatchActive(prepDir);
+        return this.cullEngine.isWatchActive(prepDir);
     }
 
     /**
@@ -314,7 +314,7 @@ public class Pipeline {
      * @return T the result of the work
      */
     private <T> T runPhase(final String phase, final PhaseRunner.PhaseWork<T> work) throws Exception {
-        return phaseRunner.run(phase, work);
+        return this.phaseRunner.run(phase, work);
     }
 
     /**
@@ -344,7 +344,7 @@ public class Pipeline {
          * @return {@link SortSummary} the partial sort result
          */
         public SortSummary sortSummary() {
-            return sortSummary;
+            return this.sortSummary;
         }
     }
 }

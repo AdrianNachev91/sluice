@@ -52,7 +52,7 @@ public sealed interface Finding {
     record MissingMontageField(String montage) implements Finding {
         @Override
         public String describe() {
-            return montage + ": missing 'montage'";
+            return this.montage + ": missing 'montage'";
         }
     }
 
@@ -64,7 +64,7 @@ public sealed interface Finding {
     record MontageFieldMismatch(String montage, String declared) implements Finding {
         @Override
         public String describe() {
-            return montage + ": 'montage' is '" + declared + "', expected '" + montage + "'";
+            return this.montage + ": 'montage' is '" + this.declared + "', expected '" + this.montage + "'";
         }
     }
 
@@ -75,7 +75,7 @@ public sealed interface Finding {
     record InvalidCategory(String montage, int index, String category, String allowedClause) implements Finding {
         @Override
         public String describe() {
-            return at(montage, index) + ": invalid action '" + category + "' (" + allowedClause + ")";
+            return at(this.montage, this.index) + ": invalid action '" + this.category + "' (" + this.allowedClause + ")";
         }
     }
 
@@ -86,7 +86,7 @@ public sealed interface Finding {
     record MissingReason(String montage, int index) implements Finding {
         @Override
         public String describe() {
-            return at(montage, index) + ": missing 'reason'";
+            return at(this.montage, this.index) + ": missing 'reason'";
         }
     }
 
@@ -97,7 +97,7 @@ public sealed interface Finding {
     record MissingGroup(String montage, int index) implements Finding {
         @Override
         public String describe() {
-            return at(montage, index) + ": missing 'group'";
+            return at(this.montage, this.index) + ": missing 'group'";
         }
     }
 
@@ -108,7 +108,7 @@ public sealed interface Finding {
     record MissingChosenReason(String montage, int index) implements Finding {
         @Override
         public String describe() {
-            return at(montage, index) + ": missing 'chosen_reason'";
+            return at(this.montage, this.index) + ": missing 'chosen_reason'";
         }
     }
 
@@ -119,7 +119,7 @@ public sealed interface Finding {
     record WrongChosenCount(String montage, String group, int chosen) implements Finding {
         @Override
         public String describe() {
-            return montage + ": near-dup group '" + group + "' has " + chosen + " chosen (need exactly 1)";
+            return this.montage + ": near-dup group '" + this.group + "' has " + this.chosen + " chosen (need exactly 1)";
         }
     }
 
@@ -130,7 +130,7 @@ public sealed interface Finding {
     record TooFewRejects(String montage, String group, int rejects) implements Finding {
         @Override
         public String describe() {
-            return montage + ": near-dup group '" + group + "' has " + rejects + " reject(s) (need >=1)";
+            return this.montage + ": near-dup group '" + this.group + "' has " + this.rejects + " reject(s) (need >=1)";
         }
     }
 
@@ -143,8 +143,8 @@ public sealed interface Finding {
     record InvalidGroupSlug(String montage, String group, int maxLength) implements Finding {
         @Override
         public String describe() {
-            return montage + ": near-dup group '" + group
-                    + "' is not a valid slug (lowercase a-z0-9, hyphenated, max " + maxLength + " chars)";
+            return this.montage + ": near-dup group '" + this.group
+                    + "' is not a valid slug (lowercase a-z0-9, hyphenated, max " + this.maxLength + " chars)";
         }
     }
 
@@ -157,7 +157,7 @@ public sealed interface Finding {
     record DuplicateFileReference(String file, long count) implements Finding {
         @Override
         public String describe() {
-            return "file listed " + count + " times across shards/unreviewable: " + file;
+            return "file listed " + this.count + " times across shards/unreviewable: " + this.file;
         }
     }
 
@@ -173,7 +173,7 @@ public sealed interface Finding {
     record DecisionUnreviewableOverlap(Decision decision) implements Finding {
         @Override
         public String describe() {
-            return "file listed both as a decision and as unreviewable: " + decision.file();
+            return "file listed both as a decision and as unreviewable: " + this.decision.file();
         }
 
         @Override
@@ -194,8 +194,8 @@ public sealed interface Finding {
 
         @Override
         public String describe() {
-            return "near-dup group '" + group + "' spans " + montages.size() + " shards ("
-                    + String.join(", ", montages) + "); a group must stay within one montage";
+            return "near-dup group '" + this.group + "' spans " + this.montages.size() + " shards ("
+                    + String.join(", ", this.montages) + "); a group must stay within one montage";
         }
     }
 
@@ -205,7 +205,7 @@ public sealed interface Finding {
     record MissingFile(String montage, int index) implements Finding {
         @Override
         public String describe() {
-            return at(montage, index) + ": missing 'file'";
+            return at(this.montage, this.index) + ": missing 'file'";
         }
     }
 
@@ -216,7 +216,7 @@ public sealed interface Finding {
     record FileOutOfScope(String montage, int index, Path file) implements Finding {
         @Override
         public String describe() {
-            return at(montage, index) + ": file out of scope: " + file;
+            return at(this.montage, this.index) + ": file out of scope: " + this.file;
         }
     }
 
@@ -236,7 +236,7 @@ public sealed interface Finding {
     record StrayShard(String shardFile) implements Finding {
         @Override
         public String describe() {
-            return shardFile + ": no matching montage";
+            return this.shardFile + ": no matching montage";
         }
 
         @Override
@@ -252,7 +252,7 @@ public sealed interface Finding {
     record MissingShard(String montage, String expectedFile) implements Finding {
         @Override
         public String describe() {
-            return montage + ": no shard " + expectedFile;
+            return this.montage + ": no shard " + this.expectedFile;
         }
     }
 
@@ -270,7 +270,7 @@ public sealed interface Finding {
     record CorruptIndex(Path indexPath) implements Finding {
         @Override
         public String describe() {
-            return indexPath + ": corrupt or unreadable index.json";
+            return this.indexPath + ": corrupt or unreadable index.json";
         }
 
         @Override
@@ -290,7 +290,7 @@ public sealed interface Finding {
     record CorruptSidecar(String montage) implements Finding {
         @Override
         public String describe() {
-            return montage + ": sidecar unreadable or missing";
+            return this.montage + ": sidecar unreadable or missing";
         }
 
         @Override
@@ -308,10 +308,10 @@ public sealed interface Finding {
     record MissingSource(Path file, Path moveRecordLog) implements Finding {
         @Override
         public String describe() {
-            return "file not found, and its move could not be verified: " + file
+            return "file not found, and its move could not be verified: " + this.file
                     + " - if an earlier, crashed run already applied it, the automatic check that would confirm that"
                     + " (a move record matching this file, whose recorded destination still hash-verifies) found"
-                    + " none. This needs manual investigation before re-running; see " + moveRecordLog + ".";
+                    + " none. This needs manual investigation before re-running; see " + this.moveRecordLog + ".";
         }
 
         @Override

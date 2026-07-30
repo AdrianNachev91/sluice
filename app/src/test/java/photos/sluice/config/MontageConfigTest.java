@@ -27,7 +27,7 @@ class MontageConfigTest {
 
     @Test
     void bundledDefaultsBindFromApplicationYml() {
-        runner.run(context -> {
+        this.runner.run(context -> {
             final MontageConfig config = context.getBean(MontageConfig.class);
             assertThat(config.tilesPerRow()).isEqualTo(5);
             assertThat(config.tileSize()).isEqualTo(224);
@@ -36,7 +36,7 @@ class MontageConfigTest {
 
     @Test
     void explicitPropertyOverridesBundledDefault() {
-        runner.withPropertyValues("sluice.montage.tiles-per-row=7")
+        this.runner.withPropertyValues("sluice.montage.tiles-per-row=7")
                 .run(context -> {
                     final MontageConfig config = context.getBean(MontageConfig.class);
                     assertThat(config.tilesPerRow()).isEqualTo(7);
@@ -52,7 +52,7 @@ class MontageConfigTest {
                     tiles-per-row: 7
                 """);
 
-        runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
+        this.runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
                 .run(context -> {
                     final MontageConfig config = context.getBean(MontageConfig.class);
                     assertThat(config.tilesPerRow()).isEqualTo(7);
@@ -70,7 +70,7 @@ class MontageConfigTest {
                 """);
         System.setProperty("sluice.montage.tiles-per-row", "9");
 
-        runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
+        this.runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
                 .run(context -> {
                     final MontageConfig config = context.getBean(MontageConfig.class);
                     assertThat(config.tilesPerRow()).isEqualTo(9);

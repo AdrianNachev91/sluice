@@ -69,7 +69,7 @@ public class SidecarWriter {
                         .map(p -> new Photo(p.src().toString(), p.name(), p.time().toString(), p.received()))
                         .toList());
         try (final var output = Files.newOutputStream(sidecarPath)) {
-            mapper.writeValue(output, document);
+            this.mapper.writeValue(output, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write sidecar " + sidecarPath, e);
         } catch (final JacksonException e) {

@@ -121,10 +121,10 @@ final class CullEngine {
      * dispatchAndApply()'s own note.
      */
     void armWatchesForExistingWaitingJobs() {
-        if (cullSettings.externalAgent().mode() != WatchMode.WATCH || jobRunner.isBusy()) {
+        if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH || this.jobRunner.isBusy()) {
             return;
         }
-        waitingJobs().forEach(this::armWatchIfConfigured);
+        this.waitingJobs().forEach(this::armWatchIfConfigured);
     }
 
     /**
@@ -142,8 +142,8 @@ final class CullEngine {
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
      */
     JobHandle<CullJobOutcome> cull(final CullScope scope) {
-        checkNoWaitingJobFor(scope);
-        return jobRunner.submit(handle -> buildFreshAndDispatch(scope, handle::isCancellationRequested));
+        this.checkNoWaitingJobFor(scope);
+        return this.jobRunner.submit(handle -> this.buildFreshAndDispatch(scope, handle::isCancellationRequested));
     }
 
     /**
@@ -157,8 +157,8 @@ final class CullEngine {
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
      */
     JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
-        return jobRunner.submit(handle ->
-                dispatchAndApply(cullPrepPort.readIndex(prepDir), allowPartial, handle::isCancellationRequested));
+        return this.jobRunner.submit(handle ->
+                this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial, handle::isCancellationRequested));
     }
 
     /**
@@ -172,15 +172,15 @@ final class CullEngine {
      * @return a {@link List} of {@link WaitingCullJob} every cull job still waiting on shards
      */
     List<WaitingCullJob> waitingJobs() {
-        final Path cullPrepRoot = pathsPort.logs().resolve("cull-prep");
-        if (!mediaStore.exists(cullPrepRoot)) {
+        final Path cullPrepRoot = this.pathsPort.logs().resolve("cull-prep");
+        if (!this.mediaStore.exists(cullPrepRoot)) {
             return List.of();
         }
-        return mediaStore.listFiles(cullPrepRoot).stream()
+        return this.mediaStore.listFiles(cullPrepRoot).stream()
                 .filter(file -> file.getFileName().toString().equals(INDEX_FILE))
                 .map(Path::getParent)
-                .filter(prepDir -> !mediaStore.exists(prepDir.resolve(DECISIONS_FILE)))
-                .<WaitingCullJob>mapMulti((prepDir, consumer) -> readWaitingJob(prepDir).ifPresent(consumer))
+                .filter(prepDir -> !this.mediaStore.exists(prepDir.resolve(DECISIONS_FILE)))
+                .<WaitingCullJob>mapMulti((prepDir, consumer) -> this.readWaitingJob(prepDir).ifPresent(consumer))
                 .toList();
     }
 
@@ -193,7 +193,7 @@ final class CullEngine {
      * @return boolean whether a watcher is currently active for it
      */
     boolean isWatchActive(final Path prepDir) {
-        final CullWatcher watcher = activeWatches.get(prepDir);
+        final CullWatcher watcher = this.activeWatches.get(prepDir);
         return watcher != null && watcher.isActive();
     }
 
@@ -204,7 +204,7 @@ final class CullEngine {
      */
     void checkNoWaitingJobFor(final CullScope scope) {
         final String tag = CullScope.tag(scope);
-        waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst().ifPresent(existing -> {
+        this.waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst().ifPresent(existing -> {
             throw new IllegalStateException("A cull for scope '" + tag + "' is already waiting on shards at "
                     + existing.prepDir() + " - resume or resolve it before starting a new cull for the same scope.");
         });
@@ -221,13 +221,13 @@ final class CullEngine {
      * @return {@link CullJobOutcome} the outcome of this cull attempt
      */
     CullJobOutcome buildFreshAndDispatch(final CullScope scope, final CancellationSignal cancellation) throws Exception {
-        checkNoWaitingJobFor(scope);
+        this.checkNoWaitingJobFor(scope);
         // phaseRunner.run/PhaseWork are shared with sort/commit/rescue, which always return non-null -
         // keeping T itself non-null there avoids leaking a spurious "might be null" possibility
         // into those callers. Wrapping the result in Optional here instead keeps that shared
         // contract clean while still letting this call site express a real null case.
-        final Optional<PrepDir> prep = phaseRunner.run(PREPPING,
-                progress -> Optional.ofNullable(montageRenderer.build(scope, montageConfig, progress, cancellation)));
+        final Optional<PrepDir> prep = this.phaseRunner.run(PREPPING,
+                progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.montageConfig, progress, cancellation)));
         // Empty means the renderer itself stopped mid-render, before index.json was ever written -
         // nothing resumable exists yet. The renderer is the completion authority here: this
         // branches purely on its return value, never on re-checking disk state.
@@ -238,9 +238,9 @@ final class CullEngine {
         // cleanly to Waiting too - a 0/N tally, nothing dispatched yet. No watcher is armed: an
         // auto-resume moments after a cancel would defy it.
         if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(buildWaitingJob(prep.get()));
+            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep.get()));
         }
-        return dispatchAndApply(prep.get(), false, cancellation);
+        return this.dispatchAndApply(prep.get(), false, cancellation);
     }
 
     /**
@@ -251,7 +251,7 @@ final class CullEngine {
      */
     private Optional<WaitingCullJob> readWaitingJob(final Path prepDir) {
         try {
-            return Optional.of(buildWaitingJob(cullPrepPort.readIndex(prepDir)));
+            return Optional.of(this.buildWaitingJob(this.cullPrepPort.readIndex(prepDir)));
         } catch (final UncheckedIOException e) {
             return Optional.empty();
         }
@@ -279,21 +279,21 @@ final class CullEngine {
      */
     private CullJobOutcome dispatchAndApply(final PrepDir prep, final boolean allowPartial, final CancellationSignal cancellation)
             throws Exception {
-        disarmWatch(prep.prepDir());
+        this.disarmWatch(prep.prepDir());
         final CullReport cullReport;
         try {
-            cullReport = phaseRunner.run(CULLING,
-                    progress -> cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress, cancellation));
+            cullReport = this.phaseRunner.run(CULLING,
+                    progress -> this.cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress, cancellation));
         } catch (final CullException e) {
-            if (!cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
+            if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
                 throw e;
             }
-            final WaitingCullJob job = buildWaitingJob(prep);
+            final WaitingCullJob job = this.buildWaitingJob(prep);
             // Not armed when this CullException is itself the manual-mode pause racing a
             // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
             // pause (no cancellation involved) still arms as before.
             if (!cancellation.isCancelled()) {
-                armWatchIfConfigured(job);
+                this.armWatchIfConfigured(job);
             }
             return new CullJobOutcome.Waiting(job);
         }
@@ -303,18 +303,18 @@ final class CullEngine {
         // never sees a cancellation mid-call, but a cancellation requested right after it still
         // lands here before apply moves anything.
         if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(buildWaitingJob(prep));
+            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep));
         }
-        final Optional<ApplyReport> applyReport = phaseRunner.run(APPLYING,
+        final Optional<ApplyReport> applyReport = this.phaseRunner.run(APPLYING,
                 progress -> Optional.ofNullable(
-                        applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress, cancellation)));
+                        this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress, cancellation)));
         // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
         // decisions.json was never written. The prep dir still reads as a waiting job, the same
         // authority rule the renderer's own empty return follows above. No watcher is armed here
         // either, for the same reason the pre-APPLYING check above doesn't: an auto-resume
         // moments after a cancel would defy it.
         if (applyReport.isEmpty()) {
-            return new CullJobOutcome.Waiting(buildWaitingJob(prep));
+            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep));
         }
         return new CullJobOutcome.Applied(cullReport, applyReport.get());
     }
@@ -327,7 +327,7 @@ final class CullEngine {
      */
     private WaitingCullJob buildWaitingJob(final PrepDir prep) {
         return new WaitingCullJob(
-                prep.scope(), prep.prepDir(), shardTallyCalculator.tally(prep), mediaStore.lastModifiedTime(prep.prepDir()));
+                prep.scope(), prep.prepDir(), this.shardTallyCalculator.tally(prep), this.mediaStore.lastModifiedTime(prep.prepDir()));
     }
 
     /**
@@ -350,12 +350,12 @@ final class CullEngine {
      * @param job {@link WaitingCullJob} the waiting job to watch
      */
     private void armWatchIfConfigured(final WaitingCullJob job) {
-        if (cullSettings.externalAgent().mode() != WatchMode.WATCH
-                || !cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
+        if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH
+                || !this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
             return;
         }
         final Path prepDir = job.prepDir();
-        activeWatches.compute(prepDir, (_, existing) -> {
+        this.activeWatches.compute(prepDir, (_, existing) -> {
             if (existing != null && existing.isActive()) {
                 return existing;
             }
@@ -364,8 +364,8 @@ final class CullEngine {
             // "total time since the job first started waiting." A re-arm gets its own full timeout
             // window instead of inheriting a countdown already run down by an earlier streak. A
             // fresh app restart or a shard that turned invalid after looking ready are both re-arms.
-            final var watcher = new CullWatcher(watchPollInterval, cullSettings.externalAgent().watchTimeout(),
-                    () -> shardTallyCalculator.isFullyValid(prepDir), () -> tryAutoResume(prepDir), Instant.now());
+            final var watcher = new CullWatcher(this.watchPollInterval, this.cullSettings.externalAgent().watchTimeout(),
+                    () -> this.shardTallyCalculator.isFullyValid(prepDir), () -> this.tryAutoResume(prepDir), Instant.now());
             watcher.start();
             return watcher;
         });
@@ -380,7 +380,7 @@ final class CullEngine {
      * @param prepDir {@link Path} the prep dir whose watcher should stop
      */
     void disarmWatch(final Path prepDir) {
-        final CullWatcher watcher = activeWatches.remove(prepDir);
+        final CullWatcher watcher = this.activeWatches.remove(prepDir);
         if (watcher != null) {
             watcher.stop();
         }
@@ -402,7 +402,7 @@ final class CullEngine {
     private boolean tryAutoResume(final Path prepDir) {
         final JobHandle<CullJobOutcome> handle;
         try {
-            handle = resume(prepDir, false);
+            handle = this.resume(prepDir, false);
         } catch (final IllegalStateException busy) {
             return false;
         }

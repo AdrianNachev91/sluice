@@ -63,7 +63,7 @@ public class DisasterDrawer {
         final Path drawer = prepDir.resolve(DRAWER_DIR);
         final String extension = extensionOf(source.getFileName().toString());
         final String stamp = DisasterTimestamp.now();
-        return mediaStore.moveTo(source, uniqueName(drawer, stamp, what, extension));
+        return this.mediaStore.moveTo(source, this.uniqueName(drawer, stamp, what, extension));
     }
 
     /**
@@ -78,10 +78,10 @@ public class DisasterDrawer {
      */
     public Path write(final Path prepDir, final String what, final String content) {
         final Path drawer = prepDir.resolve(DRAWER_DIR);
-        mediaStore.ensureDirectory(drawer);
+        this.mediaStore.ensureDirectory(drawer);
         final String stamp = DisasterTimestamp.now();
-        final Path dest = uniqueName(drawer, stamp, what, ".txt");
-        mediaStore.write(dest, content);
+        final Path dest = this.uniqueName(drawer, stamp, what, ".txt");
+        this.mediaStore.write(dest, content);
         return dest;
     }
 
@@ -94,15 +94,15 @@ public class DisasterDrawer {
      * @return int the number of entries deleted
      */
     public int sweepExpired(final Path cullPrepRoot) {
-        if (!mediaStore.exists(cullPrepRoot)) {
+        if (!this.mediaStore.exists(cullPrepRoot)) {
             return 0;
         }
         final Instant cutoff = Instant.now().minus(RETENTION);
-        final List<Path> expired = mediaStore.listFiles(cullPrepRoot).stream()
+        final List<Path> expired = this.mediaStore.listFiles(cullPrepRoot).stream()
                 .filter(DisasterDrawer::isDrawerEntry)
                 .filter(file -> isExpired(file, cutoff))
                 .toList();
-        expired.forEach(mediaStore::delete);
+        expired.forEach(this.mediaStore::delete);
         return expired.size();
     }
 
@@ -125,17 +125,17 @@ public class DisasterDrawer {
      * @return int the number of graveyard folders deleted
      */
     public int sweepExpiredGraveyard(final Path graveyardRoot) {
-        if (!mediaStore.exists(graveyardRoot)) {
+        if (!this.mediaStore.exists(graveyardRoot)) {
             return 0;
         }
-        final List<Path> allFiles = mediaStore.listFiles(graveyardRoot);
+        final List<Path> allFiles = this.mediaStore.listFiles(graveyardRoot);
         final List<Path> graveyards = allFiles.stream()
                 .map(file -> graveyardRoot.resolve(graveyardRoot.relativize(file).getName(0)))
                 .distinct()
                 .toList();
         final Instant cutoff = Instant.now().minus(RETENTION);
         final List<Path> expired = graveyards.stream().filter(dir -> isExpiredGraveyard(dir, cutoff)).toList();
-        expired.forEach(dir -> deleteGraveyard(dir, allFiles));
+        expired.forEach(dir -> this.deleteGraveyard(dir, allFiles));
         return expired.size();
     }
 
@@ -147,8 +147,8 @@ public class DisasterDrawer {
      * @param allFiles a {@link List} of {@link Path} every file found under the graveyard root
      */
     private void deleteGraveyard(final Path dir, final List<Path> allFiles) {
-        allFiles.stream().filter(file -> file.startsWith(dir)).forEach(mediaStore::delete);
-        mediaStore.removeIfEmptyOfFiles(dir);
+        allFiles.stream().filter(file -> file.startsWith(dir)).forEach(this.mediaStore::delete);
+        this.mediaStore.removeIfEmptyOfFiles(dir);
     }
 
     /**
@@ -217,7 +217,7 @@ public class DisasterDrawer {
      */
     private Path uniqueName(final Path drawer, final String stamp, final String what, final String extension) {
         final Path candidate = drawer.resolve(stamp + "-" + what + extension);
-        if (!mediaStore.exists(candidate)) {
+        if (!this.mediaStore.exists(candidate)) {
             return candidate;
         }
         int n = 2;
@@ -225,7 +225,7 @@ public class DisasterDrawer {
         do {
             numbered = drawer.resolve(stamp + "-" + what + "-" + n + extension);
             n++;
-        } while (mediaStore.exists(numbered));
+        } while (this.mediaStore.exists(numbered));
         return numbered;
     }
 

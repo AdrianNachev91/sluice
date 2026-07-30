@@ -104,7 +104,7 @@ public class SortEngine implements SortUseCase {
      */
     @Override
     public SortSummary sort(final SortScope scope) {
-        return sort(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
+        return this.sort(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
     /**
@@ -115,7 +115,7 @@ public class SortEngine implements SortUseCase {
      * @return {@link SortSummary} summary of what was sorted, deduped, and routed
      */
     public SortSummary sort(final SortScope scope, final ProgressCallback progress) {
-        return sort(scope, progress, CancellationSignal.NEVER);
+        return this.sort(scope, progress, CancellationSignal.NEVER);
     }
 
     /**
@@ -137,28 +137,28 @@ public class SortEngine implements SortUseCase {
         // cancellation seen here is a clean abort with zero side effects. The check exists only to
         // stop wasted work quickly on the pass most likely to run long: it spans the whole Inbox,
         // not just the requested scope.
-        final ScanResult scanResult = inboxScanner.scan(pathsPort.inbox());
+        final ScanResult scanResult = this.inboxScanner.scan(this.pathsPort.inbox());
         final List<DatedMedia> allDated = new ArrayList<>();
         for (final MediaFile file : scanResult.media()) {
             if (cancellation.isCancelled()) {
                 return EMPTY_SORT_SUMMARY;
             }
-            allDated.add(new DatedMedia(file, dateResolver.resolve(file, scanResult.sidecars().get(file))));
+            allDated.add(new DatedMedia(file, this.dateResolver.resolve(file, scanResult.sidecars().get(file))));
         }
-        final List<DatedMedia> inScope = scopeSelector.select(allDated, scope);
+        final List<DatedMedia> inScope = this.scopeSelector.select(allDated, scope);
         final Map<MediaFile, DateResult> dateByFile = new HashMap<>();
         inScope.forEach(dated -> dateByFile.put(dated.file(), dated.date()));
 
-        final Set<String> libraryHashes = existingLibraryHashes();
+        final Set<String> libraryHashes = this.existingLibraryHashes();
         final List<HashedMedia> hashed = inScope.stream()
-                .map(dated -> new HashedMedia(dated.file(), sha256Port.hash(dated.file().path())))
+                .map(dated -> new HashedMedia(dated.file(), this.sha256Port.hash(dated.file().path())))
                 .toList();
-        final DedupPlan plan = dedup.plan(hashed, libraryHashes);
+        final DedupPlan plan = this.dedup.plan(hashed, libraryHashes);
 
-        plan.redundantVsLibrary().forEach(file -> mediaStore.delete(file.path()));
-        plan.withinBatchDuplicates().forEach(file -> mediaStore.delete(file.path()));
+        plan.redundantVsLibrary().forEach(file -> this.mediaStore.delete(file.path()));
+        plan.withinBatchDuplicates().forEach(file -> this.mediaStore.delete(file.path()));
 
-        final RoutingResult routing = routeSurvivors(plan.toSort(), dateByFile, progress, cancellation);
+        final RoutingResult routing = this.routeSurvivors(plan.toSort(), dateByFile, progress, cancellation);
 
         // A cancelled routing pass can stop before every survivor is routed. Those unrouted files
         // never actually left the Inbox, even though scope selection picked them. This is the set
@@ -172,9 +172,9 @@ public class SortEngine implements SortUseCase {
         // duplicate, or routed. It only depends on the file having actually left the Inbox, so
         // this runs against actuallyRemoved, after routing, rather than the full in-scope list
         // before it. A file routing never reached keeps its sidecar for a future run.
-        final Set<Path> consumedSidecars = consumeSidecars(actuallyRemoved, dateByFile, scanResult.sidecars());
+        final Set<Path> consumedSidecars = this.consumeSidecars(actuallyRemoved, dateByFile, scanResult.sidecars());
 
-        sweepOrphanedSidecarsAndEmptyDirectories(scanResult, actuallyRemoved, consumedSidecars);
+        this.sweepOrphanedSidecarsAndEmptyDirectories(scanResult, actuallyRemoved, consumedSidecars);
 
         return new SortSummary(actuallyRemoved.size(), plan.redundantVsLibrary().size(),
                 plan.withinBatchDuplicates().size(), routing.photosSorted, routing.videosSorted, routing.lowRes,
@@ -206,7 +206,7 @@ public class SortEngine implements SortUseCase {
             // left alone, per the schema-validation safety rule.
             if (sidecar != null && date.source().equals(SIDECAR_SOURCE)
                     && deletedSidecars.add(sidecar.jsonPath())) {
-                mediaStore.delete(sidecar.jsonPath());
+                this.mediaStore.delete(sidecar.jsonPath());
             }
         }
         return deletedSidecars;
@@ -240,10 +240,10 @@ public class SortEngine implements SortUseCase {
         final List<Path> remainingJsonPaths = scanResult.jsonPaths().stream()
                 .filter(path -> !consumedSidecars.contains(path))
                 .toList();
-        for (final Path orphaned : sidecarSweep.findOrphaned(remainingMediaPaths, remainingJsonPaths)) {
-            mediaStore.delete(orphaned);
+        for (final Path orphaned : this.sidecarSweep.findOrphaned(remainingMediaPaths, remainingJsonPaths)) {
+            this.mediaStore.delete(orphaned);
         }
-        mediaStore.removeEmptyDirectories(pathsPort.inbox());
+        this.mediaStore.removeEmptyDirectories(this.pathsPort.inbox());
     }
 
     /**
@@ -258,8 +258,8 @@ public class SortEngine implements SortUseCase {
      */
     private Set<String> existingLibraryHashes() {
         final Set<String> result = new HashSet<>();
-        hashIndexPort.load().forEach((hash, paths) -> {
-            if (paths.stream().anyMatch(mediaStore::exists)) {
+        this.hashIndexPort.load().forEach((hash, paths) -> {
+            if (paths.stream().anyMatch(this.mediaStore::exists)) {
                 result.add(hash);
             }
         });
@@ -288,7 +288,7 @@ public class SortEngine implements SortUseCase {
             // this lookup always hits. requireNonNull asserts that invariant rather than silently
             // trusting it.
             final DateResult date = Objects.requireNonNull(dateByFile.get(file));
-            routeOneSurvivor(file, date, routing);
+            this.routeOneSurvivor(file, date, routing);
             routing.routedFiles.add(file);
             progress.tick(++current, total);
         }
@@ -308,7 +308,7 @@ public class SortEngine implements SortUseCase {
         final String leaf = file.path().getFileName().toString();
 
         if (date.confidence() == Confidence.UNSORTABLE) {
-            routeToReview(file, leaf, pathsPort.review().resolve("Unsorted"), REASON_UNSORTED);
+            this.routeToReview(file, leaf, this.pathsPort.review().resolve("Unsorted"), REASON_UNSORTED);
             routing.unsorted++;
             routing.unsortedFiles.add(leaf);
             return;
@@ -316,20 +316,20 @@ public class SortEngine implements SortUseCase {
 
         // The scanner already filtered to recognized extensions, so classification always
         // succeeds for a file that reached this point.
-        final MediaType type = mediaTypeDetector.classify(file.path()).orElseThrow();
+        final MediaType type = this.mediaTypeDetector.classify(file.path()).orElseThrow();
         final boolean isVideo = type == MediaType.VIDEO;
         final String extension = MediaTypeDetector.extensionOf(file.path());
 
-        if (!isVideo && isLowRes(file, type, extension)) {
-            routeToReview(file, leaf, pathsPort.review().resolve(yearMonthDash(date.when())), REASON_LOW_RES);
+        if (!isVideo && this.isLowRes(file, type, extension)) {
+            this.routeToReview(file, leaf, this.pathsPort.review().resolve(yearMonthDash(date.when())), REASON_LOW_RES);
             routing.lowRes++;
             return;
         }
 
         final String mediaFolder = isVideo ? "Videos" : "Photos";
-        final Path destDir = pathsPort.sorted().resolve(mediaFolder)
+        final Path destDir = this.pathsPort.sorted().resolve(mediaFolder)
                 .resolve(yearFolder(date.when())).resolve(monthFolder(date.when()));
-        mediaStore.move(file.path(), destDir);
+        this.mediaStore.move(file.path(), destDir);
         routing.yearsSorted.add(date.when().getYear());
         if (isVideo) {
             routing.videosSorted++;
@@ -350,8 +350,8 @@ public class SortEngine implements SortUseCase {
      * @return boolean true if the file counts as low-res
      */
     private boolean isLowRes(final MediaFile file, final MediaType type, final String extension) {
-        final long size = mediaStore.size(file.path());
-        final Dimensions dimensions = imageDimensionsPort.read(file.path()).orElse(null);
+        final long size = this.mediaStore.size(file.path());
+        final Dimensions dimensions = this.imageDimensionsPort.read(file.path()).orElse(null);
         return LowResGate.isLowRes(size, dimensions, type, extension);
     }
 
@@ -364,8 +364,8 @@ public class SortEngine implements SortUseCase {
      * @param reason {@link String} short label recorded in the reasons file
      */
     private void routeToReview(final MediaFile file, final String leaf, final Path destDir, final String reason) {
-        mediaStore.move(file.path(), destDir);
-        mediaStore.appendLine(destDir.resolve(REASONS_FILE), leaf + " - " + reason);
+        this.mediaStore.move(file.path(), destDir);
+        this.mediaStore.appendLine(destDir.resolve(REASONS_FILE), leaf + " - " + reason);
     }
 
     /**

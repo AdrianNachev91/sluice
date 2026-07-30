@@ -38,6 +38,6 @@ public class ApplyException extends Exception {
      * @return a {@link List} of {@link Finding} the findings
      */
     public List<Finding> findings() {
-        return findings;
+        return this.findings;
     }
 }

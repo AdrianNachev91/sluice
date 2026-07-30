@@ -37,7 +37,7 @@ class ShardValidatorTest {
 
     @Test
     void aWellFormedShardIsValidAndMergesItsDecisions() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new Classification(A, "junk", "photo of a screen"),
                 new Classification(B, "food", "restaurant meal")));
 
@@ -49,7 +49,7 @@ class ShardValidatorTest {
 
     @Test
     void anEmptyDecisionsShardIsValid() {
-        final var report = validate(shardFile("montage-001"));
+        final var report = this.validate(this.shardFile("montage-001"));
 
         assertThat(report.valid()).isTrue();
         assertThat(report.decisions()).isEmpty();
@@ -57,7 +57,7 @@ class ShardValidatorTest {
 
     @Test
     void aCompleteNearDupGroupIsValid() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupChosen(A, "g1", "sharpest of the three"),
                 new NearDupReject(B, "g1", "slightly blurred"),
                 new NearDupReject(C, "g1", "eyes closed")));
@@ -68,7 +68,7 @@ class ShardValidatorTest {
 
     @Test
     void anUnconfiguredCategoryIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new Classification(A, "meme", "funny caption")));
 
         assertThat(report.findings()).contains(
@@ -77,7 +77,7 @@ class ShardValidatorTest {
 
     @Test
     void aBlankClassificationReasonIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new Classification(A, "junk", "")));
 
         assertThat(report.findings()).contains(new MissingReason("montage-001", 1));
@@ -85,7 +85,7 @@ class ShardValidatorTest {
 
     @Test
     void aNearDupChosenMissingItsGroupAndReasonIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupChosen(A, "", "")));
 
         assertThat(report.findings()).contains(
@@ -95,7 +95,7 @@ class ShardValidatorTest {
 
     @Test
     void aNearDupRejectMissingItsGroupAndReasonIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupReject(A, "", "")));
 
         assertThat(report.findings()).contains(
@@ -105,8 +105,8 @@ class ShardValidatorTest {
 
     @Test
     void aBlankFileIsReported() {
-        final var report = validate(shardFile("montage-001",
-                missingFile()));
+        final var report = this.validate(this.shardFile("montage-001",
+                this.missingFile()));
 
         assertThat(report.findings()).contains(new MissingFile("montage-001", 1));
     }
@@ -114,7 +114,7 @@ class ShardValidatorTest {
     @Test
     void aFileOutsideTheScopeIsReported() {
         final var stray = Path.of("Sorted/Photos/2016/08/z.jpg");
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new Classification(stray, "junk", "screenshot")));
 
         assertThat(report.findings()).contains(new FileOutOfScope("montage-001", 1, stray));
@@ -123,7 +123,7 @@ class ShardValidatorTest {
     @Test
     void aDriftedPathHealsToItsUniqueSidecarSource() {
         final var drifted = Path.of("Sorted/Photos/2016/09/a.jpg"); // wrong month, unique basename a.jpg
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new Classification(drifted, "junk", "screenshot")));
 
         assertThat(report.valid()).isTrue();
@@ -136,8 +136,8 @@ class ShardValidatorTest {
         final var dupA = Path.of("Sorted/Photos/2016/08/dup.jpg");
         final var dupB = Path.of("Sorted/Photos/2016/09/dup.jpg");
         final var drifted = Path.of("Sorted/Photos/2016/10/dup.jpg");
-        final var report = validator().validate(
-                List.of(shardFile("montage-001", new Classification(drifted, "junk", "screenshot"))),
+        final var report = this.validator().validate(
+                List.of(this.shardFile("montage-001", new Classification(drifted, "junk", "screenshot"))),
                 List.of(dupA, dupB),
                 CATEGORIES,
                 List.of());
@@ -148,7 +148,7 @@ class ShardValidatorTest {
 
     @Test
     void aNearDupGroupWithNoChosenIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupReject(A, "g1", "blurred")));
 
         assertThat(report.findings()).contains(new WrongChosenCount("montage-001", "g1", 0));
@@ -156,7 +156,7 @@ class ShardValidatorTest {
 
     @Test
     void aNearDupGroupWithTwoChosenIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupChosen(A, "g1", "sharp"),
                 new NearDupChosen(B, "g1", "also sharp"),
                 new NearDupReject(C, "g1", "blurred")));
@@ -166,7 +166,7 @@ class ShardValidatorTest {
 
     @Test
     void aNearDupGroupWithNoRejectIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupChosen(A, "g1", "sharp")));
 
         assertThat(report.findings()).contains(new TooFewRejects("montage-001", "g1", 0));
@@ -174,7 +174,7 @@ class ShardValidatorTest {
 
     @Test
     void aGroupSlugWithUppercaseOrUnderscoresIsReported() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupChosen(A, "Beach_Day", "sharp"),
                 new NearDupReject(B, "Beach_Day", "blurred")));
 
@@ -184,7 +184,7 @@ class ShardValidatorTest {
     @Test
     void aGroupSlugLongerThanTwentyFourCharsIsReported() {
         final var tooLong = "a-very-long-birthday-slug"; // 25 chars
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupChosen(A, tooLong, "sharp"),
                 new NearDupReject(B, tooLong, "blurred")));
 
@@ -194,7 +194,7 @@ class ShardValidatorTest {
     @Test
     void aHyphenatedSlugAtTheLengthLimitIsValid() {
         final var atLimit = "birthday-cake-candles-24"; // 24 chars exactly
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new NearDupChosen(A, atLimit, "sharp"),
                 new NearDupReject(B, atLimit, "blurred")));
 
@@ -203,7 +203,7 @@ class ShardValidatorTest {
 
     @Test
     void aMontageFieldNotMatchingTheFilenameIsReported() {
-        final var report = validate(new ShardFile("montage-001",
+        final var report = this.validate(new ShardFile("montage-001",
                 new DecisionShard("montage-002", List.of(new Classification(A, "junk", "screenshot")))));
 
         assertThat(report.findings()).contains(new MontageFieldMismatch("montage-001", "montage-002"));
@@ -211,7 +211,7 @@ class ShardValidatorTest {
 
     @Test
     void aBlankMontageFieldIsReported() {
-        final var report = validate(new ShardFile("montage-001",
+        final var report = this.validate(new ShardFile("montage-001",
                 new DecisionShard("", List.of(new Classification(A, "junk", "screenshot")))));
 
         assertThat(report.findings()).contains(new MissingMontageField("montage-001"));
@@ -219,9 +219,9 @@ class ShardValidatorTest {
 
     @Test
     void aFileActedOnByTwoShardsIsReported() {
-        final var report = validate(
-                shardFile("montage-001", new Classification(A, "junk", "screenshot")),
-                shardFile("montage-002", new Classification(A, "food", "meal")));
+        final var report = this.validate(
+                this.shardFile("montage-001", new Classification(A, "junk", "screenshot")),
+                this.shardFile("montage-002", new Classification(A, "food", "meal")));
 
         assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
     }
@@ -229,12 +229,12 @@ class ShardValidatorTest {
     @Test
     void aNearDupGroupIdReusedAcrossTwoShardsIsReported() {
         final var d = Path.of("Sorted/Photos/2016/08/d.jpg");
-        final var report = validator().validate(
+        final var report = this.validator().validate(
                 List.of(
-                        shardFile("montage-001",
+                        this.shardFile("montage-001",
                                 new NearDupChosen(A, "g1", "sharp"),
                                 new NearDupReject(B, "g1", "blurred")),
-                        shardFile("montage-002",
+                        this.shardFile("montage-002",
                                 new NearDupChosen(C, "g1", "sharp"),
                                 new NearDupReject(d, "g1", "blurred"))),
                 List.of(A, B, C, d),
@@ -248,9 +248,9 @@ class ShardValidatorTest {
     @Test
     void aHealThatCollidesWithAnAlreadyListedFileIsCaughtAsADuplicate() {
         final var driftedA = Path.of("Sorted/Photos/2016/09/a.jpg"); // heals to A
-        final var report = validate(
-                shardFile("montage-001", new Classification(A, "junk", "screenshot")),
-                shardFile("montage-002", new Classification(driftedA, "food", "meal")));
+        final var report = this.validate(
+                this.shardFile("montage-001", new Classification(A, "junk", "screenshot")),
+                this.shardFile("montage-002", new Classification(driftedA, "food", "meal")));
 
         assertThat(report.heals()).hasSize(1);
         assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
@@ -259,8 +259,8 @@ class ShardValidatorTest {
     @Test
     void aFileListedBothAsADecisionAndAsUnreviewableIsReportedAsAResolvableOverlap() {
         final var decision = new Classification(A, "junk", "screenshot");
-        final var report = validator().validate(
-                List.of(shardFile("montage-001", decision)),
+        final var report = this.validator().validate(
+                List.of(this.shardFile("montage-001", decision)),
                 SCOPE,
                 CATEGORIES,
                 List.of(A));
@@ -272,10 +272,10 @@ class ShardValidatorTest {
     // multi-reference shape, which has no such resolution and stays the general DuplicateFileReference.
     @Test
     void aFileListedTwiceAsADecisionAndOnceAsUnreviewableIsReportedAsAPlainDuplicate() {
-        final var report = validator().validate(
+        final var report = this.validator().validate(
                 List.of(
-                        shardFile("montage-001", new Classification(A, "junk", "screenshot")),
-                        shardFile("montage-002", new Classification(A, "food", "meal"))),
+                        this.shardFile("montage-001", new Classification(A, "junk", "screenshot")),
+                        this.shardFile("montage-002", new Classification(A, "food", "meal"))),
                 SCOPE,
                 CATEGORIES,
                 List.of(A));
@@ -285,8 +285,8 @@ class ShardValidatorTest {
 
     @Test
     void aFileListedTwiceWithinTheUnreviewableListIsReported() {
-        final var report = validator().validate(
-                List.of(shardFile("montage-001")),
+        final var report = this.validator().validate(
+                List.of(this.shardFile("montage-001")),
                 SCOPE,
                 CATEGORIES,
                 List.of(A, A));
@@ -296,8 +296,8 @@ class ShardValidatorTest {
 
     @Test
     void anEmptyCategorySetMakesEveryClassificationInvalid() {
-        final var report = validator().validate(
-                List.of(shardFile("montage-001", new Classification(A, "junk", "screenshot"))),
+        final var report = this.validator().validate(
+                List.of(this.shardFile("montage-001", new Classification(A, "junk", "screenshot"))),
                 SCOPE,
                 List.of(),
                 List.of());
@@ -310,9 +310,9 @@ class ShardValidatorTest {
     // does not mask the blank reason on the same decision. This is the whole point of aggregating.
     @Test
     void everyProblemIsReportedNotJustTheFirst() {
-        final var report = validate(shardFile("montage-001",
+        final var report = this.validate(this.shardFile("montage-001",
                 new Classification(A, "meme", ""),       // unknown category + blank reason
-                missingFile())); // blank file
+                this.missingFile())); // blank file
 
         assertThat(report.findings()).contains(
                 new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny"),
@@ -322,9 +322,9 @@ class ShardValidatorTest {
 
     @Test
     void findingsAreOrderedByMontageRegardlessOfInputOrder() {
-        final var report = validate(
-                shardFile("montage-002", missingFile()),
-                shardFile("montage-001", missingFile()));
+        final var report = this.validate(
+                this.shardFile("montage-002", this.missingFile()),
+                this.shardFile("montage-001", this.missingFile()));
 
         assertThat(report.findings()).containsExactly(
                 new MissingFile("montage-001", 1),
@@ -366,6 +366,6 @@ class ShardValidatorTest {
     }
 
     private ValidationReport validate(final ShardFile... shards) {
-        return validator().validate(List.of(shards), SCOPE, CATEGORIES, List.of());
+        return this.validator().validate(List.of(shards), SCOPE, CATEGORIES, List.of());
     }
 }

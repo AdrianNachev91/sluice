@@ -27,7 +27,7 @@ class InboxScannerTest {
         Files.writeString(photo, "photo bytes");
         Files.writeString(album.resolve("IMG_1234.jpg.json"), "{}");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.takeoutMode()).isTrue();
         assertThat(result.media()).containsExactly(new MediaFile(photo));
@@ -39,7 +39,7 @@ class InboxScannerTest {
         final Path photo = inbox.resolve("IMG_5678.jpg");
         Files.writeString(photo, "photo bytes");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.takeoutMode()).isFalse();
         assertThat(result.media()).containsExactly(new MediaFile(photo));
@@ -51,7 +51,7 @@ class InboxScannerTest {
         final Path svg = inbox.resolve("drawing.svg");
         Files.writeString(svg, "<svg/>");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.media()).containsExactly(new MediaFile(svg));
     }
@@ -61,7 +61,7 @@ class InboxScannerTest {
         final Path video = inbox.resolve("clip.mp4");
         Files.writeString(video, "video bytes");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.media()).containsExactly(new MediaFile(video));
         assertThat(new MediaTypeDetector().classify(video)).contains(MediaType.VIDEO);
@@ -73,7 +73,7 @@ class InboxScannerTest {
         Files.writeString(photo, "photo bytes");
         Files.writeString(inbox.resolve("readme.txt"), "not media");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.media()).containsExactly(new MediaFile(photo));
     }
@@ -85,7 +85,7 @@ class InboxScannerTest {
         final Path sidecar = inbox.resolve("IMG_1234.jpg.JSON");
         Files.writeString(sidecar, "{}");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.takeoutMode()).isTrue();
         assertThat(result.sidecars()).containsEntry(new MediaFile(photo), new TakeoutSidecar(sidecar));
@@ -104,7 +104,7 @@ class InboxScannerTest {
         Files.writeString(sidecarA, "{}");
         Files.writeString(sidecarB, "{}");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.sidecars())
                 .containsEntry(new MediaFile(photoA), new TakeoutSidecar(sidecarA))
@@ -115,7 +115,7 @@ class InboxScannerTest {
     void danglingSidecarWithNoMatchingMediaIsDroppedSilently(@TempDir final Path inbox) throws IOException {
         Files.writeString(inbox.resolve("IMG_9999.jpg.json"), "{}");
 
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.takeoutMode()).isTrue();
         assertThat(result.media()).isEmpty();
@@ -124,7 +124,7 @@ class InboxScannerTest {
 
     @Test
     void emptyInboxProducesEmptyNonTakeoutResult(@TempDir final Path inbox) {
-        final ScanResult result = scanner.scan(inbox);
+        final ScanResult result = this.scanner.scan(inbox);
 
         assertThat(result.takeoutMode()).isFalse();
         assertThat(result.media()).isEmpty();
@@ -135,6 +135,6 @@ class InboxScannerTest {
     void nonExistentInboxRootThrowsUncheckedIOException(@TempDir final Path inbox) {
         final Path missing = inbox.resolve("does-not-exist");
 
-        assertThatThrownBy(() -> scanner.scan(missing)).isInstanceOf(UncheckedIOException.class);
+        assertThatThrownBy(() -> this.scanner.scan(missing)).isInstanceOf(UncheckedIOException.class);
     }
 }

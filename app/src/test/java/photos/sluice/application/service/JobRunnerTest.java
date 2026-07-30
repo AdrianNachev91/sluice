@@ -17,7 +17,7 @@ class JobRunnerTest {
 
     @Test
     void joinReturnsTheWorkResult() {
-        final JobHandle<String> handle = runner.submit(_ -> "done");
+        final JobHandle<String> handle = this.runner.submit(_ -> "done");
 
         assertThat(handle.join()).isEqualTo("done");
     }
@@ -26,7 +26,7 @@ class JobRunnerTest {
     void workRunsOffTheSubmittingThread() {
         final long submittingThreadId = Thread.currentThread().threadId();
         final var workThreadId = new AtomicLong(submittingThreadId);
-        final JobHandle<String> handle = runner.submit(_ -> {
+        final JobHandle<String> handle = this.runner.submit(_ -> {
             workThreadId.set(Thread.currentThread().threadId());
             return "done";
         });
@@ -45,19 +45,19 @@ class JobRunnerTest {
         // assert anything.
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
-        final JobHandle<String> handle = runner.submit(_ -> {
+        final JobHandle<String> handle = this.runner.submit(_ -> {
             started.countDown();
             release.await();
             return "done";
         });
         started.await();
 
-        assertThat(runner.isBusy()).isTrue();
+        assertThat(this.runner.isBusy()).isTrue();
 
         release.countDown();
         handle.join();
 
-        assertThat(runner.isBusy()).isFalse();
+        assertThat(this.runner.isBusy()).isFalse();
     }
 
     @Test
@@ -67,14 +67,14 @@ class JobRunnerTest {
         // that happened to finish first.
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
-        final JobHandle<String> first = runner.submit(_ -> {
+        final JobHandle<String> first = this.runner.submit(_ -> {
             started.countDown();
             release.await();
             return "done";
         });
         started.await();
 
-        assertThatThrownBy(() -> runner.submit(_ -> "second"))
+        assertThatThrownBy(() -> this.runner.submit(_ -> "second"))
                 .isInstanceOf(IllegalStateException.class);
 
         release.countDown();
@@ -84,14 +84,14 @@ class JobRunnerTest {
     @Test
     void slotFreesAndFailureIsWrappedWhenWorkThrows() {
         final var failure = new RuntimeException("Defqon 1 canceled, queue the next edition");
-        final JobHandle<String> handle = runner.submit(_ -> {
+        final JobHandle<String> handle = this.runner.submit(_ -> {
             throw failure;
         });
 
         assertThatThrownBy(handle::join)
                 .isInstanceOf(CompletionException.class)
                 .hasCause(failure);
-        assertThat(runner.isBusy()).isFalse();
+        assertThat(this.runner.isBusy()).isFalse();
     }
 
     @Test
@@ -99,7 +99,7 @@ class JobRunnerTest {
         // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes.
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
-        final JobHandle<String> first = runner.submit(_ -> {
+        final JobHandle<String> first = this.runner.submit(_ -> {
             started.countDown();
             release.await();
             return "first";
@@ -108,7 +108,7 @@ class JobRunnerTest {
         release.countDown();
         first.join();
 
-        final JobHandle<String> second = runner.submit(_ -> "second");
+        final JobHandle<String> second = this.runner.submit(_ -> "second");
 
         assertThat(second.join()).isEqualTo("second");
     }
@@ -121,7 +121,7 @@ class JobRunnerTest {
         final var observedCancellation = new AtomicBoolean(true);
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
-        final JobHandle<String> handle = runner.submit(h -> {
+        final JobHandle<String> handle = this.runner.submit(h -> {
             started.countDown();
             release.await();
             observedCancellation.set(h.isCancellationRequested());
@@ -140,7 +140,7 @@ class JobRunnerTest {
     @Test
     void onCompleteFiresOnceTheResultIsAvailable() {
         final var received = new AtomicReference<>("");
-        final JobHandle<String> handle = runner.submit(_ -> "result");
+        final JobHandle<String> handle = this.runner.submit(_ -> "result");
 
         // join() only guarantees the future's own result is visible, not that a sibling dependent
         // stage like thenAccept has already run - wait on that stage's own completion too, or this

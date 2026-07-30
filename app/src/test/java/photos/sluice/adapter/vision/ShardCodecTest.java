@@ -36,9 +36,9 @@ class ShardCodecTest {
                 new NearDupReject(dir.resolve("soft.jpg"), "lake-jun20", "softer focus")));
         final Path shardPath = dir.resolve("decisions-007.json");
 
-        codec.write(shardPath, shard);
+        this.codec.write(shardPath, shard);
 
-        assertThat(codec.read(shardPath)).isEqualTo(shard);
+        assertThat(this.codec.read(shardPath)).isEqualTo(shard);
     }
 
     @Test
@@ -46,11 +46,11 @@ class ShardCodecTest {
         final var shard = new DecisionShard("montage-008", List.of());
         final Path shardPath = dir.resolve("decisions-008.json");
 
-        codec.write(shardPath, shard);
+        this.codec.write(shardPath, shard);
 
         assertThat(Files.readString(shardPath, StandardCharsets.UTF_8)).isEqualToIgnoringWhitespace("""
                 { "montage": "montage-008", "decisions": [] }""");
-        assertThat(codec.read(shardPath)).isEqualTo(shard);
+        assertThat(this.codec.read(shardPath)).isEqualTo(shard);
     }
 
     @Test
@@ -64,7 +64,7 @@ class ShardCodecTest {
                 new NearDupReject(reject, "lake-jun20", "softer focus; chosen is IMG_20190620_150010.jpg")));
         final Path shardPath = dir.resolve("decisions-007.json");
 
-        codec.write(shardPath, shard);
+        this.codec.write(shardPath, shard);
 
         assertThat(Files.readString(shardPath, StandardCharsets.UTF_8)).isEqualToIgnoringWhitespace("""
                 {
@@ -84,7 +84,7 @@ class ShardCodecTest {
                 new Classification(dir.resolve("a.jpg"), "scenery", "weak composition")));
         final Path shardPath = dir.resolve("decisions-001.json");
 
-        codec.write(shardPath, shard);
+        this.codec.write(shardPath, shard);
 
         final String json = Files.readString(shardPath, StandardCharsets.UTF_8);
         assertThat(json).doesNotContain("group").doesNotContain("chosen_reason");
@@ -97,7 +97,7 @@ class ShardCodecTest {
                 { "montage": "montage-002",
                   "decisions": [ { "file": "a.jpg", "action": "pets", "reason": "cat" } ] }""");
 
-        final DecisionShard shard = codec.read(shardPath);
+        final DecisionShard shard = this.codec.read(shardPath);
 
         assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
             assertThat(c.category()).isEqualTo("pets");
@@ -112,7 +112,7 @@ class ShardCodecTest {
                 { "montage": "montage-003",
                   "decisions": [ { "file": "a.jpg", "action": "junk", "reason": "blurry", "confidence": 0.9 } ] }""");
 
-        assertThatThrownBy(() -> codec.read(shardPath))
+        assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(shardPath.toString());
     }
@@ -124,7 +124,7 @@ class ShardCodecTest {
                 { "montage": "montage-004",
                   "decisions": [ { "action": "junk" } ] }""");
 
-        final DecisionShard shard = codec.read(shardPath);
+        final DecisionShard shard = this.codec.read(shardPath);
 
         assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
             assertThat(c.file().toString()).isEmpty();
@@ -139,7 +139,7 @@ class ShardCodecTest {
                 { "montage": "montage-009",
                   "decisions": [ { "file": "a.jpg", "action": "near-dup-chosen" } ] }""");
 
-        final DecisionShard shard = codec.read(shardPath);
+        final DecisionShard shard = this.codec.read(shardPath);
 
         assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(NearDupChosen.class, c -> {
             assertThat(c.group()).isEmpty();
@@ -154,7 +154,7 @@ class ShardCodecTest {
                 { "montage": "montage-010", "summary": "all good",
                   "decisions": [] }""");
 
-        assertThatThrownBy(() -> codec.read(shardPath))
+        assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(shardPath.toString());
     }
@@ -165,7 +165,7 @@ class ShardCodecTest {
         Files.writeString(shardPath, """
                 { "montage": "montage-005" }""");
 
-        assertThat(codec.read(shardPath).decisions()).isEmpty();
+        assertThat(this.codec.read(shardPath).decisions()).isEmpty();
     }
 
     @Test
@@ -173,7 +173,7 @@ class ShardCodecTest {
         final Path shardPath = dir.resolve("decisions-006.json");
         Files.writeString(shardPath, "null");
 
-        assertThatThrownBy(() -> codec.read(shardPath))
+        assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(shardPath.toString());
     }
@@ -185,7 +185,7 @@ class ShardCodecTest {
                 { "montage": "montage-007",
                   "decisions": [ null, { "file": "a.jpg", "action": "junk", "reason": "blurry" } ] }""");
 
-        assertThatThrownBy(() -> codec.read(shardPath))
+        assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("null decision entry");
     }
@@ -196,7 +196,7 @@ class ShardCodecTest {
         final var shard = new DecisionShard("montage-006", List.of(
                 new Classification(dir.resolve("a.jpg"), "junk", "blurry")));
 
-        assertThatThrownBy(() -> codec.write(shardPath, shard))
+        assertThatThrownBy(() -> this.codec.write(shardPath, shard))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(shardPath.toString());
     }
@@ -221,7 +221,7 @@ class ShardCodecTest {
         final Path shardPath = dir.resolve("decisions-008.json");
         Files.writeString(shardPath, "{ not valid json");
 
-        assertThatThrownBy(() -> codec.read(shardPath))
+        assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(shardPath.toString())
                 .hasCauseInstanceOf(IOException.class)

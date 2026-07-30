@@ -745,84 +745,84 @@ class ApplyEngineTest {
 
         @Override
         public Path move(final Path source, final Path destDir) {
-            return delegate.move(source, destDir);
+            return this.delegate.move(source, destDir);
         }
 
         @Override
         public Path resolveDestination(final Path source, final Path destDir) {
-            return delegate.resolveDestination(source, destDir);
+            return this.delegate.resolveDestination(source, destDir);
         }
 
         @Override
         public Path moveTo(final Path source, final Path destination) {
-            if (movesUntilFailure <= 0) {
-                if (crashPoint == CrashPoint.AFTER_THE_MOVE) {
-                    delegate.moveTo(source, destination);
+            if (this.movesUntilFailure <= 0) {
+                if (this.crashPoint == CrashPoint.AFTER_THE_MOVE) {
+                    this.delegate.moveTo(source, destination);
                 }
                 throw new RuntimeException("simulated crash");
             }
-            movesUntilFailure--;
-            return delegate.moveTo(source, destination);
+            this.movesUntilFailure--;
+            return this.delegate.moveTo(source, destination);
         }
 
         @Override
         public List<Path> listFiles(final Path root) {
-            return delegate.listFiles(root);
+            return this.delegate.listFiles(root);
         }
 
         @Override
         public Instant lastModifiedTime(final Path path) {
-            return delegate.lastModifiedTime(path);
+            return this.delegate.lastModifiedTime(path);
         }
 
         @Override
         public Path copy(final Path source, final Path destDir) {
-            return delegate.copy(source, destDir);
+            return this.delegate.copy(source, destDir);
         }
 
         @Override
         public void delete(final Path path) {
-            delegate.delete(path);
+            this.delegate.delete(path);
         }
 
         @Override
         public void ensureDirectory(final Path dir) {
-            delegate.ensureDirectory(dir);
+            this.delegate.ensureDirectory(dir);
         }
 
         @Override
         public boolean exists(final Path path) {
-            return delegate.exists(path);
+            return this.delegate.exists(path);
         }
 
         @Override
         public long size(final Path path) {
-            return delegate.size(path);
+            return this.delegate.size(path);
         }
 
         @Override
         public void appendLine(final Path file, final String line) {
-            delegate.appendLine(file, line);
+            this.delegate.appendLine(file, line);
         }
 
         @Override
         public void write(final Path file, final String content) {
-            delegate.write(file, content);
+            this.delegate.write(file, content);
         }
 
         @Override
         public List<String> readLines(final Path file) {
-            return delegate.readLines(file);
+            return this.delegate.readLines(file);
         }
 
         @Override
         public void removeEmptyDirectories(final Path root) {
-            delegate.removeEmptyDirectories(root);
+            this.delegate.removeEmptyDirectories(root);
         }
 
         @Override
         public void removeIfEmptyOfFiles(final Path dir) {
-            delegate.removeIfEmptyOfFiles(dir);
+            this.delegate.removeIfEmptyOfFiles(dir);
         }
     }
 }

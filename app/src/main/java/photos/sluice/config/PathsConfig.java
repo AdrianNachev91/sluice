@@ -35,9 +35,9 @@ public class PathsConfig implements PathsPort {
      */
     @PostConstruct
     void validate() {
-        requireExistingDirectory("sluice.paths.repo-root", properties.repoRoot());
-        requireExistingDirectory("sluice.paths.library-root", properties.libraryRoot());
-        requireExistingDirectory("sluice.paths.inbox", properties.inbox());
+        requireExistingDirectory("sluice.paths.repo-root", this.properties.repoRoot());
+        requireExistingDirectory("sluice.paths.library-root", this.properties.libraryRoot());
+        requireExistingDirectory("sluice.paths.inbox", this.properties.inbox());
     }
 
     /**
@@ -46,7 +46,7 @@ public class PathsConfig implements PathsPort {
      * @return {@link Path} the absolute repo root path
      */
     public Path repoRoot() {
-        return resolve(Objects.requireNonNull(properties.repoRoot()));
+        return resolve(Objects.requireNonNull(this.properties.repoRoot()));
     }
 
     /**
@@ -56,7 +56,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path library() {
-        return resolve(Objects.requireNonNull(properties.libraryRoot()));
+        return resolve(Objects.requireNonNull(this.properties.libraryRoot()));
     }
 
     /**
@@ -66,7 +66,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path inbox() {
-        return resolve(Objects.requireNonNull(properties.inbox()));
+        return resolve(Objects.requireNonNull(this.properties.inbox()));
     }
 
     /**
@@ -76,7 +76,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path logs() {
-        return repoRoot().resolve("logs");
+        return this.repoRoot().resolve("logs");
     }
 
     /**
@@ -86,7 +86,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path sorted() {
-        return repoRoot().resolve("Sorted");
+        return this.repoRoot().resolve("Sorted");
     }
 
     /**
@@ -96,7 +96,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path review() {
-        return repoRoot().resolve("Review");
+        return this.repoRoot().resolve("Review");
     }
 
     /**
@@ -106,7 +106,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path duplicates() {
-        return repoRoot().resolve("Duplicates");
+        return this.repoRoot().resolve("Duplicates");
     }
 
     /**
@@ -116,7 +116,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path unreviewable() {
-        return repoRoot().resolve("Unreviewable");
+        return this.repoRoot().resolve("Unreviewable");
     }
 
     /**
