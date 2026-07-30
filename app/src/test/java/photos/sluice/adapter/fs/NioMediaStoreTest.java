@@ -18,35 +18,35 @@ class NioMediaStoreTest {
     private final NioMediaStore store = new NioMediaStore();
 
     @Test
-    void listFilesReturnsEveryRegularFileRecursivelyButNoDirectories(@TempDir Path root) throws IOException {
+    void listFilesReturnsEveryRegularFileRecursivelyButNoDirectories(@TempDir final Path root) throws IOException {
         Files.writeString(root.resolve("top.jpg"), "top");
-        Path nested = Files.createDirectories(root.resolve("2019").resolve("06"));
+        final Path nested = Files.createDirectories(root.resolve("2019").resolve("06"));
         Files.writeString(nested.resolve("nested.jpg"), "nested");
 
-        List<Path> files = store.listFiles(root);
+        final List<Path> files = store.listFiles(root);
 
         assertThat(files).containsExactlyInAnyOrder(root.resolve("top.jpg"), nested.resolve("nested.jpg"));
     }
 
     @Test
-    void listFilesOnAnEmptyDirectoryReturnsEmpty(@TempDir Path root) {
+    void listFilesOnAnEmptyDirectoryReturnsEmpty(@TempDir final Path root) {
         assertThat(store.listFiles(root)).isEmpty();
     }
 
     @Test
-    void listFilesOnAMissingRootWrapsIoExceptionUnchecked(@TempDir Path root) {
-        Path missing = root.resolve("does-not-exist");
+    void listFilesOnAMissingRootWrapsIoExceptionUnchecked(@TempDir final Path root) {
+        final Path missing = root.resolve("does-not-exist");
 
         assertThatThrownBy(() -> store.listFiles(missing)).isInstanceOf(UncheckedIOException.class);
     }
 
     @Test
-    void moveCreatesDestDirAndPlacesFileUnderOriginalName(@TempDir Path root) throws IOException {
-        Path source = root.resolve("IMG_1234.jpg");
+    void moveCreatesDestDirAndPlacesFileUnderOriginalName(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("IMG_1234.jpg");
         Files.writeString(source, "photo bytes", StandardCharsets.UTF_8);
-        Path destDir = root.resolve("Sorted").resolve("2019").resolve("06");
+        final Path destDir = root.resolve("Sorted").resolve("2019").resolve("06");
 
-        Path dest = store.move(source, destDir);
+        final Path dest = store.move(source, destDir);
 
         assertThat(dest).isEqualTo(destDir.resolve("IMG_1234.jpg"));
         assertThat(Files.exists(source)).isFalse();
@@ -54,14 +54,14 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void moveResolvesCollisionByAppendingNumberBeforeExtension(@TempDir Path root) throws IOException {
-        Path destDir = Files.createDirectories(root.resolve("dest"));
+    void moveResolvesCollisionByAppendingNumberBeforeExtension(@TempDir final Path root) throws IOException {
+        final Path destDir = Files.createDirectories(root.resolve("dest"));
         Files.writeString(destDir.resolve("IMG_1234.jpg"), "existing");
         Files.writeString(destDir.resolve("IMG_1234 (2).jpg"), "existing2");
-        Path source = root.resolve("IMG_1234.jpg");
+        final Path source = root.resolve("IMG_1234.jpg");
         Files.writeString(source, "incoming");
 
-        Path dest = store.move(source, destDir);
+        final Path dest = store.move(source, destDir);
 
         assertThat(dest).isEqualTo(destDir.resolve("IMG_1234 (3).jpg"));
         assertThat(Files.readString(dest)).isEqualTo("incoming");
@@ -70,73 +70,73 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void moveHandlesFilenameWithNoExtension(@TempDir Path root) throws IOException {
-        Path destDir = Files.createDirectories(root.resolve("dest"));
+    void moveHandlesFilenameWithNoExtension(@TempDir final Path root) throws IOException {
+        final Path destDir = Files.createDirectories(root.resolve("dest"));
         Files.writeString(destDir.resolve("README"), "existing");
-        Path source = root.resolve("README");
+        final Path source = root.resolve("README");
         Files.writeString(source, "incoming");
 
-        Path dest = store.move(source, destDir);
+        final Path dest = store.move(source, destDir);
 
         assertThat(dest).isEqualTo(destDir.resolve("README (2)"));
     }
 
     @Test
-    void copyLeavesSourceInPlace(@TempDir Path root) throws IOException {
-        Path source = root.resolve("IMG_1234.jpg");
+    void copyLeavesSourceInPlace(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("IMG_1234.jpg");
         Files.writeString(source, "photo bytes");
-        Path destDir = root.resolve("dest");
+        final Path destDir = root.resolve("dest");
 
-        Path dest = store.copy(source, destDir);
+        final Path dest = store.copy(source, destDir);
 
         assertThat(Files.exists(source)).isTrue();
         assertThat(Files.readString(dest)).isEqualTo("photo bytes");
     }
 
     @Test
-    void copyResolvesCollisionSameAsMove(@TempDir Path root) throws IOException {
-        Path destDir = Files.createDirectories(root.resolve("dest"));
+    void copyResolvesCollisionSameAsMove(@TempDir final Path root) throws IOException {
+        final Path destDir = Files.createDirectories(root.resolve("dest"));
         Files.writeString(destDir.resolve("IMG_1234.jpg"), "existing");
-        Path source = root.resolve("IMG_1234.jpg");
+        final Path source = root.resolve("IMG_1234.jpg");
         Files.writeString(source, "incoming");
 
-        Path dest = store.copy(source, destDir);
+        final Path dest = store.copy(source, destDir);
 
         assertThat(dest).isEqualTo(destDir.resolve("IMG_1234 (2).jpg"));
         assertThat(Files.readString(destDir.resolve("IMG_1234.jpg"))).isEqualTo("existing");
     }
 
     @Test
-    void collisionOnADotfileAppendsSuffixToTheWholeName(@TempDir Path root) throws IOException {
-        Path destDir = Files.createDirectories(root.resolve("dest"));
+    void collisionOnADotfileAppendsSuffixToTheWholeName(@TempDir final Path root) throws IOException {
+        final Path destDir = Files.createDirectories(root.resolve("dest"));
         Files.writeString(destDir.resolve(".gitignore"), "existing");
-        Path source = root.resolve(".gitignore");
+        final Path source = root.resolve(".gitignore");
         Files.writeString(source, "incoming");
 
-        Path dest = store.move(source, destDir);
+        final Path dest = store.move(source, destDir);
 
         assertThat(dest).isEqualTo(destDir.resolve(".gitignore (2)"));
     }
 
     @Test
-    void moveMissingSourceWrapsIoExceptionUnchecked(@TempDir Path root) {
-        Path missing = root.resolve("does-not-exist.jpg");
-        Path destDir = root.resolve("dest");
+    void moveMissingSourceWrapsIoExceptionUnchecked(@TempDir final Path root) {
+        final Path missing = root.resolve("does-not-exist.jpg");
+        final Path destDir = root.resolve("dest");
 
         assertThatThrownBy(() -> store.move(missing, destDir)).isInstanceOf(UncheckedIOException.class);
     }
 
     @Test
-    void copyMissingSourceWrapsIoExceptionUnchecked(@TempDir Path root) {
-        Path missing = root.resolve("does-not-exist.jpg");
-        Path destDir = root.resolve("dest");
+    void copyMissingSourceWrapsIoExceptionUnchecked(@TempDir final Path root) {
+        final Path missing = root.resolve("does-not-exist.jpg");
+        final Path destDir = root.resolve("dest");
 
         assertThatThrownBy(() -> store.copy(missing, destDir)).isInstanceOf(UncheckedIOException.class);
     }
 
     @Test
-    void deleteRemovesFile(@TempDir Path root) throws IOException {
-        Path file = root.resolve("junk.jpg");
+    void deleteRemovesFile(@TempDir final Path root) throws IOException {
+        final Path file = root.resolve("junk.jpg");
         Files.writeString(file, "junk");
 
         store.delete(file);
@@ -145,15 +145,15 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void deleteMissingFileWrapsIoExceptionUnchecked(@TempDir Path root) {
-        Path missing = root.resolve("does-not-exist.jpg");
+    void deleteMissingFileWrapsIoExceptionUnchecked(@TempDir final Path root) {
+        final Path missing = root.resolve("does-not-exist.jpg");
 
         assertThatThrownBy(() -> store.delete(missing)).isInstanceOf(UncheckedIOException.class);
     }
 
     @Test
-    void ensureDirectoryCreatesNestedPathAndIsIdempotent(@TempDir Path root) {
-        Path dir = root.resolve("a").resolve("b").resolve("c");
+    void ensureDirectoryCreatesNestedPathAndIsIdempotent(@TempDir final Path root) {
+        final Path dir = root.resolve("a").resolve("b").resolve("c");
 
         store.ensureDirectory(dir);
         store.ensureDirectory(dir);
@@ -162,39 +162,39 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void existsIsTrueForARealFileAndFalseOtherwise(@TempDir Path root) throws IOException {
-        Path file = root.resolve("present.jpg");
+    void existsIsTrueForARealFileAndFalseOtherwise(@TempDir final Path root) throws IOException {
+        final Path file = root.resolve("present.jpg");
         Files.writeString(file, "bytes");
-        Path missing = root.resolve("absent.jpg");
+        final Path missing = root.resolve("absent.jpg");
 
         assertThat(store.exists(file)).isTrue();
         assertThat(store.exists(missing)).isFalse();
     }
 
     @Test
-    void sizeReturnsByteCount(@TempDir Path root) throws IOException {
-        Path file = root.resolve("file.jpg");
+    void sizeReturnsByteCount(@TempDir final Path root) throws IOException {
+        final Path file = root.resolve("file.jpg");
         Files.writeString(file, "12345", StandardCharsets.UTF_8);
 
         assertThat(store.size(file)).isEqualTo(5);
     }
 
     @Test
-    void appendLineCreatesFileOnFirstCallThenAppendsOnSubsequentCalls(@TempDir Path root) {
-        Path file = root.resolve("_reasons.txt");
+    void appendLineCreatesFileOnFirstCallThenAppendsOnSubsequentCalls(@TempDir final Path root) {
+        final Path file = root.resolve("_reasons.txt");
 
         store.appendLine(file, "IMG_0001.jpg - low-res");
         store.appendLine(file, "IMG_0002.jpg - unsorted-implausible-date");
 
         assertThat(Files.exists(file)).isTrue();
-        List<String> lines = readLines(file);
+        final List<String> lines = readLines(file);
         assertThat(lines).containsExactly(
                 "IMG_0001.jpg - low-res", "IMG_0002.jpg - unsorted-implausible-date");
     }
 
     @Test
-    void writeCreatesFileOnFirstCallThenReplacesItsWholeContentOnSubsequentCalls(@TempDir Path root) {
-        Path file = root.resolve("chosen.jpg.txt");
+    void writeCreatesFileOnFirstCallThenReplacesItsWholeContentOnSubsequentCalls(@TempDir final Path root) {
+        final Path file = root.resolve("chosen.jpg.txt");
 
         store.write(file, "Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
         store.write(file, "Chose a.jpg - sharpest. Rejects: b.jpg - blurred, c.jpg - also blurred");
@@ -204,8 +204,8 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void readLinesReturnsEveryLineInOrder(@TempDir Path root) {
-        Path file = root.resolve("applied.log");
+    void readLinesReturnsEveryLineInOrder(@TempDir final Path root) {
+        final Path file = root.resolve("applied.log");
 
         store.appendLine(file, "IMG_0001.jpg");
         store.appendLine(file, "IMG_0002.jpg");
@@ -214,15 +214,15 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void readLinesOnAMissingFileReturnsEmpty(@TempDir Path root) {
-        Path missing = root.resolve("applied.log");
+    void readLinesOnAMissingFileReturnsEmpty(@TempDir final Path root) {
+        final Path missing = root.resolve("applied.log");
 
         assertThat(store.readLines(missing)).isEmpty();
     }
 
     @Test
-    void removeEmptyDirectoriesCollapsesNestedEmptyChainBottomUp(@TempDir Path root) throws IOException {
-        Path nested = Files.createDirectories(root.resolve("Takeout").resolve("Google Photos").resolve("2019-06"));
+    void removeEmptyDirectoriesCollapsesNestedEmptyChainBottomUp(@TempDir final Path root) throws IOException {
+        final Path nested = Files.createDirectories(root.resolve("Takeout").resolve("Google Photos").resolve("2019-06"));
 
         store.removeEmptyDirectories(root);
 
@@ -233,10 +233,10 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void removeEmptyDirectoriesLeavesADirectoryWithAFileInPlace(@TempDir Path root) throws IOException {
-        Path keptDir = Files.createDirectories(root.resolve("keep"));
+    void removeEmptyDirectoriesLeavesADirectoryWithAFileInPlace(@TempDir final Path root) throws IOException {
+        final Path keptDir = Files.createDirectories(root.resolve("keep"));
         Files.writeString(keptDir.resolve("leftover.txt"), "not media");
-        Path emptyDir = Files.createDirectories(root.resolve("empty"));
+        final Path emptyDir = Files.createDirectories(root.resolve("empty"));
 
         store.removeEmptyDirectories(root);
 
@@ -245,9 +245,9 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void removeEmptyDirectoriesLeavesAnAncestorInPlaceWhenADeeperSiblingStillHasAFile(@TempDir Path root) throws IOException {
-        Path emptyBranch = Files.createDirectories(root.resolve("album").resolve("empty-sub"));
-        Path fileBranch = Files.createDirectories(root.resolve("album").resolve("has-file"));
+    void removeEmptyDirectoriesLeavesAnAncestorInPlaceWhenADeeperSiblingStillHasAFile(@TempDir final Path root) throws IOException {
+        final Path emptyBranch = Files.createDirectories(root.resolve("album").resolve("empty-sub"));
+        final Path fileBranch = Files.createDirectories(root.resolve("album").resolve("has-file"));
         Files.writeString(fileBranch.resolve("leftover.txt"), "not media");
 
         store.removeEmptyDirectories(root);
@@ -258,8 +258,8 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void removeIfEmptyOfFilesDeletesDirAndNestedEmptySubtreeWhenNoFileRemains(@TempDir Path root) throws IOException {
-        Path target = Files.createDirectories(root.resolve("2019-06").resolve("empty-sub"));
+    void removeIfEmptyOfFilesDeletesDirAndNestedEmptySubtreeWhenNoFileRemains(@TempDir final Path root) throws IOException {
+        final Path target = Files.createDirectories(root.resolve("2019-06").resolve("empty-sub"));
 
         store.removeIfEmptyOfFiles(root.resolve("2019-06"));
 
@@ -269,9 +269,9 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void removeIfEmptyOfFilesLeavesDirInPlaceWhenAFileRemainsAnywhereBelow(@TempDir Path root) throws IOException {
-        Path target = Files.createDirectories(root.resolve("2019-06"));
-        Path nested = Files.createDirectories(target.resolve("nested"));
+    void removeIfEmptyOfFilesLeavesDirInPlaceWhenAFileRemainsAnywhereBelow(@TempDir final Path root) throws IOException {
+        final Path target = Files.createDirectories(root.resolve("2019-06"));
+        final Path nested = Files.createDirectories(target.resolve("nested"));
         Files.writeString(nested.resolve("leftover.jpg"), "keeper", StandardCharsets.UTF_8);
 
         store.removeIfEmptyOfFiles(target);
@@ -281,18 +281,18 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void removeIfEmptyOfFilesOnAMissingDirIsANoOp(@TempDir Path root) {
-        Path missing = root.resolve("does-not-exist");
+    void removeIfEmptyOfFilesOnAMissingDirIsANoOp(@TempDir final Path root) {
+        final Path missing = root.resolve("does-not-exist");
 
         store.removeIfEmptyOfFiles(missing);
 
         assertThat(Files.exists(missing)).isFalse();
     }
 
-    private static List<String> readLines(Path file) {
+    private static List<String> readLines(final Path file) {
         try {
             return Files.readAllLines(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException(e);
         }
     }

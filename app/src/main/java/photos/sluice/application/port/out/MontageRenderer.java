@@ -35,7 +35,7 @@ public interface MontageRenderer {
      * @param progress {@link ProgressCallback} callback ticked once per montage written
      * @return {@link PrepDir} the prep directory holding the built montages
      */
-    default PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress) {
+    default PrepDir build(final CullScope scope, final MontageConfig config, final ProgressCallback progress) {
         return build(scope, config);
     }
 
@@ -53,8 +53,8 @@ public interface MontageRenderer {
      * @param cancellation {@link CancellationSignal} signal checked during rendering
      * @return {@link PrepDir}, or null if cancelled before any resumable state existed
      */
-    default @Nullable PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress,
-            CancellationSignal cancellation) {
+    default @Nullable PrepDir build(final CullScope scope, final MontageConfig config, final ProgressCallback progress,
+                                    final CancellationSignal cancellation) {
         return build(scope, config, progress);
     }
 }

@@ -57,20 +57,20 @@ public final class TakeoutSidecarPairer {
      * @param jsonPaths a {@link List} of {@link Path} sidecar JSON paths available for pairing
      * @return {@link PairingResult} the pairing result
      */
-    public PairingResult pair(List<Path> mediaPaths, List<Path> jsonPaths) {
-        boolean takeoutMode = !jsonPaths.isEmpty();
+    public PairingResult pair(final List<Path> mediaPaths, final List<Path> jsonPaths) {
+        final boolean takeoutMode = !jsonPaths.isEmpty();
 
         // Two passes: first index every sidecar in a directory by the media filename it
         // describes (built once, independent of how many media files there are), then look each
         // media file up against that index. This keeps pairing O(sidecars + media) instead of
         // O(sidecars x media), and lets every media file share the same per-directory index
         // rather than re-deriving owner keys per lookup.
-        Map<Path, List<Path>> jsonsByDir = jsonPaths.stream()
+        final Map<Path, List<Path>> jsonsByDir = jsonPaths.stream()
                 .collect(Collectors.groupingBy(TakeoutSidecarPairer::directoryKeyOf, LinkedHashMap::new, Collectors.toList()));
-        Map<Path, Map<String, Path>> ownersByDir = new HashMap<>();
+        final Map<Path, Map<String, Path>> ownersByDir = new HashMap<>();
         jsonsByDir.forEach((dir, sidecars) -> {
-            Map<String, Path> owners = new LinkedHashMap<>();
-            for (Path json : sidecars) {
+            final Map<String, Path> owners = new LinkedHashMap<>();
+            for (final Path json : sidecars) {
                 // First sidecar to claim an owner key wins; a second sidecar deriving the same
                 // key (rare, e.g. two differently-suffixed sidecars for one photo) is ignored
                 // rather than overwriting the first match.
@@ -79,10 +79,10 @@ public final class TakeoutSidecarPairer {
             ownersByDir.put(dir, owners);
         });
 
-        Map<Path, Path> sidecarsByMedia = new LinkedHashMap<>();
-        for (Path media : mediaPaths) {
-            Path dir = directoryKeyOf(media);
-            String fileName = media.getFileName().toString();
+        final Map<Path, Path> sidecarsByMedia = new LinkedHashMap<>();
+        for (final Path media : mediaPaths) {
+            final Path dir = directoryKeyOf(media);
+            final String fileName = media.getFileName().toString();
             // Try the fast exact index lookup first; only fall back to scanning every sidecar in
             // the directory by prefix when the index has no entry for this filename at all.
             Path matched = matchByOwnerKey(ownersByDir.get(dir), fileName);
@@ -104,8 +104,8 @@ public final class TakeoutSidecarPairer {
      * @param path {@link Path} the path to derive a directory scope key from
      * @return {@link Path} the parent directory, or the path itself if it has none
      */
-    static Path directoryKeyOf(Path path) {
-        Path parent = path.getParent();
+    static Path directoryKeyOf(final Path path) {
+        final Path parent = path.getParent();
         return parent != null ? parent : path;
     }
 
@@ -118,13 +118,13 @@ public final class TakeoutSidecarPairer {
      * @param json {@link Path} the sidecar JSON path
      * @return {@link String} the owner key identifying the media file it describes
      */
-    public static String ownerKeyOf(Path json) {
-        String base = stripJsonExtension(json.getFileName().toString());
-        Matcher supplemental = SUPPLEMENTAL.matcher(base);
+    public static String ownerKeyOf(final Path json) {
+        final String base = stripJsonExtension(json.getFileName().toString());
+        final Matcher supplemental = SUPPLEMENTAL.matcher(base);
         if (supplemental.matches()) {
             return supplemental.group(1);
         }
-        Matcher dup = SIDECAR_DUP_NUMBERED.matcher(base);
+        final Matcher dup = SIDECAR_DUP_NUMBERED.matcher(base);
         if (dup.matches()) {
             return dup.group(1) + "(" + dup.group(3) + ")." + dup.group(2);
         }
@@ -139,7 +139,7 @@ public final class TakeoutSidecarPairer {
      * @param mediaFileName {@link String} the media file's own filename
      * @return {@link Path} the matching sidecar, if any
      */
-    private static @Nullable Path matchByOwnerKey(@Nullable Map<String, Path> owners, String mediaFileName) {
+    private static @Nullable Path matchByOwnerKey(final @Nullable Map<String, Path> owners, final String mediaFileName) {
         if (owners == null) {
             return null;
         }
@@ -147,9 +147,9 @@ public final class TakeoutSidecarPairer {
         if (hit != null) {
             return hit;
         }
-        Matcher edited = EDITED.matcher(mediaFileName);
+        final Matcher edited = EDITED.matcher(mediaFileName);
         if (edited.matches()) {
-            String editedBase = edited.group(1) + "." + edited.group(2);
+            final String editedBase = edited.group(1) + "." + edited.group(2);
             hit = owners.get(editedBase.toLowerCase(Locale.ROOT));
         }
         return hit;
@@ -166,12 +166,12 @@ public final class TakeoutSidecarPairer {
      * @param mediaFileName {@link String} the media file's own filename
      * @return {@link Path} the matching sidecar, if any
      */
-    private static @Nullable Path prefixFallback(@Nullable List<Path> dirSidecars, String mediaFileName) {
+    private static @Nullable Path prefixFallback(final @Nullable List<Path> dirSidecars, final String mediaFileName) {
         if (dirSidecars == null) {
             return null;
         }
-        for (String prefix : candidatePrefixes(mediaFileName)) {
-            Path hit = shortestStartingWith(dirSidecars, prefix);
+        for (final String prefix : candidatePrefixes(mediaFileName)) {
+            final Path hit = shortestStartingWith(dirSidecars, prefix);
             if (hit != null) {
                 return hit;
             }
@@ -188,13 +188,13 @@ public final class TakeoutSidecarPairer {
      * @param mediaFileName {@link String} the media file's own filename
      * @return a {@link List} of {@link String} the candidate prefixes to try against sidecar base names, in priority order
      */
-    private static List<String> candidatePrefixes(String mediaFileName) {
-        List<String> prefixes = new ArrayList<>();
+    private static List<String> candidatePrefixes(final String mediaFileName) {
+        final List<String> prefixes = new ArrayList<>();
         prefixes.add(mediaFileName);
         addDupReversedForm(prefixes, mediaFileName);
-        Matcher edited = EDITED.matcher(mediaFileName);
+        final Matcher edited = EDITED.matcher(mediaFileName);
         if (edited.matches()) {
-            String editedBase = edited.group(1) + "." + edited.group(2);
+            final String editedBase = edited.group(1) + "." + edited.group(2);
             prefixes.add(editedBase);
             addDupReversedForm(prefixes, editedBase);
         }
@@ -207,8 +207,8 @@ public final class TakeoutSidecarPairer {
      * @param prefixes a {@link List} of {@link String} the candidate list to append to
      * @param mediaFileName {@link String} the filename to reverse the dup-numbering of
      */
-    private static void addDupReversedForm(List<String> prefixes, String mediaFileName) {
-        Matcher dup = MEDIA_DUP_NUMBERED.matcher(mediaFileName);
+    private static void addDupReversedForm(final List<String> prefixes, final String mediaFileName) {
+        final Matcher dup = MEDIA_DUP_NUMBERED.matcher(mediaFileName);
         if (dup.matches()) {
             prefixes.add(dup.group(1) + dup.group(3) + dup.group(2));
         }
@@ -223,11 +223,11 @@ public final class TakeoutSidecarPairer {
      * @param prefix {@link String} the prefix to match sidecar base names against
      * @return {@link Path} the shortest matching sidecar, if any
      */
-    private static @Nullable Path shortestStartingWith(List<Path> dirSidecars, String prefix) {
+    private static @Nullable Path shortestStartingWith(final List<Path> dirSidecars, final String prefix) {
         Path best = null;
         int bestLength = Integer.MAX_VALUE;
-        for (Path json : dirSidecars) {
-            String base = stripJsonExtension(json.getFileName().toString());
+        for (final Path json : dirSidecars) {
+            final String base = stripJsonExtension(json.getFileName().toString());
             if (base.length() < bestLength && base.regionMatches(true, 0, prefix, 0, prefix.length())) {
                 best = json;
                 bestLength = base.length();
@@ -242,7 +242,7 @@ public final class TakeoutSidecarPairer {
      * @param name {@link String} the filename to strip
      * @return {@link String} the name without its ".json" extension, or unchanged if it has none
      */
-    private static String stripJsonExtension(String name) {
+    private static String stripJsonExtension(final String name) {
         return name.length() >= 5 && name.regionMatches(true, name.length() - 5, ".json", 0, 5)
                 ? name.substring(0, name.length() - 5)
                 : name;

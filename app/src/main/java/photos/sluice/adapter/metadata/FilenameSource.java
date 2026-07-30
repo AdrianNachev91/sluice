@@ -34,14 +34,14 @@ public class FilenameSource implements DateSource {
      * @return an {@link Optional} {@link LocalDateTime}, the parsed date, if the filename matched the date pattern
      */
     @Override
-    public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
-        Matcher matcher = DATE_PATTERN.matcher(file.path().getFileName().toString());
+    public Optional<LocalDateTime> resolve(final MediaFile file, final @Nullable TakeoutSidecar sidecar) {
+        final Matcher matcher = DATE_PATTERN.matcher(file.path().getFileName().toString());
         if (!matcher.find()) {
             return Optional.empty();
         }
-        int year = Integer.parseInt(matcher.group(1));
-        int month = Integer.parseInt(matcher.group(2));
-        int day = Integer.parseInt(matcher.group(3));
+        final int year = Integer.parseInt(matcher.group(1));
+        final int month = Integer.parseInt(matcher.group(2));
+        final int day = Integer.parseInt(matcher.group(3));
         try {
             return Optional.of(LocalDate.of(year, month, day).atStartOfDay());
         } catch (DateTimeException _) {

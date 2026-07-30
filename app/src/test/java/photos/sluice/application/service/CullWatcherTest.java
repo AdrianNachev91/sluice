@@ -17,10 +17,10 @@ class CullWatcherTest {
 
     @Test
     void doesNotAttemptConsumeUntilReady() throws InterruptedException {
-        var ready = new AtomicBoolean(false);
-        var consumeAttempts = new AtomicInteger(0);
-        var consumed = new CountDownLatch(1);
-        var watcher = new CullWatcher(POLL_INTERVAL, null, ready::get, () -> {
+        final var ready = new AtomicBoolean(false);
+        final var consumeAttempts = new AtomicInteger(0);
+        final var consumed = new CountDownLatch(1);
+        final var watcher = new CullWatcher(POLL_INTERVAL, null, ready::get, () -> {
             consumeAttempts.incrementAndGet();
             consumed.countDown();
             return true;
@@ -42,10 +42,10 @@ class CullWatcherTest {
 
     @Test
     void stopsPollingAfterASuccessfulConsume() throws InterruptedException {
-        var consumeAttempts = new AtomicInteger(0);
-        var firstConsume = new CountDownLatch(1);
-        var secondConsume = new CountDownLatch(1);
-        var watcher = new CullWatcher(POLL_INTERVAL, null, () -> true, () -> {
+        final var consumeAttempts = new AtomicInteger(0);
+        final var firstConsume = new CountDownLatch(1);
+        final var secondConsume = new CountDownLatch(1);
+        final var watcher = new CullWatcher(POLL_INTERVAL, null, () -> true, () -> {
             if (consumeAttempts.incrementAndGet() == 1) {
                 firstConsume.countDown();
             } else {
@@ -66,10 +66,10 @@ class CullWatcherTest {
 
     @Test
     void keepsPollingWhenAttemptConsumeReportsBusyUntilItSucceeds() throws InterruptedException {
-        var consumeAttempts = new AtomicInteger(0);
-        var succeeded = new CountDownLatch(1);
-        var watcher = new CullWatcher(POLL_INTERVAL, null, () -> true, () -> {
-            boolean isThirdAttempt = consumeAttempts.incrementAndGet() >= 3;
+        final var consumeAttempts = new AtomicInteger(0);
+        final var succeeded = new CountDownLatch(1);
+        final var watcher = new CullWatcher(POLL_INTERVAL, null, () -> true, () -> {
+            final boolean isThirdAttempt = consumeAttempts.incrementAndGet() >= 3;
             if (isThirdAttempt) {
                 succeeded.countDown();
             }
@@ -85,8 +85,8 @@ class CullWatcherTest {
 
     @Test
     void stopsWithoutEverConsumingOnceTheTimeoutElapses() throws InterruptedException {
-        var consumeAttempts = new AtomicInteger(0);
-        var watcher = new CullWatcher(POLL_INTERVAL, Duration.ofMillis(40), () -> false,
+        final var consumeAttempts = new AtomicInteger(0);
+        final var watcher = new CullWatcher(POLL_INTERVAL, Duration.ofMillis(40), () -> false,
                 () -> {
                     consumeAttempts.incrementAndGet();
                     return true;
@@ -103,7 +103,7 @@ class CullWatcherTest {
 
     @Test
     void stopIsIdempotentAndSafeBeforeStart() {
-        var watcher = new CullWatcher(POLL_INTERVAL, null, () -> false, () -> true, Instant.now());
+        final var watcher = new CullWatcher(POLL_INTERVAL, null, () -> false, () -> true, Instant.now());
 
         watcher.stop();
         watcher.stop();
@@ -111,8 +111,8 @@ class CullWatcherTest {
         assertThat(watcher.isActive()).isFalse();
     }
 
-    private static void waitUntilInactive(CullWatcher watcher, Duration timeout) throws InterruptedException {
-        Instant deadline = Instant.now().plus(timeout);
+    private static void waitUntilInactive(final CullWatcher watcher, final Duration timeout) throws InterruptedException {
+        final Instant deadline = Instant.now().plus(timeout);
         while (watcher.isActive()) {
             if (Instant.now().isAfter(deadline)) {
                 throw new AssertionError("watcher still active after " + timeout);

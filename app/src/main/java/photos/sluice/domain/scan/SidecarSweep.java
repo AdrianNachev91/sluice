@@ -44,17 +44,17 @@ public final class SidecarSweep {
      * @param remainingJsonPaths a {@link List} of {@link Path} sidecar JSON files still present in the Inbox
      * @return a {@link List} of {@link Path} orphaned sidecar paths with no owning media left
      */
-    public List<Path> findOrphaned(List<Path> remainingMedia, List<Path> remainingJsonPaths) {
-        Map<Path, List<String>> mediaNamesByDir = new HashMap<>();
-        for (Path media : remainingMedia) {
+    public List<Path> findOrphaned(final List<Path> remainingMedia, final List<Path> remainingJsonPaths) {
+        final Map<Path, List<String>> mediaNamesByDir = new HashMap<>();
+        for (final Path media : remainingMedia) {
             mediaNamesByDir.computeIfAbsent(TakeoutSidecarPairer.directoryKeyOf(media), _ -> new ArrayList<>())
                     .add(media.getFileName().toString().toLowerCase(Locale.ROOT));
         }
 
-        List<Path> orphaned = new ArrayList<>();
-        for (Path json : remainingJsonPaths) {
-            String ownerKeyLower = TakeoutSidecarPairer.ownerKeyOf(json).toLowerCase(Locale.ROOT);
-            List<String> mediaNames = mediaNamesByDir.getOrDefault(TakeoutSidecarPairer.directoryKeyOf(json), List.of());
+        final List<Path> orphaned = new ArrayList<>();
+        for (final Path json : remainingJsonPaths) {
+            final String ownerKeyLower = TakeoutSidecarPairer.ownerKeyOf(json).toLowerCase(Locale.ROOT);
+            final List<String> mediaNames = mediaNamesByDir.getOrDefault(TakeoutSidecarPairer.directoryKeyOf(json), List.of());
             if (!stillNeeded(ownerKeyLower, mediaNames)) {
                 orphaned.add(json);
             }
@@ -72,8 +72,8 @@ public final class SidecarSweep {
      * @param mediaNames a {@link List} of {@link String} lowercased media file names in the same directory
      * @return boolean true if the sidecar is still needed by some media file
      */
-    private static boolean stillNeeded(String ownerKeyLower, List<String> mediaNames) {
-        boolean allowPrefixMatch = ownerKeyLower.length() >= MIN_TRUNCATED_OWNER_KEY_LENGTH;
+    private static boolean stillNeeded(final String ownerKeyLower, final List<String> mediaNames) {
+        final boolean allowPrefixMatch = ownerKeyLower.length() >= MIN_TRUNCATED_OWNER_KEY_LENGTH;
         return mediaNames.stream().anyMatch(name -> name.equals(ownerKeyLower) || (allowPrefixMatch && name.startsWith(ownerKeyLower)));
     }
 }

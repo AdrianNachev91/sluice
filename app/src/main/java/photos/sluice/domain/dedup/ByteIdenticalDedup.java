@@ -22,7 +22,7 @@ public final class ByteIdenticalDedup {
      * files redundant against the library, and duplicates found within the batch itself.
      */
     public record DedupPlan(List<MediaFile> toSort, List<MediaFile> redundantVsLibrary,
-                             List<MediaFile> withinBatchDuplicates) {
+                            List<MediaFile> withinBatchDuplicates) {
         /**
          * Makes the three file lists immutable.
          *
@@ -44,13 +44,13 @@ public final class ByteIdenticalDedup {
      * @param libraryHashes a {@link Set} of {@link String} hashes already present in the library
      * @return {@link DedupPlan} the resulting dedup plan
      */
-    public DedupPlan plan(List<HashedMedia> media, Set<String> libraryHashes) {
-        List<MediaFile> toSort = new ArrayList<>();
-        List<MediaFile> redundantVsLibrary = new ArrayList<>();
-        List<MediaFile> withinBatchDuplicates = new ArrayList<>();
-        Set<String> seenInBatch = new HashSet<>();
+    public DedupPlan plan(final List<HashedMedia> media, final Set<String> libraryHashes) {
+        final List<MediaFile> toSort = new ArrayList<>();
+        final List<MediaFile> redundantVsLibrary = new ArrayList<>();
+        final List<MediaFile> withinBatchDuplicates = new ArrayList<>();
+        final Set<String> seenInBatch = new HashSet<>();
 
-        for (HashedMedia hashed : media) {
+        for (final HashedMedia hashed : media) {
             // Library redundancy is checked before in-batch dedup: a hash already present in the
             // library goes to redundantVsLibrary even if it also repeats within the batch, so
             // every matching occurrence lands there rather than only the first.

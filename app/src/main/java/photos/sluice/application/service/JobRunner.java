@@ -30,12 +30,12 @@ public class JobRunner {
      * @param work a {@link JobWork} of T the job logic to execute
      * @return a {@link JobHandle} of T a handle for the started job
      */
-    public <T> JobHandle<T> submit(JobWork<T> work) {
+    public <T> JobHandle<T> submit(final JobWork<T> work) {
         if (!busy.compareAndSet(false, true)) {
             throw new IllegalStateException("A job is already running; only one job runs at a time");
         }
-        var resultFuture = new CompletableFuture<T>();
-        var handle = new JobHandle<>(resultFuture);
+        final var resultFuture = new CompletableFuture<T>();
+        final var handle = new JobHandle<>(resultFuture);
         executor.execute(() -> run(work, handle, resultFuture));
         return handle;
     }
@@ -60,12 +60,12 @@ public class JobRunner {
      * @param handle a {@link JobHandle} of T the handle passed to the job's work
      * @param resultFuture a {@link CompletableFuture} of T the future to complete with the result or failure
      */
-    private <T> void run(JobWork<T> work, JobHandle<T> handle, CompletableFuture<T> resultFuture) {
+    private <T> void run(final JobWork<T> work, final JobHandle<T> handle, final CompletableFuture<T> resultFuture) {
         T result = null;
         Throwable failure = null;
         try {
             result = work.run(handle);
-        } catch (Throwable t) {
+        } catch (final Throwable t) {
             // Caught broadly, not just Exception. An Error can escape deep in an engine call - a
             // stack overflow walking a pathological directory tree, an out-of-memory decoding a
             // large batch. Only catching Exception would let it skip both freeing the slot and

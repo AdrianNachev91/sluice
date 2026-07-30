@@ -57,8 +57,8 @@ public class PrepDirRemedies {
      * @param disasterDrawer {@link DisasterDrawer} files unsalvageable artifacts instead of deleting them
      * @param moveLedger {@link MoveLedger} records every CHOICE resolution
      */
-    public PrepDirRemedies(MediaStore mediaStore, CullPrepPort cullPrepPort, PathsPort pathsPort,
-            DisasterDrawer disasterDrawer, MoveLedger moveLedger) {
+    public PrepDirRemedies(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final PathsPort pathsPort,
+                           final DisasterDrawer disasterDrawer, final MoveLedger moveLedger) {
         this.mediaStore = mediaStore;
         this.cullPrepPort = cullPrepPort;
         this.pathsPort = pathsPort;
@@ -77,7 +77,7 @@ public class PrepDirRemedies {
      * @param source {@link Path} the missing file's original source path, as named by the MissingSource finding
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
-    public void skipMissingSource(Path prepDirPath, Path source, String reason) {
+    public void skipMissingSource(final Path prepDirPath, final Path source, final String reason) {
         moveLedger.recordSkip(prepDirPath, source, reason);
     }
 
@@ -92,7 +92,7 @@ public class PrepDirRemedies {
      * @param resolution {@link OverlapResolution} which listing should win
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
-    public void resolveOverlap(Path prepDirPath, Path file, OverlapResolution resolution, String reason) {
+    public void resolveOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution, final String reason) {
         moveLedger.recordOverlap(prepDirPath, file, resolution, reason);
     }
 
@@ -109,7 +109,7 @@ public class PrepDirRemedies {
      * @param resolution {@link CorruptSidecarResolution} which way the batch was resolved
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
-    public void resolveCorruptSidecar(Path prepDirPath, String montage, CorruptSidecarResolution resolution, String reason) {
+    public void resolveCorruptSidecar(final Path prepDirPath, final String montage, final CorruptSidecarResolution resolution, final String reason) {
         final Path sidecarPath = prepDirPath.resolve(montage + ".json");
         if (mediaStore.exists(sidecarPath)) {
             disasterDrawer.file(prepDirPath, sidecarPath, "corrupt-sidecar-" + montage);
@@ -131,7 +131,7 @@ public class PrepDirRemedies {
      * @return an {@link Optional} {@link String} the montage the shard was renamed to claim, empty if
      *         the repair could not run unambiguously
      */
-    public Optional<String> autoRepairStrayShard(Path prepDirPath, Finding.StrayShard strayShard) {
+    public Optional<String> autoRepairStrayShard(final Path prepDirPath, final Finding.StrayShard strayShard) {
         final PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         final List<String> unclaimed = prepDir.entries().stream()
                 .filter(montage -> !cullPrepPort.hasShard(prepDirPath, montage))
@@ -164,7 +164,7 @@ public class PrepDirRemedies {
      * @param strayShard {@link Finding.StrayShard} the finding naming the stray shard file
      * @return {@link Path} the path the stray shard was filed to
      */
-    public Path setAsideStrayShard(Path prepDirPath, Finding.StrayShard strayShard) {
+    public Path setAsideStrayShard(final Path prepDirPath, final Finding.StrayShard strayShard) {
         return disasterDrawer.file(prepDirPath, prepDirPath.resolve(strayShard.shardFile()), "stray-shard");
     }
 
@@ -195,9 +195,9 @@ public class PrepDirRemedies {
      * @param prepDirPath {@link Path} the prep directory whose index to rebuild
      * @return an {@link Optional} {@link PrepDir} the rebuilt index, empty if the guard refused
      */
-    public Optional<PrepDir> rebuildIndex(Path prepDirPath) {
+    public Optional<PrepDir> rebuildIndex(final Path prepDirPath) {
         final var montageNumbers = new ArrayList<Integer>();
-        for (Path file : mediaStore.listFiles(prepDirPath)) {
+        for (final Path file : mediaStore.listFiles(prepDirPath)) {
             MontageNaming.sidecarMontageNumber(file.getFileName().toString()).ifPresent(montageNumbers::add);
         }
         montageNumbers.sort(null);
@@ -208,7 +208,7 @@ public class PrepDirRemedies {
 
         final var allSrcs = new ArrayList<Path>();
         int photos = 0;
-        for (String montage : entries) {
+        for (final String montage : entries) {
             final Optional<List<Path>> srcs = Sidecars.srcsOf(cullPrepPort, prepDirPath, montage);
             if (srcs.isEmpty()) {
                 return Optional.empty();
@@ -233,7 +233,7 @@ public class PrepDirRemedies {
      * @param sortedNumbers a {@link List} of {@link Integer}, ascending
      * @return boolean true if the sequence is contiguous starting from 1
      */
-    private static boolean isContiguousFromOne(List<Integer> sortedNumbers) {
+    private static boolean isContiguousFromOne(final List<Integer> sortedNumbers) {
         for (int i = 0; i < sortedNumbers.size(); i++) {
             if (sortedNumbers.get(i) != i + 1) {
                 return false;
@@ -250,9 +250,9 @@ public class PrepDirRemedies {
      * @param files a {@link List} of {@link Path}, non-empty
      * @return {@link Path} the deepest common parent directory
      */
-    private static Path commonParent(List<Path> files) {
+    private static Path commonParent(final List<Path> files) {
         Path common = files.getFirst().getParent();
-        for (Path file : files) {
+        for (final Path file : files) {
             final Path parent = file.getParent();
             while (!parent.startsWith(common)) {
                 common = common.getParent();
@@ -283,7 +283,7 @@ public class PrepDirRemedies {
      * @param prepDirPath {@link Path} the prep directory to discard
      * @return {@link DiscardReport} the graveyard directory and how many shards were set aside
      */
-    public DiscardReport discard(Path prepDirPath) {
+    public DiscardReport discard(final Path prepDirPath) {
         return discard(prepDirPath, ProgressCallback.NO_OP);
     }
 
@@ -294,7 +294,7 @@ public class PrepDirRemedies {
      * @param progress {@link ProgressCallback} progress callback ticked per file
      * @return {@link DiscardReport} the graveyard directory and how many shards were set aside
      */
-    public DiscardReport discard(Path prepDirPath, ProgressCallback progress) {
+    public DiscardReport discard(final Path prepDirPath, final ProgressCallback progress) {
         final String scope = prepDirPath.getFileName().toString();
         final Path graveyard = pathsPort.logs().resolve("disasters").resolve(scope + "-" + DisasterTimestamp.now());
         mediaStore.ensureDirectory(graveyard);
@@ -302,7 +302,7 @@ public class PrepDirRemedies {
         final int total = files.size();
         int current = 0;
         int shardsSetAside = 0;
-        for (Path file : files) {
+        for (final Path file : files) {
             final String name = file.getFileName().toString();
             if (MontageNaming.isMontageImage(name)) {
                 mediaStore.delete(file);

@@ -26,7 +26,7 @@ final class DatePlausibility {
      * @param when {@link LocalDateTime} the date to check
      * @return boolean true if the date is plausible
      */
-    static boolean isPlausible(LocalDateTime when) {
+    static boolean isPlausible(final LocalDateTime when) {
         return when.getYear() >= PLAUSIBLE_MIN_YEAR && !when.isAfter(LocalDateTime.now());
     }
 }

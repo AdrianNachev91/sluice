@@ -26,10 +26,10 @@ public final class ConfigDirLocator {
      * @param env a {@link Map} of {@link String} to {@link String} environment variables to resolve paths from
      * @return {@link Path} the resolved config directory path
      */
-    public static Path locate(String osName, Map<String, String> env) {
-        String os = osName.toLowerCase(Locale.ROOT);
+    public static Path locate(final String osName, final Map<String, String> env) {
+        final String os = osName.toLowerCase(Locale.ROOT);
         if (os.contains("win")) {
-            String appData = env.get("APPDATA");
+            final String appData = env.get("APPDATA");
             if (appData != null) {
                 return Path.of(appData + "\\Sluice");
             }
@@ -38,7 +38,7 @@ public final class ConfigDirLocator {
         if (os.contains("mac")) {
             return Path.of(env.get("HOME") + "/Library/Application Support/Sluice");
         }
-        String xdgConfigHome = env.get("XDG_CONFIG_HOME");
+        final String xdgConfigHome = env.get("XDG_CONFIG_HOME");
         if (xdgConfigHome != null) {
             return Path.of(xdgConfigHome + "/sluice");
         }

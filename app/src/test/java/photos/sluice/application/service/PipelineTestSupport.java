@@ -65,8 +65,8 @@ final class PipelineTestSupport {
     private PipelineTestSupport() {
     }
 
-    static void waitUntil(Duration timeout, BooleanSupplier condition) {
-        Instant deadline = Instant.now().plus(timeout);
+    static void waitUntil(final Duration timeout, final BooleanSupplier condition) {
+        final Instant deadline = Instant.now().plus(timeout);
         while (!condition.getAsBoolean()) {
             if (Instant.now().isAfter(deadline)) {
                 throw new AssertionError("condition not met within " + timeout);
@@ -76,48 +76,48 @@ final class PipelineTestSupport {
                 // not something this test can await via a latch or callback.
                 //noinspection BusyWait
                 Thread.sleep(10);
-            } catch (InterruptedException e) {
+            } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
         }
     }
 
-    static Path inboxOf(Path root) {
+    static Path inboxOf(final Path root) {
         return root.resolve("Inbox");
     }
 
-    static Path sortedPhotosDir(Path root, String year, String month) {
+    static Path sortedPhotosDir(final Path root, final String year, final String month) {
         return root.resolve("Sorted").resolve("Photos").resolve(year).resolve(month);
     }
 
-    static Pipeline pipeline(Path root, RecordingProgressPort progress) {
+    static Pipeline pipeline(final Path root, final RecordingProgressPort progress) {
         return pipeline(root, progress, new NioMediaStore());
     }
 
-    static Pipeline pipeline(Path root, RecordingProgressPort progress, MediaStore mediaStore) {
+    static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore) {
         return pipeline(root, progress, mediaStore, defaultCullSettings(), List.of(new ManualModeCuller()));
     }
 
     // cull()/waitingJobs()/resume() tests always go through this name, wiring the same manual-mode
     // default (a fake external-agent-shaped VisionCuller) unless a test needs to vary the provider.
-    static Pipeline cullPipeline(Path root, RecordingProgressPort progress) {
+    static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress) {
         return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), List.of(new ManualModeCuller()));
     }
 
-    static Pipeline cullPipeline(Path root, RecordingProgressPort progress, CullSettings cullSettings,
-            List<VisionCuller> cullers) {
+    static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress, final CullSettings cullSettings,
+                                 final List<VisionCuller> cullers) {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers);
     }
 
     // curate() tests go through this name, wiring AutoApproveCuller as the configured provider.
     // curate() runs prep/dispatch/apply in one call, with no gap to hand-drop a shard into the way
     // the manual-mode cull() tests above do.
-    static Pipeline curatePipeline(Path root, RecordingProgressPort progress) {
+    static Pipeline curatePipeline(final Path root, final RecordingProgressPort progress) {
         return curatePipeline(root, progress, new NioMediaStore());
     }
 
-    static Pipeline curatePipeline(Path root, RecordingProgressPort progress, MediaStore mediaStore) {
+    static Pipeline curatePipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore) {
         return pipeline(root, progress, mediaStore, autoApproveCullSettings(), List.of(new AutoApproveCuller()));
     }
 
@@ -129,13 +129,13 @@ final class PipelineTestSupport {
     // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
     // interval (via Pipeline's package-private test constructor). A real auto-resume proves out
     // fast this way, instead of waiting on the production 2-second cadence.
-    static Pipeline watchPipeline(Path root, RecordingProgressPort progress, CullSettings cullSettings,
-            List<VisionCuller> cullers, Duration pollInterval) {
+    static Pipeline watchPipeline(final Path root, final RecordingProgressPort progress, final CullSettings cullSettings,
+                                  final List<VisionCuller> cullers, final Duration pollInterval) {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers, pollInterval);
     }
 
-    static Pipeline pipeline(Path root, RecordingProgressPort progress, MediaStore mediaStore,
-            CullSettings cullSettings, List<VisionCuller> cullers) {
+    static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
+                             final CullSettings cullSettings, final List<VisionCuller> cullers) {
         return pipeline(root, progress, mediaStore, cullSettings, cullers, null);
     }
 
@@ -144,41 +144,41 @@ final class PipelineTestSupport {
     // HeifDecoder dependency is stubbed to always miss: none of these fixtures are HEIC/AVIF, and
     // real HEIC/AVIF decode already has its own coverage in TileRendererTest. pollInterval null
     // means "use Pipeline's own production default" - only watchPipeline() ever passes one.
-    static Pipeline pipeline(Path root, RecordingProgressPort progress, MediaStore mediaStore,
-            CullSettings cullSettings, List<VisionCuller> cullers, @Nullable Duration pollInterval) {
-        Path libraryRoot = root.resolve("Library");
-        var pathsConfig = new PathsConfig(
+    static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
+                             final CullSettings cullSettings, final List<VisionCuller> cullers, final @Nullable Duration pollInterval) {
+        final Path libraryRoot = root.resolve("Library");
+        final var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
-        var sha256Port = new Sha256Hasher();
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var sha256Port = new Sha256Hasher();
 
-        var dateResolver =
+        final var dateResolver =
                 new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
-        var sortEngine = new SortEngine(pathsConfig, new InboxScanner(), dateResolver, sha256Port, hashIndex,
+        final var sortEngine = new SortEngine(pathsConfig, new InboxScanner(), dateResolver, sha256Port, hashIndex,
                 new ImageDimensionsReader(), mediaStore);
-        var commitEngine = new CommitEngine(pathsConfig, mediaStore, sha256Port, hashIndex);
-        var rescueDateResolver = new RescueDateResolver(new ExifSource(), new FilenameSource());
-        var rescueEngine = new RescueEngine(pathsConfig, mediaStore, sha256Port, hashIndex, rescueDateResolver);
+        final var commitEngine = new CommitEngine(pathsConfig, mediaStore, sha256Port, hashIndex);
+        final var rescueDateResolver = new RescueDateResolver(new ExifSource(), new FilenameSource());
+        final var rescueEngine = new RescueEngine(pathsConfig, mediaStore, sha256Port, hashIndex, rescueDateResolver);
 
-        HeifDecoder stubHeifDecoder = _ -> Optional.empty();
-        var montageRenderer = new CullMontageRenderer(new TileRenderer(stubHeifDecoder), new MontageBuilder(),
+        final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
+        final var montageRenderer = new CullMontageRenderer(new TileRenderer(stubHeifDecoder), new MontageBuilder(),
                 new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig);
-        var cullPrepPort = new JsonCullPrepStore();
-        var cullDispatcher = new CullDispatcher(cullers, cullSettings);
-        var disasterDrawer = new DisasterDrawer(mediaStore);
-        var moveLedger = new MoveLedger(mediaStore);
-        var cullDestinations = new CullDestinations(pathsConfig);
-        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, cullSettings, sha256Port);
-        var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,
+        final var cullPrepPort = new JsonCullPrepStore();
+        final var cullDispatcher = new CullDispatcher(cullers, cullSettings);
+        final var disasterDrawer = new DisasterDrawer(mediaStore);
+        final var moveLedger = new MoveLedger(mediaStore);
+        final var cullDestinations = new CullDestinations(pathsConfig);
+        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, cullSettings, sha256Port);
+        final var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,
                 moveLedger, applyPlanner);
-        var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
+        final var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
                 cullDestinations, moveLedger, applyPlanner);
-        var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, disasterDrawer, moveLedger);
-        var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyPlanner, moveLedger);
-        var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
+        final var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, disasterDrawer, moveLedger);
+        final var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyPlanner, moveLedger);
+        final var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
         // given photo lands in via mtime ordering alone, without depending on batch-size math.
-        var montageConfig = new MontageConfig(64, 1);
+        final var montageConfig = new MontageConfig(64, 1);
 
         if (pollInterval == null) {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
@@ -196,13 +196,13 @@ final class PipelineTestSupport {
                 new ExternalAgentSettings(WatchMode.MANUAL, null));
     }
 
-    static CullSettings watchCullSettings(@Nullable Duration watchTimeout) {
+    static CullSettings watchCullSettings(final @Nullable Duration watchTimeout) {
         return new FixedSettings(VisionCuller.MANUAL_MODE_PROVIDER_ID,
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.WATCH, watchTimeout));
     }
 
-    static void writeFile(Path file, String content) throws IOException {
+    static void writeFile(final Path file, final String content) throws IOException {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
     }
@@ -210,7 +210,7 @@ final class PipelineTestSupport {
     // 60,000 bytes clears LowResGate's 50KB threshold, same fixture convention as SortEngineTest -
     // sort's progress-bracket tests aren't testing low-res routing and shouldn't accidentally
     // exercise it.
-    static String padded(String marker) {
+    static String padded(final String marker) {
         return marker + "x".repeat(60_000);
     }
 
@@ -219,17 +219,17 @@ final class PipelineTestSupport {
     static final int PHOTO_WIDTH = 800;
     static final int PHOTO_HEIGHT = 600;
 
-    static Path writePhoto(Path dir, String name, Instant mtime) throws IOException {
+    static Path writePhoto(final Path dir, final String name, final Instant mtime) throws IOException {
         Files.createDirectories(dir);
-        var image = new BufferedImage(PHOTO_WIDTH, PHOTO_HEIGHT, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
+        final var image = new BufferedImage(PHOTO_WIDTH, PHOTO_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = image.createGraphics();
         try {
             g.setColor(Color.BLUE);
             g.fillRect(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
         } finally {
             g.dispose();
         }
-        Path file = dir.resolve(name);
+        final Path file = dir.resolve(name);
         ImageIO.write(image, "jpg", file.toFile());
         Files.setLastModifiedTime(file, FileTime.from(mtime));
         return file;
@@ -242,17 +242,17 @@ final class PipelineTestSupport {
     // random noise instead defeats JPEG compression, so the file clears the floor easily. name must
     // carry a FilenameSource-recognized date (e.g. "20190601_photo.jpg") since these fixtures have
     // no EXIF or Takeout JSON.
-    static Path writeInboxPhoto(Path root, String name) throws IOException {
+    static Path writeInboxPhoto(final Path root, final String name) throws IOException {
         return writeInboxPhoto(root, name, 42);
     }
 
     // seed varies the noise, so two calls in the same test never produce byte-identical files that
     // ByteIdenticalDedup would then collapse into one.
-    static Path writeInboxPhoto(Path root, String name, long seed) throws IOException {
-        Path file = inboxOf(root).resolve(name);
+    static Path writeInboxPhoto(final Path root, final String name, final long seed) throws IOException {
+        final Path file = inboxOf(root).resolve(name);
         Files.createDirectories(file.getParent());
-        var image = new BufferedImage(PHOTO_WIDTH, PHOTO_HEIGHT, BufferedImage.TYPE_INT_RGB);
-        var random = new Random(seed);
+        final var image = new BufferedImage(PHOTO_WIDTH, PHOTO_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        final var random = new Random(seed);
         for (int y = 0; y < PHOTO_HEIGHT; y++) {
             for (int x = 0; x < PHOTO_WIDTH; x++) {
                 image.setRGB(x, y, random.nextInt(0xFFFFFF));
@@ -265,18 +265,18 @@ final class PipelineTestSupport {
     // Hand-drops a shard the same shape a real external agent would write, matching
     // ApplyEngineTest's own writeShard/classificationJson convention. ShardCodec itself is
     // package-private to adapter.vision and unreachable from here.
-    static void writeShard(Path prepDir, String montage, String... decisionsJson) throws IOException {
-        String shardName = montage.replaceFirst("^montage-", "decisions-") + ".json";
+    static void writeShard(final Path prepDir, final String montage, final String... decisionsJson) throws IOException {
+        final String shardName = montage.replaceFirst("^montage-", "decisions-") + ".json";
         Files.writeString(prepDir.resolve(shardName),
                 "{ \"montage\": \"%s\", \"decisions\": [ %s ] }".formatted(montage, String.join(", ", decisionsJson)));
     }
 
-    static String classificationJson(Path file, String category, String reason) {
+    static String classificationJson(final Path file, final String category, final String reason) {
         return "{ \"file\": \"%s\", \"action\": \"%s\", \"reason\": \"%s\" }"
                 .formatted(jsonEscaped(file), category, reason);
     }
 
-    private static String jsonEscaped(Path path) {
+    private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
 
@@ -284,17 +284,17 @@ final class PipelineTestSupport {
         final List<String> events = new ArrayList<>();
 
         @Override
-        public void phaseStarted(String phase) {
+        public void phaseStarted(final String phase) {
             events.add("started:" + phase);
         }
 
         @Override
-        public void tick(String phase, int current, int total) {
+        public void tick(final String phase, final int current, final int total) {
             events.add("tick:" + phase + ":" + current + "/" + total);
         }
 
         @Override
-        public void phaseFinished(String phase) {
+        public void phaseFinished(final String phase) {
             events.add("finished:" + phase);
         }
     }
@@ -305,77 +305,77 @@ final class PipelineTestSupport {
         private final MediaStore delegate = new NioMediaStore();
 
         @Override
-        public List<Path> listFiles(Path root) {
+        public List<Path> listFiles(final Path root) {
             return delegate.listFiles(root);
         }
 
         @Override
-        public Instant lastModifiedTime(Path path) {
+        public Instant lastModifiedTime(final Path path) {
             return delegate.lastModifiedTime(path);
         }
 
         @Override
-        public Path move(Path source, Path destDir) {
+        public Path move(final Path source, final Path destDir) {
             throw new RuntimeException("simulated crash");
         }
 
         @Override
-        public Path resolveDestination(Path source, Path destDir) {
+        public Path resolveDestination(final Path source, final Path destDir) {
             return delegate.resolveDestination(source, destDir);
         }
 
         @Override
-        public Path moveTo(Path source, Path destination) {
+        public Path moveTo(final Path source, final Path destination) {
             return delegate.moveTo(source, destination);
         }
 
         @Override
-        public Path copy(Path source, Path destDir) {
+        public Path copy(final Path source, final Path destDir) {
             return delegate.copy(source, destDir);
         }
 
         @Override
-        public void delete(Path path) {
+        public void delete(final Path path) {
             delegate.delete(path);
         }
 
         @Override
-        public void ensureDirectory(Path dir) {
+        public void ensureDirectory(final Path dir) {
             delegate.ensureDirectory(dir);
         }
 
         @Override
-        public boolean exists(Path path) {
+        public boolean exists(final Path path) {
             return delegate.exists(path);
         }
 
         @Override
-        public long size(Path path) {
+        public long size(final Path path) {
             return delegate.size(path);
         }
 
         @Override
-        public void appendLine(Path file, String line) {
+        public void appendLine(final Path file, final String line) {
             delegate.appendLine(file, line);
         }
 
         @Override
-        public void write(Path file, String content) {
+        public void write(final Path file, final String content) {
             delegate.write(file, content);
         }
 
         @Override
-        public List<String> readLines(Path file) {
+        public List<String> readLines(final Path file) {
             return delegate.readLines(file);
         }
 
         @Override
-        public void removeEmptyDirectories(Path root) {
+        public void removeEmptyDirectories(final Path root) {
             delegate.removeEmptyDirectories(root);
         }
 
         @Override
-        public void removeIfEmptyOfFiles(Path dir) {
+        public void removeIfEmptyOfFiles(final Path dir) {
             delegate.removeIfEmptyOfFiles(dir);
         }
     }
@@ -388,27 +388,27 @@ final class PipelineTestSupport {
         private final CountDownLatch moveStarted;
         private final CountDownLatch releaseMove;
 
-        BlockingMoves(CountDownLatch moveStarted, CountDownLatch releaseMove) {
+        BlockingMoves(final CountDownLatch moveStarted, final CountDownLatch releaseMove) {
             this.moveStarted = moveStarted;
             this.releaseMove = releaseMove;
         }
 
         @Override
-        public List<Path> listFiles(Path root) {
+        public List<Path> listFiles(final Path root) {
             return delegate.listFiles(root);
         }
 
         @Override
-        public Instant lastModifiedTime(Path path) {
+        public Instant lastModifiedTime(final Path path) {
             return delegate.lastModifiedTime(path);
         }
 
         @Override
-        public Path move(Path source, Path destDir) {
+        public Path move(final Path source, final Path destDir) {
             moveStarted.countDown();
             try {
                 releaseMove.await();
-            } catch (InterruptedException e) {
+            } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
@@ -416,62 +416,62 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path resolveDestination(Path source, Path destDir) {
+        public Path resolveDestination(final Path source, final Path destDir) {
             return delegate.resolveDestination(source, destDir);
         }
 
         @Override
-        public Path moveTo(Path source, Path destination) {
+        public Path moveTo(final Path source, final Path destination) {
             return delegate.moveTo(source, destination);
         }
 
         @Override
-        public Path copy(Path source, Path destDir) {
+        public Path copy(final Path source, final Path destDir) {
             return delegate.copy(source, destDir);
         }
 
         @Override
-        public void delete(Path path) {
+        public void delete(final Path path) {
             delegate.delete(path);
         }
 
         @Override
-        public void ensureDirectory(Path dir) {
+        public void ensureDirectory(final Path dir) {
             delegate.ensureDirectory(dir);
         }
 
         @Override
-        public boolean exists(Path path) {
+        public boolean exists(final Path path) {
             return delegate.exists(path);
         }
 
         @Override
-        public long size(Path path) {
+        public long size(final Path path) {
             return delegate.size(path);
         }
 
         @Override
-        public void appendLine(Path file, String line) {
+        public void appendLine(final Path file, final String line) {
             delegate.appendLine(file, line);
         }
 
         @Override
-        public void write(Path file, String content) {
+        public void write(final Path file, final String content) {
             delegate.write(file, content);
         }
 
         @Override
-        public List<String> readLines(Path file) {
+        public List<String> readLines(final Path file) {
             return delegate.readLines(file);
         }
 
         @Override
-        public void removeEmptyDirectories(Path root) {
+        public void removeEmptyDirectories(final Path root) {
             delegate.removeEmptyDirectories(root);
         }
 
         @Override
-        public void removeIfEmptyOfFiles(Path dir) {
+        public void removeIfEmptyOfFiles(final Path dir) {
             delegate.removeIfEmptyOfFiles(dir);
         }
     }
@@ -485,17 +485,17 @@ final class PipelineTestSupport {
         private final CountDownLatch listStarted;
         private final CountDownLatch releaseList;
 
-        BlockingListFiles(CountDownLatch listStarted, CountDownLatch releaseList) {
+        BlockingListFiles(final CountDownLatch listStarted, final CountDownLatch releaseList) {
             this.listStarted = listStarted;
             this.releaseList = releaseList;
         }
 
         @Override
-        public List<Path> listFiles(Path root) {
+        public List<Path> listFiles(final Path root) {
             listStarted.countDown();
             try {
                 releaseList.await();
-            } catch (InterruptedException e) {
+            } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
@@ -503,72 +503,72 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Instant lastModifiedTime(Path path) {
+        public Instant lastModifiedTime(final Path path) {
             return delegate.lastModifiedTime(path);
         }
 
         @Override
-        public Path move(Path source, Path destDir) {
+        public Path move(final Path source, final Path destDir) {
             return delegate.move(source, destDir);
         }
 
         @Override
-        public Path resolveDestination(Path source, Path destDir) {
+        public Path resolveDestination(final Path source, final Path destDir) {
             return delegate.resolveDestination(source, destDir);
         }
 
         @Override
-        public Path moveTo(Path source, Path destination) {
+        public Path moveTo(final Path source, final Path destination) {
             return delegate.moveTo(source, destination);
         }
 
         @Override
-        public Path copy(Path source, Path destDir) {
+        public Path copy(final Path source, final Path destDir) {
             return delegate.copy(source, destDir);
         }
 
         @Override
-        public void delete(Path path) {
+        public void delete(final Path path) {
             delegate.delete(path);
         }
 
         @Override
-        public void ensureDirectory(Path dir) {
+        public void ensureDirectory(final Path dir) {
             delegate.ensureDirectory(dir);
         }
 
         @Override
-        public boolean exists(Path path) {
+        public boolean exists(final Path path) {
             return delegate.exists(path);
         }
 
         @Override
-        public long size(Path path) {
+        public long size(final Path path) {
             return delegate.size(path);
         }
 
         @Override
-        public void appendLine(Path file, String line) {
+        public void appendLine(final Path file, final String line) {
             delegate.appendLine(file, line);
         }
 
         @Override
-        public void write(Path file, String content) {
+        public void write(final Path file, final String content) {
             delegate.write(file, content);
         }
 
         @Override
-        public List<String> readLines(Path file) {
+        public List<String> readLines(final Path file) {
             return delegate.readLines(file);
         }
 
         @Override
-        public void removeEmptyDirectories(Path root) {
+        public void removeEmptyDirectories(final Path root) {
             delegate.removeEmptyDirectories(root);
         }
 
         @Override
-        public void removeIfEmptyOfFiles(Path dir) {
+        public void removeIfEmptyOfFiles(final Path dir) {
             delegate.removeIfEmptyOfFiles(dir);
         }
     }
@@ -582,37 +582,37 @@ final class PipelineTestSupport {
         private final CountDownLatch moveStarted;
         private final CountDownLatch releaseMove;
 
-        BlockingMoveTo(CountDownLatch moveStarted, CountDownLatch releaseMove) {
+        BlockingMoveTo(final CountDownLatch moveStarted, final CountDownLatch releaseMove) {
             this.moveStarted = moveStarted;
             this.releaseMove = releaseMove;
         }
 
         @Override
-        public List<Path> listFiles(Path root) {
+        public List<Path> listFiles(final Path root) {
             return delegate.listFiles(root);
         }
 
         @Override
-        public Instant lastModifiedTime(Path path) {
+        public Instant lastModifiedTime(final Path path) {
             return delegate.lastModifiedTime(path);
         }
 
         @Override
-        public Path move(Path source, Path destDir) {
+        public Path move(final Path source, final Path destDir) {
             return delegate.move(source, destDir);
         }
 
         @Override
-        public Path resolveDestination(Path source, Path destDir) {
+        public Path resolveDestination(final Path source, final Path destDir) {
             return delegate.resolveDestination(source, destDir);
         }
 
         @Override
-        public Path moveTo(Path source, Path destination) {
+        public Path moveTo(final Path source, final Path destination) {
             moveStarted.countDown();
             try {
                 releaseMove.await();
-            } catch (InterruptedException e) {
+            } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
@@ -620,52 +620,52 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path copy(Path source, Path destDir) {
+        public Path copy(final Path source, final Path destDir) {
             return delegate.copy(source, destDir);
         }
 
         @Override
-        public void delete(Path path) {
+        public void delete(final Path path) {
             delegate.delete(path);
         }
 
         @Override
-        public void ensureDirectory(Path dir) {
+        public void ensureDirectory(final Path dir) {
             delegate.ensureDirectory(dir);
         }
 
         @Override
-        public boolean exists(Path path) {
+        public boolean exists(final Path path) {
             return delegate.exists(path);
         }
 
         @Override
-        public long size(Path path) {
+        public long size(final Path path) {
             return delegate.size(path);
         }
 
         @Override
-        public void appendLine(Path file, String line) {
+        public void appendLine(final Path file, final String line) {
             delegate.appendLine(file, line);
         }
 
         @Override
-        public void write(Path file, String content) {
+        public void write(final Path file, final String content) {
             delegate.write(file, content);
         }
 
         @Override
-        public List<String> readLines(Path file) {
+        public List<String> readLines(final Path file) {
             return delegate.readLines(file);
         }
 
         @Override
-        public void removeEmptyDirectories(Path root) {
+        public void removeEmptyDirectories(final Path root) {
             delegate.removeEmptyDirectories(root);
         }
 
         @Override
-        public void removeIfEmptyOfFiles(Path dir) {
+        public void removeIfEmptyOfFiles(final Path dir) {
             delegate.removeIfEmptyOfFiles(dir);
         }
     }
@@ -682,11 +682,11 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
-            List<String> missing = new ArrayList<>();
+        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
+            final List<String> missing = new ArrayList<>();
             int done = 0;
-            for (String montage : prep.entries()) {
-                boolean hasShard = Files.exists(prep.prepDir().resolve(
+            for (final String montage : prep.entries()) {
+                final boolean hasShard = Files.exists(prep.prepDir().resolve(
                         montage.replaceFirst("^montage-", "decisions-") + ".json"));
                 if (hasShard) {
                     done++;
@@ -712,11 +712,11 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
             started.countDown();
             try {
                 release.await();
-            } catch (InterruptedException e) {
+            } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
@@ -742,11 +742,11 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) {
-            for (String montage : prep.entries()) {
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+            for (final String montage : prep.entries()) {
                 try {
                     writeShard(prep.prepDir(), montage);
-                } catch (IOException e) {
+                } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }
             }
@@ -767,15 +767,15 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) {
-            for (String montage : prep.entries()) {
-                List<SidecarPhotoEntry> photos = cullPrepPort.readSidecar(prep.prepDir(), montage);
-                String[] decisions = photos.stream()
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+            for (final String montage : prep.entries()) {
+                final List<SidecarPhotoEntry> photos = cullPrepPort.readSidecar(prep.prepDir(), montage);
+                final String[] decisions = photos.stream()
                         .map(photo -> classificationJson(photo.src(), "junk", "blurry"))
                         .toArray(String[]::new);
                 try {
                     writeShard(prep.prepDir(), montage, decisions);
-                } catch (IOException e) {
+                } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }
             }
@@ -787,7 +787,7 @@ final class PipelineTestSupport {
     // genuine failure, never "waiting for more shards" - see VisionCuller.MANUAL_MODE_PROVIDER_ID.
     record ThrowingCuller(String id) implements VisionCuller {
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
             throw new CullException("the model could not produce a valid judgement");
         }
     }
@@ -807,22 +807,22 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) {
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
             return cull(prep, opts, ProgressCallback.NO_OP, CancellationSignal.NEVER);
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress,
-                CancellationSignal cancellation) {
-            int total = prep.entries().size();
+        public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress,
+                               final CancellationSignal cancellation) {
+            final int total = prep.entries().size();
             int current = 0;
             int culled = 0;
             while (current < total && !cancellation.isCancelled()) {
-                String montage = prep.entries().get(current);
+                final String montage = prep.entries().get(current);
                 current++;
                 try {
                     writeShard(prep.prepDir(), montage);
-                } catch (IOException e) {
+                } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }
                 culled++;
@@ -831,7 +831,7 @@ final class PipelineTestSupport {
                     firstShardWritten.countDown();
                     try {
                         releaseRemaining.await();
-                    } catch (InterruptedException e) {
+                    } catch (final InterruptedException e) {
                         Thread.currentThread().interrupt();
                         throw new AssertionError(e);
                     }
@@ -850,7 +850,7 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) {
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
             throw new AssertionError("dispatch must never run after a post-PREPPING cancellation");
         }
     }

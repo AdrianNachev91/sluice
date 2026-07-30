@@ -33,7 +33,7 @@ final class CurateEngine {
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param cullEngine {@link CullEngine} performs the cull phase
      */
-    CurateEngine(SortEngine sortEngine, JobRunner jobRunner, ProgressPort progressPort, CullEngine cullEngine) {
+    CurateEngine(final SortEngine sortEngine, final JobRunner jobRunner, final ProgressPort progressPort, final CullEngine cullEngine) {
         this.sortEngine = sortEngine;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
@@ -73,18 +73,18 @@ final class CurateEngine {
      * @param scope {@link SortScope} the sort scope to sort and then cull
      * @return a {@link JobHandle} of {@link CurateOutcome} handle for the combined sort+cull job
      */
-    JobHandle<CurateOutcome> curate(SortScope scope) {
-        CullScope known = knownCullScope(scope);
+    JobHandle<CurateOutcome> curate(final SortScope scope) {
+        final CullScope known = knownCullScope(scope);
         if (known != null) {
             cullEngine.checkNoWaitingJobFor(known);
         }
         return jobRunner.submit(handle -> {
-            SortSummary sortSummary = phaseRunner.run(SORTING,
+            final SortSummary sortSummary = phaseRunner.run(SORTING,
                     progress -> sortEngine.sort(scope, progress, handle::isCancellationRequested));
             if (handle.isCancellationRequested()) {
                 return new CurateOutcome(sortSummary, null);
             }
-            CullScope cullScope = known != null ? known : oldestYearCullScope(sortSummary);
+            final CullScope cullScope = known != null ? known : oldestYearCullScope(sortSummary);
             if (cullScope == null) {
                 return new CurateOutcome(sortSummary, null);
             }
@@ -96,7 +96,7 @@ final class CurateEngine {
                 // for example) is never mislabeled as this conflict.
                 try {
                     cullEngine.checkNoWaitingJobFor(cullScope);
-                } catch (IllegalStateException conflict) {
+                } catch (final IllegalStateException conflict) {
                     // The sort has already moved real files by this point. CurateConflictException
                     // carries the SortSummary forward so the caller isn't left blind about what
                     // already happened.
@@ -115,10 +115,10 @@ final class CurateEngine {
      * @param scope {@link SortScope} the sort scope to map
      * @return {@link CullScope} the mapped cull scope, or null for OldestYear
      */
-    private static @Nullable CullScope knownCullScope(SortScope scope) {
+    private static @Nullable CullScope knownCullScope(final SortScope scope) {
         return switch (scope) {
-            case SortScope.Year(int year, MonthRange months) -> new CullScope.Year(year, monthsFromRange(months));
-            case SortScope.OldestN(int n) -> new CullScope.OldestN(n);
+            case SortScope.Year(final int year, final MonthRange months) -> new CullScope.Year(year, monthsFromRange(months));
+            case SortScope.OldestN(final int n) -> new CullScope.OldestN(n);
             case SortScope.OldestYear() -> null;
         };
     }
@@ -131,7 +131,7 @@ final class CurateEngine {
      * @param sortSummary {@link SortSummary} summary produced by the just-run sort
      * @return {@link CullScope} the resolved cull scope, or null if nothing to cull
      */
-    private static @Nullable CullScope oldestYearCullScope(SortSummary sortSummary) {
+    private static @Nullable CullScope oldestYearCullScope(final SortSummary sortSummary) {
         return sortSummary.yearsSorted().stream().findAny()
                 .<CullScope>map(year -> new CullScope.Year(year, null))
                 .orElse(null);
@@ -143,7 +143,7 @@ final class CurateEngine {
      * @param months {@link MonthRange} the range to expand, or null for no restriction
      * @return a {@link List} of {@link Integer} the list of months in range, or null if months is null
      */
-    private static @Nullable List<Integer> monthsFromRange(@Nullable MonthRange months) {
+    private static @Nullable List<Integer> monthsFromRange(final @Nullable MonthRange months) {
         return months == null ? null : IntStream.rangeClosed(months.from(), months.to()).boxed().toList();
     }
 }

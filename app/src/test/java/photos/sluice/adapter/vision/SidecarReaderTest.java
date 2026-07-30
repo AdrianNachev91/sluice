@@ -22,8 +22,8 @@ class SidecarReaderTest {
     private final SidecarReader reader = new SidecarReader();
 
     @Test
-    void returnsEveryListedPhotoEntryInFull(@TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void returnsEveryListedPhotoEntryInFull(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 {
                   "montage": "%s",
@@ -45,10 +45,10 @@ class SidecarReaderTest {
     }
 
     @Test
-    void ignoresFieldsItDoesNotConsume(@TempDir Path dir) throws IOException {
+    void ignoresFieldsItDoesNotConsume(@TempDir final Path dir) throws IOException {
         // A field this reader has never heard of must not break the read either - the sidecar's
         // full shape is the writer's business, including any it grows later.
-        Path sidecar = dir.resolve("montage-001.json");
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 {
                   "montage": "whatever",
@@ -66,15 +66,15 @@ class SidecarReaderTest {
     }
 
     @Test
-    void failsLoudWhenTheSidecarFileIsMissing(@TempDir Path dir) {
+    void failsLoudWhenTheSidecarFileIsMissing(@TempDir final Path dir) {
         assertThatThrownBy(() -> reader.readEntries(dir.resolve("montage-404.json")))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("montage-404.json");
     }
 
     @Test
-    void failsLoudOnMalformedJson(@TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void failsLoudOnMalformedJson(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, "{ not json");
 
         assertThatThrownBy(() -> reader.readEntries(sidecar))
@@ -83,8 +83,8 @@ class SidecarReaderTest {
     }
 
     @Test
-    void failsLoudOnANullDocument(@TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void failsLoudOnANullDocument(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, "null");
 
         assertThatThrownBy(() -> reader.readEntries(sidecar))
@@ -93,8 +93,8 @@ class SidecarReaderTest {
     }
 
     @Test
-    void failsLoudWhenThePhotosArrayIsMissing(@TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void failsLoudWhenThePhotosArrayIsMissing(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 { "montage": "montage-001.jpg" }""");
 
@@ -104,8 +104,8 @@ class SidecarReaderTest {
     }
 
     @Test
-    void failsLoudOnAnEmptyPhotosArray(@TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void failsLoudOnAnEmptyPhotosArray(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 { "montage": "montage-001.jpg", "photos": [] }""");
 
@@ -115,8 +115,8 @@ class SidecarReaderTest {
     }
 
     @Test
-    void failsLoudOnANullPhotoEntry(@TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void failsLoudOnANullPhotoEntry(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 { "photos": [ null ] }""");
 
@@ -127,8 +127,8 @@ class SidecarReaderTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"src", "name", "time", "received"})
-    void failsLoudOnAPhotoEntryMissingARequiredField(String missing, @TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void failsLoudOnAPhotoEntryMissingARequiredField(final String missing, @TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 { "photos": [ %s ] }""".formatted(photoWithout(missing, dir)));
 
@@ -138,8 +138,8 @@ class SidecarReaderTest {
     }
 
     @Test
-    void failsLoudOnAnUnparseableTime(@TempDir Path dir) throws IOException {
-        Path sidecar = dir.resolve("montage-001.json");
+    void failsLoudOnAnUnparseableTime(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
                 { "photos": [ { "src": "%s", "name": "IMG_001.jpg", "time": "20-06-2019 15:00",
                   "received": false } ] }""".formatted(jsonEscaped(dir.resolve("IMG_001.jpg"))));
@@ -150,8 +150,8 @@ class SidecarReaderTest {
     }
 
     // One complete photo entry as raw JSON, with the named field left out.
-    private String photoWithout(String missing, Path dir) {
-        var fields = new LinkedHashMap<String, String>();
+    private String photoWithout(final String missing, final Path dir) {
+        final var fields = new LinkedHashMap<String, String>();
         fields.put("src", "\"" + jsonEscaped(dir.resolve("IMG_001.jpg")) + "\"");
         fields.put("name", "\"IMG_001.jpg\"");
         fields.put("time", "\"2019-06-20T15:00:10Z\"");
@@ -162,7 +162,7 @@ class SidecarReaderTest {
                 .collect(Collectors.joining(", ", "{ ", " }"));
     }
 
-    private static String jsonEscaped(Path path) {
+    private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
 }

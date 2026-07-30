@@ -18,7 +18,7 @@ final class PhaseRunner {
      *
      * @param progressPort {@link ProgressPort} sink for phase start/tick/finish events
      */
-    PhaseRunner(ProgressPort progressPort) {
+    PhaseRunner(final ProgressPort progressPort) {
         this.progressPort = progressPort;
     }
 
@@ -31,7 +31,7 @@ final class PhaseRunner {
      * @param work a {@link PhaseWork} of T the engine call to bracket
      * @return T the engine call's result
      */
-    <T> T run(String phase, PhaseWork<T> work) throws Exception {
+    <T> T run(final String phase, final PhaseWork<T> work) throws Exception {
         progressPort.phaseStarted(phase);
         try {
             return work.run((current, total) -> progressPort.tick(phase, current, total));

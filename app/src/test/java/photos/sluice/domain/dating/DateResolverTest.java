@@ -29,21 +29,21 @@ class DateResolverTest {
             new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
 
     @Test
-    void sidecarWinsOverExif(@TempDir Path dir) throws IOException {
-        var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg")); // exif date 2021-03-15
-        LocalDateTime sidecarDate = LocalDateTime.of(2015, 5, 5, 12, 0, 0);
-        var sidecar = new TakeoutSidecar(writeSidecar(dir, sidecarDate));
+    void sidecarWinsOverExif(@TempDir final Path dir) throws IOException {
+        final var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg")); // exif date 2021-03-15
+        final LocalDateTime sidecarDate = LocalDateTime.of(2015, 5, 5, 12, 0, 0);
+        final var sidecar = new TakeoutSidecar(writeSidecar(dir, sidecarDate));
 
-        DateResult result = resolver.resolve(file, sidecar);
+        final DateResult result = resolver.resolve(file, sidecar);
 
         assertThat(result).isEqualTo(new DateResult(sidecarDate, Confidence.TRUSTED, "sidecar"));
     }
 
     @Test
     void exifWinsWhenNoSidecar() {
-        var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
+        final var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
 
-        DateResult result = resolver.resolve(file, null);
+        final DateResult result = resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDateTime.of(2021, 3, 15, 10, 30, 0), Confidence.TRUSTED, "exif"));
@@ -51,9 +51,9 @@ class DateResolverTest {
 
     @Test
     void resolvesHeicExifWithoutExiftool() {
-        var file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
+        final var file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
 
-        DateResult result = resolver.resolve(file, null);
+        final DateResult result = resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDateTime.of(2018, 2, 5, 15, 11, 44), Confidence.TRUSTED, "exif"));
@@ -61,9 +61,9 @@ class DateResolverTest {
 
     @Test
     void filenameWinsWhenNoSidecarAndNoExif() {
-        var file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
+        final var file = new MediaFile(Path.of("IMG_20210315_103000.jpg"));
 
-        DateResult result = resolver.resolve(file, null);
+        final DateResult result = resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDate.of(2021, 3, 15).atStartOfDay(), Confidence.TRUSTED, "filename"));
@@ -72,34 +72,34 @@ class DateResolverTest {
     @Test
     void trustedFilenameDateBypassesThePlausibilityGuard() {
         // 1999 predates the plausibility floor, but only LOW-confidence sources are guarded.
-        var file = new MediaFile(Path.of("IMG_19990101_120000.jpg"));
+        final var file = new MediaFile(Path.of("IMG_19990101_120000.jpg"));
 
-        DateResult result = resolver.resolve(file, null);
+        final DateResult result = resolver.resolve(file, null);
 
         assertThat(result).isEqualTo(
                 new DateResult(LocalDate.of(1999, 1, 1).atStartOfDay(), Confidence.TRUSTED, "filename"));
     }
 
     @Test
-    void mtimeIsTheLowConfidenceLastResort(@TempDir Path dir) throws IOException {
-        Path file = dir.resolve("plain-file.jpg"); // no date-pattern name, no exif data
+    void mtimeIsTheLowConfidenceLastResort(@TempDir final Path dir) throws IOException {
+        final Path file = dir.resolve("plain-file.jpg"); // no date-pattern name, no exif data
         Files.writeString(file, "not an image");
-        LocalDateTime mtime = LocalDateTime.of(2022, 6, 1, 9, 0, 0);
+        final LocalDateTime mtime = LocalDateTime.of(2022, 6, 1, 9, 0, 0);
         Files.setLastModifiedTime(file, FileTime.from(mtime.atZone(ZoneId.systemDefault()).toInstant()));
 
-        DateResult result = resolver.resolve(new MediaFile(file), null);
+        final DateResult result = resolver.resolve(new MediaFile(file), null);
 
         assertThat(result).isEqualTo(new DateResult(mtime, Confidence.LOW, "mtime"));
     }
 
     @Test
-    void implausibleMtimeDateBecomesUnsortable(@TempDir Path dir) throws IOException {
-        Path file = dir.resolve("plain-file.jpg");
+    void implausibleMtimeDateBecomesUnsortable(@TempDir final Path dir) throws IOException {
+        final Path file = dir.resolve("plain-file.jpg");
         Files.writeString(file, "not an image");
-        LocalDateTime preYear2000 = LocalDateTime.of(1995, 1, 1, 0, 0, 0);
+        final LocalDateTime preYear2000 = LocalDateTime.of(1995, 1, 1, 0, 0, 0);
         Files.setLastModifiedTime(file, FileTime.from(preYear2000.atZone(ZoneId.systemDefault()).toInstant()));
 
-        DateResult result = resolver.resolve(new MediaFile(file), null);
+        final DateResult result = resolver.resolve(new MediaFile(file), null);
 
         // The guard only flips the confidence; the date and source name it rejected are preserved
         // so the caller can still report what was found, not just that it was unsortable.
@@ -107,13 +107,13 @@ class DateResolverTest {
     }
 
     @Test
-    void futureMtimeDateBecomesUnsortable(@TempDir Path dir) throws IOException {
-        Path file = dir.resolve("plain-file.jpg");
+    void futureMtimeDateBecomesUnsortable(@TempDir final Path dir) throws IOException {
+        final Path file = dir.resolve("plain-file.jpg");
         Files.writeString(file, "not an image");
-        LocalDateTime tenYearsOut = LocalDateTime.now().plusYears(10).withNano(0);
+        final LocalDateTime tenYearsOut = LocalDateTime.now().plusYears(10).withNano(0);
         Files.setLastModifiedTime(file, FileTime.from(tenYearsOut.atZone(ZoneId.systemDefault()).toInstant()));
 
-        DateResult result = resolver.resolve(new MediaFile(file), null);
+        final DateResult result = resolver.resolve(new MediaFile(file), null);
 
         assertThat(result).isEqualTo(new DateResult(tenYearsOut, Confidence.UNSORTABLE, "mtime"));
     }
@@ -121,17 +121,17 @@ class DateResolverTest {
     @Test
     void allSourcesFailingStillProducesAnUnsortableResult() {
         // No sidecar, no exif (nonexistent path), no date-pattern filename, and no mtime to read.
-        var file = new MediaFile(Path.of("does-not-exist/plain-file.jpg"));
+        final var file = new MediaFile(Path.of("does-not-exist/plain-file.jpg"));
 
-        DateResult result = resolver.resolve(file, null);
+        final DateResult result = resolver.resolve(file, null);
 
         assertThat(result.confidence()).isEqualTo(Confidence.UNSORTABLE);
         assertThat(result.source()).isEqualTo("none");
     }
 
-    private static Path writeSidecar(Path dir, LocalDateTime photoTakenAt) throws IOException {
-        long epochSeconds = photoTakenAt.atZone(ZoneId.systemDefault()).toEpochSecond();
-        Path sidecar = dir.resolve("IMG_0001.jpg.supplemental-metadata.json");
+    private static Path writeSidecar(final Path dir, final LocalDateTime photoTakenAt) throws IOException {
+        final long epochSeconds = photoTakenAt.atZone(ZoneId.systemDefault()).toEpochSecond();
+        final Path sidecar = dir.resolve("IMG_0001.jpg.supplemental-metadata.json");
         Files.writeString(sidecar, """
                 {
                   "photoTakenTime": {

@@ -50,26 +50,26 @@ class SortEngineRealDataParityTest {
     private static final int SCOPE_SIZE = 10_000; // comfortably above the ~856-file real copy
 
     @Test
-    void sortEngineMatchesReferenceEngineOnRealTakeoutData(@TempDir Path rootA, @TempDir Path rootB)
+    void sortEngineMatchesReferenceEngineOnRealTakeoutData(@TempDir final Path rootA, @TempDir final Path rootB)
             throws IOException, InterruptedException {
-        String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
+        final String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
         Assumptions.assumeTrue(sourceDirProperty != null && !sourceDirProperty.isBlank(),
                 "sluice.parity.sourceDir must be set to the Takeout/Google Photos folder when sluice.parity.realData=true");
-        Path sourceDir = Path.of(sourceDirProperty);
+        final Path sourceDir = Path.of(sourceDirProperty);
         Assumptions.assumeTrue(Files.isDirectory(sourceDir), "sluice.parity.sourceDir does not exist: " + sourceDir);
 
-        for (String yearFolder : SOURCE_YEAR_FOLDERS) {
-            Path source = sourceDir.resolve(yearFolder);
+        for (final String yearFolder : SOURCE_YEAR_FOLDERS) {
+            final Path source = sourceDir.resolve(yearFolder);
             Assumptions.assumeTrue(Files.isDirectory(source), "Expected source year folder missing: " + source);
             copyRecursively(source, rootA.resolve("Inbox").resolve(yearFolder));
             copyRecursively(source, rootB.resolve("Inbox").resolve(yearFolder));
         }
 
-        Path repoRoot = findRepoRoot();
+        final Path repoRoot = findRepoRoot();
         runReferenceEngine(repoRoot, rootA);
         sortEngine(rootB).sort(new SortScope.OldestN(SCOPE_SIZE));
 
-        MoveDiffer differ = new MoveDiffer();
+        final MoveDiffer differ = new MoveDiffer();
         assertNoUnexplainedDiff("Sorted", differ.diffTrees(rootA.resolve("Sorted"), rootB.resolve("Sorted")));
         assertNoUnexplainedDiff("Review", differ.diffTrees(rootA.resolve("Review"), rootB.resolve("Review")));
         assertNoUnexplainedDiff("Inbox", differ.diffTrees(rootA.resolve("Inbox"), rootB.resolve("Inbox")));
@@ -84,11 +84,11 @@ class SortEngineRealDataParityTest {
     // (unconditional prefix match) that Java's floor makes it delete. That sidecar survives in the
     // reference's tree but not Java's, which is "onlyInA" (present in the reference's output, absent
     // from Java's), never "onlyInB".
-    private static void assertNoUnexplainedDiff(String label, MoveDiffer.Diff diff) {
-        Set<String> unexplainedOnlyInA = new HashSet<>();
-        Set<String> unexplainedOnlyInB = diff.onlyInB();
+    private static void assertNoUnexplainedDiff(final String label, final MoveDiffer.Diff diff) {
+        final Set<String> unexplainedOnlyInA = new HashSet<>();
+        final Set<String> unexplainedOnlyInB = diff.onlyInB();
         int explained = 0;
-        for (String path : diff.onlyInA()) {
+        for (final String path : diff.onlyInA()) {
             if (isExplainedByKnownSidecarFloorDivergence(path)) {
                 explained++;
             } else {
@@ -106,11 +106,11 @@ class SortEngineRealDataParityTest {
         }
     }
 
-    private static boolean isExplainedByKnownSidecarFloorDivergence(String relativePath) {
+    private static boolean isExplainedByKnownSidecarFloorDivergence(final String relativePath) {
         if (!relativePath.toLowerCase(Locale.ROOT).endsWith(".json")) {
             return false;
         }
-        String fileName = relativePath.substring(relativePath.lastIndexOf('/') + 1);
+        final String fileName = relativePath.substring(relativePath.lastIndexOf('/') + 1);
         return TakeoutSidecarPairer.ownerKeyOf(Path.of(fileName)).length() < SidecarSweep.MIN_TRUNCATED_OWNER_KEY_LENGTH;
     }
 
@@ -118,7 +118,7 @@ class SortEngineRealDataParityTest {
     // engine's entry script is found - robust to Surefire's actual working directory rather than
     // assuming app/ or the mvn invocation directory.
     private static Path findRepoRoot() {
-        Path startingDirectory = Path.of("").toAbsolutePath();
+        final Path startingDirectory = Path.of("").toAbsolutePath();
         Path candidate = startingDirectory;
         for (int i = 0; i < 5 && candidate != null; i++, candidate = candidate.getParent()) {
             if (Files.isRegularFile(candidate.resolve("scripts").resolve("sort.ps1"))) {
@@ -128,11 +128,11 @@ class SortEngineRealDataParityTest {
         throw new IllegalStateException("Could not locate scripts/sort.ps1 above " + startingDirectory);
     }
 
-    private static void runReferenceEngine(Path repoRoot, Path rootA) throws IOException, InterruptedException {
-        Path exifTool = repoRoot.resolve("tools").resolve("exiftool.exe");
+    private static void runReferenceEngine(final Path repoRoot, final Path rootA) throws IOException, InterruptedException {
+        final Path exifTool = repoRoot.resolve("tools").resolve("exiftool.exe");
         // Process implements Closeable (closes its inherited-IO streams on exit; does not itself wait
         // for or kill the process, so waitFor/destroyForcibly below are still needed).
-        try (Process process = new ProcessBuilder(
+        try (final Process process = new ProcessBuilder(
                 "powershell.exe", "-NoProfile", "-NonInteractive",
                 "-File", repoRoot.resolve("scripts").resolve("sort.ps1").toString(),
                 "-RepoRoot", rootA.toString(),
@@ -143,7 +143,7 @@ class SortEngineRealDataParityTest {
             // Bounded rather than an indefinite waitFor(): a manually-gated local run should fail
             // loudly on a hung child process (e.g. a corrupt file wedging exiftool) instead of
             // hanging forever.
-            boolean finished = process.waitFor(10, TimeUnit.MINUTES);
+            final boolean finished = process.waitFor(10, TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();
                 fail("reference engine did not finish within 10 minutes - killed");
@@ -152,20 +152,20 @@ class SortEngineRealDataParityTest {
         }
     }
 
-    private static SortEngine sortEngine(Path root) {
-        var pathsConfig = new PathsConfig(
+    private static SortEngine sortEngine(final Path root) {
+        final var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), root.toString(), root.resolve("Inbox").toString()));
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
-        var dateResolver =
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
+        final var dateResolver =
                 new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
         return new SortEngine(pathsConfig, new InboxScanner(), dateResolver, new Sha256Hasher(), hashIndex,
                 new ImageDimensionsReader(), new NioMediaStore());
     }
 
-    private static void copyRecursively(Path source, Path destination) throws IOException {
-        try (var walk = Files.walk(source)) {
-            for (Path path : (Iterable<Path>) walk::iterator) {
-                Path target = destination.resolve(source.relativize(path).toString());
+    private static void copyRecursively(final Path source, final Path destination) throws IOException {
+        try (final var walk = Files.walk(source)) {
+            for (final Path path : (Iterable<Path>) walk::iterator) {
+                final Path target = destination.resolve(source.relativize(path).toString());
                 if (Files.isDirectory(path)) {
                     Files.createDirectories(target);
                 } else {
@@ -173,7 +173,7 @@ class SortEngineRealDataParityTest {
                     Files.copy(path, target);
                 }
             }
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             throw e.getCause();
         }
     }

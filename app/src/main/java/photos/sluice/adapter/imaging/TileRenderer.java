@@ -71,7 +71,7 @@ public class TileRenderer {
      *
      * @param heifDecoder {@link HeifDecoder} the decoder used for HEIF-family formats
      */
-    public TileRenderer(HeifDecoder heifDecoder) {
+    public TileRenderer(final HeifDecoder heifDecoder) {
         this.heifDecoder = heifDecoder;
     }
 
@@ -96,8 +96,8 @@ public class TileRenderer {
      * @param tileSize int the target tile size in pixels
      * @return {@link TileResult} the rendered tile result
      */
-    public TileResult render(Path file, int tileSize) {
-        String extension = MediaTypeDetector.extensionOf(file);
+    public TileResult render(final Path file, final int tileSize) {
+        final String extension = MediaTypeDetector.extensionOf(file);
         if (extension.equals("svg")) {
             // A ".svg" file that isn't actually valid SVG happens in practice. A real file in this
             // project's own library is a PNG mislabeled with an .svg extension. Falling back to
@@ -129,7 +129,7 @@ public class TileRenderer {
      * @param label {@link String} the label to draw on the placeholder
      * @return {@link TileResult} the placeholder tile result
      */
-    private static TileResult placeholderResult(int tileSize, String label) {
+    private static TileResult placeholderResult(final int tileSize, final String label) {
         return new TileResult(placeholder(tileSize, label), true);
     }
 
@@ -139,7 +139,7 @@ public class TileRenderer {
      * @param extension {@link String} the file extension
      * @return {@link String} the label to draw on the placeholder tile
      */
-    private static String placeholderLabel(String extension) {
+    private static String placeholderLabel(final String extension) {
         return RAW_EXTENSIONS.contains(extension) ? extension.toUpperCase(Locale.ROOT) : "NO PREVIEW";
     }
 
@@ -150,7 +150,7 @@ public class TileRenderer {
      * @param tileSize int the target tile size in pixels
      * @return an {@link Optional} {@link TileResult}, or empty if decoding failed
      */
-    private static Optional<TileResult> rasterResult(Path file, int tileSize) {
+    private static Optional<TileResult> rasterResult(final Path file, final int tileSize) {
         return renderRaster(file, tileSize)
                 .map(image -> new TileResult(image, isSourceUnreviewable(file)));
     }
@@ -163,7 +163,7 @@ public class TileRenderer {
      * @return an {@link Optional} {@link BufferedImage}, the resized image, or empty if decoding
      *     failed
      */
-    private static Optional<BufferedImage> renderRaster(Path file, int tileSize) {
+    private static Optional<BufferedImage> renderRaster(final Path file, final int tileSize) {
         try {
             return Optional.ofNullable(
                     Thumbnails.of(file.toFile())
@@ -188,16 +188,16 @@ public class TileRenderer {
      * @param file {@link Path} the file whose source resolution to check
      * @return boolean true if the source is too small to judge
      */
-    private static boolean isSourceUnreviewable(Path file) {
-        try (ImageInputStream stream = ImageIO.createImageInputStream(file.toFile())) {
+    private static boolean isSourceUnreviewable(final Path file) {
+        try (final ImageInputStream stream = ImageIO.createImageInputStream(file.toFile())) {
             if (stream == null) {
                 return false;
             }
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+            final Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
             if (!readers.hasNext()) {
                 return false;
             }
-            ImageReader reader = readers.next();
+            final ImageReader reader = readers.next();
             try {
                 reader.setInput(stream);
                 // Index 0 specifically, matching what renderRaster's own decode actually used -
@@ -235,26 +235,26 @@ public class TileRenderer {
      * @return an {@link Optional} {@link TileResult}, the resized thumbnail tile result, or empty
      *     if unavailable
      */
-    private static Optional<TileResult> exifThumbnailResult(Path file, int tileSize) {
+    private static Optional<TileResult> exifThumbnailResult(final Path file, final int tileSize) {
         try {
-            var metadata = ImageMetadataReader.readMetadata(file.toFile());
-            var directory = metadata.getFirstDirectoryOfType(ExifThumbnailDirectory.class);
+            final var metadata = ImageMetadataReader.readMetadata(file.toFile());
+            final var directory = metadata.getFirstDirectoryOfType(ExifThumbnailDirectory.class);
             // The IDE doesn't recognize metadata-extractor's own @Nullable annotation on this
             // method. The branch is real, exercised by TileRendererTest's no-EXIF-metadata fixture.
             //noinspection ConstantValue
             if (directory == null) {
                 return Optional.empty();
             }
-            Integer length = directory.getInteger(ExifThumbnailDirectory.TAG_THUMBNAIL_LENGTH);
+            final Integer length = directory.getInteger(ExifThumbnailDirectory.TAG_THUMBNAIL_LENGTH);
             if (length == null || !isPlausibleThumbnailLength(length)) {
                 return Optional.empty();
             }
-            byte[] bytes = new byte[length];
-            try (var raf = new RandomAccessFile(file.toFile(), "r")) {
+            final byte[] bytes = new byte[length];
+            try (final var raf = new RandomAccessFile(file.toFile(), "r")) {
                 raf.seek(directory.getAdjustedThumbnailOffset());
                 raf.readFully(bytes);
             }
-            BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(bytes));
+            final BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(bytes));
             return decoded == null ? Optional.empty() : resizedResult(decoded, tileSize);
         } catch (ImageProcessingException | IOException | RuntimeException _) {
             return Optional.empty();
@@ -272,7 +272,7 @@ public class TileRenderer {
      * @param length int the claimed thumbnail byte length
      * @return boolean true if the length is a plausible thumbnail size
      */
-    static boolean isPlausibleThumbnailLength(int length) {
+    static boolean isPlausibleThumbnailLength(final int length) {
         return length > 0 && length <= MAX_EXIF_THUMBNAIL_BYTES;
     }
 
@@ -283,8 +283,8 @@ public class TileRenderer {
      * @param tileSize int the target tile size in pixels
      * @return an {@link Optional} {@link TileResult}, or empty if resizing failed
      */
-    private static Optional<TileResult> resizedResult(BufferedImage source, int tileSize) {
-        boolean unreviewable = Math.max(source.getWidth(), source.getHeight()) < MIN_JUDGEABLE_DIMENSION;
+    private static Optional<TileResult> resizedResult(final BufferedImage source, final int tileSize) {
+        final boolean unreviewable = Math.max(source.getWidth(), source.getHeight()) < MIN_JUDGEABLE_DIMENSION;
         return resize(source, tileSize).map(image -> new TileResult(image, unreviewable));
     }
 
@@ -295,16 +295,16 @@ public class TileRenderer {
      * @param tileSize int the target tile size in pixels
      * @return an {@link Optional} {@link BufferedImage}, or empty if transcoding failed
      */
-    private static Optional<BufferedImage> renderSvg(Path file, int tileSize) {
+    private static Optional<BufferedImage> renderSvg(final Path file, final int tileSize) {
         // Batik's own default canvas is a fixed 400x400 square, regardless of the document's real
         // aspect ratio, whenever width/height transcoding hints aren't given. Verified directly
         // against a real viewBox-only fixture - a common, valid SVG authoring style that omits
         // width/height in favor of viewBox alone. That fixture came out visibly stretched to
         // square before this fix. Parsing the real aspect ratio ourselves and passing explicit
         // hints for both dimensions is the only way to get Batik to honor it.
-        double aspect = svgAspectRatio(file);
-        float renderSize = tileSize * 2f;
-        var transcoder = new BufferedImageTranscoder();
+        final double aspect = svgAspectRatio(file);
+        final float renderSize = tileSize * 2f;
+        final var transcoder = new BufferedImageTranscoder();
         if (aspect >= 1) {
             transcoder.addTranscodingHint(ImageTranscoder.KEY_WIDTH, renderSize);
             transcoder.addTranscodingHint(ImageTranscoder.KEY_HEIGHT, (float) (renderSize / aspect));
@@ -322,7 +322,7 @@ public class TileRenderer {
             // whole montage build.
             return Optional.empty();
         }
-        BufferedImage rendered = transcoder.image();
+        final BufferedImage rendered = transcoder.image();
         return rendered == null ? Optional.empty() : resize(rendered, tileSize);
     }
 
@@ -336,7 +336,7 @@ public class TileRenderer {
      * @param file {@link Path} the SVG file to inspect
      * @return double the document's width/height aspect ratio
      */
-    private static double svgAspectRatio(Path file) {
+    private static double svgAspectRatio(final Path file) {
         try {
             // Many real-world SVGs (Illustrator exports especially) carry the standard SVG 1.1
             // public DOCTYPE prolog. Blocking DOCTYPE outright would silently lose the
@@ -344,7 +344,7 @@ public class TileRenderer {
             // fetching instead - the actual XXE vector - keeps a normal DOCTYPE parseable while
             // staying safe against arbitrary user-supplied SVG content. This is the standard OWASP
             // XXE-prevention posture for when DOCTYPE itself can't just be disallowed.
-            var factory = DocumentBuilderFactory.newInstance();
+            final var factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
             // These are fixed SAX/JAXP feature-name strings defined by spec, never dereferenced
             // over the network - not real links, so there's no https variant to switch to.
@@ -357,20 +357,20 @@ public class TileRenderer {
                     "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
             factory.setXIncludeAware(false);
             factory.setExpandEntityReferences(false);
-            var builder = factory.newDocumentBuilder();
+            final var builder = factory.newDocumentBuilder();
             // A raster file mislabeled with an .svg extension fails XML parsing. That's an
             // expected, already-handled outcome here - it falls through to the 1.0 default. The
             // parser's default handler still logs fatal errors to stderr regardless, even though
             // the exception itself is caught, so a no-op handler silences that noise. (Passing
             // null instead of a no-op instance would just restore the noisy default handler.)
             builder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler());
-            var root = builder.parse(file.toFile()).getDocumentElement();
-            double[] viewBox = parseViewBox(root.getAttribute("viewBox"));
+            final var root = builder.parse(file.toFile()).getDocumentElement();
+            final double[] viewBox = parseViewBox(root.getAttribute("viewBox"));
             if (viewBox != null) {
                 return viewBox[0] / viewBox[1];
             }
-            double width = parseLength(root.getAttribute("width"));
-            double height = parseLength(root.getAttribute("height"));
+            final double width = parseLength(root.getAttribute("width"));
+            final double height = parseLength(root.getAttribute("height"));
             if (width > 0 && height > 0) {
                 return width / height;
             }
@@ -387,16 +387,16 @@ public class TileRenderer {
      * @param viewBox {@link String} the raw viewBox attribute value
      * @return double[] the parsed [width, height], or null if not usable
      */
-    private static double @Nullable [] parseViewBox(String viewBox) {
+    private static double @Nullable [] parseViewBox(final String viewBox) {
         if (viewBox.isBlank()) {
             return null;
         }
-        String[] parts = viewBox.trim().split("[\\s,]+");
+        final String[] parts = viewBox.trim().split("[\\s,]+");
         if (parts.length != 4) {
             return null;
         }
-        double width = Double.parseDouble(parts[2]);
-        double height = Double.parseDouble(parts[3]);
+        final double width = Double.parseDouble(parts[2]);
+        final double height = Double.parseDouble(parts[3]);
         return width > 0 && height > 0 ? new double[] {width, height} : null;
     }
 
@@ -406,14 +406,14 @@ public class TileRenderer {
      * @param length {@link String} the raw length attribute value
      * @return double the parsed absolute length, or zero if not usable
      */
-    private static double parseLength(String length) {
+    private static double parseLength(final String length) {
         // A percentage carries no absolute size on its own - it's relative to a reference
         // viewport this isolated-attribute read has no access to. Treated as unusable rather than
         // parsed as if the number before the '%' were an absolute length.
         if (length.isBlank() || length.endsWith("%")) {
             return 0;
         }
-        String numeric = length.replaceAll("[^0-9.]+$", "");
+        final String numeric = length.replaceAll("[^0-9.]+$", "");
         try {
             return numeric.isBlank() ? 0 : Double.parseDouble(numeric);
         } catch (NumberFormatException _) {
@@ -428,7 +428,7 @@ public class TileRenderer {
      * @param tileSize int the target tile size in pixels
      * @return an {@link Optional} {@link BufferedImage}, or empty if resizing failed
      */
-    private static Optional<BufferedImage> resize(BufferedImage source, int tileSize) {
+    private static Optional<BufferedImage> resize(final BufferedImage source, final int tileSize) {
         try {
             return Optional.ofNullable(Thumbnails.of(source).size(tileSize, tileSize).asBufferedImage());
         } catch (IOException | RuntimeException _) {
@@ -449,19 +449,19 @@ public class TileRenderer {
      * @param label {@link String} the label to draw
      * @return {@link BufferedImage} the placeholder image
      */
-    private static BufferedImage placeholder(int tileSize, String label) {
-        var image = new BufferedImage(tileSize, tileSize, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
+    private static BufferedImage placeholder(final int tileSize, final String label) {
+        final var image = new BufferedImage(tileSize, tileSize, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = image.createGraphics();
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(new Color(0x44, 0x44, 0x44));
             g.fillRect(0, 0, tileSize, tileSize);
             g.setColor(Color.WHITE);
             g.setFont(g.getFont().deriveFont(Font.BOLD, tileSize / 10f));
-            FontMetrics metrics = g.getFontMetrics();
-            int textWidth = metrics.stringWidth(label);
-            int x = (tileSize - textWidth) / 2;
-            int y = (tileSize - metrics.getHeight()) / 2 + metrics.getAscent();
+            final FontMetrics metrics = g.getFontMetrics();
+            final int textWidth = metrics.stringWidth(label);
+            final int x = (tileSize - textWidth) / 2;
+            final int y = (tileSize - metrics.getHeight()) / 2 + metrics.getAscent();
             g.drawString(label, x, y);
         } finally {
             g.dispose();
@@ -488,7 +488,7 @@ public class TileRenderer {
          * @return {@link BufferedImage} a new ARGB buffered image
          */
         @Override
-        public BufferedImage createImage(int width, int height) {
+        public BufferedImage createImage(final int width, final int height) {
             return new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         }
 
@@ -499,7 +499,7 @@ public class TileRenderer {
          * @param output {@link TranscoderOutput} unused, required by the Transcoder API
          */
         @Override
-        public void writeImage(BufferedImage image, TranscoderOutput output) {
+        public void writeImage(final BufferedImage image, final TranscoderOutput output) {
             this.image = image;
         }
 

@@ -66,9 +66,9 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param mediaStore {@link MediaStore} lists and checks files on disk
      * @param pathsPort {@link PathsPort} resolves the Sorted and logs roots
      */
-    public CullMontageRenderer(TileRenderer tileRenderer, MontageBuilder montageBuilder,
-            SidecarWriter sidecarWriter, PrepIndexWriter prepIndexWriter, MediaStore mediaStore,
-            PathsPort pathsPort) {
+    public CullMontageRenderer(final TileRenderer tileRenderer, final MontageBuilder montageBuilder,
+                               final SidecarWriter sidecarWriter, final PrepIndexWriter prepIndexWriter, final MediaStore mediaStore,
+                               final PathsPort pathsPort) {
         this.tileRenderer = tileRenderer;
         this.montageBuilder = montageBuilder;
         this.sidecarWriter = sidecarWriter;
@@ -91,7 +91,7 @@ public class CullMontageRenderer implements MontageRenderer {
      * @return {@link PrepDir} the resulting prep dir
      */
     @Override
-    public PrepDir build(CullScope scope, MontageConfig config) {
+    public PrepDir build(final CullScope scope, final MontageConfig config) {
         return build(scope, config, ProgressCallback.NO_OP);
     }
 
@@ -104,7 +104,7 @@ public class CullMontageRenderer implements MontageRenderer {
      * @return {@link PrepDir} the resulting prep dir
      */
     @Override
-    public PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress) {
+    public PrepDir build(final CullScope scope, final MontageConfig config, final ProgressCallback progress) {
         // NEVER never trips, so the cancellation-aware overload below always runs to completion and
         // returns non-null here - this just asserts that rather than silently trusting it.
         return Objects.requireNonNull(build(scope, config, progress, CancellationSignal.NEVER));
@@ -122,13 +122,13 @@ public class CullMontageRenderer implements MontageRenderer {
      * @return {@link PrepDir} the resulting prep dir, or null if cancelled before completion
      */
     @Override
-    public @Nullable PrepDir build(CullScope scope, MontageConfig config, ProgressCallback progress,
-            CancellationSignal cancellation) {
+    public @Nullable PrepDir build(final CullScope scope, final MontageConfig config, final ProgressCallback progress,
+                                   final CancellationSignal cancellation) {
         // Ordering happens before rendering. Batch boundaries (which photos land in montage-001 vs
         // montage-002) must be decided from the full candidate list, not from however MediaStore
         // happened to return files from disk.
-        Path photosRoot = pathsPort.sorted().resolve("Photos");
-        List<CullCandidate> ordered =
+        final Path photosRoot = pathsPort.sorted().resolve("Photos");
+        final List<CullCandidate> ordered =
                 cullScopeSelector.order(collectCandidates(photosRoot, scope), scope);
 
         // Render every candidate's tile up front and split off the unreviewable ones here, before
@@ -143,17 +143,17 @@ public class CullMontageRenderer implements MontageRenderer {
         // This is the long pass (one HEIC CLI decode per candidate), and it runs entirely before
         // clearPrepDir() below. A cancellation seen here leaves disk fully untouched - there is no
         // partial prep dir for a caller to resume from.
-        List<RenderedCandidate> rendered = new ArrayList<>();
-        for (CullCandidate candidate : ordered) {
+        final List<RenderedCandidate> rendered = new ArrayList<>();
+        for (final CullCandidate candidate : ordered) {
             if (cancellation.isCancelled()) {
                 return null;
             }
             rendered.add(new RenderedCandidate(candidate, tileRenderer.render(candidate.path(), config.tileSize())));
         }
-        List<RenderedCandidate> reviewable = rendered.stream()
+        final List<RenderedCandidate> reviewable = rendered.stream()
                 .filter(candidate -> !candidate.tile().unreviewable())
                 .toList();
-        List<Path> unreviewable = rendered.stream()
+        final List<Path> unreviewable = rendered.stream()
                 .filter(candidate -> candidate.tile().unreviewable())
                 .map(candidate -> candidate.candidate().path())
                 .toList();
@@ -163,14 +163,14 @@ public class CullMontageRenderer implements MontageRenderer {
         // reviewable this time around. A stale montage-002.* from that prior run would otherwise
         // survive alongside this run's smaller output, with nothing to indicate it's no longer
         // current.
-        String scopeTag = CullScope.tag(scope);
-        Path prepDir = pathsPort.logs().resolve("cull-prep").resolve(scopeTag);
+        final String scopeTag = CullScope.tag(scope);
+        final Path prepDir = pathsPort.logs().resolve("cull-prep").resolve(scopeTag);
         clearPrepDir(prepDir);
         mediaStore.ensureDirectory(prepDir);
 
-        int tilesPerMontage = config.tilesPerRow() * config.tilesPerRow();
-        int totalMontages = (reviewable.size() + tilesPerMontage - 1) / tilesPerMontage;
-        List<String> entries = new ArrayList<>();
+        final int tilesPerMontage = config.tilesPerRow() * config.tilesPerRow();
+        final int totalMontages = (reviewable.size() + tilesPerMontage - 1) / tilesPerMontage;
+        final List<String> entries = new ArrayList<>();
         for (int start = 0; start < reviewable.size(); start += tilesPerMontage) {
             // Checked per montage. A partial prep dir stopped here is inert: with no index.json
             // ever written, it's invisible to waitingJobs(). The next build() call for this scope
@@ -178,11 +178,11 @@ public class CullMontageRenderer implements MontageRenderer {
             if (cancellation.isCancelled()) {
                 return null;
             }
-            int end = Math.min(start + tilesPerMontage, reviewable.size());
+            final int end = Math.min(start + tilesPerMontage, reviewable.size());
             // entries.size() + 1, not (start / tilesPerMontage) + 1. Both give the same number
             // today, but entries.size() stays correct even if a future change makes montages
             // variable-sized rather than a fixed tilesPerMontage each.
-            String tag = "montage-%03d".formatted(entries.size() + 1);
+            final String tag = "montage-%03d".formatted(entries.size() + 1);
             writeMontage(prepDir, tag, reviewable.subList(start, end), config);
             entries.add(tag);
             progress.tick(entries.size(), totalMontages);
@@ -191,7 +191,7 @@ public class CullMontageRenderer implements MontageRenderer {
         // photos reports reviewable.size(), not the raw count found in scope. An unreviewable file
         // never appears in any montage or sidecar. Counting it here would make this number
         // disagree with what a caller can actually see on disk.
-        var result = new PrepDir(
+        final var result = new PrepDir(
                 scopeTag,
                 cullScopeSelector.basePath(photosRoot, scope),
                 reviewable.size(),
@@ -210,7 +210,7 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param scope {@link CullScope} the cull scope determining which directories to scan
      * @return a {@link List} of {@link CullCandidate}, the candidates found, unordered
      */
-    private List<CullCandidate> collectCandidates(Path photosRoot, CullScope scope) {
+    private List<CullCandidate> collectCandidates(final Path photosRoot, final CullScope scope) {
         return cullScopeSelector.directoriesToScan(photosRoot, scope).stream()
                 // A requested month directory may not exist (e.g. no photos ever landed there) -
                 // skipped silently rather than treated as an error.
@@ -229,20 +229,20 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param batch a {@link List} of {@link RenderedCandidate}, the rendered candidates to include
      * @param config {@link MontageConfig} the montage layout configuration
      */
-    private void writeMontage(Path prepDir, String tag, List<RenderedCandidate> batch, MontageConfig config) {
-        List<MontageBuilder.MontageTile> tiles = batch.stream()
+    private void writeMontage(final Path prepDir, final String tag, final List<RenderedCandidate> batch, final MontageConfig config) {
+        final List<MontageBuilder.MontageTile> tiles = batch.stream()
                 .map(rendered -> new MontageBuilder.MontageTile(
                         rendered.tile().image(), rendered.candidate().path().getFileName().toString()))
                 .toList();
-        BufferedImage canvas = montageBuilder.compose(tiles, config);
-        Path montageFile = prepDir.resolve(tag + ".jpg");
+        final BufferedImage canvas = montageBuilder.compose(tiles, config);
+        final Path montageFile = prepDir.resolve(tag + ".jpg");
         try {
             ImageIO.write(canvas, "jpg", montageFile.toFile());
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write montage " + montageFile, e);
         }
 
-        List<SidecarPhotoEntry> photos = batch.stream()
+        final List<SidecarPhotoEntry> photos = batch.stream()
                 .map(rendered -> new SidecarPhotoEntry(
                         rendered.candidate().path(),
                         rendered.candidate().path().getFileName().toString(),
@@ -258,7 +258,7 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param path {@link Path} the candidate file path
      * @return boolean true if the file name looks like a WhatsApp-received photo
      */
-    private static boolean isReceived(Path path) {
+    private static boolean isReceived(final Path path) {
         return RECEIVED_PATTERN.matcher(path.getFileName().toString()).find();
     }
 
@@ -268,10 +268,10 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param file {@link Path} the file to inspect
      * @return {@link Instant} the file's last-modified instant
      */
-    private static Instant mtimeOf(Path file) {
+    private static Instant mtimeOf(final Path file) {
         try {
             return Files.getLastModifiedTime(file).toInstant();
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read mtime of " + file, e);
         }
     }
@@ -284,13 +284,13 @@ public class CullMontageRenderer implements MontageRenderer {
      *
      * @param prepDir {@link Path} the prep dir to clear
      */
-    private static void clearPrepDir(Path prepDir) {
+    private static void clearPrepDir(final Path prepDir) {
         if (!Files.exists(prepDir)) {
             return;
         }
-        try (Stream<Path> walk = Files.walk(prepDir)) {
+        try (final Stream<Path> walk = Files.walk(prepDir)) {
             walk.sorted(Comparator.reverseOrder()).forEach(CullMontageRenderer::deleteQuietly);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to clear stale prep dir " + prepDir, e);
         }
     }
@@ -300,10 +300,10 @@ public class CullMontageRenderer implements MontageRenderer {
      *
      * @param path {@link Path} the file to delete
      */
-    private static void deleteQuietly(Path path) {
+    private static void deleteQuietly(final Path path) {
         try {
             Files.delete(path);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to delete " + path, e);
         }
     }

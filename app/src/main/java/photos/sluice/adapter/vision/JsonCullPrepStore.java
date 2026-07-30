@@ -66,7 +66,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
      */
     @Autowired
-    JsonCullPrepStore(ShardCodec shardCodec, SidecarReader sidecarReader) {
+    JsonCullPrepStore(final ShardCodec shardCodec, final SidecarReader sidecarReader) {
         this(shardCodec, sidecarReader, JsonMapper.builder().build());
     }
 
@@ -78,7 +78,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
      * @param mapper {@link JsonMapper} the JSON mapper used for index and merged-decisions I/O
      */
-    JsonCullPrepStore(ShardCodec shardCodec, SidecarReader sidecarReader, JsonMapper mapper) {
+    JsonCullPrepStore(final ShardCodec shardCodec, final SidecarReader sidecarReader, final JsonMapper mapper) {
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
         this.mapper = mapper;
@@ -99,14 +99,14 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @return {@link PrepDir} the parsed prep directory index
      */
     @Override
-    public PrepDir readIndex(Path prepDir) {
-        Path path = prepDir.resolve("index.json");
-        RawIndex raw;
-        try (var input = Files.newInputStream(path)) {
+    public PrepDir readIndex(final Path prepDir) {
+        final Path path = prepDir.resolve("index.json");
+        final RawIndex raw;
+        try (final var input = Files.newInputStream(path)) {
             raw = mapper.readValue(input, RawIndex.class);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read prep index " + path, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to read prep index " + path, new IOException(e));
         }
         // The IDE binds the generic result to the non-null RawIndex type and can't see that a
@@ -116,8 +116,8 @@ public class JsonCullPrepStore implements CullPrepPort {
             throw new UncheckedIOException("Prep index " + path + " is not a JSON object",
                     new IOException("null document"));
         }
-        List<String> unreviewable = raw.unreviewable() == null ? List.of() : raw.unreviewable();
-        List<String> entries = raw.entries() == null ? List.of() : raw.entries();
+        final List<String> unreviewable = raw.unreviewable() == null ? List.of() : raw.unreviewable();
+        final List<String> entries = raw.entries() == null ? List.of() : raw.entries();
         return new PrepDir(raw.scope(), Path.of(raw.basePath()), raw.photos(),
                 unreviewable.stream().map(Path::of).toList(), raw.montages(), Path.of(raw.prepDir()), entries);
     }
@@ -151,8 +151,8 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param index {@link PrepDir} the index to persist
      */
     @Override
-    public void writeIndex(Path prepDir, PrepDir index) {
-        var document = new RawIndexOut(
+    public void writeIndex(final Path prepDir, final PrepDir index) {
+        final var document = new RawIndexOut(
                 index.scope(),
                 index.basePath().toString(),
                 index.photos(),
@@ -160,12 +160,12 @@ public class JsonCullPrepStore implements CullPrepPort {
                 index.montages(),
                 index.prepDir().toString(),
                 index.entries());
-        Path path = prepDir.resolve("index.json");
-        try (var output = Files.newOutputStream(path)) {
+        final Path path = prepDir.resolve("index.json");
+        try (final var output = Files.newOutputStream(path)) {
             mapper.writeValue(output, document);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write prep index " + path, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to write prep index " + path, new IOException(e));
         }
     }
@@ -178,7 +178,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @return a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
      */
     @Override
-    public List<SidecarPhotoEntry> readSidecar(Path prepDir, String montage) {
+    public List<SidecarPhotoEntry> readSidecar(final Path prepDir, final String montage) {
         return sidecarReader.readEntries(prepDir.resolve(montage + ".json"));
     }
 
@@ -190,7 +190,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @return boolean true if the montage's shard file exists
      */
     @Override
-    public boolean hasShard(Path prepDir, String montage) {
+    public boolean hasShard(final Path prepDir, final String montage) {
         return Files.exists(prepDir.resolve(MontageNaming.shardFileFor(montage)));
     }
 
@@ -202,7 +202,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @return {@link DecisionShard} the montage's decision shard
      */
     @Override
-    public DecisionShard readShard(Path prepDir, String montage) {
+    public DecisionShard readShard(final Path prepDir, final String montage) {
         return shardCodec.read(prepDir.resolve(MontageNaming.shardFileFor(montage)));
     }
 
@@ -213,7 +213,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @return {@link DecisionShard} the parsed decision shard
      */
     @Override
-    public DecisionShard readShardFile(Path shardFile) {
+    public DecisionShard readShardFile(final Path shardFile) {
         return shardCodec.read(shardFile);
     }
 
@@ -251,18 +251,18 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param report {@link ApplyReport} the apply summary to embed
      */
     @Override
-    public void writeMergedDecisions(Path prepDir, String scope, List<Decision> decisions, ApplyReport report) {
-        var document = new MergedDecisions(
+    public void writeMergedDecisions(final Path prepDir, final String scope, final List<Decision> decisions, final ApplyReport report) {
+        final var document = new MergedDecisions(
                 scope,
                 decisions.stream().map(JsonCullPrepStore::toRaw).toList(),
                 new Summary(report.reviewed(), report.byCategory(), report.nearDupGroups(),
                         report.nearDupRejects(), report.unreviewable()));
-        Path path = prepDir.resolve("decisions.json");
-        try (var output = Files.newOutputStream(path)) {
+        final Path path = prepDir.resolve("decisions.json");
+        try (final var output = Files.newOutputStream(path)) {
             mapper.writeValue(output, document);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write merged decisions " + path, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to write merged decisions " + path, new IOException(e));
         }
     }
@@ -276,11 +276,11 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @return {@link RawDecision} the raw DTO representation
      */
     @SuppressWarnings("DuplicatedCode")
-    private static RawDecision toRaw(Decision decision) {
+    private static RawDecision toRaw(final Decision decision) {
         return switch (decision) {
-            case Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
-            case NearDupChosen c -> new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
-            case NearDupReject r -> new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
+            case final Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
+            case final NearDupChosen c -> new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
+            case final NearDupReject r -> new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
         };
     }
 }

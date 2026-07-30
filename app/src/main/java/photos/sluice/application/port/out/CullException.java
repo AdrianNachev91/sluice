@@ -16,7 +16,7 @@ public class CullException extends Exception {
      *
      * @param message {@link String} the aggregated validation problems
      */
-    public CullException(String message) {
+    public CullException(final String message) {
         super(message);
     }
 
@@ -26,7 +26,7 @@ public class CullException extends Exception {
      * @param message {@link String} the aggregated validation problems
      * @param cause {@link Throwable} the underlying cause
      */
-    public CullException(String message, Throwable cause) {
+    public CullException(final String message, final Throwable cause) {
         super(message, cause);
     }
 }

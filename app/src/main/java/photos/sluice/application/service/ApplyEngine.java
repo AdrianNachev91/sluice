@@ -74,9 +74,9 @@ public class ApplyEngine {
      * @param moveLedger {@link MoveLedger} records each move before it runs
      * @param applyPlanner {@link ApplyPlanner} validates the batch and classifies each decision
      */
-    public ApplyEngine(MediaStore mediaStore, CullPrepPort cullPrepPort, Sha256Port sha256Port,
-            HashIndexPort hashIndexPort, CullDestinations cullDestinations, MoveLedger moveLedger,
-            ApplyPlanner applyPlanner) {
+    public ApplyEngine(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final Sha256Port sha256Port,
+                       final HashIndexPort hashIndexPort, final CullDestinations cullDestinations, final MoveLedger moveLedger,
+                       final ApplyPlanner applyPlanner) {
         this.mediaStore = mediaStore;
         this.cullPrepPort = cullPrepPort;
         this.sha256Port = sha256Port;
@@ -94,7 +94,7 @@ public class ApplyEngine {
      * @return {@link ApplyReport} the applied run's summary report
      * @throws ApplyException if validation finds unresolved problems
      */
-    public ApplyReport apply(Path prepDirPath, ApplyOptions options) throws ApplyException {
+    public ApplyReport apply(final Path prepDirPath, final ApplyOptions options) throws ApplyException {
         return apply(prepDirPath, options, ProgressCallback.NO_OP);
     }
 
@@ -107,7 +107,7 @@ public class ApplyEngine {
      * @return {@link ApplyReport} the applied run's summary report
      * @throws ApplyException if validation finds unresolved problems
      */
-    public ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress) throws ApplyException {
+    public ApplyReport apply(final Path prepDirPath, final ApplyOptions options, final ProgressCallback progress) throws ApplyException {
         // NEVER never trips, so the cancellation-aware overload below always runs to completion
         // and returns non-null here - this just asserts that rather than silently trusting it.
         return Objects.requireNonNull(apply(prepDirPath, options, progress, CancellationSignal.NEVER));
@@ -132,8 +132,8 @@ public class ApplyEngine {
      * @return {@link ApplyReport} the applied run's summary report, or null if cancelled
      * @throws ApplyException if validation finds unresolved problems
      */
-    public @Nullable ApplyReport apply(Path prepDirPath, ApplyOptions options, ProgressCallback progress,
-            CancellationSignal cancellation) throws ApplyException {
+    public @Nullable ApplyReport apply(final Path prepDirPath, final ApplyOptions options, final ProgressCallback progress,
+                                       final CancellationSignal cancellation) throws ApplyException {
         final PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         // One snapshot for this whole run, taken before anything below could append to the ledger.
         final Ledger ledger = moveLedger.read(prepDirPath);
@@ -172,23 +172,23 @@ public class ApplyEngine {
         // writeMergedDecisions() and cleanupIntermediates() - must not run, so this returns null
         // outright rather than falling through to them. No decisions.json means the prep dir still
         // reads as a waiting job (see dispatchAndApply()'s own null handling).
-        for (Status status : statuses) {
+        for (final Status status : statuses) {
             if (cancellation.isCancelled()) {
                 return null;
             }
             switch (status) {
-                case Status.Pending p -> apply(p.decision(), prepDirPath, nearDupGroups, outcome);
-                case Status.Done d -> backfillSecondaryWrite(d.decision(), d.record());
+                case final Status.Pending p -> apply(p.decision(), prepDirPath, nearDupGroups, outcome);
+                case final Status.Done d -> backfillSecondaryWrite(d.decision(), d.record());
                 case Status.Skipped _ -> {} // user gave up on this decision - nothing to do
                 case Status.Unresolved _ -> {} // already aborted the whole run above
             }
             progress.tick(++current, total);
         }
-        for (FileStatus status : unreviewableStatuses) {
+        for (final FileStatus status : unreviewableStatuses) {
             if (cancellation.isCancelled()) {
                 return null;
             }
-            if (status instanceof FileStatus.Pending(Path file)) {
+            if (status instanceof FileStatus.Pending(final Path file)) {
                 recordThenMove(file, cullDestinations.unreviewableDir(file), prepDirPath);
             }
             // Done, Skipped: nothing further to do here.
@@ -217,15 +217,15 @@ public class ApplyEngine {
      * @param heals a {@link List} of {@link String} healed-shard messages to include
      * @return {@link ApplyReport} a freshly recomputed summary report
      */
-    private static ApplyReport summarize(List<Decision> decisions, PrepDir prepDir, int unreviewableCount,
-            List<String> heals) {
+    private static ApplyReport summarize(final List<Decision> decisions, final PrepDir prepDir, final int unreviewableCount,
+                                         final List<String> heals) {
         final Map<String, Integer> byCategory = new TreeMap<>();
         final Set<String> groups = new HashSet<>();
         int rejects = 0;
-        for (Decision decision : decisions) {
+        for (final Decision decision : decisions) {
             switch (decision) {
-                case Classification c -> byCategory.merge(c.category(), 1, Integer::sum);
-                case NearDupChosen c -> groups.add(c.group());
+                case final Classification c -> byCategory.merge(c.category(), 1, Integer::sum);
+                case final NearDupChosen c -> groups.add(c.group());
                 case NearDupReject _ -> rejects++;
             }
         }
@@ -241,8 +241,8 @@ public class ApplyEngine {
      * @param decision {@link Decision} the already-verified-done decision
      * @param record {@link MoveRecord} the verified move record proving it ran
      */
-    private void backfillSecondaryWrite(Decision decision, MoveRecord record) {
-        if (decision instanceof Classification c) {
+    private void backfillSecondaryWrite(final Decision decision, final MoveRecord record) {
+        if (decision instanceof final Classification c) {
             backfillClassificationWrite(c, record);
         }
     }
@@ -253,7 +253,7 @@ public class ApplyEngine {
      * @param c {@link Classification} the classification decision
      * @param record {@link MoveRecord} the verified move record
      */
-    private void backfillClassificationWrite(Classification c, MoveRecord record) {
+    private void backfillClassificationWrite(final Classification c, final MoveRecord record) {
         if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
             // HashIndexPort.contains(hash) alone isn't enough. The index legitimately allows several
             // paths under one hash (byte-identical files kept in more than one place). Another entry
@@ -282,12 +282,12 @@ public class ApplyEngine {
      * @param decisions a {@link List} of {@link Decision} the full decisions list
      * @return a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions grouped by group id
      */
-    private static Map<String, List<Decision>> groupNearDups(List<Decision> decisions) {
+    private static Map<String, List<Decision>> groupNearDups(final List<Decision> decisions) {
         final Map<String, List<Decision>> byGroup = new HashMap<>();
-        for (Decision decision : decisions) {
+        for (final Decision decision : decisions) {
             switch (decision) {
-                case NearDupChosen c -> byGroup.computeIfAbsent(c.group(), _ -> new ArrayList<>()).add(decision);
-                case NearDupReject r -> byGroup.computeIfAbsent(r.group(), _ -> new ArrayList<>()).add(decision);
+                case final NearDupChosen c -> byGroup.computeIfAbsent(c.group(), _ -> new ArrayList<>()).add(decision);
+                case final NearDupReject r -> byGroup.computeIfAbsent(r.group(), _ -> new ArrayList<>()).add(decision);
                 case Classification _ -> {
                 }
             }
@@ -303,12 +303,12 @@ public class ApplyEngine {
      * @param nearDupGroups a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions grouped by group id
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
-    private void apply(Decision decision, Path prepDirPath, Map<String, List<Decision>> nearDupGroups,
-            ApplyOutcome outcome) {
+    private void apply(final Decision decision, final Path prepDirPath, final Map<String, List<Decision>> nearDupGroups,
+                       final ApplyOutcome outcome) {
         switch (decision) {
-            case Classification c -> applyClassification(c, prepDirPath, outcome);
-            case NearDupChosen c -> applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome);
-            case NearDupReject r -> applyNearDupReject(r, prepDirPath, outcome);
+            case final Classification c -> applyClassification(c, prepDirPath, outcome);
+            case final NearDupChosen c -> applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome);
+            case final NearDupReject r -> applyNearDupReject(r, prepDirPath, outcome);
         }
     }
 
@@ -325,7 +325,7 @@ public class ApplyEngine {
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
-    private void applyClassification(Classification c, Path prepDirPath, ApplyOutcome outcome) {
+    private void applyClassification(final Classification c, final Path prepDirPath, final ApplyOutcome outcome) {
         outcome.byCategory.merge(c.category(), 1, Integer::sum);
         final Path destDir = cullDestinations.destinationDirFor(c);
         final MoveOutcome moved = recordThenMove(c.file(), destDir, prepDirPath);
@@ -352,7 +352,7 @@ public class ApplyEngine {
      * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
-    private void applyNearDupChosen(NearDupChosen c, List<Decision> group, ApplyOutcome outcome) {
+    private void applyNearDupChosen(final NearDupChosen c, final List<Decision> group, final ApplyOutcome outcome) {
         final Path dupDir = cullDestinations.duplicatesDir(c.file(), c.group());
         final Path dest = dupDir.resolve(c.file().getFileName().toString());
         if (!mediaStore.exists(dest)) {
@@ -369,7 +369,7 @@ public class ApplyEngine {
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
-    private void applyNearDupReject(NearDupReject r, Path prepDirPath, ApplyOutcome outcome) {
+    private void applyNearDupReject(final NearDupReject r, final Path prepDirPath, final ApplyOutcome outcome) {
         recordThenMove(r.file(), cullDestinations.destinationDirFor(r), prepDirPath);
         outcome.nearDupRejects++;
     }
@@ -387,7 +387,7 @@ public class ApplyEngine {
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @return {@link MoveOutcome} the resolved destination and source hash
      */
-    private MoveOutcome recordThenMove(Path source, Path destDir, Path prepDirPath) {
+    private MoveOutcome recordThenMove(final Path source, final Path destDir, final Path prepDirPath) {
         final Path dest = mediaStore.resolveDestination(source, destDir);
         final String hash = sha256Port.hash(source);
         moveLedger.recordMove(prepDirPath, source, dest, hash);
@@ -402,7 +402,7 @@ public class ApplyEngine {
      * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
      * @return {@link String} the note's text
      */
-    private static String chosenNote(NearDupChosen chosen, List<Decision> group) {
+    private static String chosenNote(final NearDupChosen chosen, final List<Decision> group) {
         final String rejects = group.stream()
                 .filter(NearDupReject.class::isInstance)
                 .map(NearDupReject.class::cast)
@@ -422,8 +422,8 @@ public class ApplyEngine {
      *
      * @param prepDirPath {@link Path} the prep directory to clean up
      */
-    private void cleanupIntermediates(Path prepDirPath) {
-        for (Path file : mediaStore.listFiles(prepDirPath)) {
+    private void cleanupIntermediates(final Path prepDirPath) {
+        for (final Path file : mediaStore.listFiles(prepDirPath)) {
             if (MontageNaming.isMontageImage(file.getFileName().toString())) {
                 mediaStore.delete(file);
             }

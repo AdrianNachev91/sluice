@@ -34,7 +34,7 @@ public class CullDestinations {
      *
      * @param pathsPort {@link PathsPort} resolves the library, review, duplicates and unreviewable roots
      */
-    public CullDestinations(PathsPort pathsPort) {
+    public CullDestinations(final PathsPort pathsPort) {
         this.pathsPort = pathsPort;
     }
 
@@ -46,12 +46,12 @@ public class CullDestinations {
      * @param decision {@link Decision} the decision to resolve a destination directory for
      * @return {@link Path} the destination directory
      */
-    Path destinationDirFor(Decision decision) {
+    Path destinationDirFor(final Decision decision) {
         return switch (decision) {
-            case Classification c -> c.category().equals(FUNNY_CATEGORY)
+            case final Classification c -> c.category().equals(FUNNY_CATEGORY)
                     ? pathsPort.library().resolve("Funny")
                     : pathsPort.review().resolve(c.category());
-            case NearDupReject r -> duplicatesDir(r.file(), r.group());
+            case final NearDupReject r -> duplicatesDir(r.file(), r.group());
             case NearDupChosen _ -> throw new IllegalStateException(
                     "NearDupChosen has no move destination - a chosen keeper is copied, never moved");
         };
@@ -64,7 +64,7 @@ public class CullDestinations {
      * @param group {@link String} the near-dup group id
      * @return {@link Path} the group's duplicates folder
      */
-    Path duplicatesDir(Path file, String group) {
+    Path duplicatesDir(final Path file, final String group) {
         return pathsPort.duplicates().resolve(yearMonthOf(file) + "_" + group);
     }
 
@@ -76,7 +76,7 @@ public class CullDestinations {
      * @param file {@link Path} the unreviewable file
      * @return {@link Path} its destination folder under the unreviewable root
      */
-    Path unreviewableDir(Path file) {
+    Path unreviewableDir(final Path file) {
         final String[] yearMonth = yearMonthOf(file).split("-", 2);
         return pathsPort.unreviewable().resolve(yearMonth[0]).resolve(yearMonth[1]);
     }
@@ -91,7 +91,7 @@ public class CullDestinations {
      * @param file {@link Path} the file to derive year-month from
      * @return {@link String} the "yyyy-MM" string, or an undated marker
      */
-    private static String yearMonthOf(Path file) {
+    private static String yearMonthOf(final Path file) {
         final Path monthDir = file.getParent();
         final Path yearDir = monthDir == null ? null : monthDir.getParent();
         if (yearDir == null) {
@@ -110,7 +110,7 @@ public class CullDestinations {
      * @param slot int the 1-based candidate slot
      * @return {@link String} the candidate file name
      */
-    static String candidateName(String baseName, int slot) {
+    static String candidateName(final String baseName, final int slot) {
         if (slot == 1) {
             return baseName;
         }

@@ -17,7 +17,7 @@ class PathsConfigValidationTest {
             .withUserConfiguration(TestConfig.class);
 
     @Test
-    void blankRepoRootFailsWithActionableMessage(@TempDir Path libraryRoot, @TempDir Path inbox) {
+    void blankRepoRootFailsWithActionableMessage(@TempDir final Path libraryRoot, @TempDir final Path inbox) {
         runner.withPropertyValues(
                 "sluice.paths.library-root=" + libraryRoot,
                 "sluice.paths.inbox=" + inbox
@@ -33,8 +33,8 @@ class PathsConfigValidationTest {
 
     @Test
     void nonExistentDirectoryFailsWithDistinctMessage(
-            @TempDir Path repoParent, @TempDir Path libraryRoot, @TempDir Path inbox) {
-        Path missingRepoRoot = repoParent.resolve("does-not-exist");
+            @TempDir final Path repoParent, @TempDir final Path libraryRoot, @TempDir final Path inbox) {
+        final Path missingRepoRoot = repoParent.resolve("does-not-exist");
         runner.withPropertyValues(
                 "sluice.paths.repo-root=" + missingRepoRoot,
                 "sluice.paths.library-root=" + libraryRoot,
@@ -51,7 +51,7 @@ class PathsConfigValidationTest {
 
     @Test
     void allExistingDirectoriesStartCleanly(
-            @TempDir Path repoRoot, @TempDir Path libraryRoot, @TempDir Path inbox) {
+            @TempDir final Path repoRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox) {
         runner.withPropertyValues(
                 "sluice.paths.repo-root=" + repoRoot,
                 "sluice.paths.library-root=" + libraryRoot,

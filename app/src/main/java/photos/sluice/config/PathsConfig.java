@@ -26,7 +26,7 @@ public class PathsConfig implements PathsPort {
      *
      * @param properties {@link PathsProperties} bound path properties
      */
-    public PathsConfig(PathsProperties properties) {
+    public PathsConfig(final PathsProperties properties) {
         this.properties = properties;
     }
 
@@ -125,7 +125,7 @@ public class PathsConfig implements PathsPort {
      * @param raw {@link String} the raw path string
      * @return {@link Path} the absolute normalized path
      */
-    private static Path resolve(String raw) {
+    private static Path resolve(final String raw) {
         return Path.of(raw).toAbsolutePath().normalize();
     }
 
@@ -135,12 +135,12 @@ public class PathsConfig implements PathsPort {
      * @param property {@link String} the config property name, for the error message
      * @param raw {@link String} the raw configured path value
      */
-    private static void requireExistingDirectory(String property, @Nullable String raw) {
+    private static void requireExistingDirectory(final String property, final @Nullable String raw) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalStateException(
                     property + " is not configured. Set it in Settings or via the " + property + " property.");
         }
-        Path path = resolve(raw);
+        final Path path = resolve(raw);
         if (!Files.isDirectory(path)) {
             throw new IllegalStateException(
                     property + " (" + path + ") does not exist. Set it in Settings or via the "

@@ -45,21 +45,21 @@ public class MontageBuilder {
      * @param config {@link MontageConfig} the montage grid configuration
      * @return {@link BufferedImage} the composed montage image
      */
-    public BufferedImage compose(List<MontageTile> tiles, MontageConfig config) {
+    public BufferedImage compose(final List<MontageTile> tiles, final MontageConfig config) {
         if (tiles.isEmpty()) {
             throw new IllegalArgumentException("cannot compose a montage from an empty tile list");
         }
-        int tileSize = config.tileSize();
-        int tilesPerRow = config.tilesPerRow();
-        int labelHeight = labelBandHeight();
-        int cellWidth = tileSize + 2 * CELL_PADDING;
-        int cellHeight = tileSize + labelHeight + 2 * CELL_PADDING;
-        int rows = ceilDiv(tiles.size(), tilesPerRow);
-        int canvasWidth = tilesPerRow * cellWidth;
-        int canvasHeight = rows * cellHeight;
+        final int tileSize = config.tileSize();
+        final int tilesPerRow = config.tilesPerRow();
+        final int labelHeight = labelBandHeight();
+        final int cellWidth = tileSize + 2 * CELL_PADDING;
+        final int cellHeight = tileSize + labelHeight + 2 * CELL_PADDING;
+        final int rows = ceilDiv(tiles.size(), tilesPerRow);
+        final int canvasWidth = tilesPerRow * cellWidth;
+        final int canvasHeight = rows * cellHeight;
 
-        var canvas = new BufferedImage(canvasWidth, canvasHeight, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = canvas.createGraphics();
+        final var canvas = new BufferedImage(canvasWidth, canvasHeight, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = canvas.createGraphics();
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(BACKGROUND);
@@ -67,8 +67,8 @@ public class MontageBuilder {
             // The canvas is pre-filled with BACKGROUND above, so a partial last row's unused cells
             // need no special-casing - they stay background simply because nothing draws there.
             for (int i = 0; i < tiles.size(); i++) {
-                int row = i / tilesPerRow;
-                int col = i % tilesPerRow;
+                final int row = i / tilesPerRow;
+                final int col = i % tilesPerRow;
                 drawCell(g, tiles.get(i), col * cellWidth, row * cellHeight, cellWidth, cellHeight, tileSize);
             }
         } finally {
@@ -92,24 +92,24 @@ public class MontageBuilder {
      * @param tileSize int the tile's own image size
      */
     private static void drawCell(
-            Graphics2D parent, MontageTile tile, int x, int y, int width, int height, int tileSize) {
-        var cell = (Graphics2D) parent.create(x, y, width, height);
+            final Graphics2D parent, final MontageTile tile, final int x, final int y, final int width, final int height, final int tileSize) {
+        final var cell = (Graphics2D) parent.create(x, y, width, height);
         try {
             cell.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            BufferedImage image = tile.image();
+            final BufferedImage image = tile.image();
             // TileRenderer guarantees image.getWidth()/getHeight() <= tileSize, so these are always
             // >= CELL_PADDING - the image itself never needs clipping, only the label can overflow.
-            int imgX = CELL_PADDING + (tileSize - image.getWidth()) / 2;
-            int imgY = CELL_PADDING + (tileSize - image.getHeight()) / 2;
+            final int imgX = CELL_PADDING + (tileSize - image.getWidth()) / 2;
+            final int imgY = CELL_PADDING + (tileSize - image.getHeight()) / 2;
             cell.drawImage(image, imgX, imgY, null);
 
             cell.setColor(LABEL_COLOR);
             cell.setFont(cell.getFont().deriveFont(Font.PLAIN, LABEL_FONT_SIZE));
-            FontMetrics metrics = cell.getFontMetrics();
-            String label = tile.label();
-            int textWidth = metrics.stringWidth(label);
-            int textX = CELL_PADDING + (tileSize - textWidth) / 2;
-            int textY = CELL_PADDING + tileSize + LABEL_VERTICAL_MARGIN + metrics.getAscent();
+            final FontMetrics metrics = cell.getFontMetrics();
+            final String label = tile.label();
+            final int textWidth = metrics.stringWidth(label);
+            final int textX = CELL_PADDING + (tileSize - textWidth) / 2;
+            final int textY = CELL_PADDING + tileSize + LABEL_VERTICAL_MARGIN + metrics.getAscent();
             cell.drawString(label, textX, textY);
         } finally {
             cell.dispose();
@@ -125,8 +125,8 @@ public class MontageBuilder {
      * @return int the label band height in pixels
      */
     static int labelBandHeight() {
-        var probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = probe.createGraphics();
+        final var probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = probe.createGraphics();
         try {
             g.setFont(g.getFont().deriveFont(Font.PLAIN, LABEL_FONT_SIZE));
             return g.getFontMetrics().getHeight() + 2 * LABEL_VERTICAL_MARGIN;
@@ -142,7 +142,7 @@ public class MontageBuilder {
      * @param b int the divisor
      * @return int the ceiling of a divided by b
      */
-    private static int ceilDiv(int a, int b) {
+    private static int ceilDiv(final int a, final int b) {
         return (a + b - 1) / b;
     }
 }

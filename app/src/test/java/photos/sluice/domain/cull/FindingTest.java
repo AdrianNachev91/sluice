@@ -40,7 +40,7 @@ class FindingTest {
 
     @Test
     void corruptSidecarDescribesTheMontageAndCarriesTheChoiceRemedy() {
-        var finding = new CorruptSidecar("montage-001");
+        final var finding = new CorruptSidecar("montage-001");
 
         assertThat(finding.describe()).isEqualTo("montage-001: sidecar unreadable or missing");
         assertThat(finding.remedy()).isEqualTo(Finding.Remedy.CHOICE);

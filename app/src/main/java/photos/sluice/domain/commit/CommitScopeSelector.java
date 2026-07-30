@@ -26,10 +26,10 @@ public final class CommitScopeSelector {
      * @param scope {@link CommitScope} the commit scope to check against
      * @return boolean true if the path is in scope
      */
-    public boolean isInScope(String relativePath, CommitScope scope) {
+    public boolean isInScope(final String relativePath, final CommitScope scope) {
         return switch (scope) {
             case All() -> true;
-            case Year(int year, MonthRange months) -> matchesYear(relativePath, year, months);
+            case Year(final int year, final MonthRange months) -> matchesYear(relativePath, year, months);
         };
     }
 
@@ -41,15 +41,15 @@ public final class CommitScopeSelector {
      * @param months {@link MonthRange} optional month range narrowing the year
      * @return boolean true if the path's date falls within the year and month range
      */
-    private static boolean matchesYear(String relativePath, int year, @Nullable MonthRange months) {
-        Matcher matcher = YEAR_MONTH.matcher(relativePath);
+    private static boolean matchesYear(final String relativePath, final int year, final @Nullable MonthRange months) {
+        final Matcher matcher = YEAR_MONTH.matcher(relativePath);
         if (!matcher.find()) {
             // No YYYY/MM segment at all (e.g. Funny) - only in scope via the All branch above,
             // never via a specific-year scope.
             return false;
         }
-        int foundYear = Integer.parseInt(matcher.group(1));
-        int foundMonth = Integer.parseInt(matcher.group(2));
+        final int foundYear = Integer.parseInt(matcher.group(1));
+        final int foundMonth = Integer.parseInt(matcher.group(2));
         return foundYear == year && (months == null || months.includes(foundMonth));
     }
 }

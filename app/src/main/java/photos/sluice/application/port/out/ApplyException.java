@@ -27,7 +27,7 @@ public class ApplyException extends Exception {
      * @param message {@link String} the aggregated validation problems
      * @param findings a {@link List} of {@link Finding} the structured findings behind the message
      */
-    public ApplyException(String message, List<Finding> findings) {
+    public ApplyException(final String message, final List<Finding> findings) {
         super(message);
         this.findings = List.copyOf(findings);
     }

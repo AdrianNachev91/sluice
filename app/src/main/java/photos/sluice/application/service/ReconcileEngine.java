@@ -58,9 +58,9 @@ public class ReconcileEngine {
      * @param moveLedger {@link MoveLedger} appends the reconstructed records
      * @param applyPlanner {@link ApplyPlanner} validates the shard contract before any rebuild
      */
-    public ReconcileEngine(MediaStore mediaStore, CullPrepPort cullPrepPort, Sha256Port sha256Port,
-            DisasterDrawer disasterDrawer, CullDestinations cullDestinations, MoveLedger moveLedger,
-            ApplyPlanner applyPlanner) {
+    public ReconcileEngine(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final Sha256Port sha256Port,
+                           final DisasterDrawer disasterDrawer, final CullDestinations cullDestinations, final MoveLedger moveLedger,
+                           final ApplyPlanner applyPlanner) {
         this.mediaStore = mediaStore;
         this.cullPrepPort = cullPrepPort;
         this.sha256Port = sha256Port;
@@ -82,7 +82,7 @@ public class ReconcileEngine {
      * @return {@link ReconcileReport} what the sweep found
      * @throws ApplyException if the shard contract itself does not validate cleanly
      */
-    public ReconcileReport reconcile(Path prepDirPath) throws ApplyException {
+    public ReconcileReport reconcile(final Path prepDirPath) throws ApplyException {
         final PrepDir prepDir = cullPrepPort.readIndex(prepDirPath);
         // Snapshot taken before the ledger gets filed away below - see Ledger's own Javadoc. Once
         // filed, a read returns empty and an already-resolved overlap would wrongly revert to
@@ -116,7 +116,7 @@ public class ReconcileEngine {
      * @param decision {@link Decision} the decision to reconcile
      * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
      */
-    private void reconcileDecision(Decision decision, ReconcileSweep sweep) {
+    private void reconcileDecision(final Decision decision, final ReconcileSweep sweep) {
         if (decision instanceof NearDupChosen) {
             if (mediaStore.exists(decision.file())) {
                 sweep.stillPending++;
@@ -137,7 +137,7 @@ public class ReconcileEngine {
      * @param destDir {@link Path} the directory a real apply would have moved file into
      * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
      */
-    private void reconcileFile(Path file, Path destDir, ReconcileSweep sweep) {
+    private void reconcileFile(final Path file, final Path destDir, final ReconcileSweep sweep) {
         if (mediaStore.exists(file)) {
             sweep.stillPending++;
             return;
@@ -164,9 +164,9 @@ public class ReconcileEngine {
      *
      * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
      */
-    private void resolvePendingMoves(ReconcileSweep sweep) {
+    private void resolvePendingMoves(final ReconcileSweep sweep) {
         final Map<String, List<PendingMove>> groups = new LinkedHashMap<>();
-        for (PendingMove move : sweep.pendingMoves) {
+        for (final PendingMove move : sweep.pendingMoves) {
             final String key = move.destDir() + MoveLedger.RECORD_DELIMITER + move.file().getFileName();
             groups.computeIfAbsent(key, _ -> new ArrayList<>()).add(move);
         }
@@ -180,7 +180,7 @@ public class ReconcileEngine {
      * @param claimants a {@link List} of {@link PendingMove}, this group's claimants in decision order
      * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
      */
-    private void resolveGroup(List<PendingMove> claimants, ReconcileSweep sweep) {
+    private void resolveGroup(final List<PendingMove> claimants, final ReconcileSweep sweep) {
         final PendingMove first = claimants.getFirst();
         final List<Path> candidates = contiguousCandidates(first.destDir(), first.file().getFileName().toString());
         if (candidates.size() != claimants.size()) {
@@ -205,7 +205,7 @@ public class ReconcileEngine {
      * @param baseName {@link String} the file's own original name
      * @return a {@link List} of {@link Path}, every contiguous candidate found, in slot order
      */
-    private List<Path> contiguousCandidates(Path destDir, String baseName) {
+    private List<Path> contiguousCandidates(final Path destDir, final String baseName) {
         final var candidates = new ArrayList<Path>();
         int slot = 1;
         Path candidate = destDir.resolve(CullDestinations.candidateName(baseName, slot));
@@ -242,7 +242,7 @@ public class ReconcileEngine {
         int reconstructed;
         int stillPending;
 
-        ReconcileSweep(Path prepDirPath, Path moveRecordLog) {
+        ReconcileSweep(final Path prepDirPath, final Path moveRecordLog) {
             this.prepDirPath = prepDirPath;
             this.moveRecordLog = moveRecordLog;
         }

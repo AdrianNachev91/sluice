@@ -25,7 +25,7 @@ public final class JobHandle<T> {
      *
      * @param result a {@link CompletableFuture} of T the job's in-flight result
      */
-    JobHandle(CompletableFuture<T> result) {
+    JobHandle(final CompletableFuture<T> result) {
         this.result = result;
     }
 

@@ -36,8 +36,8 @@ public class AppConfig {
      * @return {@link DateResolver} the composed date resolver
      */
     @Bean
-    public DateResolver dateResolver(TakeoutJsonSource sidecarSource, ExifSource exifSource,
-            FilenameSource filenameSource, MtimeSource mtimeSource) {
+    public DateResolver dateResolver(final TakeoutJsonSource sidecarSource, final ExifSource exifSource,
+                                     final FilenameSource filenameSource, final MtimeSource mtimeSource) {
         return new DateResolver(sidecarSource, exifSource, filenameSource, mtimeSource);
     }
 
@@ -50,7 +50,7 @@ public class AppConfig {
      * @return {@link RescueDateResolver} the composed rescue date resolver
      */
     @Bean
-    public RescueDateResolver rescueDateResolver(ExifSource exifSource, FilenameSource filenameSource) {
+    public RescueDateResolver rescueDateResolver(final ExifSource exifSource, final FilenameSource filenameSource) {
         return new RescueDateResolver(exifSource, filenameSource);
     }
 
@@ -61,7 +61,7 @@ public class AppConfig {
      * @return {@link CsvLibraryHashIndex} the CSV library hash index bean
      */
     @Bean
-    public CsvLibraryHashIndex csvLibraryHashIndex(PathsConfig pathsConfig) {
+    public CsvLibraryHashIndex csvLibraryHashIndex(final PathsConfig pathsConfig) {
         return new CsvLibraryHashIndex(pathsConfig.logs().resolve("library-hashes.csv"));
     }
 
@@ -72,7 +72,7 @@ public class AppConfig {
      * @return {@link CliHeifDecoder} the CLI HEIF decoder bean
      */
     @Bean
-    public CliHeifDecoder cliHeifDecoder(ImagingConfig imagingConfig) {
+    public CliHeifDecoder cliHeifDecoder(final ImagingConfig imagingConfig) {
         return new CliHeifDecoder(imagingConfig.heifDecoderCommand());
     }
 
@@ -85,7 +85,7 @@ public class AppConfig {
      * @return {@link photos.sluice.domain.cull.MontageConfig} the domain montage config
      */
     @Bean
-    public photos.sluice.domain.cull.MontageConfig montageConfig(MontageConfig properties) {
+    public photos.sluice.domain.cull.MontageConfig montageConfig(final MontageConfig properties) {
         return new photos.sluice.domain.cull.MontageConfig(properties.tileSize(), properties.tilesPerRow());
     }
 }

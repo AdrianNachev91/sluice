@@ -31,8 +31,8 @@ public class DateResolver {
      * @param filenameSource {@link DateSource} resolves from the filename pattern
      * @param mtimeSource {@link DateSource} resolves from filesystem mtime
      */
-    public DateResolver(DateSource sidecarSource, DateSource exifSource, DateSource filenameSource,
-            DateSource mtimeSource) {
+    public DateResolver(final DateSource sidecarSource, final DateSource exifSource, final DateSource filenameSource,
+                        final DateSource mtimeSource) {
         this.sidecarSource = sidecarSource;
         this.exifSource = exifSource;
         this.filenameSource = filenameSource;
@@ -46,8 +46,8 @@ public class DateResolver {
      * @param sidecar {@link TakeoutSidecar} the file's Takeout sidecar, if any
      * @return {@link DateResult} the resolved date, confidence, and source
      */
-    public DateResult resolve(MediaFile file, TakeoutSidecar sidecar) {
-        DateResult result = tryResolve(sidecarSource, "sidecar", Confidence.TRUSTED, file, sidecar)
+    public DateResult resolve(final MediaFile file, final TakeoutSidecar sidecar) {
+        final DateResult result = tryResolve(sidecarSource, "sidecar", Confidence.TRUSTED, file, sidecar)
                 .or(() -> tryResolve(exifSource, "exif", Confidence.TRUSTED, file, sidecar))
                 .or(() -> tryResolve(filenameSource, "filename", Confidence.TRUSTED, file, sidecar))
                 .or(() -> tryResolve(mtimeSource, "mtime", Confidence.LOW, file, sidecar))
@@ -71,8 +71,8 @@ public class DateResolver {
      * @param sidecar {@link TakeoutSidecar} the file's Takeout sidecar, if any
      * @return an {@link Optional} {@link DateResult}, if the source resolved a date
      */
-    private static Optional<DateResult> tryResolve(DateSource source, String name, Confidence confidence,
-            MediaFile file, TakeoutSidecar sidecar) {
+    private static Optional<DateResult> tryResolve(final DateSource source, final String name, final Confidence confidence,
+                                                   final MediaFile file, final TakeoutSidecar sidecar) {
         return source.resolve(file, sidecar).map(when -> new DateResult(when, confidence, name));
     }
 

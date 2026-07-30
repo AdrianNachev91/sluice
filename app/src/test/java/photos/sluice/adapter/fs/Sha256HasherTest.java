@@ -21,16 +21,16 @@ class Sha256HasherTest {
     private final Sha256Hasher hasher = new Sha256Hasher();
 
     @Test
-    void hashesFixtureFileToKnownUpperHexSha256(@TempDir Path dir) throws IOException {
-        Path file = dir.resolve("fixture.txt");
+    void hashesFixtureFileToKnownUpperHexSha256(@TempDir final Path dir) throws IOException {
+        final Path file = dir.resolve("fixture.txt");
         Files.writeString(file, FIXTURE_CONTENT, StandardCharsets.UTF_8);
 
         assertThat(hasher.hash(file)).isEqualTo(FIXTURE_SHA256);
     }
 
     @Test
-    void missingFileWrapsIoExceptionUnchecked(@TempDir Path dir) {
-        Path missing = dir.resolve("does-not-exist.txt");
+    void missingFileWrapsIoExceptionUnchecked(@TempDir final Path dir) {
+        final Path missing = dir.resolve("does-not-exist.txt");
 
         assertThatThrownBy(() -> hasher.hash(missing)).isInstanceOf(UncheckedIOException.class);
     }

@@ -40,18 +40,18 @@ class CullMontageRendererTest {
     private static final int PHOTO_HEIGHT = 600;
 
     @Test
-    void buildBatchesIntoMultipleMontagesComputesReceivedFlagsAndDropsUnreviewableFiles(@TempDir Path root)
+    void buildBatchesIntoMultipleMontagesComputesReceivedFlagsAndDropsUnreviewableFiles(@TempDir final Path root)
             throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
-        Path a = writePhoto(juneDir, "IMG_20190601_100000.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        Path b = writePhoto(juneDir, "IMG-20190602-WA0001.jpg", Instant.parse("2019-06-02T10:00:00Z"));
-        Path c = writePhoto(juneDir, "IMG_20190603_100000.jpg", Instant.parse("2019-06-03T10:00:00Z"));
-        Path d = writePhoto(juneDir, "IMG_20190604_100000.jpg", Instant.parse("2019-06-04T10:00:00Z"));
-        Path e = writePhoto(juneDir, "IMG_20190605_100000.jpg", Instant.parse("2019-06-05T10:00:00Z"));
-        Path corrupt = writeCorruptFile(juneDir, "corrupt.jpg", Instant.parse("2019-06-06T10:00:00Z"));
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        final Path a = writePhoto(juneDir, "IMG_20190601_100000.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path b = writePhoto(juneDir, "IMG-20190602-WA0001.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final Path c = writePhoto(juneDir, "IMG_20190603_100000.jpg", Instant.parse("2019-06-03T10:00:00Z"));
+        final Path d = writePhoto(juneDir, "IMG_20190604_100000.jpg", Instant.parse("2019-06-04T10:00:00Z"));
+        final Path e = writePhoto(juneDir, "IMG_20190605_100000.jpg", Instant.parse("2019-06-05T10:00:00Z"));
+        final Path corrupt = writeCorruptFile(juneDir, "corrupt.jpg", Instant.parse("2019-06-06T10:00:00Z"));
 
-        PrepDir result = renderer(pathsConfig)
+        final PrepDir result = renderer(pathsConfig)
                 .build(new CullScope.Year(2019, null), new MontageConfig(64, 2));
 
         assertThat(result.scope()).isEqualTo("2019");
@@ -61,13 +61,13 @@ class CullMontageRendererTest {
         assertThat(result.montages()).isEqualTo(2);
         assertThat(result.entries()).containsExactly("montage-001", "montage-002");
 
-        Path montage1 = result.prepDir().resolve("montage-001.jpg");
-        Path montage2 = result.prepDir().resolve("montage-002.jpg");
+        final Path montage1 = result.prepDir().resolve("montage-001.jpg");
+        final Path montage2 = result.prepDir().resolve("montage-002.jpg");
         assertThat(decode(montage1).getWidth()).isPositive();
         assertThat(decode(montage2).getWidth()).isPositive();
         assertThat(Files.exists(result.prepDir().resolve("montage-003.jpg"))).isFalse();
 
-        String sidecar1 = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
+        final String sidecar1 = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
         assertThat(sidecar1).isEqualToIgnoringWhitespace("""
                 {
                   "montage": "%s",
@@ -80,7 +80,7 @@ class CullMontageRendererTest {
                 }
                 """.formatted(jsonEscaped(montage1), jsonEscaped(a), jsonEscaped(b), jsonEscaped(c), jsonEscaped(d)));
 
-        String sidecar2 = Files.readString(result.prepDir().resolve("montage-002.json"), StandardCharsets.UTF_8);
+        final String sidecar2 = Files.readString(result.prepDir().resolve("montage-002.json"), StandardCharsets.UTF_8);
         assertThat(sidecar2).isEqualToIgnoringWhitespace("""
                 {
                   "montage": "%s",
@@ -91,7 +91,7 @@ class CullMontageRendererTest {
                 """.formatted(jsonEscaped(montage2), jsonEscaped(e)));
         assertThat(sidecar1 + sidecar2).doesNotContain("corrupt.jpg");
 
-        String index = Files.readString(result.prepDir().resolve("index.json"), StandardCharsets.UTF_8);
+        final String index = Files.readString(result.prepDir().resolve("index.json"), StandardCharsets.UTF_8);
         assertThat(index).isEqualToIgnoringWhitespace("""
                 {
                   "scope": "2019",
@@ -106,79 +106,79 @@ class CullMontageRendererTest {
     }
 
     @Test
-    void yearScopeNarrowedToSpecificMonthsExcludesOtherMonths(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
-        Path julyDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("07");
+    void yearScopeNarrowedToSpecificMonthsExcludesOtherMonths(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        final Path julyDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("07");
         writePhoto(juneDir, "june.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         writePhoto(julyDir, "july.jpg", Instant.parse("2019-07-01T00:00:00Z"));
 
-        PrepDir result = renderer(pathsConfig)
+        final PrepDir result = renderer(pathsConfig)
                 .build(new CullScope.Year(2019, List.of(6)), MontageConfig.defaults());
 
         assertThat(result.photos()).isEqualTo(1);
         assertThat(result.unreviewable()).isEmpty();
-        String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
+        final String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
         assertThat(sidecar).contains("june.jpg").doesNotContain("july.jpg");
     }
 
     @Test
-    void aRequestedMonthDirectoryThatDoesNotExistIsSkippedRatherThanThrowing(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+    void aRequestedMonthDirectoryThatDoesNotExistIsSkippedRatherThanThrowing(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "june.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         // 2019/07 is never created on disk.
 
-        PrepDir result = renderer(pathsConfig)
+        final PrepDir result = renderer(pathsConfig)
                 .build(new CullScope.Year(2019, List.of(6, 7)), MontageConfig.defaults());
 
         assertThat(result.photos()).isEqualTo(1);
     }
 
     @Test
-    void oldestNPicksTheTrueGlobalOldestAcrossDifferentYears(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path photosRoot = pathsConfig.sorted().resolve("Photos");
+    void oldestNPicksTheTrueGlobalOldestAcrossDifferentYears(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path photosRoot = pathsConfig.sorted().resolve("Photos");
         writePhoto(photosRoot.resolve("2018").resolve("01"), "oldest.jpg", Instant.parse("2018-01-01T00:00:00Z"));
         writePhoto(photosRoot.resolve("2019").resolve("06"), "middle.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         writePhoto(photosRoot.resolve("2020").resolve("01"), "newest.jpg", Instant.parse("2020-01-01T00:00:00Z"));
 
-        PrepDir result = renderer(pathsConfig).build(new CullScope.OldestN(2), new MontageConfig(64, 2));
+        final PrepDir result = renderer(pathsConfig).build(new CullScope.OldestN(2), new MontageConfig(64, 2));
 
         assertThat(result.scope()).isEqualTo("oldest-2");
         assertThat(result.basePath()).isEqualTo(photosRoot);
         assertThat(result.photos()).isEqualTo(2);
-        String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
+        final String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
         assertThat(sidecar).contains("oldest.jpg").contains("middle.jpg").doesNotContain("newest.jpg");
     }
 
     @Test
     void oldestNCapsBeforeTheUnreviewableFilterSoAnUnreviewableFileWithinTheWindowIsNotBackfilled(
-            @TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
-        Path oldestCorrupt = writeCorruptFile(juneDir, "oldest-corrupt.jpg", Instant.parse("2019-06-01T00:00:00Z"));
+            @TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        final Path oldestCorrupt = writeCorruptFile(juneDir, "oldest-corrupt.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         writePhoto(juneDir, "second-oldest.jpg", Instant.parse("2019-06-02T00:00:00Z"));
         writePhoto(juneDir, "third-oldest.jpg", Instant.parse("2019-06-03T00:00:00Z"));
 
-        PrepDir result = renderer(pathsConfig).build(new CullScope.OldestN(2), MontageConfig.defaults());
+        final PrepDir result = renderer(pathsConfig).build(new CullScope.OldestN(2), MontageConfig.defaults());
 
         // The 2 oldest by mtime are oldest-corrupt and second-oldest. Capping to n happens before
         // the unreviewable filter, so the corrupt file's slot is dropped rather than backfilled from
         // third-oldest, even though third-oldest would itself be reviewable.
         assertThat(result.photos()).isEqualTo(1);
         assertThat(result.unreviewable()).containsExactly(oldestCorrupt);
-        String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
+        final String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
         assertThat(sidecar).contains("second-oldest.jpg").doesNotContain("third-oldest.jpg");
     }
 
     @Test
-    void aScopeWithNoReviewablePhotosProducesAnEmptyPrepDirWithoutThrowing(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
-        Path corrupt = writeCorruptFile(juneDir, "corrupt.jpg", Instant.parse("2019-06-01T00:00:00Z"));
+    void aScopeWithNoReviewablePhotosProducesAnEmptyPrepDirWithoutThrowing(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        final Path corrupt = writeCorruptFile(juneDir, "corrupt.jpg", Instant.parse("2019-06-01T00:00:00Z"));
 
-        PrepDir result = renderer(pathsConfig)
+        final PrepDir result = renderer(pathsConfig)
                 .build(new CullScope.Year(2019, List.of(6)), MontageConfig.defaults());
 
         assertThat(result.photos()).isEqualTo(0);
@@ -190,42 +190,42 @@ class CullMontageRendererTest {
     }
 
     @Test
-    void receivedFlagMatchesTheWhatsAppFilenamePatternCaseInsensitively(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+    void receivedFlagMatchesTheWhatsAppFilenamePatternCaseInsensitively(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "img-20190601-wa0001.jpg", Instant.parse("2019-06-01T00:00:00Z"));
 
-        PrepDir result = renderer(pathsConfig)
+        final PrepDir result = renderer(pathsConfig)
                 .build(new CullScope.Year(2019, List.of(6)), MontageConfig.defaults());
 
-        String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
+        final String sidecar = Files.readString(result.prepDir().resolve("montage-001.json"), StandardCharsets.UTF_8);
         assertThat(sidecar).contains("\"received\":true");
     }
 
     @Test
-    void rerunningWithFewerPhotosClearsStaleMontageFilesFromAPriorLargerRun(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
-        List<Path> files = List.of(
+    void rerunningWithFewerPhotosClearsStaleMontageFilesFromAPriorLargerRun(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        final List<Path> files = List.of(
                 writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z")),
                 writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z")),
                 writePhoto(juneDir, "c.jpg", Instant.parse("2019-06-03T00:00:00Z")),
                 writePhoto(juneDir, "d.jpg", Instant.parse("2019-06-04T00:00:00Z")),
                 writePhoto(juneDir, "e.jpg", Instant.parse("2019-06-05T00:00:00Z")));
-        var scope = new CullScope.Year(2019, null);
-        var config = new MontageConfig(64, 2);
-        CullMontageRenderer renderer = renderer(pathsConfig);
+        final var scope = new CullScope.Year(2019, null);
+        final var config = new MontageConfig(64, 2);
+        final CullMontageRenderer renderer = renderer(pathsConfig);
 
-        PrepDir first = renderer.build(scope, config);
+        final PrepDir first = renderer.build(scope, config);
         assertThat(first.montages()).isEqualTo(2);
-        Path staleMontage = first.prepDir().resolve("montage-002.jpg");
-        Path staleSidecar = first.prepDir().resolve("montage-002.json");
+        final Path staleMontage = first.prepDir().resolve("montage-002.jpg");
+        final Path staleSidecar = first.prepDir().resolve("montage-002.json");
         assertThat(Files.exists(staleMontage)).isTrue();
 
         Files.delete(files.get(2));
         Files.delete(files.get(3));
         Files.delete(files.get(4));
-        PrepDir second = renderer.build(scope, config);
+        final PrepDir second = renderer.build(scope, config);
 
         assertThat(second.montages()).isEqualTo(1);
         assertThat(Files.exists(staleMontage)).isFalse();
@@ -233,17 +233,17 @@ class CullMontageRendererTest {
     }
 
     @Test
-    void progressCallbackTicksOnceForEachMontageWritten(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+    void progressCallbackTicksOnceForEachMontageWritten(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z"));
         writePhoto(juneDir, "c.jpg", Instant.parse("2019-06-03T00:00:00Z"));
         writePhoto(juneDir, "d.jpg", Instant.parse("2019-06-04T00:00:00Z"));
         writePhoto(juneDir, "e.jpg", Instant.parse("2019-06-05T00:00:00Z"));
 
-        List<String> ticks = new ArrayList<>();
-        PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
+        final List<String> ticks = new ArrayList<>();
+        final PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
                 (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(result.montages()).isEqualTo(2);
@@ -251,13 +251,13 @@ class CullMontageRendererTest {
     }
 
     @Test
-    void cancellationBeforeRenderingAnyCandidateLeavesNoPrepDirAtAllAndReturnsNull(@TempDir Path root)
+    void cancellationBeforeRenderingAnyCandidateLeavesNoPrepDirAtAllAndReturnsNull(@TempDir final Path root)
             throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
 
-        PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), MontageConfig.defaults(),
+        final PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), MontageConfig.defaults(),
                 ProgressCallback.NO_OP, () -> true);
 
         assertThat(result).isNull();
@@ -266,19 +266,19 @@ class CullMontageRendererTest {
 
     @Test
     void cancellationAfterOneCandidateRendersStillLeavesDiskUntouchedSinceRenderRunsBeforeClearing(
-            @TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+            @TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z"));
         // Not cancelled for the first candidate's check, cancelled from the second check onward,
         // so one tile is rendered in memory before the cancellation trips. That proves even a
         // partially-rendered tile doesn't leave anything on disk, since the render pass runs
         // entirely before clearPrepDir().
-        AtomicInteger checks = new AtomicInteger();
-        CancellationSignal cancelBeforeSecondCandidate = () -> checks.incrementAndGet() > 1;
+        final AtomicInteger checks = new AtomicInteger();
+        final CancellationSignal cancelBeforeSecondCandidate = () -> checks.incrementAndGet() > 1;
 
-        PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
+        final PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
                 ProgressCallback.NO_OP, cancelBeforeSecondCandidate);
 
         assertThat(result).isNull();
@@ -286,25 +286,25 @@ class CullMontageRendererTest {
     }
 
     @Test
-    void cancellationMidBatchLeavesAPartialInertPrepDirWithNoIndexJson(@TempDir Path root) throws IOException {
-        var pathsConfig = pathsConfig(root);
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+    void cancellationMidBatchLeavesAPartialInertPrepDirWithNoIndexJson(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
         writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T00:00:00Z"));
         // tilesPerRow=1 puts one photo per montage, so two photos make two montages - the write
         // loop below stops after the first.
-        var config = new MontageConfig(64, 1);
+        final var config = new MontageConfig(64, 1);
         // The signal is checked once per candidate in the render pass first (2 calls, both false
         // here so both candidates fully render). Then the montage-write loop's own checks begin
         // (one per montage): false for the first montage, true from the second montage onward.
-        AtomicInteger checks = new AtomicInteger();
-        CancellationSignal cancelBeforeSecondMontage = () -> checks.incrementAndGet() > 3;
+        final AtomicInteger checks = new AtomicInteger();
+        final CancellationSignal cancelBeforeSecondMontage = () -> checks.incrementAndGet() > 3;
 
-        PrepDir result = renderer(pathsConfig)
+        final PrepDir result = renderer(pathsConfig)
                 .build(new CullScope.Year(2019, null), config, ProgressCallback.NO_OP, cancelBeforeSecondMontage);
 
         assertThat(result).isNull();
-        Path prepDir = pathsConfig.logs().resolve("cull-prep").resolve("2019");
+        final Path prepDir = pathsConfig.logs().resolve("cull-prep").resolve("2019");
         assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isTrue();
         assertThat(Files.exists(prepDir.resolve("montage-002.jpg"))).isFalse();
         // No index.json means this prep dir is invisible to Pipeline.waitingJobs() - inert, and
@@ -312,47 +312,47 @@ class CullMontageRendererTest {
         assertThat(Files.exists(prepDir.resolve("index.json"))).isFalse();
     }
 
-    private static PathsConfig pathsConfig(Path root) {
+    private static PathsConfig pathsConfig(final Path root) {
         return new PathsConfig(new PathsProperties(
                 root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
     }
 
-    private static CullMontageRenderer renderer(PathsConfig pathsConfig) {
-        HeifDecoder stubHeifDecoder = _ -> Optional.empty();
+    private static CullMontageRenderer renderer(final PathsConfig pathsConfig) {
+        final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
         return new CullMontageRenderer(
                 new TileRenderer(stubHeifDecoder), new MontageBuilder(), new SidecarWriter(),
                 new PrepIndexWriter(), new NioMediaStore(), pathsConfig);
     }
 
-    private static Path writePhoto(Path dir, String name, Instant mtime) throws IOException {
+    private static Path writePhoto(final Path dir, final String name, final Instant mtime) throws IOException {
         Files.createDirectories(dir);
-        var image = new BufferedImage(PHOTO_WIDTH, PHOTO_HEIGHT, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
+        final var image = new BufferedImage(PHOTO_WIDTH, PHOTO_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = image.createGraphics();
         try {
             g.setColor(Color.BLUE);
             g.fillRect(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
         } finally {
             g.dispose();
         }
-        Path file = dir.resolve(name);
+        final Path file = dir.resolve(name);
         ImageIO.write(image, "jpg", file.toFile());
         Files.setLastModifiedTime(file, FileTime.from(mtime));
         return file;
     }
 
-    private static Path writeCorruptFile(Path dir, String name, Instant mtime) throws IOException {
+    private static Path writeCorruptFile(final Path dir, final String name, final Instant mtime) throws IOException {
         Files.createDirectories(dir);
-        Path file = dir.resolve(name);
+        final Path file = dir.resolve(name);
         Files.writeString(file, "not a real image");
         Files.setLastModifiedTime(file, FileTime.from(mtime));
         return file;
     }
 
-    private static BufferedImage decode(Path file) throws IOException {
+    private static BufferedImage decode(final Path file) throws IOException {
         return ImageIO.read(file.toFile());
     }
 
-    private static String jsonEscaped(Path path) {
+    private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
 }

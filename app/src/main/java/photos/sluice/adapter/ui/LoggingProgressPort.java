@@ -21,7 +21,7 @@ public class LoggingProgressPort implements ProgressPort {
      * @param phase {@link String} the phase name
      */
     @Override
-    public void phaseStarted(String phase) {
+    public void phaseStarted(final String phase) {
         log.info("{}", phase);
     }
 
@@ -33,7 +33,7 @@ public class LoggingProgressPort implements ProgressPort {
      * @param total int the total count for this phase
      */
     @Override
-    public void tick(String phase, int current, int total) {
+    public void tick(final String phase, final int current, final int total) {
         log.info("{} {}/{}", phase, current, total);
     }
 
@@ -43,7 +43,7 @@ public class LoggingProgressPort implements ProgressPort {
      * @param phase {@link String} the phase name
      */
     @Override
-    public void phaseFinished(String phase) {
+    public void phaseFinished(final String phase) {
         log.info("{} done", phase);
     }
 }

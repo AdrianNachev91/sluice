@@ -28,7 +28,7 @@ class MontageConfigTest {
     @Test
     void bundledDefaultsBindFromApplicationYml() {
         runner.run(context -> {
-            MontageConfig config = context.getBean(MontageConfig.class);
+            final MontageConfig config = context.getBean(MontageConfig.class);
             assertThat(config.tilesPerRow()).isEqualTo(5);
             assertThat(config.tileSize()).isEqualTo(224);
         });
@@ -38,14 +38,14 @@ class MontageConfigTest {
     void explicitPropertyOverridesBundledDefault() {
         runner.withPropertyValues("sluice.montage.tiles-per-row=7")
                 .run(context -> {
-                    MontageConfig config = context.getBean(MontageConfig.class);
+                    final MontageConfig config = context.getBean(MontageConfig.class);
                     assertThat(config.tilesPerRow()).isEqualTo(7);
                 });
     }
 
     @Test
-    void importedUserFileOverridesBundledDefault(@TempDir Path tmp) throws IOException {
-        Path userFile = tmp.resolve("config.yml");
+    void importedUserFileOverridesBundledDefault(@TempDir final Path tmp) throws IOException {
+        final Path userFile = tmp.resolve("config.yml");
         Files.writeString(userFile, """
                 sluice:
                   montage:
@@ -54,15 +54,15 @@ class MontageConfigTest {
 
         runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
                 .run(context -> {
-                    MontageConfig config = context.getBean(MontageConfig.class);
+                    final MontageConfig config = context.getBean(MontageConfig.class);
                     assertThat(config.tilesPerRow()).isEqualTo(7);
                     assertThat(config.tileSize()).isEqualTo(224);
                 });
     }
 
     @Test
-    void systemPropertyProxyForEnvVarOverridesImportedUserFile(@TempDir Path tmp) throws IOException {
-        Path userFile = tmp.resolve("config.yml");
+    void systemPropertyProxyForEnvVarOverridesImportedUserFile(@TempDir final Path tmp) throws IOException {
+        final Path userFile = tmp.resolve("config.yml");
         Files.writeString(userFile, """
                 sluice:
                   montage:
@@ -72,7 +72,7 @@ class MontageConfigTest {
 
         runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
                 .run(context -> {
-                    MontageConfig config = context.getBean(MontageConfig.class);
+                    final MontageConfig config = context.getBean(MontageConfig.class);
                     assertThat(config.tilesPerRow()).isEqualTo(9);
                 });
     }

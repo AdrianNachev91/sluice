@@ -31,12 +31,12 @@ class TileRendererTest {
     private final TileRenderer renderer = new TileRenderer(_ -> Optional.empty());
 
     @Test
-    void resizesALandscapeRasterImageFitWithinTheTileBoundsWithoutStretching(@TempDir Path tempDir)
+    void resizesALandscapeRasterImageFitWithinTheTileBoundsWithoutStretching(@TempDir final Path tempDir)
             throws IOException {
-        Path jpeg = tempDir.resolve("landscape.jpg");
+        final Path jpeg = tempDir.resolve("landscape.jpg");
         writeJpeg(jpeg, 1280, 640);
 
-        TileResult result = renderer.render(jpeg, TILE_SIZE);
+        final TileResult result = renderer.render(jpeg, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -44,12 +44,12 @@ class TileRendererTest {
     }
 
     @Test
-    void resizesAPortraitRasterImageFitWithinTheTileBoundsWithoutStretching(@TempDir Path tempDir)
+    void resizesAPortraitRasterImageFitWithinTheTileBoundsWithoutStretching(@TempDir final Path tempDir)
             throws IOException {
-        Path jpeg = tempDir.resolve("portrait.jpg");
+        final Path jpeg = tempDir.resolve("portrait.jpg");
         writeJpeg(jpeg, 640, 1280);
 
-        TileResult result = renderer.render(jpeg, TILE_SIZE);
+        final TileResult result = renderer.render(jpeg, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE / 2);
@@ -58,7 +58,7 @@ class TileRendererTest {
 
     @Test
     void rendersARealSvgFixtureToABoundedTile() {
-        TileResult result = renderer.render(FIXTURES.resolve("rectangle.svg"), TILE_SIZE);
+        final TileResult result = renderer.render(FIXTURES.resolve("rectangle.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -74,7 +74,7 @@ class TileRendererTest {
     // actually preserved, not just that some bounded image came out.
     @Test
     void rendersARealGradientSvgFixturePreservingItsViewBoxAspectRatio() {
-        TileResult result = renderer.render(FIXTURES.resolve("gradient.svg"), TILE_SIZE);
+        final TileResult result = renderer.render(FIXTURES.resolve("gradient.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -88,7 +88,7 @@ class TileRendererTest {
     // external-entity-blocking defense parses it correctly while still rejecting XXE attacks.
     @Test
     void aDoctypeDeclaredSvgStillGetsItsRealAspectRatio() {
-        TileResult result = renderer.render(FIXTURES.resolve("doctype-viewbox-only.svg"), TILE_SIZE);
+        final TileResult result = renderer.render(FIXTURES.resolve("doctype-viewbox-only.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -101,7 +101,7 @@ class TileRendererTest {
     // synthesized case.
     @Test
     void aFileWithSvgExtensionThatIsActuallyPngFallsBackToRasterDecode() {
-        TileResult result = renderer.render(FIXTURES.resolve("defqon_2027_overlay.svg"), TILE_SIZE);
+        final TileResult result = renderer.render(FIXTURES.resolve("defqon_2027_overlay.svg"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(Math.max(result.image().getWidth(), result.image().getHeight())).isEqualTo(TILE_SIZE);
@@ -109,7 +109,7 @@ class TileRendererTest {
 
     @Test
     void unknownCorruptFileFallsBackToAPlaceholder() {
-        TileResult result = renderer.render(FIXTURES.resolve("not-an-image.dat"), TILE_SIZE);
+        final TileResult result = renderer.render(FIXTURES.resolve("not-an-image.dat"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -127,9 +127,9 @@ class TileRendererTest {
     // though real pixels came back - contrast with the modern Sony fixture below.
     @Test
     void realCanonCr2FixtureFallsBackToItsExifThumbnailWhenThePrimaryDecodeFails() {
-        Path cr2 = FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
+        final Path cr2 = FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
 
-        TileResult result = renderer.render(cr2, TILE_SIZE);
+        final TileResult result = renderer.render(cr2, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -143,9 +143,9 @@ class TileRendererTest {
     // problem - the same code path recovers a genuinely reviewable tile here.
     @Test
     void realModernSonyArwFixtureRecoversAJudgeablePreview() {
-        Path arw = FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
+        final Path arw = FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
 
-        TileResult result = renderer.render(arw, TILE_SIZE);
+        final TileResult result = renderer.render(arw, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(Math.max(result.image().getWidth(), result.image().getHeight())).isEqualTo(TILE_SIZE);
@@ -163,7 +163,7 @@ class TileRendererTest {
             "6162, true",
             "20971520, true"
     })
-    void isPlausibleThumbnailLengthMatchesExpectedBoundary(int length, boolean expected) {
+    void isPlausibleThumbnailLengthMatchesExpectedBoundary(final int length, final boolean expected) {
         assertThat(TileRenderer.isPlausibleThumbnailLength(length)).isEqualTo(expected);
     }
 
@@ -173,7 +173,7 @@ class TileRendererTest {
     // (CR2 above) from "nothing at all is recoverable" (this case).
     @Test
     void aFileWithRawExtensionAndNoRealImageContentAtAllFallsBackToAPlaceholder() {
-        TileResult result = renderer.render(FIXTURES.resolve("fake-corrupt.cr2"), TILE_SIZE);
+        final TileResult result = renderer.render(FIXTURES.resolve("fake-corrupt.cr2"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -187,9 +187,9 @@ class TileRendererTest {
     // for, not just the EXIF-thumbnail fallback.
     @Test
     void realNikonNefFixtureDecodesARealButTooSmallEmbeddedThumbnail() {
-        Path nef = FIXTURES.resolve("raw-samples/nikon-d40.nef");
+        final Path nef = FIXTURES.resolve("raw-samples/nikon-d40.nef");
 
-        TileResult result = renderer.render(nef, TILE_SIZE);
+        final TileResult result = renderer.render(nef, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -201,7 +201,7 @@ class TileRendererTest {
     // dependency actually decodes real WebP bytes, not just that a reader is present.
     @Test
     void rendersARealWebpFixtureToABoundedTile() {
-        TileResult result = renderer.render(FIXTURES.resolve("webp-sample.webp"), TILE_SIZE);
+        final TileResult result = renderer.render(FIXTURES.resolve("webp-sample.webp"), TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(Math.max(result.image().getWidth(), result.image().getHeight())).isEqualTo(TILE_SIZE);
@@ -209,11 +209,11 @@ class TileRendererTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"tiff", "bmp", "gif"})
-    void decodesViaTheGenericRasterPath(String format, @TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("photo." + format);
+    void decodesViaTheGenericRasterPath(final String format, @TempDir final Path tempDir) throws IOException {
+        final Path file = tempDir.resolve("photo." + format);
         ImageIO.write(blankImage(960, 640), format, file.toFile());
 
-        TileResult result = renderer.render(file, TILE_SIZE);
+        final TileResult result = renderer.render(file, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -224,11 +224,11 @@ class TileRendererTest {
     // decode itself succeeds cleanly - the primary raster path's own version of the small-preview
     // problem the Nikon NEF fixture demonstrates with real bytes above.
     @Test
-    void aSmallRasterImageDecodesButIsFlaggedUnreviewable(@TempDir Path tempDir) throws IOException {
-        Path tiny = tempDir.resolve("tiny.jpg");
+    void aSmallRasterImageDecodesButIsFlaggedUnreviewable(@TempDir final Path tempDir) throws IOException {
+        final Path tiny = tempDir.resolve("tiny.jpg");
         writeJpeg(tiny, 300, 200);
 
-        TileResult result = renderer.render(tiny, TILE_SIZE);
+        final TileResult result = renderer.render(tiny, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -243,12 +243,12 @@ class TileRendererTest {
             "640, false",
             "639, true"
     })
-    void aSourceAtTheJudgeableBoundary(int dimension, boolean expectedUnreviewable, @TempDir Path tempDir)
+    void aSourceAtTheJudgeableBoundary(final int dimension, final boolean expectedUnreviewable, @TempDir final Path tempDir)
             throws IOException {
-        Path file = tempDir.resolve("boundary.jpg");
+        final Path file = tempDir.resolve("boundary.jpg");
         writeJpeg(file, dimension, dimension);
 
-        TileResult result = renderer.render(file, TILE_SIZE);
+        final TileResult result = renderer.render(file, TILE_SIZE);
 
         assertThat(result.unreviewable()).isEqualTo(expectedUnreviewable);
     }
@@ -258,14 +258,14 @@ class TileRendererTest {
     // decoder-returns-empty and too-small tests below do.
     @ParameterizedTest
     @ValueSource(strings = {"heic", "heif", "avif"})
-    void heifFamilyRoutesToTheInjectedDecoderAndResizesItsResult(String extension, @TempDir Path tempDir)
+    void heifFamilyRoutesToTheInjectedDecoderAndResizesItsResult(final String extension, @TempDir final Path tempDir)
             throws IOException {
-        Path file = tempDir.resolve("photo." + extension);
+        final Path file = tempDir.resolve("photo." + extension);
         Files.createFile(file);
-        BufferedImage decoded = blankImage(800, 400);
-        TileRenderer withDecoder = new TileRenderer(_ -> Optional.of(decoded));
+        final BufferedImage decoded = blankImage(800, 400);
+        final TileRenderer withDecoder = new TileRenderer(_ -> Optional.of(decoded));
 
-        TileResult result = withDecoder.render(file, TILE_SIZE);
+        final TileResult result = withDecoder.render(file, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -280,10 +280,10 @@ class TileRendererTest {
     // within 224x224 lands on 224x149.
     @Test
     void realAvifFixtureDecodesToARealTileViaTheCliHeifDecoder() {
-        TileRenderer withRealHeifDecoder = new TileRenderer(new CliHeifDecoder("heif-convert"));
-        Path avif = FIXTURES.resolve("arctic-sky.avif");
+        final TileRenderer withRealHeifDecoder = new TileRenderer(new CliHeifDecoder("heif-convert"));
+        final Path avif = FIXTURES.resolve("arctic-sky.avif");
 
-        TileResult result = withRealHeifDecoder.render(avif, TILE_SIZE);
+        final TileResult result = withRealHeifDecoder.render(avif, TILE_SIZE);
 
         assertThat(result.unreviewable()).isFalse();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -293,13 +293,13 @@ class TileRendererTest {
     // The HEIC/AVIF decode path's own version of the judgeability check: a decoder can hand back
     // real pixels that are still too small to trust, same as the raster and EXIF-thumbnail paths.
     @Test
-    void heifDecoderReturningATooSmallImageIsFlaggedUnreviewable(@TempDir Path tempDir) throws IOException {
-        Path fakeHeic = tempDir.resolve("photo.heic");
+    void heifDecoderReturningATooSmallImageIsFlaggedUnreviewable(@TempDir final Path tempDir) throws IOException {
+        final Path fakeHeic = tempDir.resolve("photo.heic");
         Files.createFile(fakeHeic);
-        BufferedImage decoded = blankImage(300, 200);
-        TileRenderer withHeic = new TileRenderer(_ -> Optional.of(decoded));
+        final BufferedImage decoded = blankImage(300, 200);
+        final TileRenderer withHeic = new TileRenderer(_ -> Optional.of(decoded));
 
-        TileResult result = withHeic.render(fakeHeic, TILE_SIZE);
+        final TileResult result = withHeic.render(fakeHeic, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -307,12 +307,12 @@ class TileRendererTest {
     }
 
     @Test
-    void heicFallsBackToAPlaceholderWhenTheDecoderReturnsEmpty(@TempDir Path tempDir) throws IOException {
-        Path fakeHeic = tempDir.resolve("photo.heic");
+    void heicFallsBackToAPlaceholderWhenTheDecoderReturnsEmpty(@TempDir final Path tempDir) throws IOException {
+        final Path fakeHeic = tempDir.resolve("photo.heic");
         Files.createFile(fakeHeic);
-        TileRenderer withNoDecoder = new TileRenderer(_ -> Optional.empty());
+        final TileRenderer withNoDecoder = new TileRenderer(_ -> Optional.empty());
 
-        TileResult result = withNoDecoder.render(fakeHeic, TILE_SIZE);
+        final TileResult result = withNoDecoder.render(fakeHeic, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
@@ -330,27 +330,27 @@ class TileRendererTest {
     // against what unreviewable claims about it. A future Thumbnailator version that picked a
     // different sub-image would fail this test immediately, rather than silently disagreeing.
     @Test
-    void unreviewableFlagMatchesTheSubImageActuallyRendered(@TempDir Path tempDir) throws IOException {
-        Path tiff = tempDir.resolve("two-page.tiff");
+    void unreviewableFlagMatchesTheSubImageActuallyRendered(@TempDir final Path tempDir) throws IOException {
+        final Path tiff = tempDir.resolve("two-page.tiff");
         writeTwoPageTiff(tiff, 50, 50, Color.RED, 2000, 2000, Color.BLUE);
 
-        TileResult result = renderer.render(tiff, TILE_SIZE);
+        final TileResult result = renderer.render(tiff, TILE_SIZE);
 
         assertThat(result.unreviewable()).isTrue();
-        int centerX = result.image().getWidth() / 2;
-        int centerY = result.image().getHeight() / 2;
+        final int centerX = result.image().getWidth() / 2;
+        final int centerY = result.image().getHeight() / 2;
         assertThat(new Color(result.image().getRGB(centerX, centerY))).isEqualTo(Color.RED);
     }
 
     private static void writeTwoPageTiff(
-            Path target, int firstWidth, int firstHeight, Color firstColor,
-            int secondWidth, int secondHeight, Color secondColor) throws IOException {
-        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("TIFF");
-        ImageWriter writer = writers.next();
-        try (ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile())) {
+            final Path target, final int firstWidth, final int firstHeight, final Color firstColor,
+            final int secondWidth, final int secondHeight, final Color secondColor) throws IOException {
+        final Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("TIFF");
+        final ImageWriter writer = writers.next();
+        try (final ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile())) {
             writer.setOutput(out);
             writer.prepareWriteSequence(null);
-            ImageWriteParam param = writer.getDefaultWriteParam();
+            final ImageWriteParam param = writer.getDefaultWriteParam();
             writer.writeToSequence(
                     new IIOImage(solidImage(firstWidth, firstHeight, firstColor), null, null), param);
             writer.writeToSequence(
@@ -361,9 +361,9 @@ class TileRendererTest {
         }
     }
 
-    private static BufferedImage solidImage(int width, int height, Color color) {
-        var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
+    private static BufferedImage solidImage(final int width, final int height, final Color color) {
+        final var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = image.createGraphics();
         try {
             g.setColor(color);
             g.fillRect(0, 0, width, height);
@@ -373,11 +373,11 @@ class TileRendererTest {
         return image;
     }
 
-    private static void writeJpeg(Path target, int width, int height) throws IOException {
+    private static void writeJpeg(final Path target, final int width, final int height) throws IOException {
         ImageIO.write(blankImage(width, height), "jpg", target.toFile());
     }
 
-    private static BufferedImage blankImage(int width, int height) {
+    private static BufferedImage blankImage(final int width, final int height) {
         return new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
     }
 }

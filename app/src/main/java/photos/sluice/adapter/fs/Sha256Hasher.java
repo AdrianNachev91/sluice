@@ -37,18 +37,18 @@ public class Sha256Hasher implements Sha256Port {
      * @return {@link String} the uppercase hex-encoded SHA-256 hash
      */
     @Override
-    public String hash(Path file) {
-        MessageDigest digest = newSha256Digest();
+    public String hash(final Path file) {
+        final MessageDigest digest = newSha256Digest();
         // DigestInputStream wraps the file stream and feeds every byte it reads into the digest
         // as a side effect, so the digest is computed incrementally over the stream rather than
         // requiring the whole file in memory at once. The read loop exists only to drive that
         // side effect - the returned bytes themselves are discarded.
-        try (InputStream in = Files.newInputStream(file);
-             var digestIn = new DigestInputStream(in, digest)) {
-            byte[] buffer = new byte[BUFFER_SIZE];
+        try (final InputStream in = Files.newInputStream(file);
+             final var digestIn = new DigestInputStream(in, digest)) {
+            final byte[] buffer = new byte[BUFFER_SIZE];
             //noinspection StatementWithEmptyBody -- reading drives the digest; the bytes themselves are discarded
             while (digestIn.read(buffer) != -1) {}
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to hash " + file, e);
         }
         return toUpperHex(digest.digest());
@@ -66,7 +66,7 @@ public class Sha256Hasher implements Sha256Port {
             // MessageDigest API and cannot fire in practice. Converting it to unchecked signals a
             // broken JVM, not a normal, callable-handleable error.
             return MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
+        } catch (final NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm not available", e);
         }
     }
@@ -79,10 +79,10 @@ public class Sha256Hasher implements Sha256Port {
      * @param bytes byte[] the raw digest bytes
      * @return {@link String} the uppercase hex encoding of the bytes
      */
-    private static String toUpperHex(byte[] bytes) {
-        char[] hex = new char[bytes.length * 2];
+    private static String toUpperHex(final byte[] bytes) {
+        final char[] hex = new char[bytes.length * 2];
         for (int i = 0; i < bytes.length; i++) {
-            int b = bytes[i] & 0xFF;
+            final int b = bytes[i] & 0xFF;
             hex[i * 2] = HEX_DIGITS[b >>> 4];
             hex[i * 2 + 1] = HEX_DIGITS[b & 0x0F];
         }

@@ -18,7 +18,7 @@ public enum LibraryBucket {
      * @param firstSegment {@link String} the first path segment
      * @return {@link LibraryBucket} the matching library bucket, or OTHER if unrecognized
      */
-    public static LibraryBucket ofFirstSegment(String firstSegment) {
+    public static LibraryBucket ofFirstSegment(final String firstSegment) {
         return switch (firstSegment) {
             case "Photos" -> PHOTOS;
             case "Videos" -> VIDEOS;

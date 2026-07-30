@@ -39,12 +39,12 @@ public final class InboxScanner implements InboxScannerPort {
      * @return {@link ScanResult} the scanned media, paired sidecars, Takeout mode, and JSON paths
      */
     @Override
-    public ScanResult scan(Path inboxRoot) {
-        List<Path> mediaPaths = new ArrayList<>();
-        List<Path> jsonPaths = new ArrayList<>();
+    public ScanResult scan(final Path inboxRoot) {
+        final List<Path> mediaPaths = new ArrayList<>();
+        final List<Path> jsonPaths = new ArrayList<>();
         // Files.walk holds an open directory-traversal resource until the returned stream is
         // closed, so it must stay inside try-with-resources rather than being consumed inline.
-        try (Stream<Path> walk = Files.walk(inboxRoot)) {
+        try (final Stream<Path> walk = Files.walk(inboxRoot)) {
             walk.filter(Files::isRegularFile).forEach(path -> {
                 // A file that is neither a JSON sidecar nor a recognized media extension falls
                 // through untouched (no else branch) - it never reaches the pairer below and
@@ -55,9 +55,9 @@ public final class InboxScanner implements InboxScannerPort {
                     mediaPaths.add(path);
                 }
             });
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to scan inbox " + inboxRoot, e);
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             // Files.walk fails synchronously (plain IOException, caught above) only when the root
             // itself can't be opened; a failure partway through traversal (e.g. a subdirectory
             // that becomes unreadable mid-walk) surfaces as this unchecked form instead. Both are
@@ -65,13 +65,13 @@ public final class InboxScanner implements InboxScannerPort {
             throw new UncheckedIOException("Failed to scan inbox " + inboxRoot, e.getCause());
         }
 
-        PairingResult pairing = sidecarPairer.pair(mediaPaths, jsonPaths);
+        final PairingResult pairing = sidecarPairer.pair(mediaPaths, jsonPaths);
 
-        List<MediaFile> media = new ArrayList<>();
-        for (Path path : mediaPaths) {
+        final List<MediaFile> media = new ArrayList<>();
+        for (final Path path : mediaPaths) {
             media.add(new MediaFile(path));
         }
-        Map<MediaFile, TakeoutSidecar> sidecars = new LinkedHashMap<>();
+        final Map<MediaFile, TakeoutSidecar> sidecars = new LinkedHashMap<>();
         // Pairing runs on raw Paths (TakeoutSidecarPairer's existing contract), so its result is
         // translated into the domain-model MediaFile/TakeoutSidecar wrappers only at the end.
         pairing.sidecarsByMedia().forEach((mediaPath, jsonPath) ->
@@ -86,7 +86,7 @@ public final class InboxScanner implements InboxScannerPort {
      * @param path {@link Path} file to check
      * @return boolean true if the file name ends with .json
      */
-    private static boolean isJson(Path path) {
+    private static boolean isJson(final Path path) {
         return path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".json");
     }
 }

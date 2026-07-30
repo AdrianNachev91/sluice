@@ -17,16 +17,16 @@ class JobRunnerTest {
 
     @Test
     void joinReturnsTheWorkResult() {
-        JobHandle<String> handle = runner.submit(_ -> "done");
+        final JobHandle<String> handle = runner.submit(_ -> "done");
 
         assertThat(handle.join()).isEqualTo("done");
     }
 
     @Test
     void workRunsOffTheSubmittingThread() {
-        long submittingThreadId = Thread.currentThread().threadId();
-        var workThreadId = new AtomicLong(submittingThreadId);
-        JobHandle<String> handle = runner.submit(_ -> {
+        final long submittingThreadId = Thread.currentThread().threadId();
+        final var workThreadId = new AtomicLong(submittingThreadId);
+        final JobHandle<String> handle = runner.submit(_ -> {
             workThreadId.set(Thread.currentThread().threadId());
             return "done";
         });
@@ -43,9 +43,9 @@ class JobRunnerTest {
         // read false just because the virtual thread hasn't been scheduled yet. "release" then
         // holds the job open on command, so it doesn't finish before the test gets a chance to
         // assert anything.
-        var started = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        JobHandle<String> handle = runner.submit(_ -> {
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final JobHandle<String> handle = runner.submit(_ -> {
             started.countDown();
             release.await();
             return "done";
@@ -65,9 +65,9 @@ class JobRunnerTest {
         // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes. Needed here so the
         // second submit() below is proven to race a job that's genuinely still in flight, not one
         // that happened to finish first.
-        var started = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        JobHandle<String> first = runner.submit(_ -> {
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final JobHandle<String> first = runner.submit(_ -> {
             started.countDown();
             release.await();
             return "done";
@@ -83,8 +83,8 @@ class JobRunnerTest {
 
     @Test
     void slotFreesAndFailureIsWrappedWhenWorkThrows() {
-        var failure = new RuntimeException("Defqon 1 canceled, queue the next edition");
-        JobHandle<String> handle = runner.submit(_ -> {
+        final var failure = new RuntimeException("Defqon 1 canceled, queue the next edition");
+        final JobHandle<String> handle = runner.submit(_ -> {
             throw failure;
         });
 
@@ -97,9 +97,9 @@ class JobRunnerTest {
     @Test
     void slotIsFreeAgainOnceTheFirstJobFinishes() throws InterruptedException {
         // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes.
-        var started = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        JobHandle<String> first = runner.submit(_ -> {
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final JobHandle<String> first = runner.submit(_ -> {
             started.countDown();
             release.await();
             return "first";
@@ -108,7 +108,7 @@ class JobRunnerTest {
         release.countDown();
         first.join();
 
-        JobHandle<String> second = runner.submit(_ -> "second");
+        final JobHandle<String> second = runner.submit(_ -> "second");
 
         assertThat(second.join()).isEqualTo("second");
     }
@@ -118,10 +118,10 @@ class JobRunnerTest {
         // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes. requestCancellation()
         // is called while the job is still paused on release.await(), so the flag is guaranteed to
         // already be set by the time the job resumes and reads it.
-        var observedCancellation = new AtomicBoolean(true);
-        var started = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        JobHandle<String> handle = runner.submit(h -> {
+        final var observedCancellation = new AtomicBoolean(true);
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final JobHandle<String> handle = runner.submit(h -> {
             started.countDown();
             release.await();
             observedCancellation.set(h.isCancellationRequested());
@@ -139,8 +139,8 @@ class JobRunnerTest {
 
     @Test
     void onCompleteFiresOnceTheResultIsAvailable() {
-        var received = new AtomicReference<>("");
-        JobHandle<String> handle = runner.submit(_ -> "result");
+        final var received = new AtomicReference<>("");
+        final JobHandle<String> handle = runner.submit(_ -> "result");
 
         // join() only guarantees the future's own result is visible, not that a sibling dependent
         // stage like thenAccept has already run - wait on that stage's own completion too, or this

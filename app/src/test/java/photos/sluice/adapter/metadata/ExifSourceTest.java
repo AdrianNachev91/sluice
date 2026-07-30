@@ -17,45 +17,45 @@ class ExifSourceTest {
 
     @Test
     void resolvesDateTimeOriginalFromJpeg() {
-        var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
+        final var file = new MediaFile(FIXTURES.resolve("synthetic-exif.jpg"));
 
-        Optional<LocalDateTime> result = source.resolve(file, null);
+        final Optional<LocalDateTime> result = source.resolve(file, null);
 
         assertThat(result).contains(LocalDateTime.of(2021, 3, 15, 10, 30, 0));
     }
 
     @Test
     void resolvesDateTimeOriginalFromIphoneHeic() {
-        var file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
+        final var file = new MediaFile(FIXTURES.resolve("iphone-exif.heic"));
 
-        Optional<LocalDateTime> result = source.resolve(file, null);
+        final Optional<LocalDateTime> result = source.resolve(file, null);
 
         assertThat(result).contains(LocalDateTime.of(2018, 2, 5, 15, 11, 44));
     }
 
     @Test
     void fallsBackToDateTimeDigitizedWhenOriginalAbsent() {
-        var file = new MediaFile(FIXTURES.resolve("digitized-only-exif.jpg"));
+        final var file = new MediaFile(FIXTURES.resolve("digitized-only-exif.jpg"));
 
-        Optional<LocalDateTime> result = source.resolve(file, null);
+        final Optional<LocalDateTime> result = source.resolve(file, null);
 
         assertThat(result).contains(LocalDateTime.of(2019, 6, 20, 8, 0, 0));
     }
 
     @Test
     void returnsEmptyWhenImageHasNoExifData() {
-        var file = new MediaFile(FIXTURES.resolve("no-exif.jpg"));
+        final var file = new MediaFile(FIXTURES.resolve("no-exif.jpg"));
 
-        Optional<LocalDateTime> result = source.resolve(file, null);
+        final Optional<LocalDateTime> result = source.resolve(file, null);
 
         assertThat(result).isEmpty();
     }
 
     @Test
     void returnsEmptyWhenFileIsNotAnImage() {
-        var file = new MediaFile(FIXTURES.resolve("not-an-image.txt"));
+        final var file = new MediaFile(FIXTURES.resolve("not-an-image.txt"));
 
-        Optional<LocalDateTime> result = source.resolve(file, null);
+        final Optional<LocalDateTime> result = source.resolve(file, null);
 
         assertThat(result).isEmpty();
     }

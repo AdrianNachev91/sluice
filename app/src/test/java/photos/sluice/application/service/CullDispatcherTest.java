@@ -28,11 +28,11 @@ class CullDispatcherTest {
 
     @Test
     void routesToTheCullerMatchingTheConfiguredProvider() throws CullException {
-        var target = new RecordingCuller("anthropic");
-        var other = new RecordingCuller("external-agent");
-        var dispatcher = new CullDispatcher(List.of(other, target), settingsFor("anthropic"));
+        final var target = new RecordingCuller("anthropic");
+        final var other = new RecordingCuller("external-agent");
+        final var dispatcher = new CullDispatcher(List.of(other, target), settingsFor("anthropic"));
 
-        CullReport report = dispatcher.cull(PREP, OPTIONS);
+        final CullReport report = dispatcher.cull(PREP, OPTIONS);
 
         assertThat(target.receivedPrep).isSameAs(PREP);
         assertThat(target.receivedOptions).isSameAs(OPTIONS);
@@ -42,7 +42,7 @@ class CullDispatcherTest {
 
     @Test
     void failsLoudWhenNoCullerMatchesTheProvider() {
-        var dispatcher = new CullDispatcher(List.of(new RecordingCuller("anthropic")), settingsFor("ollama"));
+        final var dispatcher = new CullDispatcher(List.of(new RecordingCuller("anthropic")), settingsFor("ollama"));
 
         assertThatThrownBy(() -> dispatcher.cull(PREP, OPTIONS))
                 .isInstanceOf(IllegalStateException.class)
@@ -51,7 +51,7 @@ class CullDispatcherTest {
 
     @Test
     void failsLoudWhenNoCullersAreRegisteredAtAll() {
-        var dispatcher = new CullDispatcher(List.of(), settingsFor("external-agent"));
+        final var dispatcher = new CullDispatcher(List.of(), settingsFor("external-agent"));
 
         assertThatThrownBy(() -> dispatcher.cull(PREP, OPTIONS))
                 .isInstanceOf(IllegalStateException.class)
@@ -60,7 +60,7 @@ class CullDispatcherTest {
 
     @Test
     void propagatesTheCullExceptionFromTheSelectedCuller() {
-        var dispatcher = new CullDispatcher(
+        final var dispatcher = new CullDispatcher(
                 List.of(new ThrowingCuller("external-agent")), settingsFor("external-agent"));
 
         assertThatThrownBy(() -> dispatcher.cull(PREP, OPTIONS))
@@ -70,10 +70,10 @@ class CullDispatcherTest {
 
     @Test
     void resolvesTheProviderFreshOnEachCall() throws CullException {
-        var external = new RecordingCuller("external-agent");
-        var anthropic = new RecordingCuller("anthropic");
-        var settings = new MutableSettings("external-agent");
-        var dispatcher = new CullDispatcher(List.of(external, anthropic), settings);
+        final var external = new RecordingCuller("external-agent");
+        final var anthropic = new RecordingCuller("anthropic");
+        final var settings = new MutableSettings("external-agent");
+        final var dispatcher = new CullDispatcher(List.of(external, anthropic), settings);
 
         dispatcher.cull(PREP, OPTIONS);
         settings.provider = "anthropic";
@@ -85,9 +85,9 @@ class CullDispatcherTest {
 
     @Test
     void routesTheProgressCallbackToTheSelectedCuller() throws CullException {
-        var target = new RecordingCuller("anthropic");
-        var dispatcher = new CullDispatcher(List.of(target), settingsFor("anthropic"));
-        ProgressCallback progress = (_, _) -> { };
+        final var target = new RecordingCuller("anthropic");
+        final var dispatcher = new CullDispatcher(List.of(target), settingsFor("anthropic"));
+        final ProgressCallback progress = (_, _) -> { };
 
         dispatcher.cull(PREP, OPTIONS, progress);
 
@@ -102,7 +102,7 @@ class CullDispatcherTest {
                 .hasMessageContaining("dup");
     }
 
-    private static CullSettings settingsFor(String provider) {
+    private static CullSettings settingsFor(final String provider) {
         return new MutableSettings(provider);
     }
 
@@ -110,7 +110,7 @@ class CullDispatcherTest {
 
         private String provider;
 
-        private MutableSettings(String provider) {
+        private MutableSettings(final String provider) {
             this.provider = provider;
         }
 
@@ -143,7 +143,7 @@ class CullDispatcherTest {
         private @Nullable CullOptions receivedOptions;
         private @Nullable ProgressCallback receivedProgress;
 
-        private RecordingCuller(String id) {
+        private RecordingCuller(final String id) {
             this.id = id;
         }
 
@@ -153,14 +153,14 @@ class CullDispatcherTest {
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) {
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
             this.receivedPrep = prep;
             this.receivedOptions = opts;
             return report;
         }
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) {
+        public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress) {
             this.receivedProgress = progress;
             return cull(prep, opts);
         }
@@ -169,7 +169,7 @@ class CullDispatcherTest {
     private record ThrowingCuller(String id) implements VisionCuller {
 
         @Override
-        public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
             throw new CullException("shards missing");
         }
     }

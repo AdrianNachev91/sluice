@@ -19,7 +19,7 @@ class CullConfigTest {
     @Test
     void bundledDefaultProviderIsExternalAgent() {
         runner.run(context -> {
-            CullConfig config = context.getBean(CullConfig.class);
+            final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.provider()).isEqualTo("external-agent");
             // With sluice.cull.provider-settings.* absent, the settings object still exists (the
             // port promises never-null) and each field reports unset as null.
@@ -34,7 +34,7 @@ class CullConfigTest {
     void explicitPropertyOverridesProvider() {
         runner.withPropertyValues("sluice.cull.provider=anthropic")
                 .run(context -> {
-                    CullConfig config = context.getBean(CullConfig.class);
+                    final CullConfig config = context.getBean(CullConfig.class);
                     assertThat(config.provider()).isEqualTo("anthropic");
                 });
     }
@@ -42,7 +42,7 @@ class CullConfigTest {
     @Test
     void bundledDefaultCategoriesAreTheStandardFourCards() {
         runner.run(context -> {
-            CullConfig config = context.getBean(CullConfig.class);
+            final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories()).extracting(CullCategory::name)
                     .containsExactly("junk", "scenery", "food", "funny");
         });
@@ -54,7 +54,7 @@ class CullConfigTest {
         // is what teaches an automated provider to catch them. Guard the phrase so a future
         // rewording of the defaults can't silently drop the emphasis.
         runner.run(context -> {
-            CullConfig config = context.getBean(CullConfig.class);
+            final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories().getFirst().description()).contains("photo of a screen");
         });
     }
@@ -67,7 +67,7 @@ class CullConfigTest {
                 "sluice.cull.categories[1].name=pets",
                 "sluice.cull.categories[1].description=Photos of the family dog"
         ).run(context -> {
-            CullConfig config = context.getBean(CullConfig.class);
+            final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories()).containsExactly(
                     new CullCategory("receipts", "Paper receipts and invoices"),
                     new CullCategory("pets", "Photos of the family dog"));
@@ -87,7 +87,7 @@ class CullConfigTest {
     @Test
     void externalAgentDefaultsToManualModeWhenAbsent() {
         runner.run(context -> {
-            CullConfig config = context.getBean(CullConfig.class);
+            final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
             assertThat(config.externalAgent().watchTimeout()).isNull();
         });
@@ -102,7 +102,7 @@ class CullConfigTest {
                 "sluice.cull.provider-settings.thinking=true",
                 "sluice.cull.provider-settings.max-retries=5"
         ).run(context -> {
-            CullConfig config = context.getBean(CullConfig.class);
+            final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.providerSettings().model()).isEqualTo("claude-sonnet-5");
             assertThat(config.providerSettings().endpoint()).isEqualTo("https://api.anthropic.com");
             assertThat(config.providerSettings().thinking()).isTrue();

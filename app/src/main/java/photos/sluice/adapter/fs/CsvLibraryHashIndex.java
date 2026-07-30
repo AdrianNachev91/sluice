@@ -38,7 +38,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      *
      * @param indexFile {@link Path} path to the CSV hash index file
      */
-    public CsvLibraryHashIndex(Path indexFile) {
+    public CsvLibraryHashIndex(final Path indexFile) {
         this.indexFile = indexFile;
     }
 
@@ -53,22 +53,22 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         if (!Files.isRegularFile(indexFile)) {
             return Map.of();
         }
-        Map<String, List<Path>> result = new LinkedHashMap<>();
+        final Map<String, List<Path>> result = new LinkedHashMap<>();
         try {
-            List<String> lines = Files.readAllLines(indexFile, StandardCharsets.UTF_8);
+            final List<String> lines = Files.readAllLines(indexFile, StandardCharsets.UTF_8);
             for (int i = 0; i < lines.size(); i++) {
                 // The BOM (if present) and the header row only ever appear on line 0.
-                String line = i == 0 ? stripBom(lines.get(i)) : lines.get(i);
-                boolean isHeaderRow = i == 0 && line.equals(HEADER);
+                final String line = i == 0 ? stripBom(lines.get(i)) : lines.get(i);
+                final boolean isHeaderRow = i == 0 && line.equals(HEADER);
                 if (!line.isBlank() && !isHeaderRow) {
-                    IndexEntry entry = parseLine(line);
+                    final IndexEntry entry = parseLine(line);
                     // The same file/hash can legitimately appear more than once (a byte-identical
                     // copy filed under two names/locations), so group by hash instead of
                     // overwriting.
                     result.computeIfAbsent(entry.sha256(), _ -> new ArrayList<>()).add(entry.path());
                 }
             }
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read hash index " + indexFile, e);
         }
         return result;
@@ -81,7 +81,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @return boolean true if the hash appears in the index
      */
     @Override
-    public boolean contains(String sha256) {
+    public boolean contains(final String sha256) {
         // No caching: every caller so far either already holds a pre-loaded Set or calls this
         // rarely enough that re-reading the file each time is not worth the staleness risk of a
         // cache that could drift if the file is modified outside this process.
@@ -94,11 +94,11 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @param entries a {@link List} of {@link IndexEntry} to append
      */
     @Override
-    public void append(List<IndexEntry> entries) {
+    public void append(final List<IndexEntry> entries) {
         if (entries.isEmpty()) {
             return;
         }
-        try (Session session = openSession()) {
+        try (final Session session = openSession()) {
             entries.forEach(session::append);
         }
     }
@@ -129,7 +129,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
          * @param entry {@link IndexEntry} to append
          */
         @Override
-        public void append(IndexEntry entry) {
+        public void append(final IndexEntry entry) {
             try {
                 if (writer == null) {
                     writer = openWriter();
@@ -137,7 +137,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
                 writer.write(formatLine(entry));
                 writer.newLine();
                 writer.flush();
-            } catch (IOException e) {
+            } catch (final IOException e) {
                 throw new UncheckedIOException("Failed to append to hash index " + indexFile, e);
             }
         }
@@ -152,7 +152,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
             }
             try {
                 writer.close();
-            } catch (IOException e) {
+            } catch (final IOException e) {
                 throw new UncheckedIOException("Failed to close hash index " + indexFile, e);
             }
         }
@@ -165,15 +165,15 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      */
     private BufferedWriter openWriter() throws IOException {
         Files.createDirectories(indexFile.getParent());
-        boolean exists = Files.isRegularFile(indexFile);
-        long size = exists ? Files.size(indexFile) : 0;
-        boolean writeHeader = !exists || size == 0;
+        final boolean exists = Files.isRegularFile(indexFile);
+        final long size = exists ? Files.size(indexFile) : 0;
+        final boolean writeHeader = !exists || size == 0;
         // Defensive: the file can arrive here without a trailing newline (a manual edit, an
         // editor that strips trailing whitespace, an interrupted write). Appending straight
         // onto such a line would merge it with the next row into one unparsable line and
         // break load() for the whole file.
-        boolean needsLeadingNewline = size > 0 && !endsWithNewline(indexFile);
-        BufferedWriter writer = Files.newBufferedWriter(indexFile, StandardCharsets.UTF_8,
+        final boolean needsLeadingNewline = size > 0 && !endsWithNewline(indexFile);
+        final BufferedWriter writer = Files.newBufferedWriter(indexFile, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         if (needsLeadingNewline) {
             writer.newLine();
@@ -192,12 +192,12 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @param file {@link Path} file to check
      * @return boolean true if the file's last byte is a newline character
      */
-    private static boolean endsWithNewline(Path file) throws IOException {
-        try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ)) {
+    private static boolean endsWithNewline(final Path file) throws IOException {
+        try (final SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ)) {
             channel.position(channel.size() - 1);
-            ByteBuffer buffer = ByteBuffer.allocate(1);
+            final ByteBuffer buffer = ByteBuffer.allocate(1);
             channel.read(buffer);
-            byte last = buffer.get(0);
+            final byte last = buffer.get(0);
             return last == '\n' || last == '\r';
         }
     }
@@ -208,7 +208,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @param entry {@link IndexEntry} to format
      * @return {@link String} the formatted CSV row
      */
-    private static String formatLine(IndexEntry entry) {
+    private static String formatLine(final IndexEntry entry) {
         return quote(entry.sha256()) + "," + quote(entry.path().toString());
     }
 
@@ -218,7 +218,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @param value {@link String} field value to quote
      * @return {@link String} the quoted, escaped field value
      */
-    private static String quote(String value) {
+    private static String quote(final String value) {
         return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
@@ -228,7 +228,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @param line {@link String} line to strip
      * @return {@link String} the line without a leading BOM
      */
-    private static String stripBom(String line) {
+    private static String stripBom(final String line) {
         return !line.isEmpty() && line.charAt(0) == BOM ? line.substring(1) : line;
     }
 
@@ -238,8 +238,8 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @param line {@link String} CSV row to parse
      * @return {@link IndexEntry} the parsed index entry
      */
-    private static IndexEntry parseLine(String line) {
-        List<String> fields = parseCsvFields(line);
+    private static IndexEntry parseLine(final String line) {
+        final List<String> fields = parseCsvFields(line);
         if (fields.size() != 2) {
             throw new IllegalStateException("Malformed hash index line: " + line);
         }
@@ -257,12 +257,12 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * @param line {@link String} CSV row to split into fields
      * @return a {@link List} of {@link String}, the row's field values, in order
      */
-    private static List<String> parseCsvFields(String line) {
-        List<String> fields = new ArrayList<>();
-        var current = new StringBuilder();
+    private static List<String> parseCsvFields(final String line) {
+        final List<String> fields = new ArrayList<>();
+        final var current = new StringBuilder();
         boolean inQuotes = false;
         for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
+            final char c = line.charAt(i);
             if (inQuotes) {
                 if (c == '"') {
                     if (i + 1 < line.length() && line.charAt(i + 1) == '"') {

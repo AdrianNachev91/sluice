@@ -94,12 +94,12 @@ public class Pipeline {
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
      */
     @Autowired
-    public Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
-            MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
-            PrepDirRemedies prepDirRemedies, CullPrepPort cullPrepPort, CullSettings cullSettings,
-            MediaStore mediaStore, PathsPort pathsPort, MontageConfig montageConfig, JobRunner jobRunner,
-            ProgressPort progressPort, DisasterDrawer disasterDrawer,
-            Troubleshooter troubleshooter, PrepDirDoctor prepDirDoctor) {
+    public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
+                    final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
+                    final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
+                    final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig, final JobRunner jobRunner,
+                    final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
+                    final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
                 cullPrepPort, cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort,
                 disasterDrawer, troubleshooter, prepDirDoctor, DEFAULT_WATCH_POLL_INTERVAL);
@@ -130,12 +130,12 @@ public class Pipeline {
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
-    Pipeline(SortEngine sortEngine, CommitEngine commitEngine, RescueEngine rescueEngine,
-            MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
-            PrepDirRemedies prepDirRemedies, CullPrepPort cullPrepPort, CullSettings cullSettings,
-            MediaStore mediaStore, PathsPort pathsPort, MontageConfig montageConfig, JobRunner jobRunner,
-            ProgressPort progressPort, DisasterDrawer disasterDrawer,
-            Troubleshooter troubleshooter, PrepDirDoctor prepDirDoctor, Duration watchPollInterval) {
+    Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
+             final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
+             final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
+             final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig, final JobRunner jobRunner,
+             final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
+             final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor, final Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
@@ -180,7 +180,7 @@ public class Pipeline {
      * @param scope {@link SortScope} which files to sort
      * @return a {@link JobHandle} of {@link SortSummary} a handle to the running job
      */
-    public JobHandle<SortSummary> sort(SortScope scope) {
+    public JobHandle<SortSummary> sort(final SortScope scope) {
         return jobRunner.submit(handle -> runPhase(SORTING,
                 progress -> sortEngine.sort(scope, progress, handle::isCancellationRequested)));
     }
@@ -191,7 +191,7 @@ public class Pipeline {
      * @param scope {@link CommitScope} which files to commit
      * @return a {@link JobHandle} of {@link CommitSummary} a handle to the running job
      */
-    public JobHandle<CommitSummary> commit(CommitScope scope) {
+    public JobHandle<CommitSummary> commit(final CommitScope scope) {
         return jobRunner.submit(handle -> runPhase(COMMITTING,
                 progress -> commitEngine.commit(scope, progress, handle::isCancellationRequested)));
     }
@@ -202,7 +202,7 @@ public class Pipeline {
      * @param reviewFolder {@link String} the Review folder to promote
      * @return a {@link JobHandle} of {@link RescueSummary} a handle to the running job
      */
-    public JobHandle<RescueSummary> rescue(String reviewFolder) {
+    public JobHandle<RescueSummary> rescue(final String reviewFolder) {
         return jobRunner.submit(handle -> runPhase(RESCUING,
                 progress -> rescueEngine.rescue(reviewFolder, progress, handle::isCancellationRequested)));
     }
@@ -213,7 +213,7 @@ public class Pipeline {
      * @param scope {@link CullScope} which files to cull
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
      */
-    public JobHandle<CullJobOutcome> cull(CullScope scope) {
+    public JobHandle<CullJobOutcome> cull(final CullScope scope) {
         return cullEngine.cull(scope);
     }
 
@@ -223,7 +223,7 @@ public class Pipeline {
      * @param scope {@link SortScope} which files to curate
      * @return a {@link JobHandle} of {@link CurateOutcome} a handle to the running job
      */
-    public JobHandle<CurateOutcome> curate(SortScope scope) {
+    public JobHandle<CurateOutcome> curate(final SortScope scope) {
         return curateEngine.curate(scope);
     }
 
@@ -234,7 +234,7 @@ public class Pipeline {
      * @param allowPartial boolean whether to proceed with missing shards
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
      */
-    public JobHandle<CullJobOutcome> resume(Path prepDir, boolean allowPartial) {
+    public JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         return cullEngine.resume(prepDir, allowPartial);
     }
 
@@ -255,7 +255,7 @@ public class Pipeline {
      * @param prepDir {@link Path} the cull prep directory to troubleshoot
      * @return a {@link JobHandle} of {@link TroubleshootReport} a handle to the running job
      */
-    public JobHandle<TroubleshootReport> troubleshoot(Path prepDir) {
+    public JobHandle<TroubleshootReport> troubleshoot(final Path prepDir) {
         return jobRunner.submit(_ -> troubleshooter.troubleshoot(prepDir));
     }
 
@@ -283,7 +283,7 @@ public class Pipeline {
      * @param prepDir {@link Path} the cull prep directory to discard
      * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
      */
-    public JobHandle<DiscardReport> discard(Path prepDir) {
+    public JobHandle<DiscardReport> discard(final Path prepDir) {
         return jobRunner.submit(_ -> {
             if (prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new IllegalStateException("Prep dir " + prepDir
@@ -302,7 +302,7 @@ public class Pipeline {
      * @param prepDir {@link Path} the cull prep directory to check
      * @return boolean true if a watcher is currently polling it
      */
-    boolean isWatchActive(Path prepDir) {
+    boolean isWatchActive(final Path prepDir) {
         return cullEngine.isWatchActive(prepDir);
     }
 
@@ -313,7 +313,7 @@ public class Pipeline {
      * @param work a {@link PhaseRunner.PhaseWork} of T the work to run
      * @return T the result of the work
      */
-    private <T> T runPhase(String phase, PhaseRunner.PhaseWork<T> work) throws Exception {
+    private <T> T runPhase(final String phase, final PhaseRunner.PhaseWork<T> work) throws Exception {
         return phaseRunner.run(phase, work);
     }
 
@@ -333,7 +333,7 @@ public class Pipeline {
          * @param message {@link String} the exception message
          * @param sortSummary {@link SortSummary} the sort summary produced before the conflict
          */
-        CurateConflictException(String message, SortSummary sortSummary) {
+        CurateConflictException(final String message, final SortSummary sortSummary) {
             super(message);
             this.sortSummary = sortSummary;
         }

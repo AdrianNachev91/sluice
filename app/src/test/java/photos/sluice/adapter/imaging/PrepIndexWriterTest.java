@@ -24,16 +24,16 @@ class PrepIndexWriterTest {
     private final PrepIndexWriter writer = new PrepIndexWriter();
 
     @Test
-    void writesIndexJsonMatchingTheExactContractShape(@TempDir Path dir) throws IOException {
-        Path indexPath = dir.resolve("index.json");
-        Path basePath = dir.resolve("Sorted");
-        Path prepDir = dir.resolve("prep");
-        Path corrupt = dir.resolve("corrupt.cr2");
-        var prep = new PrepDir("2023", basePath, 42, List.of(corrupt), 2, prepDir, List.of("montage-001", "montage-002"));
+    void writesIndexJsonMatchingTheExactContractShape(@TempDir final Path dir) throws IOException {
+        final Path indexPath = dir.resolve("index.json");
+        final Path basePath = dir.resolve("Sorted");
+        final Path prepDir = dir.resolve("prep");
+        final Path corrupt = dir.resolve("corrupt.cr2");
+        final var prep = new PrepDir("2023", basePath, 42, List.of(corrupt), 2, prepDir, List.of("montage-001", "montage-002"));
 
         writer.write(indexPath, prep);
 
-        String json = Files.readString(indexPath, StandardCharsets.UTF_8);
+        final String json = Files.readString(indexPath, StandardCharsets.UTF_8);
         assertThat(json).isEqualToIgnoringWhitespace("""
                 {
                   "scope": "2023",
@@ -48,9 +48,9 @@ class PrepIndexWriterTest {
     }
 
     @Test
-    void wrapsAWriteFailureIntoUncheckedIOException(@TempDir Path dir) {
-        Path indexPath = dir.resolve("missing-parent").resolve("index.json");
-        var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
+    void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
+        final Path indexPath = dir.resolve("missing-parent").resolve("index.json");
+        final var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> writer.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
@@ -58,12 +58,12 @@ class PrepIndexWriterTest {
     }
 
     @Test
-    void wrapsAJacksonExceptionDuringTheWriteItselfIntoUncheckedIOException(@TempDir Path dir) {
-        var mapper = mock(JsonMapper.class);
+    void wrapsAJacksonExceptionDuringTheWriteItselfIntoUncheckedIOException(@TempDir final Path dir) {
+        final var mapper = mock(JsonMapper.class);
         doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(java.io.OutputStream.class), any());
-        var writerWithFailingMapper = new PrepIndexWriter(mapper);
-        Path indexPath = dir.resolve("index.json");
-        var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
+        final var writerWithFailingMapper = new PrepIndexWriter(mapper);
+        final Path indexPath = dir.resolve("index.json");
+        final var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> writerWithFailingMapper.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
@@ -72,7 +72,7 @@ class PrepIndexWriterTest {
                 .cause().hasCauseInstanceOf(JacksonException.class);
     }
 
-    private static String jsonEscaped(Path path) {
+    private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
 }

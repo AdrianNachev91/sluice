@@ -9,7 +9,7 @@ class ShardTallyTest {
 
     @Test
     void acceptsPresentAndValidUpToTotal() {
-        ShardTally tally = new ShardTally(2, 1, 3);
+        final ShardTally tally = new ShardTally(2, 1, 3);
 
         assertThat(tally.present()).isEqualTo(2);
         assertThat(tally.valid()).isEqualTo(1);
@@ -18,14 +18,14 @@ class ShardTallyTest {
 
     @Test
     void presentEqualToTotalIsAllowed() {
-        ShardTally tally = new ShardTally(3, 2, 3);
+        final ShardTally tally = new ShardTally(3, 2, 3);
 
         assertThat(tally.present()).isEqualTo(3);
     }
 
     @Test
     void fullyResolvedTallyIsAllowed() {
-        ShardTally tally = new ShardTally(3, 3, 3);
+        final ShardTally tally = new ShardTally(3, 3, 3);
 
         assertThat(tally.valid()).isEqualTo(3);
     }

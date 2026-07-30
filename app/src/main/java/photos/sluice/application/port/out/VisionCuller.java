@@ -55,7 +55,7 @@ public interface VisionCuller {
      * @param progress {@link ProgressCallback} callback ticked once per montage processed
      * @return {@link CullReport} a report of what the run did and spent
      */
-    default CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
+    default CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress) throws CullException {
         return cull(prep, opts);
     }
 
@@ -72,7 +72,7 @@ public interface VisionCuller {
      * @param cancellation {@link CancellationSignal} signal checked between montages
      * @return {@link CullReport} a report of what the run did and spent
      */
-    default CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress, CancellationSignal cancellation)
+    default CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress, final CancellationSignal cancellation)
             throws CullException {
         return cull(prep, opts, progress);
     }

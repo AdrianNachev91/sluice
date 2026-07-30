@@ -17,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DisasterDrawerTest {
 
     @Test
-    void filesASourceIntoThePrepDirsDisastersFolderEmbeddingTheGivenWhatAndExtension(@TempDir Path root) throws IOException {
-        Path prepDir = root.resolve("logs/cull-prep/2019-06");
-        Path source = writeFile(root.resolve("move-records.log"), "stale content");
+    void filesASourceIntoThePrepDirsDisastersFolderEmbeddingTheGivenWhatAndExtension(@TempDir final Path root) throws IOException {
+        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        final Path source = writeFile(root.resolve("move-records.log"), "stale content");
 
-        Path filed = drawer().file(prepDir, source, "move-records-log");
+        final Path filed = drawer().file(prepDir, source, "move-records-log");
 
         assertThat(filed.getParent()).isEqualTo(prepDir.resolve("disasters"));
         assertThat(filed.getFileName().toString()).matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}-move-records-log\\.log");
@@ -30,15 +30,15 @@ class DisasterDrawerTest {
     }
 
     @Test
-    void filingTwoEventsUnderTheSameWhatGetsTheSecondANumericSuffixInsteadOfOverwritingTheFirst(@TempDir Path root)
+    void filingTwoEventsUnderTheSameWhatGetsTheSecondANumericSuffixInsteadOfOverwritingTheFirst(@TempDir final Path root)
             throws IOException {
-        Path prepDir = root.resolve("logs/cull-prep/2019-06");
-        DisasterDrawer drawer = drawer();
-        Path firstSource = writeFile(root.resolve("first.log"), "first");
-        Path secondSource = writeFile(root.resolve("second.log"), "second");
+        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        final DisasterDrawer drawer = drawer();
+        final Path firstSource = writeFile(root.resolve("first.log"), "first");
+        final Path secondSource = writeFile(root.resolve("second.log"), "second");
 
-        Path firstFiled = drawer.file(prepDir, firstSource, "move-records-log");
-        Path secondFiled = drawer.file(prepDir, secondSource, "move-records-log");
+        final Path firstFiled = drawer.file(prepDir, firstSource, "move-records-log");
+        final Path secondFiled = drawer.file(prepDir, secondSource, "move-records-log");
 
         assertThat(firstFiled).isNotEqualTo(secondFiled);
         assertThat(Files.readString(firstFiled)).isEqualTo("first");
@@ -46,10 +46,10 @@ class DisasterDrawerTest {
     }
 
     @Test
-    void writesContentAsANewTimestampedDrawerEntry(@TempDir Path root) throws IOException {
-        Path prepDir = root.resolve("logs/cull-prep/2019-06");
+    void writesContentAsANewTimestampedDrawerEntry(@TempDir final Path root) throws IOException {
+        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
 
-        Path written = drawer().write(prepDir, "troubleshoot-report", "line one\nline two");
+        final Path written = drawer().write(prepDir, "troubleshoot-report", "line one\nline two");
 
         assertThat(written.getParent()).isEqualTo(prepDir.resolve("disasters"));
         assertThat(written.getFileName().toString()).matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}-troubleshoot-report\\.txt");
@@ -57,27 +57,27 @@ class DisasterDrawerTest {
     }
 
     @Test
-    void writingTwoReportsGetsTheSecondANumericSuffixInsteadOfOverwritingTheFirst(@TempDir Path root) {
-        Path prepDir = root.resolve("logs/cull-prep/2019-06");
-        DisasterDrawer drawer = drawer();
+    void writingTwoReportsGetsTheSecondANumericSuffixInsteadOfOverwritingTheFirst(@TempDir final Path root) {
+        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        final DisasterDrawer drawer = drawer();
 
-        Path first = drawer.write(prepDir, "troubleshoot-report", "first");
-        Path second = drawer.write(prepDir, "troubleshoot-report", "second");
+        final Path first = drawer.write(prepDir, "troubleshoot-report", "first");
+        final Path second = drawer.write(prepDir, "troubleshoot-report", "second");
 
         assertThat(first).isNotEqualTo(second);
     }
 
     @Test
-    void sweepExpiredDeletesOnlyDrawerEntriesOlderThanThirtyDays(@TempDir Path root) throws IOException {
-        Path cullPrepRoot = root.resolve("logs/cull-prep");
-        Path drawer1 = cullPrepRoot.resolve("2019-06/disasters");
-        Path oldEntry = writeFile(drawer1.resolve("2019-01-01_00-00-00-move-records-log.log"), "old");
-        Path freshEntry = writeFile(drawer1.resolve(recentStampedName()), "fresh");
+    void sweepExpiredDeletesOnlyDrawerEntriesOlderThanThirtyDays(@TempDir final Path root) throws IOException {
+        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        final Path drawer1 = cullPrepRoot.resolve("2019-06/disasters");
+        final Path oldEntry = writeFile(drawer1.resolve("2019-01-01_00-00-00-move-records-log.log"), "old");
+        final Path freshEntry = writeFile(drawer1.resolve(recentStampedName()), "fresh");
         // A sibling non-drawer file at the same nesting depth, to prove the sweep doesn't wander
         // outside disasters/ folders.
-        Path unrelated = writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
+        final Path unrelated = writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
 
-        int deleted = drawer().sweepExpired(cullPrepRoot);
+        final int deleted = drawer().sweepExpired(cullPrepRoot);
 
         assertThat(deleted).isEqualTo(1);
         assertThat(Files.exists(oldEntry)).isFalse();
@@ -86,35 +86,35 @@ class DisasterDrawerTest {
     }
 
     @Test
-    void sweepExpiredLeavesAnUnparseableFilenameAloneRatherThanGuessing(@TempDir Path root) throws IOException {
-        Path cullPrepRoot = root.resolve("logs/cull-prep");
-        Path unparseable = writeFile(cullPrepRoot.resolve("2019-06/disasters/not-a-timestamped-name.log"), "?");
+    void sweepExpiredLeavesAnUnparseableFilenameAloneRatherThanGuessing(@TempDir final Path root) throws IOException {
+        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        final Path unparseable = writeFile(cullPrepRoot.resolve("2019-06/disasters/not-a-timestamped-name.log"), "?");
 
-        int deleted = drawer().sweepExpired(cullPrepRoot);
+        final int deleted = drawer().sweepExpired(cullPrepRoot);
 
         assertThat(deleted).isZero();
         assertThat(Files.exists(unparseable)).isTrue();
     }
 
     @Test
-    void sweepExpiredOnAMissingRootReturnsZeroWithoutThrowing(@TempDir Path root) {
-        int deleted = drawer().sweepExpired(root.resolve("logs/cull-prep"));
+    void sweepExpiredOnAMissingRootReturnsZeroWithoutThrowing(@TempDir final Path root) {
+        final int deleted = drawer().sweepExpired(root.resolve("logs/cull-prep"));
 
         assertThat(deleted).isZero();
     }
 
     @Test
-    void sweepExpiredGraveyardDeletesOnlyGraveyardFoldersOlderThanThirtyDays(@TempDir Path root) throws IOException {
-        Path graveyardRoot = root.resolve("logs/disasters");
-        Path oldGraveyard = graveyardRoot.resolve("scope1-2019-01-01_00-00-00");
+    void sweepExpiredGraveyardDeletesOnlyGraveyardFoldersOlderThanThirtyDays(@TempDir final Path root) throws IOException {
+        final Path graveyardRoot = root.resolve("logs/disasters");
+        final Path oldGraveyard = graveyardRoot.resolve("scope1-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
         // Preserves a nested disasters/ subfolder's own structure - proves the whole tree is swept,
         // not just the graveyard's top-level files.
         writeFile(oldGraveyard.resolve("disasters/2019-01-01_00-00-01-corrupt-original.json"), "?");
-        Path freshGraveyard = graveyardRoot.resolve(recentStampedGraveyardName());
-        Path freshEntry = writeFile(freshGraveyard.resolve("index.json"), "{}");
+        final Path freshGraveyard = graveyardRoot.resolve(recentStampedGraveyardName());
+        final Path freshEntry = writeFile(freshGraveyard.resolve("index.json"), "{}");
 
-        int deleted = drawer().sweepExpiredGraveyard(graveyardRoot);
+        final int deleted = drawer().sweepExpiredGraveyard(graveyardRoot);
 
         assertThat(deleted).isEqualTo(1);
         assertThat(Files.exists(oldGraveyard)).isFalse();
@@ -122,51 +122,51 @@ class DisasterDrawerTest {
     }
 
     @Test
-    void sweepExpiredGraveyardParsesTheTimestampEvenWhenTheScopeTagItselfContainsHyphens(@TempDir Path root)
+    void sweepExpiredGraveyardParsesTheTimestampEvenWhenTheScopeTagItselfContainsHyphens(@TempDir final Path root)
             throws IOException {
         // A Year scope narrowed to specific months tags itself "2020-06-07-08" (CullScope.tag()) -
         // exactly the shape TIMESTAMP_SUFFIX's trailing anchor exists to parse correctly regardless
         // of how many hyphens the scope segment itself contributes.
-        Path oldGraveyard = root.resolve("logs/disasters/2020-06-07-08-2019-01-01_00-00-00");
+        final Path oldGraveyard = root.resolve("logs/disasters/2020-06-07-08-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
 
-        int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/disasters"));
+        final int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/disasters"));
 
         assertThat(deleted).isEqualTo(1);
         assertThat(Files.exists(oldGraveyard)).isFalse();
     }
 
     @Test
-    void sweepExpiredGraveyardLeavesAnUnparseableFolderNameAloneRatherThanGuessing(@TempDir Path root) throws IOException {
-        Path graveyardRoot = root.resolve("logs/disasters");
-        Path unparseable = writeFile(graveyardRoot.resolve("not-a-timestamped-name/index.json"), "{}");
+    void sweepExpiredGraveyardLeavesAnUnparseableFolderNameAloneRatherThanGuessing(@TempDir final Path root) throws IOException {
+        final Path graveyardRoot = root.resolve("logs/disasters");
+        final Path unparseable = writeFile(graveyardRoot.resolve("not-a-timestamped-name/index.json"), "{}");
 
-        int deleted = drawer().sweepExpiredGraveyard(graveyardRoot);
+        final int deleted = drawer().sweepExpiredGraveyard(graveyardRoot);
 
         assertThat(deleted).isZero();
         assertThat(Files.exists(unparseable)).isTrue();
     }
 
     @Test
-    void sweepExpiredGraveyardOnAMissingRootReturnsZeroWithoutThrowing(@TempDir Path root) {
-        int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/disasters"));
+    void sweepExpiredGraveyardOnAMissingRootReturnsZeroWithoutThrowing(@TempDir final Path root) {
+        final int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/disasters"));
 
         assertThat(deleted).isZero();
     }
 
     // A timestamp comfortably inside the 30-day retention window, so this entry must survive a sweep.
     private static String recentStampedName() {
-        DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
+        final DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
         return format.format(Instant.now().minus(Duration.ofDays(1))) + "-move-records-log.log";
     }
 
     // A graveyard folder name (<scope>-<timestamp>) comfortably inside the retention window.
     private static String recentStampedGraveyardName() {
-        DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
+        final DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
         return "scope1-" + format.format(Instant.now().minus(Duration.ofDays(1)));
     }
 
-    private static Path writeFile(Path file, String content) throws IOException {
+    private static Path writeFile(final Path file, final String content) throws IOException {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
         return file;

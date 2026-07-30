@@ -46,22 +46,22 @@ import static photos.sluice.application.service.PipelineTestSupport.writeShard;
 class CullEngineTest {
 
     @Test
-    void cullReturnsWaitingWithAnEmptyTallyWhenNoShardsHaveBeenDropped(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void cullReturnsWaitingWithAnEmptyTallyWhenNoShardsHaveBeenDropped(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
 
-        CullJobOutcome outcome = cullPipeline(root, progress).cull(new CullScope.Year(2019, null)).join();
+        final CullJobOutcome outcome = cullPipeline(root, progress).cull(new CullScope.Year(2019, null)).join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
-        WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
+        final WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
         assertThat(job.scope()).isEqualTo("2019");
         assertThat(job.shards()).isEqualTo(new ShardTally(0, 0, 1));
         assertThat(Files.exists(job.prepDir().resolve("index.json"))).isTrue();
     }
 
     @Test
-    void cullBracketsPreppingAndCullingPhasesButNeverReachesApplyingWhenWaiting(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void cullBracketsPreppingAndCullingPhasesButNeverReachesApplyingWhenWaiting(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
 
         cullPipeline(root, progress).cull(new CullScope.Year(2019, null)).join();
@@ -76,10 +76,10 @@ class CullEngineTest {
     // already has an unresolved WaitingCullJob would silently destroy any shard already dropped
     // for it.
     @Test
-    void cullRefusesToRebuildAScopeThatAlreadyHasAWaitingJob(@TempDir Path root) throws IOException {
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = cullPipeline(root, new RecordingProgressPort());
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+    void cullRefusesToRebuildAScopeThatAlreadyHasAWaitingJob(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
         assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
@@ -90,17 +90,17 @@ class CullEngineTest {
     }
 
     @Test
-    void waitingJobsIsEmptyWhenNoCullHasEverRun(@TempDir Path root) {
+    void waitingJobsIsEmptyWhenNoCullHasEverRun(@TempDir final Path root) {
         assertThat(cullPipeline(root, new RecordingProgressPort()).waitingJobs()).isEmpty();
     }
 
     @Test
-    void waitingJobsListsAPrepDirStillMissingShards(@TempDir Path root) throws IOException {
+    void waitingJobsListsAPrepDirStillMissingShards(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
         pipeline.cull(new CullScope.Year(2019, null)).join();
 
-        List<WaitingCullJob> waiting = pipeline.waitingJobs();
+        final List<WaitingCullJob> waiting = pipeline.waitingJobs();
 
         assertThat(waiting).hasSize(1);
         assertThat(waiting.getFirst().scope()).isEqualTo("2019");
@@ -108,29 +108,29 @@ class CullEngineTest {
     }
 
     @Test
-    void resumeAppliesOnceAValidShardIsDropped(@TempDir Path root) throws IOException {
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = cullPipeline(root, new RecordingProgressPort());
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+    void resumeAppliesOnceAValidShardIsDropped(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+        final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
-        var applied = (CullJobOutcome.Applied) outcome;
+        final var applied = (CullJobOutcome.Applied) outcome;
         assertThat(applied.applyReport().byCategory()).containsEntry("junk", 1);
         assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
 
     @Test
-    void resumeBracketsTheApplyingPhaseOnTheAppliedPath(@TempDir Path root) throws IOException {
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var progress = new RecordingProgressPort();
-        var pipeline = cullPipeline(root, progress);
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+    void resumeBracketsTheApplyingPhaseOnTheAppliedPath(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var progress = new RecordingProgressPort();
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         progress.events.clear();
 
@@ -142,17 +142,17 @@ class CullEngineTest {
     }
 
     @Test
-    void resumeReturnsWaitingAgainWithAnUpdatedTallyWhenAMontageStillLacksAShard(@TempDir Path root) throws IOException {
-        Path juneDir = sortedPhotosDir(root, "2019", "06");
-        Path a = writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+    void resumeReturnsWaitingAgainWithAnUpdatedTallyWhenAMontageStillLacksAShard(@TempDir final Path root) throws IOException {
+        final Path juneDir = sortedPhotosDir(root, "2019", "06");
+        final Path a = writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T10:00:00Z"));
-        var pipeline = cullPipeline(root, new RecordingProgressPort());
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         assertThat(waiting.job().shards()).isEqualTo(new ShardTally(0, 0, 2));
         writeShard(prepDir, "montage-001", classificationJson(a, "junk", "blurry"));
 
-        CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+        final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
         assertThat(((CullJobOutcome.Waiting) outcome).job().shards()).isEqualTo(new ShardTally(1, 1, 2));
@@ -160,16 +160,16 @@ class CullEngineTest {
     }
 
     @Test
-    void resumeWithAllowPartialAppliesWhatItHasAndLeavesTheMissingMontagesPhotoInPlace(@TempDir Path root) throws IOException {
-        Path juneDir = sortedPhotosDir(root, "2019", "06");
-        Path a = writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        Path b = writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T10:00:00Z"));
-        var pipeline = cullPipeline(root, new RecordingProgressPort());
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+    void resumeWithAllowPartialAppliesWhatItHasAndLeavesTheMissingMontagesPhotoInPlace(@TempDir final Path root) throws IOException {
+        final Path juneDir = sortedPhotosDir(root, "2019", "06");
+        final Path a = writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path b = writePhoto(juneDir, "b.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(a, "junk", "blurry"));
 
-        CullJobOutcome outcome = pipeline.resume(prepDir, true).join();
+        final CullJobOutcome outcome = pipeline.resume(prepDir, true).join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
         assertThat(Files.exists(a)).isFalse();
@@ -181,14 +181,14 @@ class CullEngineTest {
     // and must propagate, not quietly park the job as "waiting" like the external-agent provider's
     // identical checked exception does.
     @Test
-    void cullPropagatesAFailureFromAnAutomatedProviderInsteadOfReturningWaiting(@TempDir Path root) throws IOException {
+    void cullPropagatesAFailureFromAnAutomatedProviderInsteadOfReturningWaiting(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var progress = new RecordingProgressPort();
-        var settings = new FixedSettings("anthropic", List.of(new CullCategory("junk", "objectively worthless shots")),
+        final var progress = new RecordingProgressPort();
+        final var settings = new FixedSettings("anthropic", List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.MANUAL, null));
-        var pipeline = cullPipeline(root, progress, settings, List.of(new ThrowingCuller("anthropic")));
+        final var pipeline = cullPipeline(root, progress, settings, List.of(new ThrowingCuller("anthropic")));
 
-        var handle = pipeline.cull(new CullScope.Year(2019, null));
+        final var handle = pipeline.cull(new CullScope.Year(2019, null));
 
         assertThatThrownBy(handle::join)
                 .isInstanceOf(CompletionException.class)
@@ -205,31 +205,31 @@ class CullEngineTest {
     // armWatchIfConfigured() at all. isWatchActive() below is therefore false regardless of
     // provider - the dedicated provider-gate test further down is what actually proves that gate.
     @Test
-    void cullCancelledMidDispatchResolvesToWaitingThenResumeCompletes(@TempDir Path root) throws Exception {
+    void cullCancelledMidDispatchResolvesToWaitingThenResumeCompletes(@TempDir final Path root) throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
-        var firstShardWritten = new CountDownLatch(1);
-        var releaseCull = new CountDownLatch(1);
-        var settings = new FixedSettings("auto-approve",
+        final var firstShardWritten = new CountDownLatch(1);
+        final var releaseCull = new CountDownLatch(1);
+        final var settings = new FixedSettings("auto-approve",
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.WATCH, null));
-        var pipeline = cullPipeline(root, new RecordingProgressPort(), settings,
+        final var pipeline = cullPipeline(root, new RecordingProgressPort(), settings,
                 List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
 
-        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
         firstShardWritten.await();
         handle.requestCancellation();
         releaseCull.countDown();
-        CullJobOutcome outcome = handle.join();
+        final CullJobOutcome outcome = handle.join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
-        WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
-        Path prepDir = job.prepDir();
+        final WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
+        final Path prepDir = job.prepDir();
         assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
         assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isFalse();
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
 
-        CullJobOutcome resumed = pipeline.resume(prepDir, false).join();
+        final CullJobOutcome resumed = pipeline.resume(prepDir, false).join();
 
         assertThat(resumed).isInstanceOf(CullJobOutcome.Applied.class);
         assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isTrue();
@@ -242,29 +242,29 @@ class CullEngineTest {
     // behavior at. Without it, a leftover mode=WATCH setting would arm a phantom watcher for this
     // automated provider's own cancelled prep dir, risking an unasked-for, API-spending auto-resume.
     @Test
-    void armWatchesForExistingWaitingJobsNeverArmsAWatcherForAnAutomatedProvidersWaitingJob(@TempDir Path root)
+    void armWatchesForExistingWaitingJobsNeverArmsAWatcherForAnAutomatedProvidersWaitingJob(@TempDir final Path root)
             throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
-        var firstShardWritten = new CountDownLatch(1);
-        var releaseCull = new CountDownLatch(1);
-        var manualSettings = new FixedSettings("auto-approve",
+        final var firstShardWritten = new CountDownLatch(1);
+        final var releaseCull = new CountDownLatch(1);
+        final var manualSettings = new FixedSettings("auto-approve",
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.MANUAL, null));
-        var manualPipeline = cullPipeline(root, new RecordingProgressPort(), manualSettings,
+        final var manualPipeline = cullPipeline(root, new RecordingProgressPort(), manualSettings,
                 List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
 
-        JobHandle<CullJobOutcome> handle = manualPipeline.cull(new CullScope.Year(2019, null));
+        final JobHandle<CullJobOutcome> handle = manualPipeline.cull(new CullScope.Year(2019, null));
         firstShardWritten.await();
         handle.requestCancellation();
         releaseCull.countDown();
-        var waiting = (CullJobOutcome.Waiting) handle.join();
-        Path prepDir = waiting.job().prepDir();
+        final var waiting = (CullJobOutcome.Waiting) handle.join();
+        final Path prepDir = waiting.job().prepDir();
 
-        var watchSettings = new FixedSettings("auto-approve",
+        final var watchSettings = new FixedSettings("auto-approve",
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.WATCH, null));
-        var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchSettings, List.of(),
+        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchSettings, List.of(),
                 Duration.ofMillis(20));
 
         watchPipeline.armWatchesForExistingWaitingJobs();
@@ -282,19 +282,19 @@ class CullEngineTest {
     // whole cull-prep dir never existing at all. NeverCalledCuller fails the test outright if
     // dispatch runs at all, proving cancellation stops the job well before that.
     @Test
-    void cullCancelledMidRenderResolvesToCancelledWithNoPrepDirEverWritten(@TempDir Path root) throws Exception {
+    void cullCancelledMidRenderResolvesToCancelledWithNoPrepDirEverWritten(@TempDir final Path root) throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var listStarted = new CountDownLatch(1);
-        var releaseList = new CountDownLatch(1);
-        var mediaStore = new BlockingListFiles(listStarted, releaseList);
-        var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, defaultCullSettings(),
+        final var listStarted = new CountDownLatch(1);
+        final var releaseList = new CountDownLatch(1);
+        final var mediaStore = new BlockingListFiles(listStarted, releaseList);
+        final var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, defaultCullSettings(),
                 List.of(new NeverCalledCuller()));
 
-        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
         listStarted.await();
         handle.requestCancellation();
         releaseList.countDown();
-        CullJobOutcome outcome = handle.join();
+        final CullJobOutcome outcome = handle.join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Cancelled.class);
         assertThat(Files.exists(root.resolve("logs/cull-prep/2019"))).isFalse();
@@ -308,33 +308,33 @@ class CullEngineTest {
     // mid-render case above, this one resolves to Waiting, not Cancelled - a resumable prep dir
     // (with its dispatched shards) already exists by this point.
     @Test
-    void cullCancelledMidApplyResolvesToWaitingWithDecisionsJsonNeverWritten(@TempDir Path root) throws Exception {
+    void cullCancelledMidApplyResolvesToWaitingWithDecisionsJsonNeverWritten(@TempDir final Path root) throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
-        var moveStarted = new CountDownLatch(1);
-        var releaseMove = new CountDownLatch(1);
-        var mediaStore = new BlockingMoveTo(moveStarted, releaseMove);
-        var settings = new FixedSettings("auto-approve",
+        final var moveStarted = new CountDownLatch(1);
+        final var releaseMove = new CountDownLatch(1);
+        final var mediaStore = new BlockingMoveTo(moveStarted, releaseMove);
+        final var settings = new FixedSettings("auto-approve",
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.MANUAL, null));
-        var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, settings,
+        final var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, settings,
                 List.of(new JunkEverythingCuller()));
 
-        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
         moveStarted.await();
         handle.requestCancellation();
         releaseMove.countDown();
-        CullJobOutcome outcome = handle.join();
+        final CullJobOutcome outcome = handle.join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
-        Path prepDir = ((CullJobOutcome.Waiting) outcome).job().prepDir();
+        final Path prepDir = ((CullJobOutcome.Waiting) outcome).job().prepDir();
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
         // Exactly one of the two photos was fully processed (moved + recorded) before the
         // cancellation stopped the loop; scan order between them isn't guaranteed.
-        try (var junked = Files.list(root.resolve("Review/junk"))) {
+        try (final var junked = Files.list(root.resolve("Review/junk"))) {
             assertThat(junked.filter(p -> p.getFileName().toString().startsWith("IMG_")).count()).isEqualTo(1);
         }
-        try (var remaining = Files.list(sortedPhotosDir(root, "2019", "06"))) {
+        try (final var remaining = Files.list(sortedPhotosDir(root, "2019", "06"))) {
             assertThat(remaining.count()).isEqualTo(1);
         }
     }
@@ -345,30 +345,30 @@ class CullEngineTest {
     // same pause would arm a watcher (see cullInWatchModeAutoResumesOnceAValidShardIsDropped below).
     // This proves the simultaneous cancellation is what suppresses it, not just the settings.
     @Test
-    void manualModePauseDoesNotArmAWatcherWhenCancellationRacedIt(@TempDir Path root) throws Exception {
+    void manualModePauseDoesNotArmAWatcherWhenCancellationRacedIt(@TempDir final Path root) throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var started = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
                 List.of(new BlockingIncompleteCuller(started, release)), Duration.ofMillis(20));
 
-        JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
         started.await();
         handle.requestCancellation();
         release.countDown();
-        CullJobOutcome outcome = handle.join();
+        final CullJobOutcome outcome = handle.join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
-        Path prepDir = ((CullJobOutcome.Waiting) outcome).job().prepDir();
+        final Path prepDir = ((CullJobOutcome.Waiting) outcome).job().prepDir();
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
     }
 
     @Test
-    void cullInWatchModeAutoResumesOnceAValidShardIsDropped(@TempDir Path root) throws IOException {
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+    void cullInWatchModeAutoResumesOnceAValidShardIsDropped(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
 
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
@@ -388,16 +388,16 @@ class CullEngineTest {
     // A long poll interval keeps the watcher itself from racing to auto-resume before the manual
     // resume() below runs. This test is only about the manual path disarming it.
     @Test
-    void manualResumeDisarmsAnAlreadyArmedWatcher(@TempDir Path root) throws IOException {
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+    void manualResumeDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         assertThat(pipeline.isWatchActive(prepDir)).isTrue();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+        final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
@@ -409,13 +409,13 @@ class CullEngineTest {
     // it on disk instead. It arms a watcher purely from waitingJobs(), the same as it would after
     // a real app restart.
     @Test
-    void armWatchesForExistingWaitingJobsAutoResumesAJobItNeverStartedItself(@TempDir Path root) throws IOException {
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var manualPipeline = cullPipeline(root, new RecordingProgressPort());
-        var waiting = (CullJobOutcome.Waiting) manualPipeline.cull(new CullScope.Year(2019, null)).join();
+    void armWatchesForExistingWaitingJobsAutoResumesAJobItNeverStartedItself(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var manualPipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) manualPipeline.cull(new CullScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         watchPipeline.armWatchesForExistingWaitingJobs();
 
@@ -428,19 +428,19 @@ class CullEngineTest {
     // the "drops back to manual, all work preserved" contract from watchTimeout's own doc. Manual
     // resume must still work afterward, proving the job itself was never touched by the timeout.
     @Test
-    void watchModeGivesUpAfterTimeoutWithoutTouchingTheWaitingJob(@TempDir Path root) throws IOException {
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(Duration.ofMillis(60)),
+    void watchModeGivesUpAfterTimeoutWithoutTouchingTheWaitingJob(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(Duration.ofMillis(60)),
                 List.of(new ManualModeCuller()), Duration.ofMillis(10));
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
 
         // Polls for the real signal: the watcher actually stopping itself once the timeout fires.
         waitUntil(Duration.ofSeconds(2), () -> !pipeline.isWatchActive(prepDir));
         assertThat(Files.exists(photo)).isTrue();
 
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+        final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
         assertThat(Files.exists(photo)).isFalse();

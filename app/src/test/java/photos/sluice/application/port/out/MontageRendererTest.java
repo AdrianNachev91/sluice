@@ -17,15 +17,15 @@ class MontageRendererTest {
 
     @Test
     void progressAndCancellationAwareOverloadsDefaultToThePlainBuildMethod() {
-        var prepDir = new PrepDir("2020", Path.of("base"), 5, List.of(), 1, Path.of("prep"), List.of());
-        var calls = new ArrayList<String>();
-        MontageRenderer renderer = (_, _) -> {
+        final var prepDir = new PrepDir("2020", Path.of("base"), 5, List.of(), 1, Path.of("prep"), List.of());
+        final var calls = new ArrayList<String>();
+        final MontageRenderer renderer = (_, _) -> {
             calls.add("build");
             return prepDir;
         };
 
-        var scope = new CullScope.Year(2020, null);
-        var config = new MontageConfig(224, 5);
+        final var scope = new CullScope.Year(2020, null);
+        final var config = new MontageConfig(224, 5);
 
         assertThat(renderer.build(scope, config, ProgressCallback.NO_OP)).isSameAs(prepDir);
         assertThat(renderer.build(scope, config, ProgressCallback.NO_OP, CancellationSignal.NEVER))

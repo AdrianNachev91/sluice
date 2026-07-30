@@ -37,7 +37,7 @@ public class SidecarWriter {
      *
      * @param mapper {@link JsonMapper} the JSON mapper to write with
      */
-    SidecarWriter(JsonMapper mapper) {
+    SidecarWriter(final JsonMapper mapper) {
         this.mapper = mapper;
     }
 
@@ -62,17 +62,17 @@ public class SidecarWriter {
      * @param montagePath {@link Path} the montage image this sidecar describes
      * @param photos a {@link List} of {@link SidecarPhotoEntry}, the photo entries to record
      */
-    public void write(Path sidecarPath, Path montagePath, List<SidecarPhotoEntry> photos) {
-        var document = new Sidecar(
+    public void write(final Path sidecarPath, final Path montagePath, final List<SidecarPhotoEntry> photos) {
+        final var document = new Sidecar(
                 montagePath.toString(),
                 photos.stream()
                         .map(p -> new Photo(p.src().toString(), p.name(), p.time().toString(), p.received()))
                         .toList());
-        try (var output = Files.newOutputStream(sidecarPath)) {
+        try (final var output = Files.newOutputStream(sidecarPath)) {
             mapper.writeValue(output, document);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write sidecar " + sidecarPath, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to write sidecar " + sidecarPath, new IOException(e));
         }
     }

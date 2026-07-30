@@ -9,7 +9,7 @@ class CullCategoryTest {
 
     @Test
     void carriesNameAndDescription() {
-        var category = new CullCategory("receipts", "Paper receipts and invoices");
+        final var category = new CullCategory("receipts", "Paper receipts and invoices");
 
         assertThat(category.name()).isEqualTo("receipts");
         assertThat(category.description()).isEqualTo("Paper receipts and invoices");

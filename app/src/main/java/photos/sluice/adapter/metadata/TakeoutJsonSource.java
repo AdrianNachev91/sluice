@@ -34,19 +34,19 @@ public class TakeoutJsonSource implements DateSource {
      * @return an {@link Optional} {@link LocalDateTime}, the parsed timestamp, if the sidecar is present and well-formed
      */
     @Override
-    public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
+    public Optional<LocalDateTime> resolve(final MediaFile file, final @Nullable TakeoutSidecar sidecar) {
         if (sidecar == null) {
             return Optional.empty();
         }
-        try (var input = Files.newInputStream(sidecar.jsonPath())) {
-            JsonNode root = MAPPER.readTree(input);
-            JsonNode timestamp = root.path("photoTakenTime").path("timestamp");
+        try (final var input = Files.newInputStream(sidecar.jsonPath())) {
+            final JsonNode root = MAPPER.readTree(input);
+            final JsonNode timestamp = root.path("photoTakenTime").path("timestamp");
             // A missing node's .asLong() silently defaults to 0 (the Unix epoch) - checked
             // explicitly so a malformed sidecar can't masquerade as a trusted 1970 date.
             if (!timestamp.isString()) {
                 return Optional.empty();
             }
-            long epochSeconds = Long.parseLong(timestamp.asString());
+            final long epochSeconds = Long.parseLong(timestamp.asString());
             return Optional.of(
                     Instant.ofEpochSecond(epochSeconds).atZone(ZoneId.systemDefault()).toLocalDateTime());
         } catch (IOException | JacksonException | NumberFormatException _) {

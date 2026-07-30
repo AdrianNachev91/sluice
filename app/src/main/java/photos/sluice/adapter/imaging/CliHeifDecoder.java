@@ -35,7 +35,7 @@ public class CliHeifDecoder implements HeifDecoder {
      *
      * @param command {@link String} the CLI command name or path to invoke
      */
-    public CliHeifDecoder(String command) {
+    public CliHeifDecoder(final String command) {
         this.command = command;
     }
 
@@ -47,14 +47,14 @@ public class CliHeifDecoder implements HeifDecoder {
      *     failed for any reason
      */
     @Override
-    public Optional<BufferedImage> decode(Path file) {
-        Path output;
+    public Optional<BufferedImage> decode(final Path file) {
+        final Path output;
         try {
             output = Files.createTempFile("sluice-heif-", ".png");
         } catch (IOException _) {
             return Optional.empty();
         }
-        try (Process process = new ProcessBuilder(command, "--quiet", file.toString(), output.toString())
+        try (final Process process = new ProcessBuilder(command, "--quiet", file.toString(), output.toString())
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()) {
@@ -62,7 +62,7 @@ public class CliHeifDecoder implements HeifDecoder {
             // file still writes one diagnostic line. Both streams are discarded above rather than
             // read, since nothing here needs them, and leaving either unconsumed risks the child
             // blocking once its pipe buffer fills.
-            boolean finished;
+            final boolean finished;
             try {
                 finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             } catch (InterruptedException _) {

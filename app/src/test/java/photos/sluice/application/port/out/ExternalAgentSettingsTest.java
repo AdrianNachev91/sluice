@@ -11,7 +11,7 @@ class ExternalAgentSettingsTest {
 
     @Test
     void carriesTheGivenModeAndWatchTimeout() {
-        var settings = new ExternalAgentSettings(WatchMode.WATCH, Duration.ofMinutes(5));
+        final var settings = new ExternalAgentSettings(WatchMode.WATCH, Duration.ofMinutes(5));
 
         assertThat(settings.mode()).isEqualTo(WatchMode.WATCH);
         assertThat(settings.watchTimeout()).isEqualTo(Duration.ofMinutes(5));
@@ -22,7 +22,7 @@ class ExternalAgentSettingsTest {
         // Deliberately violates the non-null contract: Spring's reflective config binding can pass
         // null past the annotation when sluice.cull.external-agent.mode is absent.
         //noinspection DataFlowIssue
-        var settings = new ExternalAgentSettings(null, null);
+        final var settings = new ExternalAgentSettings(null, null);
 
         assertThat(settings.mode()).isEqualTo(WatchMode.MANUAL);
         assertThat(settings.watchTimeout()).isNull();

@@ -34,7 +34,7 @@ public class RescueDateResolver {
      * @param exifSource {@link DateSource} resolves from EXIF metadata
      * @param filenameSource {@link DateSource} resolves from the filename pattern
      */
-    public RescueDateResolver(DateSource exifSource, DateSource filenameSource) {
+    public RescueDateResolver(final DateSource exifSource, final DateSource filenameSource) {
         this.exifSource = exifSource;
         this.filenameSource = filenameSource;
     }
@@ -46,7 +46,7 @@ public class RescueDateResolver {
      * @param targetLeaf {@link String} the rescue destination's leaf folder name
      * @return an {@link Optional} {@link LocalDateTime}, if any source produced a plausible one
      */
-    public Optional<LocalDateTime> resolve(MediaFile file, String targetLeaf) {
+    public Optional<LocalDateTime> resolve(final MediaFile file, final String targetLeaf) {
         return folderDate(targetLeaf)
                 .or(() -> exifSource.resolve(file, null))
                 .or(() -> filenameSource.resolve(file, null))
@@ -59,8 +59,8 @@ public class RescueDateResolver {
      * @param targetLeaf {@link String} the rescue destination's leaf folder name
      * @return an {@link Optional} {@link LocalDateTime}, if the leaf matches the dated pattern
      */
-    private static Optional<LocalDateTime> folderDate(String targetLeaf) {
-        Matcher leaf = DATED_LEAF.matcher(targetLeaf);
+    private static Optional<LocalDateTime> folderDate(final String targetLeaf) {
+        final Matcher leaf = DATED_LEAF.matcher(targetLeaf);
         if (!leaf.matches()) {
             return Optional.empty();
         }

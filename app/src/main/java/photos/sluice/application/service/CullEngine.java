@@ -86,9 +86,9 @@ final class CullEngine {
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      */
-    CullEngine(MontageRenderer montageRenderer, CullDispatcher cullDispatcher, ApplyEngine applyEngine,
-            CullPrepPort cullPrepPort, CullSettings cullSettings, MediaStore mediaStore, PathsPort pathsPort,
-            MontageConfig montageConfig, JobRunner jobRunner, ProgressPort progressPort, Duration watchPollInterval) {
+    CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
+               final CullPrepPort cullPrepPort, final CullSettings cullSettings, final MediaStore mediaStore, final PathsPort pathsPort,
+               final MontageConfig montageConfig, final JobRunner jobRunner, final ProgressPort progressPort, final Duration watchPollInterval) {
         this.montageRenderer = montageRenderer;
         this.cullDispatcher = cullDispatcher;
         this.applyEngine = applyEngine;
@@ -141,7 +141,7 @@ final class CullEngine {
      * @param scope {@link CullScope} the media scope to cull
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
      */
-    JobHandle<CullJobOutcome> cull(CullScope scope) {
+    JobHandle<CullJobOutcome> cull(final CullScope scope) {
         checkNoWaitingJobFor(scope);
         return jobRunner.submit(handle -> buildFreshAndDispatch(scope, handle::isCancellationRequested));
     }
@@ -156,7 +156,7 @@ final class CullEngine {
      * @param allowPartial boolean whether a partial shard set is acceptable
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
      */
-    JobHandle<CullJobOutcome> resume(Path prepDir, boolean allowPartial) {
+    JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         return jobRunner.submit(handle ->
                 dispatchAndApply(cullPrepPort.readIndex(prepDir), allowPartial, handle::isCancellationRequested));
     }
@@ -172,7 +172,7 @@ final class CullEngine {
      * @return a {@link List} of {@link WaitingCullJob} every cull job still waiting on shards
      */
     List<WaitingCullJob> waitingJobs() {
-        Path cullPrepRoot = pathsPort.logs().resolve("cull-prep");
+        final Path cullPrepRoot = pathsPort.logs().resolve("cull-prep");
         if (!mediaStore.exists(cullPrepRoot)) {
             return List.of();
         }
@@ -192,8 +192,8 @@ final class CullEngine {
      * @param prepDir {@link Path} the prep dir to check
      * @return boolean whether a watcher is currently active for it
      */
-    boolean isWatchActive(Path prepDir) {
-        CullWatcher watcher = activeWatches.get(prepDir);
+    boolean isWatchActive(final Path prepDir) {
+        final CullWatcher watcher = activeWatches.get(prepDir);
         return watcher != null && watcher.isActive();
     }
 
@@ -202,8 +202,8 @@ final class CullEngine {
      *
      * @param scope {@link CullScope} the scope to check
      */
-    void checkNoWaitingJobFor(CullScope scope) {
-        String tag = CullScope.tag(scope);
+    void checkNoWaitingJobFor(final CullScope scope) {
+        final String tag = CullScope.tag(scope);
         waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst().ifPresent(existing -> {
             throw new IllegalStateException("A cull for scope '" + tag + "' is already waiting on shards at "
                     + existing.prepDir() + " - resume or resolve it before starting a new cull for the same scope.");
@@ -220,13 +220,13 @@ final class CullEngine {
      * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
      * @return {@link CullJobOutcome} the outcome of this cull attempt
      */
-    CullJobOutcome buildFreshAndDispatch(CullScope scope, CancellationSignal cancellation) throws Exception {
+    CullJobOutcome buildFreshAndDispatch(final CullScope scope, final CancellationSignal cancellation) throws Exception {
         checkNoWaitingJobFor(scope);
         // phaseRunner.run/PhaseWork are shared with sort/commit/rescue, which always return non-null -
         // keeping T itself non-null there avoids leaking a spurious "might be null" possibility
         // into those callers. Wrapping the result in Optional here instead keeps that shared
         // contract clean while still letting this call site express a real null case.
-        Optional<PrepDir> prep = phaseRunner.run(PREPPING,
+        final Optional<PrepDir> prep = phaseRunner.run(PREPPING,
                 progress -> Optional.ofNullable(montageRenderer.build(scope, montageConfig, progress, cancellation)));
         // Empty means the renderer itself stopped mid-render, before index.json was ever written -
         // nothing resumable exists yet. The renderer is the completion authority here: this
@@ -249,10 +249,10 @@ final class CullEngine {
      * @param prepDir {@link Path} the prep dir to read
      * @return an {@link Optional} {@link WaitingCullJob} the waiting job, or empty if the index is unreadable
      */
-    private Optional<WaitingCullJob> readWaitingJob(Path prepDir) {
+    private Optional<WaitingCullJob> readWaitingJob(final Path prepDir) {
         try {
             return Optional.of(buildWaitingJob(cullPrepPort.readIndex(prepDir)));
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             return Optional.empty();
         }
     }
@@ -277,18 +277,18 @@ final class CullEngine {
      * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
      * @return {@link CullJobOutcome} the outcome of this dispatch-and-apply attempt
      */
-    private CullJobOutcome dispatchAndApply(PrepDir prep, boolean allowPartial, CancellationSignal cancellation)
+    private CullJobOutcome dispatchAndApply(final PrepDir prep, final boolean allowPartial, final CancellationSignal cancellation)
             throws Exception {
         disarmWatch(prep.prepDir());
-        CullReport cullReport;
+        final CullReport cullReport;
         try {
             cullReport = phaseRunner.run(CULLING,
                     progress -> cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress, cancellation));
-        } catch (CullException e) {
+        } catch (final CullException e) {
             if (!cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
                 throw e;
             }
-            WaitingCullJob job = buildWaitingJob(prep);
+            final WaitingCullJob job = buildWaitingJob(prep);
             // Not armed when this CullException is itself the manual-mode pause racing a
             // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
             // pause (no cancellation involved) still arms as before.
@@ -305,7 +305,7 @@ final class CullEngine {
         if (cancellation.isCancelled()) {
             return new CullJobOutcome.Waiting(buildWaitingJob(prep));
         }
-        Optional<ApplyReport> applyReport = phaseRunner.run(APPLYING,
+        final Optional<ApplyReport> applyReport = phaseRunner.run(APPLYING,
                 progress -> Optional.ofNullable(
                         applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress, cancellation)));
         // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
@@ -325,7 +325,7 @@ final class CullEngine {
      * @param prep {@link PrepDir} the prep dir to snapshot
      * @return {@link WaitingCullJob} the waiting job for that prep dir
      */
-    private WaitingCullJob buildWaitingJob(PrepDir prep) {
+    private WaitingCullJob buildWaitingJob(final PrepDir prep) {
         return new WaitingCullJob(
                 prep.scope(), prep.prepDir(), shardTallyCalculator.tally(prep), mediaStore.lastModifiedTime(prep.prepDir()));
     }
@@ -349,12 +349,12 @@ final class CullEngine {
      *
      * @param job {@link WaitingCullJob} the waiting job to watch
      */
-    private void armWatchIfConfigured(WaitingCullJob job) {
+    private void armWatchIfConfigured(final WaitingCullJob job) {
         if (cullSettings.externalAgent().mode() != WatchMode.WATCH
                 || !cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
             return;
         }
-        Path prepDir = job.prepDir();
+        final Path prepDir = job.prepDir();
         activeWatches.compute(prepDir, (_, existing) -> {
             if (existing != null && existing.isActive()) {
                 return existing;
@@ -364,7 +364,7 @@ final class CullEngine {
             // "total time since the job first started waiting." A re-arm gets its own full timeout
             // window instead of inheriting a countdown already run down by an earlier streak. A
             // fresh app restart or a shard that turned invalid after looking ready are both re-arms.
-            var watcher = new CullWatcher(watchPollInterval, cullSettings.externalAgent().watchTimeout(),
+            final var watcher = new CullWatcher(watchPollInterval, cullSettings.externalAgent().watchTimeout(),
                     () -> shardTallyCalculator.isFullyValid(prepDir), () -> tryAutoResume(prepDir), Instant.now());
             watcher.start();
             return watcher;
@@ -379,8 +379,8 @@ final class CullEngine {
      *
      * @param prepDir {@link Path} the prep dir whose watcher should stop
      */
-    void disarmWatch(Path prepDir) {
-        CullWatcher watcher = activeWatches.remove(prepDir);
+    void disarmWatch(final Path prepDir) {
+        final CullWatcher watcher = activeWatches.remove(prepDir);
         if (watcher != null) {
             watcher.stop();
         }
@@ -399,11 +399,11 @@ final class CullEngine {
      * @param prepDir {@link Path} the prep dir to attempt to resume
      * @return boolean whether the resume attempt was actually submitted
      */
-    private boolean tryAutoResume(Path prepDir) {
-        JobHandle<CullJobOutcome> handle;
+    private boolean tryAutoResume(final Path prepDir) {
+        final JobHandle<CullJobOutcome> handle;
         try {
             handle = resume(prepDir, false);
-        } catch (IllegalStateException busy) {
+        } catch (final IllegalStateException busy) {
             return false;
         }
         handle.onComplete().whenComplete((_, failure) -> {

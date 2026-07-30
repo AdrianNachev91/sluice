@@ -28,42 +28,42 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PrepDirDoctorTest {
 
     @Test
-    void anAppliedRunReportsComplete(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void anAppliedRunReportsComplete(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         Files.writeString(prepDir.resolve("decisions.json"), "{}");
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.COMPLETE);
         assertThat(health.findings()).isEmpty();
     }
 
     @Test
-    void aCompleteRunReportsCompleteEvenWhenIndexJsonIsCorrupt(@TempDir Path root) throws IOException {
+    void aCompleteRunReportsCompleteEvenWhenIndexJsonIsCorrupt(@TempDir final Path root) throws IOException {
         // The completion check reads only decisions.json, since a COMPLETE run needs nothing else.
         // A corrupt index.json past that point must never surface as a blocking problem. It could
         // have been clobbered long after the run already finished.
-        Path prepDir = prepDir(root);
+        final Path prepDir = prepDir(root);
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
         Files.writeString(prepDir.resolve("decisions.json"), "{}");
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.COMPLETE);
         assertThat(health.findings()).isEmpty();
     }
 
     @Test
-    void aCorruptIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
+    void aCorruptIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
@@ -71,25 +71,25 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void aMissingIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root); // index.json never written at all
+    void aMissingIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root); // index.json never written at all
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
     }
 
     @Test
-    void aCorruptSidecarForAMontageWithAShardReportsBlockedWithAChoiceRemedyFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void aCorruptSidecarForAMontageWithAShardReportsBlockedWithAChoiceRemedyFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         // No sidecar written for montage-001 at all - stands in for a missing or corrupt one.
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
@@ -97,26 +97,26 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void aCorruptSidecarForAMontageWithNoShardYetReportsWaitingWithoutAFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void aCorruptSidecarForAMontageWithNoShardYetReportsWaitingWithoutAFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(culled, "x");
         writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.WAITING);
         assertThat(health.findings()).isEmpty();
     }
 
     @Test
-    void aMontageWithNoShardYetReportsWaitingWithoutAMissingShardFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path uncalled = root.resolve("Sorted/Photos/2019/06/b.jpg");
+    void aMontageWithNoShardYetReportsWaitingWithoutAMissingShardFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path uncalled = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(culled, "x");
         writeFile(uncalled, "y");
         writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
@@ -125,37 +125,37 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         // montage-002 has no shard yet - still being culled.
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.WAITING);
         assertThat(health.findings()).isEmpty();
     }
 
     @Test
-    void everyMontageShardedAndCleanReportsReady(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void everyMontageShardedAndCleanReportsReady(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.READY);
         assertThat(health.findings()).isEmpty();
     }
 
     @Test
-    void anOffContractDecisionReportsBlockedWithANoneRemedyFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void anOffContractDecisionReportsBlockedWithANoneRemedyFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "meme", "not a configured category"));
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
@@ -164,16 +164,16 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void aStrayShardReportsBlockedWithAnAutoRemedyFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void aStrayShardReportsBlockedWithAnAutoRemedyFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         writeShard(prepDir, "montage-002"); // no montage-002 entry in index.json - a stray shard
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new StrayShard("decisions-002.json"));
@@ -181,14 +181,14 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void aMissingSourceWithNoMoveRecordReportsBlockedWithAChoiceRemedyFinding(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk, no move record
+    void aMissingSourceWithNoMoveRecordReportsBlockedWithAChoiceRemedyFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk, no move record
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).hasSize(1);
@@ -198,19 +198,19 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void findingsAreOrderedAutoRemedyBeforeNoneRemedy(@TempDir Path root) throws IOException {
+    void findingsAreOrderedAutoRemedyBeforeNoneRemedy(@TempDir final Path root) throws IOException {
         // A stray shard (AUTO) and an off-contract decision (NONE) are both shard-contract findings,
         // so both surface together. A MissingSource (CHOICE) is different - it only ever surfaces
         // once the shard contract is already clean (see PrepDirDoctor.diagnose()'s own doc for why).
-        Path prepDir = prepDir(root);
-        Path offContract = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path prepDir = prepDir(root);
+        final Path offContract = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(offContract, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(offContract));
         writeShard(prepDir, "montage-001", classificationJson(offContract, "meme", "not a configured category"));
         writeShard(prepDir, "montage-002"); // stray shard, AUTO remedy
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).extracting(Finding::remedy)
@@ -218,14 +218,14 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void aShardContractProblemSuppressesMissingSourceCheckingForAnUnrelatedDecision(@TempDir Path root) throws IOException {
+    void aShardContractProblemSuppressesMissingSourceCheckingForAnUnrelatedDecision(@TempDir final Path root) throws IOException {
         // Guards against a misleading double finding. An off-contract decision already reports
         // InvalidCategory. An unrelated decision in the same batch, whose file is genuinely missing,
         // must not ALSO surface a MissingSource. The whole batch is already blocked on the shard
         // contract, the same gate apply() enforces before ever checking file existence.
-        Path prepDir = prepDir(root);
-        Path offContract = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path missingSource = root.resolve("Sorted/Photos/2019/06/b.jpg"); // never written, no move record
+        final Path prepDir = prepDir(root);
+        final Path offContract = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path missingSource = root.resolve("Sorted/Photos/2019/06/b.jpg"); // never written, no move record
         writeFile(offContract, "x");
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(offContract), sidecarEntry(missingSource));
@@ -233,7 +233,7 @@ class PrepDirDoctorTest {
                 classificationJson(offContract, "meme", "not a configured category"),
                 classificationJson(missingSource, "junk", "blurry"));
 
-        PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor().diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
@@ -241,19 +241,19 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void purgeCompletedDeletesOnlyCompletedRunsAndReportsSkippedScopesWithTheirState(@TempDir Path root)
+    void purgeCompletedDeletesOnlyCompletedRunsAndReportsSkippedScopesWithTheirState(@TempDir final Path root)
             throws IOException {
-        Path complete = prepDir(root, "complete1");
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path complete = prepDir(root, "complete1");
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(complete, 1, List.of("montage-001"));
         writeSidecar(complete, "montage-001", sidecarEntry(photo));
         writeShard(complete, "montage-001", classificationJson(photo, "junk", "blurry"));
         Files.writeString(complete.resolve("decisions.json"), "{}");
-        Path waiting = prepDir(root, "waiting1");
+        final Path waiting = prepDir(root, "waiting1");
         writeIndex(waiting, 1, List.of("montage-001")); // no shard yet - still culling
 
-        PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
+        final PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).containsExactly("complete1");
         assertThat(report.skipped()).containsExactly(entry("waiting1", State.WAITING));
@@ -262,48 +262,48 @@ class PrepDirDoctorTest {
     }
 
     @Test
-    void purgeCompletedOnAMissingCullPrepRootReturnsAnEmptyReport(@TempDir Path root) {
-        PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
+    void purgeCompletedOnAMissingCullPrepRootReturnsAnEmptyReport(@TempDir final Path root) {
+        final PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).isEmpty();
         assertThat(report.skipped()).isEmpty();
     }
 
-    private static Path prepDir(Path root) throws IOException {
+    private static Path prepDir(final Path root) throws IOException {
         return prepDir(root, "scope1");
     }
 
-    private static Path prepDir(Path root, String scope) throws IOException {
-        Path dir = root.resolve("logs/cull-prep").resolve(scope);
+    private static Path prepDir(final Path root, final String scope) throws IOException {
+        final Path dir = root.resolve("logs/cull-prep").resolve(scope);
         Files.createDirectories(dir);
         return dir;
     }
 
-    private static void writeIndex(Path prepDir, int photos, List<String> entries) {
+    private static void writeIndex(final Path prepDir, final int photos, final List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
                 new PrepDir("2019-06", prepDir.resolve("base"), photos, List.of(), entries.size(), prepDir, entries));
     }
 
-    private static void writeSidecar(Path prepDir, String montage, SidecarPhotoEntry... photos) {
+    private static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {
         new SidecarWriter().write(prepDir.resolve(montage + ".json"), prepDir.resolve(montage + ".jpg"), List.of(photos));
     }
 
-    private static SidecarPhotoEntry sidecarEntry(Path src) {
+    private static SidecarPhotoEntry sidecarEntry(final Path src) {
         return new SidecarPhotoEntry(src, src.getFileName().toString(), Instant.parse("2019-06-15T10:00:00Z"), false);
     }
 
-    private static void writeShard(Path prepDir, String montage, String... decisionsJson) throws IOException {
-        String shardName = montage.replaceFirst("^montage-", "decisions-") + ".json";
+    private static void writeShard(final Path prepDir, final String montage, final String... decisionsJson) throws IOException {
+        final String shardName = montage.replaceFirst("^montage-", "decisions-") + ".json";
         Files.writeString(prepDir.resolve(shardName),
                 "{ \"montage\": \"%s\", \"decisions\": [ %s ] }".formatted(montage, String.join(", ", decisionsJson)));
     }
 
-    private static String classificationJson(Path file, String category, String reason) {
+    private static String classificationJson(final Path file, final String category, final String reason) {
         return "{ \"file\": \"%s\", \"action\": \"%s\", \"reason\": \"%s\" }"
                 .formatted(file.toString().replace("\\", "\\\\"), category, reason);
     }
 
-    private static void writeFile(Path file, String content) throws IOException {
+    private static void writeFile(final Path file, final String content) throws IOException {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
     }

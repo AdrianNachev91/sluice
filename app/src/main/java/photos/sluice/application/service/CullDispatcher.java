@@ -37,7 +37,7 @@ public class CullDispatcher {
      * @param cullers a {@link List} of {@link VisionCuller} the vision cullers to register
      * @param settings {@link CullSettings} cull provider configuration
      */
-    public CullDispatcher(List<VisionCuller> cullers, CullSettings settings) {
+    public CullDispatcher(final List<VisionCuller> cullers, final CullSettings settings) {
         this.byId = cullers.stream().collect(Collectors.toMap(
                 VisionCuller::id, Function.identity(),
                 (first, _) -> {
@@ -53,7 +53,7 @@ public class CullDispatcher {
      * @param options {@link CullOptions} cull behavior options
      * @return {@link CullReport} the cull report
      */
-    public CullReport cull(PrepDir prep, CullOptions options) throws CullException {
+    public CullReport cull(final PrepDir prep, final CullOptions options) throws CullException {
         return select().cull(prep, options);
     }
 
@@ -65,7 +65,7 @@ public class CullDispatcher {
      * @param progress {@link ProgressCallback} progress callback
      * @return {@link CullReport} the cull report
      */
-    public CullReport cull(PrepDir prep, CullOptions options, ProgressCallback progress) throws CullException {
+    public CullReport cull(final PrepDir prep, final CullOptions options, final ProgressCallback progress) throws CullException {
         return select().cull(prep, options, progress);
     }
 
@@ -78,7 +78,7 @@ public class CullDispatcher {
      * @param cancellation {@link CancellationSignal} cancellation signal
      * @return {@link CullReport} the cull report
      */
-    public CullReport cull(PrepDir prep, CullOptions options, ProgressCallback progress, CancellationSignal cancellation)
+    public CullReport cull(final PrepDir prep, final CullOptions options, final ProgressCallback progress, final CancellationSignal cancellation)
             throws CullException {
         return select().cull(prep, options, progress, cancellation);
     }
@@ -89,8 +89,8 @@ public class CullDispatcher {
      * @return {@link VisionCuller} the selected vision culler
      */
     private VisionCuller select() {
-        String provider = settings.provider();
-        VisionCuller culler = byId.get(provider);
+        final String provider = settings.provider();
+        final VisionCuller culler = byId.get(provider);
         if (culler == null) {
             throw new IllegalStateException("No vision culler registered for provider '" + provider
                     + "'. Registered: " + byId.keySet());

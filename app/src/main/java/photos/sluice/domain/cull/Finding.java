@@ -328,7 +328,7 @@ public sealed interface Finding {
      * @param index int the decision's 1-based position within its shard
      * @return {@link String} the location prefix
      */
-    static String at(String montage, int index) {
+    static String at(final String montage, final int index) {
         return montage + "[#" + index + "]";
     }
 }

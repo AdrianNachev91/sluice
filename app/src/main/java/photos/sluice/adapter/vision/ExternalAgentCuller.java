@@ -60,7 +60,7 @@ class ExternalAgentCuller implements VisionCuller {
      * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
      * @param settings {@link CullSettings} the cull settings
      */
-    ExternalAgentCuller(ShardCodec shardCodec, SidecarReader sidecarReader, CullSettings settings) {
+    ExternalAgentCuller(final ShardCodec shardCodec, final SidecarReader sidecarReader, final CullSettings settings) {
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
         this.settings = settings;
@@ -85,7 +85,7 @@ class ExternalAgentCuller implements VisionCuller {
      * @throws CullException if any montage's shard is missing or invalid
      */
     @Override
-    public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+    public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
         return cull(prep, opts, ProgressCallback.NO_OP);
     }
 
@@ -100,23 +100,23 @@ class ExternalAgentCuller implements VisionCuller {
      * @throws CullException if any montage's shard is missing or invalid
      */
     @Override
-    public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
-        var problems = new ArrayList<String>();
-        var shards = new ArrayList<ShardFile>();
-        int total = prep.entries().size();
+    public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress) throws CullException {
+        final var problems = new ArrayList<String>();
+        final var shards = new ArrayList<ShardFile>();
+        final int total = prep.entries().size();
         int current = 0;
-        for (String montage : prep.entries()) {
+        for (final String montage : prep.entries()) {
             collectShard(prep.prepDir(), montage, opts.allowPartial(), shards, problems);
             progress.tick(++current, total);
         }
         problems.addAll(strayShards(prep));
 
-        List<Path> sidecarSrcs = prep.entries().stream()
+        final List<Path> sidecarSrcs = prep.entries().stream()
                 .flatMap(montage -> sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json")).stream())
                 .map(SidecarPhotoEntry::src)
                 .toList();
-        List<String> categoryNames = settings.categories().stream().map(CullCategory::name).toList();
-        ValidationReport report = validator.validate(shards, sidecarSrcs, categoryNames, prep.unreviewable());
+        final List<String> categoryNames = settings.categories().stream().map(CullCategory::name).toList();
+        final ValidationReport report = validator.validate(shards, sidecarSrcs, categoryNames, prep.unreviewable());
         report.findings().stream().map(Finding::describe).forEach(problems::add);
 
         if (!problems.isEmpty()) {
@@ -141,10 +141,10 @@ class ExternalAgentCuller implements VisionCuller {
      * @param shards a {@link List} of {@link ShardFile}, accumulator for readable shards, mutated by this call
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
      */
-    private void collectShard(Path prepDir, String montage, boolean allowPartial,
-            List<ShardFile> shards, List<String> problems) {
-        String shardName = MontageNaming.shardFileFor(montage);
-        Path shardPath = prepDir.resolve(shardName);
+    private void collectShard(final Path prepDir, final String montage, final boolean allowPartial,
+                              final List<ShardFile> shards, final List<String> problems) {
+        final String shardName = MontageNaming.shardFileFor(montage);
+        final Path shardPath = prepDir.resolve(shardName);
         if (!Files.exists(shardPath)) {
             if (!allowPartial) {
                 problems.add(montage + ": no shard " + shardName);
@@ -153,7 +153,7 @@ class ExternalAgentCuller implements VisionCuller {
         }
         try {
             shards.add(new ShardFile(montage, shardCodec.read(shardPath)));
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             problems.add(shardName + ": " + rootMessage(e));
         }
     }
@@ -167,18 +167,18 @@ class ExternalAgentCuller implements VisionCuller {
      * @param prep {@link PrepDir} the prep directory to scan
      * @return a {@link List} of {@link String}, problems for every decisions file naming no current montage
      */
-    private static List<String> strayShards(PrepDir prep) {
-        List<String> expected = prep.entries().stream()
+    private static List<String> strayShards(final PrepDir prep) {
+        final List<String> expected = prep.entries().stream()
                 .map(MontageNaming::shardFileFor)
                 .toList();
-        try (Stream<Path> files = Files.list(prep.prepDir())) {
+        try (final Stream<Path> files = Files.list(prep.prepDir())) {
             return files.map(path -> path.getFileName().toString())
                     .filter(name -> name.startsWith("decisions-") && name.endsWith(".json"))
                     .filter(name -> !expected.contains(name))
                     .sorted()
                     .map(name -> name + ": no matching montage")
                     .toList();
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to list prep dir " + prep.prepDir(), e);
         }
     }
@@ -191,7 +191,7 @@ class ExternalAgentCuller implements VisionCuller {
      * @param e {@link Throwable} the exception to unwrap
      * @return {@link String} the deepest cause's message, or its toString if it has none
      */
-    private static String rootMessage(Throwable e) {
+    private static String rootMessage(final Throwable e) {
         Throwable root = e;
         while (root.getCause() != null) {
             root = root.getCause();

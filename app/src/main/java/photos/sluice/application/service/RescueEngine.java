@@ -47,8 +47,8 @@ public class RescueEngine implements RescueUseCase {
      * @param hashIndexPort {@link HashIndexPort} records rescued files in the hash index
      * @param rescueDateResolver {@link RescueDateResolver} resolves a rescue date per file
      */
-    public RescueEngine(PathsPort pathsPort, MediaStore mediaStore, Sha256Port sha256Port,
-            HashIndexPort hashIndexPort, RescueDateResolver rescueDateResolver) {
+    public RescueEngine(final PathsPort pathsPort, final MediaStore mediaStore, final Sha256Port sha256Port,
+                        final HashIndexPort hashIndexPort, final RescueDateResolver rescueDateResolver) {
         this.pathsPort = pathsPort;
         this.mediaStore = mediaStore;
         this.sha256Port = sha256Port;
@@ -63,7 +63,7 @@ public class RescueEngine implements RescueUseCase {
      * @return {@link RescueSummary} summary of rescued and skipped files
      */
     @Override
-    public RescueSummary rescue(String reviewFolder) {
+    public RescueSummary rescue(final String reviewFolder) {
         return rescue(reviewFolder, ProgressCallback.NO_OP, CancellationSignal.NEVER);
     }
 
@@ -74,7 +74,7 @@ public class RescueEngine implements RescueUseCase {
      * @param progress {@link ProgressCallback} progress callback ticked per file
      * @return {@link RescueSummary} summary of rescued and skipped files
      */
-    public RescueSummary rescue(String reviewFolder, ProgressCallback progress) {
+    public RescueSummary rescue(final String reviewFolder, final ProgressCallback progress) {
         return rescue(reviewFolder, progress, CancellationSignal.NEVER);
     }
 
@@ -87,24 +87,24 @@ public class RescueEngine implements RescueUseCase {
      * @param cancellation {@link CancellationSignal} checked between files to allow early stop
      * @return {@link RescueSummary} summary of rescued and skipped files, and whether the folder was removed
      */
-    public RescueSummary rescue(String reviewFolder, ProgressCallback progress, CancellationSignal cancellation) {
-        Path reviewRoot = pathsPort.review();
-        Path target = resolveWithinReview(reviewRoot, reviewFolder);
-        String targetLeaf = target.getFileName().toString();
-        Path libraryRoot = pathsPort.library();
+    public RescueSummary rescue(final String reviewFolder, final ProgressCallback progress, final CancellationSignal cancellation) {
+        final Path reviewRoot = pathsPort.review();
+        final Path target = resolveWithinReview(reviewRoot, reviewFolder);
+        final String targetLeaf = target.getFileName().toString();
+        final Path libraryRoot = pathsPort.library();
 
         // Snapshotted once, before any move happens, and reused below to find leftover
         // _reasons.txt markers. The loop below only ever relocates recognized media files, never a
         // marker file, so this list's marker entries are still accurate afterward. No need to
         // re-walk the directory a second time.
-        List<Path> allFiles = mediaStore.listFiles(target);
-        int total = allFiles.size();
+        final List<Path> allFiles = mediaStore.listFiles(target);
+        final int total = allFiles.size();
         int current = 0;
-        var outcome = new RescueOutcome();
+        final var outcome = new RescueOutcome();
         // One session for the whole rescue loop. Each rescued file's index row is written and
         // flushed immediately, so a crash mid-run never leaves an already-moved file with no index
         // row. The header/leading-newline checks still only run once, instead of once per file.
-        try (HashIndexPort.Session session = hashIndexPort.openSession()) {
+        try (final HashIndexPort.Session session = hashIndexPort.openSession()) {
             // Checked after each file, so an in-flight file is never interrupted; already-rescued
             // files stay rescued, matching the no-undo model.
             while (current < total && !cancellation.isCancelled()) {
@@ -117,7 +117,7 @@ public class RescueEngine implements RescueUseCase {
         // once the pass reached every file AND none of them were skipped. Checking skipped alone
         // isn't enough once a pass can stop early. A cancelled run with zero skips so far would
         // otherwise delete the _reasons.txt markers while unvisited media still sits in the folder.
-        boolean ranToCompletion = current == total;
+        final boolean ranToCompletion = current == total;
         boolean folderRemoved = false;
         if (ranToCompletion && outcome.skipped.isEmpty()) {
             allFiles.stream()
@@ -141,21 +141,21 @@ public class RescueEngine implements RescueUseCase {
      * @param outcome {@link RescueOutcome} accumulator for rescued count and skipped names
      * @param session {@link HashIndexPort.Session} hash-index session to append rescued entries
      */
-    private void rescueOneFile(Path file, String targetLeaf, Path libraryRoot, RescueOutcome outcome,
-            HashIndexPort.Session session) {
-        Optional<MediaType> type = mediaTypeDetector.classify(file);
+    private void rescueOneFile(final Path file, final String targetLeaf, final Path libraryRoot, final RescueOutcome outcome,
+                               final HashIndexPort.Session session) {
+        final Optional<MediaType> type = mediaTypeDetector.classify(file);
         if (type.isEmpty()) {
             return;
         }
-        Optional<LocalDateTime> date = rescueDateResolver.resolve(new MediaFile(file), targetLeaf);
+        final Optional<LocalDateTime> date = rescueDateResolver.resolve(new MediaFile(file), targetLeaf);
         if (date.isEmpty()) {
             outcome.skipped.add(file.getFileName().toString());
             return;
         }
-        Path destDir = libraryRoot.resolve(type.get() == MediaType.VIDEO ? "Videos" : "Photos")
+        final Path destDir = libraryRoot.resolve(type.get() == MediaType.VIDEO ? "Videos" : "Photos")
                 .resolve(yearFolder(date.get())).resolve(monthFolder(date.get()));
-        String hash = sha256Port.hash(file);
-        Path dest = mediaStore.move(file, destDir);
+        final String hash = sha256Port.hash(file);
+        final Path dest = mediaStore.move(file, destDir);
         session.append(new IndexEntry(hash, dest));
         outcome.rescued++;
     }
@@ -169,8 +169,8 @@ public class RescueEngine implements RescueUseCase {
      * @param reviewFolder {@link String} caller-supplied folder name to resolve
      * @return {@link Path} normalized path guaranteed to stay under reviewRoot
      */
-    private static Path resolveWithinReview(Path reviewRoot, String reviewFolder) {
-        Path target = reviewRoot.resolve(reviewFolder).normalize();
+    private static Path resolveWithinReview(final Path reviewRoot, final String reviewFolder) {
+        final Path target = reviewRoot.resolve(reviewFolder).normalize();
         if (!target.startsWith(reviewRoot)) {
             throw new IllegalArgumentException("reviewFolder must stay under Review: " + reviewFolder);
         }
@@ -183,7 +183,7 @@ public class RescueEngine implements RescueUseCase {
      * @param when {@link LocalDateTime} the date to format
      * @return {@link String} the four-digit year folder name
      */
-    private static String yearFolder(LocalDateTime when) {
+    private static String yearFolder(final LocalDateTime when) {
         return "%04d".formatted(when.getYear());
     }
 
@@ -193,7 +193,7 @@ public class RescueEngine implements RescueUseCase {
      * @param when {@link LocalDateTime} the date to format
      * @return {@link String} the two-digit month folder name
      */
-    private static String monthFolder(LocalDateTime when) {
+    private static String monthFolder(final LocalDateTime when) {
         return "%02d".formatted(when.getMonthValue());
     }
 

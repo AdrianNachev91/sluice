@@ -15,7 +15,7 @@ class CullScopeSelectorTest {
 
     @Test
     void directoriesToScanForYearWithMonthsReturnsSortedDeduplicatedMonthDirs() {
-        var scope = new CullScope.Year(2019, List.of(8, 6, 6, 7));
+        final var scope = new CullScope.Year(2019, List.of(8, 6, 6, 7));
 
         assertThat(selector.directoriesToScan(photosRoot, scope)).containsExactly(
                 photosRoot.resolve("2019").resolve("06"),
@@ -25,7 +25,7 @@ class CullScopeSelectorTest {
 
     @Test
     void directoriesToScanForYearWithNullMonthsReturnsWholeYearDir() {
-        var scope = new CullScope.Year(2019, null);
+        final var scope = new CullScope.Year(2019, null);
 
         assertThat(selector.directoriesToScan(photosRoot, scope))
                 .containsExactly(photosRoot.resolve("2019"));
@@ -39,7 +39,7 @@ class CullScopeSelectorTest {
 
     @Test
     void basePathForYearIsTheYearDirEvenWhenNarrowedToSpecificMonths() {
-        var scope = new CullScope.Year(2019, List.of(6));
+        final var scope = new CullScope.Year(2019, List.of(6));
 
         assertThat(selector.basePath(photosRoot, scope)).isEqualTo(photosRoot.resolve("2019"));
     }
@@ -51,11 +51,11 @@ class CullScopeSelectorTest {
 
     @Test
     void orderForYearSortsByMtimeAscendingWithoutLimiting() {
-        var oldest = candidate("a.jpg", "2019-06-01T00:00:00Z");
-        var middle = candidate("b.jpg", "2019-06-02T00:00:00Z");
-        var newest = candidate("c.jpg", "2019-06-03T00:00:00Z");
+        final var oldest = candidate("a.jpg", "2019-06-01T00:00:00Z");
+        final var middle = candidate("b.jpg", "2019-06-02T00:00:00Z");
+        final var newest = candidate("c.jpg", "2019-06-03T00:00:00Z");
 
-        var ordered = selector.order(
+        final var ordered = selector.order(
                 List.of(newest, oldest, middle), new CullScope.Year(2019, null));
 
         assertThat(ordered).containsExactly(oldest, middle, newest);
@@ -63,11 +63,11 @@ class CullScopeSelectorTest {
 
     @Test
     void orderForOldestNSortsThenCapsToN() {
-        var oldest = candidate("a.jpg", "2019-06-01T00:00:00Z");
-        var middle = candidate("b.jpg", "2019-06-02T00:00:00Z");
-        var newest = candidate("c.jpg", "2019-06-03T00:00:00Z");
+        final var oldest = candidate("a.jpg", "2019-06-01T00:00:00Z");
+        final var middle = candidate("b.jpg", "2019-06-02T00:00:00Z");
+        final var newest = candidate("c.jpg", "2019-06-03T00:00:00Z");
 
-        var ordered = selector.order(
+        final var ordered = selector.order(
                 List.of(newest, oldest, middle), new CullScope.OldestN(2));
 
         assertThat(ordered).containsExactly(oldest, middle);
@@ -75,15 +75,15 @@ class CullScopeSelectorTest {
 
     @Test
     void orderForOldestNWithNGreaterThanCandidateCountReturnsEverything() {
-        var oldest = candidate("a.jpg", "2019-06-01T00:00:00Z");
-        var newest = candidate("b.jpg", "2019-06-02T00:00:00Z");
+        final var oldest = candidate("a.jpg", "2019-06-01T00:00:00Z");
+        final var newest = candidate("b.jpg", "2019-06-02T00:00:00Z");
 
-        var ordered = selector.order(List.of(newest, oldest), new CullScope.OldestN(50));
+        final var ordered = selector.order(List.of(newest, oldest), new CullScope.OldestN(50));
 
         assertThat(ordered).containsExactly(oldest, newest);
     }
 
-    private static CullCandidate candidate(String name, String instant) {
+    private static CullCandidate candidate(final String name, final String instant) {
         return new CullCandidate(Path.of(name), Instant.parse(instant));
     }
 }

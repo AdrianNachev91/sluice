@@ -43,15 +43,15 @@ public final class MoveDiffer {
      * @param root {@link Path} the directory tree to walk
      * @return a {@link Set} of {@link String} forward-slash-normalized relative paths of all regular files under root
      */
-    public Set<String> relativeFilePaths(Path root) {
+    public Set<String> relativeFilePaths(final Path root) {
         if (!Files.isDirectory(root)) {
             return Set.of();
         }
-        try (Stream<Path> walk = Files.walk(root)) {
+        try (final Stream<Path> walk = Files.walk(root)) {
             return walk.filter(Files::isRegularFile)
                     .map(path -> root.relativize(path).toString().replace('\\', '/'))
                     .collect(Collectors.toCollection(HashSet::new));
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException(e);
         }
     }
@@ -63,7 +63,7 @@ public final class MoveDiffer {
      * @param rootB {@link Path} the second directory tree
      * @return {@link Diff} the set-diff between the two trees
      */
-    public Diff diffTrees(Path rootA, Path rootB) {
+    public Diff diffTrees(final Path rootA, final Path rootB) {
         return diff(relativeFilePaths(rootA), relativeFilePaths(rootB));
     }
 
@@ -74,10 +74,10 @@ public final class MoveDiffer {
      * @param b a {@link Set} of {@link String} the second set of paths
      * @return {@link Diff} paths only in a and paths only in b
      */
-    public Diff diff(Set<String> a, Set<String> b) {
-        Set<String> onlyInA = new HashSet<>(a);
+    public Diff diff(final Set<String> a, final Set<String> b) {
+        final Set<String> onlyInA = new HashSet<>(a);
         onlyInA.removeAll(b);
-        Set<String> onlyInB = new HashSet<>(b);
+        final Set<String> onlyInB = new HashSet<>(b);
         onlyInB.removeAll(a);
         return new Diff(onlyInA, onlyInB);
     }

@@ -17,7 +17,7 @@ class CommitScopeSelectorTest {
 
     @Test
     void yearScopeIncludesMatchingYearAcrossAnyMonth() {
-        var scope = new CommitScope.Year(2019, null);
+        final var scope = new CommitScope.Year(2019, null);
 
         assertThat(selector.isInScope("Photos/2019/01/a.jpg", scope)).isTrue();
         assertThat(selector.isInScope("Photos/2019/12/a.jpg", scope)).isTrue();
@@ -26,7 +26,7 @@ class CommitScopeSelectorTest {
 
     @Test
     void yearScopeWithMonthRangeExcludesOutOfRangeMonths() {
-        var scope = new CommitScope.Year(2019, new MonthRange(6, 8));
+        final var scope = new CommitScope.Year(2019, new MonthRange(6, 8));
 
         assertThat(selector.isInScope("Videos/2019/07/a.mp4", scope)).isTrue();
         assertThat(selector.isInScope("Videos/2019/05/a.mp4", scope)).isFalse();

@@ -83,26 +83,26 @@ public final class ShardValidator {
      * @param unreviewable a {@link Collection} of {@link Path} files that could not be rendered for review
      * @return {@link ValidationReport} the aggregated validation report
      */
-    public ValidationReport validate(List<ShardFile> shards, Collection<Path> sidecarSrcs,
-            List<String> categories, Collection<Path> unreviewable) {
-        Set<Path> inScope = Set.copyOf(sidecarSrcs);
-        Map<String, Path> healableByBasename = healableByBasename(sidecarSrcs);
-        Set<String> categorySet = Set.copyOf(categories);
-        String allowedClause = categories.isEmpty()
+    public ValidationReport validate(final List<ShardFile> shards, final Collection<Path> sidecarSrcs,
+                                     final List<String> categories, final Collection<Path> unreviewable) {
+        final Set<Path> inScope = Set.copyOf(sidecarSrcs);
+        final Map<String, Path> healableByBasename = healableByBasename(sidecarSrcs);
+        final Set<String> categorySet = Set.copyOf(categories);
+        final String allowedClause = categories.isEmpty()
                 ? "no categories configured"
                 : "allowed: " + String.join(", ", categories);
 
-        var problems = new ArrayList<Finding>();
-        var heals = new ArrayList<String>();
-        var decisions = new ArrayList<Decision>();
+        final var problems = new ArrayList<Finding>();
+        final var heals = new ArrayList<String>();
+        final var decisions = new ArrayList<Decision>();
         // group id -> the montage ids that reference it, for the cross-shard uniqueness check below.
-        Map<String, Set<String>> montagesByGroup = new TreeMap<>();
+        final Map<String, Set<String>> montagesByGroup = new TreeMap<>();
 
-        List<ShardFile> ordered = shards.stream()
+        final List<ShardFile> ordered = shards.stream()
                 .sorted(Comparator.comparing(ShardFile::expectedMontage))
                 .toList();
 
-        for (ShardFile file : ordered) {
+        for (final ShardFile file : ordered) {
             validateShard(file, inScope, healableByBasename, categorySet, allowedClause,
                     montagesByGroup, problems, heals, decisions);
         }
@@ -118,18 +118,18 @@ public final class ShardValidator {
         // real choice (trust the decision, or treat the file as unreviewable). Every other shape -
         // two decisions, two unreviewable entries, or three or more references - has no such
         // resolution, and stays the general DuplicateFileReference.
-        Map<String, List<Decision>> decisionsByFile = new TreeMap<>();
-        for (Decision d : decisions) {
-            String f = d.file().toString();
+        final Map<String, List<Decision>> decisionsByFile = new TreeMap<>();
+        for (final Decision d : decisions) {
+            final String f = d.file().toString();
             if (!f.isBlank()) {
                 decisionsByFile.computeIfAbsent(f, _ -> new ArrayList<>()).add(d);
             }
         }
-        Map<String, Integer> unreviewableCountByFile = new TreeMap<>();
-        for (Path u : unreviewable) {
+        final Map<String, Integer> unreviewableCountByFile = new TreeMap<>();
+        for (final Path u : unreviewable) {
             unreviewableCountByFile.merge(u.toString(), 1, Integer::sum);
         }
-        Set<String> allReferencedFiles = new TreeSet<>();
+        final Set<String> allReferencedFiles = new TreeSet<>();
         allReferencedFiles.addAll(decisionsByFile.keySet());
         allReferencedFiles.addAll(unreviewableCountByFile.keySet());
         allReferencedFiles.forEach(f -> checkDuplicateReferences(f,
@@ -158,9 +158,9 @@ public final class ShardValidator {
      * @param unreviewableCount int how many times f appears in the unreviewable list
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      */
-    private static void checkDuplicateReferences(String f, List<Decision> decisionsForFile, int unreviewableCount,
-            List<Finding> problems) {
-        long count = decisionsForFile.size() + unreviewableCount;
+    private static void checkDuplicateReferences(final String f, final List<Decision> decisionsForFile, final int unreviewableCount,
+                                                 final List<Finding> problems) {
+        final long count = decisionsForFile.size() + unreviewableCount;
         if (count <= 1) {
             return;
         }
@@ -184,11 +184,11 @@ public final class ShardValidator {
      * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
      * @param decisions a {@link List} of {@link Decision} accumulated merged, heal-corrected decisions
      */
-    private void validateShard(ShardFile file, Set<Path> inScope, Map<String, Path> healableByBasename,
-            Set<String> categorySet, String allowedClause, Map<String, Set<String>> montagesByGroup,
-            List<Finding> problems, List<String> heals, List<Decision> decisions) {
-        String montageId = file.expectedMontage();
-        DecisionShard shard = file.shard();
+    private void validateShard(final ShardFile file, final Set<Path> inScope, final Map<String, Path> healableByBasename,
+                               final Set<String> categorySet, final String allowedClause, final Map<String, Set<String>> montagesByGroup,
+                               final List<Finding> problems, final List<String> heals, final List<Decision> decisions) {
+        final String montageId = file.expectedMontage();
+        final DecisionShard shard = file.shard();
 
         if (shard.montage().isBlank()) {
             problems.add(new MissingMontageField(montageId));
@@ -196,10 +196,10 @@ public final class ShardValidator {
             problems.add(new MontageFieldMismatch(montageId, shard.montage()));
         }
 
-        var chosenPerGroup = new HashMap<String, Integer>();
-        var rejectsPerGroup = new HashMap<String, Integer>();
+        final var chosenPerGroup = new HashMap<String, Integer>();
+        final var rejectsPerGroup = new HashMap<String, Integer>();
         int index = 0;
-        for (Decision decision : shard.decisions()) {
+        for (final Decision decision : shard.decisions()) {
             index++;
             validateFields(decision, montageId, index, categorySet, allowedClause, chosenPerGroup, rejectsPerGroup, problems);
             decisions.add(healFile(decision, montageId, index, inScope, healableByBasename, problems, heals));
@@ -207,12 +207,12 @@ public final class ShardValidator {
 
         // Each near-dup group within a shard needs exactly one chosen keeper and at least one reject.
         // Groups never span montages, so a group is complete within the one shard that declares it.
-        Set<String> groups = new TreeSet<>();
+        final Set<String> groups = new TreeSet<>();
         groups.addAll(chosenPerGroup.keySet());
         groups.addAll(rejectsPerGroup.keySet());
-        for (String group : groups) {
-            int chosen = chosenPerGroup.getOrDefault(group, 0);
-            int rejects = rejectsPerGroup.getOrDefault(group, 0);
+        for (final String group : groups) {
+            final int chosen = chosenPerGroup.getOrDefault(group, 0);
+            final int rejects = rejectsPerGroup.getOrDefault(group, 0);
             if (chosen != 1) {
                 problems.add(new WrongChosenCount(montageId, group, chosen));
             }
@@ -238,10 +238,10 @@ public final class ShardValidator {
      * @param rejectsPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated reject count per group
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      */
-    private void validateFields(Decision decision, String montage, int index, Set<String> categorySet, String allowedClause,
-            Map<String, Integer> chosenPerGroup, Map<String, Integer> rejectsPerGroup, List<Finding> problems) {
+    private void validateFields(final Decision decision, final String montage, final int index, final Set<String> categorySet, final String allowedClause,
+                                final Map<String, Integer> chosenPerGroup, final Map<String, Integer> rejectsPerGroup, final List<Finding> problems) {
         switch (decision) {
-            case Classification c -> {
+            case final Classification c -> {
                 if (!categorySet.contains(c.category())) {
                     problems.add(new InvalidCategory(montage, index, c.category(), allowedClause));
                 }
@@ -249,7 +249,7 @@ public final class ShardValidator {
                     problems.add(new MissingReason(montage, index));
                 }
             }
-            case NearDupChosen c -> {
+            case final NearDupChosen c -> {
                 if (c.group().isBlank()) {
                     problems.add(new MissingGroup(montage, index));
                 } else {
@@ -259,7 +259,7 @@ public final class ShardValidator {
                     problems.add(new MissingChosenReason(montage, index));
                 }
             }
-            case NearDupReject r -> {
+            case final NearDupReject r -> {
                 if (r.group().isBlank()) {
                     problems.add(new MissingGroup(montage, index));
                 } else {
@@ -287,9 +287,9 @@ public final class ShardValidator {
      * @param heals a {@link List} of {@link String} accumulated non-fatal path heals
      * @return {@link Decision} the decision, with its file resolved or unchanged
      */
-    private Decision healFile(Decision decision, String montage, int index, Set<Path> inScope,
-            Map<String, Path> healableByBasename, List<Finding> problems, List<String> heals) {
-        Path fileValue = decision.file();
+    private Decision healFile(final Decision decision, final String montage, final int index, final Set<Path> inScope,
+                              final Map<String, Path> healableByBasename, final List<Finding> problems, final List<String> heals) {
+        final Path fileValue = decision.file();
         if (fileValue.toString().isBlank()) {
             problems.add(new MissingFile(montage, index));
             return decision;
@@ -297,7 +297,7 @@ public final class ShardValidator {
         if (inScope.contains(fileValue)) {
             return decision;
         }
-        Path healed = healableByBasename.get(fileValue.getFileName().toString());
+        final Path healed = healableByBasename.get(fileValue.getFileName().toString());
         if (healed != null) {
             heals.add(Finding.at(montage, index) + ": '" + fileValue + "' -> '" + healed + "'");
             return withFile(decision, healed);
@@ -316,12 +316,12 @@ public final class ShardValidator {
      * @param sidecarSrcs a {@link Collection} of {@link Path} every in-scope file the montages actually showed
      * @return a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique basename
      */
-    private static Map<String, Path> healableByBasename(Collection<Path> sidecarSrcs) {
-        Map<String, Set<Path>> srcsByBasename = new HashMap<>();
-        for (Path src : sidecarSrcs) {
+    private static Map<String, Path> healableByBasename(final Collection<Path> sidecarSrcs) {
+        final Map<String, Set<Path>> srcsByBasename = new HashMap<>();
+        for (final Path src : sidecarSrcs) {
             srcsByBasename.computeIfAbsent(src.getFileName().toString(), _ -> new HashSet<>()).add(src);
         }
-        Map<String, Path> unique = new HashMap<>();
+        final Map<String, Path> unique = new HashMap<>();
         srcsByBasename.forEach((basename, srcs) -> {
             if (srcs.size() == 1) {
                 unique.put(basename, srcs.iterator().next());
@@ -337,11 +337,11 @@ public final class ShardValidator {
      * @param file {@link Path} the replacement file path
      * @return {@link Decision} the decision with the replaced file
      */
-    private static Decision withFile(Decision decision, Path file) {
+    private static Decision withFile(final Decision decision, final Path file) {
         return switch (decision) {
-            case Classification c -> new Classification(file, c.category(), c.reason());
-            case NearDupChosen c -> new NearDupChosen(file, c.group(), c.chosenReason());
-            case NearDupReject r -> new NearDupReject(file, r.group(), r.reason());
+            case final Classification c -> new Classification(file, c.category(), c.reason());
+            case final NearDupChosen c -> new NearDupChosen(file, c.group(), c.chosenReason());
+            case final NearDupReject r -> new NearDupReject(file, r.group(), r.reason());
         };
     }
 }

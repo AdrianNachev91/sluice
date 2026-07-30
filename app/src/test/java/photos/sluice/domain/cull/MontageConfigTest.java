@@ -9,7 +9,7 @@ class MontageConfigTest {
 
     @Test
     void defaultsAre224PixelTilesInA5x5Grid() {
-        MontageConfig config = MontageConfig.defaults();
+        final MontageConfig config = MontageConfig.defaults();
 
         assertThat(config.tileSize()).isEqualTo(224);
         assertThat(config.tilesPerRow()).isEqualTo(5);

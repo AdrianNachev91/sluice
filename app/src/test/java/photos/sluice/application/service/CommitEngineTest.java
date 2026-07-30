@@ -30,11 +30,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CommitEngineTest {
 
     @Test
-    void movesSortedFileIntoLibraryAtTheSameRelativeStructure(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
+    void movesSortedFileIntoLibraryAtTheSameRelativeStructure(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "keeper");
 
-        CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.All());
+        final CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.All());
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(summary.byBucket()).containsEntry(LibraryBucket.PHOTOS, 1);
@@ -43,12 +43,12 @@ class CommitEngineTest {
     }
 
     @Test
-    void appendsAnIndexRowForEveryCommittedFile(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path source = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void appendsAnIndexRowForEveryCommittedFile(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path source = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(source, "keeper");
-        String expectedHash = new Sha256Hasher().hash(source);
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final String expectedHash = new Sha256Hasher().hash(source);
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
 
         commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
 
@@ -58,12 +58,12 @@ class CommitEngineTest {
     }
 
     @Test
-    void yearScopeCommitsOnlyMatchingYear(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
+    void yearScopeCommitsOnlyMatchingYear(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/in.jpg"), "in");
         writeFile(root.resolve("Sorted/Photos/2020/01/out.jpg"), "out");
 
-        CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
+        final CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/in.jpg"))).isTrue();
@@ -71,12 +71,12 @@ class CommitEngineTest {
     }
 
     @Test
-    void monthRangeNarrowsWithinAYear(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
+    void monthRangeNarrowsWithinAYear(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Videos/2019/07/in.mp4"), "in");
         writeFile(root.resolve("Sorted/Videos/2019/05/out.mp4"), "out");
 
-        CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, new MonthRange(6, 8)));
+        final CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, new MonthRange(6, 8)));
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(Files.exists(libraryRoot.resolve("Videos/2019/07/in.mp4"))).isTrue();
@@ -84,23 +84,23 @@ class CommitEngineTest {
     }
 
     @Test
-    void allScopeIncludesUndatedFunnyButYearScopeExcludesIt(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
+    void allScopeIncludesUndatedFunnyButYearScopeExcludesIt(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Funny/joke.jpg"), "funny");
 
-        CommitSummary yearSummary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
+        final CommitSummary yearSummary = commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null));
         assertThat(yearSummary.committed()).isEqualTo(0);
         assertThat(Files.exists(root.resolve("Sorted/Funny/joke.jpg"))).isTrue();
 
-        CommitSummary allSummary = commitEngine(root, libraryRoot).commit(new CommitScope.All());
+        final CommitSummary allSummary = commitEngine(root, libraryRoot).commit(new CommitScope.All());
         assertThat(allSummary.committed()).isEqualTo(1);
         assertThat(allSummary.byBucket()).containsEntry(LibraryBucket.FUNNY, 1);
         assertThat(Files.exists(libraryRoot.resolve("Funny/joke.jpg"))).isTrue();
     }
 
     @Test
-    void prunesSortedDirectoriesLeftEmptyAfterCommit(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
+    void prunesSortedDirectoriesLeftEmptyAfterCommit(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "keeper");
 
         commitEngine(root, libraryRoot).commit(new CommitScope.All());
@@ -110,12 +110,12 @@ class CommitEngineTest {
     }
 
     @Test
-    void committingAnEmptyScopeIsANoOp(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
+    void committingAnEmptyScopeIsANoOp(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
         Files.createDirectories(root.resolve("Sorted"));
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
 
-        CommitSummary summary = commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
+        final CommitSummary summary = commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
 
         assertThat(summary.committed()).isEqualTo(0);
         assertThat(summary.byBucket()).isEmpty();
@@ -123,32 +123,32 @@ class CommitEngineTest {
     }
 
     @Test
-    void committingWithNoSortedDirectoryAtAllFailsLoudly(@TempDir Path root) {
-        Path libraryRoot = root.resolve("Library"); // Sorted itself is never created
+    void committingWithNoSortedDirectoryAtAllFailsLoudly(@TempDir final Path root) {
+        final Path libraryRoot = root.resolve("Library"); // Sorted itself is never created
 
         assertThatThrownBy(() -> commitEngine(root, libraryRoot).commit(new CommitScope.All()))
                 .isInstanceOf(UncheckedIOException.class);
     }
 
     @Test
-    void aCrashAfterTheFirstMoveLeavesItsIndexRowDurableAndResumeFinishesTheSecond(@TempDir Path root)
+    void aCrashAfterTheFirstMoveLeavesItsIndexRowDurableAndResumeFinishesTheSecond(@TempDir final Path root)
             throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(first, "keeper1");
         writeFile(second, "keeper2");
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
-        String firstHash = new Sha256Hasher().hash(first);
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final String firstHash = new Sha256Hasher().hash(first);
         // Allows exactly one move to succeed, then throws - simulating a process crash right after
         // the first file's move-and-index but before the loop reaches the second.
-        CommitEngine crashingEngine = commitEngine(root, libraryRoot, hashIndex, new FailingAfterMoves(1));
+        final CommitEngine crashingEngine = commitEngine(root, libraryRoot, hashIndex, new FailingAfterMoves(1));
 
         assertThatThrownBy(() -> crashingEngine.commit(new CommitScope.All()))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("simulated crash");
 
-        Path firstDest = libraryRoot.resolve("Photos/2019/06/a.jpg");
+        final Path firstDest = libraryRoot.resolve("Photos/2019/06/a.jpg");
         assertThat(Files.exists(firstDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(firstHash);
         // The crash lands on the second file's move itself, before it touches the filesystem at
@@ -157,21 +157,21 @@ class CommitEngineTest {
         assertThat(Files.exists(second)).isTrue();
         assertThat(Files.exists(libraryRoot.resolve("Photos/2019/06/b.jpg"))).isFalse();
 
-        CommitSummary resumeSummary = commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
+        final CommitSummary resumeSummary = commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
 
         assertThat(resumeSummary.committed()).isEqualTo(1);
-        Path secondDest = libraryRoot.resolve("Photos/2019/06/b.jpg");
+        final Path secondDest = libraryRoot.resolve("Photos/2019/06/b.jpg");
         assertThat(Files.exists(secondDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(firstHash, new Sha256Hasher().hash(secondDest));
     }
 
     @Test
-    void progressCallbackTicksOnceForEveryFileWalkedRegardlessOfScope(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
+    void progressCallbackTicksOnceForEveryFileWalkedRegardlessOfScope(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/in.jpg"), "in");
         writeFile(root.resolve("Sorted/Photos/2020/01/out.jpg"), "out");
 
-        List<String> ticks = new ArrayList<>();
+        final List<String> ticks = new ArrayList<>();
         commitEngine(root, libraryRoot).commit(new CommitScope.Year(2019, null),
                 (current, total) -> ticks.add(current + "/" + total));
 
@@ -179,19 +179,19 @@ class CommitEngineTest {
     }
 
     @Test
-    void cancelMidCommitStopsEarlyLeavingAlreadyCommittedFilesCommittedAndSummaryPartial(@TempDir Path root)
+    void cancelMidCommitStopsEarlyLeavingAlreadyCommittedFilesCommittedAndSummaryPartial(@TempDir final Path root)
             throws IOException {
-        Path libraryRoot = root.resolve("Library");
+        final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
         writeFile(root.resolve("Sorted/Photos/2019/07/b.jpg"), "b");
 
         // Cancels once the first file's move has already ticked, so the loop stops before the
         // second file is even looked at. Scan order across the two files isn't guaranteed, so the
         // assertions below check counts rather than which specific file committed first.
-        AtomicBoolean cancelled = new AtomicBoolean(false);
-        ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+        final AtomicBoolean cancelled = new AtomicBoolean(false);
+        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
 
-        CommitSummary summary = commitEngine(root, libraryRoot)
+        final CommitSummary summary = commitEngine(root, libraryRoot)
                 .commit(new CommitScope.All(), cancelAfterFirstTick, cancelled::get);
 
         assertThat(summary.committed()).isEqualTo(1);
@@ -199,28 +199,28 @@ class CommitEngineTest {
         assertThat(regularFileCount(libraryRoot)).isEqualTo(1);
     }
 
-    private static long regularFileCount(Path root) throws IOException {
-        try (Stream<Path> walk = Files.walk(root)) {
+    private static long regularFileCount(final Path root) throws IOException {
+        try (final Stream<Path> walk = Files.walk(root)) {
             return walk.filter(Files::isRegularFile).count();
         }
     }
 
-    private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot) {
+    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot) {
         return commitEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
     }
 
-    private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex) {
+    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex) {
         return commitEngine(repoRoot, libraryRoot, hashIndex, new NioMediaStore());
     }
 
-    private static CommitEngine commitEngine(Path repoRoot, Path libraryRoot, CsvLibraryHashIndex hashIndex,
-            MediaStore mediaStore) {
-        var pathsConfig = new PathsConfig(
+    private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
+                                             final MediaStore mediaStore) {
+        final var pathsConfig = new PathsConfig(
                 new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
         return new CommitEngine(pathsConfig, mediaStore, new Sha256Hasher(), hashIndex);
     }
 
-    private static void writeFile(Path file, String content) throws IOException {
+    private static void writeFile(final Path file, final String content) throws IOException {
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
     }
@@ -232,22 +232,22 @@ class CommitEngineTest {
         private final MediaStore delegate = new NioMediaStore();
         private int movesUntilFailure;
 
-        FailingAfterMoves(int movesUntilFailure) {
+        FailingAfterMoves(final int movesUntilFailure) {
             this.movesUntilFailure = movesUntilFailure;
         }
 
         @Override
-        public List<Path> listFiles(Path root) {
+        public List<Path> listFiles(final Path root) {
             return delegate.listFiles(root).stream().sorted().toList();
         }
 
         @Override
-        public Instant lastModifiedTime(Path path) {
+        public Instant lastModifiedTime(final Path path) {
             return delegate.lastModifiedTime(path);
         }
 
         @Override
-        public Path move(Path source, Path destDir) {
+        public Path move(final Path source, final Path destDir) {
             if (movesUntilFailure <= 0) {
                 throw new RuntimeException("simulated crash");
             }
@@ -256,62 +256,62 @@ class CommitEngineTest {
         }
 
         @Override
-        public Path resolveDestination(Path source, Path destDir) {
+        public Path resolveDestination(final Path source, final Path destDir) {
             return delegate.resolveDestination(source, destDir);
         }
 
         @Override
-        public Path moveTo(Path source, Path destination) {
+        public Path moveTo(final Path source, final Path destination) {
             return delegate.moveTo(source, destination);
         }
 
         @Override
-        public Path copy(Path source, Path destDir) {
+        public Path copy(final Path source, final Path destDir) {
             return delegate.copy(source, destDir);
         }
 
         @Override
-        public void delete(Path path) {
+        public void delete(final Path path) {
             delegate.delete(path);
         }
 
         @Override
-        public void ensureDirectory(Path dir) {
+        public void ensureDirectory(final Path dir) {
             delegate.ensureDirectory(dir);
         }
 
         @Override
-        public boolean exists(Path path) {
+        public boolean exists(final Path path) {
             return delegate.exists(path);
         }
 
         @Override
-        public long size(Path path) {
+        public long size(final Path path) {
             return delegate.size(path);
         }
 
         @Override
-        public void appendLine(Path file, String line) {
+        public void appendLine(final Path file, final String line) {
             delegate.appendLine(file, line);
         }
 
         @Override
-        public void write(Path file, String content) {
+        public void write(final Path file, final String content) {
             delegate.write(file, content);
         }
 
         @Override
-        public List<String> readLines(Path file) {
+        public List<String> readLines(final Path file) {
             return delegate.readLines(file);
         }
 
         @Override
-        public void removeEmptyDirectories(Path root) {
+        public void removeEmptyDirectories(final Path root) {
             delegate.removeEmptyDirectories(root);
         }
 
         @Override
-        public void removeIfEmptyOfFiles(Path dir) {
+        public void removeIfEmptyOfFiles(final Path dir) {
             delegate.removeIfEmptyOfFiles(dir);
         }
     }

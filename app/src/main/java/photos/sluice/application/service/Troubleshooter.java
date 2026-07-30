@@ -56,8 +56,8 @@ public class Troubleshooter {
      * @param prepDirRemedies {@link PrepDirRemedies} runs the index rebuild and stray-shard repair
      * @param disasterDrawer {@link DisasterDrawer} files the rendered report for support hand-off
      */
-    public Troubleshooter(PrepDirDoctor prepDirDoctor, ReconcileEngine reconcileEngine,
-            PrepDirRemedies prepDirRemedies, DisasterDrawer disasterDrawer) {
+    public Troubleshooter(final PrepDirDoctor prepDirDoctor, final ReconcileEngine reconcileEngine,
+                          final PrepDirRemedies prepDirRemedies, final DisasterDrawer disasterDrawer) {
         this.prepDirDoctor = prepDirDoctor;
         this.reconcileEngine = reconcileEngine;
         this.prepDirRemedies = prepDirRemedies;
@@ -78,7 +78,7 @@ public class Troubleshooter {
      *         re-runs that identical check. If a later change breaks that invariant and this does
      *         throw, no report gets filed - the exception propagates before render() runs.
      */
-    public TroubleshootReport troubleshoot(Path prepDir) throws ApplyException {
+    public TroubleshootReport troubleshoot(final Path prepDir) throws ApplyException {
         final PrepDirHealth before = prepDirDoctor.diagnose(prepDir);
         final boolean indexRebuilt = before.findings().stream().anyMatch(Finding.CorruptIndex.class::isInstance)
                 && prepDirRemedies.rebuildIndex(prepDir).isPresent();
@@ -111,8 +111,8 @@ public class Troubleshooter {
      * @param diagnosis {@link PrepDirHealth} the diagnosis to read StrayShard findings from
      * @return a {@link List} of {@link String} every repair actually made ("shardFile -> montage")
      */
-    private List<String> repairStrayShards(Path prepDir, PrepDirHealth diagnosis) {
-        var repaired = new ArrayList<String>();
+    private List<String> repairStrayShards(final Path prepDir, final PrepDirHealth diagnosis) {
+        final var repaired = new ArrayList<String>();
         diagnosis.findings().stream()
                 .filter(Finding.StrayShard.class::isInstance)
                 .map(Finding.StrayShard.class::cast)
@@ -134,8 +134,8 @@ public class Troubleshooter {
      * @param after {@link PrepDirHealth} the diagnosis taken after any repair
      * @return {@link String} the rendered report text
      */
-    private static String render(Path prepDir, PrepDirHealth before, boolean indexRebuilt,
-            @Nullable ReconcileReport reconcile, List<String> strayShardsRepaired, PrepDirHealth after) {
+    private static String render(final Path prepDir, final PrepDirHealth before, final boolean indexRebuilt,
+                                 final @Nullable ReconcileReport reconcile, final List<String> strayShardsRepaired, final PrepDirHealth after) {
         final List<String> lines = new ArrayList<>();
         lines.add("Troubleshoot report for " + prepDir);
         lines.add("Before: " + before.state() + " - " + before.findings().size() + " finding(s)");
@@ -166,7 +166,7 @@ public class Troubleshooter {
      * @param findings a {@link List} of {@link Finding} the findings to render
      * @param lines a {@link List} of {@link String} the report lines accumulated so far
      */
-    private static void describeAll(List<Finding> findings, List<String> lines) {
+    private static void describeAll(final List<Finding> findings, final List<String> lines) {
         findings.forEach(finding -> lines.add("  - " + finding.describe()));
     }
 }

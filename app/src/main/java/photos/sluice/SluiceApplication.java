@@ -19,8 +19,8 @@ public class SluiceApplication {
      *
      * @param args {@link String}[] command-line arguments
      */
-    static void main(String[] args) {
-        Path configFile = ConfigDirLocator.locate(System.getProperty("os.name"), System.getenv())
+    static void main(final String[] args) {
+        final Path configFile = ConfigDirLocator.locate(System.getProperty("os.name"), System.getenv())
                 .resolve("config.yml");
         new SpringApplicationBuilder(SluiceApplication.class)
                 .properties("spring.config.import=optional:file:" + configFile)

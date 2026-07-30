@@ -145,8 +145,8 @@ class AnthropicCuller implements VisionCuller {
      * @param settings {@link CullSettings} the cull settings
      */
     @Autowired
-    AnthropicCuller(CullerPrompt prompt, ShardCodec shardCodec, SidecarReader sidecarReader,
-            CullSettings settings) {
+    AnthropicCuller(final CullerPrompt prompt, final ShardCodec shardCodec, final SidecarReader sidecarReader,
+                    final CullSettings settings) {
         this(prompt, shardCodec, sidecarReader, settings,
                 () -> defaultClient(settings.providerSettings()));
     }
@@ -160,8 +160,8 @@ class AnthropicCuller implements VisionCuller {
      * @param settings {@link CullSettings} the cull settings
      * @param clientFactory a {@link Supplier} of {@link AnthropicClient}, builds the Anthropic client used to call the model
      */
-    AnthropicCuller(CullerPrompt prompt, ShardCodec shardCodec, SidecarReader sidecarReader,
-            CullSettings settings, Supplier<AnthropicClient> clientFactory) {
+    AnthropicCuller(final CullerPrompt prompt, final ShardCodec shardCodec, final SidecarReader sidecarReader,
+                    final CullSettings settings, final Supplier<AnthropicClient> clientFactory) {
         this.prompt = prompt;
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
@@ -210,7 +210,7 @@ class AnthropicCuller implements VisionCuller {
      * @throws CullException if culling fails
      */
     @Override
-    public CullReport cull(PrepDir prep, CullOptions opts) throws CullException {
+    public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
         return cull(prep, opts, ProgressCallback.NO_OP);
     }
 
@@ -224,7 +224,7 @@ class AnthropicCuller implements VisionCuller {
      * @throws CullException if culling fails
      */
     @Override
-    public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress) throws CullException {
+    public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress) throws CullException {
         return cull(prep, opts, progress, CancellationSignal.NEVER);
     }
 
@@ -240,62 +240,62 @@ class AnthropicCuller implements VisionCuller {
      * @throws CullException if a montage's response fails validation and the corrective retry does too
      */
     @Override
-    public CullReport cull(PrepDir prep, CullOptions opts, ProgressCallback progress, CancellationSignal cancellation)
+    public CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress, final CancellationSignal cancellation)
             throws CullException {
-        String model = requiredModel();
-        boolean thinking = Boolean.TRUE.equals(settings.providerSettings().thinking());
-        String systemPrompt = prompt.systemPrompt();
-        List<String> categoryNames = settings.categories().stream().map(CullCategory::name).toList();
+        final String model = requiredModel();
+        final boolean thinking = Boolean.TRUE.equals(settings.providerSettings().thinking());
+        final String systemPrompt = prompt.systemPrompt();
+        final List<String> categoryNames = settings.categories().stream().map(CullCategory::name).toList();
         long inputTokens = 0;
         long outputTokens = 0;
         int culled = 0;
         int resumed = 0;
-        int total = prep.entries().size();
+        final int total = prep.entries().size();
         int ordinal = 0;
         // Every sidecar is read up front, so validation always sees the whole scope's files. That
         // is the in-scope set the shard contract defines. Accepted shards still accumulate one
         // montage at a time. ShardValidator's cross-shard rules (a near-dup group id reused by
         // two montages, say) can only fire on the whole set. Earlier shards are known clean, so
         // any fresh problem implicates the current montage.
-        var entriesByMontage = new LinkedHashMap<String, List<SidecarPhotoEntry>>();
-        for (String montage : prep.entries()) {
+        final var entriesByMontage = new LinkedHashMap<String, List<SidecarPhotoEntry>>();
+        for (final String montage : prep.entries()) {
             entriesByMontage.put(montage,
                     sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json")));
         }
-        List<Path> scopeSrcs = entriesByMontage.values().stream()
+        final List<Path> scopeSrcs = entriesByMontage.values().stream()
                 .flatMap(List::stream)
                 .map(SidecarPhotoEntry::src)
                 .toList();
-        var acceptedShards = new ArrayList<ShardFile>();
-        AnthropicClient client = clientFactory.get();
+        final var acceptedShards = new ArrayList<ShardFile>();
+        final AnthropicClient client = clientFactory.get();
         try {
             // A second check runs below, right before the corrective retry. That halves the
             // worst-case cancel latency, at the cost of discarding a paid-for first-attempt
             // response when a cancel lands between it and the retry. Either way, an interrupted
             // montage writes no shard and the loop ends without throwing.
             while (ordinal < total && !cancellation.isCancelled()) {
-                String montage = prep.entries().get(ordinal);
+                final String montage = prep.entries().get(ordinal);
                 ordinal++;
-                List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
-                Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
+                final List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
+                final Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
                 if (resumesExistingShard(shardPath, montage, acceptedShards, scopeSrcs,
                         categoryNames, prep.unreviewable())) {
                     resumed++;
                 } else {
-                    MessageCreateParams request = request(model, thinking, systemPrompt,
+                    final MessageCreateParams request = request(model, thinking, systemPrompt,
                             prompt.userTurn(prep.scope(), montage, ordinal, total, entries),
                             montageImageBase64(prep.prepDir(), montage));
-                    Message response = client.messages().create(request);
+                    final Message response = client.messages().create(request);
                     inputTokens += response.usage().inputTokens();
                     outputTokens += response.usage().outputTokens();
                     AttemptOutcome outcome = attempt(montage, entries, response, acceptedShards,
                             scopeSrcs, categoryNames, prep.unreviewable());
                     if (outcome.shard() == null && !cancellation.isCancelled()) {
-                        Message retryResponse = client.messages().create(retryRequest(request,
+                        final Message retryResponse = client.messages().create(retryRequest(request,
                                 responseText(response), prompt.correctionTurn(outcome.problems())));
                         inputTokens += retryResponse.usage().inputTokens();
                         outputTokens += retryResponse.usage().outputTokens();
-                        AttemptOutcome retried = attempt(montage, entries, retryResponse,
+                        final AttemptOutcome retried = attempt(montage, entries, retryResponse,
                                 acceptedShards, scopeSrcs, categoryNames, prep.unreviewable());
                         if (retried.shard() == null) {
                             // A cancellation requested while the retry call itself was in flight
@@ -337,16 +337,16 @@ class AnthropicCuller implements VisionCuller {
      * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
      * @return boolean true if the existing shard is valid and was accepted
      */
-    private boolean resumesExistingShard(Path shardPath, String montage,
-            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
-            List<Path> unreviewable) {
+    private boolean resumesExistingShard(final Path shardPath, final String montage,
+                                         final List<ShardFile> acceptedShards, final List<Path> scopeSrcs, final List<String> categoryNames,
+                                         final List<Path> unreviewable) {
         if (!Files.exists(shardPath)) {
             return false;
         }
         final DecisionShard existing;
         try {
             existing = shardCodec.read(shardPath);
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             return false;
         }
         return acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames, unreviewable).isEmpty();
@@ -364,15 +364,15 @@ class AnthropicCuller implements VisionCuller {
      * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
      * @return {@link AttemptOutcome} the resulting shard, or the problems found
      */
-    private AttemptOutcome attempt(String montage, List<SidecarPhotoEntry> entries, Message response,
-            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
-            List<Path> unreviewable) {
-        var problems = new ArrayList<String>();
-        DecisionShard shard = shardOf(montage, entries, response, problems);
+    private AttemptOutcome attempt(final String montage, final List<SidecarPhotoEntry> entries, final Message response,
+                                   final List<ShardFile> acceptedShards, final List<Path> scopeSrcs, final List<String> categoryNames,
+                                   final List<Path> unreviewable) {
+        final var problems = new ArrayList<String>();
+        final DecisionShard shard = shardOf(montage, entries, response, problems);
         if (shard == null) {
             return new AttemptOutcome(null, problems);
         }
-        List<String> validationProblems =
+        final List<String> validationProblems =
                 acceptIfValid(montage, shard, acceptedShards, scopeSrcs, categoryNames, unreviewable);
         if (!validationProblems.isEmpty()) {
             return new AttemptOutcome(null, validationProblems);
@@ -395,11 +395,11 @@ class AnthropicCuller implements VisionCuller {
      * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
      * @return a {@link List} of {@link String}, validation problems found, empty if the shard was accepted
      */
-    private List<String> acceptIfValid(String montage, DecisionShard shard,
-            List<ShardFile> acceptedShards, List<Path> scopeSrcs, List<String> categoryNames,
-            List<Path> unreviewable) {
+    private List<String> acceptIfValid(final String montage, final DecisionShard shard,
+                                       final List<ShardFile> acceptedShards, final List<Path> scopeSrcs, final List<String> categoryNames,
+                                       final List<Path> unreviewable) {
         acceptedShards.add(new ShardFile(montage, shard));
-        ValidationReport report = validator.validate(acceptedShards, scopeSrcs, categoryNames, unreviewable);
+        final ValidationReport report = validator.validate(acceptedShards, scopeSrcs, categoryNames, unreviewable);
         if (!report.valid()) {
             acceptedShards.removeLast();
         }
@@ -418,16 +418,16 @@ class AnthropicCuller implements VisionCuller {
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
      * @return {@link DecisionShard} the resulting shard, or null if problems were found
      */
-    private @Nullable DecisionShard shardOf(String montage, List<SidecarPhotoEntry> entries,
-            Message response, List<String> problems) {
-        RawResponse parsed = parse(response, problems);
+    private @Nullable DecisionShard shardOf(final String montage, final List<SidecarPhotoEntry> entries,
+                                            final Message response, final List<String> problems) {
+        final RawResponse parsed = parse(response, problems);
         if (parsed == null) {
             return null;
         }
-        var decisions = new ArrayList<Decision>();
-        var seenIndices = new HashSet<Integer>();
-        List<@Nullable RawVerdict> verdicts = parsed.verdicts() == null ? List.of() : parsed.verdicts();
-        for (RawVerdict verdict : verdicts) {
+        final var decisions = new ArrayList<Decision>();
+        final var seenIndices = new HashSet<Integer>();
+        final List<@Nullable RawVerdict> verdicts = parsed.verdicts() == null ? List.of() : parsed.verdicts();
+        for (final RawVerdict verdict : verdicts) {
             collectDecision(verdict, entries, seenIndices, decisions, problems);
         }
         for (int index = 1; index <= entries.size(); index++) {
@@ -452,13 +452,13 @@ class AnthropicCuller implements VisionCuller {
      * @param decisions a {@link List} of {@link Decision}, accumulator for collected decisions, mutated by this call
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
      */
-    private static void collectDecision(@Nullable RawVerdict verdict, List<SidecarPhotoEntry> entries,
-            HashSet<Integer> seenIndices, List<Decision> decisions, List<String> problems) {
+    private static void collectDecision(final @Nullable RawVerdict verdict, final List<SidecarPhotoEntry> entries,
+                                        final HashSet<Integer> seenIndices, final List<Decision> decisions, final List<String> problems) {
         if (verdict == null) {
             problems.add("null verdict entry");
             return;
         }
-        Integer index = verdict.index();
+        final Integer index = verdict.index();
         if (index == null || index < 1 || index > entries.size()) {
             problems.add("verdict index " + index + " out of range 1.." + entries.size());
             return;
@@ -467,13 +467,13 @@ class AnthropicCuller implements VisionCuller {
             problems.add("photo " + index + " has more than one verdict");
             return;
         }
-        SidecarPhotoEntry entry = entries.get(index - 1);
+        final SidecarPhotoEntry entry = entries.get(index - 1);
         if (!entry.name().equals(verdict.name())) {
             problems.add("verdict " + index + " names '" + verdict.name()
                     + "' but photo " + index + " is '" + entry.name() + "'");
             return;
         }
-        String action = orEmpty(verdict.action());
+        final String action = orEmpty(verdict.action());
         if (action.equals(KEEP)) {
             return;
         }
@@ -493,14 +493,14 @@ class AnthropicCuller implements VisionCuller {
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
      * @return {@link RawResponse} the parsed response, or null if it couldn't be parsed
      */
-    private @Nullable RawResponse parse(Message response, List<String> problems) {
-        String text = responseText(response);
+    private @Nullable RawResponse parse(final Message response, final List<String> problems) {
+        final String text = responseText(response);
         if (text.isBlank()) {
             problems.add("response carries no text content");
             return null;
         }
         try {
-            RawResponse parsed = mapper.readValue(text, RawResponse.class);
+            final RawResponse parsed = mapper.readValue(text, RawResponse.class);
             // A literal null document deserializes to null; the IDE binds the generic result to
             // the non-null type and can't see that.
             //noinspection ConstantValue
@@ -508,7 +508,7 @@ class AnthropicCuller implements VisionCuller {
                 problems.add("response is not a JSON object");
             }
             return parsed;
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             problems.add("response is not valid verdict JSON: " + e.getMessage());
             return null;
         }
@@ -520,7 +520,7 @@ class AnthropicCuller implements VisionCuller {
      * @param response {@link Message} the model's response
      * @return {@link String} the response's full text content
      */
-    private static String responseText(Message response) {
+    private static String responseText(final Message response) {
         return response.content().stream()
                 .flatMap(block -> block.text().stream())
                 .map(TextBlock::text)
@@ -536,8 +536,8 @@ class AnthropicCuller implements VisionCuller {
      * @param retryProblems a {@link List} of {@link String}, problems from the retry attempt
      * @return {@link CullException} the exception naming both attempts' problems
      */
-    private static CullException retryFailedException(String scope, String montage,
-            List<String> firstProblems, List<String> retryProblems) {
+    private static CullException retryFailedException(final String scope, final String montage,
+                                                      final List<String> firstProblems, final List<String> retryProblems) {
         return new CullException("Cull for " + scope + " failed at " + montage
                 + " and a corrective retry did not fix it."
                 + "\nFirst attempt (" + firstProblems.size() + " problem(s)):\n - "
@@ -561,9 +561,9 @@ class AnthropicCuller implements VisionCuller {
      * @param imageBase64 {@link String} the montage image, base64-encoded
      * @return {@link MessageCreateParams} the assembled request
      */
-    private static MessageCreateParams request(String model, boolean thinking, String systemPrompt,
-            String userTurn, String imageBase64) {
-        var builder = MessageCreateParams.builder()
+    private static MessageCreateParams request(final String model, final boolean thinking, final String systemPrompt,
+                                               final String userTurn, final String imageBase64) {
+        final var builder = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(thinking ? MAX_TOKENS_THINKING : MAX_TOKENS)
                 .system(systemPrompt)
@@ -598,8 +598,8 @@ class AnthropicCuller implements VisionCuller {
      * @param correctionTurn {@link String} the follow-up turn listing the problems
      * @return {@link MessageCreateParams} the request built for the retry call
      */
-    private static MessageCreateParams retryRequest(MessageCreateParams request, String responseText,
-            String correctionTurn) {
+    private static MessageCreateParams retryRequest(final MessageCreateParams request, final String responseText,
+                                                    final String correctionTurn) {
         return request.toBuilder()
                 .addAssistantMessage(responseText.isBlank() ? "(empty response)" : responseText)
                 .addUserMessage(correctionTurn)
@@ -612,8 +612,8 @@ class AnthropicCuller implements VisionCuller {
      * @param schema a {@link Map} of {@link String} to {@link Object}, the schema, as a plain nested map
      * @return {@link JsonOutputFormat.Schema} the built schema
      */
-    private static JsonOutputFormat.Schema schemaOf(Map<String, Object> schema) {
-        var builder = JsonOutputFormat.Schema.builder();
+    private static JsonOutputFormat.Schema schemaOf(final Map<String, Object> schema) {
+        final var builder = JsonOutputFormat.Schema.builder();
         schema.forEach((key, value) -> builder.putAdditionalProperty(key, JsonValue.from(value)));
         return builder.build();
     }
@@ -626,11 +626,11 @@ class AnthropicCuller implements VisionCuller {
      * @param montage {@link String} the montage name
      * @return {@link String} the montage's JPEG image, base64-encoded
      */
-    private static String montageImageBase64(Path prepDir, String montage) {
-        Path imagePath = prepDir.resolve(montage + ".jpg");
+    private static String montageImageBase64(final Path prepDir, final String montage) {
+        final Path imagePath = prepDir.resolve(montage + ".jpg");
         try {
             return Base64.getEncoder().encodeToString(Files.readAllBytes(imagePath));
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read montage image " + imagePath, e);
         }
     }
@@ -641,7 +641,7 @@ class AnthropicCuller implements VisionCuller {
      * @return {@link String} the configured model id
      */
     private String requiredModel() {
-        String model = settings.providerSettings().model();
+        final String model = settings.providerSettings().model();
         if (model == null || model.isBlank()) {
             throw new IllegalStateException("sluice.cull.provider-settings.model is not set; "
                     + "the 'anthropic' vision provider needs the model id to request");
@@ -655,20 +655,20 @@ class AnthropicCuller implements VisionCuller {
      * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
      * @return {@link AnthropicClient} the built Anthropic client
      */
-    static AnthropicClient defaultClient(CullProviderSettings providerSettings) {
-        String apiKey = System.getenv("ANTHROPIC_API_KEY");
+    static AnthropicClient defaultClient(final CullProviderSettings providerSettings) {
+        final String apiKey = System.getenv("ANTHROPIC_API_KEY");
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException("Environment variable ANTHROPIC_API_KEY is not set; "
                     + "the 'anthropic' vision provider needs it to call the API");
         }
-        var builder = AnthropicOkHttpClient.builder().apiKey(apiKey);
-        String endpoint = providerSettings.endpoint();
+        final var builder = AnthropicOkHttpClient.builder().apiKey(apiKey);
+        final String endpoint = providerSettings.endpoint();
         if (endpoint != null && !endpoint.isBlank()) {
             builder.baseUrl(endpoint);
         }
         // Transport failures (429/5xx/timeouts) are the SDK's own retry family: exponential
         // backoff honoring retry-after, separate from the one content retry above.
-        Integer maxRetries = providerSettings.maxRetries();
+        final Integer maxRetries = providerSettings.maxRetries();
         builder.maxRetries(maxRetries == null ? DEFAULT_TRANSPORT_RETRIES : maxRetries);
         return builder.build();
     }
@@ -679,7 +679,7 @@ class AnthropicCuller implements VisionCuller {
      * @param value {@link String} the value, possibly null
      * @return {@link String} the value, or empty string if null
      */
-    private static String orEmpty(@Nullable String value) {
+    private static String orEmpty(final @Nullable String value) {
         return value == null ? "" : value;
     }
 }

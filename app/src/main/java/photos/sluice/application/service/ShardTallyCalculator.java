@@ -30,7 +30,7 @@ final class ShardTallyCalculator {
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir index, sidecars, and shards
      * @param cullSettings {@link CullSettings} the configured cull categories
      */
-    ShardTallyCalculator(CullPrepPort cullPrepPort, CullSettings cullSettings) {
+    ShardTallyCalculator(final CullPrepPort cullPrepPort, final CullSettings cullSettings) {
         this.cullPrepPort = cullPrepPort;
         this.cullSettings = cullSettings;
     }
@@ -47,18 +47,18 @@ final class ShardTallyCalculator {
      * @param prep {@link PrepDir} the prep dir to tally
      * @return {@link ShardTally} present/valid/total shard counts
      */
-    ShardTally tally(PrepDir prep) {
-        List<Path> sidecarSrcs = prep.entries().stream()
+    ShardTally tally(final PrepDir prep) {
+        final List<Path> sidecarSrcs = prep.entries().stream()
                 .flatMap(montage -> readSidecar(prep, montage).stream())
                 .map(SidecarPhotoEntry::src)
                 .toList();
-        List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
+        final List<String> categories = cullSettings.categories().stream().map(CullCategory::name).toList();
 
-        List<MontageShardStatus> statuses = prep.entries().stream()
+        final List<MontageShardStatus> statuses = prep.entries().stream()
                 .map(montage -> montageShardStatus(prep, montage, sidecarSrcs, categories))
                 .toList();
-        int present = (int) statuses.stream().filter(MontageShardStatus::present).count();
-        int valid = (int) statuses.stream().filter(MontageShardStatus::valid).count();
+        final int present = (int) statuses.stream().filter(MontageShardStatus::present).count();
+        final int valid = (int) statuses.stream().filter(MontageShardStatus::valid).count();
         return new ShardTally(present, valid, prep.entries().size());
     }
 
@@ -71,11 +71,11 @@ final class ShardTallyCalculator {
      * @param prepDir {@link Path} the prep dir to check
      * @return boolean true if every montage is present and valid
      */
-    boolean isFullyValid(Path prepDir) {
+    boolean isFullyValid(final Path prepDir) {
         try {
-            ShardTally shards = tally(cullPrepPort.readIndex(prepDir));
+            final ShardTally shards = tally(cullPrepPort.readIndex(prepDir));
             return shards.valid() == shards.total();
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             return false;
         }
     }
@@ -90,10 +90,10 @@ final class ShardTallyCalculator {
      * @param montage {@link String} the montage id to read
      * @return a {@link List} of {@link SidecarPhotoEntry} the montage's sidecar entries, or empty if unreadable
      */
-    private List<SidecarPhotoEntry> readSidecar(PrepDir prep, String montage) {
+    private List<SidecarPhotoEntry> readSidecar(final PrepDir prep, final String montage) {
         try {
             return cullPrepPort.readSidecar(prep.prepDir(), montage);
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             return List.of();
         }
     }
@@ -107,16 +107,16 @@ final class ShardTallyCalculator {
      * @param categories a {@link List} of {@link String} the configured cull category names
      * @return {@link MontageShardStatus} the montage's presence and validity
      */
-    private MontageShardStatus montageShardStatus(PrepDir prep, String montage, List<Path> sidecarSrcs,
-            List<String> categories) {
+    private MontageShardStatus montageShardStatus(final PrepDir prep, final String montage, final List<Path> sidecarSrcs,
+                                                  final List<String> categories) {
         if (!cullPrepPort.hasShard(prep.prepDir(), montage)) {
             return new MontageShardStatus(false, false);
         }
         try {
-            var shardFile = new ShardFile(montage, cullPrepPort.readShard(prep.prepDir(), montage));
-            var report = shardValidator.validate(List.of(shardFile), sidecarSrcs, categories, prep.unreviewable());
+            final var shardFile = new ShardFile(montage, cullPrepPort.readShard(prep.prepDir(), montage));
+            final var report = shardValidator.validate(List.of(shardFile), sidecarSrcs, categories, prep.unreviewable());
             return new MontageShardStatus(true, report.valid());
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             // Present but unparseable, so not valid.
             return new MontageShardStatus(true, false);
         }

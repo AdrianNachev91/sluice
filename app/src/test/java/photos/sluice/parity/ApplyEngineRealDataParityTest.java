@@ -63,38 +63,38 @@ import static org.assertj.core.api.Assertions.fail;
 class ApplyEngineRealDataParityTest {
 
     @Test
-    void applyEngineMatchesReferenceEngineOnRealCullPrepData(@TempDir Path rootA, @TempDir Path rootB)
+    void applyEngineMatchesReferenceEngineOnRealCullPrepData(@TempDir final Path rootA, @TempDir final Path rootB)
             throws IOException, InterruptedException, ApplyException {
-        String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
+        final String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
         Assumptions.assumeTrue(sourceDirProperty != null && !sourceDirProperty.isBlank(),
                 "sluice.parity.sourceDir must be set to a completed cull-prep directory when sluice.parity.realData=true");
-        Path sourceDir = Path.of(sourceDirProperty);
+        final Path sourceDir = Path.of(sourceDirProperty);
         Assumptions.assumeTrue(Files.isDirectory(sourceDir), "sluice.parity.sourceDir does not exist: " + sourceDir);
-        String leaf = sourceDir.getFileName().toString();
+        final String leaf = sourceDir.getFileName().toString();
         // sourceDir is <repoRoot>/logs/cull-prep/<leaf> - the fixed layout CLAUDE.md documents.
-        Path sourceRepoRoot = sourceDir.getParent().getParent().getParent();
+        final Path sourceRepoRoot = sourceDir.getParent().getParent().getParent();
 
-        PrepDir sourcePrepDir = new JsonCullPrepStore().readIndex(sourceDir);
-        Path relativeBase = sourceRepoRoot.relativize(sourcePrepDir.basePath());
+        final PrepDir sourcePrepDir = new JsonCullPrepStore().readIndex(sourceDir);
+        final Path relativeBase = sourceRepoRoot.relativize(sourcePrepDir.basePath());
 
-        Path prepDirA = rootA.resolve("logs/cull-prep").resolve(leaf);
-        Path prepDirB = rootB.resolve("logs/cull-prep").resolve(leaf);
+        final Path prepDirA = rootA.resolve("logs/cull-prep").resolve(leaf);
+        final Path prepDirB = rootB.resolve("logs/cull-prep").resolve(leaf);
         copyPrepDirJson(sourceDir, prepDirA, sourceRepoRoot, rootA);
         copyPrepDirJson(sourceDir, prepDirB, sourceRepoRoot, rootB);
         copyRecursively(sourcePrepDir.basePath(), rootA.resolve(relativeBase));
         copyRecursively(sourcePrepDir.basePath(), rootB.resolve(relativeBase));
 
-        Path scriptRepoRoot = findRepoRoot();
+        final Path scriptRepoRoot = findRepoRoot();
         runReferenceEngine(scriptRepoRoot, prepDirA, rootA);
         applyEngine(rootB).apply(prepDirB, new ApplyOptions(false));
 
-        MoveDiffer differ = new MoveDiffer();
+        final MoveDiffer differ = new MoveDiffer();
         assertReviewTreesMatchAccountingForKnownJunkFolderDivergence(differ, rootA.resolve("Review"), rootB.resolve("Review"));
         assertTreesIdentical(differ, "Duplicates", rootA.resolve("Duplicates"), rootB.resolve("Duplicates"));
         assertTreesIdentical(differ, "Library", rootA.resolve("Library"), rootB.resolve("Library"));
 
-        var hashIndexA = new CsvLibraryHashIndex(rootA.resolve("logs").resolve("library-hashes.csv"));
-        var hashIndexB = new CsvLibraryHashIndex(rootB.resolve("logs").resolve("library-hashes.csv"));
+        final var hashIndexA = new CsvLibraryHashIndex(rootA.resolve("logs").resolve("library-hashes.csv"));
+        final var hashIndexB = new CsvLibraryHashIndex(rootB.resolve("logs").resolve("library-hashes.csv"));
         assertThat(hashIndexB.load().keySet())
                 .as("appended index hashes")
                 .isEqualTo(hashIndexA.load().keySet());
@@ -102,8 +102,8 @@ class ApplyEngineRealDataParityTest {
         assertUnreviewableFilesRelocated(sourcePrepDir, sourceRepoRoot, rootB);
     }
 
-    private static void assertTreesIdentical(MoveDiffer differ, String label, Path treeA, Path treeB) {
-        MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
+    private static void assertTreesIdentical(final MoveDiffer differ, final String label, final Path treeA, final Path treeB) {
+        final MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
         assertThat(diff.identical())
                 .as("%s trees diverged (only-in-reference=%s, only-in-Java=%s)", label, diff.onlyInA(), diff.onlyInB())
                 .isTrue();
@@ -119,12 +119,12 @@ class ApplyEngineRealDataParityTest {
     private static final Pattern REVIEW_DATED_LEAF = Pattern.compile("^\\d{4}-\\d{2}/(.+)$");
 
     private static void assertReviewTreesMatchAccountingForKnownJunkFolderDivergence(
-            MoveDiffer differ, Path treeA, Path treeB) {
-        MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
-        Set<String> unexplainedA = new HashSet<>(diff.onlyInA());
-        Set<String> unexplainedB = new HashSet<>(diff.onlyInB());
-        for (String pathA : diff.onlyInA()) {
-            Matcher matcher = REVIEW_DATED_LEAF.matcher(pathA);
+            final MoveDiffer differ, final Path treeA, final Path treeB) {
+        final MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
+        final Set<String> unexplainedA = new HashSet<>(diff.onlyInA());
+        final Set<String> unexplainedB = new HashSet<>(diff.onlyInB());
+        for (final String pathA : diff.onlyInA()) {
+            final Matcher matcher = REVIEW_DATED_LEAF.matcher(pathA);
             if (matcher.matches() && unexplainedB.remove("junk/" + matcher.group(1))) {
                 unexplainedA.remove(pathA);
             }
@@ -138,12 +138,12 @@ class ApplyEngineRealDataParityTest {
     // moved out of Sorted and landed under Unreviewable/<yyyy>/<mm>/. The year/month derivation
     // mirrors CullDestinations.yearMonthOf() exactly, UNDATED fallback included. That keeps this a
     // true assertion against the engine's real behavior, not an assumption that could diverge.
-    private static void assertUnreviewableFilesRelocated(PrepDir sourcePrepDir, Path sourceRepoRoot, Path rootB) {
-        for (Path sourceFile : sourcePrepDir.unreviewable()) {
-            Path original = rootB.resolve(sourceRepoRoot.relativize(sourceFile));
+    private static void assertUnreviewableFilesRelocated(final PrepDir sourcePrepDir, final Path sourceRepoRoot, final Path rootB) {
+        for (final Path sourceFile : sourcePrepDir.unreviewable()) {
+            final Path original = rootB.resolve(sourceRepoRoot.relativize(sourceFile));
             assertThat(Files.exists(original)).as("unreviewable file left behind: %s", original).isFalse();
-            String[] yearMonth = yearMonthOf(original);
-            Path expectedDest = rootB.resolve("Unreviewable")
+            final String[] yearMonth = yearMonthOf(original);
+            final Path expectedDest = rootB.resolve("Unreviewable")
                     .resolve(yearMonth[0])
                     .resolve(yearMonth[1])
                     .resolve(original.getFileName());
@@ -153,12 +153,12 @@ class ApplyEngineRealDataParityTest {
 
     // Mirrors CullDestinations.yearMonthOf()'s parent/grandparent parsing and UNDATED fallback, so
     // this test's expectation can never diverge from what the engine itself actually does.
-    private static String[] yearMonthOf(Path file) {
-        Path monthDir = file.getParent();
-        Path yearDir = monthDir == null ? null : monthDir.getParent();
+    private static String[] yearMonthOf(final Path file) {
+        final Path monthDir = file.getParent();
+        final Path yearDir = monthDir == null ? null : monthDir.getParent();
         if (yearDir != null) {
-            String month = monthDir.getFileName().toString();
-            String year = yearDir.getFileName().toString();
+            final String month = monthDir.getFileName().toString();
+            final String year = yearDir.getFileName().toString();
             if (year.matches("\\d{4}") && month.matches("\\d{2}")) {
                 return new String[] {year, month};
             }
@@ -167,7 +167,7 @@ class ApplyEngineRealDataParityTest {
     }
 
     private static Path findRepoRoot() {
-        Path startingDirectory = Path.of("").toAbsolutePath();
+        final Path startingDirectory = Path.of("").toAbsolutePath();
         Path candidate = startingDirectory;
         for (int i = 0; i < 5 && candidate != null; i++, candidate = candidate.getParent()) {
             if (Files.isRegularFile(candidate.resolve("scripts").resolve("apply-cull.ps1"))) {
@@ -177,9 +177,9 @@ class ApplyEngineRealDataParityTest {
         throw new IllegalStateException("Could not locate scripts/apply-cull.ps1 above " + startingDirectory);
     }
 
-    private static void runReferenceEngine(Path scriptRepoRoot, Path prepDirA, Path rootA)
+    private static void runReferenceEngine(final Path scriptRepoRoot, final Path prepDirA, final Path rootA)
             throws IOException, InterruptedException {
-        try (Process process = new ProcessBuilder(
+        try (final Process process = new ProcessBuilder(
                 "powershell.exe", "-NoProfile", "-NonInteractive",
                 "-File", scriptRepoRoot.resolve("scripts").resolve("apply-cull.ps1").toString(),
                 "-PrepDir", prepDirA.toString(),
@@ -187,7 +187,7 @@ class ApplyEngineRealDataParityTest {
                 "-LibraryRoot", rootA.resolve("Library").toString())
                 .inheritIO()
                 .start()) {
-            boolean finished = process.waitFor(10, TimeUnit.MINUTES);
+            final boolean finished = process.waitFor(10, TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();
                 fail("reference engine did not finish within 10 minutes - killed");
@@ -196,15 +196,15 @@ class ApplyEngineRealDataParityTest {
         }
     }
 
-    private static ApplyEngine applyEngine(Path root) {
-        var pathsConfig = new PathsConfig(
+    private static ApplyEngine applyEngine(final Path root) {
+        final var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
-        var mediaStore = new NioMediaStore();
-        var cullPrepPort = new JsonCullPrepStore();
-        var sha256Port = new Sha256Hasher();
-        var moveLedger = new MoveLedger(mediaStore);
-        var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), sha256Port);
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
+        final var mediaStore = new NioMediaStore();
+        final var cullPrepPort = new JsonCullPrepStore();
+        final var sha256Port = new Sha256Hasher();
+        final var moveLedger = new MoveLedger(mediaStore);
+        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), sha256Port);
         return new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex,
                 new CullDestinations(pathsConfig), moveLedger, applyPlanner);
     }
@@ -236,33 +236,33 @@ class ApplyEngineRealDataParityTest {
     // files. Montage/tile images and any prior decisions.json/move-records.log are deliberately not
     // copied. This test needs a completed-but-not-yet-applied prep dir, and carrying over a stale
     // merge record from a previous local run would corrupt the comparison.
-    private static void copyPrepDirJson(Path source, Path dest, Path fromRoot, Path toRoot) throws IOException {
+    private static void copyPrepDirJson(final Path source, final Path dest, final Path fromRoot, final Path toRoot) throws IOException {
         Files.createDirectories(dest);
-        try (Stream<Path> files = Files.list(source).filter(ApplyEngineRealDataParityTest::isPrepJson)) {
-            for (Path file : (Iterable<Path>) files::iterator) {
-                String rewritten = rewriteRoot(Files.readString(file), fromRoot, toRoot);
+        try (final Stream<Path> files = Files.list(source).filter(ApplyEngineRealDataParityTest::isPrepJson)) {
+            for (final Path file : (Iterable<Path>) files::iterator) {
+                final String rewritten = rewriteRoot(Files.readString(file), fromRoot, toRoot);
                 Files.writeString(dest.resolve(file.getFileName()), rewritten);
             }
         }
     }
 
-    private static boolean isPrepJson(Path file) {
-        String name = file.getFileName().toString();
+    private static boolean isPrepJson(final Path file) {
+        final String name = file.getFileName().toString();
         return name.equals("index.json")
                 || (name.startsWith("montage-") && name.endsWith(".json"))
                 || (name.startsWith("decisions-") && name.endsWith(".json"));
     }
 
-    private static String rewriteRoot(String json, Path fromRoot, Path toRoot) {
-        String from = fromRoot.toString().replace("\\", "\\\\");
-        String to = toRoot.toString().replace("\\", "\\\\");
+    private static String rewriteRoot(final String json, final Path fromRoot, final Path toRoot) {
+        final String from = fromRoot.toString().replace("\\", "\\\\");
+        final String to = toRoot.toString().replace("\\", "\\\\");
         return json.replace(from, to);
     }
 
-    private static void copyRecursively(Path source, Path destination) throws IOException {
-        try (var walk = Files.walk(source)) {
-            for (Path path : (Iterable<Path>) walk::iterator) {
-                Path target = destination.resolve(source.relativize(path).toString());
+    private static void copyRecursively(final Path source, final Path destination) throws IOException {
+        try (final var walk = Files.walk(source)) {
+            for (final Path path : (Iterable<Path>) walk::iterator) {
+                final Path target = destination.resolve(source.relativize(path).toString());
                 if (Files.isDirectory(path)) {
                     Files.createDirectories(target);
                 } else {
@@ -270,7 +270,7 @@ class ApplyEngineRealDataParityTest {
                     Files.copy(path, target);
                 }
             }
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             throw e.getCause();
         }
     }

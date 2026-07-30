@@ -45,7 +45,7 @@ public class DisasterDrawer {
      *
      * @param mediaStore {@link MediaStore} filesystem effects (move, list, delete)
      */
-    public DisasterDrawer(MediaStore mediaStore) {
+    public DisasterDrawer(final MediaStore mediaStore) {
         this.mediaStore = mediaStore;
     }
 
@@ -59,10 +59,10 @@ public class DisasterDrawer {
      * @param what {@link String} a short slug naming what this file is
      * @return {@link Path} the path source was filed to
      */
-    public Path file(Path prepDir, Path source, String what) {
-        Path drawer = prepDir.resolve(DRAWER_DIR);
-        String extension = extensionOf(source.getFileName().toString());
-        String stamp = DisasterTimestamp.now();
+    public Path file(final Path prepDir, final Path source, final String what) {
+        final Path drawer = prepDir.resolve(DRAWER_DIR);
+        final String extension = extensionOf(source.getFileName().toString());
+        final String stamp = DisasterTimestamp.now();
         return mediaStore.moveTo(source, uniqueName(drawer, stamp, what, extension));
     }
 
@@ -76,11 +76,11 @@ public class DisasterDrawer {
      * @param content {@link String} the entry's full text content
      * @return {@link Path} the path content was written to
      */
-    public Path write(Path prepDir, String what, String content) {
-        Path drawer = prepDir.resolve(DRAWER_DIR);
+    public Path write(final Path prepDir, final String what, final String content) {
+        final Path drawer = prepDir.resolve(DRAWER_DIR);
         mediaStore.ensureDirectory(drawer);
-        String stamp = DisasterTimestamp.now();
-        Path dest = uniqueName(drawer, stamp, what, ".txt");
+        final String stamp = DisasterTimestamp.now();
+        final Path dest = uniqueName(drawer, stamp, what, ".txt");
         mediaStore.write(dest, content);
         return dest;
     }
@@ -93,12 +93,12 @@ public class DisasterDrawer {
      * @param cullPrepRoot {@link Path} the root directory holding every prep dir
      * @return int the number of entries deleted
      */
-    public int sweepExpired(Path cullPrepRoot) {
+    public int sweepExpired(final Path cullPrepRoot) {
         if (!mediaStore.exists(cullPrepRoot)) {
             return 0;
         }
-        Instant cutoff = Instant.now().minus(RETENTION);
-        List<Path> expired = mediaStore.listFiles(cullPrepRoot).stream()
+        final Instant cutoff = Instant.now().minus(RETENTION);
+        final List<Path> expired = mediaStore.listFiles(cullPrepRoot).stream()
                 .filter(DisasterDrawer::isDrawerEntry)
                 .filter(file -> isExpired(file, cutoff))
                 .toList();
@@ -124,17 +124,17 @@ public class DisasterDrawer {
      * @param graveyardRoot {@link Path} the discard graveyard root ({@code logs/disasters/})
      * @return int the number of graveyard folders deleted
      */
-    public int sweepExpiredGraveyard(Path graveyardRoot) {
+    public int sweepExpiredGraveyard(final Path graveyardRoot) {
         if (!mediaStore.exists(graveyardRoot)) {
             return 0;
         }
-        List<Path> allFiles = mediaStore.listFiles(graveyardRoot);
-        List<Path> graveyards = allFiles.stream()
+        final List<Path> allFiles = mediaStore.listFiles(graveyardRoot);
+        final List<Path> graveyards = allFiles.stream()
                 .map(file -> graveyardRoot.resolve(graveyardRoot.relativize(file).getName(0)))
                 .distinct()
                 .toList();
-        Instant cutoff = Instant.now().minus(RETENTION);
-        List<Path> expired = graveyards.stream().filter(dir -> isExpiredGraveyard(dir, cutoff)).toList();
+        final Instant cutoff = Instant.now().minus(RETENTION);
+        final List<Path> expired = graveyards.stream().filter(dir -> isExpiredGraveyard(dir, cutoff)).toList();
         expired.forEach(dir -> deleteGraveyard(dir, allFiles));
         return expired.size();
     }
@@ -146,7 +146,7 @@ public class DisasterDrawer {
      * @param dir {@link Path} the graveyard folder to delete
      * @param allFiles a {@link List} of {@link Path} every file found under the graveyard root
      */
-    private void deleteGraveyard(Path dir, List<Path> allFiles) {
+    private void deleteGraveyard(final Path dir, final List<Path> allFiles) {
         allFiles.stream().filter(file -> file.startsWith(dir)).forEach(mediaStore::delete);
         mediaStore.removeIfEmptyOfFiles(dir);
     }
@@ -159,7 +159,7 @@ public class DisasterDrawer {
      * @param cutoff {@link Instant} the retention cutoff
      * @return boolean true if dir was created before cutoff
      */
-    private static boolean isExpiredGraveyard(Path dir, Instant cutoff) {
+    private static boolean isExpiredGraveyard(final Path dir, final Instant cutoff) {
         return parseGraveyardTimestamp(dir.getFileName().toString()).filter(t -> t.isBefore(cutoff)).isPresent();
     }
 
@@ -169,14 +169,14 @@ public class DisasterDrawer {
      * @param name {@link String} the graveyard folder's own name
      * @return an {@link Optional} {@link Instant} the embedded creation time, if the name parses
      */
-    private static Optional<Instant> parseGraveyardTimestamp(String name) {
-        Matcher matcher = TIMESTAMP_SUFFIX.matcher(name);
+    private static Optional<Instant> parseGraveyardTimestamp(final String name) {
+        final Matcher matcher = TIMESTAMP_SUFFIX.matcher(name);
         if (!matcher.matches()) {
             return Optional.empty();
         }
         try {
             return Optional.of(LocalDateTime.parse(matcher.group(1), DisasterTimestamp.FORMAT).toInstant(ZoneOffset.UTC));
-        } catch (DateTimeParseException e) {
+        } catch (final DateTimeParseException e) {
             return Optional.empty();
         }
     }
@@ -187,8 +187,8 @@ public class DisasterDrawer {
      * @param file {@link Path} the candidate file
      * @return boolean true if file's parent directory is a disasters/ drawer
      */
-    private static boolean isDrawerEntry(Path file) {
-        Path parent = file.getParent();
+    private static boolean isDrawerEntry(final Path file) {
+        final Path parent = file.getParent();
         return parent != null && DRAWER_DIR.equals(parent.getFileName().toString());
     }
 
@@ -200,7 +200,7 @@ public class DisasterDrawer {
      * @param cutoff {@link Instant} the retention cutoff
      * @return boolean true if file was filed before cutoff
      */
-    private static boolean isExpired(Path file, Instant cutoff) {
+    private static boolean isExpired(final Path file, final Instant cutoff) {
         return parseFiledAt(file.getFileName().toString()).filter(filedAt -> filedAt.isBefore(cutoff)).isPresent();
     }
 
@@ -215,8 +215,8 @@ public class DisasterDrawer {
      * @param extension {@link String} the file's extension, including its leading dot
      * @return {@link Path} a path in drawer that does not currently exist
      */
-    private Path uniqueName(Path drawer, String stamp, String what, String extension) {
-        Path candidate = drawer.resolve(stamp + "-" + what + extension);
+    private Path uniqueName(final Path drawer, final String stamp, final String what, final String extension) {
+        final Path candidate = drawer.resolve(stamp + "-" + what + extension);
         if (!mediaStore.exists(candidate)) {
             return candidate;
         }
@@ -235,14 +235,14 @@ public class DisasterDrawer {
      * @param filename {@link String} the file name to parse
      * @return an {@link Optional} {@link Instant} the embedded filing time, if the name parses
      */
-    private static Optional<Instant> parseFiledAt(String filename) {
-        Matcher matcher = TIMESTAMP_PREFIX.matcher(filename);
+    private static Optional<Instant> parseFiledAt(final String filename) {
+        final Matcher matcher = TIMESTAMP_PREFIX.matcher(filename);
         if (!matcher.matches()) {
             return Optional.empty();
         }
         try {
             return Optional.of(LocalDateTime.parse(matcher.group(1), DisasterTimestamp.FORMAT).toInstant(ZoneOffset.UTC));
-        } catch (DateTimeParseException e) {
+        } catch (final DateTimeParseException e) {
             return Optional.empty();
         }
     }
@@ -253,8 +253,8 @@ public class DisasterDrawer {
      * @param leaf {@link String} file name
      * @return {@link String} the extension including its leading dot, or empty string if none
      */
-    private static String extensionOf(String leaf) {
-        int dot = leaf.lastIndexOf('.');
+    private static String extensionOf(final String leaf) {
+        final int dot = leaf.lastIndexOf('.');
         return dot <= 0 ? "" : leaf.substring(dot);
     }
 }

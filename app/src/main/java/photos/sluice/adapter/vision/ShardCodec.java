@@ -58,7 +58,7 @@ class ShardCodec {
      *
      * @param mapper {@link JsonMapper} the JSON mapper used for shard I/O
      */
-    ShardCodec(JsonMapper mapper) {
+    ShardCodec(final JsonMapper mapper) {
         this.mapper = mapper;
     }
 
@@ -87,15 +87,15 @@ class ShardCodec {
      * @param shardPath {@link Path} path of the shard file to write
      * @param shard {@link DecisionShard} the decision shard to write
      */
-    public void write(Path shardPath, DecisionShard shard) {
-        var document = new RawShard(
+    public void write(final Path shardPath, final DecisionShard shard) {
+        final var document = new RawShard(
                 shard.montage(),
                 shard.decisions().stream().map(ShardCodec::toRaw).toList());
-        try (var output = Files.newOutputStream(shardPath)) {
+        try (final var output = Files.newOutputStream(shardPath)) {
             mapper.writeValue(output, document);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write shard " + shardPath, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to write shard " + shardPath, new IOException(e));
         }
     }
@@ -106,13 +106,13 @@ class ShardCodec {
      * @param shardPath {@link Path} path of the shard file to read
      * @return {@link DecisionShard} the parsed decision shard
      */
-    public DecisionShard read(Path shardPath) {
+    public DecisionShard read(final Path shardPath) {
         final RawShard raw;
-        try (var input = Files.newInputStream(shardPath)) {
+        try (final var input = Files.newInputStream(shardPath)) {
             raw = mapper.readValue(input, RawShard.class);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read shard " + shardPath, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to read shard " + shardPath, new IOException(e));
         }
         // A document that is not a JSON object (the literal null token) can't be represented as a
@@ -123,7 +123,7 @@ class ShardCodec {
             throw new UncheckedIOException("Shard " + shardPath + " is not a JSON object",
                     new IOException("null document"));
         }
-        List<@Nullable RawDecision> rawDecisions = raw.decisions() == null ? List.of() : raw.decisions();
+        final List<@Nullable RawDecision> rawDecisions = raw.decisions() == null ? List.of() : raw.decisions();
         return new DecisionShard(
                 orEmpty(raw.montage()),
                 rawDecisions.stream().map(ShardCodec::toDomain).toList());
@@ -135,14 +135,14 @@ class ShardCodec {
      * @param decision {@link Decision} the domain decision to convert
      * @return {@link RawDecision} the raw DTO representation
      */
-    private static RawDecision toRaw(Decision decision) {
+    private static RawDecision toRaw(final Decision decision) {
         // Structurally similar to toDomain()'s switch below, but it maps the opposite direction
         // over a different type. Collapsing the two into one generic mapper would cost clarity.
         //noinspection DuplicatedCode
         return switch (decision) {
-            case Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
-            case NearDupChosen c -> new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
-            case NearDupReject r -> new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
+            case final Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
+            case final NearDupChosen c -> new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
+            case final NearDupReject r -> new RawDecision(r.file().toString(), NEAR_DUP_REJECT, r.group(), r.reason(), null);
         };
     }
 
@@ -152,13 +152,13 @@ class ShardCodec {
      * @param raw {@link RawDecision} the raw DTO to convert
      * @return {@link Decision} the domain decision
      */
-    private static Decision toDomain(@Nullable RawDecision raw) {
+    private static Decision toDomain(final @Nullable RawDecision raw) {
         if (raw == null) {
             throw new UncheckedIOException("Shard contains a null decision entry",
                     new IOException("null decision entry"));
         }
-        var file = Path.of(orEmpty(raw.file()));
-        String action = orEmpty(raw.action());
+        final var file = Path.of(orEmpty(raw.file()));
+        final String action = orEmpty(raw.action());
         return switch (action) {
             case NEAR_DUP_CHOSEN -> new NearDupChosen(file, orEmpty(raw.group()), orEmpty(raw.chosenReason()));
             case NEAR_DUP_REJECT -> new NearDupReject(file, orEmpty(raw.group()), orEmpty(raw.reason()));
@@ -172,7 +172,7 @@ class ShardCodec {
      * @param value {@link String} the value, possibly null
      * @return {@link String} the value, or empty string if null
      */
-    private static String orEmpty(@Nullable String value) {
+    private static String orEmpty(final @Nullable String value) {
         return value == null ? "" : value;
     }
 }

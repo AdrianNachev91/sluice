@@ -16,7 +16,7 @@ public record MonthRange(int from, int to) {
      * @param month int the month to wrap
      * @return {@link MonthRange} a range whose from and to are both month
      */
-    public static MonthRange of(int month) {
+    public static MonthRange of(final int month) {
         return new MonthRange(month, month);
     }
 
@@ -26,7 +26,7 @@ public record MonthRange(int from, int to) {
      * @param month int the month to check
      * @return boolean true if month is within from and to inclusive
      */
-    public boolean includes(int month) {
+    public boolean includes(final int month) {
         return month >= from && month <= to;
     }
 }

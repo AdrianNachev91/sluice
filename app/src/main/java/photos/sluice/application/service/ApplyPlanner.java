@@ -65,8 +65,8 @@ public class ApplyPlanner {
      * @param cullSettings {@link CullSettings} configured cull categories
      * @param sha256Port {@link Sha256Port} hashes a destination to verify a recorded move
      */
-    public ApplyPlanner(MediaReader mediaReader, CullPrepPort cullPrepPort, CullSettings cullSettings,
-            Sha256Port sha256Port) {
+    public ApplyPlanner(final MediaReader mediaReader, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
+                        final Sha256Port sha256Port) {
         this.mediaReader = mediaReader;
         this.cullPrepPort = cullPrepPort;
         this.cullSettings = cullSettings;
@@ -94,7 +94,7 @@ public class ApplyPlanner {
      * @param ledger {@link Ledger} the caller's own move-ledger snapshot
      * @return {@link ValidationReport} the merged validation report of decisions and findings
      */
-    ValidationReport validate(Path prepDirPath, PrepDir prepDir, ApplyOptions options, Ledger ledger) {
+    ValidationReport validate(final Path prepDirPath, final PrepDir prepDir, final ApplyOptions options, final Ledger ledger) {
         final var extraFindings = new ArrayList<Finding>();
 
         final Set<String> missingMontages = prepDir.entries().stream()
@@ -118,7 +118,7 @@ public class ApplyPlanner {
 
         final var sidecarSrcs = new ArrayList<Path>();
         final var shardFiles = new ArrayList<ShardFile>();
-        for (String montage : prepDir.entries()) {
+        for (final String montage : prepDir.entries()) {
             collectMontage(prepDirPath, montage, !missingMontages.contains(montage), ledger,
                     sidecarSrcs, shardFiles, extraFindings);
         }
@@ -150,8 +150,8 @@ public class ApplyPlanner {
      * @param shardFiles a {@link List} of {@link ShardFile} accumulated shards to validate
      * @param extraFindings a {@link List} of {@link Finding} accumulated findings beyond the shard contract
      */
-    private void collectMontage(Path prepDirPath, String montage, boolean hasShard, Ledger ledger,
-            List<Path> sidecarSrcs, List<ShardFile> shardFiles, List<Finding> extraFindings) {
+    private void collectMontage(final Path prepDirPath, final String montage, final boolean hasShard, final Ledger ledger,
+                                final List<Path> sidecarSrcs, final List<ShardFile> shardFiles, final List<Finding> extraFindings) {
         final Optional<List<Path>> srcs = Sidecars.srcsOf(cullPrepPort, prepDirPath, montage);
         if (srcs.isPresent()) {
             sidecarSrcs.addAll(srcs.get());
@@ -184,15 +184,15 @@ public class ApplyPlanner {
      * @param report {@link ValidationReport} the shard validator's own report, before ledger resolution
      * @return {@link ValidationReport} the same report, with resolved overlaps suppressed
      */
-    private static ValidationReport resolveOverlaps(Ledger ledger, ValidationReport report) {
+    private static ValidationReport resolveOverlaps(final Ledger ledger, final ValidationReport report) {
         final Map<Path, OverlapResolution> overlaps = ledger.overlaps();
         if (overlaps.isEmpty()) {
             return report;
         }
         final var findings = new ArrayList<Finding>();
         final var decisions = new ArrayList<>(report.decisions());
-        for (Finding finding : report.findings()) {
-            if (finding instanceof Finding.DecisionUnreviewableOverlap(Decision decision)
+        for (final Finding finding : report.findings()) {
+            if (finding instanceof Finding.DecisionUnreviewableOverlap(final Decision decision)
                     && overlaps.containsKey(decision.file())) {
                 if (overlaps.get(decision.file()) == OverlapResolution.TREAT_AS_UNREVIEWABLE) {
                     decisions.remove(decision);
@@ -214,7 +214,7 @@ public class ApplyPlanner {
      * @param ledger {@link Ledger} the caller's own move-ledger snapshot
      * @return a {@link List} of {@link Path} prepDir's unreviewable files, TRUST_DECISION-resolved ones excluded
      */
-    List<Path> resolvedUnreviewable(PrepDir prepDir, Ledger ledger) {
+    List<Path> resolvedUnreviewable(final PrepDir prepDir, final Ledger ledger) {
         final Map<Path, OverlapResolution> overlaps = ledger.overlaps();
         if (overlaps.isEmpty()) {
             return prepDir.unreviewable();
@@ -236,7 +236,7 @@ public class ApplyPlanner {
      * @param ledger {@link Ledger} the caller's own move-ledger snapshot
      * @return a {@link List} of {@link Finding} a MissingSource finding for each unresolved file
      */
-    List<Finding> checkMissingSources(PrepDir prepDir, List<Decision> decisions, Ledger ledger) {
+    List<Finding> checkMissingSources(final PrepDir prepDir, final List<Decision> decisions, final Ledger ledger) {
         final var findings = new ArrayList<Finding>();
         decisions.stream()
                 .map(decision -> classify(decision, ledger))
@@ -281,7 +281,7 @@ public class ApplyPlanner {
      * @param ledger {@link Ledger} the parsed disposition ledger
      * @return {@link Status} this decision's pending/done/skipped/unresolved status
      */
-    Status classify(Decision decision, Ledger ledger) {
+    Status classify(final Decision decision, final Ledger ledger) {
         if (mediaReader.exists(decision.file())) {
             return new Status.Pending(decision);
         }
@@ -307,7 +307,7 @@ public class ApplyPlanner {
      * @param ledger {@link Ledger} the parsed disposition ledger
      * @return {@link FileStatus} this file's pending/done/skipped/unresolved status
      */
-    FileStatus classifyFile(Path file, Ledger ledger) {
+    FileStatus classifyFile(final Path file, final Ledger ledger) {
         if (mediaReader.exists(file)) {
             return new FileStatus.Pending(file);
         }
@@ -327,7 +327,7 @@ public class ApplyPlanner {
      * @param moveRecords a {@link Map} of {@link Path} to {@link MoveRecord} move records keyed by source path
      * @return an {@link Optional} {@link MoveRecord} the verified move record, if one hash-verifies
      */
-    private Optional<MoveRecord> verifiedMoveRecord(Path file, Map<Path, MoveRecord> moveRecords) {
+    private Optional<MoveRecord> verifiedMoveRecord(final Path file, final Map<Path, MoveRecord> moveRecords) {
         final MoveRecord record = moveRecords.get(file);
         final boolean verified = record != null && mediaReader.exists(record.dest())
                 && sha256Port.hash(record.dest()).equals(record.hash());
@@ -340,7 +340,7 @@ public class ApplyPlanner {
      * @param findings a {@link List} of {@link Finding} the findings to report
      * @return {@link ApplyException} the exception describing all findings
      */
-    static ApplyException failure(List<Finding> findings) {
+    static ApplyException failure(final List<Finding> findings) {
         final List<String> messages = findings.stream().map(Finding::describe).toList();
         return new ApplyException("Shard validation failed - " + messages.size()
                 + " problem(s), nothing applied:\n  - " + String.join("\n  - ", messages), findings);

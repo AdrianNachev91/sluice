@@ -34,7 +34,7 @@ public final class MontageNaming {
      * @param montage {@link String} the montage id (e.g. montage-003)
      * @return {@link String} the corresponding shard filename
      */
-    public static String shardFileFor(String montage) {
+    public static String shardFileFor(final String montage) {
         return montage.replaceFirst("^montage-", "decisions-") + ".json";
     }
 
@@ -44,7 +44,7 @@ public final class MontageNaming {
      * @param number int the montage's 1-based number
      * @return {@link String} the montage id (e.g. montage-003)
      */
-    public static String montageIdFor(int number) {
+    public static String montageIdFor(final int number) {
         return MONTAGE_ID_FORMAT.formatted(number);
     }
 
@@ -54,8 +54,8 @@ public final class MontageNaming {
      * @param fileName {@link String} a file's own leaf name
      * @return {@link OptionalInt} the montage number, or empty if fileName is not a sidecar
      */
-    public static OptionalInt sidecarMontageNumber(String fileName) {
-        Matcher matcher = SIDECAR_NAME.matcher(fileName);
+    public static OptionalInt sidecarMontageNumber(final String fileName) {
+        final Matcher matcher = SIDECAR_NAME.matcher(fileName);
         return matcher.matches() ? OptionalInt.of(Integer.parseInt(matcher.group(1))) : OptionalInt.empty();
     }
 
@@ -66,7 +66,7 @@ public final class MontageNaming {
      * @param name {@link String} a file's own leaf name
      * @return boolean true if name is a montage/tile image
      */
-    public static boolean isMontageImage(String name) {
+    public static boolean isMontageImage(final String name) {
         return name.startsWith("tile-") || (name.startsWith("montage-") && !name.endsWith(".json"));
     }
 
@@ -78,7 +78,7 @@ public final class MontageNaming {
      * @param name {@link String} a file's own leaf name
      * @return boolean true if name is a montage decision shard
      */
-    public static boolean isShardFile(String name) {
+    public static boolean isShardFile(final String name) {
         return name.startsWith("decisions-") && name.endsWith(".json");
     }
 }

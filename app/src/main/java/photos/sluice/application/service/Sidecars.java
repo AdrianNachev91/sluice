@@ -32,12 +32,12 @@ final class Sidecars {
      * @param montage {@link String} the montage whose sidecar to read
      * @return an {@link Optional} {@link List} of {@link Path}, the sidecar's own src files, or empty if unreadable
      */
-    static Optional<List<Path>> srcsOf(CullPrepPort cullPrepPort, Path prepDirPath, String montage) {
+    static Optional<List<Path>> srcsOf(final CullPrepPort cullPrepPort, final Path prepDirPath, final String montage) {
         try {
             return Optional.of(cullPrepPort.readSidecar(prepDirPath, montage).stream()
                     .map(SidecarPhotoEntry::src)
                     .toList());
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             return Optional.empty();
         }
     }

@@ -37,44 +37,44 @@ import static org.assertj.core.api.Assertions.fail;
 class RescueEngineRealDataParityTest {
 
     @Test
-    void rescueEngineMatchesReferenceEngineOnRealReviewData(@TempDir Path rootA, @TempDir Path rootB)
+    void rescueEngineMatchesReferenceEngineOnRealReviewData(@TempDir final Path rootA, @TempDir final Path rootB)
             throws IOException, InterruptedException {
-        String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
+        final String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
         Assumptions.assumeTrue(sourceDirProperty != null && !sourceDirProperty.isBlank(),
                 "sluice.parity.sourceDir must be set to a Review subfolder when sluice.parity.realData=true");
-        Path sourceDir = Path.of(sourceDirProperty);
+        final Path sourceDir = Path.of(sourceDirProperty);
         Assumptions.assumeTrue(Files.isDirectory(sourceDir), "sluice.parity.sourceDir does not exist: " + sourceDir);
-        String leaf = sourceDir.getFileName().toString();
+        final String leaf = sourceDir.getFileName().toString();
 
         copyRecursively(sourceDir, rootA.resolve("Review").resolve(leaf));
         copyRecursively(sourceDir, rootB.resolve("Review").resolve(leaf));
 
-        Path repoRoot = findRepoRoot();
+        final Path repoRoot = findRepoRoot();
         runReferenceEngine(repoRoot, rootA, leaf);
         rescueEngine(rootB).rescue(leaf);
 
-        MoveDiffer differ = new MoveDiffer();
-        MoveDiffer.Diff libraryDiff = differ.diffTrees(rootA.resolve("Library"), rootB.resolve("Library"));
+        final MoveDiffer differ = new MoveDiffer();
+        final MoveDiffer.Diff libraryDiff = differ.diffTrees(rootA.resolve("Library"), rootB.resolve("Library"));
         assertThat(libraryDiff.identical())
                 .as("Library trees diverged (only-in-reference=%s, only-in-Java=%s)",
                         libraryDiff.onlyInA(), libraryDiff.onlyInB())
                 .isTrue();
 
-        MoveDiffer.Diff reviewDiff = differ.diffTrees(rootA.resolve("Review"), rootB.resolve("Review"));
+        final MoveDiffer.Diff reviewDiff = differ.diffTrees(rootA.resolve("Review"), rootB.resolve("Review"));
         assertThat(reviewDiff.identical())
                 .as("leftover Review trees diverged (only-in-reference=%s, only-in-Java=%s)",
                         reviewDiff.onlyInA(), reviewDiff.onlyInB())
                 .isTrue();
 
-        var hashIndexA = new CsvLibraryHashIndex(rootA.resolve("logs").resolve("library-hashes.csv"));
-        var hashIndexB = new CsvLibraryHashIndex(rootB.resolve("logs").resolve("library-hashes.csv"));
+        final var hashIndexA = new CsvLibraryHashIndex(rootA.resolve("logs").resolve("library-hashes.csv"));
+        final var hashIndexB = new CsvLibraryHashIndex(rootB.resolve("logs").resolve("library-hashes.csv"));
         assertThat(hashIndexB.load().keySet())
                 .as("appended index hashes")
                 .isEqualTo(hashIndexA.load().keySet());
     }
 
     private static Path findRepoRoot() {
-        Path startingDirectory = Path.of("").toAbsolutePath();
+        final Path startingDirectory = Path.of("").toAbsolutePath();
         Path candidate = startingDirectory;
         for (int i = 0; i < 5 && candidate != null; i++, candidate = candidate.getParent()) {
             if (Files.isRegularFile(candidate.resolve("scripts").resolve("rescue.ps1"))) {
@@ -84,9 +84,9 @@ class RescueEngineRealDataParityTest {
         throw new IllegalStateException("Could not locate scripts/rescue.ps1 above " + startingDirectory);
     }
 
-    private static void runReferenceEngine(Path repoRoot, Path rootA, String leaf) throws IOException, InterruptedException {
-        Path exifTool = repoRoot.resolve("tools").resolve("exiftool.exe");
-        try (Process process = new ProcessBuilder(
+    private static void runReferenceEngine(final Path repoRoot, final Path rootA, final String leaf) throws IOException, InterruptedException {
+        final Path exifTool = repoRoot.resolve("tools").resolve("exiftool.exe");
+        try (final Process process = new ProcessBuilder(
                 "powershell.exe", "-NoProfile", "-NonInteractive",
                 "-File", repoRoot.resolve("scripts").resolve("rescue.ps1").toString(),
                 "-ReviewFolder", rootA.resolve("Review").resolve(leaf).toString(),
@@ -95,7 +95,7 @@ class RescueEngineRealDataParityTest {
                 "-ExifTool", exifTool.toString())
                 .inheritIO()
                 .start()) {
-            boolean finished = process.waitFor(10, TimeUnit.MINUTES);
+            final boolean finished = process.waitFor(10, TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();
                 fail("reference engine did not finish within 10 minutes - killed");
@@ -104,18 +104,18 @@ class RescueEngineRealDataParityTest {
         }
     }
 
-    private static RescueEngine rescueEngine(Path root) {
-        var pathsConfig = new PathsConfig(
+    private static RescueEngine rescueEngine(final Path root) {
+        final var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
-        var rescueDateResolver = new RescueDateResolver(new ExifSource(), new FilenameSource());
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
+        final var rescueDateResolver = new RescueDateResolver(new ExifSource(), new FilenameSource());
         return new RescueEngine(pathsConfig, new NioMediaStore(), new Sha256Hasher(), hashIndex, rescueDateResolver);
     }
 
-    private static void copyRecursively(Path source, Path destination) throws IOException {
-        try (var walk = Files.walk(source)) {
-            for (Path path : (Iterable<Path>) walk::iterator) {
-                Path target = destination.resolve(source.relativize(path).toString());
+    private static void copyRecursively(final Path source, final Path destination) throws IOException {
+        try (final var walk = Files.walk(source)) {
+            for (final Path path : (Iterable<Path>) walk::iterator) {
+                final Path target = destination.resolve(source.relativize(path).toString());
                 if (Files.isDirectory(path)) {
                     Files.createDirectories(target);
                 } else {
@@ -123,7 +123,7 @@ class RescueEngineRealDataParityTest {
                     Files.copy(path, target);
                 }
             }
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             throw e.getCause();
         }
     }

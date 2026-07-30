@@ -36,8 +36,8 @@ public class ExifSource implements DateSource {
      * @return an {@link Optional} {@link LocalDateTime}, the parsed EXIF date, if present and valid
      */
     @Override
-    public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
-        Metadata metadata;
+    public Optional<LocalDateTime> resolve(final MediaFile file, final @Nullable TakeoutSidecar sidecar) {
+        final Metadata metadata;
         try {
             metadata = ImageMetadataReader.readMetadata(file.path().toFile());
         } catch (ImageProcessingException | IOException | RuntimeException _) {
@@ -46,7 +46,7 @@ public class ExifSource implements DateSource {
             // One bad file must fall through to the next DateSource, not abort the whole batch.
             return Optional.empty();
         }
-        ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+        final ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
         // getFirstDirectoryOfType's own signature claims non-null. It returns null in practice
         // when no directory of that type is present - the IDE can't model that runtime behavior.
         //noinspection ConstantValue
@@ -63,7 +63,7 @@ public class ExifSource implements DateSource {
      * @param raw {@link String} the raw EXIF date string, or null
      * @return an {@link Optional} {@link LocalDateTime}, the parsed date, if the string is present and well-formed
      */
-    private static Optional<LocalDateTime> parse(@Nullable String raw) {
+    private static Optional<LocalDateTime> parse(final @Nullable String raw) {
         if (raw == null) {
             return Optional.empty();
         }

@@ -27,9 +27,9 @@ public final class CullScopeSelector {
      * @param scope {@link CullScope} the cull scope to resolve
      * @return a {@link List} of {@link Path} directories to scan for candidates
      */
-    public List<Path> directoriesToScan(Path photosRoot, CullScope scope) {
+    public List<Path> directoriesToScan(final Path photosRoot, final CullScope scope) {
         return switch (scope) {
-            case CullScope.Year(int year, List<Integer> months) -> monthDirectories(photosRoot, year, months);
+            case CullScope.Year(final int year, final List<Integer> months) -> monthDirectories(photosRoot, year, months);
             case CullScope.OldestN _ -> List.of(photosRoot);
         };
     }
@@ -43,9 +43,9 @@ public final class CullScopeSelector {
      * @param scope {@link CullScope} the cull scope to resolve
      * @return {@link Path} the base path to report for this scope
      */
-    public Path basePath(Path photosRoot, CullScope scope) {
+    public Path basePath(final Path photosRoot, final CullScope scope) {
         return switch (scope) {
-            case CullScope.Year(int year, List<Integer> _) -> photosRoot.resolve(String.valueOf(year));
+            case CullScope.Year(final int year, List<Integer> _) -> photosRoot.resolve(String.valueOf(year));
             case CullScope.OldestN _ -> photosRoot;
         };
     }
@@ -58,13 +58,13 @@ public final class CullScopeSelector {
      * @param scope {@link CullScope} the cull scope being resolved
      * @return a {@link List} of {@link CullCandidate} the ordered (and possibly capped) candidates
      */
-    public List<CullCandidate> order(List<CullCandidate> candidates, CullScope scope) {
-        List<CullCandidate> sorted = candidates.stream()
+    public List<CullCandidate> order(final List<CullCandidate> candidates, final CullScope scope) {
+        final List<CullCandidate> sorted = candidates.stream()
                 .sorted(Comparator.comparing(CullCandidate::mtime))
                 .toList();
         return switch (scope) {
             case CullScope.Year _ -> sorted;
-            case CullScope.OldestN(int n) -> sorted.stream().limit(n).toList();
+            case CullScope.OldestN(final int n) -> sorted.stream().limit(n).toList();
         };
     }
 
@@ -77,8 +77,8 @@ public final class CullScopeSelector {
      * @param months a {@link List} of {@link Integer} specific months to include, or null for the whole year
      * @return a {@link List} of {@link Path} the resolved month (or year) directories
      */
-    private static List<Path> monthDirectories(Path photosRoot, int year, @Nullable List<Integer> months) {
-        Path yearDir = photosRoot.resolve(String.valueOf(year));
+    private static List<Path> monthDirectories(final Path photosRoot, final int year, final @Nullable List<Integer> months) {
+        final Path yearDir = photosRoot.resolve(String.valueOf(year));
         if (months == null) {
             return List.of(yearDir);
         }

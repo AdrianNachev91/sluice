@@ -29,9 +29,9 @@ public class MtimeSource implements DateSource {
      * @return an {@link Optional} {@link LocalDateTime}, the file's last-modified time, if it could be read
      */
     @Override
-    public Optional<LocalDateTime> resolve(MediaFile file, @Nullable TakeoutSidecar sidecar) {
+    public Optional<LocalDateTime> resolve(final MediaFile file, final @Nullable TakeoutSidecar sidecar) {
         try {
-            FileTime mtime = Files.getLastModifiedTime(file.path());
+            final FileTime mtime = Files.getLastModifiedTime(file.path());
             return Optional.of(LocalDateTime.ofInstant(mtime.toInstant(), ZoneId.systemDefault()));
         } catch (IOException _) {
             return Optional.empty();

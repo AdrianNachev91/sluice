@@ -61,8 +61,8 @@ public class PrepDirDoctor {
      * @param applyPlanner {@link ApplyPlanner} the merged shard-contract and missing-source checks
      * @param ledgerReader {@link LedgerReader} takes a read-only move-ledger snapshot per diagnosis
      */
-    public PrepDirDoctor(CullPrepPort cullPrepPort, MediaStore mediaStore, CullSettings cullSettings,
-            ApplyPlanner applyPlanner, LedgerReader ledgerReader) {
+    public PrepDirDoctor(final CullPrepPort cullPrepPort, final MediaStore mediaStore, final CullSettings cullSettings,
+                         final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
         this.cullPrepPort = cullPrepPort;
         this.mediaStore = mediaStore;
         this.applyPlanner = applyPlanner;
@@ -98,22 +98,22 @@ public class PrepDirDoctor {
      * @param prepDirPath {@link Path} the prep directory to diagnose
      * @return {@link PrepDirHealth} the prep dir's current state and open findings
      */
-    public PrepDirHealth diagnose(Path prepDirPath) {
+    public PrepDirHealth diagnose(final Path prepDirPath) {
         if (mediaStore.exists(prepDirPath.resolve(DECISIONS_FILE))) {
             return new PrepDirHealth(State.COMPLETE, List.of());
         }
 
-        PrepDir prepDir;
+        final PrepDir prepDir;
         try {
             prepDir = cullPrepPort.readIndex(prepDirPath);
-        } catch (UncheckedIOException e) {
+        } catch (final UncheckedIOException e) {
             return new PrepDirHealth(State.BLOCKED, List.of(new Finding.CorruptIndex(prepDirPath.resolve(INDEX_FILE))));
         }
 
         // One snapshot for this whole diagnosis, taken before either planner call below.
-        Ledger ledger = ledgerReader.read(prepDirPath);
-        ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
-        ShardTally tally = shardTallyCalculator.tally(prepDir);
+        final Ledger ledger = ledgerReader.read(prepDirPath);
+        final ValidationReport validation = applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true), ledger);
+        final ShardTally tally = shardTallyCalculator.tally(prepDir);
         // Missing-source checking is skipped here too, for the same reason it's skipped below: the
         // shard contract is still incomplete. A montage still missing its shard tells nothing about
         // whether an already-submitted decision's file is missing.
@@ -124,7 +124,7 @@ public class PrepDirDoctor {
         if (!validation.valid()) {
             return new PrepDirHealth(State.BLOCKED, ordered(validation.findings()));
         }
-        List<Finding> findings = applyPlanner.checkMissingSources(prepDir, validation.decisions(), ledger);
+        final List<Finding> findings = applyPlanner.checkMissingSources(prepDir, validation.decisions(), ledger);
         return findings.isEmpty()
                 ? new PrepDirHealth(State.READY, List.of())
                 : new PrepDirHealth(State.BLOCKED, ordered(findings));
@@ -141,21 +141,21 @@ public class PrepDirDoctor {
      * @param cullPrepRoot {@link Path} the cull-prep root directory to sweep
      * @return {@link PurgeReport} every scope purged this sweep, and every scope skipped with its state
      */
-    public PurgeReport purgeCompleted(Path cullPrepRoot) {
+    public PurgeReport purgeCompleted(final Path cullPrepRoot) {
         if (!mediaStore.exists(cullPrepRoot)) {
             return new PurgeReport(List.of(), Map.of());
         }
-        List<Path> prepDirs = mediaStore.listFiles(cullPrepRoot).stream()
+        final List<Path> prepDirs = mediaStore.listFiles(cullPrepRoot).stream()
                 .filter(file -> file.getFileName().toString().equals(INDEX_FILE))
                 .map(Path::getParent)
                 .distinct()
                 .toList();
 
-        var purged = new ArrayList<String>();
-        var skipped = new LinkedHashMap<String, State>();
-        for (Path prepDir : prepDirs) {
-            String scope = prepDir.getFileName().toString();
-            State state = diagnose(prepDir).state();
+        final var purged = new ArrayList<String>();
+        final var skipped = new LinkedHashMap<String, State>();
+        for (final Path prepDir : prepDirs) {
+            final String scope = prepDir.getFileName().toString();
+            final State state = diagnose(prepDir).state();
             if (state == State.COMPLETE) {
                 purgeDir(prepDir);
                 purged.add(scope);
@@ -171,7 +171,7 @@ public class PrepDirDoctor {
      *
      * @param prepDir {@link Path} the completed prep directory to delete
      */
-    private void purgeDir(Path prepDir) {
+    private void purgeDir(final Path prepDir) {
         mediaStore.listFiles(prepDir).forEach(mediaStore::delete);
         mediaStore.removeIfEmptyOfFiles(prepDir);
     }
@@ -185,7 +185,7 @@ public class PrepDirDoctor {
      * @param findings a {@link List} of {@link Finding} the findings to order
      * @return a {@link List} of {@link Finding} the same findings, ordered by remedy tier
      */
-    private static List<Finding> ordered(List<Finding> findings) {
+    private static List<Finding> ordered(final List<Finding> findings) {
         return findings.stream()
                 .sorted(Comparator.comparingInt(finding -> finding.remedy().ordinal()))
                 .toList();

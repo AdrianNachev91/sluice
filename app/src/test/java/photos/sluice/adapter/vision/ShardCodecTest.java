@@ -28,13 +28,13 @@ class ShardCodecTest {
     private final ShardCodec codec = new ShardCodec();
 
     @Test
-    void roundTripsEveryDecisionSubtype(@TempDir Path dir) {
-        var shard = new DecisionShard("montage-007", List.of(
+    void roundTripsEveryDecisionSubtype(@TempDir final Path dir) {
+        final var shard = new DecisionShard("montage-007", List.of(
                 new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor"),
                 new Classification(dir.resolve("plate.jpg"), "food", "ordinary restaurant plate"),
                 new NearDupChosen(dir.resolve("best.jpg"), "lake-jun20", "sharpest of the burst"),
                 new NearDupReject(dir.resolve("soft.jpg"), "lake-jun20", "softer focus")));
-        Path shardPath = dir.resolve("decisions-007.json");
+        final Path shardPath = dir.resolve("decisions-007.json");
 
         codec.write(shardPath, shard);
 
@@ -42,9 +42,9 @@ class ShardCodecTest {
     }
 
     @Test
-    void roundTripsAnAllKeepsMontageAsAnEmptyDecisionsShard(@TempDir Path dir) throws IOException {
-        var shard = new DecisionShard("montage-008", List.of());
-        Path shardPath = dir.resolve("decisions-008.json");
+    void roundTripsAnAllKeepsMontageAsAnEmptyDecisionsShard(@TempDir final Path dir) throws IOException {
+        final var shard = new DecisionShard("montage-008", List.of());
+        final Path shardPath = dir.resolve("decisions-008.json");
 
         codec.write(shardPath, shard);
 
@@ -54,15 +54,15 @@ class ShardCodecTest {
     }
 
     @Test
-    void writesTheExactOnDiskShapeExternalAgentsExpect(@TempDir Path dir) throws IOException {
-        Path junk = dir.resolve("IMG-20190612-WA0003.jpg");
-        Path chosen = dir.resolve("IMG_20190620_150010.jpg");
-        Path reject = dir.resolve("IMG_20190620_150012.jpg");
-        var shard = new DecisionShard("montage-007", List.of(
+    void writesTheExactOnDiskShapeExternalAgentsExpect(@TempDir final Path dir) throws IOException {
+        final Path junk = dir.resolve("IMG-20190612-WA0003.jpg");
+        final Path chosen = dir.resolve("IMG_20190620_150010.jpg");
+        final Path reject = dir.resolve("IMG_20190620_150012.jpg");
+        final var shard = new DecisionShard("montage-007", List.of(
                 new Classification(junk, "junk", "phone photo of a monitor showing a webpage"),
                 new NearDupChosen(chosen, "lake-jun20", "sharpest of the 3-shot burst"),
                 new NearDupReject(reject, "lake-jun20", "softer focus; chosen is IMG_20190620_150010.jpg")));
-        Path shardPath = dir.resolve("decisions-007.json");
+        final Path shardPath = dir.resolve("decisions-007.json");
 
         codec.write(shardPath, shard);
 
@@ -79,25 +79,25 @@ class ShardCodecTest {
     }
 
     @Test
-    void classificationOmitsGroupAndChosenReasonKeys(@TempDir Path dir) throws IOException {
-        var shard = new DecisionShard("montage-001", List.of(
+    void classificationOmitsGroupAndChosenReasonKeys(@TempDir final Path dir) throws IOException {
+        final var shard = new DecisionShard("montage-001", List.of(
                 new Classification(dir.resolve("a.jpg"), "scenery", "weak composition")));
-        Path shardPath = dir.resolve("decisions-001.json");
+        final Path shardPath = dir.resolve("decisions-001.json");
 
         codec.write(shardPath, shard);
 
-        String json = Files.readString(shardPath, StandardCharsets.UTF_8);
+        final String json = Files.readString(shardPath, StandardCharsets.UTF_8);
         assertThat(json).doesNotContain("group").doesNotContain("chosen_reason");
     }
 
     @Test
-    void readsAClassificationWhoseActionIsAUserDefinedCategory(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-002.json");
+    void readsAClassificationWhoseActionIsAUserDefinedCategory(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-002.json");
         Files.writeString(shardPath, """
                 { "montage": "montage-002",
                   "decisions": [ { "file": "a.jpg", "action": "pets", "reason": "cat" } ] }""");
 
-        DecisionShard shard = codec.read(shardPath);
+        final DecisionShard shard = codec.read(shardPath);
 
         assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
             assertThat(c.category()).isEqualTo("pets");
@@ -106,8 +106,8 @@ class ShardCodecTest {
     }
 
     @Test
-    void rejectsUnknownFieldsWhenReading(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-003.json");
+    void rejectsUnknownFieldsWhenReading(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-003.json");
         Files.writeString(shardPath, """
                 { "montage": "montage-003",
                   "decisions": [ { "file": "a.jpg", "action": "junk", "reason": "blurry", "confidence": 0.9 } ] }""");
@@ -118,13 +118,13 @@ class ShardCodecTest {
     }
 
     @Test
-    void leavesAbsentRequiredFieldsEmptyForTheValidatorToReject(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-004.json");
+    void leavesAbsentRequiredFieldsEmptyForTheValidatorToReject(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-004.json");
         Files.writeString(shardPath, """
                 { "montage": "montage-004",
                   "decisions": [ { "action": "junk" } ] }""");
 
-        DecisionShard shard = codec.read(shardPath);
+        final DecisionShard shard = codec.read(shardPath);
 
         assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
             assertThat(c.file().toString()).isEmpty();
@@ -133,13 +133,13 @@ class ShardCodecTest {
     }
 
     @Test
-    void leavesAbsentNearDupFieldsEmptyForTheValidatorToReject(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-009.json");
+    void leavesAbsentNearDupFieldsEmptyForTheValidatorToReject(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-009.json");
         Files.writeString(shardPath, """
                 { "montage": "montage-009",
                   "decisions": [ { "file": "a.jpg", "action": "near-dup-chosen" } ] }""");
 
-        DecisionShard shard = codec.read(shardPath);
+        final DecisionShard shard = codec.read(shardPath);
 
         assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(NearDupChosen.class, c -> {
             assertThat(c.group()).isEmpty();
@@ -148,8 +148,8 @@ class ShardCodecTest {
     }
 
     @Test
-    void rejectsAnUnknownTopLevelField(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-010.json");
+    void rejectsAnUnknownTopLevelField(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-010.json");
         Files.writeString(shardPath, """
                 { "montage": "montage-010", "summary": "all good",
                   "decisions": [] }""");
@@ -160,8 +160,8 @@ class ShardCodecTest {
     }
 
     @Test
-    void readsAMissingDecisionsArrayAsEmpty(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-005.json");
+    void readsAMissingDecisionsArrayAsEmpty(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-005.json");
         Files.writeString(shardPath, """
                 { "montage": "montage-005" }""");
 
@@ -169,8 +169,8 @@ class ShardCodecTest {
     }
 
     @Test
-    void rejectsANullDocument(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-006.json");
+    void rejectsANullDocument(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-006.json");
         Files.writeString(shardPath, "null");
 
         assertThatThrownBy(() -> codec.read(shardPath))
@@ -179,8 +179,8 @@ class ShardCodecTest {
     }
 
     @Test
-    void rejectsANullDecisionElement(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-007.json");
+    void rejectsANullDecisionElement(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-007.json");
         Files.writeString(shardPath, """
                 { "montage": "montage-007",
                   "decisions": [ null, { "file": "a.jpg", "action": "junk", "reason": "blurry" } ] }""");
@@ -191,9 +191,9 @@ class ShardCodecTest {
     }
 
     @Test
-    void wrapsAWriteFailureIntoUncheckedIOException(@TempDir Path dir) {
-        Path shardPath = dir.resolve("missing-parent").resolve("decisions-006.json");
-        var shard = new DecisionShard("montage-006", List.of(
+    void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
+        final Path shardPath = dir.resolve("missing-parent").resolve("decisions-006.json");
+        final var shard = new DecisionShard("montage-006", List.of(
                 new Classification(dir.resolve("a.jpg"), "junk", "blurry")));
 
         assertThatThrownBy(() -> codec.write(shardPath, shard))
@@ -202,12 +202,12 @@ class ShardCodecTest {
     }
 
     @Test
-    void wrapsAJacksonExceptionDuringWriteIntoUncheckedIOException(@TempDir Path dir) {
-        var mapper = mock(JsonMapper.class);
+    void wrapsAJacksonExceptionDuringWriteIntoUncheckedIOException(@TempDir final Path dir) {
+        final var mapper = mock(JsonMapper.class);
         doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
-        var codecWithFailingMapper = new ShardCodec(mapper);
-        Path shardPath = dir.resolve("decisions-007.json");
-        var shard = new DecisionShard("montage-007", List.of());
+        final var codecWithFailingMapper = new ShardCodec(mapper);
+        final Path shardPath = dir.resolve("decisions-007.json");
+        final var shard = new DecisionShard("montage-007", List.of());
 
         assertThatThrownBy(() -> codecWithFailingMapper.write(shardPath, shard))
                 .isInstanceOf(UncheckedIOException.class)
@@ -217,8 +217,8 @@ class ShardCodecTest {
     }
 
     @Test
-    void wrapsAMalformedJsonReadIntoUncheckedIOException(@TempDir Path dir) throws IOException {
-        Path shardPath = dir.resolve("decisions-008.json");
+    void wrapsAMalformedJsonReadIntoUncheckedIOException(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-008.json");
         Files.writeString(shardPath, "{ not valid json");
 
         assertThatThrownBy(() -> codec.read(shardPath))
@@ -228,7 +228,7 @@ class ShardCodecTest {
                 .cause().hasCauseInstanceOf(JacksonException.class);
     }
 
-    private static String jsonEscaped(Path path) {
+    private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
 }

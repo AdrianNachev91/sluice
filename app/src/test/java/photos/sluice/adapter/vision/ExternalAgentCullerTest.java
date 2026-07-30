@@ -36,9 +36,9 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void reportsEveryMontageCulledWhenEachHasAValidShard(@TempDir Path dir) throws IOException, CullException {
-        Path junk = dir.resolve("base").resolve("IMG_001.jpg");
-        Path keeper = dir.resolve("base").resolve("IMG_002.jpg");
+    void reportsEveryMontageCulledWhenEachHasAValidShard(@TempDir final Path dir) throws IOException, CullException {
+        final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
+        final Path keeper = dir.resolve("base").resolve("IMG_002.jpg");
         writeSidecar(dir, "montage-001", junk);
         writeSidecar(dir, "montage-002", keeper);
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
@@ -51,7 +51,7 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void throwsNamingEveryMontageMissingItsShard(@TempDir Path dir) throws IOException {
+    void throwsNamingEveryMontageMissingItsShard(@TempDir final Path dir) throws IOException {
         writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
         writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
 
@@ -62,8 +62,8 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void allowPartialWaivesMissingShardsAndReportsThemSkipped(@TempDir Path dir) throws IOException, CullException {
-        Path junk = dir.resolve("base").resolve("IMG_001.jpg");
+    void allowPartialWaivesMissingShardsAndReportsThemSkipped(@TempDir final Path dir) throws IOException, CullException {
+        final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         writeSidecar(dir, "montage-001", junk);
         writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
@@ -74,8 +74,8 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void allowPartialStillRejectsAnInvalidShard(@TempDir Path dir) throws IOException {
-        Path photo = dir.resolve("base").resolve("IMG_001.jpg");
+    void allowPartialStillRejectsAnInvalidShard(@TempDir final Path dir) throws IOException {
+        final Path photo = dir.resolve("base").resolve("IMG_001.jpg");
         writeSidecar(dir, "montage-001", photo);
         writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
@@ -88,8 +88,8 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void rejectsAShardWithNoMatchingMontage(@TempDir Path dir) throws IOException {
-        Path junk = dir.resolve("base").resolve("IMG_001.jpg");
+    void rejectsAShardWithNoMatchingMontage(@TempDir final Path dir) throws IOException {
+        final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         writeSidecar(dir, "montage-001", junk);
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "photo of a receipt"))));
@@ -101,7 +101,7 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void rejectsAStrayShardEvenWhenAllowPartialWaivesMissingOnes(@TempDir Path dir) throws IOException {
+    void rejectsAStrayShardEvenWhenAllowPartialWaivesMissingOnes(@TempDir final Path dir) throws IOException {
         writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
         codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
@@ -112,7 +112,7 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void reportsAnUnparseableShardAmongTheRunsProblems(@TempDir Path dir) throws IOException {
+    void reportsAnUnparseableShardAmongTheRunsProblems(@TempDir final Path dir) throws IOException {
         writeSidecar(dir, "montage-001", dir.resolve("base").resolve("IMG_001.jpg"));
         writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg"));
         Files.writeString(dir.resolve("decisions-001.json"), "{ not json");
@@ -124,8 +124,8 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void aggregatesValidatorProblemsIntoTheThrow(@TempDir Path dir) throws IOException {
-        Path photo = dir.resolve("base").resolve("IMG_001.jpg");
+    void aggregatesValidatorProblemsIntoTheThrow(@TempDir final Path dir) throws IOException {
+        final Path photo = dir.resolve("base").resolve("IMG_001.jpg");
         writeSidecar(dir, "montage-001", photo);
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(dir.resolve("elsewhere").resolve("OTHER.jpg"), "junk", "meme"),
@@ -138,11 +138,11 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void healsADriftedPathThroughTheSidecarBasename(@TempDir Path dir) throws IOException {
-        Path actual = dir.resolve("base").resolve("2019").resolve("06").resolve("IMG_001.jpg");
+    void healsADriftedPathThroughTheSidecarBasename(@TempDir final Path dir) throws IOException {
+        final Path actual = dir.resolve("base").resolve("2019").resolve("06").resolve("IMG_001.jpg");
         writeSidecar(dir, "montage-001", actual);
         // The culler retyped the \YYYY\MM\ segment; the unique basename resolves it back into scope.
-        Path drifted = dir.resolve("base").resolve("2019").resolve("07").resolve("IMG_001.jpg");
+        final Path drifted = dir.resolve("base").resolve("2019").resolve("07").resolve("IMG_001.jpg");
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(drifted, "junk", "photo of a screen"))));
 
@@ -151,7 +151,7 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void failsLoudWhenASidecarIsUnreadable(@TempDir Path dir) throws IOException {
+    void failsLoudWhenASidecarIsUnreadable(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("montage-001.json"), "{ not json");
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001", List.of()));
 
@@ -161,22 +161,22 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void returnsAnEmptyReportWhenThePrepDirHasNoMontages(@TempDir Path dir) throws CullException {
+    void returnsAnEmptyReportWhenThePrepDirHasNoMontages(@TempDir final Path dir) throws CullException {
         assertThat(culler.cull(prep(dir), options()))
                 .isEqualTo(new CullReport(0, 0, 0, 0));
     }
 
     @Test
-    void progressCallbackTicksOnceForEachMontageIncludingOneWithAMissingShard(@TempDir Path dir)
+    void progressCallbackTicksOnceForEachMontageIncludingOneWithAMissingShard(@TempDir final Path dir)
             throws IOException, CullException {
-        Path junk = dir.resolve("base").resolve("IMG_001.jpg");
+        final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         writeSidecar(dir, "montage-001", junk);
         writeSidecar(dir, "montage-002", dir.resolve("base").resolve("IMG_002.jpg")); // no shard written
         codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "photo of a monitor"))));
 
-        List<String> ticks = new ArrayList<>();
-        CullReport report = culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial(),
+        final List<String> ticks = new ArrayList<>();
+        final CullReport report = culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial(),
                 (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(report).isEqualTo(new CullReport(1, 1, 0, 0));
@@ -200,16 +200,16 @@ class ExternalAgentCullerTest {
         return new CullOptions(true, null);
     }
 
-    private PrepDir prep(Path prepDir, String... entries) {
+    private PrepDir prep(final Path prepDir, final String... entries) {
         return new PrepDir("2019-06", prepDir.resolve("base"), entries.length * 2, List.of(),
                 entries.length, prepDir, List.of(entries));
     }
 
     // Writes a sidecar in the writer's on-disk shape, with the fields this adapter doesn't consume
     // present too, so reads are exercised against the real full document.
-    private void writeSidecar(Path prepDir, String montage, Path... srcs) throws IOException {
-        StringBuilder photos = new StringBuilder();
-        for (Path src : srcs) {
+    private void writeSidecar(final Path prepDir, final String montage, final Path... srcs) throws IOException {
+        final StringBuilder photos = new StringBuilder();
+        for (final Path src : srcs) {
             if (!photos.isEmpty()) {
                 photos.append(", ");
             }
@@ -225,7 +225,7 @@ class ExternalAgentCullerTest {
                 """.formatted(jsonEscaped(prepDir.resolve(montage + ".jpg")), photos));
     }
 
-    private static String jsonEscaped(Path path) {
+    private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
 

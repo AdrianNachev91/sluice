@@ -25,15 +25,15 @@ class SidecarWriterTest {
     private final SidecarWriter writer = new SidecarWriter();
 
     @Test
-    void writesASinglePhotoSidecarMatchingTheExactContractShape(@TempDir Path dir) throws IOException {
-        Path sidecarPath = dir.resolve("montage-001.json");
-        Path montagePath = dir.resolve("montage-001.jpg");
-        var photo = new SidecarPhotoEntry(
+    void writesASinglePhotoSidecarMatchingTheExactContractShape(@TempDir final Path dir) throws IOException {
+        final Path sidecarPath = dir.resolve("montage-001.json");
+        final Path montagePath = dir.resolve("montage-001.jpg");
+        final var photo = new SidecarPhotoEntry(
                 dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-06-15T10:30:00Z"), false);
 
         writer.write(sidecarPath, montagePath, List.of(photo));
 
-        String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
+        final String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
         assertThat(json).isEqualToIgnoringWhitespace("""
                 {
                   "montage": "%s",
@@ -50,39 +50,39 @@ class SidecarWriterTest {
     }
 
     @Test
-    void preservesPhotoOrderAcrossMultipleEntries(@TempDir Path dir) throws IOException {
-        Path sidecarPath = dir.resolve("montage-002.json");
-        Path montagePath = dir.resolve("montage-002.jpg");
-        var first = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
-        var second = new SidecarPhotoEntry(dir.resolve("b.jpg"), "b.jpg", Instant.parse("2023-01-02T00:00:00Z"), false);
+    void preservesPhotoOrderAcrossMultipleEntries(@TempDir final Path dir) throws IOException {
+        final Path sidecarPath = dir.resolve("montage-002.json");
+        final Path montagePath = dir.resolve("montage-002.jpg");
+        final var first = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
+        final var second = new SidecarPhotoEntry(dir.resolve("b.jpg"), "b.jpg", Instant.parse("2023-01-02T00:00:00Z"), false);
 
         writer.write(sidecarPath, montagePath, List.of(first, second));
 
-        String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
-        int indexA = json.indexOf("a.jpg");
-        int indexB = json.indexOf("b.jpg");
+        final String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
+        final int indexA = json.indexOf("a.jpg");
+        final int indexB = json.indexOf("b.jpg");
         assertThat(indexA).isLessThan(indexB);
     }
 
     @Test
-    void receivedFlagPassesThroughUntouched(@TempDir Path dir) throws IOException {
-        Path sidecarPath = dir.resolve("montage-003.json");
-        Path montagePath = dir.resolve("montage-003.jpg");
-        var photo = new SidecarPhotoEntry(
+    void receivedFlagPassesThroughUntouched(@TempDir final Path dir) throws IOException {
+        final Path sidecarPath = dir.resolve("montage-003.json");
+        final Path montagePath = dir.resolve("montage-003.jpg");
+        final var photo = new SidecarPhotoEntry(
                 dir.resolve("IMG-20230615-WA0001.jpg"), "IMG-20230615-WA0001.jpg",
                 Instant.parse("2023-06-15T10:30:00Z"), true);
 
         writer.write(sidecarPath, montagePath, List.of(photo));
 
-        String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
+        final String json = Files.readString(sidecarPath, StandardCharsets.UTF_8);
         assertThat(json).contains("\"received\":true");
     }
 
     @Test
-    void wrapsAWriteFailureIntoUncheckedIOException(@TempDir Path dir) {
-        Path sidecarPath = dir.resolve("missing-parent").resolve("montage-004.json");
-        Path montagePath = dir.resolve("montage-004.jpg");
-        var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
+    void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
+        final Path sidecarPath = dir.resolve("missing-parent").resolve("montage-004.json");
+        final Path montagePath = dir.resolve("montage-004.jpg");
+        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
 
         assertThatThrownBy(() -> writer.write(sidecarPath, montagePath, List.of(photo)))
                 .isInstanceOf(UncheckedIOException.class)
@@ -90,13 +90,13 @@ class SidecarWriterTest {
     }
 
     @Test
-    void wrapsAJacksonExceptionDuringTheWriteItselfIntoUncheckedIOException(@TempDir Path dir) {
-        var mapper = mock(JsonMapper.class);
+    void wrapsAJacksonExceptionDuringTheWriteItselfIntoUncheckedIOException(@TempDir final Path dir) {
+        final var mapper = mock(JsonMapper.class);
         doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(java.io.OutputStream.class), any());
-        var writerWithFailingMapper = new SidecarWriter(mapper);
-        Path sidecarPath = dir.resolve("montage-005.json");
-        Path montagePath = dir.resolve("montage-005.jpg");
-        var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
+        final var writerWithFailingMapper = new SidecarWriter(mapper);
+        final Path sidecarPath = dir.resolve("montage-005.json");
+        final Path montagePath = dir.resolve("montage-005.jpg");
+        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"), false);
 
         assertThatThrownBy(() -> writerWithFailingMapper.write(sidecarPath, montagePath, List.of(photo)))
                 .isInstanceOf(UncheckedIOException.class)
@@ -105,7 +105,7 @@ class SidecarWriterTest {
                 .cause().hasCauseInstanceOf(JacksonException.class);
     }
 
-    private static String jsonEscaped(Path path) {
+    private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
 }

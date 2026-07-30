@@ -44,11 +44,11 @@ import static photos.sluice.application.service.PipelineTestSupport.writeShard;
 class PipelineTest {
 
     @Test
-    void sortRunsSortEngineAndReturnsItsSummary(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void sortRunsSortEngineAndReturnsItsSummary(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writeFile(inboxOf(root).resolve("20210315_photo.jpg"), padded("keeper"));
 
-        SortSummary summary = pipeline(root, progress).sort(new SortScope.OldestYear()).join();
+        final SortSummary summary = pipeline(root, progress).sort(new SortScope.OldestYear()).join();
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(summary.photosSorted()).isEqualTo(1);
@@ -56,8 +56,8 @@ class PipelineTest {
     }
 
     @Test
-    void sortBracketsProgressEventsAroundTheSortPhase(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void sortBracketsProgressEventsAroundTheSortPhase(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writeFile(inboxOf(root).resolve("20210315_a.jpg"), padded("a"));
         writeFile(inboxOf(root).resolve("20210316_b.jpg"), padded("b"));
 
@@ -73,43 +73,43 @@ class PipelineTest {
     // synchronizes the request with the exact moment the first file's move is in flight, so it lands
     // mid-pass rather than before the pass even starts.
     @Test
-    void sortStopsMidRoutingWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir Path root) throws Exception {
+    void sortStopsMidRoutingWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir final Path root) throws Exception {
         writeFile(inboxOf(root).resolve("20210101_a.jpg"), padded("a"));
         writeFile(inboxOf(root).resolve("20210102_b.jpg"), padded("b"));
-        var moveStarted = new CountDownLatch(1);
-        var releaseMove = new CountDownLatch(1);
-        var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+        final var moveStarted = new CountDownLatch(1);
+        final var releaseMove = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
 
-        JobHandle<SortSummary> handle = pipeline.sort(new SortScope.OldestYear());
+        final JobHandle<SortSummary> handle = pipeline.sort(new SortScope.OldestYear());
         moveStarted.await();
         handle.requestCancellation();
         releaseMove.countDown();
-        SortSummary summary = handle.join();
+        final SortSummary summary = handle.join();
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(summary.photosSorted()).isEqualTo(1);
-        try (var sorted = Files.list(root.resolve("Sorted/Photos/2021/01"))) {
+        try (final var sorted = Files.list(root.resolve("Sorted/Photos/2021/01"))) {
             assertThat(sorted.count()).isEqualTo(1);
         }
-        try (var remaining = Files.list(inboxOf(root))) {
+        try (final var remaining = Files.list(inboxOf(root))) {
             assertThat(remaining.count()).isEqualTo(1);
         }
     }
 
     @Test
-    void commitRunsCommitEngineAndReturnsItsSummary(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void commitRunsCommitEngineAndReturnsItsSummary(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "keeper");
 
-        CommitSummary summary = pipeline(root, progress).commit(new CommitScope.All()).join();
+        final CommitSummary summary = pipeline(root, progress).commit(new CommitScope.All()).join();
 
         assertThat(summary.committed()).isEqualTo(1);
         assertThat(Files.exists(root.resolve("Library/Photos/2019/06/a.jpg"))).isTrue();
     }
 
     @Test
-    void commitBracketsProgressEventsAroundTheCommitPhase(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void commitBracketsProgressEventsAroundTheCommitPhase(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
         writeFile(root.resolve("Sorted/Photos/2019/07/b.jpg"), "b");
 
@@ -120,11 +120,11 @@ class PipelineTest {
     }
 
     @Test
-    void rescueRunsRescueEngineAndReturnsItsSummary(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void rescueRunsRescueEngineAndReturnsItsSummary(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writeFile(root.resolve("Review/2019-06/IMG_1.jpg"), "keeper");
 
-        RescueSummary summary = pipeline(root, progress).rescue("2019-06").join();
+        final RescueSummary summary = pipeline(root, progress).rescue("2019-06").join();
 
         assertThat(summary.rescued()).isEqualTo(1);
         assertThat(summary.folderRemoved()).isTrue();
@@ -132,8 +132,8 @@ class PipelineTest {
     }
 
     @Test
-    void rescueBracketsProgressEventsAroundTheRescuePhase(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void rescueBracketsProgressEventsAroundTheRescuePhase(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writeFile(root.resolve("Review/2019-06/IMG_1.jpg"), "one");
         writeFile(root.resolve("Review/2019-06/IMG_2.jpg"), "two");
 
@@ -148,51 +148,51 @@ class PipelineTest {
     // Without it, a job that dies mid-engine-call would leave a listener's progress bar showing
     // "in progress" forever with no signal the phase ever ended.
     @Test
-    void phaseFinishedFiresEvenWhenTheEngineThrows(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void phaseFinishedFiresEvenWhenTheEngineThrows(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writeFile(root.resolve("Review/2019-06/IMG_1.jpg"), "keeper");
 
-        var handle = pipeline(root, progress, new FailingMoves()).rescue("2019-06");
+        final var handle = pipeline(root, progress, new FailingMoves()).rescue("2019-06");
 
         assertThatThrownBy(handle::join).isInstanceOf(CompletionException.class);
         assertThat(progress.events).containsExactly("started:Rescuing...", "finished:Rescuing...");
     }
 
     @Test
-    void commitStopsMidMoveLoopWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir Path root) throws Exception {
+    void commitStopsMidMoveLoopWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir final Path root) throws Exception {
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
         writeFile(root.resolve("Sorted/Photos/2019/07/b.jpg"), "b");
-        var moveStarted = new CountDownLatch(1);
-        var releaseMove = new CountDownLatch(1);
-        var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+        final var moveStarted = new CountDownLatch(1);
+        final var releaseMove = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
 
-        JobHandle<CommitSummary> handle = pipeline.commit(new CommitScope.All());
+        final JobHandle<CommitSummary> handle = pipeline.commit(new CommitScope.All());
         moveStarted.await();
         handle.requestCancellation();
         releaseMove.countDown();
-        CommitSummary summary = handle.join();
+        final CommitSummary summary = handle.join();
 
         assertThat(summary.committed()).isEqualTo(1);
-        try (var remaining = Files.walk(root.resolve("Sorted")).filter(Files::isRegularFile)) {
+        try (final var remaining = Files.walk(root.resolve("Sorted")).filter(Files::isRegularFile)) {
             assertThat(remaining.count()).isEqualTo(1);
         }
     }
 
     @Test
-    void rescueStopsMidMoveLoopWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir Path root) throws Exception {
+    void rescueStopsMidMoveLoopWhenCancellationIsRequestedWhileAFileIsInFlight(@TempDir final Path root) throws Exception {
         writeFile(root.resolve("Review/2019-06/a.jpg"), "a");
         writeFile(root.resolve("Review/2019-06/b.jpg"), "b");
-        Path reasonsFile = root.resolve("Review/2019-06/_reasons.txt");
+        final Path reasonsFile = root.resolve("Review/2019-06/_reasons.txt");
         writeFile(reasonsFile, "b.jpg - low-res");
-        var moveStarted = new CountDownLatch(1);
-        var releaseMove = new CountDownLatch(1);
-        var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+        final var moveStarted = new CountDownLatch(1);
+        final var releaseMove = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
 
-        JobHandle<RescueSummary> handle = pipeline.rescue("2019-06");
+        final JobHandle<RescueSummary> handle = pipeline.rescue("2019-06");
         moveStarted.await();
         handle.requestCancellation();
         releaseMove.countDown();
-        RescueSummary summary = handle.join();
+        final RescueSummary summary = handle.join();
 
         assertThat(summary.rescued()).isEqualTo(1);
         assertThat(summary.skipped()).isEmpty();
@@ -207,11 +207,11 @@ class PipelineTest {
     // this test has no Spring context - the same pattern CullEngineTest's own
     // armWatchesForExistingWaitingJobs() tests already use.
     @Test
-    void sweepExpiredDisasterDrawersDeletesOnlyRetentionExpiredEntries(@TempDir Path root) throws IOException {
-        Path drawer = root.resolve("logs/cull-prep/2019-06/disasters");
-        Path oldEntry = drawer.resolve("2019-01-01_00-00-00-move-records-log.log");
+    void sweepExpiredDisasterDrawersDeletesOnlyRetentionExpiredEntries(@TempDir final Path root) throws IOException {
+        final Path drawer = root.resolve("logs/cull-prep/2019-06/disasters");
+        final Path oldEntry = drawer.resolve("2019-01-01_00-00-00-move-records-log.log");
         writeFile(oldEntry, "old");
-        Path freshEntry = drawer.resolve("2099-01-01_00-00-00-move-records-log.log");
+        final Path freshEntry = drawer.resolve("2099-01-01_00-00-00-move-records-log.log");
         writeFile(freshEntry, "fresh");
 
         pipeline(root, new RecordingProgressPort()).sweepExpiredDisasterDrawers();
@@ -225,10 +225,10 @@ class PipelineTest {
     // covers sweepExpiredGraveyard()'s own logic in full, so this only needs one expired and one
     // fresh graveyard folder to prove the wiring reaches it too.
     @Test
-    void sweepExpiredDisasterDrawersAlsoSweepsTheDiscardGraveyard(@TempDir Path root) throws IOException {
-        Path oldGraveyard = root.resolve("logs/disasters/scope1-2019-01-01_00-00-00");
+    void sweepExpiredDisasterDrawersAlsoSweepsTheDiscardGraveyard(@TempDir final Path root) throws IOException {
+        final Path oldGraveyard = root.resolve("logs/disasters/scope1-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
-        Path freshEntry = root.resolve("logs/disasters/scope1-2099-01-01_00-00-00/index.json");
+        final Path freshEntry = root.resolve("logs/disasters/scope1-2099-01-01_00-00-00/index.json");
         writeFile(freshEntry, "{}");
 
         pipeline(root, new RecordingProgressPort()).sweepExpiredDisasterDrawers();
@@ -241,16 +241,16 @@ class PipelineTest {
     // directly. TroubleshooterTest already covers the diagnose/reconcile/report logic itself in
     // full, so this only needs one real prep dir to prove the wiring returns its report.
     @Test
-    void troubleshootRunsAsABackgroundJobAndReturnsTheReport(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = cullPipeline(root, progress);
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+    void troubleshootRunsAsABackgroundJobAndReturnsTheReport(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(prepDir, false).join();
 
-        TroubleshootReport report = pipeline.troubleshoot(prepDir).join();
+        final TroubleshootReport report = pipeline.troubleshoot(prepDir).join();
 
         assertThat(report.before().state()).isEqualTo(State.COMPLETE);
         assertThat(report.reconcile()).isNull();
@@ -261,16 +261,16 @@ class PipelineTest {
     // diagnose/delete logic in full, so this only needs one completed run to prove the wiring
     // deletes it.
     @Test
-    void purgeCompletedRunsAsABackgroundJobAndDeletesTheCompletedRun(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = cullPipeline(root, progress);
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+    void purgeCompletedRunsAsABackgroundJobAndDeletesTheCompletedRun(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(prepDir, false).join();
 
-        PurgeReport report = pipeline.purgeCompleted().join();
+        final PurgeReport report = pipeline.purgeCompleted().join();
 
         assertThat(report.purged()).containsExactly(prepDir.getFileName().toString());
         assertThat(Files.exists(prepDir)).isFalse();
@@ -280,14 +280,14 @@ class PipelineTest {
     // PrepDirRemediesTest already covers the graveyard-filing/image-deletion logic itself in full,
     // so this only needs a still-waiting prep dir to prove the wiring returns its report.
     @Test
-    void discardRunsAsABackgroundJobAndFilesEverythingIntoTheGraveyard(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
+    void discardRunsAsABackgroundJobAndFilesEverythingIntoTheGraveyard(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = cullPipeline(root, progress);
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
 
-        DiscardReport report = pipeline.discard(prepDir).join();
+        final DiscardReport report = pipeline.discard(prepDir).join();
 
         assertThat(report.graveyard().getParent()).isEqualTo(root.resolve("logs/disasters"));
         assertThat(Files.exists(report.graveyard().resolve("index.json"))).isTrue();
@@ -297,12 +297,12 @@ class PipelineTest {
     // Refusing a COMPLETE run is the gate PrepDirRemedies.discard() itself deliberately doesn't apply -
     // purgeCompleted() is that state's own verb, not discard().
     @Test
-    void discardRefusesACompletedRun(@TempDir Path root) throws IOException {
-        var progress = new RecordingProgressPort();
-        Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = cullPipeline(root, progress);
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+    void discardRefusesACompletedRun(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(prepDir, false).join();
 
@@ -316,12 +316,12 @@ class PipelineTest {
     // post-discard. disarmWatch() itself is proven in isolation by CullEngineTest's own
     // manualResumeDisarmsAnAlreadyArmedWatcher; this proves Pipeline.discard() actually calls it.
     @Test
-    void discardDisarmsAnAlreadyArmedWatcher(@TempDir Path root) throws IOException {
+    void discardDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
-        var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        Path prepDir = waiting.job().prepDir();
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
         assertThat(pipeline.isWatchActive(prepDir)).isTrue();
 
         pipeline.discard(prepDir).join();

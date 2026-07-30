@@ -10,7 +10,7 @@ class AppConfigTest {
     // turns the bean's mapping into a silent tileSize/tilesPerRow swap.
     @Test
     void montageConfigBeanMapsFieldsByNameNotPosition() {
-        var domainConfig = new AppConfig().montageConfig(new MontageConfig(224, 5));
+        final var domainConfig = new AppConfig().montageConfig(new MontageConfig(224, 5));
 
         assertThat(domainConfig.tileSize()).isEqualTo(224);
         assertThat(domainConfig.tilesPerRow()).isEqualTo(5);

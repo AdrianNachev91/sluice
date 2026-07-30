@@ -82,18 +82,18 @@ class AnthropicCullerLiveTest {
     private boolean tampered;
 
     @Test
-    void cullsARealMontageAndSurvivesAForcedContentRetry(@TempDir Path root) throws Exception {
-        PrepDir prep = renderRealMontage(root);
+    void cullsARealMontageAndSurvivesAForcedContentRetry(@TempDir final Path root) throws Exception {
+        final PrepDir prep = renderRealMontage(root);
         assertThat(prep.entries()).containsExactly("montage-001");
-        CullSettings settings = new FixedSettings("anthropic", CARDS,
+        final CullSettings settings = new FixedSettings("anthropic", CARDS,
                 new CullProviderSettings(MODEL, null, true, null));
         // Wrapping the production-built client exercises the whole real path: the env-var key
         // read, the absent endpoint override, and the transport-retry knob.
-        AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings());
-        var culler = new AnthropicCuller(new CullerPrompt(settings, new MontageConfig(224, 2)),
+        final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings());
+        final var culler = new AnthropicCuller(new CullerPrompt(settings, new MontageConfig(224, 2)),
                 new ShardCodec(), new SidecarReader(), settings, () -> tamperingClient(real));
 
-        CullReport report = culler.cull(prep, new CullOptions(false, null));
+        final CullReport report = culler.cull(prep, new CullOptions(false, null));
 
         assertThat(liveCalls).isEqualTo(2);
         assertThat(tampered).isTrue();
@@ -101,30 +101,30 @@ class AnthropicCullerLiveTest {
         assertThat(report.montagesSkipped()).isZero();
         assertThat(report.inputTokens()).isPositive();
         assertThat(report.outputTokens()).isPositive();
-        DecisionShard shard = new ShardCodec().read(prep.prepDir().resolve("decisions-001.json"));
+        final DecisionShard shard = new ShardCodec().read(prep.prepDir().resolve("decisions-001.json"));
         assertThat(shard.montage()).isEqualTo("montage-001");
     }
 
     // Four distinct-colored photos through the real pipeline: one 2x2 sheet at production tile size.
-    private static PrepDir renderRealMontage(Path root) throws IOException {
-        var pathsConfig = new PathsConfig(new PathsProperties(
+    private static PrepDir renderRealMontage(final Path root) throws IOException {
+        final var pathsConfig = new PathsConfig(new PathsProperties(
                 root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
-        Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
-        List<Color> colors = List.of(Color.RED, Color.GREEN, Color.BLUE, Color.ORANGE);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        final List<Color> colors = List.of(Color.RED, Color.GREEN, Color.BLUE, Color.ORANGE);
         for (int i = 0; i < PHOTO_NAMES.size(); i++) {
             writePhoto(juneDir, PHOTO_NAMES.get(i), colors.get(i));
         }
-        HeifDecoder stubHeifDecoder = _ -> Optional.empty();
-        var renderer = new CullMontageRenderer(
+        final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
+        final var renderer = new CullMontageRenderer(
                 new TileRenderer(stubHeifDecoder), new MontageBuilder(), new SidecarWriter(),
                 new PrepIndexWriter(), new NioMediaStore(), pathsConfig);
         return renderer.build(new CullScope.Year(2019, List.of(6)), new MontageConfig(224, 2));
     }
 
-    private static void writePhoto(Path dir, String name, Color color) throws IOException {
+    private static void writePhoto(final Path dir, final String name, final Color color) throws IOException {
         Files.createDirectories(dir);
-        var image = new BufferedImage(800, 600, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
+        final var image = new BufferedImage(800, 600, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = image.createGraphics();
         try {
             g.setColor(color);
             g.fillRect(0, 0, 800, 600);
@@ -137,13 +137,13 @@ class AnthropicCullerLiveTest {
     // Wraps the real client so the first response comes back with one filename flipped. The culler's
     // name check then fails, and its corrective retry goes to the live API for real. Every other
     // method delegates untouched, including close().
-    private AnthropicClient tamperingClient(AnthropicClient real) {
-        MessageService tamperingMessages = mock(MessageService.class, delegatesTo(real.messages()));
+    private AnthropicClient tamperingClient(final AnthropicClient real) {
+        final MessageService tamperingMessages = mock(MessageService.class, delegatesTo(real.messages()));
         doAnswer(invocation -> {
-            Message response = real.messages().create(invocation.<MessageCreateParams>getArgument(0));
+            final Message response = real.messages().create(invocation.<MessageCreateParams>getArgument(0));
             return ++liveCalls == 1 ? tamper(response) : response;
         }).when(tamperingMessages).create(any(MessageCreateParams.class));
-        AnthropicClient wrapper = mock(AnthropicClient.class, delegatesTo(real));
+        final AnthropicClient wrapper = mock(AnthropicClient.class, delegatesTo(real));
         doReturn(tamperingMessages).when(wrapper).messages();
         return wrapper;
     }
@@ -151,15 +151,15 @@ class AnthropicCullerLiveTest {
     // Flips the first sidecar filename found in the response text. When the model already misnamed
     // every photo on its own, there is nothing to flip. The natural failure then forces the retry,
     // and the tampered flag stays false. That fails the test visibly enough to investigate.
-    private Message tamper(Message response) {
-        String text = response.content().stream()
+    private Message tamper(final Message response) {
+        final String text = response.content().stream()
                 .flatMap(block -> block.text().stream())
                 .map(TextBlock::text)
                 .collect(Collectors.joining());
-        for (String name : PHOTO_NAMES) {
+        for (final String name : PHOTO_NAMES) {
             if (text.contains(name)) {
                 tampered = true;
-                String flipped = text.replaceFirst(Pattern.quote(name), "TAMPERED_0001.jpg");
+                final String flipped = text.replaceFirst(Pattern.quote(name), "TAMPERED_0001.jpg");
                 return response.toBuilder()
                         .content(List.of(ContentBlock.ofText(TextBlock.builder()
                                 .text(flipped)

@@ -26,8 +26,8 @@ public final class MediaTypeDetector {
      * @param path {@link Path} the path to classify
      * @return an {@link Optional} {@link MediaType}, if the extension is recognized
      */
-    public Optional<MediaType> classify(Path path) {
-        String extension = extensionOf(path);
+    public Optional<MediaType> classify(final Path path) {
+        final String extension = extensionOf(path);
         if (PHOTO_EXTENSIONS.contains(extension)) {
             return Optional.of(MediaType.PHOTO);
         }
@@ -43,9 +43,9 @@ public final class MediaTypeDetector {
      * @param path {@link Path} the path to inspect
      * @return {@link String} the lowercased extension, or an empty string if there is none
      */
-    public static String extensionOf(Path path) {
-        String name = path.getFileName().toString();
-        int dot = name.lastIndexOf('.');
+    public static String extensionOf(final Path path) {
+        final String name = path.getFileName().toString();
+        final int dot = name.lastIndexOf('.');
         if (dot < 0 || dot == name.length() - 1) {
             return "";
         }

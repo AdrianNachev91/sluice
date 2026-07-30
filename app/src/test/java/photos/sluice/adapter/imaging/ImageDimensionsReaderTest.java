@@ -29,31 +29,31 @@ class ImageDimensionsReaderTest {
 
     @Test
     void readsExifSubIfdDimensionsFromIphoneHeic() {
-        Optional<Dimensions> result = reader.read(FIXTURES.resolve("iphone-exif.heic"));
+        final Optional<Dimensions> result = reader.read(FIXTURES.resolve("iphone-exif.heic"));
 
         assertThat(result).contains(new Dimensions(4032, 3024));
     }
 
     @Test
     void fallsBackToImageIoWhenNoExifPresent() {
-        Optional<Dimensions> result = reader.read(FIXTURES.resolve("no-exif.jpg"));
+        final Optional<Dimensions> result = reader.read(FIXTURES.resolve("no-exif.jpg"));
 
         assertThat(result).contains(new Dimensions(2, 2));
     }
 
     @Test
     void returnsEmptyWhenFileIsNotAnImage() {
-        Optional<Dimensions> result = reader.read(FIXTURES.resolve("not-an-image.txt"));
+        final Optional<Dimensions> result = reader.read(FIXTURES.resolve("not-an-image.txt"));
 
         assertThat(result).isEmpty();
     }
 
     @Test
-    void multiImageTiffTakesTheLargestIndexNotTheFirst(@TempDir Path tempDir) throws IOException {
-        Path tiff = tempDir.resolve("multi-image.tiff");
+    void multiImageTiffTakesTheLargestIndexNotTheFirst(@TempDir final Path tempDir) throws IOException {
+        final Path tiff = tempDir.resolve("multi-image.tiff");
         writeTwoImageTiff(tiff, 64, 64, 512, 400);
 
-        Optional<Dimensions> result = reader.read(tiff);
+        final Optional<Dimensions> result = reader.read(tiff);
 
         assertThat(result).contains(new Dimensions(512, 400));
     }
@@ -63,9 +63,9 @@ class ImageDimensionsReaderTest {
     // multi-directory scan still returns the correct value when only one SubIFD exists.
     @Test
     void readsTrueCaptureResolutionFromARealCr2WithASingleSubIfd() {
-        Path cr2 = CULL_FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
+        final Path cr2 = CULL_FIXTURES.resolve("raw-samples/canon-eos-20d.cr2");
 
-        Optional<Dimensions> result = reader.read(cr2);
+        final Optional<Dimensions> result = reader.read(cr2);
 
         assertThat(result).contains(new Dimensions(3504, 2336));
     }
@@ -77,9 +77,9 @@ class ImageDimensionsReaderTest {
     // Verified against the actual fixture bytes, not a synthesized case.
     @Test
     void readsTrueCaptureResolutionFromARealNefWhereTheFirstSubIfdHasNoDimensions() {
-        Path nef = CULL_FIXTURES.resolve("raw-samples/nikon-d40.nef");
+        final Path nef = CULL_FIXTURES.resolve("raw-samples/nikon-d40.nef");
 
-        Optional<Dimensions> result = reader.read(nef);
+        final Optional<Dimensions> result = reader.read(nef);
 
         assertThat(result).contains(new Dimensions(3040, 2014));
     }
@@ -90,9 +90,9 @@ class ImageDimensionsReaderTest {
     // largest-across-directories rule correctly picks the true capture size, not the preview.
     @Test
     void readsTrueCaptureResolutionFromARealModernSonyArw() {
-        Path arw = CULL_FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
+        final Path arw = CULL_FIXTURES.resolve("raw-samples/sony-ilce-6700.arw");
 
-        Optional<Dimensions> result = reader.read(arw);
+        final Optional<Dimensions> result = reader.read(arw);
 
         assertThat(result).contains(new Dimensions(6656, 4608));
     }
@@ -104,7 +104,7 @@ class ImageDimensionsReaderTest {
     // matching the file's actual known dimensions.
     @Test
     void readsDimensionsFromARealAvifFixtureViaItsHeifDirectory() {
-        Optional<Dimensions> result = reader.read(CULL_FIXTURES.resolve("arctic-sky.avif"));
+        final Optional<Dimensions> result = reader.read(CULL_FIXTURES.resolve("arctic-sky.avif"));
 
         assertThat(result).contains(new Dimensions(1600, 1063));
     }
@@ -115,18 +115,18 @@ class ImageDimensionsReaderTest {
     // alone.
     @Test
     void readsDimensionsFromARealWebpFixture() {
-        Optional<Dimensions> result = reader.read(CULL_FIXTURES.resolve("webp-sample.webp"));
+        final Optional<Dimensions> result = reader.read(CULL_FIXTURES.resolve("webp-sample.webp"));
 
         assertThat(result).contains(new Dimensions(1024, 772));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"bmp", "gif"})
-    void readsDimensionsFromAGenericRasterFormat(String format, @TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("photo." + format);
+    void readsDimensionsFromAGenericRasterFormat(final String format, @TempDir final Path tempDir) throws IOException {
+        final Path file = tempDir.resolve("photo." + format);
         ImageIO.write(blankImage(300, 200), format, file.toFile());
 
-        Optional<Dimensions> result = reader.read(file);
+        final Optional<Dimensions> result = reader.read(file);
 
         assertThat(result).contains(new Dimensions(300, 200));
     }
@@ -137,7 +137,7 @@ class ImageDimensionsReaderTest {
     // combination (e.g. a directory carrying both tag pairs with different values).
     @Test
     void subIfdDimensionsPrefersTheExifSpecificTagPairWhenBothAreDirectlyPresent() {
-        var directory = new ExifSubIFDDirectory();
+        final var directory = new ExifSubIFDDirectory();
         directory.setInt(ExifSubIFDDirectory.TAG_EXIF_IMAGE_WIDTH, 3504);
         directory.setInt(ExifSubIFDDirectory.TAG_EXIF_IMAGE_HEIGHT, 2336);
         directory.setInt(ExifSubIFDDirectory.TAG_IMAGE_WIDTH, 384);
@@ -149,7 +149,7 @@ class ImageDimensionsReaderTest {
 
     @Test
     void subIfdDimensionsFallsBackToTheGenericTagPairWhenTheExifSpecificOneIsAbsent() {
-        var directory = new ExifSubIFDDirectory();
+        final var directory = new ExifSubIFDDirectory();
         directory.setInt(ExifSubIFDDirectory.TAG_IMAGE_WIDTH, 3040);
         directory.setInt(ExifSubIFDDirectory.TAG_IMAGE_HEIGHT, 2014);
 
@@ -159,14 +159,14 @@ class ImageDimensionsReaderTest {
 
     @Test
     void subIfdDimensionsIsNullWhenNeitherTagPairIsPresent() {
-        var directory = new ExifSubIFDDirectory();
+        final var directory = new ExifSubIFDDirectory();
 
         assertThat(ImageDimensionsReader.subIfdDimensions(directory)).isNull();
     }
 
     @Test
     void heifDimensionsReadsTheWidthAndHeightTags() {
-        var directory = new HeifDirectory();
+        final var directory = new HeifDirectory();
         directory.setInt(HeifDirectory.TAG_IMAGE_WIDTH, 1600);
         directory.setInt(HeifDirectory.TAG_IMAGE_HEIGHT, 1063);
 
@@ -175,7 +175,7 @@ class ImageDimensionsReaderTest {
 
     @Test
     void heifDimensionsIsNullWhenTagsAreAbsent() {
-        var directory = new HeifDirectory();
+        final var directory = new HeifDirectory();
 
         assertThat(ImageDimensionsReader.heifDimensions(directory)).isNull();
     }
@@ -185,8 +185,8 @@ class ImageDimensionsReaderTest {
     // the cross-type comparison itself, since that's the part with no empirical case yet.
     @Test
     void largestOfPrefersTheBiggerOfTwoPresentValues() {
-        var subIfd = new Dimensions(160, 120);
-        var heif = new Dimensions(1600, 1063);
+        final var subIfd = new Dimensions(160, 120);
+        final var heif = new Dimensions(1600, 1063);
 
         assertThat(ImageDimensionsReader.largestOf(subIfd, heif)).isEqualTo(heif);
         assertThat(ImageDimensionsReader.largestOf(heif, subIfd)).isEqualTo(heif);
@@ -197,8 +197,8 @@ class ImageDimensionsReaderTest {
     // report the same maxDimension, but the rule itself should stay verified rather than incidental.
     @Test
     void largestOfKeepsTheFirstArgumentWhenBothMaxDimensionsAreEqual() {
-        var first = new Dimensions(4000, 3000);
-        var second = new Dimensions(4000, 2000);
+        final var first = new Dimensions(4000, 3000);
+        final var second = new Dimensions(4000, 2000);
 
         assertThat(ImageDimensionsReader.largestOf(first, second)).isEqualTo(first);
         assertThat(ImageDimensionsReader.largestOf(second, first)).isEqualTo(second);
@@ -206,7 +206,7 @@ class ImageDimensionsReaderTest {
 
     @Test
     void largestOfFallsBackToWhicheverSideIsPresentWhenTheOtherIsNull() {
-        var present = new Dimensions(1600, 1063);
+        final var present = new Dimensions(1600, 1063);
 
         assertThat(ImageDimensionsReader.largestOf(present, null)).isEqualTo(present);
         assertThat(ImageDimensionsReader.largestOf(null, present)).isEqualTo(present);
@@ -218,14 +218,14 @@ class ImageDimensionsReaderTest {
     }
 
     private static void writeTwoImageTiff(
-            Path target, int firstWidth, int firstHeight, int secondWidth, int secondHeight)
+            final Path target, final int firstWidth, final int firstHeight, final int secondWidth, final int secondHeight)
             throws IOException {
-        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("TIFF");
-        ImageWriter writer = writers.next();
-        try (ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile())) {
+        final Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("TIFF");
+        final ImageWriter writer = writers.next();
+        try (final ImageOutputStream out = ImageIO.createImageOutputStream(target.toFile())) {
             writer.setOutput(out);
             writer.prepareWriteSequence(null);
-            ImageWriteParam param = writer.getDefaultWriteParam();
+            final ImageWriteParam param = writer.getDefaultWriteParam();
             writer.writeToSequence(
                     new javax.imageio.IIOImage(blankImage(firstWidth, firstHeight), null, null), param);
             writer.writeToSequence(
@@ -236,7 +236,7 @@ class ImageDimensionsReaderTest {
         }
     }
 
-    private static BufferedImage blankImage(int width, int height) {
+    private static BufferedImage blankImage(final int width, final int height) {
         return new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
     }
 }

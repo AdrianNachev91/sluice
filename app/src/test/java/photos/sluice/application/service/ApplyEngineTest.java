@@ -43,16 +43,16 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar
 class ApplyEngineTest {
 
     @Test
-    void aClassificationDecisionMovesTheFileToReviewCategoryAndWritesAReasonsNote(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/IMG_1.jpg");
+    void aClassificationDecisionMovesTheFileToReviewCategoryAndWritesAReasonsNote(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/IMG_1.jpg");
         writeFile(photo, "junk");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "phone photo of a monitor"));
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("junk", 1);
         assertThat(Files.exists(photo)).isFalse();
@@ -62,31 +62,31 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aFunnyClassificationMovesToLibraryFunnyAndAppendsAnIndexRowWithNoReasonsNote(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/meme.jpg");
+    void aFunnyClassificationMovesToLibraryFunnyAndAppendsAnIndexRowWithNoReasonsNote(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/meme.jpg");
         writeFile(photo, "haha");
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "funny", "genuinely funny"));
 
-        ApplyReport report = applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("funny", 1);
-        Path dest = libraryRoot.resolve("Funny/meme.jpg");
+        final Path dest = libraryRoot.resolve("Funny/meme.jpg");
         assertThat(Files.exists(dest)).isTrue();
         assertThat(Files.exists(libraryRoot.resolve("Funny/_reasons.txt"))).isFalse();
         assertThat(hashIndex.load()).containsOnlyKeys(new Sha256Hasher().hash(dest));
     }
 
     @Test
-    void nearDupChosenIsCopiedRejectIsMovedAndAChosenNoteListsAllRejects(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
+    void nearDupChosenIsCopiedRejectIsMovedAndAChosenNoteListsAllRejects(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(chosen, "sharp");
         writeFile(reject, "blurry");
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -95,13 +95,13 @@ class ApplyEngineTest {
                 nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
                 nearDupRejectJson(reject, "lake-jun19", "blurred"));
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.nearDupGroups()).isEqualTo(1);
         assertThat(report.nearDupRejects()).isEqualTo(1);
         assertThat(Files.exists(chosen)).isTrue();
         assertThat(Files.exists(reject)).isFalse();
-        Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
+        final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
         assertThat(Files.exists(dupDir.resolve("a.jpg"))).isTrue();
         assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
@@ -109,10 +109,10 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aMissingShardWithoutAllowPartialFailsLoudlyAndMovesNothing(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void aMissingShardWithoutAllowPartialFailsLoudlyAndMovesNothing(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
@@ -126,11 +126,11 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aMissingShardWithAllowPartialLeavesThatMontagesPhotosInPlace(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path untouched = root.resolve("Sorted/Photos/2019/06/untouched.jpg");
-        Path junk = root.resolve("Sorted/Photos/2019/06/junk.jpg");
+    void aMissingShardWithAllowPartialLeavesThatMontagesPhotosInPlace(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path untouched = root.resolve("Sorted/Photos/2019/06/untouched.jpg");
+        final Path junk = root.resolve("Sorted/Photos/2019/06/junk.jpg");
         writeFile(untouched, "x");
         writeFile(junk, "y");
         writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
@@ -138,7 +138,7 @@ class ApplyEngineTest {
         writeSidecar(prepDir, "montage-002", sidecarEntry(junk));
         writeShard(prepDir, "montage-002", classificationJson(junk, "junk", "blurry"));
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(true));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(true));
 
         assertThat(report.byCategory()).containsEntry("junk", 1);
         assertThat(Files.exists(untouched)).isTrue();
@@ -146,10 +146,10 @@ class ApplyEngineTest {
     }
 
     @Test
-    void anOffContractDecisionFailsLoudlyAndMovesNothing(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void anOffContractDecisionFailsLoudlyAndMovesNothing(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
@@ -162,10 +162,10 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aFileListedBothAsADecisionAndAsUnreviewableFailsValidationAndMovesNothing(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void aFileListedBothAsADecisionAndAsUnreviewableFailsValidationAndMovesNothing(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
@@ -178,10 +178,10 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aDecisionsFileWithNoMatchingMontageFailsLoudly(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void aDecisionsFileWithNoMatchingMontageFailsLoudly(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
@@ -197,17 +197,17 @@ class ApplyEngineTest {
     }
 
     @Test
-    void autoHealsARetypedPathViaUniqueSidecarBasenameAndSurfacesItAsAHeal(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path actual = root.resolve("Sorted/Photos/2019/08/a.jpg");
-        Path retyped = root.resolve("Sorted/Photos/2019/09/a.jpg"); // culler wrote the wrong month segment
+    void autoHealsARetypedPathViaUniqueSidecarBasenameAndSurfacesItAsAHeal(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path actual = root.resolve("Sorted/Photos/2019/08/a.jpg");
+        final Path retyped = root.resolve("Sorted/Photos/2019/09/a.jpg"); // culler wrote the wrong month segment
         writeFile(actual, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(actual));
         writeShard(prepDir, "montage-001", classificationJson(retyped, "junk", "blurry"));
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.heals()).hasSize(1);
         assertThat(Files.exists(actual)).isFalse();
@@ -215,16 +215,16 @@ class ApplyEngineTest {
     }
 
     @Test
-    void resumingAfterASimulatedCrashSkipsAlreadyAppliedFilesAndAppliesTheRest(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+    void resumingAfterASimulatedCrashSkipsAlreadyAppliedFilesAndAppliesTheRest(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // alreadyMoved is never written to disk under Sorted at all - standing in for a decision a
         // prior, crashed run already carried out before dying. Its destination, reasons line, and
         // move record are all pre-placed exactly as a completed run would have left them.
-        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(pending, "y");
-        Path alreadyMovedDest = root.resolve("Review/junk/a.jpg");
+        final Path alreadyMovedDest = root.resolve("Review/junk/a.jpg");
         writeFile(alreadyMovedDest, "already-moved");
         Files.writeString(root.resolve("Review/junk/_reasons.txt"), "a.jpg - blurry" + System.lineSeparator());
         writeMoveRecord(prepDir, alreadyMoved, alreadyMovedDest, new Sha256Hasher().hash(alreadyMovedDest));
@@ -234,7 +234,7 @@ class ApplyEngineTest {
                 classificationJson(alreadyMoved, "junk", "blurry"),
                 classificationJson(pending, "scenery", "weak composition"));
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("scenery", 1).doesNotContainKey("junk");
         assertThat(Files.exists(root.resolve("Review/scenery/b.jpg"))).isTrue();
@@ -245,18 +245,18 @@ class ApplyEngineTest {
     }
 
     @Test
-    void resumingPreservesAnAlreadyAppliedFunnyDecisionsIndexEntryAndIndexesThePendingOne(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+    void resumingPreservesAnAlreadyAppliedFunnyDecisionsIndexEntryAndIndexesThePendingOne(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // alreadyMoved's file was already relocated (and, per this fix, already indexed) by a prior
         // run before it crashed - simulated directly, rather than by actually crashing mid-run.
-        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/old-meme.jpg");
-        Path pending = root.resolve("Sorted/Photos/2019/06/new-meme.jpg");
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/old-meme.jpg");
+        final Path pending = root.resolve("Sorted/Photos/2019/06/new-meme.jpg");
         writeFile(pending, "haha");
-        Path priorDest = libraryRoot.resolve("Funny/old-meme.jpg");
+        final Path priorDest = libraryRoot.resolve("Funny/old-meme.jpg");
         writeFile(priorDest, "already-there");
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
-        String priorHash = new Sha256Hasher().hash(priorDest);
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final String priorHash = new Sha256Hasher().hash(priorDest);
         hashIndex.append(List.of(new IndexEntry(priorHash, priorDest)));
         writeMoveRecord(prepDir, alreadyMoved, priorDest, priorHash);
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -267,27 +267,27 @@ class ApplyEngineTest {
 
         applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false));
 
-        Path newDest = libraryRoot.resolve("Funny/new-meme.jpg");
+        final Path newDest = libraryRoot.resolve("Funny/new-meme.jpg");
         assertThat(Files.exists(newDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(priorHash, new Sha256Hasher().hash(newDest));
     }
 
     @Test
-    void aCrashBetweenAFunnyMoveAndItsIndexRowIsReconciledOnResumeWithoutRecountingIt(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+    void aCrashBetweenAFunnyMoveAndItsIndexRowIsReconciledOnResumeWithoutRecountingIt(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // photo was already moved to its destination by a prior, crashed run. The crash landed
         // between the move and the index row that would normally follow it.
-        Path photo = root.resolve("Sorted/Photos/2019/06/meme.jpg");
-        Path dest = libraryRoot.resolve("Funny/meme.jpg");
+        final Path photo = root.resolve("Sorted/Photos/2019/06/meme.jpg");
+        final Path dest = libraryRoot.resolve("Funny/meme.jpg");
         writeFile(dest, "haha");
         writeMoveRecord(prepDir, photo, dest, new Sha256Hasher().hash(dest));
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "funny", "genuinely funny"));
 
-        ApplyReport report = applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false));
 
         // The move was already done, so this run only backfills the missing row - it isn't counted
         // as this run's own work.
@@ -296,20 +296,20 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aCrashBetweenAFunnyMoveAndItsIndexRowIsReconciledEvenWhenAnotherFileSharesItsHash(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+    void aCrashBetweenAFunnyMoveAndItsIndexRowIsReconciledEvenWhenAnotherFileSharesItsHash(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // Two byte-identical funny photos share one hash but live at different paths. The first is
         // already fully indexed; the second's move already happened too, but a crash left its own
         // index row missing. Checking "is this hash indexed at all" would wrongly see the first
         // entry and skip writing the second. The path has to match too, not just the hash.
-        Path photo = root.resolve("Sorted/Photos/2019/06/meme2.jpg");
-        Path existingDest = libraryRoot.resolve("Funny/meme1.jpg");
-        Path dest = libraryRoot.resolve("Funny/meme2.jpg");
+        final Path photo = root.resolve("Sorted/Photos/2019/06/meme2.jpg");
+        final Path existingDest = libraryRoot.resolve("Funny/meme1.jpg");
+        final Path dest = libraryRoot.resolve("Funny/meme2.jpg");
         writeFile(existingDest, "identical bytes");
         writeFile(dest, "identical bytes");
-        String hash = new Sha256Hasher().hash(dest);
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final String hash = new Sha256Hasher().hash(dest);
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
         hashIndex.append(List.of(new IndexEntry(hash, existingDest)));
         writeMoveRecord(prepDir, photo, dest, hash);
         writeIndex(prepDir, 1, List.of("montage-001"));
@@ -322,35 +322,35 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aCrashBetweenAReviewMoveAndItsReasonsLineIsReconciledOnResumeWithoutRecountingIt(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+    void aCrashBetweenAReviewMoveAndItsReasonsLineIsReconciledOnResumeWithoutRecountingIt(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // photo was already moved to its destination by a prior, crashed run. The crash landed
         // between the move and the _reasons.txt line that would normally follow it.
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path dest = root.resolve("Review/junk/a.jpg");
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "x");
         writeMoveRecord(prepDir, photo, dest, new Sha256Hasher().hash(dest));
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).isEmpty();
         assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt"))).containsExactly("a.jpg - blurry");
     }
 
     @Test
-    void aCrashBetweenTwoFunnyDecisionsLeavesTheFirstOnesIndexRowDurableAndResumeFinishesTheSecond(@TempDir Path root)
+    void aCrashBetweenTwoFunnyDecisionsLeavesTheFirstOnesIndexRowDurableAndResumeFinishesTheSecond(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path first = root.resolve("Sorted/Photos/2019/06/first-meme.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/06/second-meme.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path first = root.resolve("Sorted/Photos/2019/06/first-meme.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/06/second-meme.jpg");
         writeFile(first, "haha1");
         writeFile(second, "haha2");
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second));
         writeShard(prepDir, "montage-001",
@@ -358,13 +358,13 @@ class ApplyEngineTest {
                 classificationJson(second, "funny", "second meme"));
         // Allows exactly one move to succeed, then throws - simulating a process crash right after
         // the first decision's move but before the loop reaches the second.
-        ApplyEngine crashingEngine = applyEngine(root, libraryRoot, hashIndex, new FailingAfterMoves(1));
+        final ApplyEngine crashingEngine = applyEngine(root, libraryRoot, hashIndex, new FailingAfterMoves(1));
 
         assertThatThrownBy(() -> crashingEngine.apply(prepDir, new ApplyOptions(false)))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("simulated crash");
 
-        Path firstDest = libraryRoot.resolve("Funny/first-meme.jpg");
+        final Path firstDest = libraryRoot.resolve("Funny/first-meme.jpg");
         assertThat(Files.exists(firstDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(new Sha256Hasher().hash(firstDest));
         // The crash lands on the second decision's move itself, before it touches the filesystem
@@ -374,7 +374,7 @@ class ApplyEngineTest {
 
         applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false));
 
-        Path secondDest = libraryRoot.resolve("Funny/second-meme.jpg");
+        final Path secondDest = libraryRoot.resolve("Funny/second-meme.jpg");
         assertThat(Files.exists(secondDest)).isTrue();
         assertThat(hashIndex.load()).containsOnlyKeys(
                 new Sha256Hasher().hash(firstDest), new Sha256Hasher().hash(secondDest));
@@ -386,7 +386,7 @@ class ApplyEngineTest {
     // afterwards that the move genuinely happened. Recording after the move would leave that file
     // permanently unresolvable instead.
     @Test
-    void aCrashLandingImmediatelyAfterAMoveIsStillProvableAsDoneOnResume(@TempDir Path root)
+    void aCrashLandingImmediatelyAfterAMoveIsStillProvableAsDoneOnResume(@TempDir final Path root)
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
@@ -417,15 +417,15 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aNearDupNoteBuiltOnResumeStillListsARejectAlreadyAppliedInAPriorRun(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // pending this run
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg"); // already applied in a prior run
+    void aNearDupNoteBuiltOnResumeStillListsARejectAlreadyAppliedInAPriorRun(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // pending this run
+        final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg"); // already applied in a prior run
         writeFile(chosen, "sharp");
         // reject is never written to disk - simulates a prior run having already moved it away
-        Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
-        Path rejectDest = dupDir.resolve("b.jpg");
+        final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
+        final Path rejectDest = dupDir.resolve("b.jpg");
         writeFile(rejectDest, "blurry");
         writeMoveRecord(prepDir, reject, rejectDest, new Sha256Hasher().hash(rejectDest));
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -441,11 +441,11 @@ class ApplyEngineTest {
     }
 
     @Test
-    void resumingANearDupChosenDecisionAlreadyCopiedDoesNotDuplicateTheFileOrTheNote(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
+    void resumingANearDupChosenDecisionAlreadyCopiedDoesNotDuplicateTheFileOrTheNote(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(chosen, "sharp");
         writeFile(reject, "blurry");
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -456,7 +456,7 @@ class ApplyEngineTest {
         // Simulates a prior run that copied the chosen file and wrote its note, then crashed before
         // this decision's next step. chosen's source is never removed by a copy, so the engine
         // always reprocesses it - it must converge on the same end state rather than compounding.
-        Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
+        final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
         writeFile(dupDir.resolve("a.jpg"), "already-copied");
         Files.writeString(dupDir.resolve("a.jpg.txt"), "Chose a.jpg - sharpest. Rejects: b.jpg - blurred" + System.lineSeparator());
 
@@ -469,13 +469,13 @@ class ApplyEngineTest {
     }
 
     @Test
-    void mergedDecisionsSummaryReflectsAllDecisionsIncludingOnesFromAPriorRun(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
+    void mergedDecisionsSummaryReflectsAllDecisionsIncludingOnesFromAPriorRun(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(pending, "y");
-        Path alreadyMovedDest = root.resolve("Review/junk/a.jpg");
+        final Path alreadyMovedDest = root.resolve("Review/junk/a.jpg");
         writeFile(alreadyMovedDest, "already-moved");
         writeMoveRecord(prepDir, alreadyMoved, alreadyMovedDest, new Sha256Hasher().hash(alreadyMovedDest));
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -486,19 +486,19 @@ class ApplyEngineTest {
 
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
-        String json = Files.readString(prepDir.resolve("decisions.json")).replaceAll("\\s+", "");
+        final String json = Files.readString(prepDir.resolve("decisions.json")).replaceAll("\\s+", "");
         assertThat(json).contains("\"junk\":2");
     }
 
     @Test
-    void anUnreviewableFileIsMovedToUnreviewableYearMonth(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+    void anUnreviewableFileIsMovedToUnreviewableYearMonth(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
         writeFile(undecodable, "not a real image");
         writeIndex(prepDir, 0, List.of(undecodable), List.of());
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.unreviewable()).isEqualTo(1);
         assertThat(Files.exists(undecodable)).isFalse();
@@ -506,37 +506,37 @@ class ApplyEngineTest {
     }
 
     @Test
-    void resumingRecognizesAnAlreadyMovedUnreviewableFileWithoutReprocessingIt(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+    void resumingRecognizesAnAlreadyMovedUnreviewableFileWithoutReprocessingIt(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // alreadyMoved is never written to disk under Sorted at all. It stands in for a prior,
         // crashed run that already moved it before this run reads the prep dir.
-        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
-        Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        final Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
         writeFile(dest, "already-moved");
         writeMoveRecord(prepDir, alreadyMoved, dest, new Sha256Hasher().hash(dest));
         writeIndex(prepDir, 0, List.of(alreadyMoved), List.of());
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.unreviewable()).isEqualTo(1);
         assertThat(Files.readString(dest)).isEqualTo("already-moved");
     }
 
     @Test
-    void aRunWithBothAPendingAndAnAlreadyDoneUnreviewableFileHandlesEachCorrectly(@TempDir Path root)
+    void aRunWithBothAPendingAndAnAlreadyDoneUnreviewableFileHandlesEachCorrectly(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path pending = root.resolve("Sorted/Photos/2019/06/pending.heic");
-        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/already-moved.heic");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path pending = root.resolve("Sorted/Photos/2019/06/pending.heic");
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/already-moved.heic");
         writeFile(pending, "not a real image");
-        Path alreadyMovedDest = root.resolve("Unreviewable/2019/06/already-moved.heic");
+        final Path alreadyMovedDest = root.resolve("Unreviewable/2019/06/already-moved.heic");
         writeFile(alreadyMovedDest, "already-moved");
         writeMoveRecord(prepDir, alreadyMoved, alreadyMovedDest, new Sha256Hasher().hash(alreadyMovedDest));
         writeIndex(prepDir, 0, List.of(pending, alreadyMoved), List.of());
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.unreviewable()).isEqualTo(2);
         assertThat(Files.exists(pending)).isFalse();
@@ -545,12 +545,12 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aMissingUnreviewableFileWithNoMoveRecordAbortsTheWholeRunEvenWhenOtherDecisionsArePending(@TempDir Path root)
+    void aMissingUnreviewableFileWithNoMoveRecordAbortsTheWholeRunEvenWhenOtherDecisionsArePending(@TempDir final Path root)
             throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path missingUnreviewable = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move record
-        Path pending = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path missingUnreviewable = root.resolve("Sorted/Photos/2019/06/gone.heic"); // never written, no move record
+        final Path pending = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(pending, "x");
         writeIndex(prepDir, 1, List.of(missingUnreviewable), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(pending));
@@ -565,10 +565,10 @@ class ApplyEngineTest {
     }
 
     @Test
-    void writesMergedDecisionsAndCleansUpIntermediatesEvenWithZeroDecisions(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path keeper = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void writesMergedDecisionsAndCleansUpIntermediatesEvenWithZeroDecisions(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path keeper = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(keeper, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(keeper));
@@ -576,7 +576,7 @@ class ApplyEngineTest {
         Files.writeString(prepDir.resolve("montage-001.jpg"), "fake-image");
         Files.writeString(prepDir.resolve("tile-001-01.jpg"), "fake-tile");
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).isEmpty();
         assertThat(Files.exists(keeper)).isTrue();
@@ -598,27 +598,27 @@ class ApplyEngineTest {
     // here. It falls out of the same classification machinery those hand-simulated tests exercise.
     @Test
     void aSecondApplyOnAnAlreadyCompleteRunIsANoOpThatMovesNothingAndDoesNotDuplicateSecondaryWrites(
-            @TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path junk = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path meme = root.resolve("Sorted/Photos/2019/06/meme.jpg");
+            @TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path junk = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path meme = root.resolve("Sorted/Photos/2019/06/meme.jpg");
         writeFile(junk, "blurry");
         writeFile(meme, "haha");
-        var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(junk), sidecarEntry(meme));
         writeShard(prepDir, "montage-001",
                 classificationJson(junk, "junk", "blurry"),
                 classificationJson(meme, "funny", "genuinely funny"));
-        ApplyEngine engine = applyEngine(root, libraryRoot, hashIndex);
+        final ApplyEngine engine = applyEngine(root, libraryRoot, hashIndex);
 
-        ApplyReport first = engine.apply(prepDir, new ApplyOptions(false));
-        ApplyReport second = engine.apply(prepDir, new ApplyOptions(false));
+        final ApplyReport first = engine.apply(prepDir, new ApplyOptions(false));
+        final ApplyReport second = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(first.byCategory()).containsEntry("junk", 1).containsEntry("funny", 1);
         assertThat(second.byCategory()).isEmpty();
-        Path funnyDest = libraryRoot.resolve("Funny/meme.jpg");
+        final Path funnyDest = libraryRoot.resolve("Funny/meme.jpg");
         assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
         assertThat(Files.exists(funnyDest)).isTrue();
         assertThat(Files.readString(root.resolve("Review/junk/_reasons.txt")).lines().toList())
@@ -627,12 +627,12 @@ class ApplyEngineTest {
     }
 
     @Test
-    void cancellationMidDecisionsLoopStopsEarlyAndSkipsBothFinalizers(@TempDir Path root)
+    void cancellationMidDecisionsLoopStopsEarlyAndSkipsBothFinalizers(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path first = root.resolve("Sorted/Photos/2019/06/first.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/06/second.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path first = root.resolve("Sorted/Photos/2019/06/first.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/06/second.jpg");
         writeFile(first, "blurry1");
         writeFile(second, "blurry2");
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -646,10 +646,10 @@ class ApplyEngineTest {
         Files.writeString(prepDir.resolve("tile-001-01.jpg"), "fake-tile");
         // Cancels once the first decision has ticked, so the loop stops before the second one is
         // even looked at.
-        AtomicInteger ticks = new AtomicInteger();
-        CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
+        final AtomicInteger ticks = new AtomicInteger();
+        final CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, _) -> ticks.set(current), cancelAfterFirstTick);
 
         assertThat(report).isNull();
@@ -665,12 +665,12 @@ class ApplyEngineTest {
     }
 
     @Test
-    void cancellationBetweenTheDecisionsAndUnreviewableLoopsStopsBeforeTheUnreviewableFileMoves(@TempDir Path root)
+    void cancellationBetweenTheDecisionsAndUnreviewableLoopsStopsBeforeTheUnreviewableFileMoves(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
         writeFile(photo, "junk1");
         writeFile(undecodable, "not a real image");
         writeIndex(prepDir, 1, List.of(undecodable), List.of("montage-001"));
@@ -678,10 +678,10 @@ class ApplyEngineTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         // Cancels right after the one decision ticks, so the unreviewable-file loop right after it
         // never even starts.
-        AtomicInteger ticks = new AtomicInteger();
-        CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
+        final AtomicInteger ticks = new AtomicInteger();
+        final CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, _) -> ticks.set(current), cancelAfterFirstTick);
 
         assertThat(report).isNull();
@@ -693,19 +693,19 @@ class ApplyEngineTest {
     }
 
     @Test
-    void progressCallbackTicksOnceForEachDecisionAndOnceForEachUnreviewableFile(@TempDir Path root)
+    void progressCallbackTicksOnceForEachDecisionAndOnceForEachUnreviewableFile(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
         writeFile(photo, "junk1");
         writeFile(undecodable, "not a real image");
         writeIndex(prepDir, 1, List.of(undecodable), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        List<String> ticks = new ArrayList<>();
+        final List<String> ticks = new ArrayList<>();
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, total) -> ticks.add(current + "/" + total));
 
@@ -734,27 +734,27 @@ class ApplyEngineTest {
         private final CrashPoint crashPoint;
         private int movesUntilFailure;
 
-        FailingAfterMoves(int movesUntilFailure) {
+        FailingAfterMoves(final int movesUntilFailure) {
             this(movesUntilFailure, CrashPoint.BEFORE_THE_MOVE);
         }
 
-        FailingAfterMoves(int movesUntilFailure, CrashPoint crashPoint) {
+        FailingAfterMoves(final int movesUntilFailure, final CrashPoint crashPoint) {
             this.movesUntilFailure = movesUntilFailure;
             this.crashPoint = crashPoint;
         }
 
         @Override
-        public Path move(Path source, Path destDir) {
+        public Path move(final Path source, final Path destDir) {
             return delegate.move(source, destDir);
         }
 
         @Override
-        public Path resolveDestination(Path source, Path destDir) {
+        public Path resolveDestination(final Path source, final Path destDir) {
             return delegate.resolveDestination(source, destDir);
         }
 
         @Override
-        public Path moveTo(Path source, Path destination) {
+        public Path moveTo(final Path source, final Path destination) {
             if (movesUntilFailure <= 0) {
                 if (crashPoint == CrashPoint.AFTER_THE_MOVE) {
                     delegate.moveTo(source, destination);
@@ -766,62 +766,62 @@ class ApplyEngineTest {
         }
 
         @Override
-        public List<Path> listFiles(Path root) {
+        public List<Path> listFiles(final Path root) {
             return delegate.listFiles(root);
         }
 
         @Override
-        public Instant lastModifiedTime(Path path) {
+        public Instant lastModifiedTime(final Path path) {
             return delegate.lastModifiedTime(path);
         }
 
         @Override
-        public Path copy(Path source, Path destDir) {
+        public Path copy(final Path source, final Path destDir) {
             return delegate.copy(source, destDir);
         }
 
         @Override
-        public void delete(Path path) {
+        public void delete(final Path path) {
             delegate.delete(path);
         }
 
         @Override
-        public void ensureDirectory(Path dir) {
+        public void ensureDirectory(final Path dir) {
             delegate.ensureDirectory(dir);
         }
 
         @Override
-        public boolean exists(Path path) {
+        public boolean exists(final Path path) {
             return delegate.exists(path);
         }
 
         @Override
-        public long size(Path path) {
+        public long size(final Path path) {
             return delegate.size(path);
         }
 
         @Override
-        public void appendLine(Path file, String line) {
+        public void appendLine(final Path file, final String line) {
             delegate.appendLine(file, line);
         }
 
         @Override
-        public void write(Path file, String content) {
+        public void write(final Path file, final String content) {
             delegate.write(file, content);
         }
 
         @Override
-        public List<String> readLines(Path file) {
+        public List<String> readLines(final Path file) {
             return delegate.readLines(file);
         }
 
         @Override
-        public void removeEmptyDirectories(Path root) {
+        public void removeEmptyDirectories(final Path root) {
             delegate.removeEmptyDirectories(root);
         }
 
         @Override
-        public void removeIfEmptyOfFiles(Path dir) {
+        public void removeIfEmptyOfFiles(final Path dir) {
             delegate.removeIfEmptyOfFiles(dir);
         }
     }

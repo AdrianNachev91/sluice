@@ -37,7 +37,7 @@ public class PrepIndexWriter {
      *
      * @param mapper {@link JsonMapper} the JSON mapper to write with
      */
-    PrepIndexWriter(JsonMapper mapper) {
+    PrepIndexWriter(final JsonMapper mapper) {
         this.mapper = mapper;
     }
 
@@ -56,8 +56,8 @@ public class PrepIndexWriter {
      * @param indexPath {@link Path} the file to write the index to
      * @param prepDir {@link PrepDir} the prep directory metadata to serialize
      */
-    public void write(Path indexPath, PrepDir prepDir) {
-        var document = new Index(
+    public void write(final Path indexPath, final PrepDir prepDir) {
+        final var document = new Index(
                 prepDir.scope(),
                 prepDir.basePath().toString(),
                 prepDir.photos(),
@@ -65,11 +65,11 @@ public class PrepIndexWriter {
                 prepDir.montages(),
                 prepDir.prepDir().toString(),
                 prepDir.entries());
-        try (var output = Files.newOutputStream(indexPath)) {
+        try (final var output = Files.newOutputStream(indexPath)) {
             mapper.writeValue(output, document);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write prep index " + indexPath, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to write prep index " + indexPath, new IOException(e));
         }
     }

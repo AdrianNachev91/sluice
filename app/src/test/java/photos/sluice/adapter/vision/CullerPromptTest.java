@@ -24,7 +24,7 @@ class CullerPromptTest {
 
     @Test
     void systemPromptRendersEveryCategoryCardIntoTheTemplate() {
-        String prompt = cullerPrompt(CARDS).systemPrompt();
+        final String prompt = cullerPrompt(CARDS).systemPrompt();
 
         assertThat(prompt)
                 .contains("### `junk`\n\nObjectively worthless photos.")
@@ -34,7 +34,7 @@ class CullerPromptTest {
 
     @Test
     void systemPromptCarriesTheFixedCoreRules() {
-        String prompt = cullerPrompt(CARDS).systemPrompt();
+        final String prompt = cullerPrompt(CARDS).systemPrompt();
 
         assertThat(prompt)
                 .contains("When unsure, keep.")
@@ -44,7 +44,7 @@ class CullerPromptTest {
 
     @Test
     void systemPromptFailsLoudWhenNoCategoriesAreConfigured() {
-        var prompt = cullerPrompt(List.of());
+        final var prompt = cullerPrompt(List.of());
 
         assertThatThrownBy(prompt::systemPrompt)
                 .isInstanceOf(IllegalStateException.class)
@@ -60,7 +60,7 @@ class CullerPromptTest {
 
     @Test
     void userTurnListsEveryPhotoInSidecarOrder() {
-        var entries = List.of(
+        final var entries = List.of(
                 new SidecarPhotoEntry(Path.of("D:/sorted/IMG_001.jpg"), "IMG_001.jpg",
                         Instant.parse("2019-06-20T13:00:10Z"), false),
                 new SidecarPhotoEntry(Path.of("D:/sorted/IMG-20190620-WA0003.jpg"), "IMG-20190620-WA0003.jpg",
@@ -68,7 +68,7 @@ class CullerPromptTest {
                 new SidecarPhotoEntry(Path.of("D:/sorted/IMG_002.jpg"), "IMG_002.jpg",
                         Instant.parse("2019-06-20T13:00:14Z"), false));
 
-        String turn = cullerPrompt(CARDS).userTurn("2019-06", "montage-007", 7, 12, entries);
+        final String turn = cullerPrompt(CARDS).userTurn("2019-06", "montage-007", 7, 12, entries);
 
         assertThat(turn).isEqualTo("""
                 Scope: 2019-06 - sheet 007 (7 of 12)
@@ -82,7 +82,7 @@ class CullerPromptTest {
 
     @Test
     void correctionTurnListsEveryProblemAndAsksForTheFullList() {
-        String turn = cullerPrompt(CARDS).correctionTurn(List.of(
+        final String turn = cullerPrompt(CARDS).correctionTurn(List.of(
                 "no verdict for photo 3 (IMG_003.jpg)",
                 "montage-007[#1]: missing 'reason'"));
 
@@ -94,7 +94,7 @@ class CullerPromptTest {
                 """);
     }
 
-    private static CullerPrompt cullerPrompt(List<CullCategory> categories) {
+    private static CullerPrompt cullerPrompt(final List<CullCategory> categories) {
         return new CullerPrompt(new FixedSettings("anthropic", categories), new MontageConfig(224, 5));
     }
 

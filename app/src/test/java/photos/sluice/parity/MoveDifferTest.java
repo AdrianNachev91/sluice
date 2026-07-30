@@ -15,21 +15,21 @@ class MoveDifferTest {
     private final MoveDiffer differ = new MoveDiffer();
 
     @Test
-    void identicalTreesDiffToEmpty(@TempDir Path root) throws IOException {
-        Path treeA = write(root.resolve("a"), "Photos/2021/03/img.jpg");
-        Path treeB = write(root.resolve("b"), "Photos/2021/03/img.jpg");
+    void identicalTreesDiffToEmpty(@TempDir final Path root) throws IOException {
+        final Path treeA = write(root.resolve("a"), "Photos/2021/03/img.jpg");
+        final Path treeB = write(root.resolve("b"), "Photos/2021/03/img.jpg");
 
-        MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
+        final MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
 
         assertThat(diff.identical()).isTrue();
     }
 
     @Test
-    void extraFileOnOneSideIsReported(@TempDir Path root) throws IOException {
-        Path treeA = write(root.resolve("a"), "Photos/2021/03/img.jpg", "Review/Unsorted/stray.jpg");
-        Path treeB = write(root.resolve("b"), "Photos/2021/03/img.jpg");
+    void extraFileOnOneSideIsReported(@TempDir final Path root) throws IOException {
+        final Path treeA = write(root.resolve("a"), "Photos/2021/03/img.jpg", "Review/Unsorted/stray.jpg");
+        final Path treeB = write(root.resolve("b"), "Photos/2021/03/img.jpg");
 
-        MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
+        final MoveDiffer.Diff diff = differ.diffTrees(treeA, treeB);
 
         assertThat(diff.identical()).isFalse();
         assertThat(diff.onlyInA()).containsExactly("Review/Unsorted/stray.jpg");
@@ -37,32 +37,32 @@ class MoveDifferTest {
     }
 
     @Test
-    void relativePathsAreForwardSlashNormalized(@TempDir Path root) throws IOException {
-        Path tree = write(root.resolve("a"), "Videos/2019/07/clip.mp4");
+    void relativePathsAreForwardSlashNormalized(@TempDir final Path root) throws IOException {
+        final Path tree = write(root.resolve("a"), "Videos/2019/07/clip.mp4");
 
-        Set<String> relative = differ.relativeFilePaths(tree);
+        final Set<String> relative = differ.relativeFilePaths(tree);
 
         assertThat(relative).containsExactly("Videos/2019/07/clip.mp4");
     }
 
     @Test
-    void missingRootIsTreatedAsEmptyTree(@TempDir Path root) {
-        Set<String> relative = differ.relativeFilePaths(root.resolve("never-created"));
+    void missingRootIsTreatedAsEmptyTree(@TempDir final Path root) {
+        final Set<String> relative = differ.relativeFilePaths(root.resolve("never-created"));
 
         assertThat(relative).isEmpty();
     }
 
     @Test
     void diffOfPlainSetsIsSymmetric() {
-        MoveDiffer.Diff diff = differ.diff(Set.of("only-a.jpg", "shared.jpg"), Set.of("shared.jpg", "only-b.jpg"));
+        final MoveDiffer.Diff diff = differ.diff(Set.of("only-a.jpg", "shared.jpg"), Set.of("shared.jpg", "only-b.jpg"));
 
         assertThat(diff.onlyInA()).containsExactly("only-a.jpg");
         assertThat(diff.onlyInB()).containsExactly("only-b.jpg");
     }
 
-    private static Path write(Path root, String... relativeFiles) throws IOException {
-        for (String relative : relativeFiles) {
-            Path file = root.resolve(relative);
+    private static Path write(final Path root, final String... relativeFiles) throws IOException {
+        for (final String relative : relativeFiles) {
+            final Path file = root.resolve(relative);
             Files.createDirectories(file.getParent());
             Files.writeString(file, "content");
         }

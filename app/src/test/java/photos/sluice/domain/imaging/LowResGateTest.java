@@ -10,14 +10,14 @@ class LowResGateTest {
 
     @Test
     void smallFileIsLowResRegardlessOfDimensions() {
-        boolean result = LowResGate.isLowRes(10_000, null, MediaType.PHOTO, "jpg");
+        final boolean result = LowResGate.isLowRes(10_000, null, MediaType.PHOTO, "jpg");
 
         assertThat(result).isTrue();
     }
 
     @Test
     void tinyPixelDimensionsAreLowResEvenWithLargeFile() {
-        boolean result = LowResGate.isLowRes(
+        final boolean result = LowResGate.isLowRes(
                 200_000, new Dimensions(500, 300), MediaType.PHOTO, "jpg");
 
         assertThat(result).isTrue();
@@ -25,7 +25,7 @@ class LowResGateTest {
 
     @Test
     void largeFileWithAmpleDimensionsIsNotLowRes() {
-        boolean result = LowResGate.isLowRes(
+        final boolean result = LowResGate.isLowRes(
                 200_000, new Dimensions(3000, 2000), MediaType.PHOTO, "jpg");
 
         assertThat(result).isFalse();
@@ -33,28 +33,28 @@ class LowResGateTest {
 
     @Test
     void missingDimensionsWithLargeFileDefaultsToNotLowRes() {
-        boolean result = LowResGate.isLowRes(200_000, null, MediaType.PHOTO, "jpg");
+        final boolean result = LowResGate.isLowRes(200_000, null, MediaType.PHOTO, "jpg");
 
         assertThat(result).isFalse();
     }
 
     @Test
     void videoIsExemptEvenWhenTiny() {
-        boolean result = LowResGate.isLowRes(1_000, null, MediaType.VIDEO, "mp4");
+        final boolean result = LowResGate.isLowRes(1_000, null, MediaType.VIDEO, "mp4");
 
         assertThat(result).isFalse();
     }
 
     @Test
     void svgIsExemptEvenWhenTiny() {
-        boolean result = LowResGate.isLowRes(1_000, null, MediaType.PHOTO, "svg");
+        final boolean result = LowResGate.isLowRes(1_000, null, MediaType.PHOTO, "svg");
 
         assertThat(result).isFalse();
     }
 
     @Test
     void fileSizeThresholdIsStrictlyLessThan() {
-        boolean result = LowResGate.isLowRes(
+        final boolean result = LowResGate.isLowRes(
                 51_200, new Dimensions(3000, 2000), MediaType.PHOTO, "jpg");
 
         assertThat(result).isFalse();
@@ -62,7 +62,7 @@ class LowResGateTest {
 
     @Test
     void pixelThresholdIsStrictlyLessThan() {
-        boolean result = LowResGate.isLowRes(
+        final boolean result = LowResGate.isLowRes(
                 200_000, new Dimensions(640, 480), MediaType.PHOTO, "jpg");
 
         assertThat(result).isFalse();

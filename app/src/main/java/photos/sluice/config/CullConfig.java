@@ -56,7 +56,7 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
             externalAgent = new ExternalAgentSettings(WatchMode.MANUAL, null);
         }
         // Two cards sharing a name would silently alias one category, so duplicates fail loud.
-        List<String> duplicates = categories.stream()
+        final List<String> duplicates = categories.stream()
                 .collect(Collectors.groupingBy(CullCategory::name, Collectors.counting()))
                 .entrySet().stream()
                 .filter(entry -> entry.getValue() > 1)

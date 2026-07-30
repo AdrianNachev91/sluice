@@ -39,7 +39,7 @@ final class CullWatcher {
 
     private static final Logger log = LoggerFactory.getLogger(CullWatcher.class);
     private static final ThreadFactory DAEMON_THREADS = runnable -> {
-        var thread = new Thread(runnable, "cull-watcher");
+        final var thread = new Thread(runnable, "cull-watcher");
         thread.setDaemon(true);
         return thread;
     };
@@ -62,8 +62,8 @@ final class CullWatcher {
      * @param attemptConsume {@link BooleanSupplier} the real resume attempt to run once ready
      * @param armedAt {@link Instant} when this watcher was armed
      */
-    CullWatcher(Duration pollInterval, @Nullable Duration timeout, BooleanSupplier isReady,
-            BooleanSupplier attemptConsume, Instant armedAt) {
+    CullWatcher(final Duration pollInterval, final @Nullable Duration timeout, final BooleanSupplier isReady,
+                final BooleanSupplier attemptConsume, final Instant armedAt) {
         this.pollInterval = pollInterval;
         this.timeout = timeout;
         this.isReady = isReady;
@@ -85,7 +85,7 @@ final class CullWatcher {
      * ScheduledExecutorService.shutdown() never interrupts the task currently running on it.
      */
     void stop() {
-        ScheduledFuture<?> current = task;
+        final ScheduledFuture<?> current = task;
         if (current != null) {
             current.cancel(false);
         }
@@ -110,7 +110,7 @@ final class CullWatcher {
     private void poll() {
         try {
             pollUnsafe();
-        } catch (RuntimeException e) {
+        } catch (final RuntimeException e) {
             log.warn("Cull watcher poll failed, will retry next tick", e);
         }
     }

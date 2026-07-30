@@ -36,39 +36,39 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar
 class ReconcileEngineTest {
 
     @Test
-    void reconcileRebuildsAReconstructedRecordForAFileFoundAtItsExpectedDestination(@TempDir Path root)
+    void reconcileRebuildsAReconstructedRecordForAFileFoundAtItsExpectedDestination(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an already-moved file
-        Path dest = root.resolve("Review/junk/a.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - stands in for an already-moved file
+        final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "already-moved-content");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.reconstructed()).isEqualTo(1);
         assertThat(report.stillPending()).isZero();
         assertThat(report.missingSource()).isEmpty();
-        List<String> lines = Files.readAllLines(prepDir.resolve("move-records.log"));
+        final List<String> lines = Files.readAllLines(prepDir.resolve("move-records.log"));
         assertThat(lines).hasSize(1);
         assertThat(lines.getFirst()).contains(dest.toString()).contains("RECONSTRUCTED");
     }
 
     @Test
-    void reconcileCountsAFileStillAtItsOriginalLocationAsStillPendingWithNoLogEntry(@TempDir Path root)
+    void reconcileCountsAFileStillAtItsOriginalLocationAsStillPendingWithNoLogEntry(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.stillPending()).isEqualTo(1);
         assertThat(report.reconstructed()).isZero();
@@ -77,16 +77,16 @@ class ReconcileEngineTest {
     }
 
     @Test
-    void reconcileReportsMissingSourceWhenNoDestinationCandidateExists(@TempDir Path root)
+    void reconcileReportsMissingSourceWhenNoDestinationCandidateExists(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination either
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination either
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log")));
         assertThat(report.reconstructed()).isZero();
@@ -95,17 +95,17 @@ class ReconcileEngineTest {
     // Even when a copy already sits at the near-dup group's Duplicates/ destination, a NearDupChosen
     // decision's missing source is never reconstructed from it - see the rationale below.
     @Test
-    void reconcileNeverReconstructsANearDupChosenDecision(@TempDir Path root)
+    void reconcileNeverReconstructsANearDupChosenDecision(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - the photo itself is gone
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - the photo itself is gone
+        final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(reject, "blurry");
         // Looks exactly like a successful near-dup-chosen copy, sitting right where one would land.
         // reconcile() must never treat this as proof. A NearDupChosen's source is never removed by
         // a real run, so a missing one can only mean the photo is genuinely gone.
-        Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
+        final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
         writeFile(dupDir.resolve("a.jpg"), "looks-like-a-copy");
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
@@ -113,7 +113,7 @@ class ReconcileEngineTest {
                 nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
                 nearDupRejectJson(reject, "lake-jun19", "blurred"));
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.missingSource()).extracting(MissingSource::file).containsExactly(chosen);
         assertThat(report.stillPending()).isEqualTo(1);
@@ -121,11 +121,11 @@ class ReconcileEngineTest {
     }
 
     @Test
-    void reconcileFilesAnExistingMoveRecordsLogIntoTheDisasterDrawerBeforeRebuilding(@TempDir Path root)
+    void reconcileFilesAnExistingMoveRecordsLogIntoTheDisasterDrawerBeforeRebuilding(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeMoveRecord(prepDir, root.resolve("Sorted/Photos/2019/06/stale.jpg"),
                 root.resolve("Review/junk/stale.jpg"), "stale-hash");
@@ -135,10 +135,10 @@ class ReconcileEngineTest {
 
         reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
-        Path drawer = prepDir.resolve("disasters");
+        final Path drawer = prepDir.resolve("disasters");
         assertThat(Files.exists(drawer)).isTrue();
-        try (var entries = Files.list(drawer)) {
-            List<Path> filed = entries.toList();
+        try (final var entries = Files.list(drawer)) {
+            final List<Path> filed = entries.toList();
             assertThat(filed).hasSize(1);
             assertThat(filed.getFirst().getFileName().toString()).contains("move-records-log");
         }
@@ -148,18 +148,18 @@ class ReconcileEngineTest {
     }
 
     @Test
-    void reconcileAssignsCollisionCandidatesInDecisionOrderWhenTwoDecisionsShareAnOriginalFileName(@TempDir Path root)
+    void reconcileAssignsCollisionCandidatesInDecisionOrderWhenTwoDecisionsShareAnOriginalFileName(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // Two different source photos, from different month folders, happen to share a leaf name -
         // both never re-written to disk. They stand in for an earlier, log-lost run that moved both
         // into Review/junk/, landing the second at its " (2)" collision suffix. Two claimants, two
         // contiguous candidates - the counts-match case reconcile() reconstructs.
-        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/07/a.jpg");
-        Path firstDest = root.resolve("Review/junk/a.jpg");
-        Path secondDest = root.resolve("Review/junk/a (2).jpg");
+        final Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/07/a.jpg");
+        final Path firstDest = root.resolve("Review/junk/a.jpg");
+        final Path secondDest = root.resolve("Review/junk/a (2).jpg");
         writeFile(firstDest, "first-content");
         writeFile(secondDest, "second-content");
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -168,33 +168,33 @@ class ReconcileEngineTest {
                 classificationJson(first, "junk", "blurry"),
                 classificationJson(second, "junk", "also blurry"));
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.reconstructed()).isEqualTo(2);
-        List<String> lines = Files.readAllLines(prepDir.resolve("move-records.log"));
+        final List<String> lines = Files.readAllLines(prepDir.resolve("move-records.log"));
         assertThat(lines).hasSize(2);
         assertThat(lines.get(0)).contains(first.toString()).contains(firstDest.toString());
         assertThat(lines.get(1)).contains(second.toString()).contains(secondDest.toString());
     }
 
     @Test
-    void reconcileRefusesToReconstructWhenAnUnrelatedFileClaimsTheFirstCollisionSlot(@TempDir Path root)
+    void reconcileRefusesToReconstructWhenAnUnrelatedFileClaimsTheFirstCollisionSlot(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // Only one decision ever moved here, but the plain-named slot is held by some stranger's
         // file (e.g. a recycled camera filename from an unrelated run). Our own file landed on
         // " (2)" instead. Two candidates exist for one claimant - a surplus. reconcile() cannot tell
         // which candidate is genuinely ours, so it refuses both rather than hashing the wrong one
         // into a trusted RECONSTRUCTED record.
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written
         writeFile(root.resolve("Review/junk/a.jpg"), "unrelated-stranger-content");
         writeFile(root.resolve("Review/junk/a (2).jpg"), "actually-ours");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.missingSource()).containsExactly(new MissingSource(photo, prepDir.resolve("move-records.log")));
         assertThat(report.reconstructed()).isZero();
@@ -202,15 +202,15 @@ class ReconcileEngineTest {
     }
 
     @Test
-    void reconcileRefusesToReconstructWhenTwoClaimantsShareAnOriginalNameButOnlyOneCandidateExists(@TempDir Path root)
+    void reconcileRefusesToReconstructWhenTwoClaimantsShareAnOriginalNameButOnlyOneCandidateExists(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
         // Two decisions started with the same leaf name, but only the plain-named slot exists on
         // disk - a deficit. reconcile() cannot tell which claimant it belongs to, so both are
         // reported missing rather than guessed at.
-        Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        Path second = root.resolve("Sorted/Photos/2019/07/a.jpg");
+        final Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/07/a.jpg");
         writeFile(root.resolve("Review/junk/a.jpg"), "only-one-candidate");
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second));
@@ -218,7 +218,7 @@ class ReconcileEngineTest {
                 classificationJson(first, "junk", "blurry"),
                 classificationJson(second, "junk", "also blurry"));
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.missingSource()).containsExactlyInAnyOrder(
                 new MissingSource(first, prepDir.resolve("move-records.log")),
@@ -228,25 +228,25 @@ class ReconcileEngineTest {
     }
 
     @Test
-    void reconcileHandlesAnUnreviewableFileTheSameWayAsADecision(@TempDir Path root) throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
-        Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
+    void reconcileHandlesAnUnreviewableFileTheSameWayAsADecision(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
+        final Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
         writeFile(dest, "already-moved");
         writeIndex(prepDir, 0, List.of(undecodable), List.of());
 
-        ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         assertThat(report.reconstructed()).isEqualTo(1);
         assertThat(Files.readAllLines(prepDir.resolve("move-records.log")).getFirst()).contains(dest.toString());
     }
 
     @Test
-    void reconcileThrowsWhenTheShardContractItselfDoesNotValidate(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void reconcileThrowsWhenTheShardContractItselfDoesNotValidate(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
@@ -258,12 +258,12 @@ class ReconcileEngineTest {
     }
 
     @Test
-    void aReconciledRecordIsTrustedByALaterApplyRunAsIfItHadBeenWitnessed(@TempDir Path root)
+    void aReconciledRecordIsTrustedByALaterApplyRunAsIfItHadBeenWitnessed(@TempDir final Path root)
             throws IOException, ApplyException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - a lost log after a real move
-        Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - a lost log after a real move
+        final Path pending = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(pending, "y");
         writeFile(root.resolve("Review/junk/a.jpg"), "already-moved");
         writeIndex(prepDir, 2, List.of("montage-001"));
@@ -273,7 +273,7 @@ class ReconcileEngineTest {
                 classificationJson(pending, "junk", "also blurry"));
         reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
-        ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         // The reconciled decision is recognized as already done, not reprocessed. Only the pending
         // one counts as this run's own work. Its reasons line is still backfilled, though, since
@@ -288,7 +288,7 @@ class ReconcileEngineTest {
     // overlap would revert to unresolved. The file would then be swept a second time as an
     // unreviewable file, and reported missing at a destination it was never headed for.
     @Test
-    void reconcileResolvesTheUnreviewableListBeforeFilingTheLedgerAway(@TempDir Path root)
+    void reconcileResolvesTheUnreviewableListBeforeFilingTheLedgerAway(@TempDir final Path root)
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);

@@ -50,10 +50,10 @@ public sealed interface CullScope {
      * @param scope {@link CullScope} the cull scope to tag
      * @return {@link String} the scope's on-disk tag
      */
-    static String tag(CullScope scope) {
+    static String tag(final CullScope scope) {
         return switch (scope) {
-            case Year(int year, List<Integer> months) -> yearTag(year, months);
-            case OldestN(int n) -> "oldest-" + n;
+            case Year(final int year, final List<Integer> months) -> yearTag(year, months);
+            case OldestN(final int n) -> "oldest-" + n;
         };
     }
 
@@ -64,11 +64,11 @@ public sealed interface CullScope {
      * @param months a {@link List} of {@link Integer} specific months to include, or null for the whole year
      * @return {@link String} the year (and optional month suffix) tag
      */
-    private static String yearTag(int year, @Nullable List<Integer> months) {
+    private static String yearTag(final int year, final @Nullable List<Integer> months) {
         if (months == null) {
             return String.valueOf(year);
         }
-        String monthSuffix = months.stream()
+        final String monthSuffix = months.stream()
                 .distinct()
                 .sorted()
                 .map("%02d"::formatted)

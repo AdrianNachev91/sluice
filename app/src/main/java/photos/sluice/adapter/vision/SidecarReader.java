@@ -50,13 +50,13 @@ class SidecarReader {
      * @param sidecarPath {@link Path} path of the sidecar JSON to read
      * @return a {@link List} of {@link SidecarPhotoEntry}, every photo entry the sidecar lists
      */
-    public List<SidecarPhotoEntry> readEntries(Path sidecarPath) {
+    public List<SidecarPhotoEntry> readEntries(final Path sidecarPath) {
         final RawSidecar raw;
-        try (var input = Files.newInputStream(sidecarPath)) {
+        try (final var input = Files.newInputStream(sidecarPath)) {
             raw = mapper.readValue(input, RawSidecar.class);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read sidecar " + sidecarPath, e);
-        } catch (JacksonException e) {
+        } catch (final JacksonException e) {
             throw new UncheckedIOException("Failed to read sidecar " + sidecarPath, new IOException(e));
         }
         // The IDE binds the generic result to the non-null RawSidecar type and can't see that a
@@ -85,7 +85,7 @@ class SidecarReader {
      * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
      * @return {@link SidecarPhotoEntry} the converted photo entry
      */
-    private static SidecarPhotoEntry entryOf(@Nullable RawPhoto photo, Path sidecarPath) {
+    private static SidecarPhotoEntry entryOf(final @Nullable RawPhoto photo, final Path sidecarPath) {
         if (photo == null) {
             throw new UncheckedIOException("Sidecar " + sidecarPath + " has a null photo entry",
                     new IOException("null photo entry"));
@@ -105,7 +105,7 @@ class SidecarReader {
      * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
      * @return T the non-null value
      */
-    private static <T> T required(@Nullable T value, String field, Path sidecarPath) {
+    private static <T> T required(final @Nullable T value, final String field, final Path sidecarPath) {
         if (value == null) {
             throw new UncheckedIOException(
                     "Sidecar " + sidecarPath + " has a photo entry missing '" + field + "'",
@@ -121,10 +121,10 @@ class SidecarReader {
      * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
      * @return {@link Instant} the parsed instant
      */
-    private static Instant timeOf(String time, Path sidecarPath) {
+    private static Instant timeOf(final String time, final Path sidecarPath) {
         try {
             return Instant.parse(time);
-        } catch (DateTimeParseException e) {
+        } catch (final DateTimeParseException e) {
             throw new UncheckedIOException(
                     "Sidecar " + sidecarPath + " has a photo entry with unparseable time '" + time + "'",
                     new IOException(e));

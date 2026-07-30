@@ -37,7 +37,7 @@ class CullerPrompt {
      * @param settings {@link CullSettings} the cull settings, supplying the configured categories
      * @param montageConfig {@link MontageConfig} the montage grid configuration
      */
-    CullerPrompt(CullSettings settings, MontageConfig montageConfig) {
+    CullerPrompt(final CullSettings settings, final MontageConfig montageConfig) {
         this.settings = settings;
         this.montageConfig = montageConfig;
         this.template = loadTemplate();
@@ -73,8 +73,8 @@ class CullerPrompt {
      * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
      * @return {@link String} the rendered user turn text
      */
-    String userTurn(String scope, String montage, int ordinal, int total, List<SidecarPhotoEntry> entries) {
-        var text = new StringBuilder();
+    String userTurn(final String scope, final String montage, final int ordinal, final int total, final List<SidecarPhotoEntry> entries) {
+        final var text = new StringBuilder();
         text.append("Scope: ").append(scope)
                 .append(" - sheet ").append(montage.replaceFirst("^montage-", ""))
                 .append(" (").append(ordinal).append(" of ").append(total).append(")\n");
@@ -83,7 +83,7 @@ class CullerPrompt {
                 .append(", numbered left-to-right then top-to-bottom.\n");
         text.append("Photos:\n");
         for (int i = 0; i < entries.size(); i++) {
-            SidecarPhotoEntry entry = entries.get(i);
+            final SidecarPhotoEntry entry = entries.get(i);
             text.append(i + 1).append(". ").append(entry.name()).append(" | taken ").append(entry.time());
             if (entry.received()) {
                 text.append(" | received");
@@ -103,10 +103,10 @@ class CullerPrompt {
      * @param problems a {@link List} of {@link String}, validation problems found in the failed response
      * @return {@link String} the rendered correction turn text
      */
-    String correctionTurn(List<String> problems) {
-        var text = new StringBuilder();
+    String correctionTurn(final List<String> problems) {
+        final var text = new StringBuilder();
         text.append("Your verdicts for this sheet failed validation:\n");
-        for (String problem : problems) {
+        for (final String problem : problems) {
             text.append(" - ").append(problem).append('\n');
         }
         text.append("Return the complete corrected verdict list for this sheet as JSON only, "
@@ -124,12 +124,12 @@ class CullerPrompt {
      * @param categories a {@link List} of {@link CullCategory}, the configured cull categories to render into the template
      * @return {@link String} the template with the categories placeholder replaced
      */
-    static String rendered(String template, List<CullCategory> categories) {
+    static String rendered(final String template, final List<CullCategory> categories) {
         if (!template.contains(CATEGORIES_PLACEHOLDER)) {
             throw new IllegalStateException("Prompt template " + TEMPLATE_RESOURCE
                     + " lacks the " + CATEGORIES_PLACEHOLDER + " placeholder");
         }
-        String cards = categories.stream()
+        final String cards = categories.stream()
                 .map(card -> "### `" + card.name() + "`\n\n" + card.description())
                 .collect(Collectors.joining("\n\n"));
         return template.replace(CATEGORIES_PLACEHOLDER, cards);
@@ -142,12 +142,12 @@ class CullerPrompt {
      * @return {@link String} the bundled prompt template's text
      */
     private static String loadTemplate() {
-        try (var input = CullerPrompt.class.getResourceAsStream(TEMPLATE_RESOURCE)) {
+        try (final var input = CullerPrompt.class.getResourceAsStream(TEMPLATE_RESOURCE)) {
             if (input == null) {
                 throw new IllegalStateException("Bundled prompt template " + TEMPLATE_RESOURCE + " is missing");
             }
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read bundled prompt template " + TEMPLATE_RESOURCE, e);
         }
     }

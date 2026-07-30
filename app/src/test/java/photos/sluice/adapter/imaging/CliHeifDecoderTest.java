@@ -23,7 +23,7 @@ class CliHeifDecoderTest {
     // not just that a process gets launched.
     @Test
     void decodesARealHeicFixtureToItsFullResolution() {
-        Optional<BufferedImage> result = decoder.decode(FIXTURES.resolve("dating/iphone-exif.heic"));
+        final Optional<BufferedImage> result = decoder.decode(FIXTURES.resolve("dating/iphone-exif.heic"));
 
         assertThat(result).isPresent();
         assertThat(result.get().getWidth()).isEqualTo(4032);
@@ -35,7 +35,7 @@ class CliHeifDecoderTest {
     // the HEVC fixture above. Dimensions cross-checked with `magick identify` (1600x1063).
     @Test
     void decodesARealAvifFixtureToItsFullResolution() {
-        Optional<BufferedImage> result = decoder.decode(FIXTURES.resolve("cull/arctic-sky.avif"));
+        final Optional<BufferedImage> result = decoder.decode(FIXTURES.resolve("cull/arctic-sky.avif"));
 
         assertThat(result).isPresent();
         assertThat(result.get().getWidth()).isEqualTo(1600);
@@ -46,12 +46,12 @@ class CliHeifDecoderTest {
     // reproduces exactly what happens on a machine with no decoder installed at all - the case
     // TileRenderer's placeholder fallback exists for.
     @Test
-    void missingBinaryDegradesGracefullyToEmpty(@TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("photo.heic");
+    void missingBinaryDegradesGracefullyToEmpty(@TempDir final Path tempDir) throws IOException {
+        final Path file = tempDir.resolve("photo.heic");
         Files.createFile(file);
-        CliHeifDecoder withMissingBinary = new CliHeifDecoder("sluice-test-nonexistent-heif-decoder");
+        final CliHeifDecoder withMissingBinary = new CliHeifDecoder("sluice-test-nonexistent-heif-decoder");
 
-        Optional<BufferedImage> result = withMissingBinary.decode(file);
+        final Optional<BufferedImage> result = withMissingBinary.decode(file);
 
         assertThat(result).isEmpty();
     }
@@ -60,11 +60,11 @@ class CliHeifDecoderTest {
     // non-zero (verified empirically: "Input file is not an HEIF/AVIF file"). Distinguishes this
     // from the missing-binary case above - here the process runs, but fails.
     @Test
-    void corruptFileDegradesGracefullyToEmpty(@TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("garbage.heic");
+    void corruptFileDegradesGracefullyToEmpty(@TempDir final Path tempDir) throws IOException {
+        final Path file = tempDir.resolve("garbage.heic");
         Files.writeString(file, "not a real heic file", StandardCharsets.US_ASCII);
 
-        Optional<BufferedImage> result = decoder.decode(file);
+        final Optional<BufferedImage> result = decoder.decode(file);
 
         assertThat(result).isEmpty();
     }

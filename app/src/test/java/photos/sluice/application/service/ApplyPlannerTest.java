@@ -41,7 +41,7 @@ class ApplyPlannerTest {
     // perfectly well-formed, with one chosen keeper and one reject. Only a whole-set check can see
     // that the two groups would merge into a single Duplicates folder at apply time.
     @Test
-    void aNearDupGroupIdReusedAcrossTwoMontagesFailsValidation(@TempDir Path root) throws IOException {
+    void aNearDupGroupIdReusedAcrossTwoMontagesFailsValidation(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path juneChosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
@@ -71,10 +71,10 @@ class ApplyPlannerTest {
     }
 
     @Test
-    void aMissingFileWithNoMoveRecordFailsLoudlyAndRefusesToGuess(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk, no move record either
+    void aMissingFileWithNoMoveRecordFailsLoudlyAndRefusesToGuess(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk, no move record either
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
@@ -88,11 +88,11 @@ class ApplyPlannerTest {
     }
 
     @Test
-    void aMissingNearDupChosenFileFailsLoudlyEvenThoughItsNeverAMoveBasedDecision(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk - a copy that never ran
-        Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
+    void aMissingNearDupChosenFileFailsLoudlyEvenThoughItsNeverAMoveBasedDecision(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk - a copy that never ran
+        final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(reject, "blurry");
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
@@ -111,7 +111,7 @@ class ApplyPlannerTest {
     // record naming a NearDupChosen source can only have come from somewhere else, and is refused
     // even when it hash-verifies.
     @Test
-    void aNearDupChosenDecisionIsNeverResolvedByAMoveRecordEvenOneThatHashVerifies(@TempDir Path root) throws IOException {
+    void aNearDupChosenDecisionIsNeverResolvedByAMoveRecordEvenOneThatHashVerifies(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - the photo itself is gone
@@ -133,10 +133,10 @@ class ApplyPlannerTest {
     }
 
     @Test
-    void aMoveRecordWhoseDestinationIsMissingStillFailsLoudlyRatherThanTrustingTheRecordAlone(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
+    void aMoveRecordWhoseDestinationIsMissingStillFailsLoudlyRatherThanTrustingTheRecordAlone(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
         // The move record points at a destination that was never actually written - a record alone
         // is never treated as proof; the destination has to hash-verify too.
         writeMoveRecord(prepDir, photo, root.resolve("Review/junk/a.jpg"), "not-a-real-hash-value");
@@ -150,11 +150,11 @@ class ApplyPlannerTest {
     }
 
     @Test
-    void aMoveRecordWhoseDestinationContentNoLongerMatchesStillFailsLoudly(@TempDir Path root) throws IOException {
-        Path libraryRoot = root.resolve("Library");
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
-        Path dest = root.resolve("Review/junk/a.jpg");
+    void aMoveRecordWhoseDestinationContentNoLongerMatchesStillFailsLoudly(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written to disk
+        final Path dest = root.resolve("Review/junk/a.jpg");
         writeFile(dest, "content changed after the record was written");
         // A hash that deliberately doesn't match dest's actual content. Stands in for the
         // destination having been altered (or a different file landing there) after the record
@@ -170,16 +170,16 @@ class ApplyPlannerTest {
     }
 
     @Test
-    void validateReportsCorruptSidecarForAMontageWithAShardButNoReadableSidecar(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void validateReportsCorruptSidecarForAMontageWithAShardButNoReadableSidecar(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         // No sidecar written for montage-001 at all - stands in for a missing or corrupt one; both
         // fail the same way (readSidecar() throws UncheckedIOException either way).
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner()
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
@@ -188,16 +188,16 @@ class ApplyPlannerTest {
     }
 
     @Test
-    void validateSilentlySkipsACorruptSidecarForAMontageWithNoShardYet(@TempDir Path root) throws IOException {
-        Path prepDir = prepDir(root);
-        Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+    void validateSilentlySkipsACorruptSidecarForAMontageWithNoShardYet(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(culled, "x");
         writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
 
-        ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner()
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).isEmpty();

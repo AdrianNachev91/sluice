@@ -38,7 +38,7 @@ public final class LowResGate {
      * @return boolean true if the file counts as low resolution
      */
     public static boolean isLowRes(
-            long fileSizeBytes, @Nullable Dimensions dimensions, MediaType type, String extension) {
+            final long fileSizeBytes, final @Nullable Dimensions dimensions, final MediaType type, final String extension) {
         if (type == MediaType.VIDEO || extension.equals("svg")) {
             return false;
         }
