@@ -15,18 +15,19 @@ which is exactly what these repairs exist to reason about.
 
 ## 1. Disposition ledger and CHOICE remedies
 
-`move-records.log` is more than a move log. It is the disposition ledger for every decision and
-unreviewable file the shard/`index.json` alone can't resolve. A witnessed or reconstructed move
-record is one disposition (see `apply-planner.md` and `reconcile-engine.md`). `skipMissingSource()`
-and `resolveOverlap()` append two more, each a **CHOICE** remedy a user picks between, never
-guessed at automatically. Neither one ever edits a shard or `index.json`. Both work by appending a
-ledger entry that `ApplyPlanner.validate()`/`classify()` consult on every later read.
+The disposition ledger covers every decision and unreviewable file the shard/`index.json` alone
+can't resolve. A witnessed or reconstructed move record is one disposition, held in
+`move-records.log` (see `apply-planner.md` and `reconcile-engine.md`). `skipMissingSource()` and
+`resolveOverlap()` append two more, each a **CHOICE** remedy a user picks between, never guessed at
+automatically. Those land in `choices.log`, the ledger's other half. Neither one ever edits a shard
+or `index.json`. Both work by appending a ledger entry that
+`ApplyPlanner.validate()`/`classify()` consult on every later read.
 
 The write side of each CHOICE lives here: `skipMissingSource`, `resolveOverlap`,
 `resolveCorruptSidecar`. The read side that consults it - suppressing findings and filtering the
 decisions and unreviewable files `apply()` acts on - lives in `ApplyPlanner`. See
-`apply-planner.md`. `MoveLedger.read()` parses the whole file into its four dispositions in one
-pass; see `move-ledger.md` for the file format itself.
+`apply-planner.md`. `MoveLedger.read()` parses both files into their four dispositions in one
+pass; see `move-ledger.md` for the file formats and why the ledger is split in two.
 
 ```mermaid
 flowchart TD
@@ -137,20 +138,20 @@ that one `Pipeline.discard()` method.
 
 ## Scenarios
 
-| Scenario                                                                             | Outcome |
+| Scenario                                                                             | Outcome                                                                            |
 |--------------------------------------------------------------------------------------|------------------------------------------------------------------------------------|
-| A file listed both as a decision and in index.json's unreviewable list               | Reported as `DecisionUnreviewableOverlap` (CHOICE), not `DuplicateFileReference` |
-| A missing file the user resolved via `skipMissingSource()`                           | Skipped - `apply()` moves/writes nothing for it, ever again |
-| An overlap resolved `TRUST_DECISION`                                                 | The decision applies normally; the file is no longer treated as unreviewable |
-| An overlap resolved `TREAT_AS_UNREVIEWABLE`                                          | The file moves to `Unreviewable/<yyyy>/<mm>/`; the decision is dropped |
-| A stray shard, exactly one montage unclaimed, decisions match that montage's sidecar | `autoRepairStrayShard()` (AUTO) renames it into place with no user input |
-| A stray shard that can't be assigned unambiguously                                   | Left as a `StrayShard` finding; `setAsideStrayShard()` is the CHOICE fallback |
-| index.json is corrupt or missing, every sidecar contiguous and parseable             | `rebuildIndex()` (AUTO) rebuilds it from the sidecars; original filed if present |
-| index.json is corrupt or missing, a sidecar is also missing or unparseable           | Rebuild guard refuses - `CorruptIndex` finding stays open, no engine remedy left |
-| A montage's sidecar is missing or corrupt, the montage has no shard yet              | Silently skipped - not yet actionable, same as any still-culling montage |
-| A montage's sidecar is missing or corrupt, the montage already has a shard           | `CorruptSidecar` finding (CHOICE) |
-| A `CorruptSidecar` finding resolved `SET_ASIDE`                                      | Montage dropped entirely; its photos stay in `Sorted` for a future cull |
-| A `CorruptSidecar` finding resolved `APPLY_ANYWAY`                                   | Montage's own decisions trusted at face value; membership cross-check skipped |
+| A file listed both as a decision and in index.json's unreviewable list               | Reported as `DecisionUnreviewableOverlap` (CHOICE), not `DuplicateFileReference`   |
+| A missing file the user resolved via `skipMissingSource()`                           | Skipped - `apply()` moves/writes nothing for it, ever again                        |
+| An overlap resolved `TRUST_DECISION`                                                 | The decision applies normally; the file is no longer treated as unreviewable       |
+| An overlap resolved `TREAT_AS_UNREVIEWABLE`                                          | The file moves to `Unreviewable/<yyyy>/<mm>/`; the decision is dropped             |
+| A stray shard, exactly one montage unclaimed, decisions match that montage's sidecar | `autoRepairStrayShard()` (AUTO) renames it into place with no user input           |
+| A stray shard that can't be assigned unambiguously                                   | Left as a `StrayShard` finding; `setAsideStrayShard()` is the CHOICE fallback      |
+| index.json is corrupt or missing, every sidecar contiguous and parseable             | `rebuildIndex()` (AUTO) rebuilds it from the sidecars; original filed if present   |
+| index.json is corrupt or missing, a sidecar is also missing or unparseable           | Rebuild guard refuses - `CorruptIndex` finding stays open, no engine remedy left   |
+| A montage's sidecar is missing or corrupt, the montage has no shard yet              | Silently skipped - not yet actionable, same as any still-culling montage           |
+| A montage's sidecar is missing or corrupt, the montage already has a shard           | `CorruptSidecar` finding (CHOICE)                                                  |
+| A `CorruptSidecar` finding resolved `SET_ASIDE`                                      | Montage dropped entirely; its photos stay in `Sorted` for a future cull            |
+| A `CorruptSidecar` finding resolved `APPLY_ANYWAY`                                   | Montage's own decisions trusted at face value; membership cross-check skipped      |
 | A prep dir mangled beyond every repair above                                         | `discard()` (last-resort CHOICE) graveyards its text artifacts, deletes its images |
 
 ## Related

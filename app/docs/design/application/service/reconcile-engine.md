@@ -11,7 +11,7 @@ flowchart TD
     A["read index.json"] --> A2["read the ledger -<br/>one snapshot for this<br/>whole reconcile"]
     A2 --> A3["validate<br/>(allowPartial)"]
     A3 -- any problem --> Z(["ApplyException -<br/>nothing rebuilt"])
-    A3 -- clean --> B{"move-records.log<br/>exists?"}
+    A3 -- clean --> B{"for each ledger file:<br/>is it there?"}
     B -- yes --> C["file it into the<br/>disaster drawer wholesale -<br/>never salvaged line-by-line"]
     B -- no --> D
     C --> D["for each decision +<br/>unreviewable file:<br/>source still on disk?"]
@@ -24,13 +24,12 @@ flowchart TD
     I -- surplus or deficit --> K(["every claimant in the<br/>group -> MissingSource,<br/>nothing written"])
 ```
 
-`reconcile()` exists for when `move-records.log` itself can't be trusted, missing or found
-corrupt, while the shard contract is otherwise intact. It reads the ledger into one snapshot
-before doing anything else. That same snapshot is what `validate()` and `resolvedUnreviewable()`
-both consume, and what decides whether the old log even gets filed away. See `move-ledger.md` for
-the ordering rule this follows. It never salvages a corrupt log line-by-line. Hashes are the
-ground truth, so the whole log is re-derived from disk state and the original is filed away for
-forensics.
+`reconcile()` exists for when the ledger itself can't be trusted, missing or found corrupt, while
+the shard contract is otherwise intact. It reads both ledger files into one snapshot before doing
+anything else. That same snapshot is what `validate()` and `resolvedUnreviewable()` both consume.
+See `move-ledger.md` for the ordering rule this follows. It never salvages a corrupt file
+line-by-line. Hashes are the ground truth, so the move records are re-derived from disk state.
+Both original files are filed away for forensics.
 
 The counts-match rule is what keeps a rebuilt record honest. A destination like library `Funny/`
 accumulates files across every run this app has ever applied, not just the run being reconciled.
@@ -45,7 +44,7 @@ the audit trail.
 One coincidence this rule cannot catch: a stranger's file can arrive at the exact moment the
 genuine file vanishes without trace. Count parity still holds, so it would reconstruct wrongly.
 Nothing short of the original file's own hash could tell that case apart from a genuine match.
-That hash lived only in the log this repair is replacing. This residual risk is accepted rather
+That hash lived only in the records this repair is replacing. This residual risk is accepted rather
 than chased; see `ReconcileEngine.resolvePendingMoves()`'s own Javadoc for the same rule stated
 against the code.
 

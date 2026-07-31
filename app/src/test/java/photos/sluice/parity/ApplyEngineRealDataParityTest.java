@@ -238,9 +238,9 @@ class ApplyEngineRealDataParityTest {
     // Copies index.json + every montage-*.json sidecar + every decisions-*.json shard from source
     // into dest, rewriting every occurrence of fromRoot's literal (JSON-escaped) path prefix to
     // toRoot's. This is the same relocation copyRecursively below applies to the referenced Sorted
-    // files. Montage/tile images and any prior decisions.json/move-records.log are deliberately not
-    // copied. This test needs a completed-but-not-yet-applied prep dir, and carrying over a stale
-    // merge record from a previous local run would corrupt the comparison.
+    // files. Montage/tile images, any prior decisions.json, and both ledger files are deliberately
+    // not copied. This test needs a completed-but-not-yet-applied prep dir, and carrying over a
+    // stale merge record from a previous local run would corrupt the comparison.
     private static void copyPrepDirJson(final Path source, final Path dest, final Path fromRoot, final Path toRoot) throws IOException {
         Files.createDirectories(dest);
         try (final Stream<Path> files = Files.list(source).filter(ApplyEngineRealDataParityTest::isPrepJson)) {

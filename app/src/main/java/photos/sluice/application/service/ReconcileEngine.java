@@ -24,10 +24,12 @@ import java.util.Map;
  * Rebuilds a prep directory's move ledger from disk state alone. It exists for when the ledger
  * itself cannot be trusted, whether lost, unreadable, or found with this run's shards intact.
  *
- * <p>Any existing ledger is filed into the prep dir's disaster drawer wholesale, never salvaged
- * line by line. It is then rebuilt from scratch, purely from what disk state can prove. Every
- * already-validated decision and unreviewable file is checked against the exact destination
- * applying it would have produced, recording the hash of whatever is found there.
+ * <p>Both of the ledger's files are filed into the prep dir's disaster drawer wholesale, never
+ * salvaged line by line. The move records are then rebuilt from scratch, purely from what disk
+ * state can prove. Every already-validated decision and unreviewable file is checked against the
+ * exact destination applying it would have produced, recording the hash of whatever is found
+ * there. The user's recorded choices have no disk counterpart to rebuild them from, so nothing
+ * replaces the choices file this filing removes.
  *
  * <p>This is a name-and-location match, not a proof of identity. The original file's own hash lived
  * only in the ledger being replaced, so there is nothing left to verify a located file against.
@@ -96,10 +98,9 @@ public class ReconcileEngine {
         }
         final List<Path> unreviewableFiles = this.applyPlanner.resolvedUnreviewable(prepDir, ledger);
 
-        final Path moveRecordLog = ledger.log();
-        if (this.mediaStore.exists(moveRecordLog)) {
-            this.disasterDrawer.file(prepDirPath, moveRecordLog, "move-records-log");
-        }
+        final Path moveRecordLog = ledger.moveRecordLog();
+        this.fileAway(prepDirPath, moveRecordLog, "move-records-log");
+        this.fileAway(prepDirPath, this.moveLedger.choicesLogFor(prepDirPath), "choices-log");
 
         final var sweep = new ReconcileSweep(prepDirPath, moveRecordLog);
         validation.decisions().forEach(decision -> this.reconcileDecision(decision, sweep));
@@ -107,6 +108,21 @@ public class ReconcileEngine {
         this.resolvePendingMoves(sweep);
 
         return new ReconcileReport(sweep.reconstructed, sweep.stillPending, sweep.missingSource);
+    }
+
+    /**
+     * Files one of the ledger's files into the prep dir's disaster drawer, if it is there at all.
+     * Either file can legitimately be absent. A run with no CHOICE remedy never writes a choices
+     * file, and a lost move-record file is the very thing this rebuild exists for.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose drawer receives the file
+     * @param file {@link Path} the ledger file to file away
+     * @param label {@link String} the drawer's own name for this kind of artifact
+     */
+    private void fileAway(final Path prepDirPath, final Path file, final String label) {
+        if (this.mediaStore.exists(file)) {
+            this.disasterDrawer.file(prepDirPath, file, label);
+        }
     }
 
     /**

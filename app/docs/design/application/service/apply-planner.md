@@ -11,7 +11,8 @@ write. That is enforced by the types it holds, not by convention, on both sides.
 `MediaReader`, the inspect-only half of `MediaStore`, so the filesystem mutators are not reachable
 from here and a mutation would not compile. And it holds no ledger reference at all. Every method
 that needs one takes its caller's own `MoveLedger.Ledger` snapshot as a parameter instead. This
-class cannot even read the ledger file on its own, let alone append to it (see `move-ledger.md`).
+class cannot even read the ledger files on its own, let alone append to them (see
+`move-ledger.md`).
 `ApplyEngine.apply()` calls `validate()` and then classifies every decision through this class
 before carrying anything out. See `apply-engine.md` section 1 for the whole pipeline.
 

@@ -149,6 +149,34 @@ class ReconcileEngineTest {
         assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
     }
 
+    // The ledger is two files, and a rebuild replaces all of it. So neither file may be left behind
+    // holding entries the rebuilt ledger has no counterpart for.
+    @Test
+    void reconcileFilesAnExistingChoicesLogAwayAlongsideTheMoveRecordsLog(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeMoveRecord(prepDir, root.resolve("Sorted/Photos/2019/06/stale.jpg"),
+                root.resolve("Review/junk/stale.jpg"), "stale-hash");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir,
+                root.resolve("Sorted/Photos/2019/06/gone.jpg"), "deleted it myself");
+
+        reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        try (final var entries = Files.list(prepDir.resolve("disasters"))) {
+            assertThat(entries.map(entry -> entry.getFileName().toString()))
+                    .hasSize(2)
+                    .anyMatch(name -> name.contains("move-records-log"))
+                    .anyMatch(name -> name.contains("choices-log"));
+        }
+        assertThat(Files.exists(prepDir.resolve("choices.log"))).isFalse();
+    }
+
     @Test
     void reconcileAssignsCollisionCandidatesInDecisionOrderWhenTwoDecisionsShareAnOriginalFileName(@TempDir final Path root)
             throws IOException, ApplyException {

@@ -175,6 +175,6 @@ engine this project's cancellation support touches; the verdict was to leave it 
 - The disposition-ledger CHOICE remedies, and the corrupt-index/sidecar and last-resort discard
   repairs for a damaged prep dir: `prep-dir-remedies.md`.
 - The offline rebuild for when the move ledger itself can't be trusted: `reconcile-engine.md`.
-- The move-record log's own file format, markers, and parsing rules: `move-ledger.md`.
+- The ledger files' own formats, markers, and parsing rules: `move-ledger.md`.
 - The filesystem effects this engine relies on (`move`, `resolveDestination`, `moveTo`, `copy`,
   `appendLine`, `readLines`): `media-store.md` in the `adapter/fs` design folder.

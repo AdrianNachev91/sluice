@@ -43,8 +43,8 @@ import java.util.stream.Collectors;
  * <p>That read-only property is structural, not a convention. This class holds a
  * {@link MediaReader} rather than a {@code MediaStore}, so no move, copy, write, or delete is
  * reachable from here at all. Every method here also takes its caller's own {@link Ledger}
- * snapshot rather than reading one itself. This class cannot even read the ledger file on its
- * own, let alone append to it.
+ * snapshot rather than reading one itself. This class cannot even read the ledger files on its
+ * own, let alone append to them.
  *
  * <p>Flowchart: {@code app/docs/design/application/service/apply-planner.md}.
  */
@@ -244,12 +244,12 @@ public class ApplyPlanner {
         decisions.stream()
                 .map(decision -> this.classify(decision, ledger))
                 .filter(Status.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.decision().file(), ledger.log()))
+                .map(status -> new Finding.MissingSource(status.decision().file(), ledger.moveRecordLog()))
                 .forEach(findings::add);
         this.resolvedUnreviewable(prepDir, ledger).stream()
                 .map(file -> this.classifyFile(file, ledger))
                 .filter(FileStatus.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.file(), ledger.log()))
+                .map(status -> new Finding.MissingSource(status.file(), ledger.moveRecordLog()))
                 .forEach(findings::add);
         return findings;
     }

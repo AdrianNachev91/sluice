@@ -1,37 +1,52 @@
 # Move ledger
 
-How `application/service/MoveLedger` owns `move-records.log`: the file name, the line format,
-every disposition marker, and how the whole file parses back
+How `application/service/MoveLedger` owns a prep dir's two ledger files: their names, the line
+format, every disposition marker, and how each file parses back
 (`app/src/main/java/photos/sluice/application/service/MoveLedger.java`).
 
 This is a format reference, not a flow. For how each disposition actually gets used - who reads
 it, who appends to it, and why - see the cross-links in Related below.
 
-## File and delimiter
+## Two files, and why
 
-One `move-records.log` lives inside each prep directory, at the path the private `logFor()`
-returns. Every field within a line is split on `\u001F`, the ASCII unit-separator control
+A prep directory holds `move-records.log` and `choices.log`, at the paths `moveRecordLogFor()`
+and `choicesLogFor()` return. The split is by what a lost line costs.
+
+A move record states that a named file's bytes went to a named destination. Disk state either
+agrees or it does not. So a lost move record is re-derivable by looking at disk again, which is
+exactly what `ReconcileEngine` does. A choice record is user testimony instead. Nothing on disk
+records that somebody chose to give up on a missing file, so a lost choice can only be re-asked.
+
+Keeping the two apart gives each kind of evidence its own file to be reasoned about by name. A
+rule about re-deriving from disk can then say which file it means, rather than which subset of one
+file's lines.
+
+## Delimiter
+
+Every field within a line of either file is split on `\u001F`, the ASCII unit-separator control
 character. It is guaranteed absent from any path on every mainstream filesystem. Fields split
 apart with zero escaping, even when a path itself contains spaces or commas.
 
 ## The four dispositions
 
-`read()` parses the whole file in one pass into a `Ledger` snapshot: the file's own path, plus
-four accumulators - `moves`, `skipped`, `overlaps`, and `corruptSidecars`. A witnessed move and a
+`read()` parses both files in one pass into a single `Ledger` snapshot: the move-record file's own
+path, plus four accumulators - `moves`, `skipped`, `overlaps`, and `corruptSidecars`. Either file
+may be absent, which reads as an empty contribution rather than an error. A witnessed move and a
 reconstructed move share the same `moves` map. Provenance is not kept as a separate field once
 parsed, so both are trusted identically by a reading caller.
 
-Markers are checked before falling back to the plain move shapes below. A move record's own
-`dest` field can never equal one of these marker strings, so checking the markers first is
-unambiguous. An unrecognized line shape is silently ignored.
+Each file has its own parser, recognizing only its own file's shapes. In `move-records.log` the
+field count separates the two move shapes. In `choices.log` the marker in the second field names
+which of the three choices a line records. An unrecognized line shape is silently ignored, so a
+half-written trailing line from a crash costs one entry rather than the whole file.
 
-| Disposition              | Fields | Appended by              | Format                                                                                         |
-|--------------------------|--------|--------------------------|------------------------------------------------------------------------------------------------|
-| Witnessed move           | 3      | `recordMove()`           | `source` DELIM `dest` DELIM `hash`                                                             |
-| Reconstructed move       | 4      | `recordReconstructed()`  | `source` DELIM `dest` DELIM `hash` DELIM `RECONSTRUCTED`                                       |
-| Skipped                  | 4      | `recordSkip()`           | `source` DELIM `SKIPPED_BY_USER` DELIM `timestamp` DELIM `reason`                              |
-| Overlap resolved         | 5      | `recordOverlap()`        | `file` DELIM `OVERLAP_RESOLVED` DELIM `resolution` DELIM `timestamp` DELIM `reason`            |
-| Corrupt sidecar resolved | 5      | `recordCorruptSidecar()` | `montage` DELIM `CORRUPT_SIDECAR_RESOLVED` DELIM `resolution` DELIM `timestamp` DELIM `reason` |
+| Disposition              | File               | Fields | Appended by              | Format                                                                                         |
+|--------------------------|--------------------|--------|--------------------------|------------------------------------------------------------------------------------------------|
+| Witnessed move           | `move-records.log` | 3      | `recordMove()`           | `source` DELIM `dest` DELIM `hash`                                                             |
+| Reconstructed move       | `move-records.log` | 4      | `recordReconstructed()`  | `source` DELIM `dest` DELIM `hash` DELIM `RECONSTRUCTED`                                       |
+| Skipped                  | `choices.log`      | 4      | `recordSkip()`           | `source` DELIM `SKIPPED_BY_USER` DELIM `timestamp` DELIM `reason`                              |
+| Overlap resolved         | `choices.log`      | 5      | `recordOverlap()`        | `file` DELIM `OVERLAP_RESOLVED` DELIM `resolution` DELIM `timestamp` DELIM `reason`            |
+| Corrupt sidecar resolved | `choices.log`      | 5      | `recordCorruptSidecar()` | `montage` DELIM `CORRUPT_SIDECAR_RESOLVED` DELIM `resolution` DELIM `timestamp` DELIM `reason` |
 
 ("DELIM" stands in for the literal `\u001F` character above, for readability.)
 
@@ -59,9 +74,9 @@ resulting `Ledger` is a plain parameter, passed to every collaborator that reads
 caches it. A `Ledger`'s four maps are copied on return, so sharing one snapshot across several
 read-only consumers cannot let one of them mutate what another sees.
 
-`reconcile()` takes its snapshot before filing `move-records.log` into the disaster drawer.
-Everything it resolves against the ledger must see the same state that filing is about to
-replace. See `reconcile-engine.md`.
+`reconcile()` takes its snapshot before filing either file into the disaster drawer. Everything it
+resolves against the ledger must see the same state that filing is about to replace. See
+`reconcile-engine.md`.
 
 `ApplyPlanner` itself holds no ledger reference at all - see `apply-planner.md`. `PrepDirDoctor`
 holds only the read-only `LedgerReader` view, never the append-capable `MoveLedger` - see

@@ -28,6 +28,7 @@ import static photos.sluice.application.service.CullPrepTestSupport.readIndex;
 import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
 import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
 import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
+import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRecord;
 import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
 import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
 
@@ -330,6 +331,9 @@ class PrepDirRemediesTest {
         writeFile(prepDir.resolve("tile-001-01.jpg"), "fake tile");
         Files.createDirectories(prepDir.resolve("disasters"));
         Files.writeString(prepDir.resolve("disasters/2026-01-01_00-00-00-something.txt"), "old drawer entry");
+        writeMoveRecord(prepDir, photo, root.resolve("Review/junk/a.jpg"), "hash-a");
+        prepDirRemedies(root, root.resolve("Library"))
+                .skipMissingSource(prepDir, root.resolve("Sorted/Photos/2019/06/gone.jpg"), "deleted it myself");
 
         final DiscardReport report = prepDirRemedies(root, root.resolve("Library")).discard(prepDir);
         final Path graveyard = report.graveyard();
@@ -339,6 +343,10 @@ class PrepDirRemediesTest {
         assertThat(Files.exists(graveyard.resolve("index.json"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("montage-001.json"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("decisions-001.json"))).isTrue();
+        // Both halves of the ledger ride along. The sweep is name-blind, so this is what would catch
+        // a future allowlist quietly leaving one of them behind to be deleted with the images.
+        assertThat(Files.exists(graveyard.resolve("move-records.log"))).isTrue();
+        assertThat(Files.exists(graveyard.resolve("choices.log"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("disasters/2026-01-01_00-00-00-something.txt"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("montage-001.jpg"))).isFalse();
         assertThat(Files.exists(graveyard.resolve("tile-001-01.jpg"))).isFalse();

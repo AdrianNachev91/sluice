@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 
 /**
  * {@code <prepDir>/disasters/} is the audit drawer for a prep dir's own recovery events. A
- * move-records.log or index.json this app decided was too damaged to salvage gets filed here via
+ * ledger file or index.json this app decided was too damaged to salvage gets filed here via
  * {@link #file}. Every {@link Troubleshooter} report is written here directly via {@link #write}.
  * Every entry embeds its own filing time in its filename rather than relying on file mtime, which
  * this product already treats as untrustworthy metadata elsewhere. Retention reads that embedded

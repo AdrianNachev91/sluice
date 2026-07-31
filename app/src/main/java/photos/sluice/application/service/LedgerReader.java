@@ -18,7 +18,7 @@ public interface LedgerReader {
      * snapshot is only valid for the run that took it.
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger to read
-     * @return {@link Ledger} the parsed ledger, empty in every part if no log exists yet
+     * @return {@link Ledger} the parsed ledger, empty in every part if nothing has been recorded yet
      */
     Ledger read(Path prepDirPath);
 }

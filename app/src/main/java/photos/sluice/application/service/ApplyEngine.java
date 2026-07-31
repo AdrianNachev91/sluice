@@ -154,11 +154,11 @@ public class ApplyEngine {
         final List<Finding> missingSource = new ArrayList<>();
         statuses.stream()
                 .filter(Status.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.decision().file(), ledger.log()))
+                .map(status -> new Finding.MissingSource(status.decision().file(), ledger.moveRecordLog()))
                 .forEach(missingSource::add);
         unreviewableStatuses.stream()
                 .filter(FileStatus.Unresolved.class::isInstance)
-                .map(status -> new Finding.MissingSource(status.file(), ledger.log()))
+                .map(status -> new Finding.MissingSource(status.file(), ledger.moveRecordLog()))
                 .forEach(missingSource::add);
         if (!missingSource.isEmpty()) {
             throw ApplyPlanner.failure(missingSource);
