@@ -263,6 +263,52 @@ class TroubleshooterTest {
         }
     }
 
+    // The whole point of splitting the ledger: a repair triggered by a lost move record must not
+    // cost the user an unrelated answer they already gave.
+    @Test
+    void anAnsweredSkipSurvivesAReconcileTriggeredByAnUnrelatedMissingSource(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path prepDir = prepDir(root);
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - its record is gone
+        final Path givenUpOn = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination either
+        writeFile(root.resolve("Review/junk/a.jpg"), "already-moved-content");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(alreadyMoved), sidecarEntry(givenUpOn));
+        writeShard(prepDir, "montage-001",
+                classificationJson(alreadyMoved, "junk", "blurry"),
+                classificationJson(givenUpOn, "junk", "also blurry"));
+        CullPrepTestSupport.prepDirRemedies(root, root.resolve("Library"))
+                .skipMissingSource(prepDir, givenUpOn, "deleted it myself");
+        final List<String> choicesBefore = Files.readAllLines(prepDir.resolve("choices.log"));
+
+        final TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
+
+        assertThat(report.reconcile()).isNotNull();
+        assertThat(report.reconcile().reconstructed()).isEqualTo(1);
+        assertThat(report.reconcile().skipped()).isEqualTo(1);
+        assertThat(report.text()).contains("1 already answered as skipped");
+        assertThat(Files.readAllLines(prepDir.resolve("choices.log"))).isEqualTo(choicesBefore);
+        assertThat(report.after().state()).isEqualTo(State.READY);
+    }
+
+    @Test
+    void anUndecodableChoicesLogIsDisclosedInTheRenderedReport(@TempDir final Path root) throws IOException,
+            ApplyException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - its move record was lost
+        writeFile(root.resolve("Review/junk/a.jpg"), "already-moved-content");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        CullPrepTestSupport.writeUndecodable(prepDir.resolve("choices.log"));
+
+        final TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
+
+        assertThat(report.reconcile()).isNotNull();
+        assertThat(report.reconcile().choicesLost()).isTrue();
+        assertThat(report.text()).contains("choices.log could not be decoded");
+    }
+
     private static Path prepDir(final Path root) throws IOException {
         final Path dir = root.resolve("logs/cull-prep/scope1");
         Files.createDirectories(dir);

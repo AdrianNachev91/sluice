@@ -11,13 +11,18 @@ flowchart TD
     A["read index.json"] --> A2["read the ledger -<br/>one snapshot for this<br/>whole reconcile"]
     A2 --> A3["validate<br/>(allowPartial)"]
     A3 -- any problem --> Z(["ApplyException -<br/>nothing rebuilt"])
-    A3 -- clean --> B{"for each ledger file:<br/>is it there?"}
+    A3 -- clean --> B{"move-records.log<br/>there?"}
+    B -- no --> B2{"choices.log<br/>decodable?"}
     B -- yes --> C["file it into the<br/>disaster drawer wholesale -<br/>never salvaged line-by-line"]
-    B -- no --> D
-    C --> D["for each decision +<br/>unreviewable file:<br/>source still on disk?"]
+    C --> B2
+    B2 -- yes --> D{"for each decision +<br/>unreviewable file:<br/>source still on disk?"}
+    B2 -- no --> B3["file that away too,<br/>set choicesLost -<br/>the answers are gone"]
+    B3 --> D
     D -- yes --> E(["stillPending"])
-    D -- no, NearDupChosen --> F(["MissingSource -<br/>a copy's source<br/>never disappears"])
-    D -- no, otherwise --> G["queue as a<br/>pending move<br/>(file, destDir)"]
+    D -- no --> D2{"answered skip?"}
+    D2 -- yes --> E2(["skipped -<br/>an answer is terminal,<br/>whatever the decision kind"])
+    D2 -- no, NearDupChosen --> F(["MissingSource -<br/>a copy's source<br/>never disappears"])
+    D2 -- no, otherwise --> G["queue as a<br/>pending move<br/>(file, destDir)"]
     G --> H["group all pending moves<br/>by (destDir, original<br/>file name)"]
     H --> I["per group: count<br/>contiguous on-disk<br/>candidates vs. claimants"]
     I -- counts match --> J(["reconstructed - candidates<br/>zipped to claimants in<br/>decision order, hashed,<br/>appended RECONSTRUCTED"])
@@ -29,7 +34,7 @@ the shard contract is otherwise intact. It reads both ledger files into one snap
 anything else. That same snapshot is what `validate()` and `resolvedUnreviewable()` both consume.
 See `move-ledger.md` for the ordering rule this follows. It never salvages a corrupt file
 line-by-line. Hashes are the ground truth, so the move records are re-derived from disk state.
-Both original files are filed away for forensics.
+`move-records.log` itself is filed away for forensics, if it was there at all.
 
 The counts-match rule is what keeps a rebuilt record honest. A destination like library `Funny/`
 accumulates files across every run this app has ever applied, not just the run being reconciled.
@@ -57,6 +62,35 @@ Destination resolution during the sweep (which folder a decision or unreviewable
 been moved into) is `CullDestinations`, the same class a real apply uses. See `apply-engine.md`
 for a fuller description. Agreement between the two is what keeps an already-moved file from
 looking permanently lost.
+
+## 2. What a rebuild is not allowed to touch
+
+`choices.log` is left exactly where it is. Rebuilding from disk is only honest for evidence disk
+can carry, and an answer somebody gave is not that. So a skip, an overlap resolution and a
+corrupt-sidecar resolution all survive a reconcile untouched. That holds by construction: the file
+is simply not in the rebuild's scope.
+
+A file the user already gave up on is reported `skipped`, never `MissingSource`. An answer is
+terminal, and a rebuild is not allowed to un-ask it. The skip outranks the decision kind, so even
+a `NearDupChosen` answered this way reports skipped. Existence is still checked first, the same
+order applying itself classifies in, so a file given up on and then put back becomes pending again.
+
+The one exception is a `choices.log` whose bytes do not decode. Its answers are already gone,
+whatever this run does. So it is filed into the drawer too, and the report carries `choicesLost`
+so the loss is stated plainly rather than passed over. Every finding those answers had settled is
+raised again for the user to answer afresh. A fresh answer lands in a clean file, because
+appending files an undecodable one away first - see `move-ledger.md`.
+
+That disclosure only reaches a returned report, so it covers the lost skips whenever a reconcile
+actually runs. Lost overlap
+and corrupt-sidecar answers surface earlier and by a different route: `validate()` re-raises their
+findings, so `reconcile()` throws before any report exists. `PrepDirDoctor` reads the same
+re-raised findings, and `troubleshooter.md` explains why that keeps the throw unreachable from the
+one caller. Either way the user is re-asked. Only the skip path also gets told why.
+
+Any other read failure is not a lost answer at all. A file locked by a backup or antivirus scanner
+still holds every entry it ever did. That case propagates and fails the run, rather than filing
+intact answers away. See `move-ledger.md`.
 
 ## Related
 

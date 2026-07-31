@@ -17,6 +17,7 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.service.ApplyEngine;
 import photos.sluice.application.service.ApplyPlanner;
 import photos.sluice.application.service.CullDestinations;
+import photos.sluice.application.service.DisasterDrawer;
 import photos.sluice.application.service.MoveLedger;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
@@ -208,7 +209,7 @@ class ApplyEngineRealDataParityTest {
         final var mediaStore = new NioMediaStore();
         final var cullPrepPort = new JsonCullPrepStore();
         final var sha256Port = new Sha256Hasher();
-        final var moveLedger = new MoveLedger(mediaStore);
+        final var moveLedger = new MoveLedger(mediaStore, new DisasterDrawer(mediaStore));
         final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), sha256Port);
         return new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex,
                 new CullDestinations(pathsConfig), moveLedger, applyPlanner);

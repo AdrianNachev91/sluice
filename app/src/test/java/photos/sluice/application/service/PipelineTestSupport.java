@@ -168,7 +168,7 @@ final class PipelineTestSupport {
         final var cullPrepPort = new JsonCullPrepStore();
         final var cullDispatcher = new CullDispatcher(cullers, cullSettings);
         final var disasterDrawer = new DisasterDrawer(mediaStore);
-        final var moveLedger = new MoveLedger(mediaStore);
+        final var moveLedger = new MoveLedger(mediaStore, disasterDrawer);
         final var cullDestinations = new CullDestinations(pathsConfig);
         final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, cullSettings, sha256Port);
         final var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,

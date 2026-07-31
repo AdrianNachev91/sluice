@@ -14,8 +14,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
@@ -28,6 +30,7 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeFile;
 import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
 import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRecord;
 import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
+import static photos.sluice.application.service.CullPrepTestSupport.writeUndecodable;
 import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
 
 // Rebuilding a prep dir's move ledger from disk state alone. The recurring fixture shape is a
@@ -149,10 +152,10 @@ class ReconcileEngineTest {
         assertThat(Files.exists(prepDir.resolve("move-records.log"))).isFalse();
     }
 
-    // The ledger is two files, and a rebuild replaces all of it. So neither file may be left behind
-    // holding entries the rebuilt ledger has no counterpart for.
+    // Only the move records are re-derivable from disk, so only they get replaced wholesale. An
+    // answer the user gave has no disk counterpart, and a rebuild must not take it away.
     @Test
-    void reconcileFilesAnExistingChoicesLogAwayAlongsideTheMoveRecordsLog(@TempDir final Path root)
+    void reconcileLeavesTheChoicesLogInPlaceWhileFilingTheMoveRecordsLogAway(@TempDir final Path root)
             throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
@@ -165,16 +168,154 @@ class ReconcileEngineTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir,
                 root.resolve("Sorted/Photos/2019/06/gone.jpg"), "deleted it myself");
+        final List<String> choicesBefore = Files.readAllLines(prepDir.resolve("choices.log"));
 
-        reconcileEngine(root, libraryRoot).reconcile(prepDir);
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
         try (final var entries = Files.list(prepDir.resolve("disasters"))) {
             assertThat(entries.map(entry -> entry.getFileName().toString()))
-                    .hasSize(2)
-                    .anyMatch(name -> name.contains("move-records-log"))
+                    .singleElement(as(STRING))
+                    .contains("move-records-log");
+        }
+        assertThat(Files.readAllLines(prepDir.resolve("choices.log"))).isEqualTo(choicesBefore);
+        assertThat(report.choicesLost()).isFalse();
+    }
+
+    // A file the user already gave up on is settled. A rebuild reports the answer rather than
+    // raising the same MissingSource finding that answer was given to close.
+    @Test
+    void reconcileReportsAnAnsweredSkipAsSkippedRatherThanMissingSource(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path gone = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination either
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(gone));
+        writeShard(prepDir, "montage-001", classificationJson(gone, "junk", "blurry"));
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, gone, "deleted it myself");
+
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        assertThat(report.skipped()).isEqualTo(1);
+        assertThat(report.missingSource()).isEmpty();
+        assertThat(report.reconstructed()).isZero();
+    }
+
+    // Existence outranks the answer, matching how applying itself classifies. Putting the file back
+    // is the alternative to answering at all, so a restored file simply applies normally.
+    @Test
+    void reconcileReportsAnAnsweredSkipAsPendingOnceTheFileIsPutBack(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path restored = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(restored));
+        writeShard(prepDir, "montage-001", classificationJson(restored, "junk", "blurry"));
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, restored, "deleted it myself");
+        writeFile(restored, "found it after all");
+
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        assertThat(report.stillPending()).isEqualTo(1);
+        assertThat(report.skipped()).isZero();
+        assertThat(report.missingSource()).isEmpty();
+    }
+
+    // An unreviewable file has no shard decision behind it, so its own skip travels a different code
+    // path to a decision's.
+    @Test
+    void reconcileReportsAnAnsweredSkipForAnUnreviewableFileAsSkipped(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path unreviewable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
+        writeIndex(prepDir, 0, List.of(unreviewable), List.of());
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, unreviewable, "deleted it myself");
+
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        assertThat(report.skipped()).isEqualTo(1);
+        assertThat(report.missingSource()).isEmpty();
+    }
+
+    // Settling a skip before the grouping step also shrinks the claimant pool, which is what lets
+    // this group resolve at all. Two sources share a leaf name and both are gone from Sorted. Only
+    // one was ever moved, though; the user gave up on the other. One claimant, one candidate.
+    @Test
+    void reconcileReconstructsAGroupWhoseOtherSameNamedClaimantWasAnsweredAsSkipped(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path moved = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - already moved
+        final Path givenUpOn = root.resolve("Sorted/Photos/2019/07/a.jpg"); // never written - the photo is gone
+        writeFile(root.resolve("Review/junk/a.jpg"), "the one that really moved");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(moved), sidecarEntry(givenUpOn));
+        writeShard(prepDir, "montage-001",
+                classificationJson(moved, "junk", "blurry"),
+                classificationJson(givenUpOn, "junk", "also blurry"));
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, givenUpOn, "deleted it myself");
+
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        assertThat(report.reconstructed()).isEqualTo(1);
+        assertThat(report.skipped()).isEqualTo(1);
+        assertThat(report.missingSource()).isEmpty();
+        assertThat(Files.readAllLines(prepDir.resolve("move-records.log")).getFirst()).contains(moved.toString());
+    }
+
+    // A near-dup chosen decision short-circuits before the shared per-file step, so its own answered
+    // skip has to be honoured on that branch too.
+    @Test
+    void reconcileReportsAnAnsweredSkipForANearDupChosenDecisionAsSkipped(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg"); // never written - the photo itself is gone
+        final Path reject = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(reject, "blurry");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
+        writeShard(prepDir, "montage-001",
+                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
+                nearDupRejectJson(reject, "lake-jun19", "blurred"));
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, chosen, "deleted it myself");
+
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        assertThat(report.skipped()).isEqualTo(1);
+        assertThat(report.missingSource()).isEmpty();
+        assertThat(report.stillPending()).isEqualTo(1);
+    }
+
+    // The one path that costs the user an answer. Testimony has no second source, so a choices file
+    // nothing can decode is filed away and disclosed rather than quietly passed over.
+    @Test
+    void reconcileFilesAnUndecodableChoicesLogAwayAndDisclosesTheLostAnswers(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path gone = root.resolve("Sorted/Photos/2019/06/gone.jpg"); // never written, no destination either
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(gone));
+        writeShard(prepDir, "montage-001", classificationJson(gone, "junk", "blurry"));
+        // The answer this destroys. Without it the assertions below would hold for a prep dir that
+        // never had a choices file at all, and prove nothing about a loss.
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, gone, "deleted it myself");
+        writeUndecodable(prepDir.resolve("choices.log"));
+
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        assertThat(report.choicesLost()).isTrue();
+        // The skip is gone with the file, so the finding it had settled is raised again.
+        assertThat(report.missingSource()).extracting(MissingSource::file).containsExactly(gone);
+        assertThat(report.skipped()).isZero();
+        assertThat(Files.exists(prepDir.resolve("choices.log"))).isFalse();
+        try (final var entries = Files.list(prepDir.resolve("disasters"))) {
+            assertThat(entries.map(entry -> entry.getFileName().toString()))
                     .anyMatch(name -> name.contains("choices-log"));
         }
-        assertThat(Files.exists(prepDir.resolve("choices.log"))).isFalse();
     }
 
     @Test
@@ -263,10 +404,10 @@ class ReconcileEngineTest {
             ApplyException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
-        final Path undecodable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
+        final Path unreviewable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
         final Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
         writeFile(dest, "already-moved");
-        writeIndex(prepDir, 0, List.of(undecodable), List.of());
+        writeIndex(prepDir, 0, List.of(unreviewable), List.of());
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 

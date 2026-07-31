@@ -29,6 +29,16 @@ decisions and unreviewable files `apply()` acts on - lives in `ApplyPlanner`. Se
 `apply-planner.md`. `MoveLedger.read()` parses both files into their four dispositions in one
 pass; see `move-ledger.md` for the file formats and why the ledger is split in two.
 
+An answer, once given, is permanent. It survives a reconcile, a troubleshoot and a restart, and
+nothing re-asks it. There is no un-answer affordance, deliberately. An answer only ever changes
+routing within its own run, and no CHOICE remedy here destroys media. A skipped or set-aside photo
+stays in `Sorted` for a future cull. `resolveCorruptSidecar` has the widest reach of the three,
+since it is keyed by montage rather than by file, so a `SET_ASIDE` settles a whole montage at once.
+
+Two things end an answer, neither of them an undo. A `choices.log` whose bytes do not decode loses
+what it held; `reconcile-engine.md` covers that. `discard()` below gives up on the whole run, ledger
+included, and is the one sanctioned give-up path.
+
 ```mermaid
 flowchart TD
     A["Finding.MissingSource"] --> B{"user's choice"}
@@ -120,8 +130,8 @@ skipped.
 ## 3. Last-resort discard
 
 `discard()` is the remedy for a prep dir mangled beyond every repair above. It gives up on the run
-entirely rather than resolving it. Every non-image file (shards, sidecars, `index.json`, the
-move-record log, and any disaster drawer, preserving its own relative layout) is moved wholesale
+entirely rather than resolving it. Every non-image file (shards, sidecars, `index.json`, both
+ledger files, and any disaster drawer, preserving its own relative layout) is moved wholesale
 into a global graveyard, `logs/disasters/<scope>-<timestamp>/`. The scope is read straight off the
 prep dir's own folder name, never `index.json`. The whole point of this remedy is that
 `index.json` (or anything else) might be unreadable. Only the montage/tile contact-sheet images

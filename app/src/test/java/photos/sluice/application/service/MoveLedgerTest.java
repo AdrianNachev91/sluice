@@ -9,13 +9,19 @@ import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.OverlapResolution;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.InstanceOfAssertFactories.PATH;
+import static photos.sluice.application.service.CullPrepTestSupport.writeUndecodable;
 
 // The ledger's own file layout, asserted from both sides: which file each kind of entry lands in,
 // and what one read() makes of the pair. Everything goes through the real store against a @TempDir,
@@ -192,8 +198,103 @@ class MoveLedgerTest {
         assertThat(snapshot.moves()).isEmpty();
     }
 
+    // A file present but undecodable is the one failure a snapshot reports, and it must not cost the
+    // other file's contents. Bytes no UTF-8 decoder accepts stand in for a torn write or a damaged
+    // sector. That is what a genuinely corrupt log looks like, as opposed to a malformed line.
+    @Test
+    void anUndecodableChoicesFileIsReportedOnTheSnapshotWithoutCostingTheMoveRecords(@TempDir final Path prepDir)
+            throws IOException {
+        final Path moved = prepDir.resolve("Sorted/moved.jpg");
+        final Path gone = prepDir.resolve("Sorted/gone.jpg");
+        final MoveLedger ledger = moveLedger();
+        ledger.recordMove(prepDir, moved, prepDir.resolve("Review/junk/moved.jpg"), "hash-moved");
+        ledger.recordSkip(prepDir, gone, "deleted it myself");
+        writeUndecodable(prepDir.resolve(CHOICES));
+
+        final Ledger snapshot = ledger.read(prepDir);
+
+        assertThat(snapshot.choicesUndecodable()).isTrue();
+        assertThat(snapshot.skipped()).isEmpty();
+        assertThat(snapshot.moves()).containsOnlyKeys(moved);
+    }
+
+    // Losing the move records is recoverable - every affected file simply reports as unproven, and a
+    // reconcile rebuilds them from disk. So an undecodable move-record file needs no flag of its own.
+    @Test
+    void anUndecodableMoveRecordFileReadsAsNoMovesRatherThanThrowing(@TempDir final Path prepDir) throws IOException {
+        final Path moved = prepDir.resolve("Sorted/moved.jpg");
+        final Path gone = prepDir.resolve("Sorted/gone.jpg");
+        final MoveLedger ledger = moveLedger();
+        ledger.recordMove(prepDir, moved, prepDir.resolve("Review/junk/moved.jpg"), "hash-moved");
+        ledger.recordSkip(prepDir, gone, "deleted it myself");
+        writeUndecodable(prepDir.resolve(MOVE_RECORDS));
+
+        final Ledger snapshot = ledger.read(prepDir);
+
+        assertThat(snapshot.moves()).isEmpty();
+        assertThat(snapshot.choicesUndecodable()).isFalse();
+        assertThat(snapshot.skipped()).containsExactly(gone);
+    }
+
+    // Undecodable bytes are a permanent defect worth degrading around. Every other read failure is
+    // transient - the file still holds every answer it ever did. Filing those away would destroy
+    // intact testimony over a scanner's open handle, so that case has to stay loud.
+    @Test
+    void aReadFailureThatIsNotADecodeFailurePropagatesInsteadOfReportingLostAnswers(@TempDir final Path prepDir) {
+        final Path gone = prepDir.resolve("Sorted/gone.jpg");
+        moveLedger().recordSkip(prepDir, gone, "deleted it myself");
+        final var locked = new LockedChoices();
+        final var ledger = new MoveLedger(locked, new DisasterDrawer(locked));
+
+        assertThatThrownBy(() -> ledger.read(prepDir))
+                .isInstanceOf(UncheckedIOException.class)
+                .cause().isInstanceOf(AccessDeniedException.class);
+        // The answers were never damaged, so they are still exactly where the user left them.
+        assertThat(Files.exists(prepDir.resolve(CHOICES))).isTrue();
+    }
+
+    // The same distinction on the write side. An answer must not file an intact file away just
+    // because a scanner held it open for the length of one read.
+    @Test
+    void aFreshChoiceDoesNotFileAwayAChoicesFileThatMerelyFailedToOpen(@TempDir final Path prepDir) {
+        final Path gone = prepDir.resolve("Sorted/gone.jpg");
+        moveLedger().recordSkip(prepDir, gone, "deleted it myself");
+        final var locked = new LockedChoices();
+        final var ledger = new MoveLedger(locked, new DisasterDrawer(locked));
+
+        assertThatThrownBy(() -> ledger.recordSkip(prepDir, prepDir.resolve("Sorted/other.jpg"), "this one too"))
+                .isInstanceOf(UncheckedIOException.class);
+        assertThat(Files.exists(prepDir.resolve("disasters"))).isFalse();
+        assertThat(moveLedger().read(prepDir).skipped()).containsExactly(gone);
+    }
+
+    // Appending to a file nothing can parse would leave the fresh answer as lost as the ones
+    // already in it. The finding it settles would then raise again forever.
+    @Test
+    void aFreshChoiceFilesAnUndecodableChoicesFileAwayAndLandsInAReadableOne(@TempDir final Path prepDir)
+            throws IOException {
+        final Path gone = prepDir.resolve("Sorted/gone.jpg");
+        final MoveLedger ledger = moveLedger();
+        writeUndecodable(prepDir.resolve(CHOICES));
+
+        ledger.recordSkip(prepDir, gone, "deleted it myself");
+
+        final Ledger snapshot = ledger.read(prepDir);
+        assertThat(snapshot.choicesUndecodable()).isFalse();
+        assertThat(snapshot.skipped()).containsExactly(gone);
+        try (final var filed = Files.list(prepDir.resolve("disasters"))) {
+            final List<Path> entries = filed.toList();
+            assertThat(entries).singleElement(as(PATH))
+                    .asString().contains("choices-log");
+            // Filed for forensics, so the damaged bytes have to arrive intact rather than repaired.
+            assertThat(Files.readAllBytes(entries.getFirst()))
+                    .containsExactly((byte) 0xFF, (byte) 0xFE, (byte) 0xFF);
+        }
+    }
+
     private static MoveLedger moveLedger() {
-        return new MoveLedger(new NioMediaStore());
+        final var mediaStore = new NioMediaStore();
+        return new MoveLedger(mediaStore, new DisasterDrawer(mediaStore));
     }
 
     private static List<List<String>> fieldsOf(final Path prepDir, final String fileName) throws IOException {
@@ -204,5 +305,21 @@ class MoveLedgerTest {
 
     private static void appendRaw(final Path file, final String line) throws IOException {
         Files.writeString(file, line + System.lineSeparator(), StandardOpenOption.APPEND);
+    }
+
+    // A choices file whose bytes are perfectly fine but whose read fails anyway. Windows makes this
+    // easiest to picture, since its locking is mandatory and a backup or antivirus handle alone is
+    // enough. A permission denial, a dropped network mount or an unhydrated cloud placeholder does
+    // the same anywhere. Only readLines is intercepted, so a filing that did happen would still
+    // land on disk for the test to catch.
+    private static final class LockedChoices extends NioMediaStore {
+
+        @Override
+        public List<String> readLines(final Path file) {
+            if (CHOICES.equals(file.getFileName().toString())) {
+                throw new UncheckedIOException(new AccessDeniedException(file.toString()));
+            }
+            return super.readLines(file);
+        }
     }
 }

@@ -1,5 +1,7 @@
 package photos.sluice.application.port.out;
 
+import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -52,6 +54,12 @@ public interface MediaReader {
      * Every line of file, in order, or empty if file does not exist. This is the read-side
      * counterpart to {@link MediaStore#appendLine}, for resuming from a crash-safety log written
      * one line per completed step.
+     *
+     * <p>Text is UTF-8. A file whose bytes are not valid UTF-8 must throw an
+     * {@link UncheckedIOException} caused by a {@link CharacterCodingException}, never silently
+     * substitute replacement characters. That exact cause is what separates damaged content from
+     * every other I/O failure. A caller may degrade around damaged content. A locked or
+     * permission-denied file must stay loud rather than read as an empty log.
      *
      * @param file {@link Path} the file to read
      * @return a {@link List} of {@link String}, every line in the file, or empty if the file does not exist

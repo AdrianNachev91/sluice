@@ -19,7 +19,34 @@ records that somebody chose to give up on a missing file, so a lost choice can o
 
 Keeping the two apart gives each kind of evidence its own file to be reasoned about by name. A
 rule about re-deriving from disk can then say which file it means, rather than which subset of one
-file's lines.
+file's lines. That is what the split buys: a reconcile files the whole move-record file away and
+rebuilds it, and `choices.log` is simply not in its scope. The answers survive by construction.
+
+## When a file's bytes do not decode
+
+Either file may be present and undecodable. A torn write or a damaged sector leaves that behind. So
+does a user opening the file and saving it back in another encoding. A UTF-16 save even starts with
+the same bytes a corrupt one does, and neither is readable as what this app writes. That is a
+different failure from the malformed line below, and it is not fatal to reading the other file. `read()` gives back no entries for the damaged side and carries on. A damaged
+ledger is the exact state the recovery flow exists to diagnose, so it has to reach a diagnosis
+rather than abort it.
+
+**Only a decode failure degrades this way.** Every other I/O failure propagates. A file locked by
+a backup or antivirus scanner, or one a permission check refuses, still holds every entry it ever
+did. Reading that as an empty log would file intact answers away and report them lost, so it fails
+the run loudly instead. `MediaReader.readLines`'s own contract is what makes the two
+distinguishable: a decode failure must arrive as an `UncheckedIOException` caused by a
+`CharacterCodingException`.
+
+Only the choices side is reported, as the snapshot's `choicesUndecodable`. An undecodable
+move-record file needs no flag. Every move it held reports as unproven, which is already how a
+missing record reads, and a reconcile rebuilds them all from disk. Testimony has no second source,
+so a caller has to be able to say the answers are gone. `ReconcileEngine` is that caller: it files
+the damaged file into the drawer and discloses the loss in its report.
+
+Appending a fresh answer files an undecodable choices file away first. Otherwise the new answer
+would land in a file nothing can parse, and the finding it settles would raise again on the next
+read. The original is kept for forensics rather than deleted. Its own answers are gone either way.
 
 ## Delimiter
 
@@ -29,11 +56,12 @@ apart with zero escaping, even when a path itself contains spaces or commas.
 
 ## The four dispositions
 
-`read()` parses both files in one pass into a single `Ledger` snapshot: the move-record file's own
-path, plus four accumulators - `moves`, `skipped`, `overlaps`, and `corruptSidecars`. Either file
-may be absent, which reads as an empty contribution rather than an error. A witnessed move and a
-reconstructed move share the same `moves` map. Provenance is not kept as a separate field once
-parsed, so both are trusted identically by a reading caller.
+`read()` parses both files in one pass into a single `Ledger` snapshot. It carries the move-record
+file's own path, four accumulators - `moves`, `skipped`, `overlaps`, and `corruptSidecars` - and
+the `choicesUndecodable` flag above. Either file may be absent, which reads as an empty contribution
+rather than an error. A witnessed move and a reconstructed move share the same `moves` map.
+Provenance is not kept as a separate field once parsed, so both are trusted identically by a
+reading caller.
 
 Each file has its own parser, recognizing only its own file's shapes. In `move-records.log` the
 field count separates the two move shapes. In `choices.log` the marker in the second field names
@@ -74,9 +102,10 @@ resulting `Ledger` is a plain parameter, passed to every collaborator that reads
 caches it. A `Ledger`'s four maps are copied on return, so sharing one snapshot across several
 read-only consumers cannot let one of them mutate what another sees.
 
-`reconcile()` takes its snapshot before filing either file into the disaster drawer. Everything it
-resolves against the ledger must see the same state that filing is about to replace. See
-`reconcile-engine.md`.
+`reconcile()` takes its snapshot before either of its own filings. `validate()` and
+`resolvedUnreviewable()` both consume that snapshot, and the sweep reads its skips. A snapshot
+taken later would also read a filed-away choices file as merely absent, so the loss it is meant to
+disclose would go unreported. See `reconcile-engine.md`.
 
 `ApplyPlanner` itself holds no ledger reference at all - see `apply-planner.md`. `PrepDirDoctor`
 holds only the read-only `LedgerReader` view, never the append-capable `MoveLedger` - see

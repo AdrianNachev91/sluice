@@ -5,6 +5,7 @@ import photos.sluice.application.port.out.MediaStore;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -206,6 +207,11 @@ public class NioMediaStore implements MediaStore {
 
     /**
      * Reads all lines from a file, or an empty list if it does not exist.
+     *
+     * <p>The explicit UTF-8 charset is what holds the port's decode contract. A strict decoder
+     * reports undecodable bytes rather than substituting replacement characters, so damaged
+     * content arrives as a {@link CharacterCodingException} cause instead of passing for a
+     * successful read.
      *
      * @param file {@link Path} file to read
      * @return a {@link List} of {@link String}, the file's lines, or an empty list if the file is

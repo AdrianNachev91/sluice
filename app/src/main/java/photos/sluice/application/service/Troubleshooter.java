@@ -26,8 +26,8 @@ import java.util.List;
  * {@link Finding.MissingSource} finding is currently the only signal available that the move-record
  * log itself might be lost or unreadable. {@link PrepDirDoctor} only ever reports one once the shard
  * contract is already clean. {@link ReconcileEngine#reconcile} is exactly the offline repair for
- * that situation. Reconcile never runs unprompted otherwise: it files any existing log away
- * wholesale, which would needlessly demote an already-trustworthy log's witnessed provenance to
+ * that situation. Reconcile never runs unprompted otherwise: it files the whole move-record file
+ * away, which would needlessly demote an already-trustworthy log's witnessed provenance to
  * reconstructed for no benefit. A {@link Finding.StrayShard} finding gets
  * {@link PrepDirRemedies#autoRepairStrayShard} attempted for it, unprompted. That repair is provably
  * safe when it runs at all - it either renames the one unambiguous match or does nothing.
@@ -149,7 +149,12 @@ public class Troubleshooter {
             lines.add("Reconcile: not run - no finding suggested the move log needed rebuilding");
         } else {
             lines.add("Reconcile: " + reconcile.reconstructed() + " reconstructed, " + reconcile.stillPending()
-                    + " still pending, " + reconcile.missingSource().size() + " still missing");
+                    + " still pending, " + reconcile.skipped() + " already answered as skipped, "
+                    + reconcile.missingSource().size() + " still missing");
+            if (reconcile.choicesLost()) {
+                lines.add("  - choices.log could not be decoded, and was filed into this drawer. Every answer it "
+                        + "held is lost. The findings those answers settled will be raised again.");
+            }
         }
         if (strayShardsRepaired.isEmpty()) {
             lines.add("Stray shards: none auto-repaired");

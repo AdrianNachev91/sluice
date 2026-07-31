@@ -19,17 +19,22 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Rebuilds a prep directory's move ledger from disk state alone. It exists for when the ledger
- * itself cannot be trusted, whether lost, unreadable, or found with this run's shards intact.
+ * itself cannot be trusted, whether lost, undecodable, or found with this run's shards intact.
  *
- * <p>Both of the ledger's files are filed into the prep dir's disaster drawer wholesale, never
- * salvaged line by line. The move records are then rebuilt from scratch, purely from what disk
- * state can prove. Every already-validated decision and unreviewable file is checked against the
- * exact destination applying it would have produced, recording the hash of whatever is found
- * there. The user's recorded choices have no disk counterpart to rebuild them from, so nothing
- * replaces the choices file this filing removes.
+ * <p>The move-record file is filed into the prep dir's disaster drawer wholesale, never salvaged
+ * line by line. The records are then rebuilt from scratch, purely from what disk state can prove.
+ * Every already-validated decision and unreviewable file is checked against the exact destination
+ * applying it would have produced, recording the hash of whatever is found there.
+ *
+ * <p>The choices file is left exactly where it is. Rebuilding from disk is only honest for
+ * evidence disk can carry, and an answer somebody gave is not that. So a user's answers survive a
+ * reconcile untouched, and a file they had already given up on is reported skipped rather than
+ * swept again. The one exception is a choices file whose bytes do not decode. Its answers are
+ * already gone, so it is filed away too and the report says so.
  *
  * <p>This is a name-and-location match, not a proof of identity. The original file's own hash lived
  * only in the ledger being replaced, so there is nothing left to verify a located file against.
@@ -78,8 +83,10 @@ public class ReconcileEngine {
      * reconstructed, still pending, or genuinely missing.
      *
      * <p>A file already sitting untouched needs no record at all - a still-present source is pending
-     * regardless of the ledger. NearDupChosen never gets a rebuilt record: it is a copy, so a
-     * missing source can only mean the photo itself is gone, never an unconfirmed move.
+     * regardless of the ledger. A file the user has already given up on is reported skipped, never
+     * missing: an answer is terminal, and a rebuild is not allowed to un-ask it. NearDupChosen never
+     * gets a rebuilt record: it is a copy, so a missing source can only mean the photo itself is
+     * gone, never an unconfirmed move.
      *
      * @param prepDirPath {@link Path} the prep directory to reconcile
      * @return {@link ReconcileReport} what the sweep found
@@ -87,9 +94,10 @@ public class ReconcileEngine {
      */
     public ReconcileReport reconcile(final Path prepDirPath) throws ApplyException {
         final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
-        // Snapshot taken before the ledger gets filed away below - see Ledger's own Javadoc. Once
-        // filed, a read returns empty and an already-resolved overlap would wrongly revert to
-        // unresolved here.
+        // One snapshot for this whole reconcile, taken before either filing below - see Ledger's
+        // own Javadoc. validate() and resolvedUnreviewable() both consume it, and the sweep reads
+        // its skips. Taking it later would also read a filed-away choices file as simply absent,
+        // so the loss would never be disclosed.
         final Ledger ledger = this.moveLedger.read(prepDirPath);
         final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true),
                 ledger);
@@ -99,15 +107,18 @@ public class ReconcileEngine {
         final List<Path> unreviewableFiles = this.applyPlanner.resolvedUnreviewable(prepDir, ledger);
 
         final Path moveRecordLog = ledger.moveRecordLog();
-        this.fileAway(prepDirPath, moveRecordLog, "move-records-log");
-        this.fileAway(prepDirPath, this.moveLedger.choicesLogFor(prepDirPath), "choices-log");
+        this.fileAway(prepDirPath, moveRecordLog, MoveLedger.MOVE_RECORD_DRAWER_LABEL);
+        if (ledger.choicesUndecodable()) {
+            this.fileAway(prepDirPath, this.moveLedger.choicesLogFor(prepDirPath), MoveLedger.CHOICES_DRAWER_LABEL);
+        }
 
-        final var sweep = new ReconcileSweep(prepDirPath, moveRecordLog);
+        final var sweep = new ReconcileSweep(prepDirPath, moveRecordLog, ledger.skipped());
         validation.decisions().forEach(decision -> this.reconcileDecision(decision, sweep));
         unreviewableFiles.forEach(file -> this.reconcileFile(file, this.cullDestinations.unreviewableDir(file), sweep));
         this.resolvePendingMoves(sweep);
 
-        return new ReconcileReport(sweep.reconstructed, sweep.stillPending, sweep.missingSource);
+        return new ReconcileReport(sweep.reconstructed, sweep.stillPending, sweep.skipped, sweep.missingSource,
+                ledger.choicesUndecodable());
     }
 
     /**
@@ -129,7 +140,8 @@ public class ReconcileEngine {
      * One decision's step in the sweep. A NearDupChosen decision is checked for existence right
      * here, since it is a copy. A missing source is always missing-source for it, never a pending
      * move. Classifying never has a move-record path for it either, and this must not pretend
-     * otherwise. Every other decision defers its own existence check to reconcileFile().
+     * otherwise. An answered skip still settles it first, exactly as it does for every other kind.
+     * Every other decision defers both checks to reconcileFile().
      *
      * @param decision {@link Decision} the decision to reconcile
      * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
@@ -138,6 +150,8 @@ public class ReconcileEngine {
         if (decision instanceof NearDupChosen) {
             if (this.mediaStore.exists(decision.file())) {
                 sweep.stillPending++;
+            } else if (sweep.skippedByUser.contains(decision.file())) {
+                sweep.skipped++;
             } else {
                 sweep.missingSource.add(new Finding.MissingSource(decision.file(), sweep.moveRecordLog));
             }
@@ -148,8 +162,13 @@ public class ReconcileEngine {
 
     /**
      * The core per-file step, shared by a move-based decision and an unreviewable file alike. A file
-     * still at its original location needs no record. Otherwise it is queued as a pending move, and
+     * still at its original location needs no record. A missing file the user already answered for
+     * is settled and stays settled. A rebuild reports that skip rather than re-deriving a
+     * destination nothing was ever headed to. Otherwise it is queued as a pending move, and
      * resolvePendingMoves() decides later whether its destination can be identified unambiguously.
+     *
+     * <p>Existence is checked before the answer, matching how applying itself classifies. A file
+     * the user gave up on and then put back simply becomes pending again.
      *
      * @param file {@link Path} the source file to reconcile
      * @param destDir {@link Path} the directory a real apply would have moved file into
@@ -158,6 +177,10 @@ public class ReconcileEngine {
     private void reconcileFile(final Path file, final Path destDir, final ReconcileSweep sweep) {
         if (this.mediaStore.exists(file)) {
             sweep.stillPending++;
+            return;
+        }
+        if (sweep.skippedByUser.contains(file)) {
+            sweep.skipped++;
             return;
         }
         sweep.pendingMoves.add(new PendingMove(file, destDir));
@@ -248,21 +271,26 @@ public class ReconcileEngine {
 
     /**
      * The sweep's accumulating outcome as it walks every decision and unreviewable file in turn.
-     * prepDirPath and moveRecordLog are carried here rather than threaded through every call. One
-     * lets a freshly reconstructed record be appended. The other lets a MissingSource finding name
-     * the ledger it failed to find its proof in.
+     * prepDirPath, moveRecordLog and skippedByUser are carried here rather than threaded through
+     * every call. The first lets a freshly reconstructed record be appended. The second lets a
+     * MissingSource finding name the ledger it failed to find its proof in. The third is the
+     * snapshot's own skip set, which every per-file step consults before reporting anything
+     * missing.
      */
     private static final class ReconcileSweep {
         final List<PendingMove> pendingMoves = new ArrayList<>();
         final List<Finding.MissingSource> missingSource = new ArrayList<>();
         final Path prepDirPath;
         final Path moveRecordLog;
+        final Set<Path> skippedByUser;
         int reconstructed;
         int stillPending;
+        int skipped;
 
-        ReconcileSweep(final Path prepDirPath, final Path moveRecordLog) {
+        ReconcileSweep(final Path prepDirPath, final Path moveRecordLog, final Set<Path> skippedByUser) {
             this.prepDirPath = prepDirPath;
             this.moveRecordLog = moveRecordLog;
+            this.skippedByUser = skippedByUser;
         }
     }
 }

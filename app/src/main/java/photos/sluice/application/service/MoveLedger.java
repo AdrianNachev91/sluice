@@ -5,11 +5,15 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.OverlapResolution;
 
+import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -33,6 +37,11 @@ import java.util.Set;
  * <p>A caller reads once per run via {@link #read} and threads the resulting {@link Ledger}
  * through every consumer that needs it. One snapshot covers both files. That snapshot is what
  * {@link LedgerReader} exposes to a read-only collaborator; only this class can also append to it.
+ *
+ * <p>Neither file's own damage is fatal to reading the other. A file whose bytes do not decode
+ * reads as no entries rather than throwing. A damaged ledger is the exact state the recovery flow
+ * exists to diagnose, so it has to be reportable. Only the choices side carries that failure on
+ * the snapshot, because only its loss is permanent.
  *
  * <p>Format reference: {@code app/docs/design/application/service/move-ledger.md}.
  */
@@ -60,15 +69,23 @@ public class MoveLedger implements LedgerReader {
     // ambiguity even when a path itself contains spaces, commas, or tabs.
     static final String RECORD_DELIMITER = "\u001F";
 
+    // What a filed-away copy of each file is called in a disaster drawer. Named here rather than at
+    // the filing site, so the class owning the file names owns its drawer name too.
+    static final String MOVE_RECORD_DRAWER_LABEL = "move-records-log";
+    static final String CHOICES_DRAWER_LABEL = "choices-log";
+
     private final MediaStore mediaStore;
+    private final DisasterDrawer disasterDrawer;
 
     /**
      * Creates a ledger reading and appending through the given store.
      *
      * @param mediaStore {@link MediaStore} reads and appends both ledger files
+     * @param disasterDrawer {@link DisasterDrawer} files an undecodable choices file away before a fresh answer
      */
-    public MoveLedger(final MediaStore mediaStore) {
+    public MoveLedger(final MediaStore mediaStore, final DisasterDrawer disasterDrawer) {
         this.mediaStore = mediaStore;
+        this.disasterDrawer = disasterDrawer;
     }
 
     /**
@@ -106,12 +123,60 @@ public class MoveLedger implements LedgerReader {
         final var skipped = new HashSet<Path>();
         final var overlaps = new HashMap<Path, OverlapResolution>();
         final var corruptSidecars = new HashMap<String, CorruptSidecarResolution>();
-        this.mediaStore.readLines(this.moveRecordLogFor(prepDirPath))
+        this.linesOf(this.moveRecordLogFor(prepDirPath)).orElse(List.of())
                 .forEach(line -> parseMoveRecord(line, moves));
-        this.mediaStore.readLines(this.choicesLogFor(prepDirPath))
+        final Optional<List<String>> choiceLines = this.linesOf(this.choicesLogFor(prepDirPath));
+        choiceLines.orElse(List.of())
                 .forEach(line -> parseChoice(line, skipped, overlaps, corruptSidecars));
         return new Ledger(this.moveRecordLogFor(prepDirPath), Map.copyOf(moves), Set.copyOf(skipped),
-                Map.copyOf(overlaps), Map.copyOf(corruptSidecars));
+                Map.copyOf(overlaps), Map.copyOf(corruptSidecars), choiceLines.isEmpty());
+    }
+
+    /**
+     * One ledger file's lines, or nothing at all when its bytes are not decodable text. A missing
+     * file is not a failure - either file may legitimately never have been written - so it reads
+     * back as no lines.
+     *
+     * <p>Only a decode failure degrades. A damaged ledger is the exact state the recovery flow
+     * exists to diagnose, so undecodable bytes have to reach a diagnosis rather than abort it.
+     * Every other I/O failure propagates untouched. A file held open by a backup or antivirus
+     * scanner still holds every entry it ever did. Treating that as lost testimony would file away
+     * answers nothing ever damaged, so the transient case fails the run loudly instead.
+     *
+     * <p>This has no side effects, which is what keeps a diagnosis side-effect-free.
+     *
+     * @param file {@link Path} the ledger file to read
+     * @return an {@link Optional} {@link List} of {@link String}, the file's lines, empty if its bytes do not decode
+     */
+    private Optional<List<String>> linesOf(final Path file) {
+        try {
+            return Optional.of(this.mediaStore.readLines(file));
+        } catch (final UncheckedIOException e) {
+            if (e.getCause() instanceof CharacterCodingException) {
+                return Optional.empty();
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Appends one line to the choices file, filing an undecodable one into the disaster drawer
+     * first. Without that, a fresh answer would land in a file nothing can parse. The finding the
+     * user just answered would then raise again on the very next read. The damaged original is
+     * kept for forensics rather than deleted. Its own answers are gone either way.
+     *
+     * <p>A file that has never been written reads back as no lines, not as a failure, so nothing is
+     * filed for it either.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose choices file receives the line
+     * @param line {@link String} the already-formatted entry to append
+     */
+    private void appendChoice(final Path prepDirPath, final String line) {
+        final Path choicesLog = this.choicesLogFor(prepDirPath);
+        if (this.linesOf(choicesLog).isEmpty()) {
+            this.disasterDrawer.file(prepDirPath, choicesLog, CHOICES_DRAWER_LABEL);
+        }
+        this.mediaStore.appendLine(choicesLog, line);
     }
 
     /**
@@ -149,7 +214,7 @@ public class MoveLedger implements LedgerReader {
      * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
      */
     void recordSkip(final Path prepDirPath, final Path source, final String reason) {
-        this.mediaStore.appendLine(this.choicesLogFor(prepDirPath), source + RECORD_DELIMITER + SKIPPED_MARKER
+        this.appendChoice(prepDirPath, source + RECORD_DELIMITER + SKIPPED_MARKER
                 + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
 
@@ -163,7 +228,7 @@ public class MoveLedger implements LedgerReader {
      */
     void recordOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution,
                        final String reason) {
-        this.mediaStore.appendLine(this.choicesLogFor(prepDirPath), file + RECORD_DELIMITER + OVERLAP_MARKER
+        this.appendChoice(prepDirPath, file + RECORD_DELIMITER + OVERLAP_MARKER
                 + RECORD_DELIMITER + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
 
@@ -178,7 +243,7 @@ public class MoveLedger implements LedgerReader {
      */
     void recordCorruptSidecar(final Path prepDirPath, final String montage, final CorruptSidecarResolution resolution
             , final String reason) {
-        this.mediaStore.appendLine(this.choicesLogFor(prepDirPath), montage + RECORD_DELIMITER
+        this.appendChoice(prepDirPath, montage + RECORD_DELIMITER
                 + CORRUPT_SIDECAR_MARKER + RECORD_DELIMITER + resolution + RECORD_DELIMITER + Instant.now()
                 + RECORD_DELIMITER + reason);
     }
@@ -243,10 +308,15 @@ public class MoveLedger implements LedgerReader {
      * as the place a move's proof should have been.
      *
      * <p>The disk state this reflects can change: a CHOICE remedy appends, and
-     * {@code ReconcileEngine} files both files away before rebuilding the move records. So a
-     * snapshot is only valid for the run that took it. Never cache one across a service's separate
-     * public calls. And take it first, before any write that same run might make - never after a
-     * remedy or a reconcile the run itself performs.
+     * {@code ReconcileEngine} files the move-record file away before rebuilding it. So a snapshot
+     * is only valid for the run that took it. Never cache one across a service's separate public
+     * calls. And take it first, before any write that same run might make - never after a remedy
+     * or a reconcile the run itself performs.
+     *
+     * <p>choicesUndecodable is the one failure this snapshot carries. An undecodable move-record
+     * file needs no flag: every move it held reports as an unproven one, which is already how a
+     * missing record reads, and a reconcile rebuilds them all from disk. Damaged testimony has
+     * no such second source, so a caller has to be able to say so.
      *
      * @param moveRecordLog {@link Path} the move-record file this snapshot's moves were read from
      * @param moves a {@link Map} of {@link Path} to {@link MoveRecord} every recorded move, keyed by source
@@ -254,8 +324,10 @@ public class MoveLedger implements LedgerReader {
      * @param overlaps a {@link Map} of {@link Path} to {@link OverlapResolution} every resolved overlap
      * @param corruptSidecars a {@link Map} of {@link String} to {@link CorruptSidecarResolution} every resolved
      * corrupt sidecar, keyed by montage id
+     * @param choicesUndecodable boolean whether the choices file exists but its bytes do not decode
      */
     public record Ledger(Path moveRecordLog, Map<Path, MoveRecord> moves, Set<Path> skipped,
-                         Map<Path, OverlapResolution> overlaps, Map<String, CorruptSidecarResolution> corruptSidecars) {
+                         Map<Path, OverlapResolution> overlaps, Map<String, CorruptSidecarResolution> corruptSidecars,
+                         boolean choicesUndecodable) {
     }
 }

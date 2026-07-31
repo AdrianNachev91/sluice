@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -218,6 +219,21 @@ class NioMediaStoreTest {
         final Path missing = root.resolve("applied.log");
 
         assertThat(this.store.readLines(missing)).isEmpty();
+    }
+
+    // A caller that degrades around damaged content keys off this exact cause to tell it apart from
+    // a file that is merely locked. So holding it is the adapter's job, not a side effect of how a
+    // line happens to get decoded. Substituting replacement characters instead would look like a
+    // successful read of a file whose real content is gone.
+    @Test
+    void readLinesOnBytesThatAreNotUtf8ThrowsWithADecodeFailureCause(@TempDir final Path root) throws IOException {
+        final Path file = root.resolve("choices.log");
+        // 0xFF and 0xFE are not legal UTF-8 lead bytes.
+        Files.write(file, new byte[]{(byte) 0xFF, (byte) 0xFE, (byte) 0xFF});
+
+        assertThatThrownBy(() -> this.store.readLines(file))
+                .isInstanceOf(UncheckedIOException.class)
+                .cause().isInstanceOf(CharacterCodingException.class);
     }
 
     @Test

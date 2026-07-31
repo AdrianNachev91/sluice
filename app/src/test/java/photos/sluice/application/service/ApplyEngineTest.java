@@ -36,6 +36,7 @@ import static photos.sluice.application.service.CullPrepTestSupport.writeIndex;
 import static photos.sluice.application.service.CullPrepTestSupport.writeMoveRecord;
 import static photos.sluice.application.service.CullPrepTestSupport.writeShard;
 import static photos.sluice.application.service.CullPrepTestSupport.writeSidecar;
+import static photos.sluice.application.service.CullPrepTestSupport.writeUndecodable;
 
 // Carrying decisions out against a real filesystem. It covers the moves, copies and secondary
 // writes each decision type produces, resuming a crashed run, cancellation, and the finalizers that
@@ -59,6 +60,42 @@ class ApplyEngineTest {
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
         assertThat(Files.readString(root.resolve("Review/junk/_reasons.txt")))
                 .contains("IMG_1.jpg - phone photo of a monitor");
+    }
+
+    // The safety property behind the ledger's tolerance of a damaged file. Reading a ruined
+    // move-record log as no records must cost proof, never permission. The decision it could have
+    // proven becomes unresolvable, so the run refuses rather than moving anything.
+    @Test
+    void anUndecodableMoveRecordLogBlocksTheNextApplyInsteadOfLettingItActAgain(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path first = root.resolve("Sorted/Photos/2019/06/IMG_1.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/06/IMG_2.jpg");
+        // Culled in the same batch, then put back in Sorted afterwards. It is the one source still
+        // on disk for the second run, so it is the only thing a wrongly-permissive run could move.
+        final Path still = root.resolve("Sorted/Photos/2019/06/IMG_3.jpg");
+        writeFile(first, "junk");
+        writeFile(second, "also junk");
+        writeFile(still, "blurry too");
+        writeIndex(prepDir, 3, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second), sidecarEntry(still));
+        writeShard(prepDir, "montage-001",
+                classificationJson(first, "junk", "blurry"),
+                classificationJson(second, "junk", "also blurry"),
+                classificationJson(still, "junk", "blurry too"));
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+        writeFile(still, "blurry too"); // put back in Sorted after that run carried it out
+        writeUndecodable(prepDir.resolve("move-records.log"));
+
+        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(ApplyException.class)
+                .hasMessageContaining("IMG_1.jpg");
+
+        // still is what makes "nothing applied" falsifiable. A run that shrugged off the
+        // unresolvable pair and carried on would have moved it out of Sorted.
+        assertThat(Files.exists(still)).isTrue();
+        assertThat(Files.exists(root.resolve("Review/junk/IMG_3.jpg"))).isFalse();
     }
 
     @Test

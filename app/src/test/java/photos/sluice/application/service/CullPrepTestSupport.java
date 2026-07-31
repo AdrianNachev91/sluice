@@ -110,6 +110,13 @@ final class CullPrepTestSupport {
         Files.writeString(file, content);
     }
 
+    // What a torn write or a damaged sector leaves behind, as opposed to a merely malformed line.
+    // 0xFF and 0xFE are not legal UTF-8 lead bytes, so decoding fails outright rather than yielding
+    // a line anything could try to parse.
+    static void writeUndecodable(final Path file) throws IOException {
+        Files.write(file, new byte[]{(byte) 0xFF, (byte) 0xFE, (byte) 0xFF});
+    }
+
     static PathsConfig pathsConfig(final Path repoRoot, final Path libraryRoot) {
         return new PathsConfig(
                 new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
@@ -134,8 +141,12 @@ final class CullPrepTestSupport {
     static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
                                    final MediaStore mediaStore) {
         return new ApplyEngine(mediaStore, new JsonCullPrepStore(), new Sha256Hasher(), hashIndex,
-                new CullDestinations(pathsConfig(repoRoot, libraryRoot)), new MoveLedger(mediaStore),
+                new CullDestinations(pathsConfig(repoRoot, libraryRoot)), moveLedger(mediaStore),
                 applyPlanner(mediaStore));
+    }
+
+    static MoveLedger moveLedger(final MediaStore mediaStore) {
+        return new MoveLedger(mediaStore, new DisasterDrawer(mediaStore));
     }
 
     static ApplyPlanner applyPlanner() {
@@ -150,26 +161,26 @@ final class CullPrepTestSupport {
     // planner directly reads the real (usually empty) on-disk state the same way a production
     // caller would, rather than fabricating a Ledger by hand.
     static MoveLedger.Ledger readLedger(final Path prepDir) {
-        return new MoveLedger(new NioMediaStore()).read(prepDir);
+        return moveLedger(new NioMediaStore()).read(prepDir);
     }
 
     static ReconcileEngine reconcileEngine(final Path repoRoot, final Path libraryRoot) {
         final var mediaStore = new NioMediaStore();
         return new ReconcileEngine(mediaStore, new JsonCullPrepStore(), new Sha256Hasher(),
                 new DisasterDrawer(mediaStore), new CullDestinations(pathsConfig(repoRoot, libraryRoot)),
-                new MoveLedger(mediaStore), applyPlanner(mediaStore));
+                moveLedger(mediaStore), applyPlanner(mediaStore));
     }
 
     static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot) {
         final var mediaStore = new NioMediaStore();
         return new PrepDirRemedies(mediaStore, new JsonCullPrepStore(), pathsConfig(repoRoot, libraryRoot),
-                new DisasterDrawer(mediaStore), new MoveLedger(mediaStore));
+                new DisasterDrawer(mediaStore), moveLedger(mediaStore));
     }
 
     static PrepDirDoctor prepDirDoctor() {
         final var mediaStore = new NioMediaStore();
         return new PrepDirDoctor(new JsonCullPrepStore(), mediaStore, fixedSettings(), applyPlanner(),
-                new MoveLedger(mediaStore));
+                moveLedger(mediaStore));
     }
 
     static Troubleshooter troubleshooter(final Path repoRoot, final Path libraryRoot) {
