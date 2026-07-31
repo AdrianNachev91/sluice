@@ -154,11 +154,26 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     static @Nullable Dimensions subIfdDimensions(final ExifSubIFDDirectory directory) {
         Integer width = directory.getInteger(ExifSubIFDDirectory.TAG_EXIF_IMAGE_WIDTH);
         Integer height = directory.getInteger(ExifSubIFDDirectory.TAG_EXIF_IMAGE_HEIGHT);
-        if (width == null || height == null) {
+        if (!usable(width, height)) {
             width = directory.getInteger(ExifSubIFDDirectory.TAG_IMAGE_WIDTH);
             height = directory.getInteger(ExifSubIFDDirectory.TAG_IMAGE_HEIGHT);
         }
-        return width == null || height == null ? null : new Dimensions(width, height);
+        return usable(width, height) ? new Dimensions(width, height) : null;
+    }
+
+    /**
+     * A tag that is present but zero is as good as absent, and has to be rejected the same way. Real
+     * phone exports carry zeroed pixel-dimension tags. Treating a zero as a real answer reports a
+     * dimension of 0, which reads as the smallest possible image rather than as no answer at all.
+     * That skips the decode fallback that finds the true size. It also makes a full-resolution photo
+     * look low-resolution to every caller downstream.
+     *
+     * @param width {@link Integer} the width tag's value, or null if the tag is absent
+     * @param height {@link Integer} the height tag's value, or null if the tag is absent
+     * @return boolean true if both are present and positive
+     */
+    private static boolean usable(final @Nullable Integer width, final @Nullable Integer height) {
+        return width != null && height != null && width > 0 && height > 0;
     }
 
     /**
@@ -173,7 +188,7 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     static @Nullable Dimensions heifDimensions(final HeifDirectory directory) {
         final Integer width = directory.getInteger(HeifDirectory.TAG_IMAGE_WIDTH);
         final Integer height = directory.getInteger(HeifDirectory.TAG_IMAGE_HEIGHT);
-        return width == null || height == null ? null : new Dimensions(width, height);
+        return usable(width, height) ? new Dimensions(width, height) : null;
     }
 
     /**
@@ -217,8 +232,12 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
         Dimensions largest = null;
         final int numImages = reader.getNumImages(true);
         for (int i = 0; i < numImages; i++) {
-            final var candidate = new Dimensions(reader.getWidth(i), reader.getHeight(i));
-            if (largest == null || maxDimension(candidate) > maxDimension(largest)) {
+            // Same rejection as the metadata path. A reader reporting zero has no answer either,
+            // and nothing sits behind this one to recover from a zero treated as real.
+            final int width = reader.getWidth(i);
+            final int height = reader.getHeight(i);
+            final Dimensions candidate = usable(width, height) ? new Dimensions(width, height) : null;
+            if (candidate != null && (largest == null || maxDimension(candidate) > maxDimension(largest))) {
                 largest = candidate;
             }
         }

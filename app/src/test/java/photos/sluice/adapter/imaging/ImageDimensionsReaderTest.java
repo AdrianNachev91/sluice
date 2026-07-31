@@ -165,6 +165,33 @@ class ImageDimensionsReaderTest {
     }
 
     @Test
+    void subIfdDimensionsFallsBackToTheGenericTagPairWhenTheExifSpecificOneIsZeroed() {
+        // Real phone exports carry the Exif-specific pair present but zeroed. A zero is not an
+        // answer, so it has to fall through the same way an absent tag does.
+        final var directory = new ExifSubIFDDirectory();
+        directory.setInt(ExifSubIFDDirectory.TAG_EXIF_IMAGE_WIDTH, 0);
+        directory.setInt(ExifSubIFDDirectory.TAG_EXIF_IMAGE_HEIGHT, 0);
+        directory.setInt(ExifSubIFDDirectory.TAG_IMAGE_WIDTH, 3456);
+        directory.setInt(ExifSubIFDDirectory.TAG_IMAGE_HEIGHT, 4608);
+
+        assertThat(ImageDimensionsReader.subIfdDimensions(directory)).isEqualTo(new Dimensions(3456, 4608));
+    }
+
+    @Test
+    void subIfdDimensionsIsNullWhenEveryTagPairIsZeroed() {
+        // A shape that would misroute a full-resolution photo. Reporting Dimensions(0, 0) here
+        // reads as the smallest possible image rather than as no answer. It also suppresses the
+        // decode fallback that finds the real size.
+        final var directory = new ExifSubIFDDirectory();
+        directory.setInt(ExifSubIFDDirectory.TAG_EXIF_IMAGE_WIDTH, 0);
+        directory.setInt(ExifSubIFDDirectory.TAG_EXIF_IMAGE_HEIGHT, 0);
+        directory.setInt(ExifSubIFDDirectory.TAG_IMAGE_WIDTH, 0);
+        directory.setInt(ExifSubIFDDirectory.TAG_IMAGE_HEIGHT, 0);
+
+        assertThat(ImageDimensionsReader.subIfdDimensions(directory)).isNull();
+    }
+
+    @Test
     void heifDimensionsReadsTheWidthAndHeightTags() {
         final var directory = new HeifDirectory();
         directory.setInt(HeifDirectory.TAG_IMAGE_WIDTH, 1600);
