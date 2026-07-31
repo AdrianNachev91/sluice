@@ -85,18 +85,19 @@ flowchart TD
 `funny` is the one category with a fixed destination, kept, not set aside for review, so it gets
 no reason note. Every other category, junk included, routes generically to `Review/<category>/`;
 there is no per-category destination configuration yet. The `<yyyy-MM>` folder segment comes from
-the decision file's own `.../<yyyy>/<MM>/` parent directories, not a resolved date - this app's
-Sorted layout guarantees that structure. A near-dup group's chosen note is built from every
-decision the group ever had, including ones a prior, crashed run already carried out. A resumed
-run's note still lists every reject.
+the group's CHOSEN file's own `.../<yyyy>/<MM>/` parent directories, not a resolved date - this
+app's Sorted layout guarantees that structure. Every member of a near-dup group shares that one
+folder, chosen and rejects alike, even when a reject sits in a different Sorted month than its
+keeper. A near-dup group's chosen note is built from every decision the group ever had, including
+ones a prior, crashed run already carried out. A resumed run's note still lists every reject.
 
 Every destination above is resolved by `CullDestinations`
 (`application/service/CullDestinations.java`), the one class that decides which folder a
-decision's file belongs in. `destinationDirFor()` covers a `Classification`/`NearDupReject`,
-`duplicatesDir()` a near-dup group's folder, `unreviewableDir()` an unreviewable file.
-`ReconcileEngine`'s offline sweep searches the very same directories, so agreement between the two
-is what keeps an already-moved file from looking permanently lost on reconcile. See
-`reconcile-engine.md`.
+decision's file belongs in. `destinationDirFor()` covers a `Classification`, `duplicatesDir()` a
+near-dup group's folder (given the group's chosen file as its anchor - see `nearDupAnchors()`),
+`unreviewableDir()` an unreviewable file. `ReconcileEngine`'s offline sweep searches the very same
+directories, so agreement between the two is what keeps an already-moved file from looking
+permanently lost on reconcile. See `reconcile-engine.md`.
 
 ### Why NearDupChosen still needs its own resume guard
 

@@ -148,6 +148,36 @@ class ApplyEngineTest {
                 .contains("Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
     }
 
+    // The group's own folder is derived from the CHOSEN file's month, not the reject's. Otherwise a
+    // reject sitting in a different Sorted month than its keeper would land in its own, separate
+    // Duplicates folder. It would then never see the chosen-filename note, which is only ever
+    // written once, in the chosen file's own folder.
+    @Test
+    void aNearDupGroupSpanningTwoSortedMonthsLandsInOneDuplicatesFolderWithTheNote(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path reject = root.resolve("Sorted/Photos/2019/07/b.jpg"); // a different Sorted month than chosen
+        writeFile(chosen, "sharp");
+        writeFile(reject, "blurry");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
+        writeShard(prepDir, "montage-001",
+                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
+                nearDupRejectJson(reject, "lake-jun19", "blurred"));
+
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
+        assertThat(Files.exists(dupDir.resolve("a.jpg"))).isTrue();
+        assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
+        assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
+                .contains("Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
+        // No second, July-derived folder was ever created for this group.
+        assertThat(Files.exists(root.resolve("Duplicates/2019-07_lake-jun19"))).isFalse();
+    }
+
     @Test
     void aMissingShardWithoutAllowPartialFailsLoudlyAndMovesNothing(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");

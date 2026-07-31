@@ -5,9 +5,11 @@ import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
-import photos.sluice.domain.cull.Decision.NearDupReject;
 
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Where a culled file ends up. One decision maps to exactly one destination directory, and this is
@@ -39,33 +41,51 @@ public class CullDestinations {
     }
 
     /**
-     * The destination directory a decision's file belongs in. Never called for
-     * {@link NearDupChosen}: that decision copies rather than moves, so a missing source has no
-     * destination worth searching in the first place.
+     * The destination directory a classification's file belongs in. A near-dup decision has no
+     * single-file destination of its own to resolve this way - see {@link #duplicatesDir} and its
+     * required anchor.
      *
-     * @param decision {@link Decision} the decision to resolve a destination directory for
+     * @param decision {@link Classification} the classification to resolve a destination directory for
      * @return {@link Path} the destination directory
      */
-    Path destinationDirFor(final Decision decision) {
-        return switch (decision) {
-            case final Classification c -> c.category().equals(FUNNY_CATEGORY)
-                    ? this.pathsPort.library().resolve("Funny")
-                    : this.pathsPort.review().resolve(c.category());
-            case final NearDupReject r -> this.duplicatesDir(r.file(), r.group());
-            case NearDupChosen _ -> throw new IllegalStateException(
-                    "NearDupChosen has no move destination - a chosen keeper is copied, never moved");
-        };
+    Path destinationDirFor(final Classification decision) {
+        return decision.category().equals(FUNNY_CATEGORY)
+                ? this.pathsPort.library().resolve("Funny")
+                : this.pathsPort.review().resolve(decision.category());
     }
 
     /**
-     * A near-dup group's own folder under Duplicates/.
+     * A near-dup group's own folder under Duplicates/, keyed by the group's chosen keeper alone -
+     * never by the file of the specific member being resolved. A group's members can sit in
+     * different Sorted months, and every member, chosen or rejected, must land in the exact same
+     * folder. Deriving each member's folder from its own file would split the group across two
+     * Duplicates folders instead. Only one of the two would ever get the chosen-filename note.
+     * {@link #nearDupAnchors} builds the group-to-keeper map this anchor comes from.
      *
-     * @param file {@link Path} a file in the group, used to derive year-month
+     * @param anchorFile {@link Path} the group's chosen keeper file, used to derive year-month
      * @param group {@link String} the near-dup group id
      * @return {@link Path} the group's duplicates folder
      */
-    Path duplicatesDir(final Path file, final String group) {
-        return this.pathsPort.duplicates().resolve(yearMonthOf(file) + "_" + group);
+    Path duplicatesDir(final Path anchorFile, final String group) {
+        return this.pathsPort.duplicates().resolve(yearMonthOf(anchorFile) + "_" + group);
+    }
+
+    /**
+     * The chosen keeper's file for every near-dup group present in decisions, keyed by group id.
+     * The shard contract guarantees exactly one {@link NearDupChosen} per group, so every group with
+     * a reject also has an anchor here.
+     *
+     * @param decisions a {@link List} of {@link Decision} the decisions to scan for near-dup keepers
+     * @return a {@link Map} of {@link String} to {@link Path} each group's keeper file, by group id
+     */
+    static Map<String, Path> nearDupAnchors(final List<Decision> decisions) {
+        final Map<String, Path> anchors = new HashMap<>();
+        for (final Decision decision : decisions) {
+            if (decision instanceof final NearDupChosen c) {
+                anchors.put(c.group(), c.file());
+            }
+        }
+        return anchors;
     }
 
     /**

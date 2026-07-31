@@ -165,6 +165,7 @@ public class ApplyEngine {
         }
 
         final Map<String, List<Decision>> nearDupGroups = groupNearDups(validation.decisions());
+        final Map<String, Path> nearDupAnchors = CullDestinations.nearDupAnchors(validation.decisions());
         final var outcome = new ApplyOutcome();
         // Both loops below can move a file, so both count toward the total a caller is told about.
         // Otherwise progress would reach 100% while unreviewable files are still being moved.
@@ -179,7 +180,7 @@ public class ApplyEngine {
                 return null;
             }
             switch (status) {
-                case final Status.Pending p -> this.apply(p.decision(), prepDirPath, nearDupGroups, outcome);
+                case final Status.Pending p -> this.apply(p.decision(), prepDirPath, nearDupGroups, nearDupAnchors, outcome);
                 case final Status.Done d -> this.backfillSecondaryWrite(d.decision(), d.record());
                 case Status.Skipped _ -> {} // user gave up on this decision - nothing to do
                 case Status.Unresolved _ -> {} // already aborted the whole run above
@@ -291,7 +292,7 @@ public class ApplyEngine {
         for (final Decision decision : decisions) {
             switch (decision) {
                 case final NearDupChosen c -> byGroup.computeIfAbsent(c.group(), _ -> new ArrayList<>()).add(decision);
-                case final NearDupReject r -> byGroup.computeIfAbsent(r.group(), _ -> new ArrayList<>()).add(decision);
+                case final NearDupReject reject -> byGroup.computeIfAbsent(reject.group(), _ -> new ArrayList<>()).add(decision);
                 case Classification _ -> {
                 }
             }
@@ -306,14 +307,16 @@ public class ApplyEngine {
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param nearDupGroups a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions
      * grouped by group id
+     * @param nearDupAnchors a {@link Map} of {@link String} to {@link Path} each near-dup group's keeper file, by
+     * group id
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
     private void apply(final Decision decision, final Path prepDirPath, final Map<String, List<Decision>> nearDupGroups,
-                       final ApplyOutcome outcome) {
+                       final Map<String, Path> nearDupAnchors, final ApplyOutcome outcome) {
         switch (decision) {
             case final Classification c -> this.applyClassification(c, prepDirPath, outcome);
             case final NearDupChosen c -> this.applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome);
-            case final NearDupReject r -> this.applyNearDupReject(r, prepDirPath, outcome);
+            case final NearDupReject reject -> this.applyNearDupReject(reject, nearDupAnchors.get(reject.group()), prepDirPath, outcome);
         }
     }
 
@@ -368,14 +371,18 @@ public class ApplyEngine {
     }
 
     /**
-     * Moves a rejected near-dup file into its duplicates group folder.
+     * Moves a rejected near-dup file into its duplicates group folder. The folder is resolved from
+     * the group's chosen keeper, not from reject's own file - see
+     * {@link CullDestinations#duplicatesDir}.
      *
-     * @param r {@link NearDupReject} the rejected near-dup decision
+     * @param reject {@link NearDupReject} the rejected near-dup decision
+     * @param groupAnchor {@link Path} the group's chosen keeper file
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
-    private void applyNearDupReject(final NearDupReject r, final Path prepDirPath, final ApplyOutcome outcome) {
-        this.recordThenMove(r.file(), this.cullDestinations.destinationDirFor(r), prepDirPath);
+    private void applyNearDupReject(final NearDupReject reject, final Path groupAnchor, final Path prepDirPath,
+                                    final ApplyOutcome outcome) {
+        this.recordThenMove(reject.file(), this.cullDestinations.duplicatesDir(groupAnchor, reject.group()), prepDirPath);
         outcome.nearDupRejects++;
     }
 
@@ -411,7 +418,7 @@ public class ApplyEngine {
         final String rejects = group.stream()
                 .filter(NearDupReject.class::isInstance)
                 .map(NearDupReject.class::cast)
-                .map(r -> r.file().getFileName() + " - " + r.reason())
+                .map(reject -> reject.file().getFileName() + " - " + reject.reason())
                 .collect(Collectors.joining("; "));
         return "Chose " + chosen.file().getFileName() + " - " + chosen.chosenReason() + ". Rejects: " + rejects;
     }

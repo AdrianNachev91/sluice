@@ -268,13 +268,13 @@ public final class ShardValidator {
                     problems.add(new MissingChosenReason(montage, index));
                 }
             }
-            case final NearDupReject r -> {
-                if (r.group().isBlank()) {
+            case final NearDupReject reject -> {
+                if (reject.group().isBlank()) {
                     problems.add(new MissingGroup(montage, index));
                 } else {
-                    rejectsPerGroup.merge(r.group(), 1, Integer::sum);
+                    rejectsPerGroup.merge(reject.group(), 1, Integer::sum);
                 }
-                if (r.reason().isBlank()) {
+                if (reject.reason().isBlank()) {
                     problems.add(new MissingReason(montage, index));
                 }
             }
@@ -352,7 +352,7 @@ public final class ShardValidator {
         return switch (decision) {
             case final Classification c -> new Classification(file, c.category(), c.reason());
             case final NearDupChosen c -> new NearDupChosen(file, c.group(), c.chosenReason());
-            case final NearDupReject r -> new NearDupReject(file, r.group(), r.reason());
+            case final NearDupReject reject -> new NearDupReject(file, reject.group(), reject.reason());
         };
     }
 }

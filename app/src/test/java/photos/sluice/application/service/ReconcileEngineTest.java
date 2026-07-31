@@ -125,6 +125,34 @@ class ReconcileEngineTest {
         assertThat(report.reconstructed()).isZero();
     }
 
+    // The offline sweep must search the exact same folder a real apply would have used: the group's
+    // CHOSEN file's month, never the reject's own. Searching a reject-derived folder here would find
+    // nothing, and wrongly report a file that really did move as missing.
+    @Test
+    void reconcileFindsARejectFromANearDupGroupSpanningTwoSortedMonthsAtTheChosenFilesFolder(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path reject = root.resolve("Sorted/Photos/2019/07/b.jpg"); // never written - already moved
+        writeFile(chosen, "sharp"); // the chosen file's source is never removed by a real apply
+        final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19"); // derived from chosen's month
+        final Path rejectDest = dupDir.resolve("b.jpg");
+        writeFile(rejectDest, "blurry");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(reject));
+        writeShard(prepDir, "montage-001",
+                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
+                nearDupRejectJson(reject, "lake-jun19", "blurred"));
+
+        final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
+
+        assertThat(report.reconstructed()).isEqualTo(1);
+        assertThat(report.stillPending()).isEqualTo(1); // the chosen file, still sitting in Sorted
+        assertThat(report.missingSource()).isEmpty();
+        assertThat(Files.readAllLines(prepDir.resolve("move-records.log")).getFirst()).contains(rejectDest.toString());
+    }
+
     @Test
     void reconcileFilesAnExistingMoveRecordsLogIntoTheDisasterDrawerBeforeRebuilding(@TempDir final Path root)
             throws IOException, ApplyException {

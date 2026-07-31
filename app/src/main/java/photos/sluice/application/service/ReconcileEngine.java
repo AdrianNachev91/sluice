@@ -8,7 +8,9 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.domain.cull.Decision;
+import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
+import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ReconcileReport;
@@ -112,8 +114,9 @@ public class ReconcileEngine {
             this.fileAway(prepDirPath, this.moveLedger.choicesLogFor(prepDirPath), MoveLedger.CHOICES_DRAWER_LABEL);
         }
 
+        final Map<String, Path> nearDupAnchors = CullDestinations.nearDupAnchors(validation.decisions());
         final var sweep = new ReconcileSweep(prepDirPath, moveRecordLog, ledger.skipped());
-        validation.decisions().forEach(decision -> this.reconcileDecision(decision, sweep));
+        validation.decisions().forEach(decision -> this.reconcileDecision(decision, nearDupAnchors, sweep));
         unreviewableFiles.forEach(file -> this.reconcileFile(file, this.cullDestinations.unreviewableDir(file), sweep));
         this.resolvePendingMoves(sweep);
 
@@ -137,27 +140,43 @@ public class ReconcileEngine {
     }
 
     /**
-     * One decision's step in the sweep. A NearDupChosen decision is checked for existence right
-     * here, since it is a copy. A missing source is always missing-source for it, never a pending
-     * move. Classifying never has a move-record path for it either, and this must not pretend
-     * otherwise. An answered skip still settles it first, exactly as it does for every other kind.
-     * Every other decision defers both checks to reconcileFile().
+     * One decision's step in the sweep, dispatched by decision type. A NearDupChosen decision is a
+     * copy, so it is checked for existence directly - see {@link #reconcileNearDupChosen}. A
+     * NearDupReject resolves its destination from the group's chosen keeper, not its own file - see
+     * {@link CullDestinations#duplicatesDir}. A Classification defers both checks to
+     * reconcileFile().
      *
      * @param decision {@link Decision} the decision to reconcile
+     * @param nearDupAnchors a {@link Map} of {@link String} to {@link Path} each near-dup group's keeper file, by
+     * group id
      * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
      */
-    private void reconcileDecision(final Decision decision, final ReconcileSweep sweep) {
-        if (decision instanceof NearDupChosen) {
-            if (this.mediaStore.exists(decision.file())) {
-                sweep.stillPending++;
-            } else if (sweep.skippedByUser.contains(decision.file())) {
-                sweep.skipped++;
-            } else {
-                sweep.missingSource.add(new Finding.MissingSource(decision.file(), sweep.moveRecordLog));
-            }
-            return;
+    private void reconcileDecision(final Decision decision, final Map<String, Path> nearDupAnchors,
+                                   final ReconcileSweep sweep) {
+        switch (decision) {
+            case final NearDupChosen c -> this.reconcileNearDupChosen(c, sweep);
+            case final NearDupReject reject -> this.reconcileFile(reject.file(),
+                    this.cullDestinations.duplicatesDir(nearDupAnchors.get(reject.group()), reject.group()), sweep);
+            case final Classification c -> this.reconcileFile(c.file(), this.cullDestinations.destinationDirFor(c), sweep);
         }
-        this.reconcileFile(decision.file(), this.cullDestinations.destinationDirFor(decision), sweep);
+    }
+
+    /**
+     * A NearDupChosen decision's own step, checked for existence right here since it is a copy. A
+     * missing source is always missing-source for it, never a pending move. An answered skip still
+     * settles it first, exactly as it does for every other kind.
+     *
+     * @param decision {@link NearDupChosen} the chosen near-dup decision to reconcile
+     * @param sweep {@link ReconcileSweep} the sweep's accumulating outcome
+     */
+    private void reconcileNearDupChosen(final NearDupChosen decision, final ReconcileSweep sweep) {
+        if (this.mediaStore.exists(decision.file())) {
+            sweep.stillPending++;
+        } else if (sweep.skippedByUser.contains(decision.file())) {
+            sweep.skipped++;
+        } else {
+            sweep.missingSource.add(new Finding.MissingSource(decision.file(), sweep.moveRecordLog));
+        }
     }
 
     /**

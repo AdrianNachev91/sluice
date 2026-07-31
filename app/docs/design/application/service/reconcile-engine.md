@@ -63,6 +63,12 @@ been moved into) is `CullDestinations`, the same class a real apply uses. See `a
 for a fuller description. Agreement between the two is what keeps an already-moved file from
 looking permanently lost.
 
+A near-dup group's folder is resolved from the group's chosen keeper, never from the specific
+member being swept. `reconcile()` builds that group-to-keeper map once, up front, from the same
+validated decisions the rest of the sweep already walks. A reject sitting in a different Sorted
+month than its keeper still searches the keeper's folder, matching exactly what a real apply would
+have done.
+
 ## 2. What a rebuild is not allowed to touch
 
 `choices.log` is left exactly where it is. Rebuilding from disk is only honest for evidence disk
