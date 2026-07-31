@@ -1,6 +1,7 @@
 package photos.sluice.domain.cull;
 
 import org.jspecify.annotations.Nullable;
+import photos.sluice.domain.model.Numerals;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -71,7 +72,7 @@ public sealed interface CullScope {
         final String monthSuffix = months.stream()
                 .distinct()
                 .sorted()
-                .map("%02d"::formatted)
+                .map(month -> Numerals.padded(month, 2))
                 .collect(Collectors.joining("-"));
         return year + "-" + monthSuffix;
     }

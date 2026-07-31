@@ -12,6 +12,7 @@ import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.MediaType;
+import photos.sluice.domain.model.Numerals;
 import photos.sluice.domain.rescue.RescueSummary;
 import photos.sluice.domain.scan.MediaTypeDetector;
 
@@ -186,7 +187,7 @@ public class RescueEngine implements RescueUseCase {
      * @return {@link String} the four-digit year folder name
      */
     private static String yearFolder(final LocalDateTime when) {
-        return "%04d".formatted(when.getYear());
+        return Numerals.padded(when.getYear(), 4);
     }
 
     /**
@@ -196,7 +197,7 @@ public class RescueEngine implements RescueUseCase {
      * @return {@link String} the two-digit month folder name
      */
     private static String monthFolder(final LocalDateTime when) {
-        return "%02d".formatted(when.getMonthValue());
+        return Numerals.padded(when.getMonthValue(), 2);
     }
 
     /**

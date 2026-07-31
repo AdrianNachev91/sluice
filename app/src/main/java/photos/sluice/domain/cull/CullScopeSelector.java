@@ -1,6 +1,7 @@
 package photos.sluice.domain.cull;
 
 import org.jspecify.annotations.Nullable;
+import photos.sluice.domain.model.Numerals;
 
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -87,7 +88,7 @@ public final class CullScopeSelector {
         return months.stream()
                 .distinct()
                 .sorted()
-                .map(month -> yearDir.resolve("%02d".formatted(month)))
+                .map(month -> yearDir.resolve(Numerals.padded(month, 2)))
                 .toList();
     }
 }

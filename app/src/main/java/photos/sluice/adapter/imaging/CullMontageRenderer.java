@@ -9,6 +9,7 @@ import photos.sluice.domain.cull.CullCandidate;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.CullScopeSelector;
 import photos.sluice.domain.cull.MontageConfig;
+import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.job.CancellationSignal;
@@ -184,7 +185,7 @@ public class CullMontageRenderer implements MontageRenderer {
             // entries.size() + 1, not (start / tilesPerMontage) + 1. Both give the same number
             // today, but entries.size() stays correct even if a future change makes montages
             // variable-sized rather than a fixed tilesPerMontage each.
-            final String tag = "montage-%03d".formatted(entries.size() + 1);
+            final String tag = MontageNaming.montageIdFor(entries.size() + 1);
             this.writeMontage(prepDir, tag, reviewable.subList(start, end), config);
             entries.add(tag);
             progress.tick(entries.size(), totalMontages);

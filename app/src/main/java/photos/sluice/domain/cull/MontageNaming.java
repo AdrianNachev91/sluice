@@ -1,5 +1,7 @@
 package photos.sluice.domain.cull;
 
+import photos.sluice.domain.model.Numerals;
+
 import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,8 +21,6 @@ public final class MontageNaming {
     // Rebuilding a lost index.json is the case that needs this reverse direction, since whatever
     // sidecars survive on disk are the only remaining record of which montages existed.
     private static final Pattern SIDECAR_NAME = Pattern.compile("^montage-(\\d+)\\.json$");
-
-    private static final String MONTAGE_ID_FORMAT = "montage-%03d";
 
     /**
      * Prevents instantiation of this utility class.
@@ -45,7 +45,7 @@ public final class MontageNaming {
      * @return {@link String} the montage id (e.g. montage-003)
      */
     public static String montageIdFor(final int number) {
-        return MONTAGE_ID_FORMAT.formatted(number);
+        return "montage-" + Numerals.padded(number, 3);
     }
 
     /**

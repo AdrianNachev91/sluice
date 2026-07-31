@@ -22,6 +22,7 @@ import photos.sluice.domain.model.Dimensions;
 import photos.sluice.domain.model.HashedMedia;
 import photos.sluice.domain.model.MediaFile;
 import photos.sluice.domain.model.MediaType;
+import photos.sluice.domain.model.Numerals;
 import photos.sluice.domain.model.ScanResult;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
@@ -395,7 +396,7 @@ public class SortEngine implements SortUseCase {
      * @return {@link String} the four-digit year folder name
      */
     private static String yearFolder(final LocalDateTime when) {
-        return "%04d".formatted(when.getYear());
+        return Numerals.padded(when.getYear(), 4);
     }
 
     /**
@@ -405,7 +406,7 @@ public class SortEngine implements SortUseCase {
      * @return {@link String} the two-digit month folder name
      */
     private static String monthFolder(final LocalDateTime when) {
-        return "%02d".formatted(when.getMonthValue());
+        return Numerals.padded(when.getMonthValue(), 2);
     }
 
     /**
