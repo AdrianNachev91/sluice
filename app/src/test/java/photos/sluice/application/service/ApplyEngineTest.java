@@ -93,9 +93,11 @@ class ApplyEngineTest {
                 .hasMessageContaining("IMG_1.jpg");
 
         // still is what makes "nothing applied" falsifiable. A run that shrugged off the
-        // unresolvable pair and carried on would have moved it out of Sorted.
+        // unresolvable pair and carried on would have moved it out of Sorted. Its own first-run
+        // copy already holds the plain destination name. So such a run would land on the collision
+        // suffix, which is the thing that must not exist.
         assertThat(Files.exists(still)).isTrue();
-        assertThat(Files.exists(root.resolve("Review/junk/IMG_3.jpg"))).isFalse();
+        assertThat(Files.exists(root.resolve("Review/junk/IMG_3 (2).jpg"))).isFalse();
     }
 
     @Test
