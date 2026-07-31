@@ -31,21 +31,26 @@ which of the three dedup buckets a file eventually lands in.
 
 ```mermaid
 flowchart TD
-    A["for each in-scope file"] --> B{"has a paired sidecar?"}
+    A["for each removed file"] --> B{"has a paired sidecar?"}
     B -- no --> Z(["not consumed"])
     B -- yes --> C{"did that sidecar actually<br/>produce this file's date?"}
     C -- no --> Z
-    C -- yes --> D{"already deleted this<br/>sidecar path this run?"}
-    D -- yes --> Z
-    D -- no --> E["delete it, count it"]
+    C -- yes --> D{"has every media file paired<br/>to it left the Inbox?"}
+    D -- no --> Z
+    D -- yes --> E{"already deleted this<br/>sidecar path this run?"}
+    E -- yes --> Z
+    E -- no --> F["delete it, count it"]
 ```
 
 A sidecar that exists but lost the date-resolution race - invalid content, or a coincidentally
 name-matched but unrelated JSON file - is left alone. Only a sidecar that was actually read as
-real metadata gets consumed. The "already deleted?" check exists because an edited copy of a photo
-shares its original's sidecar. Both files can be in scope at once, and both resolve their date
-from the same JSON path. It must be deleted, and counted, exactly once - not once per file that
-points at it.
+real metadata gets consumed.
+
+The last two checks both exist because an edited copy of a photo shares its original's sidecar, so
+one JSON can have more than one owner. If both owners left this run, the path comes up once per
+owner and has to be deleted, and counted, exactly once. If only one left, the JSON still belongs to
+the owner sitting in the Inbox and is not spent at all. That happens when the scope cut falls
+between two co-owners, or when routing was cancelled before reaching the second one.
 
 ## 3. Which library hashes still count as "real"
 
@@ -87,10 +92,11 @@ Runs once, after every keeper has been routed:
 
 ```mermaid
 flowchart TD
-    A["remaining media = step 1's<br/>scan media, minus every<br/>in-scope file's path"] --> C["SidecarSweep.findOrphaned<br/>on the derived media + JSON lists"]
-    B["remaining JSON = step 1's<br/>scan JSON paths, minus every<br/>path section 2 consumed"] --> C
-    C --> D["delete every orphaned<br/>sidecar returned"]
-    D --> E["MediaStore.removeEmptyDirectories<br/>(Inbox root)"]
+    A["remaining media = step 1's<br/>scan media, minus every<br/>in-scope file's path"] --> D["SidecarSweep.findOrphaned<br/>on the derived media + JSON lists"]
+    B["remaining JSON = step 1's<br/>scan JSON paths, minus every<br/>path section 2 consumed"] --> D
+    C["the scan's own sidecar-by-media<br/>pairing, unwrapped to raw paths"] --> D
+    D --> E["delete every orphaned<br/>sidecar returned"]
+    E --> F["MediaStore.removeEmptyDirectories<br/>(Inbox root)"]
 ```
 
 This is independent of section 2's per-file consumption - that mechanism only spends a sidecar
@@ -100,6 +106,12 @@ That includes unmatched ones. It also includes ones whose media left via a diffe
 This is what keeps sidecars from piling up across incremental year-by-year runs.
 `SortSummary.sidecarsDeleted` is not incremented here - only section 2's inline consumption counts
 toward it.
+
+The pairing goes in because the sweep deletes, and the question it is deciding is one the scan
+already answered. Working out again which media a sidecar belongs to would put a second derivation
+behind a delete, free to disagree with the first. It also cannot see everything the pairing does,
+such as an `-edited` copy borrowing its original's sidecar. `sidecar-sweep.md` in the `domain/scan`
+design folder covers what the sweep does with all three inputs.
 
 "Remaining" is derived from step 1's original scan, not observed directly. `dedup.plan`'s three
 buckets (section 1) are a total partition of every in-scope file, and each bucket is either moved
@@ -160,6 +172,9 @@ every engine this project's cancellation support touches; the verdict was to lea
 |--------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | Photo with a Takeout sidecar that produced its date                                                                      | Sidecar deleted, counted in `sidecarsDeleted`                                                                         |
 | Photo `+` its `-edited` copy, sharing one sidecar, both in scope                                                         | Sidecar deleted exactly once, `sidecarsDeleted` = 1, not 2                                                            |
+| Photo `+` its `-edited` copy, sharing one sidecar, only one of the two removed this run                                  | Left on disk by both mechanisms - the sidecar belongs to the co-owner still in the Inbox                              |
+| Sidecar paired to a remaining media file only through the prefix fallback                                                | Left on disk - the sweep reads the same pairing the dating pass did                                                   |
+| A `.json` that was never a per-photo sidecar (an album descriptor, an unrelated app's file)                              | Left on disk, and it keeps its directory from being removed as empty                                                  |
 | Sidecar present but invalid/unrelated, and its would-be media leaves the directory this run                              | Not deleted inline (not counted in `sidecarsDeleted`); swept afterward since nothing in the directory owns it anymore |
 | Sidecar present but invalid/unrelated, and a same-named media file remains in the directory (e.g. awaiting a future run) | Left on disk by both mechanisms                                                                                       |
 | Inbox file's hash matches a library-index hash whose recorded path still exists                                          | Deleted, counted in `reimportsDeleted`, never moved                                                                   |

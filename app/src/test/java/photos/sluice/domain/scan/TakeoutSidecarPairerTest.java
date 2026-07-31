@@ -142,4 +142,64 @@ class TakeoutSidecarPairerTest {
         assertThat(result.takeoutMode()).isTrue();
         assertThat(result.sidecarsByMedia()).doesNotContainKey(media);
     }
+
+    @Test
+    void aDupNumberedSupplementalSidecarNamesTheNumberedMediaFile() {
+        // Google puts the duplicate counter at the very end of the sidecar's name, after the
+        // supplemental suffix. The media file it describes carries it before its extension.
+        final Path media = Path.of("dir/IMG_1234(1).jpg");
+        final Path json = Path.of("dir/IMG_1234.jpg.supplemental-metadata(1).json");
+
+        assertThat(TakeoutSidecarPairer.ownerKeyOf(json)).isEqualTo("IMG_1234(1).jpg");
+
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
+
+        assertThat(result.sidecarsByMedia()).containsEntry(media, json);
+    }
+
+    @Test
+    void aDupNumberedSidecarBesideItsUnnumberedOriginalIsClaimedByBoth() {
+        // The numbered copy matches on the owner key. The original still reaches the same sidecar
+        // through the prefix fallback, since the sidecar's base name starts with its filename.
+        // Both owning it is the safe outcome: the sweep keeps a sidecar until every owner has left.
+        final Path original = Path.of("dir/IMG_1234.jpg");
+        final Path numberedCopy = Path.of("dir/IMG_1234(1).jpg");
+        final Path json = Path.of("dir/IMG_1234.jpg.supplemental-metadata(1).json");
+
+        final PairingResult result = this.pairer.pair(List.of(original, numberedCopy), List.of(json));
+
+        assertThat(result.sidecarsByMedia()).containsEntry(numberedCopy, json);
+        assertThat(result.sidecarsByMedia()).containsEntry(original, json);
+    }
+
+    @Test
+    void eachSupportedSidecarNamingShapeIsRecognizedAsDescribingAMediaFile() {
+        // One per row of the naming table in this class's design doc, plus a video extension.
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/IMG_1234.jpg.json"))).isTrue();
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(
+                Path.of("dir/IMG_1234.jpg.supplemental-metadata.json"))).isTrue();
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/IMG_1234.jpg(1).json"))).isTrue();
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/IMG_1234.jpg.someextra.json"))).isTrue();
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/IMG_1234.jpg(1).extra.json"))).isTrue();
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/clip.MP4.json"))).isTrue();
+    }
+
+    @Test
+    void aJsonWhoseOwnerKeyCarriesNoMediaExtensionDescribesNoMediaFile() {
+        // Real Google Takeout exports ship all three of these, none of them a per-photo sidecar.
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/metadata.json"))).isFalse();
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/print-subscriptions.json"))).isFalse();
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/user-generated-memory-titles.json")))
+                .isFalse();
+        // A name-shaped .json whose trailing component is not a media extension.
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(Path.of("dir/export.v2.json"))).isFalse();
+    }
+
+    @Test
+    void aTruncatedSidecarNameThatLostItsMediaExtensionDescribesNoMediaFile() {
+        // Google truncates a long sidecar name. Once the cut eats past the media extension, the
+        // owner key stops naming a media file and the sweep has to leave the JSON alone.
+        assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(
+                Path.of("dir/VeryLongOriginalPhotoFilenameFromGoogleExpo.json"))).isFalse();
+    }
 }

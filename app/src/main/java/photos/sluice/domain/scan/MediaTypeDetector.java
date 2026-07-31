@@ -38,6 +38,18 @@ public final class MediaTypeDetector {
     }
 
     /**
+     * Whether an extension names a photo or video, case-insensitively. Takes the extension on its
+     * own rather than a path, for callers holding a filename fragment instead of a real file.
+     *
+     * @param extension {@link String} the extension to check, without its leading dot
+     * @return boolean true if it is a recognized photo or video extension
+     */
+    public static boolean isRecognizedExtension(final String extension) {
+        final String lowercased = extension.toLowerCase(Locale.ROOT);
+        return PHOTO_EXTENSIONS.contains(lowercased) || VIDEO_EXTENSIONS.contains(lowercased);
+    }
+
+    /**
      * Extracts a path's file extension, lowercased.
      *
      * @param path {@link Path} the path to inspect

@@ -51,6 +51,7 @@ contextual message so a caller never has to know which shape triggered it.
 | `photo.jpg.JSON` (uppercase extension)                               | Still recognized as a sidecar - the check is case-insensitive                                     |
 | `readme.txt` alongside media                                         | Dropped silently - neither a sidecar nor a recognized media extension                             |
 | `orphan.jpg.json` with no matching photo anywhere                    | Collected as a sidecar but never paired; `takeoutMode` still flips true (a JSON file was present) |
+| `metadata.json`, or any `.json` that never described a photo         | Collected on extension alone, like any other JSON - the sweep makes that distinction              |
 | Two folders each with their own `IMG_1234.jpg` + `IMG_1234.jpg.json` | Each pairs within its own folder only - pairing never crosses directories                         |
 | Empty inbox folder                                                   | `ScanResult` with empty media, empty sidecars, `takeoutMode = false`                              |
 | Inbox root path doesn't exist                                        | Throws `UncheckedIOException`                                                                     |
@@ -61,7 +62,9 @@ contextual message so a caller never has to know which shape triggered it.
   sibling `domain/scan` design folder.
 - Risk note: pairing is name-based only. A paired sidecar must be schema-validated as real
   Takeout metadata before anything ever deletes it - never on name-match alone.
-- `ScanResult.jsonPaths` carries every sidecar found, paired or not. `SortEngine` calls this scan
-  once per `sort()` invocation. It reuses that full list after routing - minus whatever it
-  consumed itself - to feed `SidecarSweep` and find orphans. See `sidecar-sweep.md` in the
-  `domain/scan` design folder.
+- `ScanResult.jsonPaths` carries every `.json` found, paired or not, and the classification here is
+  by extension alone. That is deliberate: the list is meant to say what was on disk, not to judge
+  it. `SortEngine` calls this scan once per `sort()` invocation and reuses the full list after
+  routing, minus whatever it consumed itself, to feed `SidecarSweep`. Deciding which of those files
+  could ever have been a sidecar happens there. See `sidecar-sweep.md` in the `domain/scan` design
+  folder.

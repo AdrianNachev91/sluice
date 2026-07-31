@@ -198,9 +198,18 @@ public class SortEngine implements SortUseCase {
                                       final Map<MediaFile, DateResult> dateByFile,
                                       final Map<MediaFile, TakeoutSidecar> sidecars) {
         // An "-edited" copy shares its original's sidecar - TakeoutSidecarPairer maps both media
-        // files to the same JSON path. So the same path can come up more than once here. Set.add
-        // returns false on the second occurrence, which is what keeps a shared sidecar from being
-        // deleted and counted twice.
+        // files to the same JSON path. So a sidecar can have more than one owner, and it is only
+        // spent once every one of them has left. A co-owner the run never reached keeps the JSON
+        // alive for the run that finally takes it. That happens when the co-owner is out of scope,
+        // or when routing was cancelled before reaching it.
+        final Map<Path, Set<MediaFile>> coOwners = new HashMap<>();
+        sidecars.forEach((media, sidecar) ->
+                coOwners.computeIfAbsent(sidecar.jsonPath(), _ -> new HashSet<>()).add(media));
+        final Set<MediaFile> removed = new HashSet<>(actuallyRemoved);
+
+        // When every co-owner did leave, the same path comes up once per co-owner. Set.add returns
+        // false on the second occurrence, which is what keeps a shared sidecar from being deleted
+        // and counted twice.
         final Set<Path> deletedSidecars = new HashSet<>();
         for (final MediaFile file : actuallyRemoved) {
             final TakeoutSidecar sidecar = sidecars.get(file);
@@ -209,6 +218,7 @@ public class SortEngine implements SortUseCase {
             // exists but lost - invalid, or coincidentally name-matched to unrelated JSON - is
             // left alone, per the schema-validation safety rule.
             if (sidecar != null && date.source().equals(SIDECAR_SOURCE)
+                    && removed.containsAll(coOwners.get(sidecar.jsonPath()))
                     && deletedSidecars.add(sidecar.jsonPath())) {
                 this.mediaStore.delete(sidecar.jsonPath());
             }
@@ -218,11 +228,10 @@ public class SortEngine implements SortUseCase {
 
     /**
      * Independent of consumeSidecars above. That method only spends a sidecar whose date actually
-     * won for its file. This sweep instead treats a sidecar as spent purely because its owning
-     * media is gone from its directory now, regardless of why. That catches unmatched sidecars
-     * and ones whose media was deleted as a duplicate, so sidecars never pile up across
-     * incremental year-by-year runs. A directory left empty of all files afterward is then
-     * removed.
+     * won for its file. This sweep instead treats a sidecar as spent purely because no media file
+     * left in its directory owns it, regardless of why. That catches unmatched sidecars and ones
+     * whose media was deleted as a duplicate, so sidecars never pile up across incremental
+     * year-by-year runs. A directory left empty of all files afterward is then removed.
      *
      * <p>"Remaining" is derived from the original scan rather than observed directly, so the caller
      * passes exactly the files that actually left the Inbox this run, not every in-scope file. A
@@ -245,7 +254,13 @@ public class SortEngine implements SortUseCase {
         final List<Path> remainingJsonPaths = scanResult.jsonPaths().stream()
                 .filter(path -> !consumedSidecars.contains(path))
                 .toList();
-        for (final Path orphaned : this.sidecarSweep.findOrphaned(remainingMediaPaths, remainingJsonPaths)) {
+        // The scan's own pairing, unwrapped back to raw paths. The sweep needs to know which
+        // sidecar each media file actually reads its date from, and this is the only place that
+        // relationship was ever computed.
+        final Map<Path, Path> sidecarsByMediaPath = new HashMap<>();
+        scanResult.sidecars().forEach((media, sidecar) -> sidecarsByMediaPath.put(media.path(), sidecar.jsonPath()));
+        for (final Path orphaned : this.sidecarSweep.findOrphaned(remainingMediaPaths, remainingJsonPaths,
+                sidecarsByMediaPath)) {
             this.mediaStore.delete(orphaned);
         }
         this.mediaStore.removeEmptyDirectories(this.pathsPort.inbox());

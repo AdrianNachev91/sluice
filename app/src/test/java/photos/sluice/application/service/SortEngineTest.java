@@ -485,6 +485,95 @@ class SortEngineTest {
         assertThat(Files.exists(sidecarB)).isEqualTo(aRouted);
     }
 
+    @Test
+    void sharedSidecarSurvivesWhileOneOfItsTwoOwnersIsStillInTheInbox(@TempDir final Path root) throws IOException {
+        // An "-edited" copy pairs to its original's sidecar, so both read the same date and the
+        // scope cut can fall between them. Whichever one leaves, the JSON belongs to the one still
+        // waiting and has to survive with it. Which of the two the cut takes is filesystem-
+        // dependent, so the assertion below holds for either outcome rather than naming one.
+        final Path inbox = inboxOf(root);
+        final Path original = inbox.resolve("photo1.jpg");
+        writeFile(original, padded("original"));
+        final Path editedCopy = inbox.resolve("photo1-edited.jpg");
+        writeFile(editedCopy, padded("edited"));
+        final Path sidecar = inbox.resolve("photo1.jpg.supplemental-metadata.json");
+        writeSidecar(sidecar, LocalDateTime.of(2015, 5, 5, 12, 0, 0));
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.OldestN(1));
+
+        assertThat(summary.processed()).isEqualTo(1);
+        assertThat(Files.exists(original) ^ Files.exists(editedCopy)).isTrue();
+        assertThat(summary.sidecarsDeleted()).isZero();
+        assertThat(Files.exists(sidecar)).isTrue();
+    }
+
+    @Test
+    void cancelMidRoutingLeavesASharedSidecarIntactForTheCoOwnerItDidNotReach(@TempDir final Path root)
+            throws IOException {
+        // The other way a co-owning pair gets split. Routing stops after the first survivor, so one
+        // of the two copies never leaves the Inbox and the sidecar they share is not spent.
+        final Path inbox = inboxOf(root);
+        final Path original = inbox.resolve("photo1.jpg");
+        writeFile(original, padded("original"));
+        final Path editedCopy = inbox.resolve("photo1-edited.jpg");
+        writeFile(editedCopy, padded("edited"));
+        final Path sidecar = inbox.resolve("photo1.jpg.supplemental-metadata.json");
+        writeSidecar(sidecar, LocalDateTime.of(2015, 5, 5, 12, 0, 0));
+
+        final AtomicBoolean cancelled = new AtomicBoolean(false);
+        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        final SortSummary summary =
+                this.sortEngine(root).sort(new SortScope.OldestYear(), cancelAfterFirstTick, cancelled::get);
+
+        assertThat(summary.processed()).isEqualTo(1);
+        assertThat(Files.exists(original) ^ Files.exists(editedCopy)).isTrue();
+        assertThat(summary.sidecarsDeleted()).isZero();
+        assertThat(Files.exists(sidecar)).isTrue();
+    }
+
+    @Test
+    void prefixMatchedSidecarSurvivesWhileItsOutOfScopeMediaWaitsInTheInbox(@TempDir final Path root)
+            throws IOException {
+        // This sidecar pairs only through the prefix fallback: its base name starts with the media
+        // filename, rather than deriving an owner key equal to it. Nothing but the pairing knows
+        // they belong together.
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20190101_a.jpg"), padded("in-scope"));
+        final Path futurePhoto = inbox.resolve("20250101_future.jpg");
+        writeFile(futurePhoto, padded("future"));
+        final Path futureSidecar = inbox.resolve("20250101_future.jpg.someextra.json");
+        writeSidecar(futureSidecar, LocalDateTime.of(2025, 1, 1, 0, 0, 0));
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.Year(2019, null));
+
+        assertThat(summary.processed()).isEqualTo(1);
+        assertThat(Files.exists(futurePhoto)).isTrue();
+        assertThat(Files.exists(futureSidecar)).isTrue();
+    }
+
+    @Test
+    void aJsonThatWasNeverAPerPhotoSidecarSurvivesTheSweepAndKeepsItsDirectoryAlive(@TempDir final Path root)
+            throws IOException {
+        // Real Takeout exports ship a per-album metadata.json, and any dump can carry an unrelated
+        // app's JSON. Neither ever described a photo, so neither is the sweep's to delete - not
+        // even in an album the run emptied of media.
+        final Path inbox = inboxOf(root);
+        final Path albumDir = inbox.resolve("Takeout").resolve("Album");
+        writeFile(albumDir.resolve("20190101_a.jpg"), padded("in-scope"));
+        final Path albumDescriptor = albumDir.resolve("metadata.json");
+        Files.writeString(albumDescriptor, "{\"title\": \"Album\"}");
+        final Path unrelatedJson = albumDir.resolve("notes.json");
+        Files.writeString(unrelatedJson, "{\"note\": \"mine\"}");
+
+        this.sortEngine(root).sort(new SortScope.OldestYear());
+
+        assertThat(Files.exists(root.resolve("Sorted/Photos/2019/01/20190101_a.jpg"))).isTrue();
+        assertThat(Files.exists(albumDescriptor)).isTrue();
+        assertThat(Files.exists(unrelatedJson)).isTrue();
+        assertThat(Files.exists(albumDir)).isTrue();
+    }
+
     private static Path inboxOf(final Path root) {
         return root.resolve("Inbox");
     }

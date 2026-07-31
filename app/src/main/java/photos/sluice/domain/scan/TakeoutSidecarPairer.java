@@ -24,13 +24,19 @@ public final class TakeoutSidecarPairer {
     // Google appends this suffix to some sidecar names ("name.jpg.supplemental-metadata.json");
     // the media it describes is everything before the suffix.
     private static final Pattern SUPPLEMENTAL = Pattern.compile("^(.+?)\\.supplemental.*$", Pattern.CASE_INSENSITIVE);
-    // Reverses Google's dup-numbering: sidecar base "name.jpg(1)" describes media "name(1).jpg".
-    private static final Pattern SIDECAR_DUP_NUMBERED = Pattern.compile("^(.+)\\.([^.]+)\\((\\d+)\\)$");
-    // An edited copy ("name-edited.jpg") isn't exported with its own sidecar - it shares the
+    // Google's dup-numbering always lands at the very end of the sidecar's base name, after any
+    // suffix. It reads "name.jpg(1)" in the older shape and "name.jpg.supplemental-metadata(1)" in
+    // the newer one. So it is lifted off first, and put back once the media filename underneath is
+    // known.
+    private static final Pattern SIDECAR_DUP_NUMBERED = Pattern.compile("^(.*)\\((\\d+)\\)$");
+    // An edited copy ("name-edited.jpg") isn't exported with its own sidecar. It shares the
     // original's, so this strips the suffix to recover the original's filename as a lookup key.
     private static final Pattern EDITED = Pattern.compile("^(.*?)-edited\\.([^.]+)$", Pattern.CASE_INSENSITIVE);
     // The media-side form of dup-numbering: "name(1).jpg".
     private static final Pattern MEDIA_DUP_NUMBERED = Pattern.compile("^(.*?)(\\(\\d+\\))(\\.[^.]+)$");
+    // A dot followed by a run of word characters, which is the shape of a filename extension. It
+    // stops at anything else, so it reads "jpg" out of both "photo.jpg" and "photo.jpg(1)".
+    private static final Pattern EXTENSION_COMPONENT = Pattern.compile("\\.(\\w+)");
 
     /**
      * The outcome of one {@link TakeoutSidecarPairer#pair} call.
@@ -122,15 +128,55 @@ public final class TakeoutSidecarPairer {
      */
     public static String ownerKeyOf(final Path json) {
         final String base = stripJsonExtension(json.getFileName().toString());
-        final Matcher supplemental = SUPPLEMENTAL.matcher(base);
-        if (supplemental.matches()) {
-            return supplemental.group(1);
-        }
         final Matcher dup = SIDECAR_DUP_NUMBERED.matcher(base);
-        if (dup.matches()) {
-            return dup.group(1) + "(" + dup.group(3) + ")." + dup.group(2);
+        final boolean numbered = dup.matches();
+        final String withoutDupNumber = numbered ? dup.group(1) : base;
+
+        final Matcher supplemental = SUPPLEMENTAL.matcher(withoutDupNumber);
+        final String mediaName = supplemental.matches() ? supplemental.group(1) : withoutDupNumber;
+        return numbered ? withDupNumberBeforeExtension(mediaName, dup.group(2)) : mediaName;
+    }
+
+    /**
+     * Moves a dup number to where the media file carries it. Google numbers the sidecar at the end
+     * of its whole name, while the media file it describes is numbered before its extension.
+     *
+     * @param mediaName {@link String} the media filename recovered from the sidecar's base name
+     * @param dupNumber {@link String} the duplicate counter's digits, without their brackets
+     * @return {@link String} the media filename with the dup number in its own position
+     */
+    private static String withDupNumberBeforeExtension(final String mediaName, final String dupNumber) {
+        final String numbering = "(" + dupNumber + ")";
+        final int dot = mediaName.lastIndexOf('.');
+        return dot < 0 ? mediaName + numbering
+                : mediaName.substring(0, dot) + numbering + mediaName.substring(dot);
+    }
+
+    /**
+     * Whether a {@code .json} file names a media file at all. A per-photo sidecar's owner key is
+     * built from a media filename, so somewhere in it sits a recognized media extension. A file
+     * like {@code metadata.json} or {@code notes.json} derives an owner key with no such component,
+     * and could never have described a photo.
+     *
+     * <p>The extension is looked for anywhere in the owner key rather than only at its end. A
+     * sidecar carrying a non-standard suffix keeps its media extension in the middle
+     * ({@code IMG_1234.jpg.someextra}), and that is a real sidecar the sweep is meant to reach.
+     *
+     * <p>The distinction matters because the orphan sweep deletes what it decides is a spent
+     * sidecar. An export manifest or an unrelated app's JSON must never enter that decision at all.
+     * A truncated name cut back past its media extension fails this check too, and is left on disk.
+     * That is the safe direction: the cost is a stale sidecar, not a deleted file.
+     *
+     * @param json {@link Path} the JSON file to inspect
+     * @return boolean true if the owner key it derives names a recognized media file
+     */
+    public static boolean looksLikeMediaSidecar(final Path json) {
+        final Matcher components = EXTENSION_COMPONENT.matcher(ownerKeyOf(json));
+        boolean found = false;
+        while (!found && components.find()) {
+            found = MediaTypeDetector.isRecognizedExtension(components.group(1));
         }
-        return base;
+        return found;
     }
 
     /**
