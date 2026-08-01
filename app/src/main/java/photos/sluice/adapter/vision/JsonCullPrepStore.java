@@ -17,6 +17,7 @@ import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
+import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
@@ -112,6 +113,11 @@ public class JsonCullPrepStore implements CullPrepPort {
             throw new MalformedPrepJsonException("Prep index " + path + " does not exist", e);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read prep index " + path, e);
+        } catch (final JacksonIOException e) {
+            // The stream opened fine and failed on a later read - a lock or a dropped network mount
+            // arriving mid-read, not malformed content. Jackson wraps the underlying IOException
+            // rather than letting it propagate, so it needs its own clause ahead of JacksonException.
+            throw new UncheckedIOException("Failed to read prep index " + path, e.getCause());
         } catch (final JacksonException e) {
             throw new MalformedPrepJsonException("Failed to parse prep index " + path, e);
         }

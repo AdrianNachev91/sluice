@@ -6,8 +6,11 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
+import tools.jackson.core.exc.JacksonIOException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,6 +20,10 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SidecarReaderTest {
 
@@ -84,6 +91,29 @@ class SidecarReaderTest {
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(UncheckedIOException.class)
                 .isNotInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    @Test
+    // any(Class.class) is the only unambiguous matcher for the Class<T>-vs-TypeReference<T>
+    // readValue overload. The raw type it forces is a Mockito-generics artifact, not a real cast risk.
+    @SuppressWarnings("unchecked")
+    void aWrappedReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
+        // The directory seam above only ever exercises one platform's failure path. This proves the
+        // classification directly. Whenever a stream opens fine and fails on a later read, Jackson
+        // wraps the underlying IOException into a JacksonIOException rather than letting it propagate.
+        final Path sidecar = dir.resolve("montage-001.json");
+        Files.writeString(sidecar, "{}");
+        final var wrapped = new IOException("simulated mid-stream read failure");
+        final var jacksonIoException = mock(JacksonIOException.class);
+        when(jacksonIoException.getCause()).thenReturn(wrapped);
+        final var mapper = mock(JsonMapper.class);
+        doThrow(jacksonIoException).when(mapper).readValue(any(InputStream.class), any(Class.class));
+        final var readerWithFailingMapper = new SidecarReader(mapper);
+
+        assertThatThrownBy(() -> readerWithFailingMapper.readEntries(sidecar))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class)
+                .hasCause(wrapped);
     }
 
     @Test

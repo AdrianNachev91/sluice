@@ -11,6 +11,7 @@ import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
 import tools.jackson.core.JacksonException;
+import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -121,6 +122,11 @@ class ShardCodec {
             throw new MalformedPrepJsonException("Shard " + shardPath + " does not exist", e);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read shard " + shardPath, e);
+        } catch (final JacksonIOException e) {
+            // The stream opened fine and failed on a later read - a lock or a dropped network mount
+            // arriving mid-read, not malformed content. Jackson wraps the underlying IOException
+            // rather than letting it propagate, so it needs its own clause ahead of JacksonException.
+            throw new UncheckedIOException("Failed to read shard " + shardPath, e.getCause());
         } catch (final JacksonException e) {
             throw new MalformedPrepJsonException("Failed to parse shard " + shardPath, e);
         }

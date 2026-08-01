@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
+import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
@@ -30,7 +31,24 @@ import java.util.List;
 @Component
 class SidecarReader {
 
-    private final JsonMapper mapper = JsonMapper.builder().build();
+    private final JsonMapper mapper;
+
+    /**
+     * Constructs the reader with the default JSON mapper.
+     */
+    SidecarReader() {
+        this(JsonMapper.builder().build());
+    }
+
+    /**
+     * Package-private: lets a test inject a mock JsonMapper to exercise the JacksonIOException
+     * catch branch, which a real read failure can't trigger deterministically.
+     *
+     * @param mapper {@link JsonMapper} the JSON mapper used for sidecar I/O
+     */
+    SidecarReader(final JsonMapper mapper) {
+        this.mapper = mapper;
+    }
 
     /**
      * The JSON shape one photo entry takes in the sidecar. Every field is nullable so a missing
@@ -62,6 +80,11 @@ class SidecarReader {
             throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " does not exist", e);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read sidecar " + sidecarPath, e);
+        } catch (final JacksonIOException e) {
+            // The stream opened fine and failed on a later read - a lock or a dropped network mount
+            // arriving mid-read, not malformed content. Jackson wraps the underlying IOException
+            // rather than letting it propagate, so it needs its own clause ahead of JacksonException.
+            throw new UncheckedIOException("Failed to read sidecar " + sidecarPath, e.getCause());
         } catch (final JacksonException e) {
             throw new MalformedPrepJsonException("Failed to parse sidecar " + sidecarPath, e);
         }
