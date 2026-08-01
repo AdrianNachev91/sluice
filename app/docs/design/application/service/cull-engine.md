@@ -3,13 +3,17 @@
 How `application/service/CullEngine` orchestrates a cull job: prep (`MontageRenderer.build`) ->
 dispatch (`CullDispatcher.cull`, which routes to whichever `VisionCuller` the configured provider
 selects) -> apply (`ApplyEngine.apply`). Dispatch is conditional rather than a fixed stage: it runs
-only while some montage still lacks a shard. It also covers the watch-mode auto-resume that polls a
-still-waiting job for its shards to land
+only while some montage still lacks a shard
 (`app/src/main/java/photos/sluice/application/service/CullEngine.java`,
-`app/src/main/java/photos/sluice/application/service/ShardTallyCalculator.java`,
-`app/src/main/java/photos/sluice/application/service/CullWatcher.java`). `Pipeline` builds the one
-`CullEngine` instance it needs and exposes `cull()`/`waitingJobs()`/`resume()` under its own type -
-see `pipeline.md` for that facade and for `sort()`/`commit()`/`rescue()`.
+`app/src/main/java/photos/sluice/application/service/ShardTallyCalculator.java`). `Pipeline` builds
+the one `CullEngine` instance it needs and exposes `cull()`/`waitingJobs()`/`resume()` under its own
+type - see `pipeline.md` for that facade and for `sort()`/`commit()`/`rescue()`.
+
+The watch-mode auto-resume that polls a still-waiting job for its shards to land is a separate
+concern, owned by `CullWatchers`
+(`app/src/main/java/photos/sluice/application/service/CullWatchers.java`,
+`app/src/main/java/photos/sluice/application/service/CullWatcher.java`). `CullEngine` holds the one
+`CullWatchers` instance it needs and delegates to it - see the "Watch mode" section below.
 
 ## `cull()` / `waitingJobs()` / `resume()`
 
@@ -200,16 +204,26 @@ cancel would defy the cancel.
 
 ## Watch mode
 
-`cull.externalAgent.mode: watch` (`ExternalAgentSettings`, `WatchMode`) makes a `Waiting` outcome
-from `dispatchAndApply()` arm a `CullWatcher` for that prep dir, on top of the plain `Waiting`
-behavior above. `MANUAL` mode (the default) skips this section entirely - `armWatchIfConfigured`
-returns immediately.
+`CullWatchers` owns the watch lifecycle: which prep dirs currently have a `CullWatcher` polling
+them, and the arm/disarm/auto-resume rules around that. `CullEngine` holds the one instance it
+needs and delegates every method below to it. It passes itself in only as the route back for an
+auto-resume attempt (`prepDir -> this.resume(prepDir, false)`).
 
-That setting is only the default a run starts with. `armWatch()` arms one prep dir whatever the mode
-says, and `disarmWatch()` turns it off again. The two are the waiting card's own "auto-apply when
-shards arrive" toggle, reaching the engine through `Pipeline.startWatching`/`stopWatching`. Neither
-touches the run itself. It stays Waiting, stays listed, and still refuses a fresh cull of its scope
-either way. Only the polling changes.
+The split exists because `CullEngine` grew a second job once this lifecycle got a public on/off
+contract of its own. Prep/dispatch/apply orchestration is a distinct concern from deciding when to
+poll.
+
+`cull.externalAgent.mode: watch` (`ExternalAgentSettings`, `WatchMode`) makes a `Waiting` outcome
+from `CullEngine.dispatchAndApply()` arm a `CullWatcher` for that prep dir, on top of the plain
+`Waiting` behavior above. `MANUAL` mode (the default) skips this section entirely -
+`CullWatchers.armWatchIfConfigured` returns immediately.
+
+That setting is only the default a run starts with. `CullWatchers.armWatch()` arms one prep dir
+whatever the mode says, and `disarmWatch()` turns it off again. The two are the waiting card's own
+"auto-apply when shards arrive" toggle, reaching `CullWatchers` through `Pipeline.startWatching`/
+`stopWatching` and `CullEngine`'s own thin passthrough methods of the same names. Neither touches
+the run itself. It stays Waiting, stays listed, and still refuses a fresh cull of its scope either
+way. Only the polling changes.
 
 There is no time limit on the polling, and no setting for one. A watch that never fires costs one
 read-only readiness check per interval. A watch that does fire either completes the run or lands it
@@ -217,10 +231,10 @@ read-only readiness check per interval. A watch that does fire either completes 
 waiting for.
 
 A `Blocked` outcome never arms one. Every montage already has a shard, so the agent has finished and
-will not come back. There is nothing left for a poller to notice, and the `disarmWatch()` at the top
-of every `dispatchAndApply()` has already retired whichever watcher was running. A refused run
-therefore costs one attempt and then settles on a state the user can see. A watcher and a resume can
-never take turns re-triggering each other.
+will not come back. There is nothing left for a poller to notice, and `CullEngine`'s `disarmWatch()`
+call at the top of every `dispatchAndApply()` has already retired whichever watcher was running. A
+refused run therefore costs one attempt and then settles on a state the user can see. A watcher and a
+resume can never take turns re-triggering each other.
 
 ```mermaid
 flowchart TD
@@ -248,14 +262,17 @@ still-waiting job found on disk at startup. There is no persistent job store, so
 would otherwise silently stop watching every job armed before the restart.
 
 Retiring by prep dir rather than by watcher identity leaves one known window, accepted rather than
-closed. A watcher that fires stops itself as soon as its resume is *submitted*, but the submitted
-job runs asynchronously. An `armWatch()` landing between those two moments installs a fresh watcher.
-The job's own `disarmWatch()` then retires that one a moment later, aiming at the dead one it
-replaced. So a per-run watch switched on inside that window turns itself back off.
+closed. This is all `CullWatchers`' own state and logic - `CullEngine` only supplies the trigger. A
+watcher that fires stops itself as soon as its resume is *submitted*, but the submitted job runs
+asynchronously. A `CullWatchers.armWatch()` landing between those two moments installs a fresh
+watcher. The job's own call back into `CullEngine.disarmWatch()` (via `dispatchAndApply()`) then
+retires that one a moment later, aiming at the dead one it replaced. So a per-run watch switched on
+inside that window turns itself back off.
 
-It is bounded in three ways. The window is one job handoff wide. `activeWatches` is in-memory and
-per-process, so it takes two actors inside one process racing the same prep dir. That is a UI shape,
-a background watcher against a person, rather than a CLI one. And a second click works.
+It is bounded in three ways. The window is one job handoff wide. `CullWatchers`' own `activeWatches`
+map is in-memory and per-process, so it takes two actors inside one process racing the same prep
+dir. That is a UI shape, a background watcher against a person, rather than a CLI one. And a second
+click works.
 
 Identity-aware removal would close it, at the cost of `dispatchAndApply()` having to know whether a
 watcher or a person entered it, threaded through `resume()` and the job submission. The blind retire

@@ -27,21 +27,18 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Orchestrates a whole cull job: prep, then dispatch, then apply (see
  * {@link #buildFreshAndDispatch}). It also owns {@link #waitingJobs()} and {@link #resume} for a
- * job still sitting on shards, and the watch-mode auto-resume that polls for those shards to
- * land. The dispatch step is conditional, not a fixed stage: it runs only while a montage still
- * lacks a shard.
+ * job still sitting on shards. The watch-mode lifecycle itself lives in {@link CullWatchers}. The
+ * dispatch step is conditional, not a fixed stage: it runs only while a montage still lacks a shard.
  *
  * <p>Not a Spring bean. {@link Pipeline} builds the one instance it needs, the same way it builds
- * a {@link CullWatcher} per prep dir. {@link #checkNoWaitingJobFor} and
- * {@link #buildFreshAndDispatch} stay package-private rather than private, since
- * {@link CurateEngine}'s own cull stage reuses both directly instead of duplicating them.
+ * the {@link CullWatchers} this engine delegates to. {@link #checkNoWaitingJobFor} and
+ * {@link #buildFreshAndDispatch} stay package-private rather than private. {@link CurateEngine}'s
+ * own cull stage reuses both directly instead of duplicating them.
  */
 final class CullEngine {
 
@@ -64,13 +61,7 @@ final class CullEngine {
     private final JobRunner jobRunner;
     private final PhaseRunner phaseRunner;
     private final ShardTallyCalculator shardTallyCalculator;
-    // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
-    // unlike mode, this cadence isn't a documented user-facing knob, just an internal
-    // responsiveness/overhead tradeoff. Short enough that a human dropping files never perceives the
-    // delay; long enough not to hammer disk or spam re-validation. Pipeline's own package-private
-    // constructor overload is what lets a test override this.
-    private final Duration watchPollInterval;
-    private final Map<Path, CullWatcher> activeWatches = new ConcurrentHashMap<>();
+    private final CullWatchers cullWatchers;
 
     /**
      * Wires together every collaborator this engine dispatches cull jobs through.
@@ -107,7 +98,8 @@ final class CullEngine {
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings, applyPlanner, ledgerReader);
-        this.watchPollInterval = watchPollInterval;
+        this.cullWatchers = new CullWatchers(cullSettings, this.shardTallyCalculator, watchPollInterval,
+                prepDir -> this.resume(prepDir, false));
     }
 
     /**
@@ -131,7 +123,7 @@ final class CullEngine {
         if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH || this.jobRunner.isBusy()) {
             return;
         }
-        this.waitingJobs().forEach(this::armWatchIfConfigured);
+        this.waitingJobs().forEach(this.cullWatchers::armWatchIfConfigured);
     }
 
     /**
@@ -197,16 +189,32 @@ final class CullEngine {
     }
 
     /**
-     * Test seam: whether a watcher is currently polling prepDir. Lets a test prove disarmWatch()'s
-     * own claim - that any dispatchAndApply() call retires an existing watcher, not just the
-     * watcher's own auto-resume trigger. No need to reach into the private activeWatches map.
+     * Delegates to {@link CullWatchers}. Test seam: whether a watcher is currently polling prepDir.
      *
      * @param prepDir {@link Path} the prep dir to check
      * @return boolean whether a watcher is currently active for it
      */
     boolean isWatchActive(final Path prepDir) {
-        final CullWatcher watcher = this.activeWatches.get(prepDir);
-        return watcher != null && watcher.isActive();
+        return this.cullWatchers.isWatchActive(prepDir);
+    }
+
+    /**
+     * Delegates to {@link CullWatchers#armWatch}. {@link Pipeline#startWatching}'s own route in.
+     *
+     * @param prepDir {@link Path} the prep dir to watch
+     */
+    void armWatch(final Path prepDir) {
+        this.cullWatchers.armWatch(prepDir);
+    }
+
+    /**
+     * Delegates to {@link CullWatchers#disarmWatch}. {@link Pipeline#stopWatching} and
+     * {@link Pipeline#discard} both route in here.
+     *
+     * @param prepDir {@link Path} the prep dir whose watcher should stop
+     */
+    void disarmWatch(final Path prepDir) {
+        this.cullWatchers.disarmWatch(prepDir);
     }
 
     /**
@@ -325,7 +333,7 @@ final class CullEngine {
                 // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
                 // pause (no cancellation involved) still arms as before.
                 if (!cancellation.isCancelled()) {
-                    this.armWatchIfConfigured(job);
+                    this.cullWatchers.armWatchIfConfigured(job);
                 }
                 return new CullJobOutcome.Waiting(job);
             }
@@ -383,95 +391,5 @@ final class CullEngine {
         return new WaitingCullJob(
                 prep.scope(), prep.prepDir(), this.shardTallyCalculator.tally(prep),
                 this.mediaStore.lastModifiedTime(prep.prepDir()));
-    }
-
-    /**
-     * Starts polling a prep dir for an auto-resume whatever the configured mode says, so one run's
-     * watch can be turned on by itself. That is what the waiting card's own "auto-apply when shards
-     * arrive" toggle switches, with disarmWatch() as its off position. A no-op when a watcher is
-     * already active for that prep dir, rather than a competing second poller.
-     *
-     * <p>The provider check stays even here, where the user asked for this explicitly. Watch mode
-     * exists to notice when the user's own separate culling agent, running outside this app, drops
-     * a shard. An automated provider's shards never arrive that way, so its waiting run has nothing
-     * to notice, and a run that already looks ready would only trigger an unasked-for, API-spending
-     * resume. The toggle is absent from an automated provider's card for the same reason.
-     *
-     * @param prepDir {@link Path} the prep dir to watch
-     */
-    void armWatch(final Path prepDir) {
-        if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
-            return;
-        }
-        this.activeWatches.compute(prepDir, (_, existing) -> {
-            if (existing != null && existing.isActive()) {
-                return existing;
-            }
-            final var watcher = new CullWatcher(this.watchPollInterval,
-                    () -> this.shardTallyCalculator.isReadyToResume(prepDir), () -> this.tryAutoResume(prepDir));
-            watcher.start();
-            return watcher;
-        });
-    }
-
-    /**
-     * armWatch() for a run nobody has decided about yet, so the configured mode picks. Every
-     * automatic arming site goes through here: the startup scan and dispatchAndApply()'s own
-     * Waiting branch. A per-run toggle calls armWatch() directly instead, which is the whole
-     * difference between the two.
-     *
-     * @param job {@link WaitingCullJob} the waiting job to watch
-     */
-    private void armWatchIfConfigured(final WaitingCullJob job) {
-        if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH) {
-            return;
-        }
-        this.armWatch(job.prepDir());
-    }
-
-    /**
-     * Stops and removes the active watcher for a prep dir, if one exists. Giving up on a
-     * still-waiting job must stop it from ever auto-resuming a prep dir that's about to be filed
-     * into the graveyard, so this is package-private rather than private: dispatchAndApply()'s own
-     * call site isn't the only place that needs to retire a watcher. It is also armWatch()'s
-     * opposite, and so the off position of the waiting card's own per-run watch toggle. Turning
-     * that off leaves the run exactly as it is: still Waiting, still listed, still blocking a
-     * re-cull of its scope.
-     *
-     * @param prepDir {@link Path} the prep dir whose watcher should stop
-     */
-    void disarmWatch(final Path prepDir) {
-        final CullWatcher watcher = this.activeWatches.remove(prepDir);
-        if (watcher != null) {
-            watcher.stop();
-        }
-    }
-
-    /**
-     * The heavier action a CullWatcher runs at most once it thinks isReadyToResume(). Returns whether
-     * it actually got to run. True means resume()'s own jobRunner.submit() succeeded - the watcher's
-     * job is then done, win or lose (see dispatchAndApply()'s own re-arm-on-Waiting note). False
-     * means the job runner was busy with something else, so the watcher keeps polling and retries.
-     * The submitted job runs and completes fully asynchronously; nothing here waits on it. A
-     * failure there would otherwise vanish silently, so it's logged here instead. That matches the
-     * visibility a manual Resume gets for free from whatever UI/CLI surfaces its own
-     * join()/onComplete() failure.
-     *
-     * @param prepDir {@link Path} the prep dir to attempt to resume
-     * @return boolean whether the resume attempt was actually submitted
-     */
-    private boolean tryAutoResume(final Path prepDir) {
-        final JobHandle<CullJobOutcome> handle;
-        try {
-            handle = this.resume(prepDir, false);
-        } catch (final IllegalStateException busy) {
-            return false;
-        }
-        handle.onComplete().whenComplete((_, failure) -> {
-            if (failure != null) {
-                log.warn("Watch-mode auto-resume for {} failed", prepDir, failure);
-            }
-        });
-        return true;
     }
 }
