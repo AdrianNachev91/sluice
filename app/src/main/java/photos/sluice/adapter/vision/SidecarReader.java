@@ -2,6 +2,7 @@ package photos.sluice.adapter.vision;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -9,6 +10,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -54,23 +56,27 @@ class SidecarReader {
         final RawSidecar raw;
         try (final var input = Files.newInputStream(sidecarPath)) {
             raw = this.mapper.readValue(input, RawSidecar.class);
+        } catch (final NoSuchFileException e) {
+            // Absent entirely is not a transient read failure - it will never resolve on retry,
+            // just like a genuinely malformed one.
+            throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " does not exist", e);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read sidecar " + sidecarPath, e);
         } catch (final JacksonException e) {
-            throw new UncheckedIOException("Failed to read sidecar " + sidecarPath, new IOException(e));
+            throw new MalformedPrepJsonException("Failed to parse sidecar " + sidecarPath, e);
         }
         // The IDE binds the generic result to the non-null RawSidecar type and can't see that a
         // literal null document deserializes to null.
         //noinspection ConstantValue
         if (raw == null || raw.photos() == null) {
-            throw new UncheckedIOException("Sidecar " + sidecarPath + " has no photos array",
+            throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " has no photos array",
                     new IOException("missing photos"));
         }
         // A montage only exists for a non-empty batch, so an empty photos array is corruption too.
         // Tolerating it would strip those files from the in-scope set, and the validator would then
         // blame the culling agent for out-of-scope decisions when the prep dir is what's broken.
         if (raw.photos().isEmpty()) {
-            throw new UncheckedIOException("Sidecar " + sidecarPath + " lists no photos",
+            throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " lists no photos",
                     new IOException("empty photos"));
         }
         return raw.photos().stream()
@@ -87,7 +93,7 @@ class SidecarReader {
      */
     private static SidecarPhotoEntry entryOf(final @Nullable RawPhoto photo, final Path sidecarPath) {
         if (photo == null) {
-            throw new UncheckedIOException("Sidecar " + sidecarPath + " has a null photo entry",
+            throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " has a null photo entry",
                     new IOException("null photo entry"));
         }
         return new SidecarPhotoEntry(
@@ -107,7 +113,7 @@ class SidecarReader {
      */
     private static <T> T required(final @Nullable T value, final String field, final Path sidecarPath) {
         if (value == null) {
-            throw new UncheckedIOException(
+            throw new MalformedPrepJsonException(
                     "Sidecar " + sidecarPath + " has a photo entry missing '" + field + "'",
                     new IOException("missing " + field));
         }
@@ -125,9 +131,8 @@ class SidecarReader {
         try {
             return Instant.parse(time);
         } catch (final DateTimeParseException e) {
-            throw new UncheckedIOException(
-                    "Sidecar " + sidecarPath + " has a photo entry with unparseable time '" + time + "'",
-                    new IOException(e));
+            throw new MalformedPrepJsonException(
+                    "Sidecar " + sidecarPath + " has a photo entry with unparseable time '" + time + "'", e);
         }
     }
 }

@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -90,6 +92,27 @@ class JobRunnerTest {
 
         assertThatThrownBy(handle::join)
                 .isInstanceOf(CompletionException.class)
+                .hasCause(failure);
+        assertThat(this.runner.isBusy()).isFalse();
+    }
+
+    @Test
+    void slotFreesAndFailureIsWrappedWhenWorkThrowsAnErrorNotJustAnException() {
+        // Guards the catch (Throwable), not catch (Exception), at JobRunner.java's own run().
+        // An Error can escape deep in an engine call: a stack overflow walking a pathological
+        // directory tree, an out-of-memory decoding a large batch. Catching only Exception would
+        // let it skip both freeing the slot and completing the caller's join(). Every future
+        // submit() would then wedge behind a job that never finishes. This asserts through a
+        // bounded get(), not join(). join()'s own wait is non-interruptible and cannot be timed
+        // out. If this exact regression ever recurred, join() would hang forever here, taking the
+        // whole test run down with it instead of failing cleanly.
+        final var failure = new Error("simulated stack overflow");
+        final JobHandle<String> handle = this.runner.submit(_ -> {
+            throw failure;
+        });
+
+        assertThatThrownBy(() -> handle.onComplete().toCompletableFuture().get(5, TimeUnit.SECONDS))
+                .isInstanceOf(ExecutionException.class)
                 .hasCause(failure);
         assertThat(this.runner.isBusy()).isFalse();
     }

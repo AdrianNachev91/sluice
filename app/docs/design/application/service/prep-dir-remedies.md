@@ -77,13 +77,22 @@ regardless of overall prep-dir state. See `troubleshooter.md`.
 
 ## 2. Corrupt or missing index.json / sidecar
 
-This app's own prior output can itself go missing or unreadable in two places. `index.json` (the
-prep dir's own summary) is one; a montage's own sidecar (`montage-NNN.json`, its scope evidence)
-is the other. Neither is a culling mistake. Both get a remedy here instead of a bare crash.
+This app's own prior output can itself be damaged in two places, but the two read paths tell
+"damaged" apart differently. `index.json` (the prep dir's own summary) reaches its AUTO remedy only
+when it's missing entirely or its content is genuinely malformed (`MalformedPrepJsonException`). A
+read that merely failed - a lock, a permission denial - is not diagnosed here at all. It propagates
+uncaught, so a transient failure never triggers an AUTO rebuild against an index that was never
+actually broken. A montage's own sidecar (`montage-NNN.json`, its scope evidence) is read more
+broadly below. Any read failure routes it to the CHOICE remedy, since `Sidecars.srcsOf` doesn't yet
+make the same distinction. Neither missing nor malformed nor unreadable is a culling mistake. Every
+case index.json's AUTO remedy actually reaches, and every sidecar case, gets a remedy here instead
+of a bare crash.
 
 ```mermaid
 flowchart TD
-    A["diagnose() / apply()<br/>reads index.json"] -- unreadable --> B(["Finding.CorruptIndex<br/>(AUTO)"])
+    A["diagnose() / apply()<br/>reads index.json"] --> Z{"missing, or content<br/>genuinely malformed?"}
+    Z -- yes --> B(["Finding.CorruptIndex<br/>(AUTO)"])
+    Z -- "no - the read<br/>itself just failed" --> P(["propagates uncaught -<br/>not diagnosed here"])
     B --> C["rebuildIndex():<br/>scan for montage-NNN.json<br/>sidecar files"]
     C --> D{"contiguous 1..N,<br/>every one parseable?"}
     D -- no --> E(["guard refuses -<br/>Optional.empty(),<br/>nothing written"])
@@ -158,6 +167,7 @@ that one `Pipeline.discard()` method.
 | A stray shard that can't be assigned unambiguously                                   | Left as a `StrayShard` finding; `setAsideStrayShard()` is the CHOICE fallback      |
 | index.json is corrupt or missing, every sidecar contiguous and parseable             | `rebuildIndex()` (AUTO) rebuilds it from the sidecars; original filed if present   |
 | index.json is corrupt or missing, a sidecar is also missing or unparseable           | Rebuild guard refuses - `CorruptIndex` finding stays open, no engine remedy left   |
+| index.json read fails but is not missing or malformed (a lock, a permission denial)  | Propagates uncaught - not diagnosed here, no AUTO remedy attempted                 |
 | A montage's sidecar is missing or corrupt, the montage has no shard yet              | Silently skipped - not yet actionable, same as any still-culling montage           |
 | A montage's sidecar is missing or corrupt, the montage already has a shard           | `CorruptSidecar` finding (CHOICE)                                                  |
 | A `CorruptSidecar` finding resolved `SET_ASIDE`                                      | Montage dropped entirely; its photos stay in `Sorted` for a future cull            |

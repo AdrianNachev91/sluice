@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.io.IOException;
@@ -67,9 +68,22 @@ class SidecarReaderTest {
 
     @Test
     void failsLoudWhenTheSidecarFileIsMissing(@TempDir final Path dir) {
+        // Absent entirely is diagnosed the same as corrupt, never as a transient read failure - it
+        // will never resolve on retry.
         assertThatThrownBy(() -> this.reader.readEntries(dir.resolve("montage-404.json")))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("montage-404.json");
+    }
+
+    @Test
+    void aReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
+        // A directory in place of the sidecar is a real read failure, not malformed content.
+        final Path sidecar = dir.resolve("montage-001.json");
+        Files.createDirectory(sidecar);
+
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class);
     }
 
     @Test
@@ -78,7 +92,7 @@ class SidecarReaderTest {
         Files.writeString(sidecar, "{ not json");
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("montage-001.json");
     }
 
@@ -88,7 +102,7 @@ class SidecarReaderTest {
         Files.writeString(sidecar, "null");
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("has no photos array");
     }
 
@@ -99,7 +113,7 @@ class SidecarReaderTest {
                 { "montage": "montage-001.jpg" }""");
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("has no photos array");
     }
 
@@ -110,7 +124,7 @@ class SidecarReaderTest {
                 { "montage": "montage-001.jpg", "photos": [] }""");
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("lists no photos");
     }
 
@@ -121,7 +135,7 @@ class SidecarReaderTest {
                 { "photos": [ null ] }""");
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("null photo entry");
     }
 
@@ -133,7 +147,7 @@ class SidecarReaderTest {
                 { "photos": [ %s ] }""".formatted(this.photoWithout(missing, dir)));
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("photo entry missing '" + missing + "'");
     }
 
@@ -145,7 +159,7 @@ class SidecarReaderTest {
                   "received": false } ] }""".formatted(jsonEscaped(dir.resolve("IMG_001.jpg"))));
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("unparseable time '20-06-2019 15:00'");
     }
 

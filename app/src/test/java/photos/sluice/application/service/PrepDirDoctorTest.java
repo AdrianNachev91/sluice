@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.Finding.InvalidCategory;
 import photos.sluice.domain.cull.Finding.MissingSource;
@@ -15,6 +16,7 @@ import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -22,6 +24,7 @@ import java.util.List;
 
 import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // Fixture-writing helpers below mirror ApplyPlannerTest's own. PrepDirDoctor reuses ApplyPlanner's
 // validate()/checkMissingSources() internally, so the same shard/sidecar/index fixtures apply.
@@ -78,6 +81,20 @@ class PrepDirDoctorTest {
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
+    }
+
+    @Test
+    void aFailedIndexReadPropagatesRatherThanBeingDiagnosedAsCorrupt(@TempDir final Path root) throws IOException {
+        // A directory where index.json is expected is a real read failure. Files.newInputStream
+        // cannot open it. That is distinct from "not valid json" (malformed content) and from
+        // "never written at all" (permanently absent, diagnosed the same as corrupt). This one must
+        // propagate instead of becoming a false corruption diagnosis.
+        final Path prepDir = prepDir(root);
+        Files.createDirectory(prepDir.resolve("index.json"));
+
+        assertThatThrownBy(() -> doctor().diagnose(prepDir))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class);
     }
 
     @Test

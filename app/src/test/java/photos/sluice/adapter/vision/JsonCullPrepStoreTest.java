@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
@@ -72,7 +73,67 @@ class JsonCullPrepStoreTest {
         Files.writeString(dir.resolve("index.json"), "null");
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(UncheckedIOException.class);
+                .isInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    @Test
+    void readIndexOnMalformedJsonThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), "{ not valid json");
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    @Test
+    void readIndexOnAMissingIndexFileThrowsMalformedPrepJsonException(@TempDir final Path dir) {
+        // Absent entirely is diagnosed the same as corrupt, never as a transient read failure - it
+        // will never resolve on retry.
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    @Test
+    void readIndexOnANullBasePathThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "basePath": null, "photos": 0, "montages": 0, "prepDir": "%s" }
+                """.formatted(jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("basePath");
+    }
+
+    @Test
+    void readIndexOnANullPrepDirThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "basePath": "%s", "photos": 0, "montages": 0, "prepDir": null }
+                """.formatted(jsonEscaped(dir.resolve("base"))));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("prepDir");
+    }
+
+    @Test
+    void readIndexOnANullUnreviewableEntryThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "basePath": "%s", "photos": 0, "unreviewable": [ null ], "montages": 0,
+                  "prepDir": "%s" }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    @Test
+    void readIndexOnAReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
+        // A directory in place of index.json is a real read failure, not malformed content - the
+        // distinction PrepDirDoctor relies on to avoid a false corruption diagnosis.
+        Files.createDirectory(dir.resolve("index.json"));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class);
     }
 
     @Test

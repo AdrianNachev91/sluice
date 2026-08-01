@@ -93,6 +93,23 @@ class TakeoutJsonSourceTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void returnsEmptyWhenTimestampIsOutOfInstantRange(@TempDir final Path dir) throws IOException {
+        // A hand-edited or corrupted sidecar can hold a value Long.parseLong accepts but Instant's
+        // own range rejects. Before the fix this aborted the whole sort run instead of degrading
+        // like every other malformed-field case here.
+        final Path sidecar = writeSidecar(dir, """
+                {
+                  "photoTakenTime": {
+                    "timestamp": "%d"
+                  }
+                }""".formatted(Long.MAX_VALUE));
+
+        final Optional<LocalDateTime> result = this.source.resolve(this.anyFile, new TakeoutSidecar(sidecar));
+
+        assertThat(result).isEmpty();
+    }
+
     private static Path writeSidecar(final Path dir, final String json) throws IOException {
         final Path file = dir.resolve("IMG_0001.jpg.supplemental-metadata.json");
         Files.writeString(file, json);

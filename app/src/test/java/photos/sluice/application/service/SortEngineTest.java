@@ -54,6 +54,36 @@ class SortEngineTest {
         assertThat(summary.photosSorted()).isEqualTo(1);
         assertThat(Files.exists(root.resolve("Sorted/Photos/2021/03/20210315_photo.jpg"))).isTrue();
         assertThat(Files.exists(inbox.resolve("20210315_photo.jpg"))).isFalse();
+        // No Takeout JSON anywhere in this fixture - the pairing canary has nothing to warn about.
+        assertThat(summary.warnings()).isEmpty();
+    }
+
+    @Test
+    void healthyPairingRateProducesNoPairingWarning(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        final Path photo = inbox.resolve("photo1.jpg");
+        writeFile(photo, padded("keeper"));
+        writeSidecar(inbox.resolve("photo1.jpg.supplemental-metadata.json"), LocalDateTime.of(2015, 5, 5, 12, 0, 0));
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.OldestYear());
+
+        assertThat(summary.warnings()).isEmpty();
+    }
+
+    @Test
+    void nearZeroPairingRateWithSidecarsPresentTripsThePairingCanary(@TempDir final Path root) throws IOException {
+        // Simulates a changed Takeout export shape: a JSON sidecar exists (takeoutMode true), but
+        // its name doesn't prefix-match the media file's, so nothing pairs. Before this fix, that
+        // failure mode was silent - every file just falls through to mtime with no warning at all.
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210315_photo.jpg"), padded("keeper"));
+        Files.writeString(inbox.resolve("print-subscriptions.json"), "{}");
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.OldestYear());
+
+        assertThat(summary.sidecarsDeleted()).isEqualTo(0);
+        assertThat(summary.warnings()).hasSize(1);
+        assertThat(summary.warnings().getFirst()).contains("Takeout sidecars are present");
     }
 
     @Test

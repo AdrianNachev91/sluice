@@ -15,6 +15,10 @@ import java.util.Set;
  * always yields at most one entry, since both narrow to a single year before routing anything.
  * Empty means nothing reached Sorted at all. A curate run reads this field to learn which year an
  * auto-resolved {@link SortScope.OldestYear} scope actually picked, since nothing else reports it.
+ *
+ * <p>{@code warnings} carries conditions worth a human's attention that stopped nothing: today,
+ * only the pairing canary firing when Takeout sidecars were present but almost none of them paired
+ * to a scanned media file. Empty means nothing tripped it.
  */
 public record SortSummary(
         int processed,
@@ -27,7 +31,8 @@ public record SortSummary(
         int sidecarsDeleted,
         List<String> lowConfidenceFiles,
         List<String> unsortedFiles,
-        Set<Integer> yearsSorted) {
+        Set<Integer> yearsSorted,
+        List<String> warnings) {
 
     /**
      * Defensively copies the mutable list/set components.
@@ -43,10 +48,12 @@ public record SortSummary(
      * @param lowConfidenceFiles a {@link List} of {@link String} filenames sorted on a low-confidence date
      * @param unsortedFiles a {@link List} of {@link String} filenames routed to Review\Unsorted
      * @param yearsSorted a {@link Set} of {@link Integer} distinct years any file landed in this run
+     * @param warnings a {@link List} of {@link String} conditions worth attention that stopped nothing
      */
     public SortSummary {
         lowConfidenceFiles = List.copyOf(lowConfidenceFiles);
         unsortedFiles = List.copyOf(unsortedFiles);
         yearsSorted = Set.copyOf(yearsSorted);
+        warnings = List.copyOf(warnings);
     }
 }

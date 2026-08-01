@@ -11,6 +11,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -50,7 +51,11 @@ public class TakeoutJsonSource implements DateSource {
             final long epochSeconds = Long.parseLong(timestamp.asString());
             return Optional.of(
                     Instant.ofEpochSecond(epochSeconds).atZone(ZoneId.systemDefault()).toLocalDateTime());
-        } catch (IOException | JacksonException | NumberFormatException _) {
+        } catch (IOException | JacksonException | NumberFormatException | DateTimeException _) {
+            // DateTimeException: a corrupted or hand-edited timestamp field can hold a value
+            // Instant's own range rejects outright (Long.parseLong succeeds; ofEpochSecond then
+            // throws). Degrading here, like every other malformed-field case, keeps one bad sidecar
+            // from aborting the whole sort run. The date source chain falls through to the next one.
             return Optional.empty();
         }
     }

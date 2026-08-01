@@ -6,6 +6,7 @@ import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -23,8 +24,11 @@ public interface CullPrepPort {
 
     /**
      * The prep directory's own index.json, describing the scope it covers and every montage it
-     * expects a shard for. Unchecked failure if missing or unreadable. This is the app's own prior
-     * output, so a broken one means the prep dir itself is corrupt, not a fixable culling mistake.
+     * expects a shard for. This is the app's own prior output. Content that is missing or cannot
+     * parse means the prep dir itself is corrupt, not a fixable culling mistake, and throws
+     * {@link MalformedPrepJsonException}. A read that merely failed while the file is intact (a
+     * lock, a permission denial) throws a plain {@link UncheckedIOException} instead. That is how a
+     * caller tells the two apart.
      *
      * @param prepDir {@link Path} the prep directory to read
      * @return {@link PrepDir} the parsed prep directory index
@@ -44,9 +48,10 @@ public interface CullPrepPort {
     void writeIndex(Path prepDir, PrepDir index);
 
     /**
-     * Every photo entry montage's sidecar (montage-NNN.json) lists. Unchecked failure if unreadable
-     * or malformed. The sidecar is this app's own prior output, so a broken one means the prep dir
-     * itself is corrupt, not a fixable culling mistake.
+     * Every photo entry montage's sidecar (montage-NNN.json) lists. The sidecar is this app's own
+     * prior output. Missing or unparseable content throws {@link MalformedPrepJsonException}, the
+     * same distinction {@link #readIndex} makes against a plain {@link UncheckedIOException} for a
+     * read that merely failed.
      *
      * @param prepDir {@link Path} the prep directory holding the sidecar
      * @param montage {@link String} the montage whose sidecar to read

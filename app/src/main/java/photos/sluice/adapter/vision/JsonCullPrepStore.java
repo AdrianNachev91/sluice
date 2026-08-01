@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
@@ -21,6 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -104,22 +106,45 @@ public class JsonCullPrepStore implements CullPrepPort {
         final RawIndex raw;
         try (final var input = Files.newInputStream(path)) {
             raw = this.mapper.readValue(input, RawIndex.class);
+        } catch (final NoSuchFileException e) {
+            // Absent entirely is not a transient read failure - it will never resolve on retry,
+            // just like a genuinely malformed one. Diagnosed and remedied identically.
+            throw new MalformedPrepJsonException("Prep index " + path + " does not exist", e);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read prep index " + path, e);
         } catch (final JacksonException e) {
-            throw new UncheckedIOException("Failed to read prep index " + path, new IOException(e));
+            throw new MalformedPrepJsonException("Failed to parse prep index " + path, e);
         }
         // The IDE binds the generic result to the non-null RawIndex type and can't see that a
         // literal null document deserializes to null.
         //noinspection ConstantValue
         if (raw == null) {
-            throw new UncheckedIOException("Prep index " + path + " is not a JSON object",
+            throw new MalformedPrepJsonException("Prep index " + path + " is not a JSON object",
                     new IOException("null document"));
         }
         final List<String> unreviewable = raw.unreviewable() == null ? List.of() : raw.unreviewable();
         final List<String> entries = raw.entries() == null ? List.of() : raw.entries();
-        return new PrepDir(raw.scope(), Path.of(raw.basePath()), raw.photos(),
-                unreviewable.stream().map(Path::of).toList(), raw.montages(), Path.of(raw.prepDir()), entries);
+        return new PrepDir(raw.scope(), requiredPath(raw.basePath(), "basePath", path), raw.photos(),
+                unreviewable.stream().map(entry -> requiredPath(entry, "an unreviewable entry", path)).toList(),
+                raw.montages(), requiredPath(raw.prepDir(), "prepDir", path), entries);
+    }
+
+    /**
+     * Converts a required JSON string field to a {@link Path}, failing loud if it's null. A null
+     * required field is malformed content, the same as unparseable JSON - never a
+     * {@link NullPointerException} escaping from {@link Path#of}.
+     *
+     * @param value {@link String} the raw field value, possibly null
+     * @param field {@link String} the field's name, used only for the error message
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return {@link Path} the field's value, converted
+     */
+    private static Path requiredPath(final @Nullable String value, final String field, final Path indexPath) {
+        if (value == null) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a null " + field,
+                    new IOException("null " + field));
+        }
+        return Path.of(value);
     }
 
     /**

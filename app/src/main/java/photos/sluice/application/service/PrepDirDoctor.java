@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.domain.cull.Finding;
@@ -14,7 +15,6 @@ import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.ValidationReport;
 import photos.sluice.domain.job.ShardTally;
 
-import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -93,7 +93,9 @@ public class PrepDirDoctor {
      * whether decisions.json exists - a COMPLETE run needs nothing else. A corrupt or missing
      * index.json past that point reports BLOCKED with a single {@link Finding.CorruptIndex}. With
      * no readable montage list, nothing else here can be computed at all - not the tally, not the
-     * shard contract, not missing sources.
+     * shard contract, not missing sources. A read that merely failed - the file exists and is well
+     * formed, but couldn't be opened - is not diagnosed at all; it propagates, since a false
+     * corruption diagnosis would offer an AUTO rebuild that discards an index that was never broken.
      *
      * @param prepDirPath {@link Path} the prep directory to diagnose
      * @return {@link PrepDirHealth} the prep dir's current state and open findings
@@ -106,7 +108,7 @@ public class PrepDirDoctor {
         final PrepDir prepDir;
         try {
             prepDir = this.cullPrepPort.readIndex(prepDirPath);
-        } catch (final UncheckedIOException e) {
+        } catch (final MalformedPrepJsonException e) {
             return new PrepDirHealth(State.BLOCKED, List.of(new Finding.CorruptIndex(prepDirPath.resolve(INDEX_FILE))));
         }
 

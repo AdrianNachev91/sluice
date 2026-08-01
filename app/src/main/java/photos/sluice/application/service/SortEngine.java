@@ -57,10 +57,16 @@ public class SortEngine implements SortUseCase {
     private static final String REASON_LOW_RES = "low-res";
     private static final String REASONS_FILE = "_reasons.txt";
 
+    // The pairing canary's threshold. Google's own sidecar naming scheme changes at export time,
+    // not per-photo. A real change lands across the whole export at once rather than mixing, so
+    // there is no "mostly paired" middle ground once the scheme itself has moved. Picked to be
+    // unmistakable rather than clever: this flags a collapse, not a quality metric.
+    private static final double PAIRING_COLLAPSE_THRESHOLD = 0.05;
+
     // Returned when cancellation lands during dating, before any file is moved, deleted, or
     // written - a clean abort with nothing to report.
     private static final SortSummary EMPTY_SORT_SUMMARY =
-            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of());
+            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of());
 
     private final PathsPort pathsPort;
     private final InboxScannerPort inboxScanner;
@@ -182,7 +188,7 @@ public class SortEngine implements SortUseCase {
         return new SortSummary(actuallyRemoved.size(), plan.redundantVsLibrary().size(),
                 plan.withinBatchDuplicates().size(), routing.photosSorted, routing.videosSorted, routing.lowRes,
                 routing.unsorted, consumedSidecars.size(), routing.lowConfidenceFiles, routing.unsortedFiles,
-                routing.yearsSorted);
+                routing.yearsSorted, pairingWarnings(scanResult));
     }
 
     /**
@@ -265,6 +271,33 @@ public class SortEngine implements SortUseCase {
             this.mediaStore.delete(orphaned);
         }
         this.mediaStore.removeEmptyDirectories(this.pathsPort.inbox());
+    }
+
+    /**
+     * The pairing canary. {@link ScanResult#takeoutMode()} already tells whether Takeout sidecars
+     * were found at all. This adds the other half: whether they actually paired to anything.
+     *
+     * <p>A changed sidecar *suffix* still pairs via the prefix fallback, so a genuine naming-scheme
+     * tweak degrades safely on its own. Two changes would not: a scheme whose sidecar name does not
+     * start with the media filename at all, or a renamed JSON key
+     * {@link photos.sluice.adapter.metadata.TakeoutJsonSource} reads. Either way pairing collapses
+     * toward zero, every file falls through the whole date chain to mtime, and a run summary alone
+     * would never surface that.
+     *
+     * @param scanResult {@link ScanResult} the whole-Inbox scan this run read
+     * @return a {@link List} of {@link String} zero or one warning, non-empty only on a collapse
+     */
+    private static List<String> pairingWarnings(final ScanResult scanResult) {
+        if (!scanResult.takeoutMode() || scanResult.media().isEmpty()) {
+            return List.of();
+        }
+        final double pairingRate = (double) scanResult.sidecars().size() / scanResult.media().size();
+        if (pairingRate >= PAIRING_COLLAPSE_THRESHOLD) {
+            return List.of();
+        }
+        return List.of(("Takeout sidecars are present but only %.1f%% of %d scanned media files paired to one - "
+                + "the export's sidecar naming or JSON shape may have changed.")
+                .formatted(pairingRate * 100, scanResult.media().size()));
     }
 
     /**
