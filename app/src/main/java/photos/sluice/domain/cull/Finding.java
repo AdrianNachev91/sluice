@@ -258,6 +258,25 @@ public sealed interface Finding {
     }
 
     /**
+     * A montage's shard file is present but cannot be turned into decisions at all. Unparseable
+     * JSON, an unknown field, a null document, or a null decision entry all land here. This is the
+     * shard-side counterpart of {@link CorruptSidecar}, and the two split by who wrote the file.
+     * A sidecar is this app's own output, so an unreadable one means the prep dir needs repairing.
+     * A shard is the culling agent's output, so an unreadable one is content only a re-cull can
+     * put right.
+     *
+     * <p>NONE for exactly that reason. No engine-level repair can invent the judgements the shard
+     * was supposed to carry. Rewriting the shard, or the last-resort discard-and-redo, are the two
+     * ways out.
+     */
+    record CorruptShard(String montage, String shardFile) implements Finding {
+        @Override
+        public String describe() {
+            return this.montage + ": shard " + this.shardFile + " is unreadable";
+        }
+    }
+
+    /**
      * The prep directory's own index.json cannot be parsed - missing, truncated, or not valid JSON.
      * Always reports AUTO, the same reasoning {@link StrayShard} already relies on. index.json is a
      * derived summary (scope, base path, montage entries, photo/montage counts), reconstructible

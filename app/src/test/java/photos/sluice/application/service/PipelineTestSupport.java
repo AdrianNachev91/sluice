@@ -786,6 +786,30 @@ final class PipelineTestSupport {
         }
     }
 
+    // An automated provider that succeeds at its own job and still produces a shard set apply
+    // refuses. Every decision names a file no montage ever showed, and whose basename matches no
+    // in-scope file either, so no unique-basename heal can pull it back into scope. That is the
+    // shape a run needs to reach Blocked without any culler-side failure along the way.
+    static final class OutOfScopeCuller implements VisionCuller {
+        @Override
+        public String id() {
+            return "auto-approve";
+        }
+
+        @Override
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+            for (final String montage : prep.entries()) {
+                try {
+                    writeShard(prep.prepDir(), montage,
+                            classificationJson(prep.prepDir().resolve("never-in-scope.jpg"), "junk", "blurry"));
+                } catch (final IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+            return new CullReport(prep.entries().size(), 0, 0, 0);
+        }
+    }
+
     // Stands in for an automated provider (Anthropic/OpenAI/Ollama) whose CullException means a
     // genuine failure, never "waiting for more shards" - see VisionCuller.MANUAL_MODE_PROVIDER_ID.
     record ThrowingCuller(String id) implements VisionCuller {
@@ -844,8 +868,9 @@ final class PipelineTestSupport {
         }
     }
 
-    // Proves buildFreshAndDispatch()'s post-PREPPING cancellation check short-circuits before
-    // dispatch ever runs - any call into this fake fails the test outright.
+    // Any call into this fake fails its test outright. Two separate claims lean on that. One is
+    // buildFreshAndDispatch()'s post-PREPPING cancellation check short-circuiting before dispatch.
+    // The other is a resume skipping dispatch entirely once every montage already has a shard.
     static final class NeverCalledCuller implements VisionCuller {
         @Override
         public String id() {
@@ -854,7 +879,8 @@ final class PipelineTestSupport {
 
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
-            throw new AssertionError("dispatch must never run after a post-PREPPING cancellation");
+            throw new AssertionError("dispatch must never run: neither after a post-PREPPING "
+                    + "cancellation, nor when every montage already has a shard");
         }
     }
 

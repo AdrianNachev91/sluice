@@ -24,15 +24,17 @@ flowchart TD
     B -- no, allowPartial --> C(["waived - that<br/>montage's photos<br/>stay kept"])
     B -- no, not allowPartial --> D["problem:<br/>no shard"]
     B -- yes --> E["read it"]
+    E -- won't parse --> N["problem:<br/>shard unreadable"]
     A --> F["any decisions-*.json<br/>present with no<br/>matching montage?"]
     F -- yes --> G["problem:<br/>no matching montage"]
-    E --> H["ShardValidator.validate<br/>against the sidecar-derived<br/>in-scope set + configured<br/>categories"]
+    E -- parsed --> H["ShardValidator.validate<br/>against the sidecar-derived<br/>in-scope set + configured<br/>categories"]
     H -- contract violation --> I["problem<br/>(aggregated)"]
     H -- unresolvable file --> I
     H -- resolvable via a unique<br/>sidecar basename --> J["healed - not a<br/>problem, but reported"]
     D --> K{"any problems<br/>at all?"}
     G --> K
     I --> K
+    N --> K
     K -- yes --> L(["ApplyException"])
     K -- no --> M(["merged, heal-corrected<br/>decision list"])
 ```
@@ -51,6 +53,18 @@ on its state, it's either silently skipped (not yet culled), reported as a fresh
 and shards ever reach `ShardValidator`. The CHOICE remedy that resolves a `CorruptSidecar` finding
 lives elsewhere: see `prep-dir-remedies.md` for `resolveCorruptSidecar()` and the full breakdown of
 each ledger resolution's effect.
+
+A shard that is present but won't parse is a `Finding.CorruptShard`, never an exception escaping
+`validate()`. That matters because this is the only gate an apply-only resume passes through, and
+because `PrepDirDoctor.diagnose()` reuses the same call to drive a dashboard. A thrown exception
+there would crash the read instead of describing the dir. The distinction is between damaged content
+and a read that merely failed. Only the first becomes a finding. A read failure on an intact shard
+propagates, so a lock or a permission denial is never reported as the culling agent's mistake.
+
+`CorruptShard` carries the NONE remedy, unlike `CorruptSidecar`'s CHOICE. A sidecar is this app's
+own output, so a corrupt one is a prep-dir problem the engine can offer options for. A shard is the
+culling agent's output. No engine-level repair can invent judgements it failed to record, so the
+ways out are a rewritten shard or the last-resort discard-and-redo.
 
 `resolveOverlaps()` runs right after `ShardValidator`, suppressing a `Finding.DecisionUnreviewableOverlap`
 once the disposition ledger records how the user resolved it. Neither a shard nor `index.json` is
@@ -135,18 +149,20 @@ is never trusted on its own.
 
 ## Scenarios
 
-| Scenario                                                                                      | Outcome                                                                             |
-|-----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
-| A montage's shard is missing, `allowPartial` not set                                          | `ApplyException`, zero files moved                                                  |
-| A montage's shard is missing, `allowPartial` set                                              | That montage's photos stay in place; the rest of the run applies                    |
-| A decisions file exists with no matching montage                                              | `ApplyException`, zero files moved (regardless of `allowPartial`)                   |
-| A decision's category isn't configured, or a required field is blank                          | `ApplyException`, zero files moved                                                  |
-| A decision's `file` doesn't match any sidecar entry, but its basename does (and is unique)    | Healed - applied to the resolved path, reported as a heal                           |
-| A move-based decision's file is missing, with no move record verifying it already ran         | Unresolved - `ApplyException`, zero files moved                                     |
-| A move-based decision's file is missing, and its move record's destination hash-verifies      | Done - not reprocessed; a missing secondary write is backfilled (`apply-engine.md`) |
-| A move record's destination is missing, or its content no longer matches the recorded hash    | Unresolved - `ApplyException`, zero files moved; the record alone is never trusted  |
-| An unreviewable file's move record verifies (destination hash-matches) but its source is gone | Done - not reprocessed; there is no secondary write to backfill                     |
-| An unreviewable file is missing, with no move record verifying it already ran                 | Unresolved - `ApplyException`, zero files moved (same gate as any decision)         |
+| Scenario                                                                                      | Outcome                                                                                  |
+|-----------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------|
+| A montage's shard is missing, `allowPartial` not set                                          | `ApplyException`, zero files moved                                                       |
+| A montage's shard is missing, `allowPartial` set                                              | That montage's photos stay in place; the rest of the run applies                         |
+| A decisions file exists with no matching montage                                              | `ApplyException`, zero files moved (regardless of `allowPartial`)                        |
+| A montage's shard is present but its content will not parse                                   | `CorruptShard` - `ApplyException`, zero files moved; every other montage still validates |
+| A montage's shard is present but the read itself fails, content intact                        | Propagates as a plain `UncheckedIOException` - never diagnosed as the culler's mistake   |
+| A decision's category isn't configured, or a required field is blank                          | `ApplyException`, zero files moved                                                       |
+| A decision's `file` doesn't match any sidecar entry, but its basename does (and is unique)    | Healed - applied to the resolved path, reported as a heal                                |
+| A move-based decision's file is missing, with no move record verifying it already ran         | Unresolved - `ApplyException`, zero files moved                                          |
+| A move-based decision's file is missing, and its move record's destination hash-verifies      | Done - not reprocessed; a missing secondary write is backfilled (`apply-engine.md`)      |
+| A move record's destination is missing, or its content no longer matches the recorded hash    | Unresolved - `ApplyException`, zero files moved; the record alone is never trusted       |
+| An unreviewable file's move record verifies (destination hash-matches) but its source is gone | Done - not reprocessed; there is no secondary write to backfill                          |
+| An unreviewable file is missing, with no move record verifying it already ran                 | Unresolved - `ApplyException`, zero files moved (same gate as any decision)              |
 
 ## Related
 

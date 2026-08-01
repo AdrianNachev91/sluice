@@ -1,6 +1,7 @@
 package photos.sluice.domain.cull;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.domain.cull.Finding.CorruptShard;
 import photos.sluice.domain.cull.Finding.CorruptSidecar;
 import photos.sluice.domain.cull.Finding.DuplicateFileReference;
 import photos.sluice.domain.cull.Finding.InvalidGroupSlug;
@@ -44,5 +45,15 @@ class FindingTest {
 
         assertThat(finding.describe()).isEqualTo("montage-001: sidecar unreadable or missing");
         assertThat(finding.remedy()).isEqualTo(Finding.Remedy.CHOICE);
+    }
+
+    // NONE, where CorruptSidecar carries CHOICE: the shard is the culling agent's own output, and
+    // no engine-level repair can invent judgements it failed to record.
+    @Test
+    void corruptShardNamesTheShardFileAndOffersNoRemedy() {
+        final var finding = new CorruptShard("montage-001", "decisions-001.json");
+
+        assertThat(finding.describe()).isEqualTo("montage-001: shard decisions-001.json is unreadable");
+        assertThat(finding.remedy()).isEqualTo(Finding.Remedy.NONE);
     }
 }

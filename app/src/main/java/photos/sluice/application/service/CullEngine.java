@@ -3,6 +3,7 @@ package photos.sluice.application.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
@@ -35,7 +36,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Orchestrates a whole cull job: prep, then dispatch, then apply (see
  * {@link #buildFreshAndDispatch}). It also owns {@link #waitingJobs()} and {@link #resume} for a
  * job still sitting on shards, and the watch-mode auto-resume that polls for those shards to
- * land.
+ * land. The dispatch step is conditional, not a fixed stage: it runs only while a montage still
+ * lacks a shard.
  *
  * <p>Not a Spring bean. {@link Pipeline} builds the one instance it needs, the same way it builds
  * a {@link CullWatcher} per prep dir. {@link #checkNoWaitingJobFor} and
@@ -150,10 +152,14 @@ final class CullEngine {
     }
 
     /**
-     * Re-reads an existing prep dir (no montages regenerated) and re-runs the same dispatch-then-apply
-     * flow cull() used, this time with the caller's own allowPartial. Resume is safely re-runnable.
-     * It stays read-only until the shard set actually validates. A resume triggered before every
-     * shard is dropped just throws right back into Waiting with a freshly recomputed tally.
+     * Re-reads an existing prep dir (no montages regenerated) and picks up where the run left off,
+     * this time with the caller's own allowPartial. Resume is safely re-runnable. It stays
+     * read-only until the shard set actually validates.
+     *
+     * <p>What it does next depends only on which shards are on disk. A montage still without one
+     * means the run is genuinely unfinished, so dispatch runs again. A resume triggered too early
+     * then lands right back in Waiting with a freshly recomputed tally. A full shard set means only
+     * apply is left, so no culler is entered at all - see dispatchAndApply()'s own doc.
      *
      * @param prepDir {@link Path} the existing prep dir to resume
      * @param allowPartial boolean whether a partial shard set is acceptable
@@ -263,7 +269,16 @@ final class CullEngine {
     }
 
     /**
-     * A CullException from the dispatch step means different things depending on the configured
+     * Dispatch runs only while some montage still lacks a shard. Once every montage has one, the
+     * agent has said everything it is going to say. Re-asking buys the same answer back, at the
+     * cost of a fresh round of API calls or a redundant validation pass. So a resume with a full
+     * shard set goes straight to apply, and apply's own gate becomes the single validator.
+     *
+     * <p>A refused apply therefore resolves to Blocked rather than propagating. Blocked is the
+     * user's move: the shard set is complete, so nothing is left to wait for. No watcher is armed
+     * for it, and the disarmWatch() below has already retired any that was polling.
+     *
+     * <p>A CullException from the dispatch step means different things depending on the configured
      * provider - see VisionCuller.MANUAL_MODE_PROVIDER_ID's own doc. For that provider it's the
      * expected manual-mode pause: resolved into Waiting, run slot released. For any other (automated)
      * provider it's a genuine failure and propagates - it never throws CullException to signal a
@@ -287,22 +302,26 @@ final class CullEngine {
             throws Exception {
         this.disarmWatch(prep.prepDir());
         final CullReport cullReport;
-        try {
-            cullReport = this.phaseRunner.run(CULLING,
-                    progress -> this.cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress,
-                            cancellation));
-        } catch (final CullException e) {
-            if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
-                throw e;
+        if (this.everyMontageHasAShard(prep)) {
+            cullReport = new CullReport(0, prep.entries().size(), 0, 0);
+        } else {
+            try {
+                cullReport = this.phaseRunner.run(CULLING,
+                        progress -> this.cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress,
+                                cancellation));
+            } catch (final CullException e) {
+                if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
+                    throw e;
+                }
+                final WaitingCullJob job = this.buildWaitingJob(prep);
+                // Not armed when this CullException is itself the manual-mode pause racing a
+                // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
+                // pause (no cancellation involved) still arms as before.
+                if (!cancellation.isCancelled()) {
+                    this.armWatchIfConfigured(job);
+                }
+                return new CullJobOutcome.Waiting(job);
             }
-            final WaitingCullJob job = this.buildWaitingJob(prep);
-            // Not armed when this CullException is itself the manual-mode pause racing a
-            // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
-            // pause (no cancellation involved) still arms as before.
-            if (!cancellation.isCancelled()) {
-                this.armWatchIfConfigured(job);
-            }
-            return new CullJobOutcome.Waiting(job);
         }
         // The one boundary check this method has for an automated provider: dispatch just
         // returned, either because it finished or because it stopped early on a cancellation. This
@@ -312,10 +331,15 @@ final class CullEngine {
         if (cancellation.isCancelled()) {
             return new CullJobOutcome.Waiting(this.buildWaitingJob(prep));
         }
-        final Optional<ApplyReport> applyReport = this.phaseRunner.run(APPLYING,
-                progress -> Optional.ofNullable(
-                        this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress,
-                                cancellation)));
+        final Optional<ApplyReport> applyReport;
+        try {
+            applyReport = this.phaseRunner.run(APPLYING,
+                    progress -> Optional.ofNullable(
+                            this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress,
+                                    cancellation)));
+        } catch (final ApplyException e) {
+            return new CullJobOutcome.Blocked(this.buildWaitingJob(prep), e.findings());
+        }
         // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
         // decisions.json was never written. The prep dir still reads as a waiting job, the same
         // authority rule the renderer's own empty return follows above. No watcher is armed here
@@ -325,6 +349,21 @@ final class CullEngine {
             return new CullJobOutcome.Waiting(this.buildWaitingJob(prep));
         }
         return new CullJobOutcome.Applied(cullReport, applyReport.get());
+    }
+
+    /**
+     * Whether every montage in prep already has a shard file on disk. A plain existence check per
+     * montage, never a parse. Whether those shards are any good is apply's own gate to decide. A
+     * shard that turns out unreadable is a finding there, not a reason to re-dispatch.
+     *
+     * <p>A scope with no montages at all counts as fully sharded. There is nothing for a culler to
+     * judge, so dispatching would only produce an empty report.
+     *
+     * @param prep {@link PrepDir} the prep dir to check
+     * @return boolean true if no montage is missing its shard
+     */
+    private boolean everyMontageHasAShard(final PrepDir prep) {
+        return prep.entries().stream().allMatch(montage -> this.cullPrepPort.hasShard(prep.prepDir(), montage));
     }
 
     /**

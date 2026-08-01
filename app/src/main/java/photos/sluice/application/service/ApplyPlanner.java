@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.service.MoveLedger.Ledger;
@@ -88,6 +89,10 @@ public class ApplyPlanner {
      * different montages, a basename that only heals while unique across the whole scope. Validating
      * one montage at a time would silently disable every one of them.
      *
+     * <p>This is the single validator on the resume path, so it has to catch everything a culler's
+     * own batch check would have. That means a stray shard, a group id reused across two montages,
+     * and a shard present but unparseable, alongside the whole per-decision contract.
+     *
      * @param prepDirPath {@link Path} the prep directory being validated
      * @param prepDir {@link PrepDir} the prep directory's index
      * @param options {@link ApplyOptions} apply behavior flags
@@ -143,6 +148,11 @@ public class ApplyPlanner {
      * needed to corroborate them. SET_ASIDE drops the montage entirely - no shard, no srcs, exactly
      * like a ledger-skipped file. No resolution yet reports a fresh {@link Finding.CorruptSidecar}.
      *
+     * <p>A shard that is present but cannot be parsed is a {@link Finding.CorruptShard}, never an
+     * exception escaping this method. It is a culling-agent content mistake, so it belongs in the
+     * same aggregated report as every other one. That matters most on the apply-only resume path,
+     * where no culler runs and this is the only gate the shard ever passes through.
+     *
      * @param prepDirPath {@link Path} the prep directory being validated
      * @param montage {@link String} the montage id to collect
      * @param hasShard boolean whether this montage currently has a shard
@@ -159,7 +169,8 @@ public class ApplyPlanner {
         if (srcs.isPresent()) {
             sidecarSrcs.addAll(srcs.get());
             if (hasShard) {
-                shardFiles.add(new ShardFile(montage, this.cullPrepPort.readShard(prepDirPath, montage)));
+                this.readShard(prepDirPath, montage, extraFindings)
+                        .ifPresent(shard -> shardFiles.add(new ShardFile(montage, shard)));
             }
             return;
         }
@@ -168,11 +179,33 @@ public class ApplyPlanner {
         }
         final CorruptSidecarResolution resolution = ledger.corruptSidecars().get(montage);
         if (resolution == CorruptSidecarResolution.APPLY_ANYWAY) {
-            final DecisionShard shard = this.cullPrepPort.readShard(prepDirPath, montage);
-            shard.decisions().forEach(decision -> sidecarSrcs.add(decision.file()));
-            shardFiles.add(new ShardFile(montage, shard));
+            this.readShard(prepDirPath, montage, extraFindings).ifPresent(shard -> {
+                shard.decisions().forEach(decision -> sidecarSrcs.add(decision.file()));
+                shardFiles.add(new ShardFile(montage, shard));
+            });
         } else if (resolution != CorruptSidecarResolution.SET_ASIDE) {
             extraFindings.add(new Finding.CorruptSidecar(montage));
+        }
+    }
+
+    /**
+     * Reads one montage's shard, recording a {@link Finding.CorruptShard} instead of throwing when
+     * the content cannot be turned into decisions. Only malformed content is caught. A read that
+     * merely failed while the shard itself is intact propagates, so a lock or a permission denial
+     * never gets diagnosed as a culler mistake.
+     *
+     * @param prepDirPath {@link Path} the prep directory holding the shard
+     * @param montage {@link String} the montage whose shard to read
+     * @param extraFindings a {@link List} of {@link Finding} accumulated findings beyond the shard contract
+     * @return an {@link Optional} {@link DecisionShard} the parsed shard, or empty if it is unreadable
+     */
+    private Optional<DecisionShard> readShard(final Path prepDirPath, final String montage,
+                                              final List<Finding> extraFindings) {
+        try {
+            return Optional.of(this.cullPrepPort.readShard(prepDirPath, montage));
+        } catch (final MalformedPrepJsonException e) {
+            extraFindings.add(new Finding.CorruptShard(montage, MontageNaming.shardFileFor(montage)));
+            return Optional.empty();
         }
     }
 

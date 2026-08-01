@@ -33,8 +33,10 @@ public interface CullUseCase {
     List<WaitingCullJob> waitingJobs();
 
     /**
-     * Re-validates prepDir's shards and applies if the set is now complete or allowPartial waives
-     * what's still missing; returns Waiting again, with an updated tally, if problems remain.
+     * Picks a paused run back up. A montage still missing its shard sends the run back to the
+     * configured provider, unless allowPartial waives it. A full shard set goes straight to apply.
+     * The outcome then says which of the three things happened: applied, waiting on shards still
+     * to come, or blocked on problems apply refused to carry out.
      *
      * @param prepDir {@link Path} the prep directory to re-validate
      * @param allowPartial boolean whether missing shards may be waived

@@ -5,11 +5,14 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
+import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.ValidationReport;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -204,4 +207,66 @@ class ApplyPlannerTest {
         assertThat(report.findings()).isEmpty();
     }
 
+    // This gate is the only one an apply-only resume passes through, so an unparseable shard has to
+    // come back as a finding here. Left to escape as an exception it would crash the job instead of
+    // resolving it to a Blocked run the user can act on.
+    @Test
+    void validateReportsCorruptShardForAMontageWhoseShardCannotBeParsed(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeFile(prepDir.resolve("decisions-001.json"), "{ not valid json");
+
+        final ValidationReport report = applyPlanner()
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings())
+                .containsExactly(new Finding.CorruptShard("montage-001", "decisions-001.json"));
+        assertThat(report.decisions()).isEmpty();
+    }
+
+    // A corrupt shard must not take the rest of the batch down with it. The second montage's
+    // decisions still have to reach the report, so a troubleshooter sees one problem rather than a
+    // whole scope gone dark.
+    @Test
+    void validateStillCollectsEveryOtherMontagesDecisionsAlongsideACorruptShard(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(first, "x");
+        writeFile(second, "y");
+        writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(first));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(second));
+        writeFile(prepDir.resolve("decisions-001.json"), "{ not valid json");
+        writeShard(prepDir, "montage-002", classificationJson(second, "junk", "blurry"));
+
+        final ValidationReport report = applyPlanner()
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings())
+                .containsExactly(new Finding.CorruptShard("montage-001", "decisions-001.json"));
+        assertThat(report.decisions()).extracting(Decision::file).containsExactly(second);
+    }
+
+    // The other half of the damaged-vs-failed split. A shard whose read merely failed says nothing
+    // about the culling agent's work. Blaming it with a CorruptShard finding would be a wrong
+    // diagnosis on content that is very likely intact.
+    @Test
+    void validateLetsAFailedShardReadPropagateInsteadOfBlamingTheCuller(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        // A directory where the shard file belongs: present to hasShard(), unreadable to the codec.
+        Files.createDirectory(prepDir.resolve("decisions-001.json"));
+
+        assertThatThrownBy(() -> applyPlanner()
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir)))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class);
+    }
 }

@@ -2,6 +2,7 @@ package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
@@ -128,6 +129,10 @@ public class PrepDirRemedies {
      * candidate montage never showed. {@link #setAsideStrayShard} is the CHOICE fallback for that
      * case.
      *
+     * <p>A stray shard whose own content will not parse is ambiguous by definition. Nothing can be
+     * checked against the candidate montage's sidecar, so it falls to that same CHOICE fallback
+     * rather than failing the whole recovery pass. A read that merely failed still propagates.
+     *
      * @param prepDirPath {@link Path} the prep directory holding the stray shard
      * @param strayShard {@link Finding.StrayShard} the finding naming the stray shard file
      * @return an {@link Optional} {@link String} the montage the shard was renamed to claim, empty if
@@ -143,7 +148,12 @@ public class PrepDirRemedies {
         }
         final String candidate = unclaimed.getFirst();
         final Path strayPath = prepDirPath.resolve(strayShard.shardFile());
-        final DecisionShard content = this.cullPrepPort.readShardFile(strayPath);
+        final DecisionShard content;
+        try {
+            content = this.cullPrepPort.readShardFile(strayPath);
+        } catch (final MalformedPrepJsonException e) {
+            return Optional.empty();
+        }
         final Set<Path> candidateSidecarFiles = this.cullPrepPort.readSidecar(prepDirPath, candidate).stream()
                 .map(SidecarPhotoEntry::src)
                 .collect(Collectors.toSet());

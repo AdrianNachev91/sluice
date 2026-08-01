@@ -2,6 +2,7 @@ package photos.sluice.adapter.vision;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
@@ -113,7 +114,7 @@ class ShardCodecTest {
                   "decisions": [ { "file": "a.jpg", "action": "junk", "reason": "blurry", "confidence": 0.9 } ] }""");
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining(shardPath.toString());
     }
 
@@ -155,7 +156,7 @@ class ShardCodecTest {
                   "decisions": [] }""");
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining(shardPath.toString());
     }
 
@@ -174,7 +175,7 @@ class ShardCodecTest {
         Files.writeString(shardPath, "null");
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining(shardPath.toString());
     }
 
@@ -186,7 +187,7 @@ class ShardCodecTest {
                   "decisions": [ null, { "file": "a.jpg", "action": "junk", "reason": "blurry" } ] }""");
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("null decision entry");
     }
 
@@ -217,15 +218,37 @@ class ShardCodecTest {
     }
 
     @Test
-    void wrapsAMalformedJsonReadIntoUncheckedIOException(@TempDir final Path dir) throws IOException {
+    void wrapsAMalformedJsonReadIntoMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-008.json");
         Files.writeString(shardPath, "{ not valid json");
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
-                .isInstanceOf(UncheckedIOException.class)
+                .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining(shardPath.toString())
                 .hasCauseInstanceOf(IOException.class)
                 .cause().hasCauseInstanceOf(JacksonException.class);
+    }
+
+    @Test
+    void readOnAMissingShardThrowsMalformedPrepJsonException(@TempDir final Path dir) {
+        // Absent entirely is diagnosed the same as corrupt, never as a transient read failure - it
+        // will never resolve on retry.
+        assertThatThrownBy(() -> this.codec.read(dir.resolve("decisions-011.json")))
+                .isInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    @Test
+    void readOnAReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
+        // A directory where the shard file belongs stands in for a read that fails while the
+        // content itself is fine. A lock held by a backup process, a permission denial, and a cloud
+        // placeholder that never hydrated all land the same way. That distinction is what keeps a
+        // merely-unreadable shard from being reported as the culling agent's mistake.
+        final Path shardPath = dir.resolve("decisions-012.json");
+        Files.createDirectory(shardPath);
+
+        assertThatThrownBy(() -> this.codec.read(shardPath))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class);
     }
 
     private static String jsonEscaped(final Path path) {

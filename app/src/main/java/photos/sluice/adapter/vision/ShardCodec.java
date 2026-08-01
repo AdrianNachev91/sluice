@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
@@ -16,6 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -27,10 +29,13 @@ import java.util.List;
  * near-dup-chosen} and {@code near-dup-reject} give the two near-dup shapes. Any other action
  * value is a {@link Classification} whose category is that action string.
  *
- * <p>The read path splits two kinds of bad input. Anything that isn't a representable shard fails
- * loud: an unknown field, malformed JSON, a null document, or a null decision entry. None can be
- * turned into a {@link Decision}, and an unknown field can't even be seen once parsed. So the
- * codec is the only place to catch it. Everything representable-but-wrong is left for
+ * <p>The read path splits two kinds of bad input. Anything that isn't a representable shard throws
+ * {@link MalformedPrepJsonException}: an unknown field, malformed JSON, a null document, or a null
+ * decision entry. None can be turned into a {@link Decision}, and an unknown field can't even be
+ * seen once parsed. So the codec is the only place to catch it. A read that merely failed, leaving
+ * the content itself intact, throws a plain {@link UncheckedIOException} instead. That distinction
+ * is what lets a caller report damaged content as a finding while letting a lock or a permission
+ * denial propagate. Everything representable-but-wrong is left for
  * {@link photos.sluice.domain.cull.ShardValidator}, the single source of truth for the shard
  * contract. An absent required field deserializes to null and becomes empty here. The validator
  * reports it ("missing reason", say), aggregated with the rest of the run's problems, not as a
@@ -110,23 +115,27 @@ class ShardCodec {
         final RawShard raw;
         try (final var input = Files.newInputStream(shardPath)) {
             raw = this.mapper.readValue(input, RawShard.class);
+        } catch (final NoSuchFileException e) {
+            // Absent entirely is not a transient read failure - it will never resolve on retry,
+            // just like a genuinely malformed one.
+            throw new MalformedPrepJsonException("Shard " + shardPath + " does not exist", e);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read shard " + shardPath, e);
         } catch (final JacksonException e) {
-            throw new UncheckedIOException("Failed to read shard " + shardPath, new IOException(e));
+            throw new MalformedPrepJsonException("Failed to parse shard " + shardPath, e);
         }
         // A document that is not a JSON object (the literal null token) can't be represented as a
-        // shard, so fail loud instead of coercing it into an empty one. The IDE binds the generic
+        // shard. Fail loud instead of coercing it into an empty one. The IDE binds the generic
         // result to the non-null RawShard type and can't see that null deserializes to null.
         //noinspection ConstantValue
         if (raw == null) {
-            throw new UncheckedIOException("Shard " + shardPath + " is not a JSON object",
+            throw new MalformedPrepJsonException("Shard " + shardPath + " is not a JSON object",
                     new IOException("null document"));
         }
         final List<@Nullable RawDecision> rawDecisions = raw.decisions() == null ? List.of() : raw.decisions();
         return new DecisionShard(
                 orEmpty(raw.montage()),
-                rawDecisions.stream().map(ShardCodec::toDomain).toList());
+                rawDecisions.stream().map(decision -> toDomain(decision, shardPath)).toList());
     }
 
     /**
@@ -152,11 +161,12 @@ class ShardCodec {
      * Converts a raw DTO to its domain decision representation.
      *
      * @param raw {@link RawDecision} the raw DTO to convert
+     * @param shardPath {@link Path} the shard's own path, used only for the error message
      * @return {@link Decision} the domain decision
      */
-    private static Decision toDomain(final @Nullable RawDecision raw) {
+    private static Decision toDomain(final @Nullable RawDecision raw, final Path shardPath) {
         if (raw == null) {
-            throw new UncheckedIOException("Shard contains a null decision entry",
+            throw new MalformedPrepJsonException("Shard " + shardPath + " has a null decision entry",
                     new IOException("null decision entry"));
         }
         final var file = Path.of(orEmpty(raw.file()));

@@ -2,9 +2,11 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 
@@ -12,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -20,10 +23,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
+import static photos.sluice.application.service.PipelineTestSupport.OutOfScopeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
+import static photos.sluice.application.service.PipelineTestSupport.autoApproveCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.curatePipeline;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
+import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
 import static photos.sluice.application.service.PipelineTestSupport.writeInboxPhoto;
 import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
@@ -60,6 +66,25 @@ class CurateEngineTest {
                 "started:Building montages...", "tick:Building montages...:1/1", "finished:Building montages...",
                 "started:Culling...", "finished:Culling...",
                 "started:Applying decisions...", "finished:Applying decisions...");
+    }
+
+    // Curate reaches Blocked through the same cull stage a standalone cull() uses, so its outcome
+    // has to carry the findings too. The sort summary still describes what already moved, which is
+    // the whole reason a refused cull stage must not throw the sort's own result away.
+    @Test
+    void curateReportsBlockedWithItsFindingsWhenTheCullStagesApplyRefuses(@TempDir final Path root) throws IOException {
+        writeInboxPhoto(root, "20190601_photo.jpg");
+        final var pipeline = pipeline(root, new RecordingProgressPort(), new NioMediaStore(),
+                autoApproveCullSettings(), List.of(new OutOfScopeCuller()));
+
+        final CurateOutcome outcome = pipeline.curate(new SortScope.Year(2019, null)).join();
+
+        assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Blocked.class);
+        final var blocked = (CullJobOutcome.Blocked) Objects.requireNonNull(outcome.cullOutcome());
+        assertThat(blocked.findings()).singleElement().isInstanceOf(Finding.FileOutOfScope.class);
+        // The sorted keeper stays put: a refused apply moves nothing at all.
+        assertThat(Files.exists(root.resolve("Sorted/Photos/2019/06/20190601_photo.jpg"))).isTrue();
     }
 
     @Test

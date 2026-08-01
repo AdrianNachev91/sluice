@@ -69,8 +69,11 @@ public interface CullPrepPort {
     boolean hasShard(Path prepDir, String montage);
 
     /**
-     * The decisions-NNN.json shard for montage. Throws UncheckedIOException if the file exists but
-     * cannot be parsed as a shard - callers should check hasShard first.
+     * The decisions-NNN.json shard for montage. Callers should check {@link #hasShard} first.
+     * Content that cannot be turned into decisions throws {@link MalformedPrepJsonException}, the
+     * same distinction {@link #readIndex} makes against a plain {@link UncheckedIOException} for a
+     * read that merely failed. A shard is the culling agent's own output, not this app's. So
+     * damaged content here is reported as a finding, rather than meaning the prep dir is broken.
      *
      * @param prepDir {@link Path} the prep directory holding the shard
      * @param montage {@link String} the montage whose shard to read
@@ -81,8 +84,8 @@ public interface CullPrepPort {
     /**
      * Reads a shard file by its own path, rather than a montage's canonical name. A stray shard's
      * filename names no real montage, so it cannot be looked up via {@link #readShard}. A
-     * troubleshooter inspecting one before deciding whether to rename it needs this instead.
-     * Throws UncheckedIOException if the file cannot be parsed as a shard.
+     * troubleshooter inspecting one before deciding whether to rename it needs this instead. It
+     * throws the same way {@link #readShard} does.
      *
      * @param shardFile {@link Path} the shard file's own path
      * @return {@link DecisionShard} the parsed decision shard

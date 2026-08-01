@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
@@ -16,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -140,8 +142,103 @@ class CullEngineTest {
         pipeline.resume(prepDir, false).join();
 
         assertThat(progress.events).containsExactly(
-                "started:Culling...", "finished:Culling...",
                 "started:Applying decisions...", "tick:Applying decisions...:1/1", "finished:Applying decisions...");
+    }
+
+    // The shard set is complete, so the culling agent has said everything it is going to say.
+    // NeverCalledCuller fails the test outright if the resume enters a culler at all. The absent
+    // "Culling..." bracket is the second half of the same proof: no phase ran for it either.
+    @Test
+    void resumeGoesStraightToApplyOnceEveryMontageHasAShard(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var preparing = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) preparing.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        final var progress = new RecordingProgressPort();
+        final var resuming = cullPipeline(root, progress, defaultCullSettings(), List.of(new NeverCalledCuller()));
+
+        final CullJobOutcome outcome = resuming.resume(prepDir, false).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(progress.events).noneMatch(event -> event.startsWith("started:Culling"));
+        assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+    }
+
+    // The one fresh cull that skips dispatch. A scope with nothing reviewable in it still writes a
+    // prep dir, with an empty montage list, so there is genuinely nothing for a culler to judge.
+    // NeverCalledCuller proves none is entered; the run still completes rather than parking.
+    @Test
+    void cullOverAScopeWithNoMontagesAppliesWithoutEnteringACuller(@TempDir final Path root) {
+        final var progress = new RecordingProgressPort();
+        final var pipeline = cullPipeline(root, progress, defaultCullSettings(), List.of(new NeverCalledCuller()));
+
+        final CullJobOutcome outcome = pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(progress.events).noneMatch(event -> event.startsWith("started:Culling"));
+    }
+
+    // The findings list crosses a port boundary. A caller still holding the list it passed in must
+    // not be able to edit the outcome afterwards.
+    @Test
+    void blockedCopiesItsFindingsSoALaterMutationCannotReachTheOutcome() {
+        final List<Finding> mutable = new ArrayList<>(List.of(new Finding.CorruptShard("montage-001",
+                "decisions-001.json")));
+        final var job = new WaitingCullJob("2019", Path.of("prep"), new ShardTally(1, 1, 1), Instant.EPOCH);
+
+        final var blocked = new CullJobOutcome.Blocked(job, mutable);
+        mutable.clear();
+
+        assertThat(blocked.findings()).containsExactly(new Finding.CorruptShard("montage-001", "decisions-001.json"));
+    }
+
+    // A complete shard set that apply refuses is the user's move, not the agent's, so it resolves
+    // to Blocked rather than throwing out of the job. The findings travel with it, so a run card
+    // renders the same list the troubleshoot screen does.
+    @Test
+    void resumeLandsBlockedCarryingTheFindingsWhenApplyRefusesACompleteShardSet(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        // A file no montage ever showed, and whose basename matches no in-scope file either, so no
+        // unique-basename heal can pull it back into scope.
+        writeShard(prepDir, "montage-001",
+                classificationJson(root.resolve("never-in-scope.jpg"), "junk", "blurry"));
+
+        final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Blocked.class);
+        final var blocked = (CullJobOutcome.Blocked) outcome;
+        assertThat(blocked.job().prepDir()).isEqualTo(prepDir);
+        assertThat(blocked.findings()).singleElement().isInstanceOf(Finding.FileOutOfScope.class);
+        assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
+    }
+
+    // The shape a watcher and a resume could otherwise re-trigger each other on. The shard itself
+    // is contract-valid, so the tally reads fully valid and a watcher keeps firing on it. Only the
+    // whole-batch gate can see the decision's file is gone with no move record. Blocked disarms the
+    // watch: every montage has a shard, so nothing is left for a poller to notice.
+    @Test
+    void anApplyRefusalDisarmsTheWatchInsteadOfLeavingAPollerRunning(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        Files.delete(photo);
+
+        final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Blocked.class);
+        assertThat(((CullJobOutcome.Blocked) outcome).findings())
+                .singleElement().isInstanceOf(Finding.MissingSource.class);
+        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
     }
 
     @Test

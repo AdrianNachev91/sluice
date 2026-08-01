@@ -113,6 +113,26 @@ class PrepDirDoctorTest {
         assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.CHOICE);
     }
 
+    // A shard file present but unparseable counts toward the tally as present, so the dir is past
+    // WAITING and lands on the real gate. Diagnosis has to describe it rather than throw: this same
+    // call drives a dashboard, where one damaged shard must not take the whole reading down.
+    @Test
+    void aCorruptShardReportsBlockedWithAnInformationalFinding(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeFile(prepDir.resolve("decisions-001.json"), "{ not valid json");
+
+        final PrepDirHealth health = doctor().diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.BLOCKED);
+        assertThat(health.findings())
+                .containsExactly(new Finding.CorruptShard("montage-001", "decisions-001.json"));
+        assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.NONE);
+    }
+
     @Test
     void aCorruptSidecarForAMontageWithNoShardYetReportsWaitingWithoutAFinding(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);

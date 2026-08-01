@@ -2,7 +2,10 @@ package photos.sluice.application.port.in;
 
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.job.WaitingCullJob;
+
+import java.util.List;
 
 /**
  * What one {@code cull()} or {@code resume()} call produced.
@@ -10,17 +13,17 @@ import photos.sluice.domain.job.WaitingCullJob;
  * <p>{@link Applied} means a complete (or allowPartial-waived) shard set came back, and apply ran
  * to completion during this call.
  *
- * <p>{@link Waiting} covers two situations. The external-agent provider found the shard set still
- * incomplete, the normal manual-mode pause. Or an automated provider's cull was cancelled mid-run
- * once resumable state already existed, either a shard already on disk or a completed prep with
- * nothing dispatched yet. In both cases whatever was already written stays on disk, and
- * {@code resume()} continues from there.
+ * <p>{@link Waiting} and {@link Blocked} are the two non-terminal states, and they differ by whose
+ * move comes next. Waiting means shards are still missing, so somebody else has work to do. The
+ * external agent is still culling, or an automated run stopped part way. Blocked means every
+ * montage has a shard and apply's validation refused anyway. Nothing further is coming on its own,
+ * so the next move is the user's: troubleshoot, or repair by hand and resume.
  *
  * <p>{@link Cancelled} is the one case with nothing to resume. The run stopped before montage
  * rendering finished, so no prep dir exists yet to derive a {@link WaitingCullJob} from.
  *
- * <p>None of these three outcomes is a failure. Every case releases the run slot instead of
- * holding it open.
+ * <p>None of these four outcomes is a failure. Every case releases the run slot instead of holding
+ * it open.
  */
 public sealed interface CullJobOutcome {
 
@@ -40,6 +43,29 @@ public sealed interface CullJobOutcome {
      * @param job {@link WaitingCullJob} the paused job's resumable state
      */
     record Waiting(WaitingCullJob job) implements CullJobOutcome {
+    }
+
+    /**
+     * A cull run whose shard set is complete but whose apply refused to carry it out.
+     *
+     * <p>The findings are the same typed list {@code ApplyException} carries. A run card, a
+     * troubleshoot screen and the CLI shim all render from this one source rather than from parsed
+     * message text.
+     *
+     * @param job {@link WaitingCullJob} the blocked job's own scope, prep dir and shard tally
+     * @param findings a {@link List} of {@link Finding} every problem apply's validation refused on
+     */
+    record Blocked(WaitingCullJob job, List<Finding> findings) implements CullJobOutcome {
+
+        /**
+         * Defensively copies the findings, so a caller cannot mutate an outcome after the fact.
+         *
+         * @param job {@link WaitingCullJob} the blocked job's own scope, prep dir and shard tally
+         * @param findings a {@link List} of {@link Finding} every problem apply's validation refused on
+         */
+        public Blocked {
+            findings = List.copyOf(findings);
+        }
     }
 
     /**
