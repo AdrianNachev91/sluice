@@ -87,12 +87,42 @@ See `WaitingCullJob`'s own doc for why this is derived live instead of a persist
 tolerates a transiently-unreadable `index.json` (a concurrent job's own prep dir
 mid-clear/mid-write) by skipping that entry rather than failing the whole scan.
 
-`CullEngine` computes each `WaitingCullJob`'s `ShardTally` (`present`/`valid`/`total`) via
-`ShardTallyCalculator`, one montage at a time via `ShardValidator`, rather than reusing
-`ApplyPlanner`'s whole-batch `validate()`. A cross-shard problem (a near-dup group id reused across
-two montages) therefore doesn't show up in the tally - an accepted simplification for a progress
-number. `ApplyEngine.apply()`'s own full-batch validation (via `ApplyPlanner.validate()`) is still
-the actual gate before anything moves.
+`ShardTallyCalculator` answers two different questions, from two different places.
+
+`tally()` is the `present`/`valid`/`total` display number on each `WaitingCullJob`, computed one
+montage at a time via `ShardValidator`. Per-montage is what makes it useful: a card can name which
+montage is holding the run up. A cross-shard problem (a near-dup group id reused across two
+montages) therefore doesn't show up in it. That is fine for a number that is only ever shown.
+
+`isReadyToResume()` is what a `CullWatcher` polls, and it asks a much narrower question: has
+everything arrived? Every montage has a shard, and every one of those shards parses. Nothing more
+is coming from outside, so the run is worth a resume attempt.
+
+It deliberately holds no opinion on whether the shards are any good. That is `ApplyPlanner`'s job,
+once, at the apply. Two reasons, and the second is the load-bearing one.
+
+First, a second validator here would be ledger-blind. It reads raw disk state, where a user's answer
+to a finding still looks like the finding.
+
+Second, and worse: a problem this check could see would be a problem it never fires on. Take a stray
+shard, or a near-dup group id reused across two montages. Only the whole-batch gate can see either.
+A readiness check clever enough to catch them would therefore withhold the resume forever. The
+per-montage tally cannot see them either, so it reads a healthy `N/N` throughout. The run would sit
+silently, looking finished, with nothing ever put in front of the user. Firing instead
+costs one job slot and lands `Blocked` with the findings on screen, which is that state's whole
+point.
+
+The same reasoning covers a missing source file, an unparseable-but-present shard, and every
+ordinary contract violation. Each resumes once and settles somewhere visible.
+
+Parsing is the one content check, and it is not a quality judgement. A shard file exists from the
+moment the agent opens it for writing. Presence alone would then fire on a half-written one and
+block the run over a file that was seconds from being fine.
+
+One ledger-resolved answer reaches the display tally: a file resolved with `TRUST_DECISION` is no
+longer treated as unreviewable, so the montage claiming it stops reading invalid. A montage resolved
+with `APPLY_ANYWAY` still displays as invalid, since only the whole-batch pass knows to trust its
+shard as its own scope. Neither affects what actually happens - readiness never asked.
 
 | CullEngine method               | What runs                                                           | Phase label(s)                                                         |
 |---------------------------------|---------------------------------------------------------------------|------------------------------------------------------------------------|
@@ -175,6 +205,17 @@ from `dispatchAndApply()` arm a `CullWatcher` for that prep dir, on top of the p
 behavior above. `MANUAL` mode (the default) skips this section entirely - `armWatchIfConfigured`
 returns immediately.
 
+That setting is only the default a run starts with. `armWatch()` arms one prep dir whatever the mode
+says, and `disarmWatch()` turns it off again. The two are the waiting card's own "auto-apply when
+shards arrive" toggle, reaching the engine through `Pipeline.startWatching`/`stopWatching`. Neither
+touches the run itself. It stays Waiting, stays listed, and still refuses a fresh cull of its scope
+either way. Only the polling changes.
+
+There is no time limit on the polling, and no setting for one. A watch that never fires costs one
+read-only readiness check per interval. A watch that does fire either completes the run or lands it
+`Blocked` and stops. So the only thing a deadline could add is giving up on a run the user is still
+waiting for.
+
 A `Blocked` outcome never arms one. Every montage already has a shard, so the agent has finished and
 will not come back. There is nothing left for a poller to notice, and the `disarmWatch()` at the top
 of every `dispatchAndApply()` has already retired whichever watcher was running. A refused run
@@ -186,10 +227,8 @@ flowchart TD
     A["dispatchAndApply() lands<br/>on CullJobOutcome.Waiting"] --> B{"mode == WATCH?"}
     B -- "no" --> Z(["stay Waiting - unchanged"])
     B -- "yes" --> C["CullWatcher armed,<br/>polling every watchPollInterval<br/>(2s in production)"]
-    C --> D{"tally fully valid?<br/>(cheap check, no submit)"}
-    D -- "not yet" --> E{"watchTimeout elapsed?"}
-    E -- "no" --> C
-    E -- "yes" --> F(["watcher stops -<br/>drops back to plain manual<br/>Waiting, nothing touched"])
+    C --> D{"isReadyToResume()?<br/>every shard present<br/>and parseable"}
+    D -- "not yet" --> C
     D -- "yes" --> G["attempt resume()<br/>via JobRunner.submit()"]
     G -- "busy (another job running)" --> C
     G -- "submitted" --> H(["watcher stops -<br/>the submitted job's own outcome<br/>re-arms a fresh watcher if<br/>it lands back in Waiting"])
@@ -198,8 +237,7 @@ flowchart TD
 Deliberately pure polling, not `java.nio.file.WatchService`. A user's working folder can itself be
 a cloud-synced or network folder (a Settings choice) - exactly the folder type known to miss
 filesystem events. Depending on events at all would just relocate that gap. `watchPollInterval` is
-an internal cadence, not a `CullSettings` field - only `mode` and `watchTimeout` are the documented
-user-facing knobs.
+an internal cadence, not a `CullSettings` field - `mode` is the one documented user-facing knob.
 
 `disarmWatch()` runs at the very start of every `dispatchAndApply()` call, regardless of who
 triggered it (a fresh `cull()`, a manual `resume()` click, or a watcher's own auto-resume). The
@@ -209,30 +247,48 @@ armed watcher can therefore never leave two pollers on the same job.
 still-waiting job found on disk at startup. There is no persistent job store, so restarting the app
 would otherwise silently stop watching every job armed before the restart.
 
+Retiring by prep dir rather than by watcher identity leaves one known window, accepted rather than
+closed. A watcher that fires stops itself as soon as its resume is *submitted*, but the submitted
+job runs asynchronously. An `armWatch()` landing between those two moments installs a fresh watcher.
+The job's own `disarmWatch()` then retires that one a moment later, aiming at the dead one it
+replaced. So a per-run watch switched on inside that window turns itself back off.
+
+It is bounded in three ways. The window is one job handoff wide. `activeWatches` is in-memory and
+per-process, so it takes two actors inside one process racing the same prep dir. That is a UI shape,
+a background watcher against a person, rather than a CLI one. And a second click works.
+
+Identity-aware removal would close it, at the cost of `dispatchAndApply()` having to know whether a
+watcher or a person entered it, threaded through `resume()` and the job submission. The blind retire
+is genuinely correct for the manual path, so it cannot simply be made conditional. Not worth that
+for this window. A caller should instead bind any watch indicator to `isWatchActive()` rather than
+to its own optimistic state. A lost click then shows as a toggle flipping back, not as a click that
+did nothing.
+
 That startup scan reads `waitingJobs()`, which counts a prep dir as waiting whenever `index.json`
 exists and `decisions.json` does not. A blocked dir matches that too, so a restart can arm one
-watcher for it. What that watcher then does depends on whether the tally can see the problem at all,
-since the tally validates one montage at a time.
+watcher for it. Its shards are all present and parseable, so that watcher fires once, the resume
+lands `Blocked` again, and nothing re-arms. One wasted job slot per restart, and the run stays where
+the user left it.
 
-- A block only the whole-batch gate can see (a cross-shard group id, a missing source) leaves the
-  tally reading fully valid. The watcher fires once, that resume lands `Blocked`, and nothing
-  re-arms.
-- A block the per-montage check can see (a corrupt shard, an ordinary contract violation) leaves the
-  tally invalid. The watcher never fires at all, and with no `watchTimeout` set it keeps polling.
-
-Neither case moves a file or spends money, since watch mode never arms for an automated provider.
-The second case does leave an idle poller running for the life of the process.
+The only state that keeps polling is a montage whose shard never arrives at all, or never finishes
+being written. That is genuinely still waiting, and the card's tally says so. No resume is submitted
+and no file moves. Watch mode never arms for an automated provider, so nothing spends money either.
 
 ### Scenarios
 
-| Scenario                                                         | Outcome                                                                                           |
-|------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| Watch mode, a valid shard for every montage eventually appears   | The next poll tick's tally check passes, `resume()` is submitted automatically, `Applied` follows |
-| Watch mode, the auto-resume's own apply then refuses             | `Blocked`; the watcher already stopped after its one attempt and nothing re-arms it               |
-| Watch mode, `JobRunner` is busy with an unrelated job when ready | `attemptConsume` returns false; the watcher keeps polling and retries on the next tick            |
-| Watch mode, `watchTimeout` elapses with no fully-valid tally     | Watcher stops on its own; every dropped shard is untouched; a manual `resume()` still works       |
-| Watch mode, app restarts while a job is still waiting            | `armWatchesForExistingWaitingJobs()` re-arms a watcher for it purely from `waitingJobs()`         |
-| Manual mode (default)                                            | No watcher ever arms; behavior is identical to the `cull()`/`resume()` section above              |
+| Scenario                                                            | Outcome                                                                                               |
+|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| Watch mode, a valid shard for every montage eventually appears      | The next poll tick's readiness check passes, `resume()` is submitted automatically, `Applied` follows |
+| Watch mode, the auto-resume's own apply then refuses                | `Blocked`; the watcher already stopped after its one attempt and nothing re-arms it                   |
+| Watch mode, `JobRunner` is busy with an unrelated job when ready    | `attemptConsume` returns false; the watcher keeps polling and retries on the next tick                |
+| Watch mode, a shard is present but never parses                     | The watcher polls on, submitting nothing; the card's tally stays short of total                       |
+| Watch mode, every shard arrives but the batch is invalid            | The watcher fires once; that resume lands `Blocked` with the findings, and nothing re-arms            |
+| Watch mode, a poll tick throws                                      | Logged and treated as "not ready this tick"; the watch survives and retries                           |
+| Watch mode, app restarts while a job is still waiting               | `armWatchesForExistingWaitingJobs()` re-arms a watcher for it purely from `waitingJobs()`             |
+| Manual mode, the user turns one run's toggle on                     | `startWatching()` arms that prep dir alone; every other run still needs an explicit Resume            |
+| Either mode, the user turns one run's toggle off                    | `stopWatching()` stops the polling only; the run stays Waiting, listed, and blocking its scope        |
+| The user's answer to a troubleshoot finding makes the run appliable | A resume applies it; readiness never asked about the finding, so a watch armed for the run just fires |
+| Manual mode (default), no toggle touched                            | No watcher ever arms; behavior is identical to the `cull()`/`resume()` section above                  |
 
 ## Related
 

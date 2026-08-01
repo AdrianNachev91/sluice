@@ -155,13 +155,11 @@ Both `resolveCorruptSidecar` resolutions depend on that. So does `resolveOverlap
 `TRUST_DECISION`. Each records an answer that only this gate can read, on a prep dir whose raw disk
 state still shows the original problem.
 
-One validator does survive alongside it, and it is ledger-blind: `ShardTallyCalculator`, which
-computes the present/valid counts a waiting run displays. Nothing it does can block a run, since a
-manual resume goes to the gate regardless. It does gate watch mode's automatic resume, through
-`isFullyValid`. So a correctly-answered finding still reads as invalid there, and a watched run
-waits for a hand it has already been dealt. The tally is display machinery that grew a second job.
-Giving it the ledger, or deriving it from the gate itself, belongs with the rest of the watch
-surface.
+Watch mode's automatic resume reaches those answers the ordinary way. Its readiness check
+(`ShardTallyCalculator.isReadyToResume`) only asks whether every shard has arrived and parses, never
+whether the batch is any good. So a run whose remaining problem the user has already answered simply
+resumes, and the gate above honours the answer. Nothing between the two holds a second opinion. See
+`cull-engine.md` for why readiness is deliberately that narrow.
 
 ## 3. Last-resort discard
 

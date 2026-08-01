@@ -14,25 +14,37 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Computes a waiting cull job's present/valid shard counts from its prep dir. Not a Spring bean.
- * {@link CullEngine} owns the one instance it needs, built from the same {@link CullPrepPort} and
- * {@link CullSettings} it already receives.
+ * Computes a waiting cull job's present/valid shard counts from its prep dir, and answers whether
+ * that prep dir is worth resuming yet. Not a Spring bean. {@link CullEngine} owns the one instance
+ * it needs, built from the collaborators it already receives.
+ *
+ * <p>Neither answer is a verdict on shard content. {@link ApplyPlanner#validate} is the only thing
+ * that judges that, and it does so once, at the apply itself. The tally here is a display number,
+ * computed one montage at a time so a card can name which montage is holding a run up. Readiness
+ * asks a narrower question still: has everything arrived?
  */
 final class ShardTallyCalculator {
 
     private final CullPrepPort cullPrepPort;
     private final CullSettings cullSettings;
+    private final ApplyPlanner applyPlanner;
+    private final LedgerReader ledgerReader;
     private final ShardValidator shardValidator = new ShardValidator();
 
     /**
-     * Creates a calculator backed by the given prep-dir reader and cull settings.
+     * Creates a calculator backed by the given prep-dir reader, cull settings, and apply gate.
      *
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir index, sidecars, and shards
      * @param cullSettings {@link CullSettings} the configured cull categories
+     * @param applyPlanner {@link ApplyPlanner} the single validator readiness is decided by
+     * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that validator honours
      */
-    ShardTallyCalculator(final CullPrepPort cullPrepPort, final CullSettings cullSettings) {
+    ShardTallyCalculator(final CullPrepPort cullPrepPort, final CullSettings cullSettings,
+                         final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
         this.cullPrepPort = cullPrepPort;
         this.cullSettings = cullSettings;
+        this.applyPlanner = applyPlanner;
+        this.ledgerReader = ledgerReader;
     }
 
     /**
@@ -41,8 +53,13 @@ final class ShardTallyCalculator {
      * montages, a file claimed by two different shards) isn't caught here. That montage still
      * counts as valid.
      *
-     * <p>That's an acceptable simplification for a progress-display number - the real gate stays
-     * ApplyPlanner's full-batch validate(), unchanged by this tally.
+     * <p>Acceptable because this number is only ever shown, never acted on. isReadyToResume() below
+     * is what decides whether anything happens.
+     *
+     * <p>One ledger-resolved answer does reach it. A file the user resolved with TRUST_DECISION is
+     * no longer treated as unreviewable, so the montage claiming it stops reading invalid. A montage
+     * resolved with APPLY_ANYWAY still displays as invalid, since only the whole-batch pass knows to
+     * trust its shard as its own scope. Neither changes what actually happens to the run.
      *
      * @param prep {@link PrepDir} the prep dir to tally
      * @return {@link ShardTally} present/valid/total shard counts
@@ -53,9 +70,11 @@ final class ShardTallyCalculator {
                 .map(SidecarPhotoEntry::src)
                 .toList();
         final List<String> categories = this.cullSettings.categories().stream().map(CullCategory::name).toList();
+        final List<Path> unreviewable =
+                this.applyPlanner.resolvedUnreviewable(prep, this.ledgerReader.read(prep.prepDir()));
 
         final List<MontageShardStatus> statuses = prep.entries().stream()
-                .map(montage -> this.montageShardStatus(prep, montage, sidecarSrcs, categories))
+                .map(montage -> this.montageShardStatus(prep, montage, sidecarSrcs, categories, unreviewable))
                 .toList();
         final int present = (int) statuses.stream().filter(MontageShardStatus::present).count();
         final int valid = (int) statuses.stream().filter(MontageShardStatus::valid).count();
@@ -63,18 +82,52 @@ final class ShardTallyCalculator {
     }
 
     /**
-     * Cheap status check a CullWatcher polls repeatedly: does prepDir's tally already show every
-     * montage present and valid? Deliberately not the heavier resume()/dispatchAndApply() path. A
-     * transiently unreadable index (mid-write by a concurrent process) degrades to "not ready yet"
-     * here rather than propagating - the same tolerance readWaitingJob() already gives this case.
+     * Whether anything more is still arriving for prepDir, which is the only question a
+     * {@link CullWatcher} needs answered. Every montage has a shard, and every one of those shards
+     * parses. The culling agent has then said everything it is going to say, so the run is worth a
+     * resume attempt.
+     *
+     * <p>Whether those shards are any good is not asked here, deliberately. Judging that would mean
+     * a second validator alongside apply's own gate. This one reads raw disk state, where a user's
+     * answer to a finding still looks like the finding. Worse, a problem it could see would be a
+     * problem it never fires on. The run would poll on unresolved forever instead of resuming once
+     * and settling on Blocked, where the findings are actually in front of somebody.
+     *
+     * <p>Parsing is the one content check, and it is here to tell a finished shard from a shard
+     * being written right now. A file exists from the moment the agent opens it. Without this check
+     * a poll landing mid-write would fire on a truncated shard and block the run over nothing.
+     *
+     * <p>Deliberately not the whole resume path. This stays read-only and claims no job slot, so a
+     * poll costs nothing when the answer is no. A transiently unreadable index (mid-write by a
+     * concurrent process) degrades to "not ready yet" rather than propagating - the same tolerance
+     * readWaitingJob() already gives this case.
      *
      * @param prepDir {@link Path} the prep dir to check
-     * @return boolean true if every montage is present and valid
+     * @return boolean true if every montage has a shard and every shard parses
      */
-    boolean isFullyValid(final Path prepDir) {
+    boolean isReadyToResume(final Path prepDir) {
         try {
-            final ShardTally shards = this.tally(this.cullPrepPort.readIndex(prepDir));
-            return shards.valid() == shards.total();
+            final PrepDir prep = this.cullPrepPort.readIndex(prepDir);
+            return prep.entries().stream().allMatch(montage -> this.shardIsFinished(prep, montage));
+        } catch (final UncheckedIOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether one montage's shard is on disk and readable end to end.
+     *
+     * @param prep {@link PrepDir} the prep dir being checked
+     * @param montage {@link String} the montage id to check
+     * @return boolean true if the shard exists and parses
+     */
+    private boolean shardIsFinished(final PrepDir prep, final String montage) {
+        if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
+            return false;
+        }
+        try {
+            this.cullPrepPort.readShard(prep.prepDir(), montage);
+            return true;
         } catch (final UncheckedIOException e) {
             return false;
         }
@@ -105,18 +158,19 @@ final class ShardTallyCalculator {
      * @param montage {@link String} the montage id to check
      * @param sidecarSrcs a {@link List} of {@link Path} source paths of every in-scope sidecar entry
      * @param categories a {@link List} of {@link String} the configured cull category names
+     * @param unreviewable a {@link List} of {@link Path} the ledger-resolved unreviewable files
      * @return {@link MontageShardStatus} the montage's presence and validity
      */
     private MontageShardStatus montageShardStatus(final PrepDir prep, final String montage,
                                                   final List<Path> sidecarSrcs,
-                                                  final List<String> categories) {
+                                                  final List<String> categories,
+                                                  final List<Path> unreviewable) {
         if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
             return new MontageShardStatus(false, false);
         }
         try {
             final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage));
-            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, categories,
-                    prep.unreviewable());
+            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, categories, unreviewable);
             return new MontageShardStatus(true, report.valid());
         } catch (final UncheckedIOException e) {
             // Present but unparseable, so not valid.

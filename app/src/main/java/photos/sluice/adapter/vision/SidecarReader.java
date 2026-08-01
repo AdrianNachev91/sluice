@@ -11,6 +11,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -126,10 +127,28 @@ class SidecarReader {
                     new IOException("null photo entry"));
         }
         return new SidecarPhotoEntry(
-                Path.of(required(photo.src(), "src", sidecarPath)),
+                srcOf(required(photo.src(), "src", sidecarPath), sidecarPath),
                 required(photo.name(), "name", sidecarPath),
                 timeOf(required(photo.time(), "time", sidecarPath), sidecarPath),
                 required(photo.received(), "received", sidecarPath));
+    }
+
+    /**
+     * Converts a photo entry's src string to a {@link Path}, failing loud on a value this platform
+     * cannot make a path out of. That leaves no unchecked escape route out of a caller's read-failure
+     * handling, the same as every other unusable field here.
+     *
+     * @param src {@link String} the entry's src string
+     * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
+     * @return {@link Path} the entry's source path
+     */
+    private static Path srcOf(final String src, final Path sidecarPath) {
+        try {
+            return Path.of(src);
+        } catch (final InvalidPathException e) {
+            throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " has an unusable src: " + src,
+                    new IOException(e));
+        }
     }
 
     /**

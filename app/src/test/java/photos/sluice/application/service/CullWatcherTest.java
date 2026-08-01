@@ -8,6 +8,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,11 +21,11 @@ class CullWatcherTest {
         final var ready = new AtomicBoolean(false);
         final var consumeAttempts = new AtomicInteger(0);
         final var consumed = new CountDownLatch(1);
-        final var watcher = new CullWatcher(POLL_INTERVAL, null, ready::get, () -> {
+        final var watcher = new CullWatcher(POLL_INTERVAL, ready::get, () -> {
             consumeAttempts.incrementAndGet();
             consumed.countDown();
             return true;
-        }, Instant.now());
+        });
 
         watcher.start();
         // A bounded negative proof via the latch's own timeout, not a guessed-duration Thread.sleep
@@ -45,14 +46,14 @@ class CullWatcherTest {
         final var consumeAttempts = new AtomicInteger(0);
         final var firstConsume = new CountDownLatch(1);
         final var secondConsume = new CountDownLatch(1);
-        final var watcher = new CullWatcher(POLL_INTERVAL, null, () -> true, () -> {
+        final var watcher = new CullWatcher(POLL_INTERVAL, () -> true, () -> {
             if (consumeAttempts.incrementAndGet() == 1) {
                 firstConsume.countDown();
             } else {
                 secondConsume.countDown();
             }
             return true;
-        }, Instant.now());
+        });
 
         watcher.start();
 
@@ -68,13 +69,13 @@ class CullWatcherTest {
     void keepsPollingWhenAttemptConsumeReportsBusyUntilItSucceeds() throws InterruptedException {
         final var consumeAttempts = new AtomicInteger(0);
         final var succeeded = new CountDownLatch(1);
-        final var watcher = new CullWatcher(POLL_INTERVAL, null, () -> true, () -> {
+        final var watcher = new CullWatcher(POLL_INTERVAL, () -> true, () -> {
             final boolean isThirdAttempt = consumeAttempts.incrementAndGet() >= 3;
             if (isThirdAttempt) {
                 succeeded.countDown();
             }
             return isThirdAttempt;
-        }, Instant.now());
+        });
 
         watcher.start();
 
@@ -83,27 +84,53 @@ class CullWatcherTest {
         watcher.stop();
     }
 
+    // A ScheduledExecutorService silently suppresses every future execution of a task that throws,
+    // and the exception vanishes into a ScheduledFuture nobody inspects. So without poll()'s catch,
+    // the first bad tick ends the watch while isActive() keeps reporting true. The waiting cull
+    // then never auto-resumes, with nothing anywhere saying why. The route in is real: the readiness
+    // check reads shards an agent outside this app wrote, so malformed input is the expected case.
     @Test
-    void stopsWithoutEverConsumingOnceTheTimeoutElapses() throws InterruptedException {
-        final var consumeAttempts = new AtomicInteger(0);
-        final var watcher = new CullWatcher(POLL_INTERVAL, Duration.ofMillis(40), () -> false,
-                () -> {
-                    consumeAttempts.incrementAndGet();
-                    return true;
-                }, Instant.now());
+    void keepsPollingAfterAReadinessCheckThrows() throws InterruptedException {
+        final var readyChecks = new AtomicInteger(0);
+        final var consumed = new CountDownLatch(1);
+        final var watcher = new CullWatcher(POLL_INTERVAL, () -> {
+            if (readyChecks.incrementAndGet() == 1) {
+                throw new IllegalStateException("first tick blows up");
+            }
+            return true;
+        }, () -> {
+            consumed.countDown();
+            return true;
+        });
 
         watcher.start();
-        // Polls for the real signal - the watcher actually stopping itself once the timeout fires -
-        // instead of guessing a fixed sleep duration long enough to cover it.
-        waitUntilInactive(watcher, Duration.ofSeconds(2));
 
-        assertThat(consumeAttempts.get()).isZero();
-        assertThat(watcher.isActive()).isFalse();
+        assertThat(consumed.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(readyChecks.get()).isGreaterThan(1);
+    }
+
+    // isActive() is what a run card reads to show whether a run is being watched, so a throwing
+    // tick must not leave it lying in either direction. The watcher genuinely is still alive here,
+    // which is the whole point of the test above.
+    @Test
+    void staysActiveWhileARecoveredPollFailureIsTheOnlyThingThatHappened() throws InterruptedException {
+        final var readyChecks = new AtomicInteger(0);
+        final var watcher = new CullWatcher(POLL_INTERVAL, () -> {
+            readyChecks.incrementAndGet();
+            throw new IllegalStateException("every tick blows up");
+        }, () -> true);
+
+        watcher.start();
+        // Two throwing ticks, so the second one proves the first did not suppress the schedule.
+        waitUntil(() -> readyChecks.get() >= 2, Duration.ofSeconds(2));
+
+        assertThat(watcher.isActive()).isTrue();
+        watcher.stop();
     }
 
     @Test
     void stopIsIdempotentAndSafeBeforeStart() {
-        final var watcher = new CullWatcher(POLL_INTERVAL, null, () -> false, () -> true, Instant.now());
+        final var watcher = new CullWatcher(POLL_INTERVAL, () -> false, () -> true);
 
         watcher.stop();
         watcher.stop();
@@ -111,14 +138,14 @@ class CullWatcherTest {
         assertThat(watcher.isActive()).isFalse();
     }
 
-    private static void waitUntilInactive(final CullWatcher watcher, final Duration timeout) throws InterruptedException {
+    private static void waitUntil(final BooleanSupplier condition, final Duration timeout) throws InterruptedException {
         final Instant deadline = Instant.now().plus(timeout);
-        while (watcher.isActive()) {
+        while (!condition.getAsBoolean()) {
             if (Instant.now().isAfter(deadline)) {
-                throw new AssertionError("watcher still active after " + timeout);
+                throw new AssertionError("condition not met within " + timeout);
             }
-            // Throttles the poll loop itself, not a guess at how long the watcher takes to stop -
-            // same pattern as PipelineTest.waitUntil's own suppression.
+            // Throttles the poll loop itself, not a guess at how long the watcher takes - same
+            // pattern as PipelineTestSupport.waitUntil's own suppression.
             //noinspection BusyWait
             Thread.sleep(5);
         }

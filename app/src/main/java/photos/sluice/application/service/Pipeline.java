@@ -50,7 +50,7 @@ public class Pipeline {
     private static final String DISCARDING = "Discarding...";
 
     // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
-    // unlike mode/watchTimeout, this cadence isn't a documented user-facing knob, just an internal
+    // unlike mode, this cadence isn't a documented user-facing knob, just an internal
     // responsiveness/overhead tradeoff. Short enough that a human dropping files never perceives the
     // delay; long enough not to hammer disk or spam re-validation. See the package-private
     // constructor overload for how tests override it.
@@ -92,6 +92,8 @@ public class Pipeline {
      * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
      * @param troubleshooter {@link Troubleshooter} runs the single-button prep-dir recovery
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
+     * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
+     * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      */
     @Autowired
     public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -102,10 +104,12 @@ public class Pipeline {
                     final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig,
                     final JobRunner jobRunner,
                     final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
-                    final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor) {
+                    final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
+                    final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
                 cullPrepPort, cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort,
-                disasterDrawer, troubleshooter, prepDirDoctor, DEFAULT_WATCH_POLL_INTERVAL);
+                disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader,
+                DEFAULT_WATCH_POLL_INTERVAL);
     }
 
     /**
@@ -131,6 +135,8 @@ public class Pipeline {
      * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
      * @param troubleshooter {@link Troubleshooter} runs the single-button prep-dir recovery
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
+     * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
+     * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -139,14 +145,16 @@ public class Pipeline {
              final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig,
              final JobRunner jobRunner,
              final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
-             final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor, final Duration watchPollInterval) {
+             final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
+             final ApplyPlanner applyPlanner, final LedgerReader ledgerReader, final Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
-                mediaStore, pathsPort, montageConfig, jobRunner, progressPort, watchPollInterval);
+                mediaStore, pathsPort, montageConfig, jobRunner, progressPort, applyPlanner, ledgerReader,
+                watchPollInterval);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, this.cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
@@ -249,6 +257,29 @@ public class Pipeline {
      */
     public List<WaitingCullJob> waitingJobs() {
         return this.cullEngine.waitingJobs();
+    }
+
+    /**
+     * Turns one waiting run's auto-resume on, whatever the configured mode is. The two halves of
+     * the waiting card's "auto-apply when shards arrive" toggle are this and
+     * {@link #stopWatching}. Neither touches the run itself: it stays Waiting, stays listed, and
+     * still blocks a re-cull of its scope either way. A run belonging to an automated provider is
+     * left alone, since its shards never arrive from outside the app and the toggle is absent from
+     * its card.
+     *
+     * @param prepDir {@link Path} the cull prep directory to watch
+     */
+    public void startWatching(final Path prepDir) {
+        this.cullEngine.armWatch(prepDir);
+    }
+
+    /**
+     * Turns one waiting run's auto-resume off - {@link #startWatching}'s other half.
+     *
+     * @param prepDir {@link Path} the cull prep directory to stop watching
+     */
+    public void stopWatching(final Path prepDir) {
+        this.cullEngine.disarmWatch(prepDir);
     }
 
     /**

@@ -67,7 +67,7 @@ public class PrepDirDoctor {
         this.mediaStore = mediaStore;
         this.applyPlanner = applyPlanner;
         this.ledgerReader = ledgerReader;
-        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings);
+        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings, applyPlanner, ledgerReader);
     }
 
     /**

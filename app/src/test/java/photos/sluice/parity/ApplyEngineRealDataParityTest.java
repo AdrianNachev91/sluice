@@ -232,7 +232,7 @@ class ApplyEngineRealDataParityTest {
 
         @Override
         public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL, null);
+            return new ExternalAgentSettings(WatchMode.MANUAL);
         }
     }
 

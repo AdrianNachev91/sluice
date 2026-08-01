@@ -321,7 +321,7 @@ class PipelineTest {
     @Test
     void discardDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(null),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();

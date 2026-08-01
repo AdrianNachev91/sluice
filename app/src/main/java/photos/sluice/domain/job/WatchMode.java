@@ -9,7 +9,8 @@ package photos.sluice.domain.job;
  * pause a human-driven flow depends on.
  *
  * <p>{@code WATCH} additionally polls the prep dir and auto-resumes the moment every expected
- * shard is present and valid.
+ * shard has arrived. Whether those shards hold anything usable is decided by the resume itself,
+ * not by the poll.
  */
 public enum WatchMode {
     MANUAL,

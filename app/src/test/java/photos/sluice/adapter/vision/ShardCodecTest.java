@@ -163,6 +163,22 @@ class ShardCodecTest {
                 .hasMessageContaining(shardPath.toString());
     }
 
+    // An absent file string becomes the empty path and the validator reports it alongside the run's
+    // other problems. A string no filesystem can accept is different: nothing downstream can do
+    // anything with it, so it is malformed content. A NUL character is illegal on every mainstream
+    // platform, and left unconverted it would escape as an unchecked InvalidPathException.
+    @Test
+    void readsAFileNameThisPlatformRejectsAsMalformedContent(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-011.json");
+        Files.writeString(shardPath, """
+                { "montage": "montage-011",
+                  "decisions": [ { "file": "bad\\u0000name.jpg", "action": "junk", "reason": "blurry" } ] }""");
+
+        assertThatThrownBy(() -> this.codec.read(shardPath))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("unusable file");
+    }
+
     @Test
     void readsAMissingDecisionsArrayAsEmpty(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-005.json");

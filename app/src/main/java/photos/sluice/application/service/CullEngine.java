@@ -26,7 +26,6 @@ import photos.sluice.domain.job.WatchMode;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -66,7 +65,7 @@ final class CullEngine {
     private final PhaseRunner phaseRunner;
     private final ShardTallyCalculator shardTallyCalculator;
     // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
-    // unlike mode/watchTimeout, this cadence isn't a documented user-facing knob, just an internal
+    // unlike mode, this cadence isn't a documented user-facing knob, just an internal
     // responsiveness/overhead tradeoff. Short enough that a human dropping files never perceives the
     // delay; long enough not to hammer disk or spam re-validation. Pipeline's own package-private
     // constructor overload is what lets a test override this.
@@ -86,6 +85,8 @@ final class CullEngine {
      * @param montageConfig {@link MontageConfig} montage grid configuration
      * @param jobRunner {@link JobRunner} runs cull jobs one at a time
      * @param progressPort {@link ProgressPort} reports phase progress
+     * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
+     * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      */
     CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
@@ -93,6 +94,7 @@ final class CullEngine {
                final CullPrepPort cullPrepPort, final CullSettings cullSettings, final MediaStore mediaStore,
                final PathsPort pathsPort,
                final MontageConfig montageConfig, final JobRunner jobRunner, final ProgressPort progressPort,
+               final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
                final Duration watchPollInterval) {
         this.montageRenderer = montageRenderer;
         this.cullDispatcher = cullDispatcher;
@@ -104,7 +106,7 @@ final class CullEngine {
         this.montageConfig = montageConfig;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
-        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings);
+        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings, applyPlanner, ledgerReader);
         this.watchPollInterval = watchPollInterval;
     }
 
@@ -313,6 +315,11 @@ final class CullEngine {
                 if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
                     throw e;
                 }
+                // The exception names which montages are still missing a shard. Nothing downstream
+                // reads that list - the outcome carries a tally, not montage names - so this is the
+                // only place it can be seen at all. A watch mode that never converges is diagnosed
+                // from here.
+                log.info("Cull for {} is waiting on shards: {}", prep.scope(), e.getMessage());
                 final WaitingCullJob job = this.buildWaitingJob(prep);
                 // Not armed when this CullException is itself the manual-mode pause racing a
                 // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
@@ -379,53 +386,57 @@ final class CullEngine {
     }
 
     /**
-     * Starts polling job's prep dir for an auto-resume, unless mode is MANUAL, the configured
-     * provider isn't the external-agent one, or a watcher is already active for it.
-     * armWatchesForExistingWaitingJobs() and dispatchAndApply()'s own Waiting branch can both reach
-     * here for the same prep dir. The second call is then a no-op rather than a competing second
-     * poller.
+     * Starts polling a prep dir for an auto-resume whatever the configured mode says, so one run's
+     * watch can be turned on by itself. That is what the waiting card's own "auto-apply when shards
+     * arrive" toggle switches, with disarmWatch() as its off position. A no-op when a watcher is
+     * already active for that prep dir, rather than a competing second poller.
      *
-     * <p>Watch mode is an external-agent feature: it exists to notice when the user's own separate
-     * culling agent, running outside this app, drops a shard. The provider check mainly guards
-     * armWatchesForExistingWaitingJobs()'s startup scan, which walks every waiting job on disk
-     * regardless of which provider produced it. dispatchAndApply()'s own call site can only reach
-     * this method when the provider already matches, so the check is redundant there, but harmless.
-     * Without the guard, a leftover external-agent.mode=watch setting combined with
-     * provider=anthropic would arm a phantom watcher for an automated provider's own interrupted
-     * (cancelled) prep dir. A fully-valid tally there would then trigger an unasked-for,
-     * API-spending auto-resume the user never opted into.
+     * <p>The provider check stays even here, where the user asked for this explicitly. Watch mode
+     * exists to notice when the user's own separate culling agent, running outside this app, drops
+     * a shard. An automated provider's shards never arrive that way, so its waiting run has nothing
+     * to notice, and a run that already looks ready would only trigger an unasked-for, API-spending
+     * resume. The toggle is absent from an automated provider's card for the same reason.
      *
-     * @param job {@link WaitingCullJob} the waiting job to watch
+     * @param prepDir {@link Path} the prep dir to watch
      */
-    private void armWatchIfConfigured(final WaitingCullJob job) {
-        if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH
-                || !this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
+    void armWatch(final Path prepDir) {
+        if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
             return;
         }
-        final Path prepDir = job.prepDir();
         this.activeWatches.compute(prepDir, (_, existing) -> {
             if (existing != null && existing.isActive()) {
                 return existing;
             }
-            // Instant.now() here, not job.since() (the prep dir's own mtime). watchTimeout is
-            // deliberately "how long this watcher keeps polling in one continuous streak," not
-            // "total time since the job first started waiting." A re-arm gets its own full timeout
-            // window instead of inheriting a countdown already run down by an earlier streak. A
-            // fresh app restart or a shard that turned invalid after looking ready are both re-arms.
             final var watcher = new CullWatcher(this.watchPollInterval,
-                    this.cullSettings.externalAgent().watchTimeout(),
-                    () -> this.shardTallyCalculator.isFullyValid(prepDir), () -> this.tryAutoResume(prepDir),
-                    Instant.now());
+                    () -> this.shardTallyCalculator.isReadyToResume(prepDir), () -> this.tryAutoResume(prepDir));
             watcher.start();
             return watcher;
         });
     }
 
     /**
+     * armWatch() for a run nobody has decided about yet, so the configured mode picks. Every
+     * automatic arming site goes through here: the startup scan and dispatchAndApply()'s own
+     * Waiting branch. A per-run toggle calls armWatch() directly instead, which is the whole
+     * difference between the two.
+     *
+     * @param job {@link WaitingCullJob} the waiting job to watch
+     */
+    private void armWatchIfConfigured(final WaitingCullJob job) {
+        if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH) {
+            return;
+        }
+        this.armWatch(job.prepDir());
+    }
+
+    /**
      * Stops and removes the active watcher for a prep dir, if one exists. Giving up on a
      * still-waiting job must stop it from ever auto-resuming a prep dir that's about to be filed
      * into the graveyard, so this is package-private rather than private: dispatchAndApply()'s own
-     * call site isn't the only place that needs to retire a watcher.
+     * call site isn't the only place that needs to retire a watcher. It is also armWatch()'s
+     * opposite, and so the off position of the waiting card's own per-run watch toggle. Turning
+     * that off leaves the run exactly as it is: still Waiting, still listed, still blocking a
+     * re-cull of its scope.
      *
      * @param prepDir {@link Path} the prep dir whose watcher should stop
      */
@@ -437,7 +448,7 @@ final class CullEngine {
     }
 
     /**
-     * The heavier action a CullWatcher runs at most once it thinks isFullyValid(). Returns whether
+     * The heavier action a CullWatcher runs at most once it thinks isReadyToResume(). Returns whether
      * it actually got to run. True means resume()'s own jobRunner.submit() succeeded - the watcher's
      * job is then done, win or lose (see dispatchAndApply()'s own re-arm-on-Waiting note). False
      * means the job runner was busy with something else, so the watcher keeps polling and retries.

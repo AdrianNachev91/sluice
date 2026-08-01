@@ -89,7 +89,6 @@ class CullConfigTest {
         this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
-            assertThat(config.externalAgent().watchTimeout()).isNull();
         });
     }
 

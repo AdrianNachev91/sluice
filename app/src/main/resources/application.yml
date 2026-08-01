@@ -10,9 +10,8 @@ sluice:
     provider: external-agent
     # Tuning for the external-agent provider only. mode: manual (default) needs an explicit
     # Resume once shards are dropped; watch also polls the prep dir and auto-resumes once every
-    # shard is present and valid. watch-timeout (a duration, e.g. 30m) is unset by default,
-    # meaning a watch never gives up on its own; when set, it only drops back to manual waiting
-    # after that long with no fully-valid shard set - it never fails the job.
+    # montage's shard has arrived. This is only the default a run starts with - a single waiting
+    # run's auto-resume can be switched on or off on its own, whatever this says.
     external-agent:
       mode: manual
     # Category cards. name is the action id decisions carry. description is the "what belongs

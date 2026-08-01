@@ -23,6 +23,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
@@ -136,9 +137,10 @@ public class JsonCullPrepStore implements CullPrepPort {
     }
 
     /**
-     * Converts a required JSON string field to a {@link Path}, failing loud if it's null. A null
-     * required field is malformed content, the same as unparseable JSON - never a
-     * {@link NullPointerException} escaping from {@link Path#of}.
+     * Converts a required JSON string field to a {@link Path}. A value this platform cannot make a
+     * path out of is malformed content, the same as unparseable JSON. Two shapes reach that: a null,
+     * and a string carrying a character the filesystem forbids. Both would otherwise leave
+     * {@link Path#of} as an unchecked escape route out of every caller's read-failure handling.
      *
      * @param value {@link String} the raw field value, possibly null
      * @param field {@link String} the field's name, used only for the error message
@@ -150,7 +152,12 @@ public class JsonCullPrepStore implements CullPrepPort {
             throw new MalformedPrepJsonException("Prep index " + indexPath + " has a null " + field,
                     new IOException("null " + field));
         }
-        return Path.of(value);
+        try {
+            return Path.of(value);
+        } catch (final InvalidPathException e) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has an unusable " + field
+                    + ": " + value, new IOException(e));
+        }
     }
 
     /**

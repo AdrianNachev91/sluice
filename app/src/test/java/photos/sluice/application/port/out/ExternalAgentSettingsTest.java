@@ -3,18 +3,15 @@ package photos.sluice.application.port.out;
 import org.junit.jupiter.api.Test;
 import photos.sluice.domain.job.WatchMode;
 
-import java.time.Duration;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ExternalAgentSettingsTest {
 
     @Test
-    void carriesTheGivenModeAndWatchTimeout() {
-        final var settings = new ExternalAgentSettings(WatchMode.WATCH, Duration.ofMinutes(5));
+    void carriesTheGivenMode() {
+        final var settings = new ExternalAgentSettings(WatchMode.WATCH);
 
         assertThat(settings.mode()).isEqualTo(WatchMode.WATCH);
-        assertThat(settings.watchTimeout()).isEqualTo(Duration.ofMinutes(5));
     }
 
     @Test
@@ -22,9 +19,8 @@ class ExternalAgentSettingsTest {
         // Deliberately violates the non-null contract: Spring's reflective config binding can pass
         // null past the annotation when sluice.cull.external-agent.mode is absent.
         //noinspection DataFlowIssue
-        final var settings = new ExternalAgentSettings(null, null);
+        final var settings = new ExternalAgentSettings(null);
 
         assertThat(settings.mode()).isEqualTo(WatchMode.MANUAL);
-        assertThat(settings.watchTimeout()).isNull();
     }
 }

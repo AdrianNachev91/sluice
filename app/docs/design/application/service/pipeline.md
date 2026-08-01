@@ -13,7 +13,9 @@ with progress reported through `ProgressPort` via `PhaseRunner`
 `Troubleshooter` and `PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing.
 Neither has per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the
 whole reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each
-actually does.
+actually does. `startWatching(prepDir)`/`stopWatching(prepDir)` are the last pair of delegates, and
+the only ones that are not jobs at all. They switch one waiting run's auto-resume on and off, which
+is bookkeeping against an in-memory map rather than work - see `cull-engine.md`.
 
 ## How one call works
 

@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -14,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 /**
- * Polls one waiting cull's shard status on a fixed interval until it is fully valid, then
+ * Polls one waiting cull's shard status on a fixed interval until it is ready to resume, then
  * attempts exactly one auto-resume. Polling is deliberate here rather than a filesystem-event
  * watch. Events would normally be preferable for prompt notice on a plain local disk. A
  * user-configured working folder can point at a cloud-synced or network location instead, exactly
@@ -31,9 +30,9 @@ import java.util.function.BooleanSupplier;
  * validation. When that happens, the same {@link CullEngine} call that produces that outcome arms
  * a fresh watcher. This instance does not loop on its own.
  *
- * <p>{@code timeout}, when present, only stops polling after that long with no ready check. It
- * never touches the underlying job, matching the {@code cull.externalAgent.watchTimeout} contract
- * that dropping back to manual preserves all work.
+ * <p>There is no time limit on the polling. A watch that never fires costs one cheap tally read per
+ * interval, and a watch that does fire either completes the run or lands it Blocked and stops. So
+ * the only thing a deadline could add is giving up on a run the user is still waiting for.
  */
 final class CullWatcher {
 
@@ -45,10 +44,8 @@ final class CullWatcher {
     };
 
     private final Duration pollInterval;
-    private final @Nullable Duration timeout;
     private final BooleanSupplier isReady;
     private final BooleanSupplier attemptConsume;
-    private final Instant armedAt;
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(DAEMON_THREADS);
     // Null until start() runs; stop() before start() is a valid no-op (see its own doc).
     private volatile @Nullable ScheduledFuture<?> task;
@@ -57,18 +54,13 @@ final class CullWatcher {
      * Creates a watcher for one waiting cull, not yet running.
      *
      * @param pollInterval {@link Duration} how often to check readiness
-     * @param timeout {@link Duration} how long to poll before giving up, or null
      * @param isReady {@link BooleanSupplier} cheap readiness check
      * @param attemptConsume {@link BooleanSupplier} the real resume attempt to run once ready
-     * @param armedAt {@link Instant} when this watcher was armed
      */
-    CullWatcher(final Duration pollInterval, final @Nullable Duration timeout, final BooleanSupplier isReady,
-                final BooleanSupplier attemptConsume, final Instant armedAt) {
+    CullWatcher(final Duration pollInterval, final BooleanSupplier isReady, final BooleanSupplier attemptConsume) {
         this.pollInterval = pollInterval;
-        this.timeout = timeout;
         this.isReady = isReady;
         this.attemptConsume = attemptConsume;
-        this.armedAt = armedAt;
     }
 
     /**
@@ -116,13 +108,9 @@ final class CullWatcher {
     }
 
     /**
-     * Checks the timeout, then checks readiness and attempts one consume.
+     * Checks readiness and attempts one consume.
      */
     private void pollUnsafe() {
-        if (this.timeout != null && Duration.between(this.armedAt, Instant.now()).compareTo(this.timeout) >= 0) {
-            this.stop();
-            return;
-        }
         if (this.isReady.getAsBoolean() && this.attemptConsume.getAsBoolean()) {
             this.stop();
         }

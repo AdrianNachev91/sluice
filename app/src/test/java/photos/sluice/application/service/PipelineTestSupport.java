@@ -83,6 +83,28 @@ final class PipelineTestSupport {
         }
     }
 
+    // waitUntil's negative counterpart, for proving a background thread did NOT act. The condition
+    // is re-checked for the whole window rather than once at the end, so a state that breaks and
+    // recovers mid-window still fails. The window has to be several poll intervals wide to give the
+    // thread real chances to act.
+    static void assertHoldsFor(final Duration window, final BooleanSupplier condition) {
+        final Instant deadline = Instant.now().plus(window);
+        while (Instant.now().isBefore(deadline)) {
+            if (!condition.getAsBoolean()) {
+                throw new AssertionError("condition stopped holding within " + window);
+            }
+            try {
+                // Throttles this checking loop; the thing being watched is a real background
+                // CullWatcher thread, with no latch or callback to await instead.
+                //noinspection BusyWait
+                Thread.sleep(5);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+        }
+    }
+
     static Path inboxOf(final Path root) {
         return root.resolve("Inbox");
     }
@@ -123,7 +145,7 @@ final class PipelineTestSupport {
 
     static CullSettings autoApproveCullSettings() {
         return new FixedSettings("auto-approve", List.of(new CullCategory("junk", "objectively worthless shots")),
-                new ExternalAgentSettings(WatchMode.MANUAL, null));
+                new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
     // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
@@ -186,23 +208,37 @@ final class PipelineTestSupport {
         if (pollInterval == null) {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                     prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig,
-                    new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor);
+                    new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner,
+                    moveLedger);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                 prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(),
-                progress, disasterDrawer, troubleshooter, prepDirDoctor, pollInterval);
+                progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pollInterval);
+    }
+
+    // The same PrepDirRemedies the pipeline() factory above wires into its own Pipeline, built
+    // standalone here. It lets a test record a user's troubleshooting answer against a prep dir and
+    // then watch the pipeline honour it. Pipeline exposes troubleshoot() but not the individual
+    // CHOICE remedies, which a troubleshoot screen calls directly.
+    static PrepDirRemedies prepDirRemedies(final Path root) {
+        final var pathsConfig = new PathsConfig(new PathsProperties(root.toString(),
+                root.resolve("Library").toString(), root.resolve("Inbox").toString()));
+        final var mediaStore = new NioMediaStore();
+        final var disasterDrawer = new DisasterDrawer(mediaStore);
+        return new PrepDirRemedies(mediaStore, new JsonCullPrepStore(), pathsConfig, disasterDrawer,
+                new MoveLedger(mediaStore, disasterDrawer));
     }
 
     static CullSettings defaultCullSettings() {
         return new FixedSettings(VisionCuller.MANUAL_MODE_PROVIDER_ID,
                 List.of(new CullCategory("junk", "objectively worthless shots")),
-                new ExternalAgentSettings(WatchMode.MANUAL, null));
+                new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
-    static CullSettings watchCullSettings(final @Nullable Duration watchTimeout) {
+    static CullSettings watchCullSettings() {
         return new FixedSettings(VisionCuller.MANUAL_MODE_PROVIDER_ID,
                 List.of(new CullCategory("junk", "objectively worthless shots")),
-                new ExternalAgentSettings(WatchMode.WATCH, watchTimeout));
+                new ExternalAgentSettings(WatchMode.WATCH));
     }
 
     static void writeFile(final Path file, final String content) throws IOException {

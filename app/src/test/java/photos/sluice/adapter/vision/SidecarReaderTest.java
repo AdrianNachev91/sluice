@@ -181,6 +181,21 @@ class SidecarReaderTest {
                 .hasMessageContaining("photo entry missing '" + missing + "'");
     }
 
+    // The sibling of a missing src, and the second way that field can be unusable. A NUL character
+    // is rejected by every mainstream filesystem, so this is illegal on any platform. Left as a raw
+    // InvalidPathException it would escape every caller's read-failure handling.
+    @Test
+    void failsLoudOnASrcThisPlatformCannotMakeAPathOutOf(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
+        Files.writeString(sidecar, """
+                { "photos": [ { "src": "bad\\u0000path.jpg", "name": "IMG_001.jpg",
+                  "time": "2019-06-20T15:00:00Z", "received": false } ] }""");
+
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("unusable src");
+    }
+
     @Test
     void failsLoudOnAnUnparseableTime(@TempDir final Path dir) throws IOException {
         final Path sidecar = dir.resolve("montage-001.json");

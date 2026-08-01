@@ -128,6 +128,20 @@ class JsonCullPrepStoreTest {
                 .isInstanceOf(MalformedPrepJsonException.class);
     }
 
+    // The sibling of a null required field, and the second way a path component can be unusable. A
+    // NUL character is rejected by every mainstream filesystem, so this is illegal on any platform.
+    // Left as a raw InvalidPathException it would escape every caller's read-failure handling.
+    @Test
+    void readIndexOnAPathComponentThisPlatformRejectsThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "basePath": "bad\\u0000path", "photos": 0, "montages": 0, "prepDir": "%s" }
+                """.formatted(jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("basePath");
+    }
+
     @Test
     void readIndexOnAReadFailureThrowsPlainUncheckedIOExceptionNotMalformed(@TempDir final Path dir) throws IOException {
         // A directory in place of index.json is a real read failure, not malformed content - the

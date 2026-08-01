@@ -18,6 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.List;
@@ -31,9 +32,10 @@ import java.util.List;
  * value is a {@link Classification} whose category is that action string.
  *
  * <p>The read path splits two kinds of bad input. Anything that isn't a representable shard throws
- * {@link MalformedPrepJsonException}: an unknown field, malformed JSON, a null document, or a null
- * decision entry. None can be turned into a {@link Decision}, and an unknown field can't even be
- * seen once parsed. So the codec is the only place to catch it. A read that merely failed, leaving
+ * {@link MalformedPrepJsonException}: an unknown field, malformed JSON, a null document, a null
+ * decision entry, or a file name this platform cannot make a path out of. None can be turned into a
+ * {@link Decision}, and an unknown field can't even be seen once parsed. So the codec is the only
+ * place to catch it. A read that merely failed, leaving
  * the content itself intact, throws a plain {@link UncheckedIOException} instead. That distinction
  * is what lets a caller report damaged content as a finding while letting a lock or a permission
  * denial propagate. Everything representable-but-wrong is left for
@@ -175,13 +177,33 @@ class ShardCodec {
             throw new MalformedPrepJsonException("Shard " + shardPath + " has a null decision entry",
                     new IOException("null decision entry"));
         }
-        final var file = Path.of(orEmpty(raw.file()));
+        final var file = decisionFile(raw.file(), shardPath);
         final String action = orEmpty(raw.action());
         return switch (action) {
             case NEAR_DUP_CHOSEN -> new NearDupChosen(file, orEmpty(raw.group()), orEmpty(raw.chosenReason()));
             case NEAR_DUP_REJECT -> new NearDupReject(file, orEmpty(raw.group()), orEmpty(raw.reason()));
             default -> new Classification(file, action, orEmpty(raw.reason()));
         };
+    }
+
+    /**
+     * Converts a decision's raw file string to a {@link Path}. An absent one becomes the empty
+     * path, which the validator then reports as a missing file alongside the run's other problems.
+     * A string this platform cannot make a path out of at all is a different matter. It is content
+     * only the agent that wrote it can fix, so it is malformed content rather than an
+     * {@link InvalidPathException} escaping as a caller's unhandled crash.
+     *
+     * @param value {@link String} the decision's raw file string, possibly null
+     * @param shardPath {@link Path} the shard's own path, used only for the error message
+     * @return {@link Path} the decision's file path
+     */
+    private static Path decisionFile(final @Nullable String value, final Path shardPath) {
+        try {
+            return Path.of(orEmpty(value));
+        } catch (final InvalidPathException e) {
+            throw new MalformedPrepJsonException("Shard " + shardPath + " names an unusable file: " + value,
+                    new IOException(e));
+        }
     }
 
     /**

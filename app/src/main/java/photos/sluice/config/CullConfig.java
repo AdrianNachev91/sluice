@@ -53,7 +53,7 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
         // via ExternalAgentSettings' own compact constructor.
         //noinspection ConstantValue
         if (externalAgent == null) {
-            externalAgent = new ExternalAgentSettings(WatchMode.MANUAL, null);
+            externalAgent = new ExternalAgentSettings(WatchMode.MANUAL);
         }
         // Two cards sharing a name would silently alias one category, so duplicates fail loud.
         final List<String> duplicates = categories.stream()
