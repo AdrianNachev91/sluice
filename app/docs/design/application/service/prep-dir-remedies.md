@@ -136,6 +136,33 @@ fresh. `APPLY_ANYWAY` means every other safety net (files must exist, categories
 cross-shard duplicate check, never-overwrite) still applies. Only the membership cross-check is
 skipped.
 
+### Why one validator, and why it is the apply phase's
+
+Every remedy on this page is worth exactly as much as the run's ability to reach the gate that
+reads it. That gate is `ApplyPlanner.validate()`. It is the only place the disposition ledger is
+consulted. Any second validator ahead of it works from raw disk state alone. It would therefore
+re-derive verdicts the user has already answered, and refuse the run before their answer could
+count.
+
+The cull phase is the one step sitting ahead of that gate, so the vision cullers hold no opinion
+about shard content. The external-agent provider asks only which montages have no shard file at
+all. The Anthropic provider validates the model's own response, because that response is its own
+output and the corrective retry needs the problem list. It skips a montage whose sidecar it cannot
+read rather than failing the run. Neither provider consults `index.json`'s unreviewable list. A
+resume whose montages all have shards enters no culler at all and goes straight to the gate.
+
+Both `resolveCorruptSidecar` resolutions depend on that. So does `resolveOverlap` with
+`TRUST_DECISION`. Each records an answer that only this gate can read, on a prep dir whose raw disk
+state still shows the original problem.
+
+One validator does survive alongside it, and it is ledger-blind: `ShardTallyCalculator`, which
+computes the present/valid counts a waiting run displays. Nothing it does can block a run, since a
+manual resume goes to the gate regardless. It does gate watch mode's automatic resume, through
+`isFullyValid`. So a correctly-answered finding still reads as invalid there, and a watched run
+waits for a hand it has already been dealt. The tally is display machinery that grew a second job.
+Giving it the ledger, or deriving it from the gate itself, belongs with the rest of the watch
+surface.
+
 ## 3. Last-resort discard
 
 `discard()` is the remedy for a prep dir mangled beyond every repair above. It gives up on the run

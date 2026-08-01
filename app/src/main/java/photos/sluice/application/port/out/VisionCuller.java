@@ -32,11 +32,15 @@ public interface VisionCuller {
     String id();
 
     /**
-     * Ensures every montage in prep has a present, valid decision shard, by whatever means the
-     * implementation obtains the judgements, and returns a report of what the run did and spent.
-     * Throws CullException when a complete, valid set cannot be yielded. The throw is the signal to
-     * whoever is culling to fix the shards and run again. How far opts is honored varies by
-     * provider; each documents its own take.
+     * Obtains a decision shard for every montage in prep, by whatever means the implementation
+     * gets its judgements. Returns a report of what the run did and spent, and throws
+     * CullException when it cannot. The throw is the signal to whoever is culling to try again.
+     * How far opts is honored varies by provider; each documents its own take.
+     *
+     * <p>An implementation does not vouch for the shards' content. That is the apply phase's to
+     * judge, since it alone reads the user's own answers to earlier findings. So a culler checks
+     * only what it is placed to check. The manual-mode provider checks that a shard is there at
+     * all. A provider calling a model checks that model's response before writing it.
      *
      * @param prep {@link PrepDir} the prep directory holding montages to judge
      * @param opts {@link CullOptions} options controlling how the culler runs

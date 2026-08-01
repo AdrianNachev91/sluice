@@ -260,11 +260,15 @@ class AnthropicCullerTest {
         assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
     }
 
-    // index.json's unreviewable list has no shard of its own, but ApplyEngine moves it exactly like
-    // a decision. So the same file appearing in both would double-move at apply time - the same
-    // problem two shards reusing a group id would cause. Caught here, at cull time, not just later.
+    // A file named by both a decision and index.json's unreviewable list would double-move at apply
+    // time. That is a real problem, but not one to settle here. The user can answer it with
+    // TRUST_DECISION, and that answer lives in a ledger only the apply phase reads. Rejecting the
+    // shard here would overrule them, and each rejection costs another paid model call.
+    //
+    // The fixture is synthetic: the renderer keeps sidecar srcs and unreviewable entries disjoint,
+    // so only a hand-edited index.json reaches this state through the model's own verdict.
     @Test
-    void failsLoudWhenAFileIsListedBothAsADecisionAndInTheUnreviewableList() throws Exception {
+    void writesTheShardWhenAFileIsAlsoListedAsUnreviewableLeavingThatOverlapToApply() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg");
         this.respondWith(response("""
                 {
@@ -274,12 +278,74 @@ class AnthropicCullerTest {
                 }
                 """, 1000, 100));
 
-        assertThatThrownBy(() -> this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"),
-                OPTIONS))
-                .isInstanceOf(CullException.class)
-                .hasMessageContaining("file listed both as a decision and as unreviewable: " + this.src("IMG_0001" +
-                        ".jpg"));
+        final CullReport report =
+                this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS);
+
+        assertThat(report).isEqualTo(new CullReport(1, 0, 1000, 100));
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
+                .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
+        // One call, so the overlap never even reached the corrective retry.
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+    }
+
+    // The overlap above is hand-built: the renderer never emits a file as both a sidecar src and an
+    // unreviewable entry. A shard read back off disk is the case that needs no such fixture, since
+    // nothing constrains what an already-written shard names. So this is the resume-path twin, and
+    // the one that would break first if the unreviewable argument were ever restored.
+    @Test
+    void resumesAnExistingShardNamingAnUnreviewableFileInsteadOfPayingToReCullIt() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"))));
+
+        final CullReport report =
+                this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS);
+
+        assertThat(report).isEqualTo(new CullReport(0, 1, 0, 0));
+        verify(this.messages, times(0)).create(any(MessageCreateParams.class));
+    }
+
+    // A sidecar names the photos its montage shows, so without one there is nothing to key the
+    // model's verdicts against and no request can be built. Skipping that montage keeps the rest of
+    // the scope culling, and leaves the apply phase to offer the user a corrupt-sidecar remedy.
+    @Test
+    void skipsAMontageWhoseSidecarIsUnreadableAndStillCullsTheRest() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        Files.writeString(this.prepDir.resolve("montage-001.json"), "{ not json");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0002.jpg", "action": "junk", "reason": "screenshot" }
+                  ]
+                }
+                """, 500, 50));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
+
+        assertThat(report).isEqualTo(new CullReport(1, 1, 500, 50));
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
+        // Never culled, so no shard is invented for it - and no model call was spent trying.
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+    }
+
+    // The state resolveCorruptSidecar() actually leaves behind: the sidecar filed away, its shard
+    // still on disk. That shard must survive untouched, because APPLY_ANYWAY is an answer to trust
+    // it. Re-culling the montage would overwrite the very decisions the user chose to keep.
+    @Test
+    void leavesAnExistingShardAloneWhenItsSidecarHasBeenFiledAway() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(this.src("IMG_0001.jpg"), "junk", "the user's own answer"))));
+        Files.delete(this.prepDir.resolve("montage-001.json"));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001"), OPTIONS);
+
+        assertThat(report).isEqualTo(new CullReport(0, 1, 0, 0));
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
+                .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "the user's own answer"));
+        verify(this.messages, times(0)).create(any(MessageCreateParams.class));
     }
 
     @Test

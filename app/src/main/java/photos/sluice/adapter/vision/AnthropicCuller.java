@@ -53,6 +53,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -76,8 +77,9 @@ import java.util.stream.Collectors;
  * naming the montage and both attempts' problems. The one-retry cap is deliberate, so a model
  * that cannot cull a montage stops burning tokens. Missing connection settings (model id, API
  * key) are the user's configuration to fix, and fail unchecked with the property or variable
- * name. A prep directory whose sidecar or montage image can't be read is broken app output. That
- * fails unchecked too, because the scope needs re-prepping.
+ * name. A montage image that can't be read is broken app output, and fails unchecked because the
+ * scope needs re-prepping. An unreadable sidecar skips its own montage instead, leaving the apply
+ * phase to offer the user a repair - see {@link #readEntries}.
  *
  * <p>A montage whose valid shard is already on disk is skipped. A run can be interrupted by a
  * crash or a user cancellation. Either way, re-invoking it on the same prep directory finishes
@@ -251,18 +253,21 @@ class AnthropicCuller implements VisionCuller {
         long inputTokens = 0;
         long outputTokens = 0;
         int culled = 0;
-        int resumed = 0;
+        int skipped = 0;
         final int total = prep.entries().size();
         int ordinal = 0;
-        // Every sidecar is read up front, so validation always sees the whole scope's files. That
-        // is the in-scope set the shard contract defines. Accepted shards still accumulate one
-        // montage at a time. ShardValidator's cross-shard rules (a near-dup group id reused by
-        // two montages, say) can only fire on the whole set. Earlier shards are known clean, so
-        // any fresh problem implicates the current montage.
+        // Every readable sidecar is read up front, so validation sees as much of the scope as
+        // survives. That is the in-scope set the shard contract defines. Accepted shards still
+        // accumulate one montage at a time. ShardValidator's cross-shard rules (a near-dup group
+        // id reused by two montages, say) can only fire on the whole set. Earlier shards are known
+        // clean, so any fresh problem implicates the current montage.
+        //
+        // A sidecar that can't be read leaves its montage out of the map entirely. The loop below
+        // then skips that montage instead of failing the whole run. See readEntries().
         final var entriesByMontage = new LinkedHashMap<String, List<SidecarPhotoEntry>>();
         for (final String montage : prep.entries()) {
-            entriesByMontage.put(montage,
-                    this.sidecarReader.readEntries(prep.prepDir().resolve(montage + ".json")));
+            this.readEntries(prep.prepDir().resolve(montage + ".json"))
+                    .ifPresent(entries -> entriesByMontage.put(montage, entries));
         }
         final List<Path> scopeSrcs = entriesByMontage.values().stream()
                 .flatMap(List::stream)
@@ -280,9 +285,9 @@ class AnthropicCuller implements VisionCuller {
                 ordinal++;
                 final List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
                 final Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
-                if (this.resumesExistingShard(shardPath, montage, acceptedShards, scopeSrcs,
-                        categoryNames, prep.unreviewable())) {
-                    resumed++;
+                if (entries == null || this.resumesExistingShard(shardPath, montage, acceptedShards,
+                        scopeSrcs, categoryNames)) {
+                    skipped++;
                 } else {
                     final MessageCreateParams request = request(model, thinking, systemPrompt,
                             this.prompt.userTurn(prep.scope(), montage, ordinal, total, entries),
@@ -291,14 +296,14 @@ class AnthropicCuller implements VisionCuller {
                     inputTokens += response.usage().inputTokens();
                     outputTokens += response.usage().outputTokens();
                     AttemptOutcome outcome = this.attempt(montage, entries, response, acceptedShards,
-                            scopeSrcs, categoryNames, prep.unreviewable());
+                            scopeSrcs, categoryNames);
                     if (outcome.shard() == null && !cancellation.isCancelled()) {
                         final Message retryResponse = client.messages().create(retryRequest(request,
                                 responseText(response), this.prompt.correctionTurn(outcome.problems())));
                         inputTokens += retryResponse.usage().inputTokens();
                         outputTokens += retryResponse.usage().outputTokens();
                         final AttemptOutcome retried = this.attempt(montage, entries, retryResponse,
-                                acceptedShards, scopeSrcs, categoryNames, prep.unreviewable());
+                                acceptedShards, scopeSrcs, categoryNames);
                         if (retried.shard() == null) {
                             // A cancellation requested while the retry call itself was in flight
                             // reaches here too. Thrown only when uncancelled, so a cancel never
@@ -322,7 +327,31 @@ class AnthropicCuller implements VisionCuller {
         } finally {
             client.close();
         }
-        return new CullReport(culled, resumed, inputTokens, outputTokens);
+        return new CullReport(culled, skipped, inputTokens, outputTokens);
+    }
+
+    /**
+     * Reads one montage's sidecar, translating an unreadable one into the empty case rather than
+     * failing the run. A sidecar names the photos its montage's tile grid shows. Without one there
+     * is nothing to key the model's verdicts back to files, so that montage cannot be culled.
+     *
+     * <p>Skipping it beats failing the run, because a montage that already holds a shard has a
+     * genuine repair path. The apply phase reports it as a corrupt sidecar and offers the choice of
+     * trusting that shard or setting the montage aside. Failing here would put the run out of reach
+     * of the answer to that question.
+     *
+     * <p>Damaged content and a read that merely failed are both tolerated, matching what the apply
+     * phase does with the same sidecar. Neither is a judgement this class is placed to make.
+     *
+     * @param sidecarPath {@link Path} path of the montage's sidecar
+     * @return an {@link Optional} {@link List} of {@link SidecarPhotoEntry} the entries, or empty if unreadable
+     */
+    private Optional<List<SidecarPhotoEntry>> readEntries(final Path sidecarPath) {
+        try {
+            return Optional.of(this.sidecarReader.readEntries(sidecarPath));
+        } catch (final UncheckedIOException e) {
+            return Optional.empty();
+        }
     }
 
     /**
@@ -336,13 +365,11 @@ class AnthropicCuller implements VisionCuller {
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated on acceptance
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
      * @param categoryNames a {@link List} of {@link String}, configured cull category names
-     * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
      * @return boolean true if the existing shard is valid and was accepted
      */
     private boolean resumesExistingShard(final Path shardPath, final String montage,
                                          final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
-                                         final List<String> categoryNames,
-                                         final List<Path> unreviewable) {
+                                         final List<String> categoryNames) {
         if (!Files.exists(shardPath)) {
             return false;
         }
@@ -352,7 +379,7 @@ class AnthropicCuller implements VisionCuller {
         } catch (final UncheckedIOException e) {
             return false;
         }
-        return this.acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames, unreviewable).isEmpty();
+        return this.acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames).isEmpty();
     }
 
     /**
@@ -364,20 +391,18 @@ class AnthropicCuller implements VisionCuller {
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
      * @param categoryNames a {@link List} of {@link String}, configured cull category names
-     * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
      * @return {@link AttemptOutcome} the resulting shard, or the problems found
      */
     private AttemptOutcome attempt(final String montage, final List<SidecarPhotoEntry> entries, final Message response,
                                    final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
-                                   final List<String> categoryNames,
-                                   final List<Path> unreviewable) {
+                                   final List<String> categoryNames) {
         final var problems = new ArrayList<String>();
         final DecisionShard shard = this.shardOf(montage, entries, response, problems);
         if (shard == null) {
             return new AttemptOutcome(null, problems);
         }
         final List<String> validationProblems =
-                this.acceptIfValid(montage, shard, acceptedShards, scopeSrcs, categoryNames, unreviewable);
+                this.acceptIfValid(montage, shard, acceptedShards, scopeSrcs, categoryNames);
         if (!validationProblems.isEmpty()) {
             return new AttemptOutcome(null, validationProblems);
         }
@@ -386,25 +411,31 @@ class AnthropicCuller implements VisionCuller {
 
     /**
      * Tentatively adds the shard to the accepted set and validates the whole set against the
-     * scope's full src list, plus index.json's own unreviewable list. A file listed there and in a
-     * shard would double-move at apply time, same as a file listed in two shards. A clean result
-     * keeps the shard and returns no problems. Anything else rolls the addition back, so a retry or
-     * re-cull starts from the same accepted state.
+     * scope's full src list. A clean result keeps the shard and returns no problems. Anything else
+     * rolls the addition back, so a retry or re-cull starts from the same accepted state.
+     *
+     * <p>index.json's own unreviewable list is deliberately left out of the check. It is prep-dir
+     * state a user's troubleshooting answer can overrule, and only the apply phase reads those
+     * answers. Checking it here would reject a shard on a verdict the user has already settled, and
+     * every rejection costs another paid model call.
+     *
+     * <p>A verdict this class builds cannot name one of those files anyway. Each comes from a
+     * sidecar entry, and the montage renderer keeps the reviewable and unreviewable sets disjoint.
+     * A shard read back off disk carries no such guarantee, which is a second reason the question
+     * belongs to the apply phase rather than here.
      *
      * @param montage {@link String} the montage name
      * @param shard {@link DecisionShard} the candidate shard to validate
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated by this call
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
      * @param categoryNames a {@link List} of {@link String}, configured cull category names
-     * @param unreviewable a {@link List} of {@link Path}, paths excluded from review
      * @return a {@link List} of {@link String}, validation problems found, empty if the shard was accepted
      */
     private List<String> acceptIfValid(final String montage, final DecisionShard shard,
                                        final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
-                                       final List<String> categoryNames,
-                                       final List<Path> unreviewable) {
+                                       final List<String> categoryNames) {
         acceptedShards.add(new ShardFile(montage, shard));
-        final ValidationReport report = this.validator.validate(acceptedShards, scopeSrcs, categoryNames, unreviewable);
+        final ValidationReport report = this.validator.validate(acceptedShards, scopeSrcs, categoryNames, List.of());
         if (!report.valid()) {
             acceptedShards.removeLast();
         }

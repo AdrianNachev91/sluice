@@ -15,10 +15,13 @@ flowchart TD
     A["cull(prep, opts)"] --> B["require sluice.cull.<br/>provider-settings.model"]
     B --> C["render the system prompt<br/>(CullerPrompt + category cards)"]
     C --> D["build the API client<br/>(ANTHROPIC_API_KEY, optional endpoint,<br/>transport max-retries)"]
-    D --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>unreadable fails unchecked)"]
+    D --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>an unreadable one contributes<br/>nothing and drops its montage)"]
     W --> E["for each montage, in sidecar order"]
-    E --> R{"existing shard<br/>readable + valid?"}
-    R -- yes --> S["skip: count as resumed,<br/>shard joins the accepted set"]
+    E --> Q{"sidecar<br/>readable?"}
+    Q -- no --> S2["skip: count as skipped,<br/>any existing shard<br/>left untouched"]
+    S2 --> E
+    Q -- yes --> R{"existing shard<br/>readable + valid?"}
+    R -- yes --> S["skip: shard joins<br/>the accepted set"]
     S --> E
     R -- no --> F["one stateless API request<br/>(see Per-montage request)"]
     F --> J["add the response's usage<br/>to the token totals"]
@@ -29,7 +32,7 @@ flowchart TD
     T -- no --> X(["throw CullException with<br/>both attempts' problems"])
     G -- clean --> I["write decisions-NNN.json"]
     I --> E
-    E -- all done --> K(["CullReport<br/>(culled, resumed, token totals)"])
+    E -- all done --> K(["CullReport<br/>(culled, skipped, token totals)"])
 ```
 
 Each montage is one stateless request; no conversation state carries between montages. That
@@ -37,6 +40,15 @@ matches the crash-safety model (a shard lands on disk the moment its montage pas
 cost linear in photo count. Resume rides on the same property. A re-invoked run skips every
 montage whose shard is already on disk and valid, so an interrupted cull finishes only the
 remainder. An unreadable or contract-breaking existing shard is re-culled and overwritten.
+
+A montage whose sidecar cannot be read is skipped instead. There is nothing to key the model's
+verdicts back to files without one, so no request can be built for it. Failing the run outright
+would be worse than skipping. The apply phase reports that montage as a corrupt sidecar, and offers
+a real choice between trusting its existing shard and setting the montage aside. A hard failure
+here would put the run out of reach of that answer. Any shard the montage already holds is left
+exactly as it is, since trusting it is one of the two things the user may have chosen. Both a
+damaged sidecar and a read that merely failed are tolerated the same way, matching what the apply
+phase does with the identical file.
 
 ## Per-montage request
 
@@ -100,7 +112,19 @@ Two validation layers, split by where the information lives:
   against the whole scope's src list, read from all sidecars up front. This makes "in scope" mean
   the same thing here as for the sibling provider. Earlier shards are known clean, so any fresh
   problem implicates the current montage. Resumed shards join the same set, so the cross-shard
-  rules keep firing across the resume boundary.
+  rules keep firing across the resume boundary. A montage skipped for want of a readable sidecar is
+  the one gap. Its shard stays out of the accepted set, so a group id it claims is invisible to the
+  montages after it. Apply's gate sees every shard on disk and catches the collision there.
+
+One shard-level rule is deliberately not run here: the check against `index.json`'s unreviewable
+list. A file named by both a decision and that list would double-move, so it is a genuine problem.
+It is just not one this class is placed to settle. The user can answer it with `TRUST_DECISION`,
+and that answer lives in a disposition ledger only the apply phase reads. Rejecting a shard here
+would re-derive a verdict they have already overruled, and every rejection costs another paid model
+call. A verdict this class builds cannot name one of those files anyway. Each comes from a sidecar
+entry, and `CullMontageRenderer` keeps the reviewable and unreviewable sets disjoint. A shard read
+back off disk on the resume path carries no such guarantee, which is a second reason the question
+belongs to the apply phase. It runs the same check there, with those answers applied.
 
 A failing attempt does not throw by itself. Its problem list feeds the corrective retry (see the
 top-level flow). The model's reply comes back as an assistant turn, and the problems follow as a
@@ -114,7 +138,8 @@ deliberate - a model that fails the same montage twice stops burning tokens.
 |-------------------------------------------------------------------------------------|----------------------------|------------------------------------------------------------------------|
 | `provider-settings.model` unset                                                     | User config                | Unchecked `IllegalStateException` naming the property                  |
 | `ANTHROPIC_API_KEY` unset                                                           | User environment           | Unchecked `IllegalStateException` naming the variable                  |
-| Sidecar or montage image unreadable                                                 | Re-prep the scope          | Unchecked `UncheckedIOException` - the prep dir is broken app output   |
+| Montage image unreadable                                                            | Re-prep the scope          | Unchecked `UncheckedIOException` - the prep dir is broken app output   |
+| Sidecar unreadable                                                                  | Answer at the apply phase  | That montage is skipped; apply reports it as a corrupt sidecar         |
 | Response fails validation twice (attempt + corrective retry)                        | Re-run the cull            | Checked `CullException` naming the montage and both attempts' problems |
 | Transport trouble (429/5xx/timeout) beyond `provider-settings.max-retries` backoffs | Wait / raise the retry cap | The SDK's own exception after its exponential backoff gives up         |
 
@@ -133,12 +158,15 @@ deliberate - a model that fails the same montage twice stops burning tokens.
 | Run fails at montage N                                          | Shards 1..N-1 remain; the run reports failure and nothing is applied (missing shards stay a hard gate downstream) |
 | Re-run after a failure or interruption                          | Montages with valid shards resume (skipped, no API call); the rest are culled                                     |
 | Existing shard unreadable or contract-breaking                  | Re-culled; the fresh shard overwrites it                                                                          |
+| A montage's sidecar is unreadable, and it has no shard          | Skipped, no API call; apply reports the corrupt sidecar and the missing shard                                     |
+| A montage's sidecar is unreadable, and it already has a shard   | Skipped, no API call; that shard is left untouched for the apply-phase answer to act on                           |
+| A file is named by both a decision and the unreviewable list    | Shard written; the overlap is apply's to report, with the user's own answer applied                               |
 
 ## Known limitations
 
-- **`CullOptions` is ignored.** Every montage either resumes or culls, so `allowPartial` has
-  nothing to waive. A montage that fails both attempts fails the run. `timeout` is not yet wired
-  to the client.
+- **`CullOptions` is ignored.** A montage resumes, culls, or is skipped for want of a readable
+  sidecar, so `allowPartial` has nothing to waive. A montage that fails both attempts fails the
+  run. `timeout` is not yet wired to the client.
 - **Exhaustive verdicts are always on.** The designed off-switch for cheap all-keeper scopes
   (`cull.exhaustiveVerdicts`) is not implemented.
 - **Response-level validation is single-consumer for now.** The parse and per-verdict checks live
