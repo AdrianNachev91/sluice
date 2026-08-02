@@ -61,6 +61,7 @@ flowchart TD
     D -- yes --> E(["real tile,<br/>unreviewable = source < 640px"])
     D -- no --> F(["placeholder"])
     B -- no --> F
+    A -- "throws unchecked" --> F
 ```
 
 AVIF shares HEIC/HEIF's ISOBMFF container and is decodable by the same underlying codec library
@@ -70,7 +71,10 @@ libheif-based CLI decoder, its command configurable via `sluice.imaging.heif-dec
 defaulting to `heif-convert` on PATH. It's verified against real HEIC and AVIF fixtures. A missing
 or failing binary degrades to `Optional.empty()`, which this path already turns into a placeholder.
 `TileRenderer` still takes any `HeifDecoder` through its constructor, so which instance it actually
-runs with in the assembled app is a later wiring concern, not this class's.
+runs with in the assembled app is a later wiring concern, not this class's. The port's signature
+permits an unchecked exception, and a decoder backed by a native library or a separate process can
+raise one. So the decode call is guarded, and an implementation that throws lands on the same
+placeholder an empty result does.
 
 ## Generic raster path (everything else, including every RAW extension)
 
@@ -133,6 +137,7 @@ preview" rather than blending in if that routing is ever skipped or incomplete a
 | An unknown-extension corrupt file                        | Placeholder labeled `NO PREVIEW`                                                   |
 | Real HEIC/AVIF, via `CliHeifDecoder`                     | Real tile, `unreviewable` per the same 640px source-size check                     |
 | HEIC/HEIF/AVIF with no decoder on PATH or a corrupt file | Placeholder labeled with the real extension                                        |
+| A `HeifDecoder` that throws an unchecked exception       | Placeholder labeled with the real extension                                        |
 
 ## Known limitations
 

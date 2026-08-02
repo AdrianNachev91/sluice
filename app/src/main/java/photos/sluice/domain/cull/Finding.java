@@ -9,8 +9,12 @@ import java.util.List;
  * {@link photos.sluice.application.service.ApplyPlanner}'s own batch-level checks. Examples of the
  * latter are a stray shard, or a decision whose file cannot be accounted for.
  *
- * <p>{@link #describe()} renders the exact prose an aggregated {@code ApplyException} reports.
- * Callers read that rendered text, never a finding's fields directly.
+ * <p>{@link #describe()} renders the exact prose an aggregated {@code ApplyException} reports, so
+ * no caller formats a message out of a finding's fields itself. A caller may still read those
+ * fields directly to act on the finding - {@link photos.sluice.application.service.PrepDirRemedies}
+ * takes a {@link StrayShard}'s own file name to repair it, and {@code ApplyPlanner} reads a
+ * {@link DecisionUnreviewableOverlap}'s file to suppress it once resolved - it just never renders
+ * text from them.
  *
  * <p>{@link #remedy()} classifies how, if at all, {@code PrepDirDoctor}'s troubleshooter can
  * resolve the finding on its own. AUTO is safe to apply unprompted. CHOICE means the user picks

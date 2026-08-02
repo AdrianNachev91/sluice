@@ -589,9 +589,12 @@ class AnthropicCuller implements VisionCuller {
      * Assembles one montage's complete API request. The image block precedes the text turn per
      * Anthropic's vision guidance: models resolve references into an image better when the image
      * comes first. The schema rides along as a structured-output format, so the response text is
-     * the verdict JSON itself, never prose around it. No sampling parameters - current Anthropic
-     * models reject them outright. Thinking is always sent explicitly, never left to the model
-     * generation's own default: disabled unless configured on, adaptive when it is.
+     * meant to be the verdict JSON itself rather than prose around it. A request for a format is not
+     * a guarantee of one, so {@link #parse} records a problem rather than throwing when the response
+     * is not - which is what drives the corrective retry. No sampling
+     * parameters - current Anthropic models reject them outright. Thinking is always sent
+     * explicitly, never left to the model generation's own default: disabled unless configured on,
+     * adaptive when it is.
      *
      * @param model {@link String} the model id to request
      * @param thinking boolean whether to enable adaptive thinking

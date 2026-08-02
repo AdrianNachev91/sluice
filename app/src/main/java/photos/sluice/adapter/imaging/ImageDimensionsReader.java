@@ -9,6 +9,7 @@ import com.drew.metadata.heif.HeifDirectory;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ImageDimensionsPort;
+import photos.sluice.domain.imaging.LowResGate;
 import photos.sluice.domain.model.Dimensions;
 
 import javax.imageio.ImageIO;
@@ -23,29 +24,47 @@ import java.util.function.Function;
 
 /**
  * An {@link ImageDimensionsPort} that reads an image's true pixel dimensions from embedded
- * metadata where possible. It only falls back to a full decode via ImageIO when no usable
- * metadata exists.
+ * metadata where possible. A decode via ImageIO backs that up, either when no usable metadata
+ * exists or when the metadata answer is small enough to change a routing decision.
  *
  * <p>Camera and container formats can expose more than one directory that might carry dimensions.
  * A RAW file's multi-image chain can carry multiple Exif SubIFDs, and a HEIC/AVIF file can carry
- * multiple HEIF directories. Not every directory found is guaranteed to hold the real capture
- * resolution.
- * Every candidate directory is checked, and the largest reported dimensions win, so a small
- * embedded preview or thumbnail can never be mistaken for the true resolution.
+ * multiple HEIF directories. Not every directory found holds the real capture resolution.
+ * Every candidate directory is checked, and the largest reported dimensions win. A small embedded
+ * preview therefore loses to any sibling directory carrying the true size. Where no sibling
+ * carries it, the decode described on {@link #read} is the second opinion instead.
  */
 @Component
 public class ImageDimensionsReader implements ImageDimensionsPort {
 
     /**
-     * Reads an image's pixel dimensions, trying embedded metadata first and falling back to
-     * decoding via ImageIO.
+     * Reads an image's pixel dimensions. Embedded metadata answers first. A decode via ImageIO
+     * cross-checks that answer whenever it comes out small.
+     *
+     * <p>Any single metadata directory can describe a sub-image rather than the capture. Two real
+     * shapes do exactly that. An editor can resize a photo and leave the EXIF pixel-dimension tags
+     * behind at the old size. A tiled HEIC stores its picture as a grid of small tiles. The
+     * container box a metadata parse reaches there can carry one tile's size, not the grid's.
+     *
+     * <p>At or above {@link LowResGate#MIN_DIMENSION} the exact number changes no routing decision,
+     * so the metadata answer stands and the decode is skipped. Below it the number decides whether a
+     * file is called low-res, so the metadata reading counts as a candidate rather than an answer.
+     * The decode then runs as a second source and the larger of the two wins. When no decoder can
+     * read the format at all, nothing corroborates the small reading, so empty is reported. An
+     * unknown size leaves a real photo where it belongs, while an uncorroborated small one exiles
+     * it as low-res.
      *
      * @param file {@link Path} the image file to read
-     * @return an {@link Optional} {@link Dimensions}, or empty if none could be determined
+     * @return an {@link Optional} {@link Dimensions}; empty if none could be determined, or if a
+     *         sub-threshold metadata reading had no decoder available to corroborate it
      */
     @Override
     public Optional<Dimensions> read(final Path file) {
-        return readMetadataDimensions(file).or(() -> readViaImageIo(file));
+        final Dimensions fromMetadata = readMetadataDimensions(file).orElse(null);
+        if (fromMetadata != null && maxDimension(fromMetadata) >= LowResGate.MIN_DIMENSION) {
+            return Optional.of(fromMetadata);
+        }
+        return readViaImageIo(file).map(decoded -> largestOf(decoded, fromMetadata));
     }
 
     /**
@@ -61,14 +80,17 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      * low-res when its reported dimensions are small, so under-reporting a real capture's size
      * (the verified Nikon failure mode) is the risk this guards against. A corrupted file whose
      * non-primary SubIFD happens to report an inflated bogus value could in principle cause a
-     * genuinely low-res file to escape that flag. It could never cause the reverse: misrouting a
-     * real high-res photo as low-res.
+     * genuinely low-res file to escape that flag. Picking the larger candidate only ever raises the
+     * reported size, so this rule on its own cannot push a photo below the flag. It also cannot
+     * lift a file whose every directory under-reports, which is why read() cross-checks a small
+     * result against a decode.
      *
      * <p>HEIC/HEIF/AVIF files can carry their dimensions in a separate HeifDirectory, instead of or
      * alongside an Exif SubIFD. A real AVIF fixture verified this: it has no embedded EXIF at all,
-     * only the container's own native width/height box. A real iPhone HEIC works via the SubIFD
-     * path alone, since Apple's own HEIC files do carry full EXIF. A plain AVIF conversion with no
-     * EXIF needs this second check to be found at all.
+     * only the container's own native width/height box. A plain AVIF conversion with no EXIF needs
+     * this second check to be found at all. A real iPhone HEIC carries both directory types. Its
+     * HEIF side reads a 512x512 tile rather than the assembled picture, so the SubIFD's larger
+     * value is the one that has to win.
      *
      * @param file {@link Path} the image file to inspect
      * @return an {@link Optional} {@link Dimensions}, the largest trusted dimensions found across
@@ -93,12 +115,12 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A file could in principle carry dimensions in both directory types at once (an edited HEIC
-     * whose EXIF wasn't refreshed to match a later HEIF-box resize, for example). Comparing across
-     * both rather than trusting whichever type appears first extends the same largest-wins
-     * safety margin largestAcross already applies within a single type. Ties keep the first
-     * argument, an arbitrary but pinned-down choice - it doesn't matter which equally-large
-     * candidate is reported, only that a real one is.
+     * A file really does carry dimensions in both directory types at once. A real iPhone HEIC is
+     * one: its HeifDirectory reads a 512x512 tile, its Exif SubIFD reads the true 4032x3024
+     * capture. Comparing across both rather than trusting whichever type appears first extends
+     * the same largest-wins safety margin largestAcross already applies within a single type.
+     * Ties keep the first argument, an arbitrary but pinned-down choice - it doesn't matter which
+     * equally-large candidate is reported, only that a real one is.
      *
      * @param a {@link Dimensions} the first candidate dimensions, or null
      * @param b {@link Dimensions} the second candidate dimensions, or null

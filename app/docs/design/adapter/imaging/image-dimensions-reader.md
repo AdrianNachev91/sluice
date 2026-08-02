@@ -4,8 +4,8 @@ How `adapter/imaging/ImageDimensionsReader` determines a media file's pixel dime
 `SortEngine`/`LowResGate` to decide whether a file is low-res
 (`app/src/main/java/photos/sluice/adapter/imaging/ImageDimensionsReader.java`).
 
-This runs at `sort` time, trusting metadata **tag values** rather than decoding real pixels. That's
-a different, cheaper mechanism than `TileRenderer`'s montage-time real decode (see
+This runs at `sort` time, trusting metadata **tag values** rather than decoding real pixels wherever
+it can. That's a different, cheaper mechanism than `TileRenderer`'s montage-time real decode (see
 `tile-renderer.md`). `TileRenderer` independently re-measures actual decoded content, so it doesn't
 share this class's failure modes.
 
@@ -14,13 +14,42 @@ share this class's failure modes.
 ```mermaid
 flowchart TD
     A["read(file)"] --> B["readMetadataDimensions(file)"]
-    B --> C{"present?"}
+    B --> C{"present and<br/>>= MIN_DIMENSION?"}
     C -- yes --> D(["dimensions"])
     C -- no --> E["readViaImageIo(file)"]
     E --> F{"present?"}
-    F -- yes --> D
+    F -- yes --> H["largestOf(decoded,<br/>metadata result)"]
+    H --> D
     F -- no --> G(["empty"])
 ```
+
+The metadata answer is taken as final only above `LowResGate.MIN_DIMENSION` (640). That is the only
+bar at which the exact number changes a routing decision. Above it a decode would buy nothing and
+cost a read per file.
+
+Below the bar the metadata answer is a candidate, not a verdict. Any single directory can describe a
+sub-image rather than the capture, and two real shapes do:
+
+- **Stale EXIF pixel-dimension tags.** An editor resizes the pixels and leaves `0xA002`/`0xA003`
+  behind at the old size. Reproduced with a fixture whose tags read 400x300 over a real 1024x768
+  picture.
+- **A tiled HEIC.** Apple stores the picture as a grid of 512x512 tiles, and the container box a
+  metadata parse reaches carries a tile's size, not the grid's. Verified on this repo's own real
+  4032x3024 iPhone HEIC: its `HeifDirectory` reads 512x512. That file is saved today only because
+  its Exif SubIFD also carries the true size. An EXIF-stripped copy of it leaves 512 as the sole
+  reading, under the 640 bar, on a full-resolution photo.
+
+So below the bar the decode runs as a second source and `largestOf` picks between them. When no
+decoder handles the format at all, nothing corroborates the small reading and the result is empty.
+`LowResGate` treats unknown dimensions as "don't flag", which leaves a real photo where it belongs.
+An uncorroborated small reading would exile it to `Review\` as low-res instead.
+
+That last rule costs something, and the cost is the deliberate trade. A genuinely sub-640 file in a
+format ImageIO cannot read reports no dimensions, so only the 50 KiB file-size floor can flag it.
+HEIC and AVIF are always in that group. RAW is mixed. A CR2 or ARW has no working reader here
+either, but a NEF's embedded preview does open. So a NEF's metadata reading gets corroborated
+rather than left unconfirmed. A real sub-640 image in an unreadable format lands far under that
+floor.
 
 ## `readMetadataDimensions`
 
@@ -45,16 +74,20 @@ type and keeps the largest, rather than the first found. This is verified agains
 NEF: its *first* `ExifSubIFDDirectory` (the embedded preview's own) has no width/height tags at
 all. Only a later one holds the true native capture resolution.
 
-`largestOf` compares the two directory types' results against each other. A file could in
-principle carry dimensions in both at once - an edited HEIC whose EXIF wasn't refreshed to match a
-later HEIF-box resize, for example. The same largest-wins safety margin applies across types too,
-not only within one.
+`largestOf` compares the two directory types' results against each other. A file really does carry
+dimensions in both at once. The iPhone HEIC fixture is one: `HeifDirectory` reads its 512x512 tile,
+its Exif SubIFD reads the true 4032x3024. The same largest-wins safety margin applies across types
+too, not only within one, and that file is why it has to.
 
 Trusting the largest is a one-directional safety margin. `LowResGate` only ever flags a file
 low-res when its reported dimensions are small, so under-reporting a real capture's size is the
 risk this guards against. A corrupted file whose non-primary directory reports an inflated bogus
-value could in principle let a genuinely low-res file escape the flag. It could never cause the
-reverse: misrouting a real high-res photo as low-res.
+value could in principle let a genuinely low-res file escape the flag. Picking the larger candidate
+only ever raises the reported size, so this rule alone cannot push a photo below the flag.
+
+What it cannot do is lift a file whose every directory under-reports. The largest of several
+sub-image readings is still a sub-image reading. That gap is what the sub-threshold decode
+cross-check above closes.
 
 ### Per-directory tag extraction
 
@@ -77,30 +110,34 @@ flowchart TD
     D --> E(["largest by pixel dimension,<br/>or empty"])
 ```
 
-Used when metadata parsing found nothing (no EXIF/HEIF metadata at all, e.g. a plain PNG). Scans
-every sub-image index via ImageIO directly rather than assuming index 0 is the real photo. A
-multi-image file (e.g. a TIFF with an embedded thumbnail) exposes images in raw physical order,
-with no marker for which one is the real capture. This mirrors the same largest-not-first
-principle the metadata path applies.
+Used when metadata parsing found nothing (no EXIF/HEIF metadata at all, e.g. a plain PNG). Also
+used as the second source whenever the metadata answer came out under 640. Scans every sub-image
+index via ImageIO directly rather than assuming index 0 is the real photo. A multi-image file
+(e.g. a TIFF with an embedded thumbnail) exposes images in raw physical order, with no marker for
+which one is the real capture. This mirrors the same largest-not-first principle the metadata path
+applies.
 
 ## Scenarios
 
 | File                                                        | Path taken                                  | Result                                           |
 |-------------------------------------------------------------|---------------------------------------------|--------------------------------------------------|
-| iPhone HEIC (real EXIF)                                     | `ExifSubIFDDirectory`                       | True capture resolution                          |
+| iPhone HEIC (real EXIF, 512x512 tiles)                      | `ExifSubIFDDirectory` beats `HeifDirectory` | True capture resolution, not the 512x512 tile    |
 | Real AVIF, no embedded EXIF                                 | `HeifDirectory`                             | True capture resolution                          |
 | Real Nikon NEF, multiple SubIFDs                            | `ExifSubIFDDirectory`, largest across all   | True capture resolution, not the 160x120 preview |
 | Real Sony ARW, TIFF vs. EXIF tag pairs on different SubIFDs | `ExifSubIFDDirectory`, largest across all   | True capture resolution, not the smaller preview |
 | Plain PNG/JPEG with no EXIF                                 | ImageIO fallback                            | Real dimensions                                  |
 | Multi-image TIFF                                            | ImageIO fallback, largest across sub-images | The larger image, not the embedded thumbnail     |
+| JPEG whose EXIF tags are stale at 400x300                   | Sub-threshold cross-check, decode wins      | Real 1024x768, not the stale tag pair            |
+| Sub-640 AVIF/HEIC, nothing else to read it                  | Sub-threshold cross-check, no decoder       | Empty, so `LowResGate` leaves the file alone     |
 | Not an image / unparseable                                  | Neither path finds anything                 | Empty                                            |
 
 ## Known limitations
 
-- **The cross-directory-type comparison in `largestOf` has no real-fixture case where both sides
-  are simultaneously present.** Every fixture here carries just one type's dimensions, never
-  both. The "both present, pick the larger" branch is covered only by a direct unit test against
-  hand-built values, not an observed real file.
+- **A sub-640 file in a format ImageIO cannot read reports no dimensions at all.** HEIC and AVIF
+  have no reader here. Neither does a CR2 or ARW, though a NEF's embedded preview does open. Where
+  nothing can confirm a small metadata reading, only the 50 KiB file-size floor can flag the file
+  as low-res. Accepted deliberately: a real sub-640 image in an unreadable format sits far under
+  that floor, and the alternative misroutes full-resolution photos.
 - **Trusting the largest value is a one-directional safety margin, not a corruption
   defense.** A corrupted file's non-primary directory could report an inflated bogus value.
   That could, in principle, let a genuinely low-res file escape `LowResGate`'s flag.

@@ -42,7 +42,7 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
         // can't model that reflective path and reads the guards as always-false.
         //noinspection ConstantValue
         categories = categories == null ? List.of() : List.copyOf(categories);
-        // The port promises a never-null settings object whose fields are null when unset, so an
+        // The port requires a non-null settings object whose fields are null when unset, so an
         // absent provider-settings node normalizes to that shape here.
         //noinspection ConstantValue
         if (providerSettings == null) {

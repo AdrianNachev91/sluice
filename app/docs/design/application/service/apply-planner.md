@@ -155,12 +155,12 @@ directly.
 list, returning a `Finding.MissingSource` for each unresolved one. `PrepDirDoctor.diagnose()` is
 its one caller, for a proactive diagnosis pass that touches nothing (see `prep-dir-doctor.md`).
 `Troubleshooter` only ever reaches it indirectly, through that same `diagnose()` call.
-`ReconcileEngine` never calls it - it has its own reconciliation sweep instead (`reconcile-engine.md`).
-`ApplyEngine.apply()` does not call it either: its own single classification pass already produces
-the same findings inline, so a second hash-verification pass would be redundant. `verifiedMoveRecord()`
-is the shared check both `classify()` and `classifyFile()` use. A move record only counts as proof
-once its recorded destination still exists and still hashes to the recorded value. A record alone
-is never trusted on its own.
+`ReconcileEngine` does not call it - it has its own reconciliation sweep instead
+(`reconcile-engine.md`). `ApplyEngine.apply()` does not call it either: its own single
+classification pass already produces the same findings inline, so a second hash-verification pass
+would be redundant. `verifiedMoveRecord()` is the shared check both `classify()` and
+`classifyFile()` use. A move record only counts as proof once its recorded destination still
+exists and still hashes to the recorded value. A record alone is never trusted on its own.
 
 ## Scenarios
 

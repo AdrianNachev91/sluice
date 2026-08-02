@@ -163,6 +163,10 @@ class TroubleshooterTest {
 
         final TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);
 
+        // montage-002 has no shard of its own yet, so the run is WAITING, not BLOCKED, at the point
+        // the stray shard is reported. A StrayShard finding surfaces from the WAITING branch too,
+        // not just once the shard contract is otherwise complete.
+        assertThat(report.before().state()).isEqualTo(State.WAITING);
         assertThat(report.before().findings()).containsExactly(new StrayShard("decisions-003.json"));
         assertThat(report.strayShardsRepaired()).containsExactly("decisions-003.json -> montage-002");
         assertThat(Files.exists(prepDir.resolve("decisions-003.json"))).isFalse();

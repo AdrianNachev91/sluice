@@ -11,8 +11,10 @@ import photos.sluice.domain.job.ProgressCallback;
  *
  * <p>In one mode the user's agent reads the montages and writes the shards out of band. In another
  * the app calls the user's configured vision model and writes the shards from its response. Either
- * way the work stays inside {@link #cull}, so the signature is uniform and callers never branch on
- * which provider is selected.
+ * way the work stays inside {@link #cull}, so callers invoke it uniformly regardless of provider -
+ * a caller may still branch on the provider id itself for other reasons, such as how it resolves a
+ * {@link CullException} thrown from {@link #cull} into a waiting state (see
+ * {@link #MANUAL_MODE_PROVIDER_ID}'s own doc).
  */
 public interface VisionCuller {
 

@@ -51,8 +51,11 @@ read. The original is kept for forensics rather than deleted. Its own answers ar
 ## Delimiter
 
 Every field within a line of either file is split on `\u001F`, the ASCII unit-separator control
-character. It is guaranteed absent from any path on every mainstream filesystem. Fields split
-apart with zero escaping, even when a path itself contains spaces or commas.
+character. A filesystem may technically permit that character in a name, so its absence from a
+path is a practical convention rather than an OS-enforced guarantee. It is vanishingly unlikely to
+appear in a real path. Fields split apart with zero escaping, even when a path itself contains
+spaces or commas. A path that did carry one would change its line's field count, and an
+unrecognized line shape is dropped.
 
 ## The four dispositions
 

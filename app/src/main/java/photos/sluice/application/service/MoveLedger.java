@@ -65,9 +65,12 @@ public class MoveLedger implements LedgerReader {
     private static final String OVERLAP_MARKER = "OVERLAP_RESOLVED";
     private static final String CORRUPT_SIDECAR_MARKER = "CORRUPT_SIDECAR_RESOLVED";
 
-    // A control character, not a printable one - guaranteed absent from any path on every
-    // mainstream filesystem. A record's fields can be split back apart with zero escaping and no
-    // ambiguity even when a path itself contains spaces, commas, or tabs.
+    // A control character, not a printable one. A filesystem may technically permit one in a name,
+    // so its absence from a path is a practical convention rather than an OS-enforced guarantee. It
+    // is vanishingly unlikely to appear in a real path. A record's fields then split back apart
+    // with zero escaping and no ambiguity, even when a path itself contains spaces, commas, or
+    // tabs. A path that did carry one would change its line's field count, and a line whose shape
+    // is not recognized is dropped.
     static final String RECORD_DELIMITER = "\u001F";
 
     // What a filed-away copy of each file is called in a disaster drawer. Named here rather than at

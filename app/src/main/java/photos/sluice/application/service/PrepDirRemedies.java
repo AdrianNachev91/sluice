@@ -32,9 +32,10 @@ import java.util.stream.Collectors;
  * index.json from surviving sidecars the other. A CHOICE remedy costs the user something - work,
  * money, or an audit trail - so it only ever runs on an explicit decision.
  *
- * <p>Every CHOICE remedy records itself as a disposition-ledger entry. Shards and index.json are
- * never edited. Mutating a culler's own output would destroy the record of what it actually said,
- * which is exactly what these repairs exist to reason about.
+ * <p>Every CHOICE remedy records itself as a disposition-ledger entry, and a CHOICE remedy never
+ * edits a shard or index.json. Mutating a culler's own output would destroy the record of what it
+ * actually said, which is exactly what these repairs exist to reason about. An AUTO remedy is the
+ * exception: renaming a stray shard or rebuilding index.json is the repair itself.
  *
  * <p>Flowchart: {@code app/docs/design/application/service/prep-dir-remedies.md}.
  */
@@ -191,10 +192,10 @@ public class PrepDirRemedies {
      *
      * <p>The unreviewable list is genuinely unrecoverable - no sidecar or shard mentions it, since
      * it was never montaged at all. So a rebuilt index always reports it empty. Losing it costs a
-     * report line, never safety: an unreviewable photo is never moved, so it stays in Sorted for a
-     * future cull to see fresh. The scope is read straight off the prep dir's own folder name,
-     * which is the on-disk convention every real index.json already mirrors. The basePath is
-     * reconstructed as the deepest common parent of every surviving sidecar's own src files. That's
+     * report line, not safety. A photo dropped from the rebuilt list is simply not acted on. The
+     * scope is read straight off the prep dir's own folder name, which is the on-disk convention
+     * every real index.json already mirrors. The basePath is reconstructed as the deepest common
+     * parent of every surviving sidecar's own src files. That's
      * exact for a Year scope, an approximation for OldestN spanning a single year. The field is
      * purely a display value no engine logic ever consults, so the approximation costs nothing
      * beyond a slightly less precise report line.

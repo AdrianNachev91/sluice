@@ -4,10 +4,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Outcome counters and filename lists from one sort run, returned by the sort use case. The
- * {@code processed} count is always the sum of six other counters: {@code reimportsDeleted},
+ * Outcome counters and filename lists from one sort run, returned by the sort use case. Every file
+ * that actually left the Inbox lands in exactly one of six outcome buckets: {@code reimportsDeleted},
  * {@code byteDupsDeleted}, {@code photosSorted}, {@code videosSorted}, {@code lowRes}, and
- * {@code unsorted}. Every in-scope file lands in exactly one of those six buckets. Printing a
+ * {@code unsorted}. The constructor rejects any instance whose {@code processed} count does not
+ * equal those six added together, so a caller may read {@code processed} as that sum. Printing a
  * human-readable report from this record is a caller's job, not this type's.
  *
  * <p>The {@code yearsSorted} field is every distinct year a file actually landed in under Sorted
@@ -35,7 +36,8 @@ public record SortSummary(
         List<String> warnings) {
 
     /**
-     * Defensively copies the mutable list/set components.
+     * Validates that processed equals the six outcome buckets added together, then defensively
+     * copies the mutable list/set components.
      *
      * @param processed int total in-scope files processed this run
      * @param reimportsDeleted int redundant Inbox files deleted as already in library
@@ -51,6 +53,16 @@ public record SortSummary(
      * @param warnings a {@link List} of {@link String} conditions worth attention that stopped nothing
      */
     public SortSummary {
+        // sidecarsDeleted is deliberately outside the sum. A sidecar is metadata, not media, and
+        // one JSON can be shared by several media files, so it does not partition the same set.
+        final int bucketed = reimportsDeleted + byteDupsDeleted + photosSorted + videosSorted + lowRes + unsorted;
+        if (processed != bucketed) {
+            throw new IllegalArgumentException(("processed must equal the six outcome buckets added together: "
+                    + "processed=%d, sum=%d (reimportsDeleted=%d, byteDupsDeleted=%d, photosSorted=%d, "
+                    + "videosSorted=%d, lowRes=%d, unsorted=%d)")
+                    .formatted(processed, bucketed, reimportsDeleted, byteDupsDeleted, photosSorted, videosSorted,
+                            lowRes, unsorted));
+        }
         lowConfidenceFiles = List.copyOf(lowConfidenceFiles);
         unsortedFiles = List.copyOf(unsortedFiles);
         yearsSorted = Set.copyOf(yearsSorted);

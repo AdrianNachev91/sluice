@@ -15,6 +15,8 @@ verification.
 | `rectangle.svg`, `doctype-viewbox-only.svg` | Written by hand for this repo, not third-party content (the DOCTYPE prolog in the latter is the standard public-domain SVG 1.1 boilerplate, not original content) | N/A                                                                                                 | N/A        |
 | `defqon_2027_overlay.svg`                   | This project's own media (`Sorted/Photos/2026/06/`) - actually a PNG mislabeled with an `.svg` extension, kept deliberately as a real-world edge-case fixture     | N/A (repo's own file)                                                                               | N/A        |
 | `fake-corrupt.cr2`, `not-an-image.dat`      | Synthetic, not real image content                                                                                                                                 | N/A                                                                                                 | N/A        |
+| `stale-exif-dimensions.jpg`                 | Synthetic: a 1024x768 gradient encoded locally, then given EXIF pixel-dimension tags reading 400x300 - the disagreement is the whole point of the fixture         | N/A                                                                                                 | N/A        |
+| `small-heif-only.avif`                      | Synthetic: a 320x240 gradient encoded locally to AVIF with metadata stripped, so its size exists only in the HEIF container box                                   | N/A                                                                                                 | N/A        |
 
 All three RAW files' CC0 license confirmed by checking they do not appear in
 `https://raw.pixls.us/json/getrepository.php?set=noncc0` (the site's own list of every non-CC0
@@ -31,11 +33,10 @@ is a tool limitation on retrieval, not a real constraint: test fixtures never sh
 app (only `src/main/resources` does), so fixture file size has no bearing on what end users
 download.
 
-`arctic-sky.avif` (real, verified `ftyp`/`avif` box structure) is reserved for when a real
-libheif-backed `HeifDecoder` adapter exists - no real decoder exists yet, so
-`TileRendererTest.realAvifFixtureFallsBackToAPlaceholderUntilARealDecoderExists` currently only
-proves today's honest placeholder behavior for a real file of this format. Re-verify with a real
-decoded assertion once that adapter lands.
+`arctic-sky.avif` (real, verified `ftyp`/`avif` box structure) runs through the real
+libheif-backed `CliHeifDecoder` adapter in
+`TileRendererTest.realAvifFixtureDecodesToARealTileViaTheCliHeifDecoder`. That proves the
+HEIF-family routing path recovers a real tile end to end for a real file of this format.
 
 ## What the three real RAW fixtures actually prove
 
@@ -71,6 +72,25 @@ AVIF correctly, but stores its dimensions under a `HeifDirectory`, not an `ExifS
 `ImageDimensionsReader` only ever checked the latter, so every AVIF file read empty regardless of
 its actual metadata. Fixed by also checking `HeifDirectory` from the same metadata parse, taking
 the largest result across both directory types.
+
+## The two sub-threshold fixtures
+
+`stale-exif-dimensions.jpg` and `small-heif-only.avif` cover a third bug in the same class. The
+metadata result was taken as final whenever it was present at all. A directory describing a
+sub-image rather than the capture therefore won outright, and the decode never ran.
+
+The JPEG is the case a decode can rescue. Its EXIF tags read 400x300 over a genuinely 1024x768
+picture. 400 is under `LowResGate`'s 640 bar and 1024 is over it, so the tags alone send a good
+photo to `Review\`.
+
+The AVIF is the case no decode can rescue, because ImageIO ships no AVIF reader. It is genuinely
+320x240, so its metadata reading is correct. The point is that nothing in the file distinguishes
+it from a tile size standing in for a much larger grid.
+
+That second shape is not hypothetical. `dating/iphone-exif.heic` is a real 4032x3024 photo whose
+`HeifDirectory` reads 512x512, Apple's tile size for the grid the picture is stored as. It survives
+today only because its Exif SubIFD carries the true size alongside. Strip the EXIF and 512 is the
+only reading left, under the 640 bar, on a full-resolution photo.
 
 ## The other 5 RAW extensions (dng, cr3, raf, orf, rw2)
 

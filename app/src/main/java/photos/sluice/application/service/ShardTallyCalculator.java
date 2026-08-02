@@ -62,8 +62,9 @@ final class ShardTallyCalculator {
      * montages, a file claimed by two different shards) isn't caught here. That montage still
      * counts as valid.
      *
-     * <p>Acceptable because this number is only ever shown, never acted on. isReadyToResume() below
-     * is what decides whether anything happens.
+     * <p>Acceptable because this validity number is only ever shown. present and total, not valid,
+     * are what decide whether anything happens - {@link PrepDirDoctor#diagnose} branches on them
+     * internally to reach WAITING, and only a WAITING or READY run gets a watcher armed.
      *
      * <p>One ledger-resolved answer does reach it. A file the user resolved with TRUST_DECISION is
      * no longer treated as unreviewable, so the montage claiming it stops reading invalid. A montage

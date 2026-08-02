@@ -182,6 +182,30 @@ class SortEngineTest {
         assertThat(Files.exists(albumDir)).isTrue();
     }
 
+    // The other half of the incremental promise. The sidecar the first run correctly left behind
+    // gets swept by the run that finally takes its media, not consumed inline. The sidecar is
+    // invalid JSON, so it cannot win the date race - the filename source wins instead. Only
+    // mechanism 2 (the whole-Inbox sweep) can be what deletes it, proving a later run sweeps it
+    // rather than letting it pile up.
+    @Test
+    void aLaterYearsSortSweepsTheSidecarTheEarlierRunLeftBehind(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        final Path albumDir = inbox.resolve("Takeout").resolve("Album");
+        writeFile(albumDir.resolve("20190101_a.jpg"), padded("in-scope"));
+        writeFile(albumDir.resolve("20250101_future.jpg"), padded("future"));
+        final Path futureSidecar = albumDir.resolve("20250101_future.jpg.supplemental-metadata.json");
+        Files.writeString(futureSidecar, "{not valid json");
+
+        this.sortEngine(root).sort(new SortScope.Year(2019, null));
+        assertThat(Files.exists(futureSidecar)).isTrue();
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.Year(2025, null));
+
+        assertThat(summary.sidecarsDeleted()).isZero();
+        assertThat(Files.exists(futureSidecar)).isFalse();
+        assertThat(Files.exists(albumDir)).isFalse();
+    }
+
     @Test
     void sidecarOfAReimportDeletedFileIsSweptTooNotJustSidecarsOfMovedFiles(@TempDir final Path root) throws IOException {
         final Path inbox = inboxOf(root);
@@ -351,6 +375,32 @@ class SortEngineTest {
         assertThat(Files.exists(root.resolve("Sorted/Photos/2019/01/20190101_oldest.jpg"))).isTrue();
         assertThat(Files.exists(inbox.resolve("20200101_mid.jpg"))).isTrue();
         assertThat(Files.exists(inbox.resolve("20210101_newest.jpg"))).isTrue();
+    }
+
+    // The property CurateEngine leans on to read "the" year off a summary. Both scopes narrow to
+    // one year before anything is routed, so a second year cannot reach Sorted in the same run.
+    @Test
+    void anOldestYearSortReportsOnlyTheYearItPicked(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20180101_a.jpg"), padded("older"));
+        writeFile(inbox.resolve("20190101_b.jpg"), padded("newer"));
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.OldestYear());
+
+        assertThat(summary.yearsSorted()).containsExactly(2018);
+    }
+
+    // Mirrors anOldestYearSortReportsOnlyTheYearItPicked for the other scope shape that narrows to
+    // one year up front: an explicit Year scope, over the same two-year fixture.
+    @Test
+    void anExplicitYearSortReportsOnlyThatYear(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20180101_a.jpg"), padded("older"));
+        writeFile(inbox.resolve("20190101_b.jpg"), padded("newer"));
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.Year(2019, null));
+
+        assertThat(summary.yearsSorted()).containsExactly(2019);
     }
 
     @Test

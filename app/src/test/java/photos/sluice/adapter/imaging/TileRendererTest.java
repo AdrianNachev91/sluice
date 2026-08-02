@@ -254,9 +254,10 @@ class TileRendererTest {
         assertThat(result.unreviewable()).isEqualTo(expectedUnreviewable);
     }
 
-    // heic, heif, and avif all share the same HeifDecoder port and routing - no real decoder
-    // exists yet for any of the three, so this only proves the routing, the same way the
-    // decoder-returns-empty and too-small tests below do.
+    // heic, heif, and avif all share the same HeifDecoder port and routing. This test uses a
+    // stub decoder to prove the routing itself, the same way the decoder-returns-empty and
+    // too-small tests below do. A separate test elsewhere in this file proves a real decoder
+    // recovers a real tile end to end for one of the three.
     @ParameterizedTest
     @ValueSource(strings = {"heic", "heif", "avif"})
     void heifFamilyRoutesToTheInjectedDecoderAndResizesItsResult(final String extension, @TempDir final Path tempDir)
@@ -305,6 +306,25 @@ class TileRendererTest {
         assertThat(result.unreviewable()).isTrue();
         assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
         assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE * 2 / 3);
+    }
+
+    // A stub decoder, because no real HeifDecoder can be made to throw on demand. The port's
+    // signature permits an unchecked exception, and an implementation backed by a native library
+    // or a different process can raise one. Then render() absorbs it into the same placeholder an
+    // empty result produces, so the failure stays contained to one tile of the montage.
+    @Test
+    void heicFallsBackToAPlaceholderWhenTheDecoderThrows(@TempDir final Path tempDir) throws IOException {
+        final Path fakeHeic = tempDir.resolve("photo.heic");
+        Files.createFile(fakeHeic);
+        final TileRenderer withThrowingDecoder = new TileRenderer(_ -> {
+            throw new IllegalStateException("decoder blew up");
+        });
+
+        final TileResult result = withThrowingDecoder.render(fakeHeic, TILE_SIZE);
+
+        assertThat(result.unreviewable()).isTrue();
+        assertThat(result.image().getWidth()).isEqualTo(TILE_SIZE);
+        assertThat(result.image().getHeight()).isEqualTo(TILE_SIZE);
     }
 
     @Test

@@ -8,8 +8,9 @@ import java.util.List;
  * caller, mirroring {@code index.json}'s own field shape and order. The record is what travels in
  * memory: the caller reports a summary from it and hands it to the
  * {@link photos.sluice.application.port.out.VisionCuller} port. {@code index.json} makes the same
- * data durable, so a later session can rebuild the record without re-running prep. The montage,
- * sidecar, and shard files themselves are always re-read from disk by whoever consumes them.
+ * data durable, so a later session can rebuild the record without re-running prep. The record
+ * carries no montage, sidecar, or shard content of its own, so those files are read from disk at
+ * the point of use.
  *
  * <p>There is no source field: a cull run only ever reads Sorted, since the library is final once
  * committed and is never re-scanned by cull.

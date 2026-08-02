@@ -180,7 +180,8 @@ one-dir occupancy question above.
 `tally()` is the `present`/`valid`/`total` display number on each `WaitingCullJob`, computed one
 montage at a time via `ShardValidator`. Per-montage is what makes it useful: a card can name which
 montage is holding the run up. A cross-shard problem (a near-dup group id reused across two
-montages) therefore doesn't show up in it. That is fine for a number that is only ever shown.
+montages) therefore doesn't show up in it. That is fine for a validity number that is only ever
+shown.
 
 `isReadyToResume()` is what a `CullWatcher` polls, and it asks a much narrower question: has
 everything arrived? Every montage has a shard, and every one of those shards parses. Nothing more

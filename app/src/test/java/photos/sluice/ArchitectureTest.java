@@ -61,6 +61,16 @@ class ArchitectureTest {
                     .should().dependOnClassesThat().resideInAnyPackage("..adapter..", "..config..")
                     .as("application must depend on ports, not adapters or config");
 
+    // The application layer reaches the filesystem only through ports. Path as a value type is
+    // fine; opening a file or a stream is an adapter's job.
+    @ArchTest
+    static final ArchRule applicationDoesNoFileIo =
+            noClasses().that().resideInAPackage("..application..")
+                    .should().dependOnClassesThat().belongToAnyOf(
+                            Files.class, File.class, InputStream.class, OutputStream.class,
+                            Reader.class, Writer.class, RandomAccessFile.class)
+                    .as("application must not perform filesystem or stream I/O directly, only through ports");
+
     // Adapters are effect implementations reached only through their ports. Only config, the
     // composition root, may name a concrete adapter type (to wire it); anything else depending on a
     // concrete adapter has bypassed the port it should go through.

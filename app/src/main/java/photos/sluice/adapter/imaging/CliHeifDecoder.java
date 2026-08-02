@@ -30,13 +30,42 @@ public class CliHeifDecoder implements HeifDecoder {
 
     private final String command;
 
+    private final TempFileFactory tempFiles;
+
     /**
      * Creates a decoder that shells out to the given HEIF-decoding CLI command.
      *
      * @param command {@link String} the CLI command name or path to invoke
      */
     public CliHeifDecoder(final String command) {
+        this(command, () -> Files.createTempFile("sluice-heif-", ".png"));
+    }
+
+    /**
+     * Package-private: lets a test inject a failing temp-file creation to exercise the catch
+     * branch below, which a real temp directory can't trigger deterministically.
+     *
+     * @param command   {@link String} the CLI command name or path to invoke
+     * @param tempFiles {@link TempFileFactory} the source of the scratch file each decode writes to
+     */
+    CliHeifDecoder(final String command, final TempFileFactory tempFiles) {
         this.command = command;
+        this.tempFiles = tempFiles;
+    }
+
+    /**
+     * Creates the scratch file one decode run writes its decoded PNG to.
+     */
+    @FunctionalInterface
+    interface TempFileFactory {
+
+        /**
+         * Creates a new scratch file for a single decode run.
+         *
+         * @return the {@link Path} of the newly created file
+         * @throws IOException if the file cannot be created
+         */
+        Path create() throws IOException;
     }
 
     /**
@@ -50,8 +79,12 @@ public class CliHeifDecoder implements HeifDecoder {
     public Optional<BufferedImage> decode(final Path file) {
         final Path output;
         try {
-            output = Files.createTempFile("sluice-heif-", ".png");
-        } catch (IOException _) {
+            output = this.tempFiles.create();
+        } catch (IOException | RuntimeException _) {
+            // The same pair the main block below catches. Scratch-file creation can fail unchecked
+            // as well as checked, on a bad temp directory or a filesystem provider fault. Catching
+            // only the checked half would leave an escape route out of this method's "never
+            // throws" contract.
             return Optional.empty();
         }
         try (final Process process = new ProcessBuilder(this.command, "--quiet", file.toString(), output.toString())
@@ -89,7 +122,7 @@ public class CliHeifDecoder implements HeifDecoder {
         } finally {
             try {
                 Files.deleteIfExists(output);
-            } catch (IOException _) {
+            } catch (IOException | RuntimeException _) {
                 // Best-effort cleanup of a temp file. Leaving a stray file in the OS temp dir on
                 // the rare failure path isn't worth failing the whole decode over.
             }

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -206,6 +207,27 @@ class CullEngineTest {
         assertThat(Files.exists(waiting.job().prepDir().resolve("decisions-001.json"))).isTrue();
     }
 
+    // The self-healing half of DAMAGED. A read that merely failed is transient, and no diagnosis is
+    // cached, so the run reports its real state the moment the file opens again.
+    @Test
+    void aTransientlyDamagedRunDiagnosesItsRealStateOnceTheReadSucceedsAgain(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var prepStore = new FailableIndexReads();
+        final var pipeline = cullPipeline(root, new RecordingProgressPort(), prepStore);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        prepStore.startFailing();
+        // The control: proves this fixture's failing read actually reaches DAMAGED before trusting
+        // the READY assertion below to mean the read succeeding, not the absence of caching alone.
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(run -> run.health().state()).isEqualTo(State.DAMAGED);
+
+        prepStore.stopFailing();
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(run -> run.health().state()).isEqualTo(State.READY);
+    }
+
     // A damaged run never reads as ready, so a watcher armed for it would poll for good. The 30s
     // interval means an armed watcher could not have fired and retired itself before the assertion,
     // so a false reading here means "never armed".
@@ -316,6 +338,42 @@ class CullEngineTest {
         assertThat(root.resolve("logs/cull-prep/2019")).doesNotExist();
         assertThat(pipeline.cull(new CullScope.Year(2019, null)).join())
                 .isInstanceOf(CullJobOutcome.Waiting.class);
+    }
+
+    // A cancellation landing right after prep finishes but before dispatch starts. NeverCalledCuller
+    // fails the test outright if dispatch runs at all, proving the run never reaches it.
+    @Test
+    void aCancellationRightAfterPrepFinishesStopsDispatchFromEverRunning(@TempDir final Path root) throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var progress = new RecordingProgressPort();
+        // The tick can fire before cull() has even returned the handle. The hook waits (bounded, so
+        // a broken wiring fails fast instead of hanging the suite) for the test to hand it over
+        // rather than reading a null.
+        final var handleReady = new CountDownLatch(1);
+        final var cancel = new AtomicReference<Runnable>(() -> {});
+        progress.cancelWhenPhaseFinishes("Building montages...", () -> {
+            try {
+                if (!handleReady.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("handle was never handed over");
+                }
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            cancel.get().run();
+        });
+        final var pipeline = cullPipeline(root, progress, defaultCullSettings(), List.of(new NeverCalledCuller()));
+
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        cancel.set(handle::requestCancellation);
+        handleReady.countDown();
+        final CullJobOutcome outcome = handle.join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
+        final WaitingCullJob job = ((CullJobOutcome.Waiting) outcome).job();
+        assertThat(job.shards()).isEqualTo(new ShardTally(0, 0, 1));
+        assertThat(progress.events).noneMatch(event -> event.startsWith("started:Culling"));
+        assertThat(pipeline.isWatchActive(job.prepDir())).isFalse();
     }
 
     // A run that never had to archive anything says so, rather than leaving a caller to guess
@@ -1006,11 +1064,42 @@ class CullEngineTest {
         Files.writeString(prepDir.resolve("montage-001.json"), "{ not json at all");
         prepDirRemedies(root).resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY,
                 "the shard itself is fine");
+        // The tally still reads the montage as invalid - only the whole-batch pass knows to trust
+        // its shard as its own scope. Readiness is what ignores that, which is the claim below.
+        assertThat(pipeline.cullRuns()).singleElement().satisfies(run -> {
+            assertThat(run.shards()).isNotNull();
+            assertThat(run.shards().valid()).isEqualTo(0);
+        });
 
         pipeline.startWatching(prepDir);
 
         waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+    }
+
+    // buildWaitingJob's own guard against an unstattable prep dir, mirroring
+    // PrepDirDoctor.lastModifiedOrEpoch for the job-resolution path rather than the dashboard.
+    // Without it, a stat failure here replaces a legitimate Waiting outcome with a crash.
+    @Test
+    void cullStillReturnsWaitingWhenTheJobsMtimeCannotBeRead(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = pipeline(root, new RecordingProgressPort(), new FailingLastModified(),
+                defaultCullSettings(), List.of(new ManualModeCuller()));
+
+        final CullJobOutcome outcome = pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
+        assertThat(((CullJobOutcome.Waiting) outcome).job().since()).isEqualTo(Instant.EPOCH);
+    }
+
+    // A stat that fails with a plain unchecked exception - the guard holds for the whole
+    // unchecked space, not a list of expected types.
+    private static final class FailingLastModified extends NioMediaStore {
+
+        @Override
+        public Instant lastModifiedTime(final Path path) {
+            throw new IllegalStateException("simulated stat failure");
+        }
     }
 
     /**

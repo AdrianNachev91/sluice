@@ -113,8 +113,7 @@ public class TileRenderer {
             // AVIF shares HEIC/HEIF's ISOBMFF container. It's decodable by the same libheif
             // library, just with an AV1 payload instead of HEVC. Routed through the same port so a
             // real libheif-backed adapter picks up AVIF for free, with no separate decoder needed.
-            return this.heifDecoder.decode(file)
-                    .flatMap(image -> resizedResult(image, tileSize))
+            return this.heifResult(file, tileSize)
                     .orElseGet(() -> placeholderResult(tileSize, extension.toUpperCase(Locale.ROOT)));
         }
         return rasterResult(file, tileSize)
@@ -141,6 +140,26 @@ public class TileRenderer {
      */
     private static String placeholderLabel(final String extension) {
         return RAW_EXTENSIONS.contains(extension) ? extension.toUpperCase(Locale.ROOT) : "NO PREVIEW";
+    }
+
+    /**
+     * Decodes a HEIF-family file through the injected decoder and resizes the result to the tile
+     * size.
+     *
+     * @param file {@link Path} the HEIF/HEIC/AVIF file to decode
+     * @param tileSize int the target tile size in pixels
+     * @return an {@link Optional} {@link TileResult}, or empty if decoding failed
+     */
+    private Optional<TileResult> heifResult(final Path file, final int tileSize) {
+        try {
+            return this.heifDecoder.decode(file).flatMap(image -> resizedResult(image, tileSize));
+        } catch (RuntimeException _) {
+            // A HeifDecoder implementation can fail however its own backing technology fails, and
+            // the port's signature can't stop an unchecked exception escaping. Catching it here
+            // keeps render()'s "never throws" contract true whichever decoder is wired in. One bad
+            // file degrades to a placeholder rather than aborting the whole montage build.
+            return Optional.empty();
+        }
     }
 
     /**

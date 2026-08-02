@@ -26,14 +26,18 @@ public interface CullSettings {
     List<CullCategory> categories();
 
     /**
-     * Connection settings for API-backed providers. Never null; its fields are null when unset.
+     * Connection settings for API-backed providers. An implementation must return a non-null
+     * instance, substituting an all-null-fields instance for a missing configured block; its fields
+     * are null when unset.
      *
      * @return {@link CullProviderSettings} the provider connection settings
      */
     CullProviderSettings providerSettings();
 
     /**
-     * Tuning for the external-agent provider only. Never null; see ExternalAgentSettings' own doc.
+     * Tuning for the external-agent provider only. An implementation must return a non-null
+     * instance, substituting a MANUAL-mode default for a missing configured block; see
+     * ExternalAgentSettings' own doc for its own null-handling.
      *
      * @return {@link ExternalAgentSettings} the external-agent tuning settings
      */

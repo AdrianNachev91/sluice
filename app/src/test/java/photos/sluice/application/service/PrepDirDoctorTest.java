@@ -391,6 +391,10 @@ class PrepDirDoctorTest {
         assertThat(report.skipped()).containsExactly(entry("waiting1", State.WAITING));
         assertThat(Files.exists(complete)).isFalse();
         assertThat(Files.exists(waiting)).isTrue();
+        // Forward-looking guard on the never-delete-media invariant. This fixture's photo sits
+        // outside the purged tree, so nothing here could make purgeCompleted() touch it today.
+        // A future change that followed shard-referenced paths instead would trip this.
+        assertThat(Files.exists(photo)).isTrue();
     }
 
     // A dir holding shards but no index is exactly the run worth not overwriting, so the sweep has
@@ -600,6 +604,28 @@ class PrepDirDoctorTest {
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getFirst().health().state()).isEqualTo(State.READY);
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
+    }
+
+    // The epoch reads as "as old as anything", putting a dir nobody can stat at the top of a list
+    // ordered by neglect. The working-store assertion first, so this cannot pass with the guard gone.
+    @Test
+    void aPrepDirWhoseMtimeCannotBeReadIsAgedAsTheEpoch(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root, "2019");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+
+        assertThat(doctor().summaryOf(prepDir).since()).isNotEqualTo(Instant.EPOCH);
+        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingLastModified()).summaryOf(prepDir).since())
+                .isEqualTo(Instant.EPOCH);
+    }
+
+    // A stat that fails with a plain unchecked exception - the guard holds for the whole unchecked
+    // space, not a list of expected types.
+    private static final class FailingLastModified extends NioMediaStore {
+
+        @Override
+        public Instant lastModifiedTime(final Path path) {
+            throw new IllegalStateException("simulated stat failure");
+        }
     }
 
     private static PrepDirDoctor doctor() {

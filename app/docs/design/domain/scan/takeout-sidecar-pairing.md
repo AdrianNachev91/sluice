@@ -92,5 +92,8 @@ must not enter that decision at all. See `sidecar-sweep.md`.
   media/sidecar/dropped classification) is covered separately. See `inbox-scanning.md` in the
   sibling `adapter/fs` design folder.
 - Risk note: a name-only pairing can't tell a real Takeout sidecar from an unrelated `.json` that
-  happens to share a filename prefix. Whatever deletes a consumed sidecar must only do so once it
-  has actually been read as valid Takeout metadata, never on name-match alone.
+  happens to share a filename prefix. Deletion does not close that gap by validating content.
+  Inline consumption spends only a sidecar whose parsed date actually won for its file, but the
+  orphan sweep decides from names alone. The sweep's safety is structural instead: it deletes only
+  `.json` files, never media, and only once nothing left in the sidecar's own directory owns it.
+  See `sidecar-sweep.md` for the rules and the accepted residual, a long-named stray `.json`.

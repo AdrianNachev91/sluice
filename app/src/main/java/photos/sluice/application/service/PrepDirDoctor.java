@@ -110,17 +110,12 @@ public class PrepDirDoctor {
      * nobody could look at.
      *
      * <p>Past the index the mapping is narrower than DAMAGED alone. A shard that fails to parse
-     * reports {@link Finding.CorruptShard}, and a sidecar that cannot be read reports {@link
-     * Finding.CorruptSidecar}. DAMAGED is where anything that would otherwise escape lands, not where
+     * reports {@link Finding.CorruptShard}, and a sidecar that fails to parse reports {@link
+     * Finding.CorruptSidecar}. A sidecar that merely cannot be read is DAMAGED like the index case
+     * above, not CorruptSidecar. DAMAGED is where anything that would otherwise escape lands, not where
      * every later failure lands. Nothing does escape: {@link #examine}'s catch-all is what holds that
      * contract. An {@link Error} is the one deliberate exception, since a dying JVM is not a
      * diagnosis a prep dir can carry.
-     *
-     * <p>One transient failure is misreported as damaged content, a known gap rather than a design
-     * choice. A sidecar that could not be opened reports {@link Finding.CorruptSidecar}, because the
-     * sidecar read catches every {@code UncheckedIOException} rather than narrowing to malformed
-     * content the way the shard read does. That remedy is CHOICE and both answers are permanent, so
-     * a locked sidecar can cost a user an irreversible decision.
      *
      * @param prepDirPath {@link Path} the prep directory to diagnose
      * @return {@link PrepDirHealth} the prep dir's current state and open findings
@@ -184,7 +179,9 @@ public class PrepDirDoctor {
 
         // One snapshot for both planner calls below. The tally takes its own, so a concurrent write
         // between the two can leave the tally reading a different ledger state than the findings.
-        // Display-only: nothing acts on the tally, and the findings are what apply is gated on.
+        //
+        // Present/total decide the WAITING branch below. The validity count is display-only - the
+        // findings are what apply is gated on.
         final Ledger ledger = this.ledgerReader.read(prepDirPath);
         final ValidationReport validation = this.applyPlanner.validate(prepDirPath, prepDir, new ApplyOptions(true),
                 ledger);

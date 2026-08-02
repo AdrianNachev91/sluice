@@ -190,6 +190,24 @@ class CurateEngineTest {
         assertThat(Files.exists(existing)).isTrue();
     }
 
+    // An explicit OldestN scope's target count is known before curate() ever submits a job, the same
+    // shape as an explicit Year. It carries straight through regardless of what this run's own sort
+    // found. Here the sort finds nothing new, yet a photo already sitting in Sorted still gets culled.
+    @Test
+    void curateWithAnExplicitOldestNScopeCullsEvenWhenThisRunSortedNothingNew(@TempDir final Path root)
+            throws IOException {
+        Files.createDirectories(inboxOf(root));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "already-sorted.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var progress = new RecordingProgressPort();
+
+        final CurateOutcome outcome = curatePipeline(root, progress).curate(new SortScope.OldestN(1)).join();
+
+        assertThat(outcome.sortSummary().processed()).isZero();
+        assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(progress.events).contains("started:Culling...");
+        assertThat(Files.exists(root.resolve("logs/cull-prep/oldest-1/index.json"))).isTrue();
+    }
+
     // Mirrors cull()'s own "refuses to rebuild a scope with an unresolved WaitingCullJob" contract.
     // An explicit Year scope's target CullScope is known before curate() ever submits a job, so it
     // gets the same synchronous, pre-sort fail-fast. Proven here by the sort never running at all:

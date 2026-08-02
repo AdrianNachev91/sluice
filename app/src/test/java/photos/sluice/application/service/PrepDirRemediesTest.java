@@ -145,6 +145,8 @@ class PrepDirRemediesTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
+        final byte[] indexBefore = Files.readAllBytes(prepDir.resolve("index.json"));
+        final byte[] shardBefore = Files.readAllBytes(prepDir.resolve("decisions-001.json"));
 
         remedies.resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, "the decision is correct");
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
@@ -153,6 +155,8 @@ class PrepDirRemediesTest {
         assertThat(report.unreviewable()).isZero();
         assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
         assertThat(Files.exists(root.resolve("Unreviewable"))).isFalse();
+        assertThat(prepDir.resolve("index.json")).hasBinaryContent(indexBefore);
+        assertThat(prepDir.resolve("decisions-001.json")).hasBinaryContent(shardBefore);
     }
 
     @Test

@@ -221,9 +221,10 @@ public class SortEngine implements SortUseCase {
         for (final MediaFile file : actuallyRemoved) {
             final TakeoutSidecar sidecar = sidecars.get(file);
             final DateResult date = Objects.requireNonNull(dateByFile.get(file));
-            // Only a sidecar that actually won the date-resolution chain is spent. One that
+            // Only a sidecar that actually won the date-resolution chain is spent here. One that
             // exists but lost - invalid, or coincidentally name-matched to unrelated JSON - is
-            // left alone, per the schema-validation safety rule.
+            // not this method's to judge. The orphan sweep decides its fate afterward, by name,
+            // against whatever media remains in its directory.
             if (sidecar != null && date.source().equals(SIDECAR_SOURCE)
                     && removed.containsAll(coOwners.get(sidecar.jsonPath()))
                     && deletedSidecars.add(sidecar.jsonPath())) {

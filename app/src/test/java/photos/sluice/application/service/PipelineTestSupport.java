@@ -190,6 +190,13 @@ final class PipelineTestSupport {
             this.failing = true;
         }
 
+        // The self-healing half of the fixture above. The bytes were never touched, so the very
+        // next read succeeds again, the same way a backup or antivirus handle releasing a locked
+        // file does.
+        void stopFailing() {
+            this.failing = false;
+        }
+
         @Override
         public PrepDir readIndex(final Path prepDir) {
             if (this.failing) {
@@ -527,9 +534,20 @@ final class PipelineTestSupport {
         // point in its own progress. The engine reports a tick only once the work that tick counts
         // is genuinely on disk, so it is a real signal rather than a guessed moment.
         private @Nullable Runnable onFirstTick;
+        // Runs once, the first time the named phase reports finished. PhaseRunner.run() fires
+        // phaseFinished in a finally, right after the engine call returns and before control moves
+        // on to whatever the caller does next. That is how a test lands a real cancellation in the
+        // exact window between one phase ending and the next one starting.
+        private @Nullable Runnable onPhaseFinished;
+        private @Nullable String finishedPhase;
 
         void cancelOnFirstTick(final Runnable action) {
             this.onFirstTick = action;
+        }
+
+        void cancelWhenPhaseFinishes(final String phase, final Runnable action) {
+            this.finishedPhase = phase;
+            this.onPhaseFinished = action;
         }
 
         @Override
@@ -550,6 +568,11 @@ final class PipelineTestSupport {
         @Override
         public void phaseFinished(final String phase) {
             this.events.add("finished:" + phase);
+            if (this.onPhaseFinished != null && phase.equals(this.finishedPhase)) {
+                final Runnable action = this.onPhaseFinished;
+                this.onPhaseFinished = null;
+                action.run();
+            }
         }
     }
 

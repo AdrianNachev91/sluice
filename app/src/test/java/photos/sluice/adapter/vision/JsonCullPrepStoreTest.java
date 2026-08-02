@@ -186,11 +186,11 @@ class JsonCullPrepStoreTest {
     }
 
     @Test
-    void readShardOnMalformedContentThrowsUnchecked(@TempDir final Path dir) throws IOException {
+    void readShardOnMalformedContentThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("decisions-003.json"), "{ not valid json");
 
         assertThatThrownBy(() -> this.store.readShard(dir, "montage-003"))
-                .isInstanceOf(UncheckedIOException.class);
+                .isInstanceOf(MalformedPrepJsonException.class);
     }
 
     // readShardFile() is readShard()'s sibling for a stray shard, whose own filename names no real

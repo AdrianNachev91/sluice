@@ -1,11 +1,14 @@
 package photos.sluice.adapter.imaging;
 
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 import com.drew.metadata.heif.HeifDirectory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import photos.sluice.domain.imaging.LowResGate;
 import photos.sluice.domain.model.Dimensions;
 
 import javax.imageio.ImageIO;
@@ -16,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -118,6 +122,50 @@ class ImageDimensionsReaderTest {
         final Optional<Dimensions> result = this.reader.read(CULL_FIXTURES.resolve("webp-sample.webp"));
 
         assertThat(result).contains(new Dimensions(1024, 772));
+    }
+
+    // A JPEG whose EXIF pixel-dimension tags sit at 400x300 while its encoded picture is 1024x768.
+    // That is the shape an editor leaves behind when it resizes pixels but not the tags. 400 is
+    // under LowResGate's 640 bar and 1024 is over it. Trusting the tags alone would route a
+    // perfectly good photo to Review as low-res. The decode is what settles it.
+    @Test
+    void aSubThresholdMetadataSizeLosesToTheLargerSizeADecodeFinds() {
+        final Path jpeg = CULL_FIXTURES.resolve("stale-exif-dimensions.jpg");
+
+        final Optional<Dimensions> result = this.reader.read(jpeg);
+
+        assertThat(result).contains(new Dimensions(1024, 768));
+    }
+
+    // No ImageIO reader handles AVIF, so a sub-threshold HEIF reading has nothing to corroborate
+    // it. This fixture really is 320x240, so the reading happens to be right. The class cannot
+    // tell that apart from a tile size standing in for a full-resolution grid. A real tiled HEIC
+    // does exactly that, reporting a 512x512 tile for a 4032x3024 photo. Reporting nothing leaves
+    // the file alone. Reporting the small number would exile a photo of that second shape.
+    @Test
+    void aSubThresholdMetadataSizeNoDecoderCanCorroborateIsNotReported() {
+        final Path avif = CULL_FIXTURES.resolve("small-heif-only.avif");
+
+        final Optional<Dimensions> result = this.reader.read(avif);
+
+        assertThat(result).isEmpty();
+    }
+
+    // The real 4032x3024 iPhone HEIC's HeifDirectory reports 512x512, Apple's tile size for the
+    // grid that makes up the picture. Its Exif SubIFD carries the true capture size, which is why
+    // reading the whole file still returns 4032x3024. Strip that EXIF and the tile size is all
+    // that is left, under the 640 bar, on a genuinely full-resolution photo. This pins the premise
+    // the sub-threshold cross-check rests on, against a real file rather than an argument.
+    @Test
+    void aRealTiledHeicsHeifDirectoryReportsATileSizeNotTheCaptureSize() throws Exception {
+        final Path heic = FIXTURES.resolve("iphone-exif.heic");
+
+        final Metadata metadata = ImageMetadataReader.readMetadata(heic.toFile());
+        final Dimensions fromHeif = Objects.requireNonNull(ImageDimensionsReader.largestAcross(
+                metadata.getDirectoriesOfType(HeifDirectory.class), ImageDimensionsReader::heifDimensions));
+
+        assertThat(fromHeif).isEqualTo(new Dimensions(512, 512));
+        assertThat(Math.max(fromHeif.width(), fromHeif.height())).isLessThan(LowResGate.MIN_DIMENSION);
     }
 
     @ParameterizedTest

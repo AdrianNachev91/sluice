@@ -105,8 +105,8 @@ also parses cleanly. A gap or an unparseable sidecar means the sidecars themselv
 damaged. A silently-smaller rebuilt index would make perfectly healthy shards look stray.
 
 The unreviewable list is genuinely unrecoverable (no sidecar or shard ever names it), so a
-rebuilt index always reports it empty. That's a report-line loss, not a safety one, since an
-unreviewable file is never moved either way. `basePath` is reconstructed as the deepest common
+rebuilt index always reports it empty. That's a report-line loss, not a safety one. A file dropped
+from the rebuilt list is simply not acted on. `basePath` is reconstructed as the deepest common
 parent of every surviving sidecar's own `src` files. That's exact for a `Year` scope, an
 approximation for `OldestN` narrowed to one year. The field is display-only, though, and no engine
 logic ever consults it.

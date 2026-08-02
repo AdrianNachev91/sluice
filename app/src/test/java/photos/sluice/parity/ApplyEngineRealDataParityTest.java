@@ -140,8 +140,7 @@ class ApplyEngineRealDataParityTest {
     // Unreviewable routing has no PS reference to diff against, so it is checked directly instead.
     // Every unreviewable path index.json recorded (rewritten into rootB's own coordinate space) has
     // moved out of Sorted and landed under Unreviewable/<yyyy>/<mm>/. The year/month derivation
-    // mirrors CullDestinations.yearMonthOf() exactly, UNDATED fallback included. That keeps this a
-    // true assertion against the engine's real behavior, not an assumption that could diverge.
+    // mirrors CullDestinations.yearMonthOf()'s parent/grandparent parsing and UNDATED fallback.
     private static void assertUnreviewableFilesRelocated(final PrepDir sourcePrepDir, final Path sourceRepoRoot,
                                                          final Path rootB) {
         for (final Path sourceFile : sourcePrepDir.unreviewable()) {
@@ -156,8 +155,10 @@ class ApplyEngineRealDataParityTest {
         }
     }
 
-    // Mirrors CullDestinations.yearMonthOf()'s parent/grandparent parsing and UNDATED fallback, so
-    // this test's expectation can never diverge from what the engine itself actually does.
+    // Mirrors CullDestinations.yearMonthOf()'s parent/grandparent parsing and UNDATED fallback. A
+    // re-derivation, since the real method is private static one package over. Drift is loud rather
+    // than silent: a wrong expectation here names a destination the engine never wrote, and the
+    // assertion above (using this method's output) fails.
     private static String[] yearMonthOf(final Path file) {
         final Path monthDir = file.getParent();
         final Path yearDir = monthDir == null ? null : monthDir.getParent();

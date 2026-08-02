@@ -16,6 +16,8 @@ class CliHeifDecoderTest {
 
     private static final Path FIXTURES = Path.of("src/test/resources");
 
+    private static final Path DECODABLE_FIXTURE = FIXTURES.resolve("dating/iphone-exif.heic");
+
     private final CliHeifDecoder decoder = new CliHeifDecoder("heif-convert");
 
     // Reuses the existing HEIC fixture from the dating tests - a real iPhone photo, no new
@@ -23,7 +25,7 @@ class CliHeifDecoderTest {
     // not just that a process gets launched.
     @Test
     void decodesARealHeicFixtureToItsFullResolution() {
-        final Optional<BufferedImage> result = this.decoder.decode(FIXTURES.resolve("dating/iphone-exif.heic"));
+        final Optional<BufferedImage> result = this.decoder.decode(DECODABLE_FIXTURE);
 
         assertThat(result).isPresent();
         assertThat(result.get().getWidth()).isEqualTo(4032);
@@ -52,6 +54,22 @@ class CliHeifDecoderTest {
         final CliHeifDecoder withMissingBinary = new CliHeifDecoder("sluice-test-nonexistent-heif-decoder");
 
         final Optional<BufferedImage> result = withMissingBinary.decode(file);
+
+        assertThat(result).isEmpty();
+    }
+
+    // Scratch-file creation can fail unchecked as well as checked, and the injectable factory is
+    // the only seam that reproduces the unchecked half deterministically. SecurityException stands
+    // in for any unchecked failure a filesystem provider can raise there. The fixture is a real,
+    // decodable HEIC, so the refused scratch file is the only thing that can turn this result
+    // empty.
+    @Test
+    void anUncheckedScratchFileFailureDegradesGracefullyToEmpty() {
+        final var withFailingScratchFiles = new CliHeifDecoder("heif-convert", () -> {
+            throw new SecurityException("scratch file refused");
+        });
+
+        final Optional<BufferedImage> result = withFailingScratchFiles.decode(DECODABLE_FIXTURE);
 
         assertThat(result).isEmpty();
     }

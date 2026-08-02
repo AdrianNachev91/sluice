@@ -17,8 +17,10 @@ import java.util.Map;
  *
  * <p>Carrying a decision out and reconciling one after the fact must agree on this exactly. An
  * offline reconcile searches the very directory a real apply would have moved the file into. Any
- * disagreement between the two would make an already-moved file look permanently lost. Keeping the
- * mapping in one class is what guarantees they cannot drift.
+ * disagreement between the two would make an already-moved file look permanently lost. Neither
+ * {@link ApplyEngine} nor {@link ReconcileEngine} is given a {@link PathsPort} of its own, so
+ * neither has any way to resolve the library, review, duplicates or unreviewable root except
+ * through this class.
  */
 @Component
 public class CullDestinations {

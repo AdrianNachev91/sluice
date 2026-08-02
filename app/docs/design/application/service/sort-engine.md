@@ -115,9 +115,10 @@ design folder covers what the sweep does with all three inputs.
 
 "Remaining" is derived from step 1's original scan, not observed directly. `dedup.plan`'s three
 buckets (section 1) are a total partition of every in-scope file, and each bucket is either moved
-or deleted before the sweep runs. So every in-scope file is guaranteed to have left the Inbox
-already. Step 1's original scan lists, minus what this run itself removed, already describe what's
-left.
+or deleted before the sweep runs. So every file this run actually removed (`actuallyRemoved`) has
+already left the Inbox by the time the sweep runs. A cancellation mid-routing (section 6) can leave
+some in-scope files still sitting there. Step 1's original scan lists, minus what this run itself
+removed, already describe what's left.
 
 ## 6. Cancellation
 

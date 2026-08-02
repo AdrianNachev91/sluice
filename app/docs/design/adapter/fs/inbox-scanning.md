@@ -60,8 +60,12 @@ contextual message so a caller never has to know which shape triggered it.
 
 - Sidecar-matching detail (owner keys, the prefix fallback): `takeout-sidecar-pairing.md` in the
   sibling `domain/scan` design folder.
-- Risk note: pairing is name-based only. A paired sidecar must be schema-validated as real
-  Takeout metadata before anything ever deletes it - never on name-match alone.
+- Risk note: pairing is name-based only, and deletion does not close that gap by validating
+  content. Inline consumption spends only a sidecar whose parsed date actually won for its file.
+  The orphan sweep that catches every other spent sidecar decides from names alone and never
+  reads content. The sweep's safety is structural instead: it deletes only `.json` files, never
+  media, and only once nothing left in the sidecar's own directory owns it. See
+  `sidecar-sweep.md` for the rules and the one accepted residual, a long-named stray `.json`.
 - `ScanResult.jsonPaths` carries every `.json` found, paired or not, and the classification here is
   by extension alone. That is deliberate: the list is meant to say what was on disk, not to judge
   it. `SortEngine` calls this scan once per `sort()` invocation and reuses the full list after
