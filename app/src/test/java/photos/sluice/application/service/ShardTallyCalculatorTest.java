@@ -4,7 +4,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.vision.JsonCullPrepStore;
+import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.Decision;
+import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.OverlapResolution;
+import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.job.ShardTally;
 
 import java.io.IOException;
@@ -86,8 +92,83 @@ class ShardTallyCalculatorTest {
         assertThat(shardTallyCalculator().isReadyToResume(prepDir)).isFalse();
     }
 
+    // A non-I/O RuntimeException from hasShard(), read inside the same guard as the shard read and
+    // the validation. tally() degrades that montage to present-but-invalid rather than throwing.
+    @Test
+    void aNonIoFailureCheckingShardPresenceStillReportsRatherThanThrowing(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        final ShardTallyCalculator calculator = shardTallyCalculator(new ThrowingHasShard());
+
+        assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 0, 1));
+    }
+
+    // The same failure, at isReadyToResume()'s own entry point. It answers not ready rather than
+    // propagating, matching the tolerance its own Javadoc already claims for a transiently
+    // unreadable index.
+    @Test
+    void aNonIoFailureCheckingShardPresenceAnswersNotReadyRatherThanThrowing(@TempDir final Path root)
+            throws IOException {
+        final Path prepDir = prepDir(root);
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        final ShardTallyCalculator calculator = shardTallyCalculator(new ThrowingHasShard());
+
+        assertThat(calculator.isReadyToResume(prepDir)).isFalse();
+    }
+
     private static ShardTallyCalculator shardTallyCalculator() {
-        return new ShardTallyCalculator(new JsonCullPrepStore(), fixedSettings(), applyPlanner(),
+        return shardTallyCalculator(new JsonCullPrepStore());
+    }
+
+    private static ShardTallyCalculator shardTallyCalculator(final CullPrepPort cullPrepPort) {
+        return new ShardTallyCalculator(cullPrepPort, fixedSettings(), applyPlanner(new NioMediaStore(), cullPrepPort),
                 moveLedger(new NioMediaStore()));
+    }
+
+    // Passes every read and write through to a real store. Only hasShard is overridden, the one
+    // call this exists to fail: a non-I/O RuntimeException. A port constrains nothing about what an
+    // adapter may actually raise.
+    private static final class ThrowingHasShard implements CullPrepPort {
+
+        private final CullPrepPort delegate = new JsonCullPrepStore();
+
+        @Override
+        public PrepDir readIndex(final Path prepDir) {
+            return this.delegate.readIndex(prepDir);
+        }
+
+        @Override
+        public void writeIndex(final Path prepDir, final PrepDir index) {
+            this.delegate.writeIndex(prepDir, index);
+        }
+
+        @Override
+        public List<SidecarPhotoEntry> readSidecar(final Path prepDir, final String montage) {
+            return this.delegate.readSidecar(prepDir, montage);
+        }
+
+        @Override
+        public boolean hasShard(final Path prepDir, final String montage) {
+            throw new IllegalStateException("simulated non-I/O failure");
+        }
+
+        @Override
+        public DecisionShard readShard(final Path prepDir, final String montage) {
+            return this.delegate.readShard(prepDir, montage);
+        }
+
+        @Override
+        public DecisionShard readShardFile(final Path shardFile) {
+            return this.delegate.readShardFile(shardFile);
+        }
+
+        @Override
+        public void writeMergedDecisions(final Path prepDir, final String scope, final List<Decision> decisions,
+                                         final ApplyReport report) {
+            this.delegate.writeMergedDecisions(prepDir, scope, decisions, report);
+        }
     }
 }

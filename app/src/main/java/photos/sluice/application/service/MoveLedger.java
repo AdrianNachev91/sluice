@@ -7,6 +7,7 @@ import photos.sluice.domain.cull.OverlapResolution;
 
 import java.io.UncheckedIOException;
 import java.nio.charset.CharacterCodingException;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashMap;
@@ -251,23 +252,35 @@ public class MoveLedger implements LedgerReader {
     /**
      * Parses one move-record line, keyed by the source it moved. A witnessed record carries three
      * fields and a reconstructed one carries four, the last being the provenance marker. Both parse
-     * to the same shape, since a classifying caller trusts them identically. An unrecognized shape
-     * is silently ignored.
+     * to the same shape, since a classifying caller trusts them identically. A line whose shape is
+     * not recognized, or whose shape matches but whose subject cannot be turned into a path, is
+     * silently ignored the same way. {@link Path#of} would otherwise be an unchecked escape route
+     * out of every caller's read-failure handling. One garbled line has no business taking the whole
+     * file's worth of otherwise-good records down with it.
      *
      * @param line {@link String} one line of the move-record file
      * @param moves a {@link Map} of {@link Path} to {@link MoveRecord} accumulated move records
      */
     private static void parseMoveRecord(final String line, final Map<Path, MoveRecord> moves) {
         final String[] fields = line.split(RECORD_DELIMITER, -1);
-        if (fields.length == 3 || (fields.length == 4 && RECONSTRUCTED_MARKER.equals(fields[3]))) {
+        if (fields.length != 3 && !(fields.length == 4 && RECONSTRUCTED_MARKER.equals(fields[3]))) {
+            return;
+        }
+        try {
             moves.put(Path.of(fields[0]), new MoveRecord(Path.of(fields[1]), fields[2]));
+        } catch (final InvalidPathException e) {
+            // Same treatment as a line whose shape is not recognized at all.
         }
     }
 
     /**
      * Parses one choices line into whichever of the three accumulators its marker names. Every shape
-     * carries its subject first and its marker second, so one field decides which kind a line is. An
-     * unrecognized shape is silently ignored.
+     * carries its subject first and its marker second, so one field decides which kind a line is. A
+     * line whose shape is not recognized, or whose shape matches but whose subject or resolution
+     * field is garbled, is silently ignored the same way. One bad line then costs one lost answer
+     * rather than the whole file. The disposition it named simply reads as never given, and the run
+     * diagnoses to its real state with the original finding re-raised, where the remedies work
+     * normally.
      *
      * @param line {@link String} one line of the choices file
      * @param skipped a {@link Set} of {@link Path} accumulated sources the user gave up on
@@ -279,12 +292,17 @@ public class MoveLedger implements LedgerReader {
                                     final Map<Path, OverlapResolution> overlaps,
                                     final Map<String, CorruptSidecarResolution> corruptSidecars) {
         final String[] fields = line.split(RECORD_DELIMITER, -1);
-        if (fields.length == 4 && SKIPPED_MARKER.equals(fields[1])) {
-            skipped.add(Path.of(fields[0]));
-        } else if (fields.length == 5 && OVERLAP_MARKER.equals(fields[1])) {
-            overlaps.put(Path.of(fields[0]), OverlapResolution.valueOf(fields[2]));
-        } else if (fields.length == 5 && CORRUPT_SIDECAR_MARKER.equals(fields[1])) {
-            corruptSidecars.put(fields[0], CorruptSidecarResolution.valueOf(fields[2]));
+        try {
+            if (fields.length == 4 && SKIPPED_MARKER.equals(fields[1])) {
+                skipped.add(Path.of(fields[0]));
+            } else if (fields.length == 5 && OVERLAP_MARKER.equals(fields[1])) {
+                overlaps.put(Path.of(fields[0]), OverlapResolution.valueOf(fields[2]));
+            } else if (fields.length == 5 && CORRUPT_SIDECAR_MARKER.equals(fields[1])) {
+                corruptSidecars.put(fields[0], CorruptSidecarResolution.valueOf(fields[2]));
+            }
+        } catch (final IllegalArgumentException e) {
+            // Covers both InvalidPathException (Path.of) and a plain IllegalArgumentException
+            // (Enum.valueOf) - the same treatment as a line whose shape is not recognized at all.
         }
     }
 

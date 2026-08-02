@@ -141,30 +141,31 @@ class PrepDirDoctorTest {
         assertThat(doctor().diagnose(prepDir).state()).isEqualTo(State.DAMAGED);
     }
 
-    // The reason the catch in examine() is a catch-all rather than a list of expected types. This
-    // line is well-formed enough to reach the parser and garbled where it counts, so
-    // CorruptSidecarResolution.valueOf throws IllegalArgumentException. Not an I/O type, so no
-    // enumerated catch would have covered it.
+    // A line well-formed enough to reach the parser and garbled where it counts, so its resolution
+    // field cannot become a CorruptSidecarResolution. Dropped rather than thrown, so the disposition
+    // it named reads as never given. The sidecar it was meant to answer for was never written
+    // either, standing in for the corrupt one that answer was about. The run diagnoses to its real
+    // state, with the original finding re-raised, rather than reporting the whole dir damaged over
+    // one bad line.
     @Test
-    void aGarbledChoicesLineReportsDamagedRatherThanThrowing(@TempDir final Path root) throws IOException {
+    void aGarbledChoicesLineIsDroppedAndTheOriginalFindingIsReRaisedInstead(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
-        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
-        writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
-        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         final String d = MoveLedger.RECORD_DELIMITER;
         Files.writeString(prepDir.resolve("choices.log"),
                 "montage-001" + d + "CORRUPT_SIDECAR_RESOLVED" + d + "NOT_A_RESOLUTION" + d + "why" + d + "when");
 
         final PrepDirHealth health = doctor().diagnose(prepDir);
 
-        assertThat(health.state()).isEqualTo(State.DAMAGED);
-        assertThat(health.findings()).containsExactly(new Finding.UnreadablePrepDir(prepDir));
+        assertThat(health.state()).isEqualTo(State.WAITING);
+        assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
     }
 
     // The same guarantee one layer up: a dir runs() cannot diagnose becomes a row rather than an
     // exception. The healthy dir alongside it proves the scan carried on rather than ending there.
+    // Injected at the CullPrepPort seam rather than through the filesystem. That way the
+    // classification does not depend on how a given platform's filesystem treats a directory
+    // standing in for a file.
     @Test
     void runsListsADirItCannotDiagnoseInsteadOfThrowing(@TempDir final Path root) throws IOException {
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
@@ -173,13 +174,11 @@ class PrepDirDoctorTest {
         writeIndex(healthy, 1, List.of("montage-001"));
         writeSidecar(healthy, "montage-001", sidecarEntry(photo));
         writeShard(healthy, "montage-001", classificationJson(photo, "junk", "blurry"));
-        final Path garbled = prepDir(root, "2020");
-        writeIndex(garbled, 1, List.of("montage-001"));
-        final String d = MoveLedger.RECORD_DELIMITER;
-        Files.writeString(garbled.resolve("choices.log"),
-                "montage-001" + d + "CORRUPT_SIDECAR_RESOLVED" + d + "NOT_A_RESOLUTION" + d + "why" + d + "when");
+        final Path damaged = prepDir(root, "2020");
+        writeIndex(damaged, 1, List.of("montage-001"));
 
-        final List<CullRunSummary> runs = doctor().runs(root.resolve("logs/cull-prep"));
+        final List<CullRunSummary> runs =
+                doctor(new FailingIndexReadOf(damaged)).runs(root.resolve("logs/cull-prep"));
 
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
@@ -439,6 +438,83 @@ class PrepDirDoctorTest {
         assertThat(report.skipped()).isEmpty();
     }
 
+    // A dir whose own occupancy could not be determined diagnoses DAMAGED. It lands in the report's
+    // own unreadable bucket, distinct from skipped, and its healthy sibling still purges normally.
+    @Test
+    void purgeCompletedReportsAnUnreadableOccupancyCheckInItsOwnBucketAndStillPurgesItsSibling(
+            @TempDir final Path root) throws IOException {
+        final Path complete = prepDir(root, "complete1");
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(complete, 1, List.of("montage-001"));
+        writeSidecar(complete, "montage-001", sidecarEntry(photo));
+        writeShard(complete, "montage-001", classificationJson(photo, "junk", "blurry"));
+        Files.writeString(complete.resolve("decisions.json"), "{}");
+        final Path unreadable = prepDir(root, "unreadable1");
+        writeIndex(unreadable, 1, List.of("montage-001"));
+        final var store = new FailingListingOf(unreadable);
+
+        final PurgeReport report =
+                CullPrepTestSupport.prepDirDoctor(store).purgeCompleted(root.resolve("logs/cull-prep"));
+
+        assertThat(report.purged()).containsExactly("complete1");
+        assertThat(report.skipped()).isEmpty();
+        assertThat(report.unreadable()).containsExactly(entry("unreadable1", "could not be read"));
+        assertThat(Files.exists(complete)).isFalse();
+        assertThat(Files.exists(unreadable)).isTrue();
+    }
+
+    // purgeDir() guards itself, so a delete failing on one prep dir does not abandon the sweep with
+    // no report at all. That dir lands in the unreadable bucket instead of purged, and its sibling
+    // still purges normally.
+    @Test
+    void purgeCompletedReportsAFailedDeleteInItsOwnBucketAndContinuesTheSweep(@TempDir final Path root)
+            throws IOException {
+        final Path first = prepDir(root, "complete1");
+        final Path second = prepDir(root, "complete2");
+        final Path photo1 = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path photo2 = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(photo1, "x");
+        writeFile(photo2, "y");
+        writeIndex(first, 1, List.of("montage-001"));
+        writeSidecar(first, "montage-001", sidecarEntry(photo1));
+        writeShard(first, "montage-001", classificationJson(photo1, "junk", "blurry"));
+        Files.writeString(first.resolve("decisions.json"), "{}");
+        writeIndex(second, 1, List.of("montage-001"));
+        writeSidecar(second, "montage-001", sidecarEntry(photo2));
+        writeShard(second, "montage-001", classificationJson(photo2, "junk", "blurry"));
+        Files.writeString(second.resolve("decisions.json"), "{}");
+        final var store = new FailingDeleteUnder(first);
+
+        final PurgeReport report =
+                CullPrepTestSupport.prepDirDoctor(store).purgeCompleted(root.resolve("logs/cull-prep"));
+
+        assertThat(report.purged()).containsExactly("complete2");
+        assertThat(report.skipped()).isEmpty();
+        assertThat(report.unreadable()).containsExactly(entry("complete1", "could not be deleted"));
+        assertThat(Files.exists(first)).isTrue();
+        assertThat(Files.exists(second)).isFalse();
+    }
+
+    // Fails delete() for anything under one target prep dir, standing in for a lock or permission
+    // denial on one of the files a purge is deleting. Every other dir's delete behaves normally.
+    private static final class FailingDeleteUnder extends NioMediaStore {
+
+        private final Path target;
+
+        FailingDeleteUnder(final Path target) {
+            this.target = target;
+        }
+
+        @Override
+        public void delete(final Path path) {
+            if (path.startsWith(this.target)) {
+                throw new IllegalStateException("simulated delete failure");
+            }
+            super.delete(path);
+        }
+    }
+
     private static Path prepDir(final Path root) throws IOException {
         return prepDir(root, "scope1");
     }
@@ -503,16 +579,27 @@ class PrepDirDoctorTest {
         assertThat(CullPrepTestSupport.prepDirDoctor(new FailingExists()).runs(cullPrepRoot)).isEmpty();
     }
 
-    // The third thing the guard has to cover. Relativizing a listed path against the root throws
-    // when the two are not both absolute, and that mapping runs after the listing returns.
+    // The new, narrower guard: only one candidate's own occupancy check fails, so only that one
+    // candidate is affected. Its healthy sibling still gets enumerated and diagnosed normally,
+    // proving isolation rather than the root-level guard above, which fails the whole enumeration.
     @Test
-    void runsReportsNoRunsWhenAListedPathCannotBeRelativizedRatherThanThrowing(@TempDir final Path root)
-            throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/cull-prep");
-        writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
-        assertThat(doctor().runs(cullPrepRoot)).hasSize(1);
+    void runsListsTheHealthySiblingAlongsideADamagedEntryForTheOneWhoseOccupancyCouldNotBeRead(
+            @TempDir final Path root) throws IOException {
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        final Path healthy = prepDir(root, "2019");
+        writeIndex(healthy, 1, List.of("montage-001"));
+        writeSidecar(healthy, "montage-001", sidecarEntry(photo));
+        writeShard(healthy, "montage-001", classificationJson(photo, "junk", "blurry"));
+        final Path unreadable = prepDir(root, "2020");
+        writeIndex(unreadable, 1, List.of("montage-001"));
+        final var store = new FailingListingOf(unreadable);
 
-        assertThat(CullPrepTestSupport.prepDirDoctor(new ListsAnUnrelativizablePath()).runs(cullPrepRoot)).isEmpty();
+        final List<CullRunSummary> runs = CullPrepTestSupport.prepDirDoctor(store).runs(root.resolve("logs/cull-prep"));
+
+        assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
+        assertThat(runs.getFirst().health().state()).isEqualTo(State.READY);
+        assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
     }
 
     private static PrepDirDoctor doctor() {
@@ -529,20 +616,28 @@ class PrepDirDoctorTest {
     private static final class FailingListing extends NioMediaStore {
 
         @Override
-        public List<Path> listFiles(final Path dir) {
+        public List<Path> listChildDirectories(final Path dir) {
             throw new IllegalStateException("simulated listing failure");
         }
     }
 
-    // A media store that lists a relative path, which cannot be relativized against an absolute
-    // root. Nothing in the app produces this today, since the paths come from walking the root
-    // itself. It is what an adapter honouring MediaReader's documented contract could hand back,
-    // and the guard holds for it either way.
-    private static final class ListsAnUnrelativizablePath extends NioMediaStore {
+    // Fails listFiles() for exactly one candidate prep dir. Stands in for that one dir's own read
+    // failing - a locked disaster-drawer file, say. Every sibling and the root-level shallow listing
+    // behave normally.
+    private static final class FailingListingOf extends NioMediaStore {
+
+        private final Path target;
+
+        FailingListingOf(final Path target) {
+            this.target = target;
+        }
 
         @Override
         public List<Path> listFiles(final Path dir) {
-            return List.of(Path.of("elsewhere", "2019-06", "index.json"));
+            if (dir.equals(this.target)) {
+                throw new IllegalStateException("simulated listing failure");
+            }
+            return super.listFiles(dir);
         }
     }
 
@@ -582,6 +677,25 @@ class PrepDirDoctorTest {
         @Override
         public PrepDir readIndex(final Path prepDir) {
             throw simulatedReadFailure();
+        }
+    }
+
+    // Fails the index read for exactly one target prep dir, so a sibling prep dir's own diagnosis
+    // reads normally alongside it.
+    private static final class FailingIndexReadOf extends DelegatingPrepStore {
+
+        private final Path target;
+
+        FailingIndexReadOf(final Path target) {
+            this.target = target;
+        }
+
+        @Override
+        public PrepDir readIndex(final Path prepDir) {
+            if (prepDir.equals(this.target)) {
+                throw simulatedReadFailure();
+            }
+            return super.readIndex(prepDir);
         }
     }
 

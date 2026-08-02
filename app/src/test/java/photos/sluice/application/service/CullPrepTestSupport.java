@@ -14,11 +14,15 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
+import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.Decision;
+import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -158,6 +162,13 @@ final class CullPrepTestSupport {
         return applyPlanner(mediaStore, new JsonCullPrepStore());
     }
 
+    // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
+    // owns, the same seam prepDirDoctor(CullPrepPort) below uses. A real NioMediaStore backs every
+    // other read, so only the sidecar/shard reads this port covers are the ones a test can fail.
+    static ApplyPlanner applyPlanner(final CullPrepPort cullPrepPort) {
+        return applyPlanner(new NioMediaStore(), cullPrepPort);
+    }
+
     static ApplyPlanner applyPlanner(final MediaStore mediaStore, final CullPrepPort cullPrepPort) {
         return new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), new Sha256Hasher());
     }
@@ -177,8 +188,14 @@ final class CullPrepTestSupport {
     }
 
     static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot) {
+        return prepDirRemedies(repoRoot, libraryRoot, new JsonCullPrepStore());
+    }
+
+    // Lets a test inject a prep-dir reader that fails the way it wants to test, the same seam
+    // applyPlanner(CullPrepPort) above uses.
+    static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot, final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
-        return new PrepDirRemedies(mediaStore, new JsonCullPrepStore(), pathsConfig(repoRoot, libraryRoot),
+        return new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig(repoRoot, libraryRoot),
                 new DisasterDrawer(mediaStore), moveLedger(mediaStore));
     }
 
@@ -230,6 +247,49 @@ final class CullPrepTestSupport {
         @Override
         public ExternalAgentSettings externalAgent() {
             return new ExternalAgentSettings(WatchMode.MANUAL);
+        }
+    }
+
+    // Passes every read and write through to a real store. Only readSidecar is overridden, the one
+    // call this exists to fail: a read that merely failed, with the content otherwise intact.
+    static final class FailingSidecarRead implements CullPrepPort {
+
+        private final CullPrepPort delegate = new JsonCullPrepStore();
+
+        @Override
+        public PrepDir readIndex(final Path prepDir) {
+            return this.delegate.readIndex(prepDir);
+        }
+
+        @Override
+        public void writeIndex(final Path prepDir, final PrepDir index) {
+            this.delegate.writeIndex(prepDir, index);
+        }
+
+        @Override
+        public List<SidecarPhotoEntry> readSidecar(final Path prepDir, final String montage) {
+            throw new UncheckedIOException(new IOException("simulated read failure"));
+        }
+
+        @Override
+        public boolean hasShard(final Path prepDir, final String montage) {
+            return this.delegate.hasShard(prepDir, montage);
+        }
+
+        @Override
+        public DecisionShard readShard(final Path prepDir, final String montage) {
+            return this.delegate.readShard(prepDir, montage);
+        }
+
+        @Override
+        public DecisionShard readShardFile(final Path shardFile) {
+            return this.delegate.readShardFile(shardFile);
+        }
+
+        @Override
+        public void writeMergedDecisions(final Path prepDir, final String scope, final List<Decision> decisions,
+                                         final ApplyReport report) {
+            this.delegate.writeMergedDecisions(prepDir, scope, decisions, report);
         }
     }
 }

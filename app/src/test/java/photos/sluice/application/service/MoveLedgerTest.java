@@ -184,6 +184,57 @@ class MoveLedgerTest {
         assertThat(snapshot.skipped()).containsExactlyInAnyOrder(gone, goneLater);
     }
 
+    // A line whose shape matches - right field count, right marker - but whose subject or
+    // resolution cannot be parsed gets the same treatment as a shape neither parser recognizes at
+    // all: dropped, not thrown. Path.of and Enum.valueOf would otherwise be unchecked escape routes
+    // out of every caller's read-failure handling.
+    @Test
+    void aLineMatchingItsShapeButGarbledInContentIsDroppedWithoutLosingTheGoodLinesAroundIt(@TempDir final Path prepDir)
+            throws IOException {
+        final Path moved = prepDir.resolve("Sorted/moved.jpg");
+        final MoveLedger ledger = moveLedger();
+        ledger.recordMove(prepDir, moved, prepDir.resolve("Review/junk/moved.jpg"), "hash-moved");
+        final String d = MoveLedger.RECORD_DELIMITER;
+        // A NUL byte is the one character Path.of rejects on both platforms this project's CI runs.
+        // Built via a char literal rather than a string escape, so no encoding layer between here
+        // and the file can silently turn it into something else.
+        final String unusablePath = "bad" + (char) 0 + "path";
+        appendRaw(prepDir.resolve(MOVE_RECORDS), unusablePath + d + "Review/junk/garbled.jpg" + d + "hash-garbled");
+
+        final Ledger snapshot = ledger.read(prepDir);
+
+        assertThat(snapshot.moves()).containsOnlyKeys(moved);
+    }
+
+    // The choices file's own three shapes, each garbled the way its own fields can be: a subject
+    // Path.of cannot parse, or a resolution Enum.valueOf cannot parse. Every good entry around them
+    // still parses.
+    @Test
+    void everyChoicesShapeGarbledInContentIsDroppedWithoutLosingTheGoodEntriesAroundIt(@TempDir final Path prepDir)
+            throws IOException {
+        final Path skipped = prepDir.resolve("Sorted/skipped.jpg");
+        final Path overlapping = prepDir.resolve("Sorted/overlapping.jpg");
+        final MoveLedger ledger = moveLedger();
+        ledger.recordSkip(prepDir, skipped, "deleted it myself");
+        ledger.recordOverlap(prepDir, overlapping, OverlapResolution.TRUST_DECISION, "the decision is correct");
+        ledger.recordCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "redo it");
+        final String d = MoveLedger.RECORD_DELIMITER;
+        // Same NUL-byte technique as the move-record test above, for the same reason.
+        final String unusablePath = "bad" + (char) 0 + "path";
+        appendRaw(prepDir.resolve(CHOICES), unusablePath + d + "SKIPPED_BY_USER" + d + "now" + d + "why");
+        appendRaw(prepDir.resolve(CHOICES),
+                "Sorted/other.jpg" + d + "OVERLAP_RESOLVED" + d + "NOT_A_RESOLUTION" + d + "now" + d + "why");
+        appendRaw(prepDir.resolve(CHOICES),
+                "montage-002" + d + "CORRUPT_SIDECAR_RESOLVED" + d + "NOT_A_RESOLUTION" + d + "now" + d + "why");
+
+        final Ledger snapshot = ledger.read(prepDir);
+
+        assertThat(snapshot.skipped()).containsExactly(skipped);
+        assertThat(snapshot.overlaps()).containsExactly(entry(overlapping, OverlapResolution.TRUST_DECISION));
+        assertThat(snapshot.corruptSidecars())
+                .containsExactly(entry("montage-001", CorruptSidecarResolution.SET_ASIDE));
+    }
+
     // A move record and a skip that happen to share a field count sit in different files, so neither
     // parser ever sees the other's shape. A reconstructed move and a skip are both four fields.
     @Test

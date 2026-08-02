@@ -151,11 +151,9 @@ public class PrepDirDoctor {
         try {
             return this.read(prepDirPath);
         } catch (final RuntimeException e) {
-            // Catch-all on purpose. A garbled path field in the move ledger throws
-            // InvalidPathException, and an unrecognised disposition token throws
-            // IllegalArgumentException. Neither is an I/O type. An enumerated list needs
-            // re-enumerating every time a reader downstream grows a new escape, and a miss costs
-            // the app's own startup.
+            // Catch-all on purpose. Nothing this method calls promises to raise only I/O types. An
+            // enumerated list needs re-enumerating every time a reader downstream grows a new escape
+            // route, and a miss costs the app's own startup.
             //
             // Logged rather than swallowed, so a genuine bug reaching here stays visible instead of
             // reading as an ordinary damaged dir.
@@ -292,28 +290,16 @@ public class PrepDirDoctor {
      * Every prep dir holding at least one file, as an immediate child of cullPrepRoot.
      *
      * <p>Presence of a file is the occupancy test, not presence of index.json. A dir holding shards
-     * an agent already produced, but whose index has since been lost, is exactly the run worth
-     * refusing to overwrite. Filtering on index.json would make it invisible.
+     * an agent already produced, but whose index has since been lost, is still worth refusing to
+     * overwrite. A file inside a subdirectory (the disaster drawer, say) belongs to that run, not
+     * one of its own. A loose file directly in the root belongs to no run.
      *
-     * <p>The first path segment under the root is the prep dir, never the file's own parent. A prep
-     * dir has subdirectories of its own, such as the disaster drawer holding filed-away artifacts.
-     * A file inside one of those belongs to the run, not to a run of its own. A loose file lying
-     * directly in the root belongs to no run at all and is skipped.
-     *
-     * <p>A listing that fails outright yields no runs rather than throwing. runs() must not be able
-     * to take anything down, and purgeCompleted() sweeping nothing is safer than purgeCompleted()
-     * throwing before it starts. A permission denial on one prep dir's own subdirectory is enough to
-     * fail the walk, as is a network mount dropping under the root.
-     *
-     * <p>The guard is a catch-all, for the reason {@link #examine} is, and it wraps the whole body
-     * rather than the listing call alone. The existence check reaches the same port, and the mapping
-     * below can raise on a path it cannot relativize. Guarding only the call that looks like the
-     * risky one is how a total method quietly stops being total.
-     *
-     * <p>Logged rather than swallowed silently. An empty dashboard and an unreadable one look
-     * identical to a user, so the log is the only place the difference exists. purgeCompleted()
-     * inherits that blind spot. A sweep that could not list the root reports nothing purged and
-     * nothing skipped, which is exactly what an empty root reports.
+     * <p>Enumeration and occupancy are two separately guarded reads. The root is listed shallowly
+     * for its immediate subdirectories, then each candidate is deep-listed on its own to check
+     * occupancy. One candidate's read failing costs that one entry, not every entry after it. An
+     * unreadable candidate is treated as occupied rather than dropped, and its own diagnosis - run
+     * separately by every caller of this method - usually lands on DAMAGED. Only the root-level
+     * read itself failing yields no runs at all, logged rather than swallowed.
      *
      * @param cullPrepRoot {@link Path} the cull-prep root directory to enumerate
      * @return a {@link List} of {@link Path} every prep dir found, ordered by name
@@ -323,16 +309,29 @@ public class PrepDirDoctor {
             if (!this.mediaStore.exists(cullPrepRoot)) {
                 return List.of();
             }
-            return this.mediaStore.listFiles(cullPrepRoot).stream()
-                    .map(cullPrepRoot::relativize)
-                    .filter(relative -> relative.getNameCount() > 1)
-                    .map(relative -> cullPrepRoot.resolve(relative.getName(0)))
-                    .distinct()
+            return this.mediaStore.listChildDirectories(cullPrepRoot).stream()
+                    .filter(this::holdsAFile)
                     .sorted()
                     .toList();
         } catch (final RuntimeException e) {
             log.warn("Could not list {}, reporting no cull runs this pass", cullPrepRoot, e);
             return List.of();
+        }
+    }
+
+    /**
+     * Whether prepDir holds at least one file anywhere in its own subtree, guarded on its own so one
+     * unreadable candidate cannot cost {@link #prepDirsUnder} every other one.
+     *
+     * @param prepDir {@link Path} the candidate prep dir to check
+     * @return boolean true if prepDir holds at least one file, or its own occupancy could not be read
+     */
+    private boolean holdsAFile(final Path prepDir) {
+        try {
+            return !this.mediaStore.listFiles(prepDir).isEmpty();
+        } catch (final RuntimeException e) {
+            log.warn("Could not check whether {} holds any files, treating it as occupied", prepDir, e);
+            return true;
         }
     }
 
@@ -344,33 +343,53 @@ public class PrepDirDoctor {
      * of its shards, index.json, move-record log, and any disaster drawer is a decision only the
      * user makes, never a timer.
      *
+     * <p>A run diagnosed DAMAGED, or a COMPLETE run whose own delete fails partway, lands in the
+     * report's unreadable bucket rather than skipped or purged - neither is a state a user can act
+     * on the way WAITING or BLOCKED are. {@link #purgeDir} guards its own failure, so the sweep
+     * continues on to the rest regardless.
+     *
      * @param cullPrepRoot {@link Path} the cull-prep root directory to sweep
-     * @return {@link PurgeReport} every scope purged this sweep, and every scope skipped with its state
+     * @return {@link PurgeReport} every scope purged, skipped with its state, or left unreadable, this sweep
      */
     public PurgeReport purgeCompleted(final Path cullPrepRoot) {
         final var purged = new ArrayList<String>();
         final var skipped = new LinkedHashMap<String, State>();
+        final var unreadable = new LinkedHashMap<String, String>();
         for (final Path prepDir : this.prepDirsUnder(cullPrepRoot)) {
             final String scope = scopeOf(prepDir);
             final State state = this.diagnose(prepDir).state();
-            if (state == State.COMPLETE) {
-                this.purgeDir(prepDir);
-                purged.add(scope);
+            if (state == State.DAMAGED) {
+                unreadable.put(scope, "could not be read");
+            } else if (state == State.COMPLETE) {
+                if (this.purgeDir(prepDir)) {
+                    purged.add(scope);
+                } else {
+                    unreadable.put(scope, "could not be deleted");
+                }
             } else {
                 skipped.put(scope, state);
             }
         }
-        return new PurgeReport(purged, skipped);
+        return new PurgeReport(purged, skipped, unreadable);
     }
 
     /**
      * Hard-deletes every file under a completed prepDir, then removes the now-empty directory tree.
+     * Guarded on its own so one prep dir's delete failing partway through a sweep of several does not
+     * abandon the rest with no report at all.
      *
      * @param prepDir {@link Path} the completed prep directory to delete
+     * @return boolean true if the delete completed; false if it failed partway through
      */
-    private void purgeDir(final Path prepDir) {
-        this.mediaStore.listFiles(prepDir).forEach(this.mediaStore::delete);
-        this.mediaStore.removeIfEmptyOfFiles(prepDir);
+    private boolean purgeDir(final Path prepDir) {
+        try {
+            this.mediaStore.listFiles(prepDir).forEach(this.mediaStore::delete);
+            this.mediaStore.removeIfEmptyOfFiles(prepDir);
+            return true;
+        } catch (final RuntimeException e) {
+            log.warn("Could not fully purge {}, leaving what remains for a retry", prepDir, e);
+            return false;
+        }
     }
 
     /**

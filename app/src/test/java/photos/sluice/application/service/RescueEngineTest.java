@@ -266,6 +266,11 @@ class RescueEngineTest {
         }
 
         @Override
+        public List<Path> listChildDirectories(final Path root) {
+            return this.delegate.listChildDirectories(root);
+        }
+
+        @Override
         public Instant lastModifiedTime(final Path path) {
             return this.delegate.lastModifiedTime(path);
         }

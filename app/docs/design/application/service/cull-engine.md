@@ -26,14 +26,15 @@ Deciding whether the scope is free to claim comes first, before anything is rend
 readability - see `prep-dir-doctor.md` for why the test is deliberately that loose. Every state but
 `COMPLETE` refuses, and what differs between them is the way out, not whether a refusal happens.
 
-| Occupant   | Result                            | Way out                  |
-|------------|-----------------------------------|--------------------------|
-| `WAITING`  | refuse                            | Resume, or Discard       |
-| `READY`    | refuse                            | Resume, or Discard       |
-| `BLOCKED`  | refuse                            | Troubleshoot, or Discard |
-| `DAMAGED`  | refuse                            | Re-diagnose, or Discard  |
-| `COMPLETE` | archive to the graveyard, proceed | none needed              |
-| nothing    | proceed                           | none needed              |
+| Occupant             | Result                            | Way out                  |
+|----------------------|-----------------------------------|--------------------------|
+| `WAITING`            | refuse                            | Resume, or Discard       |
+| `READY`              | refuse                            | Resume, or Discard       |
+| `BLOCKED`            | refuse                            | Troubleshoot, or Discard |
+| `DAMAGED`            | refuse                            | Re-diagnose, or Discard  |
+| `COMPLETE`           | archive to the graveyard, proceed | none needed              |
+| nothing              | proceed                           | none needed              |
+| unknown (unreadable) | refuse                            | retry once it clears     |
 
 `READY` is the state worth naming explicitly: a full shard set that has not applied yet is work
 nobody has spent, one Resume away from landing. A refusal throws `Pipeline.ScopeOccupiedException`,
@@ -48,6 +49,15 @@ findings are all `NONE` gets just as little repair from it, so the difference is
 Troubleshoot is still worth running. Its report names which file failed and with what, which is
 otherwise only in the log. That is a diagnosis, not a fix.
 
+**The unknown row is not `DAMAGED`, though it looks the same to a user.** `CullEngine.occupancyOf`
+answers empty, occupied, or unreadable - never a bare boolean, since "occupied" and "I could not
+tell" cost wildly different mistakes if conflated. An unreadable prep dir's own listing failed
+before any diagnosis ever ran, so no run is fabricated to carry one. `Pipeline.ScopeUnreadableException`
+names the prep dir and the read failure directly, rather than reusing `ScopeOccupiedException` with
+a `DAMAGED` occupant that was never actually diagnosed. Same refusal, same safety. Proceeding would
+still let `buildFreshAndDispatch()` clear a directory nobody could confirm was empty. But there is no
+false claim, and no destructive Discard button offered against a run that may not exist at all.
+
 **Two different causes reach `DAMAGED`, and they have opposite answers.** The row names both, which is
 why its way out reads as two steps rather than one.
 
@@ -56,16 +66,16 @@ the file. Diagnosis is never cached, so the next poll re-reads from disk. Once t
 the placeholder hydrates, the run reports its real state and that state's own row names the exit. The
 only action is outside the app, and often there is none worth taking.
 
-Content that no reader could parse is the other case, and re-diagnosing never clears it. A garbled
-line in `choices.log` is the example under test. Discard is the only exit, and it costs the whole
-run: every shard, and the model spend behind it.
+Content that no reader could parse is the other case, and re-diagnosing never clears it. Discard is
+the only exit, and it costs the whole run: every shard, and the model spend behind it.
 
-**That price is wrong for the file it is charged over, and this is a known gap.** `choices.log` holds
-answers to findings, not the decisions themselves, and the ledger is split in two precisely so a
-repair cannot cost the user an answer. The ledger's parsers already skip a line whose shape they do
-not recognise. One whose shape matches and whose content does not still fails the whole read.
-Skipping that too would cost one lost answer instead of the run. The run would then diagnose to its
-real state, usually `BLOCKED` with the original finding re-raised, where Troubleshoot works normally.
+`choices.log` holds answers to findings, not the decisions themselves, and the ledger is split in
+two precisely so a repair cannot cost the user an answer. A line whose shape neither ledger parser
+recognises is skipped. So is one whose shape matches but whose subject or resolution field is
+garbled - a `Path.of` or `Enum.valueOf` failure costs that one line's answer rather than the whole
+file. The run then diagnoses to its real state, usually `BLOCKED` with the original finding
+re-raised, where Troubleshoot works normally. `move-records.log` gets the same treatment for its own
+malformed line, though its own loss is never permanent: a reconcile rebuilds it from disk regardless.
 
 **A `COMPLETE` occupant is archived rather than refused, and no confirmation is asked.** The old
 record moves wholesale into `logs/disasters/<scope>-<timestamp>/` and the new run proceeds. The
@@ -92,9 +102,11 @@ for the full reasoning on that one.
 flowchart TD
     A["CullEngine.cull(scope)"] --> W{"scope's prep dir<br/>occupied?"}
     W -- "yes, not COMPLETE" --> WZ(["ScopeOccupiedException,<br/>thrown synchronously -<br/>nothing rebuilt"])
+    W -- "unreadable" --> WU(["ScopeUnreadableException,<br/>thrown synchronously -<br/>nothing rebuilt"])
     W -- "no, or COMPLETE" --> B["JobRunner.submit"]
     B --> CS{"claimScope: ask again,<br/>now on the job thread"}
     CS -- "occupied, not COMPLETE" --> WZ2(["ScopeOccupiedException"])
+    CS -- "unreadable" --> WU2(["ScopeUnreadableException"])
     CS -- "COMPLETE" --> WA["archive it to the graveyard<br/>-> archivedPriorRun"]
     CS -- "free" --> P
     WA --> P
@@ -216,6 +228,7 @@ Then no `"Culling..."` bracket is reported and no provider client is built.
 |-------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `cull()` on a scope with no shards dropped yet (fresh manual-mode prep) | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                               |
 | `cull()` called again while that scope's run is unresolved              | `ScopeOccupiedException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched      |
+| `cull()` on a scope whose own prep dir cannot be listed at all          | `ScopeUnreadableException` thrown synchronously, naming the prep dir and the read failure - nothing rebuilt, no run fabricated to blame                    |
 | `cull()` called again once that scope's run has applied                 | The old record is archived to the graveyard, named by `archivedPriorRun`, and the fresh run proceeds with no confirm                                       |
 | `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved. No culler is entered, so no `"Culling..."` phase is bracketed                                                       |
 | `resume()` while a shard is still missing                               | Dispatch runs again; `CullJobOutcome.Waiting`, with a freshly recomputed tally                                                                             |

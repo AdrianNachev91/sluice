@@ -438,4 +438,41 @@ public class Pipeline {
             return this.sortSummary;
         }
     }
+
+    /**
+     * Thrown when a fresh cull or curate is refused because scope's own prep dir could not be read
+     * at all, rather than because a diagnosed run occupies it. Refusing is the same safe direction a
+     * {@link ScopeOccupiedException} takes: proceeding would let a fresh prep clear a directory
+     * nobody could confirm was actually empty. But nothing here was diagnosed, so no run is
+     * fabricated to carry one. This carries the prep dir path and the read failure instead. A
+     * caller names what could not be read and offers a retry, rather than routing to a specific
+     * state's remedy that was never actually reached.
+     *
+     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
+     * refused needs no knowledge of this type at all.
+     */
+    public static final class ScopeUnreadableException extends IllegalStateException {
+        private final transient Path prepDir;
+
+        /**
+         * Creates the exception, naming the prep dir that could not be read.
+         *
+         * @param prepDir {@link Path} the prep dir whose occupancy could not be determined
+         * @param cause {@link Throwable} the read failure
+         */
+        ScopeUnreadableException(final Path prepDir, final Throwable cause) {
+            super("Scope's prep dir " + prepDir + " could not be read, so whether it is occupied is unknown - "
+                    + "retry once whatever is holding it clears.", cause);
+            this.prepDir = prepDir;
+        }
+
+        /**
+         * Returns the prep dir whose occupancy could not be determined.
+         *
+         * @return {@link Path} the unreadable prep dir
+         */
+        public Path prepDir() {
+            return this.prepDir;
+        }
+    }
 }

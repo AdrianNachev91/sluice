@@ -39,7 +39,9 @@ since that's the public facade type a caller catches). Being a subtype, it keeps
 `sortSummary()`, so these paths refuse no less usefully than the pre-submit one.
 
 Only `ScopeOccupiedException` is caught, which is what keeps a genuine cull failure downstream (a misconfigured
-provider, for example) from ever being mislabeled as this conflict.
+provider, for example) from ever being mislabeled as this conflict. A `Pipeline.ScopeUnreadableException` mid-job
+(see `cull-engine.md`) is neither this conflict nor a cull failure. It is not caught either, and propagates
+carrying no `SortSummary` - the same as any other unexpected failure this method does not name.
 
 The single stage-boundary check between sort finishing and cull starting still exists, but neither stage is coarse on
 its own anymore. `SortEngine`'s own dating and routing passes each check the signal per file (see `sort-engine.md`).

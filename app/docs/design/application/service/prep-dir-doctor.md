@@ -23,9 +23,18 @@ without a word. Presence of a file is the one test that still works when nothing
 read.
 
 Two exclusions fall out of the same rule. A file lying loose directly in the root belongs to no run,
-and an empty directory holds nothing anybody could lose. The first path segment under the root is
-what identifies the run, never the file's own parent. A prep dir has subdirectories of its own, the
+and an empty directory holds nothing anybody could lose. An immediate child of the root is what
+identifies the run, never a file's own deeper parent. A prep dir has subdirectories of its own, the
 disaster drawer among them.
+
+Two reads at two different depths, each guarded on its own. The root itself is listed shallowly for
+its immediate subdirectories; each candidate is then checked for occupancy with its own deep listing.
+One candidate's read failing costs one entry rather than every entry after it. A locked disaster
+drawer in one run must not hide every other run sitting next to it. A candidate whose own occupancy
+could not be determined is treated as occupied rather than dropped. That is the same fail-safe
+default `CullEngine.occupancyOf` uses for a scope's own occupancy check (see `cull-engine.md`) - an
+unreadable dir must never be mistaken for an empty one. Its own diagnosis, run separately by every
+caller, decides what it reports. Often that is the identical failure, landing it on `DAMAGED`.
 
 ## 2. runs()
 
@@ -77,28 +86,38 @@ escape lands on `DAMAGED`. Not every later failure does: a shard that fails to p
 rather than a list of expected types, which is what lets the contract hold with no list to keep in
 step. That is what makes it safe for the startup watch scan to call from a `@PostConstruct`, and for
 a dashboard to poll. `runs()` and `summaryOf()` extend the same guarantee, guarded the same way, over
-the root listing and the mtime read. A walk that fails reports no runs and logs it, rather than
-taking the whole reading down.
+the mtime read and both of `prepDirsUnder`'s own reads (see section 1 above). Neither the root's own
+listing failing nor one candidate's own occupancy check failing can take the whole reading down. The
+former reports no runs at all. The latter costs one entry, reported `DAMAGED`.
 
-One transient failure is still misreported as damaged content, and it is a known gap rather than a
-design choice. A sidecar that could not be opened reports `Finding.CorruptSidecar`, whose remedy is
-`CHOICE` and whose answers are permanent. `Sidecars.srcsOf` catches every `UncheckedIOException`
-instead of narrowing to malformed content the way the shard read does.
+A transient read failure and genuinely damaged content are distinguished on the findings path a
+`CHOICE` answer follows from. A sidecar that merely failed to open propagates, rather than being
+reported `Finding.CorruptSidecar`, whose remedy is `CHOICE` and whose answers are permanent.
+`Sidecars.srcsOf` catches only `MalformedPrepJsonException`, narrowing to malformed content the same
+way the shard read already does. The display-only shard tally makes the opposite, equally deliberate
+choice: `ShardTallyCalculator`'s own reads degrade on any read failure, transient or not, since a
+wrong number shown for one poll costs nothing a `CHOICE` answer would.
 
 ## 3. purgeCompleted()
 
 ```mermaid
 flowchart TD
     A["cullPrepRoot"] --> B{"root exists?"}
-    B -- no --> Z(["PurgeReport(empty, empty)"])
+    B -- no --> Z(["PurgeReport(empty, empty, empty)"])
     B -- yes --> C["every prep dir under it"]
     C --> D["diagnose(prepDir)"]
-    D --> E{"state == COMPLETE?"}
-    E -- yes --> F["delete every file<br/>under prepDir, then<br/>remove the empty tree"]
-    F --> G(["purged += scope"])
+    D --> J{"state == DAMAGED?"}
+    J -- yes --> K(["unreadable[scope] = 'could not be read'"])
+    J -- no --> E{"state == COMPLETE?"}
+    E -- yes --> F["purgeDir(prepDir)"]
+    F --> L{"succeeded?"}
+    L -- yes --> G(["purged += scope"])
+    L -- no --> M(["unreadable[scope] = 'could not be deleted'"])
     E -- no --> H(["skipped[scope] = state"])
-    G --> I(["PurgeReport(purged, skipped)"])
+    G --> I(["PurgeReport(purged, skipped, unreadable)"])
     H --> I
+    K --> I
+    M --> I
 ```
 
 Manual, one-button housekeeping - no age-based auto-purge, and no graveyard detour. A completed
@@ -111,10 +130,15 @@ to let go of, not media.
 is near-instant, but for the same one-job-at-a-time serialization every other job gets. A purge can
 never race a re-prep of a scope it's mid-delete on.
 
-Every other state (`WAITING`, `BLOCKED`, `READY`, `DAMAGED`) is left untouched and reported in
-`skipped`. A caller can then render "N runs cleared, M left because: ..." without a second diagnose
-pass. A damaged run is skipped rather than crashing the sweep, which is the whole point of
-`diagnose()` never throwing.
+`WAITING`, `BLOCKED` and `READY` are left untouched and reported in `skipped`, mapped to the state
+that kept them. A caller can then render "N runs cleared, M left because: ..." without a second
+diagnose pass.
+
+`DAMAGED` gets its own bucket instead: `unreadable`, mapped to a short reason rather than a state.
+Its state carries no more than that something could not be read, not a state a user can act on the
+way `WAITING` or `BLOCKED` are. `purgeDir()` guards itself the same way `prepDirsUnder`'s own
+per-candidate read does. A run whose own delete then fails partway lands in the same bucket, so one
+failing delete costs one entry rather than abandoning the rest of the sweep with no report at all.
 Deletion itself reuses the same `listFiles` + `delete` + `removeIfEmptyOfFiles` sequence
 `PrepDirRemedies.discard()` uses for its own image cleanup. The only difference is that here every
 file is deleted, not just the montage/tile images. Nothing about a `COMPLETE` run's own artifacts

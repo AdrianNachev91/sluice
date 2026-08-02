@@ -66,7 +66,10 @@ reading caller.
 Each file has its own parser, recognizing only its own file's shapes. In `move-records.log` the
 field count separates the two move shapes. In `choices.log` the marker in the second field names
 which of the three choices a line records. An unrecognized line shape is silently ignored, so a
-half-written trailing line from a crash costs one entry rather than the whole file.
+half-written trailing line from a crash costs one entry rather than the whole file. A line whose
+shape is recognized but whose subject or resolution field cannot be parsed - a garbled path, an
+unrecognized enum token - gets the same treatment. Neither parser lets `Path.of` or `Enum.valueOf`
+escape as an unchecked exception; each drops just that one line instead.
 
 | Disposition              | File               | Fields | Appended by              | Format                                                                                         |
 |--------------------------|--------------------|--------|--------------------------|------------------------------------------------------------------------------------------------|

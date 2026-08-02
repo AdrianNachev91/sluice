@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.DiscardReport;
@@ -12,12 +13,15 @@ import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDir;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static photos.sluice.application.service.CullPrepTestSupport.FailingSidecarRead;
 import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
@@ -260,6 +264,21 @@ class PrepDirRemediesTest {
         assertThat(rebuilt).isEmpty();
     }
 
+    // A sidecar that merely failed to read is not evidence the rebuild should refuse. Refusing here
+    // sends the user to discard-and-redo over what is very likely a passing lock, throwing away every
+    // shard and the model spend behind them. Propagating instead lets the caller's job fail loudly and
+    // retry, the same shape a failed shard read already has elsewhere in this class.
+    @Test
+    void rebuildIndexLetsAFailedSidecarReadPropagateInsteadOfRefusingTheRebuild(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        writeSidecar(prepDir, "montage-001", sidecarEntry(root.resolve("Sorted/Photos/2019/06/a.jpg")));
+
+        assertThatThrownBy(() -> prepDirRemedies(root, root.resolve("Library"), new FailingSidecarRead())
+                .rebuildIndex(prepDir))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class);
+    }
+
     @Test
     void resolveCorruptSidecarSetAsideExcludesTheMontageEntirelyLeavingItsPhotoInSorted(@TempDir final Path root)
             throws IOException, ApplyException {
@@ -353,5 +372,4 @@ class PrepDirRemediesTest {
         assertThat(Files.exists(prepDir)).isFalse();
         assertThat(report.shardsSetAside()).isEqualTo(1);
     }
-
 }

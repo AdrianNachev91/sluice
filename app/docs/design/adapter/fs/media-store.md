@@ -81,15 +81,18 @@ itself uses.
 
 ## Related
 
-- `delete`, `ensureDirectory`, and `listFiles` are thin `Files` wrappers with no branching worth
-  diagramming. All rewrap `IOException` as `UncheckedIOException` with a contextual message,
-  matching every other adapter in this package. The same is true of `exists`, `size`, and
-  `appendLine`.
+- `delete`, `ensureDirectory`, `listFiles`, and `listChildDirectories` are thin `Files` wrappers with
+  no branching worth diagramming. All rewrap `IOException` as `UncheckedIOException` with a
+  contextual message, matching every other adapter in this package. The same is true of `exists`,
+  `size`, and `appendLine`. `listFiles` walks a directory's whole subtree for its regular files;
+  `listChildDirectories` lists only root's immediate subdirectories, non-recursive.
 - The main consumer of `move`, `delete`, `exists`, `size`, and `appendLine` is `sort-engine.md` in
   the `application/service` design folder. `listFiles` is used by both `CommitEngine` (walking
   `Sorted/`) and `RescueEngine` (walking a Review folder). Neither warrants a design doc for this
   port method itself - what's worth diagramming is each engine's own scope/branching logic, not
-  `listFiles`. Only `rescue-engine.md` cleared that bar, for `RescueEngine`'s own logic. `copy`,
+  `listFiles`. Only `rescue-engine.md` cleared that bar, for `RescueEngine`'s own logic.
+  `listChildDirectories` is used by `PrepDirDoctor`, covered in `prep-dir-doctor.md`, to shallow-list
+  the cull-prep root so one candidate's own read failing cannot cost every other one. `copy`,
   `resolveDestination`, `moveTo`, and `write` are used by `apply-engine.md`'s `ApplyEngine` for
   near-dup handling and crash-safe resume.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the

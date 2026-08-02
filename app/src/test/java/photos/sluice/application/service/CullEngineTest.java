@@ -36,6 +36,7 @@ import static photos.sluice.application.service.PipelineTestSupport.BlockingInco
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoveTo;
 import static photos.sluice.application.service.PipelineTestSupport.FailableIndexReads;
+import static photos.sluice.application.service.PipelineTestSupport.FailingListingOfPrepDir;
 import static photos.sluice.application.service.PipelineTestSupport.FixedSettings;
 import static photos.sluice.application.service.PipelineTestSupport.JunkEverythingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
@@ -135,6 +136,28 @@ class CullEngineTest {
         assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
                 .isInstanceOf(Pipeline.ScopeOccupiedException.class);
         assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
+    }
+
+    // A scope whose own occupancy could not be determined refuses the same direction an occupied one
+    // does, but without fabricating a diagnosed occupant to justify it. Answering "empty" instead
+    // would let this reach buildFreshAndDispatch(), clearing a directory nobody could confirm held
+    // nothing worth losing.
+    @Test
+    void cullRefusesWithScopeUnreadableRatherThanFabricatingAnOccupantWhenOccupancyCannotBeRead(
+            @TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path prepDir = root.resolve("logs/cull-prep/2019");
+        Files.createDirectories(prepDir);
+        Files.writeString(prepDir.resolve("stray.txt"), "something already here");
+        final var mediaStore = new FailingListingOfPrepDir(prepDir);
+        final var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, defaultCullSettings(),
+                List.of(new ManualModeCuller()));
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
+                .isInstanceOfSatisfying(Pipeline.ScopeUnreadableException.class,
+                        refusal -> assertThat(refusal.prepDir()).isEqualTo(prepDir));
+        // Nothing was cleared - the stray file the fixture planted is still exactly where it was.
+        assertThat(Files.exists(prepDir.resolve("stray.txt"))).isTrue();
     }
 
     // Archive and proceed, with no confirmation asked. Curate resolves its own scope mid-job so no

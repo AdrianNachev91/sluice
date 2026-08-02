@@ -271,37 +271,72 @@ final class CullEngine {
      *
      * @param scope {@link CullScope} the scope to look up
      * @return an {@link Optional} {@link CullRunSummary} the occupying run, diagnosed
+     * @throws Pipeline.ScopeUnreadableException if the prep dir's own occupancy could not be determined
      */
     private Optional<CullRunSummary> occupantOf(final CullScope scope) {
         final Path prepDir = this.cullPrepRoot.resolve(CullScope.tag(scope));
-        if (this.holdsNothing(prepDir)) {
-            return Optional.empty();
-        }
-        return Optional.of(this.prepDirDoctor.summaryOf(prepDir));
+        return switch (this.occupancyOf(prepDir)) {
+            case final Occupancy.Empty ignored -> Optional.empty();
+            case final Occupancy.Occupied ignored -> Optional.of(this.prepDirDoctor.summaryOf(prepDir));
+            case Occupancy.Unreadable(final RuntimeException cause) ->
+                    throw new Pipeline.ScopeUnreadableException(prepDir, cause);
+        };
     }
 
     /**
-     * Whether prepDir holds no file at all, and so nothing anybody could lose.
+     * Whether prepDir holds a file, holds none, or could not be read at all.
      *
-     * <p>A listing that fails answers no. Not knowing what is in there is not the same as knowing
-     * it is empty, and the two possible mistakes cost wildly different amounts. A needless refusal
-     * costs one confusing message. Proceeding clears the dir.
+     * <p>A boolean has no way to say "I do not know". {@link Occupancy.Unreadable} gives that third
+     * answer its own vocabulary, distinct from occupied. {@link #occupantOf} can then refuse over an
+     * unreadable dir without fabricating a diagnosis or a remedy to justify it. Conflating the two
+     * would route a dropped network mount to DAMAGED's locked Discard, the same as a genuinely stuck
+     * run. If the failure clears between the refusal and the discard, that destroys a healthy run.
      *
-     * <p>So an unreadable prep dir occupies its scope, and in practice reports DAMAGED, since the
-     * diagnosis walks the tree this listing just failed on. Guarded by a catch-all over both port
-     * calls. {@link MediaStore} constrains nothing about what a read may throw, and the safe answer
-     * is the same whatever came back. The cost: a collaborator failing every time refuses every cull
-     * of every scope, with only the log naming the real cause.
+     * <p>Not knowing what is in prepDir is not the same as knowing it is empty, and the two possible
+     * mistakes cost wildly different amounts. A needless refusal costs one confusing message.
+     * Proceeding clears the dir. So an unreadable prep dir is never treated as empty here - refusing
+     * is the one safe direction, whichever of the two unresolved cases caused it.
+     *
+     * <p>Guarded by a catch-all over both port calls. {@link MediaStore} constrains nothing about
+     * what a read may throw, and the safe answer is the same whatever came back.
      *
      * @param prepDir {@link Path} the prep dir to check
-     * @return boolean true only when the dir is known to hold no files
+     * @return {@link Occupancy} whether prepDir is empty, occupied, or could not be read
      */
-    private boolean holdsNothing(final Path prepDir) {
+    private Occupancy occupancyOf(final Path prepDir) {
         try {
-            return !this.mediaStore.exists(prepDir) || this.mediaStore.listFiles(prepDir).isEmpty();
+            final boolean empty = !this.mediaStore.exists(prepDir) || this.mediaStore.listFiles(prepDir).isEmpty();
+            return empty ? new Occupancy.Empty() : new Occupancy.Occupied();
         } catch (final RuntimeException e) {
-            log.warn("Could not list {}, treating the scope as occupied", prepDir, e);
-            return false;
+            log.warn("Could not tell whether {} is occupied", prepDir, e);
+            return new Occupancy.Unreadable(e);
+        }
+    }
+
+    /**
+     * {@link #occupancyOf}'s own answer: a prep dir holds a file, holds none, or its own occupancy
+     * could not even be determined. The third case is why this is not a boolean.
+     */
+    private sealed interface Occupancy {
+
+        /**
+         * The prep dir holds no file at all, and so nothing anybody could lose.
+         */
+        record Empty() implements Occupancy {
+        }
+
+        /**
+         * The prep dir holds at least one file.
+         */
+        record Occupied() implements Occupancy {
+        }
+
+        /**
+         * The prep dir's own occupancy could not be determined.
+         *
+         * @param cause {@link RuntimeException} the read failure
+         */
+        record Unreadable(RuntimeException cause) implements Occupancy {
         }
     }
 

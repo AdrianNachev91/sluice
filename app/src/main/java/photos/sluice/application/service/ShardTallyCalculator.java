@@ -1,5 +1,7 @@
 package photos.sluice.application.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
@@ -9,7 +11,6 @@ import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.job.ShardTally;
 
-import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -22,8 +23,16 @@ import java.util.List;
  * that judges that, and it does so once, at the apply itself. The tally here is a display number,
  * computed one montage at a time so a card can name which montage is holding a run up. Readiness
  * asks a narrower question still: has everything arrived?
+ *
+ * <p>Every read here degrades rather than throws. A transiently unreadable index, sidecar, or shard
+ * reports as not-yet-ready or not-yet-valid, never as an exception escaping to a caller. {@link Error}
+ * stays uncaught. This class states that contract itself rather than depending on a caller's own
+ * catch-all to hold it, since a display number and a watcher's poll should never be able to take a
+ * caller down over a read that will very likely succeed on the next pass.
  */
 final class ShardTallyCalculator {
+
+    private static final Logger log = LoggerFactory.getLogger(ShardTallyCalculator.class);
 
     private final CullPrepPort cullPrepPort;
     private final CullSettings cullSettings;
@@ -109,7 +118,8 @@ final class ShardTallyCalculator {
         try {
             final PrepDir prep = this.cullPrepPort.readIndex(prepDir);
             return prep.entries().stream().allMatch(montage -> this.shardIsFinished(prep, montage));
-        } catch (final UncheckedIOException e) {
+        } catch (final RuntimeException e) {
+            log.warn("Could not check readiness of {}, reporting it as not ready", prepDir, e);
             return false;
         }
     }
@@ -122,13 +132,14 @@ final class ShardTallyCalculator {
      * @return boolean true if the shard exists and parses
      */
     private boolean shardIsFinished(final PrepDir prep, final String montage) {
-        if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
-            return false;
-        }
         try {
+            if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
+                return false;
+            }
             this.cullPrepPort.readShard(prep.prepDir(), montage);
             return true;
-        } catch (final UncheckedIOException e) {
+        } catch (final RuntimeException e) {
+            log.warn("Could not check {}'s shard in {}, reporting it as not finished", montage, prep.prepDir(), e);
             return false;
         }
     }
@@ -146,7 +157,8 @@ final class ShardTallyCalculator {
     private List<SidecarPhotoEntry> readSidecar(final PrepDir prep, final String montage) {
         try {
             return this.cullPrepPort.readSidecar(prep.prepDir(), montage);
-        } catch (final UncheckedIOException e) {
+        } catch (final RuntimeException e) {
+            log.warn("Could not read {}'s sidecar in {}, contributing no files from it", montage, prep.prepDir(), e);
             return List.of();
         }
     }
@@ -165,15 +177,17 @@ final class ShardTallyCalculator {
                                                   final List<Path> sidecarSrcs,
                                                   final List<String> categories,
                                                   final List<Path> unreviewable) {
-        if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
-            return new MontageShardStatus(false, false);
-        }
         try {
+            if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
+                return new MontageShardStatus(false, false);
+            }
             final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage));
             final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, categories, unreviewable);
             return new MontageShardStatus(true, report.valid());
-        } catch (final UncheckedIOException e) {
-            // Present but unparseable, so not valid.
+        } catch (final RuntimeException e) {
+            // Present but unparseable, or its own presence could not even be confirmed - either way
+            // not valid, and never reported as absent, since an unconfirmed shard is not a missing one.
+            log.warn("Could not check {}'s shard status in {}, reporting it as invalid", montage, prep.prepDir(), e);
             return new MontageShardStatus(true, false);
         }
     }

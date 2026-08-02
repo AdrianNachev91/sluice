@@ -262,6 +262,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public List<Path> listChildDirectories(final Path root) {
+            return this.delegate.listChildDirectories(root);
+        }
+
+        @Override
         public Instant lastModifiedTime(final Path path) {
             return this.delegate.lastModifiedTime(path);
         }
@@ -324,6 +329,25 @@ final class PipelineTestSupport {
         @Override
         public void removeIfEmptyOfFiles(final Path dir) {
             this.delegate.removeIfEmptyOfFiles(dir);
+        }
+    }
+
+    // Fails listFiles() for exactly one target path. Stands in for a scope's own occupancy check
+    // failing - a locked disaster-drawer file, say. Every other read behaves normally.
+    static final class FailingListingOfPrepDir extends NioMediaStore {
+
+        private final Path target;
+
+        FailingListingOfPrepDir(final Path target) {
+            this.target = target;
+        }
+
+        @Override
+        public List<Path> listFiles(final Path root) {
+            if (root.equals(this.target)) {
+                throw new IllegalStateException("simulated listing failure");
+            }
+            return super.listFiles(root);
         }
     }
 
@@ -540,6 +564,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public List<Path> listChildDirectories(final Path root) {
+            return this.delegate.listChildDirectories(root);
+        }
+
+        @Override
         public Instant lastModifiedTime(final Path path) {
             return this.delegate.lastModifiedTime(path);
         }
@@ -626,6 +655,11 @@ final class PipelineTestSupport {
         @Override
         public List<Path> listFiles(final Path root) {
             return this.delegate.listFiles(root);
+        }
+
+        @Override
+        public List<Path> listChildDirectories(final Path root) {
+            return this.delegate.listChildDirectories(root);
         }
 
         @Override
@@ -733,6 +767,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public List<Path> listChildDirectories(final Path root) {
+            return this.delegate.listChildDirectories(root);
+        }
+
+        @Override
         public Instant lastModifiedTime(final Path path) {
             return this.delegate.lastModifiedTime(path);
         }
@@ -820,6 +859,11 @@ final class PipelineTestSupport {
         @Override
         public List<Path> listFiles(final Path root) {
             return this.delegate.listFiles(root);
+        }
+
+        @Override
+        public List<Path> listChildDirectories(final Path root) {
+            return this.delegate.listChildDirectories(root);
         }
 
         @Override

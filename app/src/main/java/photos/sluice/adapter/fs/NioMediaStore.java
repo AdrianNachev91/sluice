@@ -42,6 +42,21 @@ public class NioMediaStore implements MediaStore {
     }
 
     /**
+     * Lists every immediate subdirectory of a directory, non-recursive.
+     *
+     * @param root {@link Path} directory to list
+     * @return a {@link List} of {@link Path}, root's immediate subdirectories
+     */
+    @Override
+    public List<Path> listChildDirectories(final Path root) {
+        try (final Stream<Path> entries = Files.list(root)) {
+            return entries.filter(Files::isDirectory).toList();
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to list " + root, e);
+        }
+    }
+
+    /**
      * Reads a file's last-modified timestamp.
      *
      * @param path {@link Path} file to check

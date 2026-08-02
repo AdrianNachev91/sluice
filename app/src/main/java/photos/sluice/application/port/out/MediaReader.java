@@ -26,6 +26,22 @@ public interface MediaReader {
     List<Path> listFiles(Path root);
 
     /**
+     * Every immediate subdirectory of root, non-recursive, as absolute paths. Order is unspecified.
+     * A file sitting directly in root, rather than in one of its subdirectories, is not named here.
+     * Only directories are. root itself must exist. A caller checking {@link #exists} first is what
+     * separates a genuinely empty root from a missing one.
+     *
+     * <p>Deliberately shallow, unlike {@link #listFiles}. A caller enumerating many independent
+     * subdirectories lists them at this level first, each one worth reading on its own. It then
+     * reads each subdirectory inside its own guard. One subdirectory's read failure then costs one
+     * entry rather than the whole enumeration.
+     *
+     * @param root {@link Path} the directory to list
+     * @return a {@link List} of {@link Path}, every immediate subdirectory found, as absolute paths
+     */
+    List<Path> listChildDirectories(Path root);
+
+    /**
      * When path was last modified. Used where a directory's own age is the signal, e.g. a waiting
      * cull job's prep dir. A media file's capture date comes from DateSource instead.
      *

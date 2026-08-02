@@ -20,6 +20,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static photos.sluice.application.service.CullPrepTestSupport.FailingSidecarRead;
 import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
 import static photos.sluice.application.service.CullPrepTestSupport.applyPlanner;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
@@ -336,6 +337,26 @@ class ApplyPlannerTest {
         Files.createDirectory(prepDir.resolve("decisions-001.json"));
 
         assertThatThrownBy(() -> applyPlanner()
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir)))
+                .isInstanceOf(UncheckedIOException.class)
+                .isNotInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    // The sidecar side of the same damaged-vs-failed split. A montage whose sidecar merely failed to
+    // read - a lock held for a moment by a backup process - has done nothing wrong. Its culler
+    // answers are not suspect. Diagnosing it as CorruptSidecar would cost the user an irreversible
+    // CHOICE answer over a file that was never damaged. Injected at the CullPrepPort seam, proving
+    // the classification without depending on how a given platform's filesystem treats a directory
+    // standing in for a file.
+    @Test
+    void validateLetsAFailedSidecarReadPropagateInsteadOfDiagnosingCorruption(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+
+        assertThatThrownBy(() -> applyPlanner(new FailingSidecarRead())
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir)))
                 .isInstanceOf(UncheckedIOException.class)
                 .isNotInstanceOf(MalformedPrepJsonException.class);
