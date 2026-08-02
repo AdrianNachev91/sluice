@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
-import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
@@ -101,13 +100,13 @@ final class CullWatchers {
      * Waiting branch. A per-run toggle calls armWatch() directly instead, which is the whole
      * difference between the two.
      *
-     * @param job {@link WaitingCullJob} the waiting job to watch
+     * @param prepDir {@link Path} the waiting run's prep dir
      */
-    void armWatchIfConfigured(final WaitingCullJob job) {
+    void armWatchIfConfigured(final Path prepDir) {
         if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH) {
             return;
         }
-        this.armWatch(job.prepDir());
+        this.armWatch(prepDir);
     }
 
     /**

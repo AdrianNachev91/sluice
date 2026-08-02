@@ -300,6 +300,32 @@ public sealed interface Finding {
     }
 
     /**
+     * Reading the prep directory did not get far enough to say anything about it. This is the
+     * catch-all diagnosis, so two different causes reach it and they are not distinguished here.
+     *
+     * <p>The first is a read that failed outright, leaving what is on disk intact. A file held open
+     * by a backup or antivirus process, a permission denial, and a cloud placeholder that never
+     * hydrated all land here. The second is content the readers past index.json could not make sense
+     * of, such as a garbled line in the move ledger. There the files opened fine and the bytes are
+     * the problem.
+     *
+     * <p>NONE because neither cause has a repair worth offering unprompted. Naming an {@code AUTO}
+     * remedy would offer to rebuild an artifact nothing has established as broken. Retrying costs
+     * nothing and resolves the first cause once whatever held the file lets go. Discard is the way
+     * out when it does not, which is where the second cause tends to end up.
+     *
+     * <p>This is what keeps {@code PrepDirHealth.State.DAMAGED} from being a state with nothing to
+     * show. A dashboard renders this line. A troubleshoot report says it plainly, rather than
+     * reporting a clean bill of health for a directory the app is refusing to cull.
+     */
+    record UnreadablePrepDir(Path prepDir) implements Finding {
+        @Override
+        public String describe() {
+            return this.prepDir + ": could not be read far enough to diagnose - see the log for what failed";
+        }
+    }
+
+    /**
      * A montage's own sidecar (montage-NNN.json) cannot be parsed, while index.json itself is
      * intact. CHOICE because the sidecar names that montage's only surviving evidence of what was
      * actually in scope. The engine cannot decide unprompted whether to give up on that batch or

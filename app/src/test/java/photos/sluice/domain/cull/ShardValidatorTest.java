@@ -331,8 +331,9 @@ class ShardValidatorTest {
                 new MissingFile("montage-002", 1));
     }
 
-    // Proves describe() renders the exact prose an aggregated ApplyException reports, for a
-    // representative sample rather than checking all thirteen finding shapes twice.
+    // Proves describe() renders the exact prose an aggregated ApplyException reports. A sample of
+    // four shapes, not every shape this validator raises. FindingTest covers the rest, and the two
+    // lists are disjoint, so no shape is checked twice.
     @Test
     void describeRendersTheExactProseApplyExceptionReports() {
         assertThat(new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny").describe())

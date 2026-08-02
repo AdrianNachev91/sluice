@@ -286,8 +286,11 @@ class CullMontageRendererTest {
         assertThat(Files.exists(pathsConfig.logs().resolve("cull-prep").resolve("2019"))).isFalse();
     }
 
+    // A scope is occupied by any prep dir holding files. A half-rendered one left lying around
+    // would refuse every later cull of that scope, while holding nothing worth refusing over. It
+    // records no decision at all, and its montages cost only the time to render them again.
     @Test
-    void cancellationMidBatchLeavesAPartialInertPrepDirWithNoIndexJson(@TempDir final Path root) throws IOException {
+    void cancellationMidBatchClearsTheMontagesItHadAlreadyWritten(@TempDir final Path root) throws IOException {
         final var pathsConfig = pathsConfig(root);
         final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
@@ -300,17 +303,17 @@ class CullMontageRendererTest {
         // (one per montage): false for the first montage, true from the second montage onward.
         final AtomicInteger checks = new AtomicInteger();
         final CancellationSignal cancelBeforeSecondMontage = () -> checks.incrementAndGet() > 3;
+        // Ticked once per montage actually written to disk, so this is what separates "the cleanup
+        // removed montage-001" from "montage-001 was never written in the first place". Without it
+        // the empty-directory assertion below would hold under either.
+        final AtomicInteger montagesWritten = new AtomicInteger();
 
-        final PrepDir result = renderer(pathsConfig)
-                .build(new CullScope.Year(2019, null), config, ProgressCallback.NO_OP, cancelBeforeSecondMontage);
+        final PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), config,
+                (current, _) -> montagesWritten.set(current), cancelBeforeSecondMontage);
 
         assertThat(result).isNull();
-        final Path prepDir = pathsConfig.logs().resolve("cull-prep").resolve("2019");
-        assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isTrue();
-        assertThat(Files.exists(prepDir.resolve("montage-002.jpg"))).isFalse();
-        // No index.json means this prep dir is invisible to Pipeline.waitingJobs() - inert, and
-        // cleared outright by the next build() call for this scope.
-        assertThat(Files.exists(prepDir.resolve("index.json"))).isFalse();
+        assertThat(montagesWritten.get()).isEqualTo(1);
+        assertThat(pathsConfig.logs().resolve("cull-prep").resolve("2019")).doesNotExist();
     }
 
     private static PathsConfig pathsConfig(final Path root) {

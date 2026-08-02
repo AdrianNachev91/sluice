@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
@@ -16,27 +17,28 @@ import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
 
-import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 
 /**
  * Orchestrates a whole cull job: prep, then dispatch, then apply (see
- * {@link #buildFreshAndDispatch}). It also owns {@link #waitingJobs()} and {@link #resume} for a
- * job still sitting on shards. The watch-mode lifecycle itself lives in {@link CullWatchers}. The
- * dispatch step is conditional, not a fixed stage: it runs only while a montage still lacks a shard.
+ * {@link #buildFreshAndDispatch}). It also owns {@link #resume} for a job still sitting on shards,
+ * and the scope-occupancy rules that decide whether a fresh run may start at all. The watch-mode
+ * lifecycle itself lives in {@link CullWatchers}. The dispatch step is conditional, not a fixed
+ * stage: it runs only while a montage still lacks a shard.
  *
  * <p>Not a Spring bean. {@link Pipeline} builds the one instance it needs, the same way it builds
- * the {@link CullWatchers} this engine delegates to. {@link #checkNoWaitingJobFor} and
+ * the {@link CullWatchers} this engine delegates to. {@link #refuseIfScopeOccupied} and
  * {@link #buildFreshAndDispatch} stay package-private rather than private. {@link CurateEngine}'s
  * own cull stage reuses both directly instead of duplicating them.
  */
@@ -47,8 +49,6 @@ final class CullEngine {
     private static final String PREPPING = "Building montages...";
     private static final String CULLING = "Culling...";
     private static final String APPLYING = "Applying decisions...";
-    private static final String DECISIONS_FILE = "decisions.json";
-    private static final String INDEX_FILE = "index.json";
 
     private final MontageRenderer montageRenderer;
     private final CullDispatcher cullDispatcher;
@@ -56,12 +56,14 @@ final class CullEngine {
     private final CullPrepPort cullPrepPort;
     private final CullSettings cullSettings;
     private final MediaStore mediaStore;
-    private final PathsPort pathsPort;
     private final MontageConfig montageConfig;
     private final JobRunner jobRunner;
     private final PhaseRunner phaseRunner;
     private final ShardTallyCalculator shardTallyCalculator;
     private final CullWatchers cullWatchers;
+    private final PrepDirDoctor prepDirDoctor;
+    private final PrepDirRemedies prepDirRemedies;
+    private final Path cullPrepRoot;
 
     /**
      * Wires together every collaborator this engine dispatches cull jobs through.
@@ -78,6 +80,8 @@ final class CullEngine {
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
+     * @param prepDirDoctor {@link PrepDirDoctor} diagnoses whatever already occupies a scope
+     * @param prepDirRemedies {@link PrepDirRemedies} archives a completed run out of the way
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      */
     CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
@@ -86,6 +90,7 @@ final class CullEngine {
                final PathsPort pathsPort,
                final MontageConfig montageConfig, final JobRunner jobRunner, final ProgressPort progressPort,
                final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
+               final PrepDirDoctor prepDirDoctor, final PrepDirRemedies prepDirRemedies,
                final Duration watchPollInterval) {
         this.montageRenderer = montageRenderer;
         this.cullDispatcher = cullDispatcher;
@@ -93,55 +98,65 @@ final class CullEngine {
         this.cullPrepPort = cullPrepPort;
         this.cullSettings = cullSettings;
         this.mediaStore = mediaStore;
-        this.pathsPort = pathsPort;
         this.montageConfig = montageConfig;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings, applyPlanner, ledgerReader);
         this.cullWatchers = new CullWatchers(cullSettings, this.shardTallyCalculator, watchPollInterval,
                 prepDir -> this.resume(prepDir, false));
+        this.prepDirDoctor = prepDirDoctor;
+        this.prepDirRemedies = prepDirRemedies;
+        this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
     }
 
     /**
-     * Re-arms a watcher for every still-waiting job found on disk, so watch mode survives an app
-     * restart the same way WAITING_FOR_SHARDS itself does. There is no persistent job store - see
-     * WaitingCullJob's own doc. Without this, restarting the app would silently stop watching every
-     * job that was armed before the restart. A no-op when mode is MANUAL. Callable directly (not
-     * just via Pipeline's own @PostConstruct) so a test can drive it without a Spring context.
+     * Re-arms a watcher for every resumable run found on disk. There is no persistent job store (see
+     * WaitingCullJob's own doc), so restarting the app would otherwise stop watching every run armed
+     * before it. A no-op when mode is MANUAL. Callable directly, not just via Pipeline's own
+     * {@code @PostConstruct}, so a test can drive it without a Spring context.
      *
-     * <p>Also a no-op while a job is currently running. waitingJobs() counts a prep dir as waiting the
-     * moment index.json exists and decisions.json doesn't yet. That's also true of a prep dir
-     * mid-CULLING/mid-APPLYING right now - dispatchAndApply() only writes decisions.json near the
-     * very end of a successful apply. JobRunner only ever runs one job at a time, so a busy runner
-     * could only mean the one job in flight is that prep dir's own. Arming here anyway would risk a
-     * phantom watcher for a job about to resolve to Applied on its own, with nothing left to disarm
-     * it afterward. Any prep dir that's genuinely still waiting gets picked up the next time this
-     * runs once the app is idle again. This is also not the only path that arms a watcher - see
-     * dispatchAndApply()'s own note.
+     * <p>Resumable means WAITING or READY: the two states a run can leave without a person. WAITING
+     * still expects shards, which is what a watcher watches for. READY has them all already, the
+     * ordinary shape of a restart where the agent finished while the app was closed.
+     *
+     * <p>BLOCKED and DAMAGED are left alone. A blocked run would resume and block again on the same
+     * findings, spending a job slot at every launch to reach a verdict only the user can change. A
+     * damaged run never reads as ready, so its watcher would poll for good.
+     *
+     * <p>Also a no-op while a job is running. A prep dir mid-job never diagnoses COMPLETE, since
+     * decisions.json is written only near the end of a successful apply. So it can still look like
+     * something to arm. JobRunner runs one job at a time, so a busy runner means that job is this
+     * dir's own, and arming it would leave a phantom watcher for a job about to resolve by itself.
+     * Anything genuinely waiting is picked up on the next run once the app is idle. Not the only
+     * path that arms a watcher - see dispatchAndApply()'s own note.
      */
-    void armWatchesForExistingWaitingJobs() {
+    void armWatchesForResumableRuns() {
         if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH || this.jobRunner.isBusy()) {
             return;
         }
-        this.waitingJobs().forEach(this.cullWatchers::armWatchIfConfigured);
+        this.prepDirDoctor.runs(this.cullPrepRoot).stream()
+                .filter(run -> run.health().state() == State.WAITING || run.health().state() == State.READY)
+                .forEach(run -> this.cullWatchers.armWatchIfConfigured(run.prepDir()));
     }
 
     /**
      * Prep always runs fresh: a scope's montages are rebuilt from Sorted every call.
-     * MontageRenderer.build() clears whatever a stale prior run left in the same prep dir first.
-     * That would silently destroy any shards already dropped for a still-unresolved WaitingCullJob
-     * on the same scope. checkNoWaitingJobFor() guards against that and fails loud instead - resume
-     * or resolve it first.
+     * MontageRenderer.build() clears whatever a prior run left in the same prep dir first. That
+     * would destroy everything the prior run still held. Shards an agent was paid to produce, a
+     * move-record log, the answers a user gave a troubleshoot screen. refuseIfScopeOccupied()
+     * guards against that and fails loud instead.
      *
-     * <p>Checked here too, synchronously before submit(), for the earliest possible fail-fast.
-     * buildFreshAndDispatch() below checks the same thing again once actually running - that's
-     * CurateEngine's only option for an auto-resolved scope; see its own comment.
+     * <p>Refused here, synchronously before submit(), for the earliest possible fail-fast.
+     * claimScope() inside buildFreshAndDispatch() below asks the same question again once actually
+     * running. That is CurateEngine's only option for an auto-resolved scope, per its own comment.
+     * The archive of a completed occupant happens only there, on the job's own thread. Only that
+     * call can put the resulting graveyard path into the outcome.
      *
      * @param scope {@link CullScope} the media scope to cull
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
      */
     JobHandle<CullJobOutcome> cull(final CullScope scope) {
-        this.checkNoWaitingJobFor(scope);
+        this.refuseIfScopeOccupied(scope);
         return this.jobRunner.submit(handle -> this.buildFreshAndDispatch(scope, handle::isCancellationRequested));
     }
 
@@ -162,30 +177,7 @@ final class CullEngine {
     JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         return this.jobRunner.submit(handle ->
                 this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
-                        handle::isCancellationRequested));
-    }
-
-    /**
-     * Every cull still waiting on shards, derived live off disk rather than a persisted list (see
-     * WaitingCullJob's own doc). A prep dir counts as waiting when it has index.json (prep ran) but no
-     * decisions.json yet (apply never completed). Not routed through JobRunner - this only reads, so
-     * it doesn't compete for the single job slot. A prep dir whose index.json is transiently
-     * unreadable (mid-write by a concurrent cull job) is skipped rather than failing the whole scan.
-     * That's the same tolerance the external-agent design already gives a shard mid-write.
-     *
-     * @return a {@link List} of {@link WaitingCullJob} every cull job still waiting on shards
-     */
-    List<WaitingCullJob> waitingJobs() {
-        final Path cullPrepRoot = this.pathsPort.logs().resolve("cull-prep");
-        if (!this.mediaStore.exists(cullPrepRoot)) {
-            return List.of();
-        }
-        return this.mediaStore.listFiles(cullPrepRoot).stream()
-                .filter(file -> file.getFileName().toString().equals(INDEX_FILE))
-                .map(Path::getParent)
-                .filter(prepDir -> !this.mediaStore.exists(prepDir.resolve(DECISIONS_FILE)))
-                .<WaitingCullJob>mapMulti((prepDir, consumer) -> this.readWaitingJob(prepDir).ifPresent(consumer))
-                .toList();
+                        handle::isCancellationRequested, null));
     }
 
     /**
@@ -218,30 +210,118 @@ final class CullEngine {
     }
 
     /**
-     * Throws if a cull job for scope is already waiting on shards.
+     * Throws if scope's own prep dir is occupied by a run that is not finished.
+     *
+     * <p>Occupancy is presence, not readability. Any prep dir holding at least one file occupies
+     * its scope. A guard phrased around a readable index would miss the dirs most worth
+     * protecting: the damaged ones, which can say nothing about themselves. Whatever a scope's
+     * prep dir still holds, a fresh run over the top of it would wipe.
+     *
+     * <p>Every state but COMPLETE refuses. What differs by state is the way out, not whether a
+     * refusal happens - cull-engine.md's table maps each one. READY is the one worth naming here: a
+     * full shard set that has not applied yet is unspent work, one resume from landing.
+     *
+     * <p>A COMPLETE occupant is not refused here. {@link #claimScope} is what moves it aside.
      *
      * @param scope {@link CullScope} the scope to check
      */
-    void checkNoWaitingJobFor(final CullScope scope) {
-        final String tag = CullScope.tag(scope);
-        this.waitingJobs().stream().filter(job -> job.scope().equals(tag)).findFirst().ifPresent(existing -> {
-            throw new IllegalStateException("A cull for scope '" + tag + "' is already waiting on shards at "
-                    + existing.prepDir() + " - resume or resolve it before starting a new cull for the same scope.");
-        });
+    void refuseIfScopeOccupied(final CullScope scope) {
+        this.occupantOf(scope)
+                .filter(occupant -> occupant.health().state() != State.COMPLETE)
+                .ifPresent(occupant -> {
+                    throw new Pipeline.ScopeOccupiedException(occupant);
+                });
+    }
+
+    /**
+     * Frees scope's prep dir for a fresh run, and reports where a completed occupant was filed.
+     *
+     * <p>A COMPLETE run is archived into the graveyard rather than overwritten, and no confirmation
+     * is asked. Curate resolves its own scope mid-job, so no dialog could fire there anyway, and a
+     * monthly curate would pay that toll every month. Nothing is destroyed: the archive keeps the
+     * same 30-day recovery window every other graveyard entry gets.
+     *
+     * @param scope {@link CullScope} the scope to free
+     * @return {@link Path} the graveyard directory a completed occupant was archived into, or null
+     *         if the scope was already free
+     */
+    private @Nullable Path claimScope(final CullScope scope) {
+        final Optional<CullRunSummary> occupant = this.occupantOf(scope);
+        if (occupant.isEmpty()) {
+            return null;
+        }
+        final CullRunSummary run = occupant.get();
+        if (run.health().state() != State.COMPLETE) {
+            throw new Pipeline.ScopeOccupiedException(run);
+        }
+        log.info("Archiving the completed cull of {} before re-culling the same scope", run.scope());
+        // Disarmed before the graveyard move starts, never after. A watcher left polling survives
+        // the archive and then finds the fresh run at that same path. It would be watching a
+        // different run than the one it was armed for. Only a manual startWatching() on an
+        // already-COMPLETE run leaves one armed here, since dispatchAndApply() disarms on entry.
+        this.disarmWatch(run.prepDir());
+        return this.prepDirRemedies.discard(run.prepDir()).graveyard();
+    }
+
+    /**
+     * The run currently occupying scope's own prep dir, diagnosed, or empty if nothing is there.
+     *
+     * <p>An empty directory is not an occupant. Nothing in it can be lost, and prep writes straight
+     * into it.
+     *
+     * @param scope {@link CullScope} the scope to look up
+     * @return an {@link Optional} {@link CullRunSummary} the occupying run, diagnosed
+     */
+    private Optional<CullRunSummary> occupantOf(final CullScope scope) {
+        final Path prepDir = this.cullPrepRoot.resolve(CullScope.tag(scope));
+        if (this.holdsNothing(prepDir)) {
+            return Optional.empty();
+        }
+        return Optional.of(this.prepDirDoctor.summaryOf(prepDir));
+    }
+
+    /**
+     * Whether prepDir holds no file at all, and so nothing anybody could lose.
+     *
+     * <p>A listing that fails answers no. Not knowing what is in there is not the same as knowing
+     * it is empty, and the two possible mistakes cost wildly different amounts. A needless refusal
+     * costs one confusing message. Proceeding clears the dir.
+     *
+     * <p>So an unreadable prep dir occupies its scope, and in practice reports DAMAGED, since the
+     * diagnosis walks the tree this listing just failed on. Guarded by a catch-all over both port
+     * calls. {@link MediaStore} constrains nothing about what a read may throw, and the safe answer
+     * is the same whatever came back. The cost: a collaborator failing every time refuses every cull
+     * of every scope, with only the log naming the real cause.
+     *
+     * @param prepDir {@link Path} the prep dir to check
+     * @return boolean true only when the dir is known to hold no files
+     */
+    private boolean holdsNothing(final Path prepDir) {
+        try {
+            return !this.mediaStore.exists(prepDir) || this.mediaStore.listFiles(prepDir).isEmpty();
+        } catch (final RuntimeException e) {
+            log.warn("Could not list {}, treating the scope as occupied", prepDir, e);
+            return false;
+        }
     }
 
     /**
      * Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and
      * CurateEngine's cull stage; resume() re-enters at dispatchAndApply() directly instead, since it
-     * must never rebuild an existing prep dir. See checkNoWaitingJobFor()'s own doc for why this
-     * check runs here too, not only at cull()'s synchronous pre-submit call site.
+     * must never rebuild an existing prep dir. See cull()'s own doc for why the occupancy question
+     * is asked here too, not only at its synchronous pre-submit call site.
+     *
+     * <p>claimScope() runs before anything else, and every outcome below carries what it returned.
+     * The archive happens ahead of montage rendering, so every way this method can end is reachable
+     * with a prior run already filed away. An outcome that dropped that fact would leave a user's
+     * completed record looking like it disappeared.
      *
      * @param scope {@link CullScope} the media scope to cull
      * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
      * @return {@link CullJobOutcome} the outcome of this cull attempt
      */
     CullJobOutcome buildFreshAndDispatch(final CullScope scope, final CancellationSignal cancellation) throws Exception {
-        this.checkNoWaitingJobFor(scope);
+        final Path archivedPriorRun = this.claimScope(scope);
         // phaseRunner.run/PhaseWork are shared with sort/commit/rescue, which always return non-null -
         // keeping T itself non-null there avoids leaking a spurious "might be null" possibility
         // into those callers. Wrapping the result in Optional here instead keeps that shared
@@ -249,33 +329,19 @@ final class CullEngine {
         final Optional<PrepDir> prep = this.phaseRunner.run(PREPPING,
                 progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.montageConfig, progress,
                         cancellation)));
-        // Empty means the renderer itself stopped mid-render, before index.json was ever written -
-        // nothing resumable exists yet. The renderer is the completion authority here: this
-        // branches purely on its return value, never on re-checking disk state.
+        // Empty means the renderer itself stopped mid-render, clearing whatever it had written and
+        // leaving no prep dir at all - nothing resumable exists. The renderer is the completion
+        // authority here: this branches purely on its return value, never on re-checking disk state.
         if (prep.isEmpty()) {
-            return new CullJobOutcome.Cancelled();
+            return new CullJobOutcome.Cancelled(archivedPriorRun);
         }
         // Prep just finished and wrote index.json, so a cancellation seen right here resolves
         // cleanly to Waiting too - a 0/N tally, nothing dispatched yet. No watcher is armed: an
         // auto-resume moments after a cancel would defy it.
         if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep.get()));
+            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep.get()), archivedPriorRun);
         }
-        return this.dispatchAndApply(prep.get(), false, cancellation);
-    }
-
-    /**
-     * Reads prepDir's index and builds the waiting job it represents, if readable.
-     *
-     * @param prepDir {@link Path} the prep dir to read
-     * @return an {@link Optional} {@link WaitingCullJob} the waiting job, or empty if the index is unreadable
-     */
-    private Optional<WaitingCullJob> readWaitingJob(final Path prepDir) {
-        try {
-            return Optional.of(this.buildWaitingJob(this.cullPrepPort.readIndex(prepDir)));
-        } catch (final UncheckedIOException e) {
-            return Optional.empty();
-        }
+        return this.dispatchAndApply(prep.get(), false, cancellation, archivedPriorRun);
     }
 
     /**
@@ -305,10 +371,14 @@ final class CullEngine {
      * @param prep {@link PrepDir} the prep dir to dispatch and apply
      * @param allowPartial boolean whether a partial shard set is acceptable
      * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
+     * @param archivedPriorRun {@link Path} where a completed run of this scope was archived on the
+     *         way in, or null. Always null on the resume path, which enters an existing prep dir
+     *         rather than claiming a scope.
      * @return {@link CullJobOutcome} the outcome of this dispatch-and-apply attempt
      */
     private CullJobOutcome dispatchAndApply(final PrepDir prep, final boolean allowPartial,
-                                            final CancellationSignal cancellation)
+                                            final CancellationSignal cancellation,
+                                            final @Nullable Path archivedPriorRun)
             throws Exception {
         this.disarmWatch(prep.prepDir());
         final CullReport cullReport;
@@ -333,9 +403,9 @@ final class CullEngine {
                 // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
                 // pause (no cancellation involved) still arms as before.
                 if (!cancellation.isCancelled()) {
-                    this.cullWatchers.armWatchIfConfigured(job);
+                    this.cullWatchers.armWatchIfConfigured(job.prepDir());
                 }
-                return new CullJobOutcome.Waiting(job);
+                return new CullJobOutcome.Waiting(job, archivedPriorRun);
             }
         }
         // The one boundary check this method has for an automated provider: dispatch just
@@ -344,7 +414,7 @@ final class CullEngine {
         // never sees a cancellation mid-call, but a cancellation requested right after it still
         // lands here before apply moves anything.
         if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep));
+            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep), archivedPriorRun);
         }
         final Optional<ApplyReport> applyReport;
         try {
@@ -353,7 +423,7 @@ final class CullEngine {
                             this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress,
                                     cancellation)));
         } catch (final ApplyException e) {
-            return new CullJobOutcome.Blocked(this.buildWaitingJob(prep), e.findings());
+            return new CullJobOutcome.Blocked(this.buildWaitingJob(prep), e.findings(), archivedPriorRun);
         }
         // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
         // decisions.json was never written. The prep dir still reads as a waiting job, the same
@@ -361,9 +431,9 @@ final class CullEngine {
         // either, for the same reason the pre-APPLYING check above doesn't: an auto-resume
         // moments after a cancel would defy it.
         if (applyReport.isEmpty()) {
-            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep));
+            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep), archivedPriorRun);
         }
-        return new CullJobOutcome.Applied(cullReport, applyReport.get());
+        return new CullJobOutcome.Applied(cullReport, applyReport.get(), archivedPriorRun);
     }
 
     /**

@@ -32,18 +32,16 @@ import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Pins the JVM's default {@code FORMAT} locale for every test here to a regional Arabic locale
- * whose native numeral set is not ASCII (finding #6). A bare {@code ar} locale still resolves to
- * plain Latin digits under the CLDR provider. Only a regional variant like {@code ar-SA} actually
- * picks the non-ASCII digit set, so that is the one pinned below.
- *
- * <p>Every assertion checks that a path segment, id, or prep-dir tag built from a year, month, or
- * sequence number still comes out ASCII under that pinned locale. The round trip additionally
- * proves the concrete failure this defect causes. A year-scoped commit silently reports zero
- * files. {@code CommitScopeSelector}'s {@code \d} pattern is ASCII-only. It never matches a
- * Sorted folder name written in the wrong numeral system.
- */
+// Pins the JVM's default FORMAT locale for every test here to a regional Arabic locale whose native
+// numeral set is not ASCII. A bare "ar" locale still resolves to plain Latin digits under the CLDR
+// provider. Only a regional variant like "ar-SA" actually picks the non-ASCII digit set, so that is
+// the one pinned below.
+//
+// Every assertion checks that a path segment, id, or prep-dir tag built from a year, month, or
+// sequence number still comes out ASCII under that pinned locale. The round trip additionally proves
+// the concrete failure this defect causes. A year-scoped commit silently reports zero files.
+// CommitScopeSelector's \d pattern is ASCII-only. It never matches a Sorted folder name written in
+// the wrong numeral system.
 class LocaleIndependentNumeralsTest {
 
     private Locale originalFormatLocale;

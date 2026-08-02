@@ -30,8 +30,13 @@ import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
+import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.Decision;
+import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
@@ -109,6 +114,16 @@ final class PipelineTestSupport {
         return root.resolve("Inbox");
     }
 
+    // Every run still owing somebody something - anything but COMPLETE. An applied run stays on
+    // disk until purged, so cullRuns() keeps listing it and "no runs at all" would never come true.
+    // A test waiting for an apply to land waits on this going empty. Waiting on a moved file
+    // instead would pass part way through, before decisions.json makes the run COMPLETE.
+    static List<CullRunSummary> unresolvedRuns(final Pipeline pipeline) {
+        return pipeline.cullRuns().stream()
+                .filter(run -> run.health().state() != State.COMPLETE)
+                .toList();
+    }
+
     static Path sortedPhotosDir(final Path root, final String year, final String month) {
         return root.resolve("Sorted").resolve("Photos").resolve(year).resolve(month);
     }
@@ -121,7 +136,7 @@ final class PipelineTestSupport {
         return pipeline(root, progress, mediaStore, defaultCullSettings(), List.of(new ManualModeCuller()));
     }
 
-    // cull()/waitingJobs()/resume() tests always go through this name, wiring the same manual-mode
+    // cull()/cullRuns()/resume() tests always go through this name, wiring the same manual-mode
     // default (a fake external-agent-shaped VisionCuller) unless a test needs to vary the provider.
     static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress) {
         return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), List.of(new ManualModeCuller()));
@@ -162,14 +177,178 @@ final class PipelineTestSupport {
         return pipeline(root, progress, mediaStore, cullSettings, cullers, null);
     }
 
+    // A prep-dir reader that can be told to start failing its index reads, standing in for a file
+    // held open by a backup or antivirus process. Reaching that state through the filesystem
+    // instead would mean testing the OS. A directory in place of the file fails at the open on
+    // Windows and at the first read on Linux, which are different clauses in the reader.
+    static final class FailableIndexReads implements CullPrepPort {
+
+        private final CullPrepPort delegate = new JsonCullPrepStore();
+        private boolean failing;
+
+        void startFailing() {
+            this.failing = true;
+        }
+
+        @Override
+        public PrepDir readIndex(final Path prepDir) {
+            if (this.failing) {
+                throw new UncheckedIOException(new IOException("simulated read failure"));
+            }
+            return this.delegate.readIndex(prepDir);
+        }
+
+        @Override
+        public void writeIndex(final Path prepDir, final PrepDir index) {
+            this.delegate.writeIndex(prepDir, index);
+        }
+
+        @Override
+        public List<SidecarPhotoEntry> readSidecar(final Path prepDir, final String montage) {
+            return this.delegate.readSidecar(prepDir, montage);
+        }
+
+        @Override
+        public boolean hasShard(final Path prepDir, final String montage) {
+            return this.delegate.hasShard(prepDir, montage);
+        }
+
+        @Override
+        public DecisionShard readShard(final Path prepDir, final String montage) {
+            return this.delegate.readShard(prepDir, montage);
+        }
+
+        @Override
+        public DecisionShard readShardFile(final Path shardFile) {
+            return this.delegate.readShardFile(shardFile);
+        }
+
+        @Override
+        public void writeMergedDecisions(final Path prepDir, final String scope, final List<Decision> decisions,
+                                         final ApplyReport report) {
+            this.delegate.writeMergedDecisions(prepDir, scope, decisions, report);
+        }
+    }
+
+    // Runs onFirstQuery once, the first time anything asks whether target exists. The occupancy
+    // check's own exists() call is that question, so this plants a state change squarely between
+    // cull()'s synchronous ask and claimScope()'s ask on the job thread. The real case is something
+    // outside this process creating a prep dir during a long sort. JobRunner's single slot stops
+    // another in-app job doing it, but nothing stops the user or a sync client.
+    static final class PlantOnFirstExists implements MediaStore {
+        private final MediaStore delegate = new NioMediaStore();
+        private final Path target;
+        private final Runnable onFirstQuery;
+        private boolean fired;
+
+        PlantOnFirstExists(final Path target, final Runnable onFirstQuery) {
+            this.target = target;
+            this.onFirstQuery = onFirstQuery;
+        }
+
+        @Override
+        public boolean exists(final Path path) {
+            final boolean result = this.delegate.exists(path);
+            if (!this.fired && path.equals(this.target)) {
+                this.fired = true;
+                this.onFirstQuery.run();
+            }
+            return result;
+        }
+
+        @Override
+        public List<Path> listFiles(final Path root) {
+            return this.delegate.listFiles(root);
+        }
+
+        @Override
+        public Instant lastModifiedTime(final Path path) {
+            return this.delegate.lastModifiedTime(path);
+        }
+
+        @Override
+        public long size(final Path path) {
+            return this.delegate.size(path);
+        }
+
+        @Override
+        public List<String> readLines(final Path file) {
+            return this.delegate.readLines(file);
+        }
+
+        @Override
+        public Path move(final Path source, final Path destDir) {
+            return this.delegate.move(source, destDir);
+        }
+
+        @Override
+        public Path resolveDestination(final Path source, final Path destDir) {
+            return this.delegate.resolveDestination(source, destDir);
+        }
+
+        @Override
+        public Path moveTo(final Path source, final Path destination) {
+            return this.delegate.moveTo(source, destination);
+        }
+
+        @Override
+        public Path copy(final Path source, final Path destDir) {
+            return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public void delete(final Path path) {
+            this.delegate.delete(path);
+        }
+
+        @Override
+        public void ensureDirectory(final Path dir) {
+            this.delegate.ensureDirectory(dir);
+        }
+
+        @Override
+        public void appendLine(final Path file, final String line) {
+            this.delegate.appendLine(file, line);
+        }
+
+        @Override
+        public void write(final Path file, final String content) {
+            this.delegate.write(file, content);
+        }
+
+        @Override
+        public void removeEmptyDirectories(final Path root) {
+            this.delegate.removeEmptyDirectories(root);
+        }
+
+        @Override
+        public void removeIfEmptyOfFiles(final Path dir) {
+            this.delegate.removeIfEmptyOfFiles(dir);
+        }
+    }
+
     // The one full wiring every overload above funnels into - real adapters throughout (matching
     // this project's no-mocks test convention), same as the engines below. CullMontageRenderer's
     // HeifDecoder dependency is stubbed to always miss: none of these fixtures are HEIC/AVIF, and
     // real HEIC/AVIF decode already has its own coverage in TileRendererTest. pollInterval null
     // means "use Pipeline's own production default" - only watchPipeline() ever passes one.
+    // Same wiring, with the prep-dir reader swapped out. Only a test that needs a read to fail at a
+    // seam this code owns passes one.
+    static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress,
+                                 final CullPrepPort cullPrepPort) {
+        return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), List.of(new ManualModeCuller()),
+                null, cullPrepPort);
+    }
+
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
                              final CullSettings cullSettings, final List<VisionCuller> cullers,
                              final @Nullable Duration pollInterval) {
+        return pipeline(root, progress, mediaStore, cullSettings, cullers, pollInterval, new JsonCullPrepStore());
+    }
+
+    static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
+                             final CullSettings cullSettings, final List<VisionCuller> cullers,
+                             final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort) {
         final Path libraryRoot = root.resolve("Library");
         final var pathsConfig = new PathsConfig(
                 new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
@@ -187,7 +366,6 @@ final class PipelineTestSupport {
         final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
         final var montageRenderer = new CullMontageRenderer(new TileRenderer(stubHeifDecoder), new MontageBuilder(),
                 new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig);
-        final var cullPrepPort = new JsonCullPrepStore();
         final var cullDispatcher = new CullDispatcher(cullers, cullSettings);
         final var disasterDrawer = new DisasterDrawer(mediaStore);
         final var moveLedger = new MoveLedger(mediaStore, disasterDrawer);
@@ -321,6 +499,14 @@ final class PipelineTestSupport {
 
     static final class RecordingProgressPort implements ProgressPort {
         final List<String> events = new ArrayList<>();
+        // Runs once, on the first tick of any phase. This is how a test cancels a job at an exact
+        // point in its own progress. The engine reports a tick only once the work that tick counts
+        // is genuinely on disk, so it is a real signal rather than a guessed moment.
+        private @Nullable Runnable onFirstTick;
+
+        void cancelOnFirstTick(final Runnable action) {
+            this.onFirstTick = action;
+        }
 
         @Override
         public void phaseStarted(final String phase) {
@@ -330,6 +516,11 @@ final class PipelineTestSupport {
         @Override
         public void tick(final String phase, final int current, final int total) {
             this.events.add("tick:" + phase + ":" + current + "/" + total);
+            if (this.onFirstTick != null) {
+                final Runnable action = this.onFirstTick;
+                this.onFirstTick = null;
+                action.run();
+            }
         }
 
         @Override

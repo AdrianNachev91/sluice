@@ -1,7 +1,7 @@
 package photos.sluice.application.port.in;
 
+import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.job.WaitingCullJob;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * The use case for running the vision cull over sorted media, including waiting on and resuming
  * jobs that pause for an external agent's shards. A caller drives the whole cull lifecycle
- * through this interface: starting a run, listing what is still waiting, and resuming a prep dir.
+ * through this interface: starting a run, listing what is on disk, and resuming a prep dir.
  */
 public interface CullUseCase {
 
@@ -23,14 +23,15 @@ public interface CullUseCase {
     CullJobOutcome cull(CullScope scope);
 
     /**
-     * Every cull still waiting on an external agent's shards, across this and prior app runs -
-     * read live off disk, never a persisted list.
+     * Every cull run currently on disk, across this and prior app runs, each one diagnosed. Read
+     * live by enumerating the cull-prep root, never from a persisted list. A run whose own index
+     * cannot be read is listed too, since that is the one a caller most needs to show.
      *
-     * @return a {@link List} of {@link WaitingCullJob} the currently waiting cull jobs
+     * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
      */
     // No UI consumes this port yet, so no caller currently invokes this method through it.
     @SuppressWarnings("unused")
-    List<WaitingCullJob> waitingJobs();
+    List<CullRunSummary> cullRuns();
 
     /**
      * Picks a paused run back up. A montage still missing its shard sends the run back to the

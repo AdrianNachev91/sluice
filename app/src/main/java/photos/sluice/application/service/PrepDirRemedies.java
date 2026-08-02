@@ -274,23 +274,24 @@ public class PrepDirRemedies {
     }
 
     /**
-     * The last-resort CHOICE remedy for a prep dir mangled beyond every other repair. It gives up on
-     * the run entirely, filing everything worth keeping into a global graveyard and deleting the
-     * rest. Every non-image file is moved wholesale into
-     * {@code logs/disasters/<scope>-<timestamp>/}, keeping its own relative layout. That covers
-     * shards, sidecars, index.json, the move ledger, and any disaster drawer. The graveyard gets the
-     * same 30-day retention window every other disaster-drawer artifact does. Only the montage and
-     * tile contact-sheet images are truly deleted, since they cost cents to re-render on a fresh
-     * cull of the same scope. Library media is never touched - this only ever reaches into the prep
-     * dir itself.
+     * Files a whole prep dir into the global graveyard, leaving its scope free. Every non-image file
+     * is moved wholesale into {@code logs/disasters/<scope>-<timestamp>/}, keeping its own relative
+     * layout. That covers shards, sidecars, index.json, the move ledger, and any disaster drawer.
+     * The graveyard gets the same 30-day retention window every other disaster-drawer artifact does.
+     * Only the montage and tile contact-sheet images are truly deleted, since they cost cents to
+     * re-render on a fresh cull of the same scope. Library media is never touched - this only ever
+     * reaches into the prep dir itself.
      *
-     * <p>scope is read straight off the prep dir's own folder name, never index.json. The whole
-     * point of this remedy is that index.json, or anything else, might be too damaged to read at
-     * all.
+     * <p>scope is read straight off the prep dir's own folder name, never index.json. One caller
+     * below reaches this with a prep dir too damaged to read anything out of at all.
      *
-     * <p>Callers should gate this on {@link PrepDirDoctor} reporting anything but COMPLETE - this is
-     * the raw mechanism, ungated. {@code Pipeline.discard()} adds that gate, plus watcher-disarming
-     * and JobRunner wiring, for its own two entry points.
+     * <p>This is the raw mechanism, ungated, and its two callers gate it in opposite directions.
+     * {@code Pipeline.discard()} is the last-resort CHOICE remedy for a run mangled beyond every
+     * other repair. It refuses a COMPLETE one, since {@code purgeCompleted()} is that state's own
+     * verb. The cull engine's own scope claim requires COMPLETE: starting a fresh run over a
+     * finished one archives that record rather than letting prep overwrite it. Same file moves,
+     * opposite preconditions, because the question is only ever whether the run being filed away is
+     * finished.
      *
      * @param prepDirPath {@link Path} the prep directory to discard
      * @return {@link DiscardReport} the graveyard directory and how many shards were set aside

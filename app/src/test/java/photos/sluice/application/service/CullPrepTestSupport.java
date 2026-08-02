@@ -7,6 +7,7 @@ import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.adapter.vision.JsonCullPrepStore;
 import photos.sluice.application.port.out.CullCategory;
+import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
@@ -30,8 +31,8 @@ import java.util.List;
 // them wired to the same roots. Building that graph in one place keeps each test file about
 // behavior rather than construction.
 //
-// Everything writes through the REAL adapters against a @TempDir, not fakes. These tests are about
-// what actually lands on disk, so a stubbed store would prove far less.
+// Everything writes through the real adapters against a @TempDir, so the assertions are about what
+// actually lands on disk.
 final class CullPrepTestSupport {
 
     // The field separator a hand-written fixture log has to use. Read off MoveLedger rather than
@@ -154,7 +155,11 @@ final class CullPrepTestSupport {
     }
 
     static ApplyPlanner applyPlanner(final MediaStore mediaStore) {
-        return new ApplyPlanner(mediaStore, new JsonCullPrepStore(), fixedSettings(), new Sha256Hasher());
+        return applyPlanner(mediaStore, new JsonCullPrepStore());
+    }
+
+    static ApplyPlanner applyPlanner(final MediaStore mediaStore, final CullPrepPort cullPrepPort) {
+        return new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), new Sha256Hasher());
     }
 
     // A caller takes the ledger snapshot and passes it into ApplyPlanner. A test driving the
@@ -178,8 +183,30 @@ final class CullPrepTestSupport {
     }
 
     static PrepDirDoctor prepDirDoctor() {
+        return prepDirDoctor(new JsonCullPrepStore());
+    }
+
+    // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
+    // owns. Provoking a read failure through the filesystem instead means testing the OS. Putting a
+    // directory where a file belongs fails at the open on Windows and at the first read on Linux.
+    // Those are two different code paths in the reader.
+    //
+    // The planner reads through the same port, matching production, where both take the one bean.
+    // Handing it a separate real store would leave every read past the index working normally, so
+    // only an index-read failure could ever be injected.
+    static PrepDirDoctor prepDirDoctor(final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
-        return new PrepDirDoctor(new JsonCullPrepStore(), mediaStore, fixedSettings(), applyPlanner(),
+        return new PrepDirDoctor(cullPrepPort, mediaStore, fixedSettings(), applyPlanner(mediaStore, cullPrepPort),
+                moveLedger(mediaStore));
+    }
+
+    // Same seam as the overload above, on the other port. The injected store is threaded into the
+    // planner and the ledger too, matching production, where all three take the one bean. Building
+    // those with a fresh real store instead would leave the injected failure unreachable from
+    // everything except the doctor's own direct calls.
+    static PrepDirDoctor prepDirDoctor(final MediaStore mediaStore) {
+        final var cullPrepPort = new JsonCullPrepStore();
+        return new PrepDirDoctor(cullPrepPort, mediaStore, fixedSettings(), applyPlanner(mediaStore, cullPrepPort),
                 moveLedger(mediaStore));
     }
 

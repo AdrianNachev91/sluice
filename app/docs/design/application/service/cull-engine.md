@@ -6,8 +6,8 @@ selects) -> apply (`ApplyEngine.apply`). Dispatch is conditional rather than a f
 only while some montage still lacks a shard
 (`app/src/main/java/photos/sluice/application/service/CullEngine.java`,
 `app/src/main/java/photos/sluice/application/service/ShardTallyCalculator.java`). `Pipeline` builds
-the one `CullEngine` instance it needs and exposes `cull()`/`waitingJobs()`/`resume()` under its own
-type - see `pipeline.md` for that facade and for `sort()`/`commit()`/`rescue()`.
+the one `CullEngine` instance it needs and exposes `cull()`/`resume()` under its own type - see
+`pipeline.md` for that facade and for `sort()`/`commit()`/`rescue()`.
 
 The watch-mode auto-resume that polls a still-waiting job for its shards to land is a separate
 concern, owned by `CullWatchers`
@@ -15,7 +15,73 @@ concern, owned by `CullWatchers`
 `app/src/main/java/photos/sluice/application/service/CullWatcher.java`). `CullEngine` holds the one
 `CullWatchers` instance it needs and delegates to it - see the "Watch mode" section below.
 
-## `cull()` / `waitingJobs()` / `resume()`
+## Claiming a scope
+
+A fresh run rebuilds its scope's prep dir from scratch, and `MontageRenderer.build()` clears that dir
+before writing. So starting one over an existing run destroys everything that run still held. Shards
+an agent was paid to produce, a move-record log, the answers a user gave a troubleshoot screen.
+Deciding whether the scope is free to claim comes first, before anything is rendered.
+
+**A scope is occupied while any prep dir sits at its path, holding at least one file.** Presence, not
+readability - see `prep-dir-doctor.md` for why the test is deliberately that loose. Every state but
+`COMPLETE` refuses, and what differs between them is the way out, not whether a refusal happens.
+
+| Occupant   | Result                            | Way out                  |
+|------------|-----------------------------------|--------------------------|
+| `WAITING`  | refuse                            | Resume, or Discard       |
+| `READY`    | refuse                            | Resume, or Discard       |
+| `BLOCKED`  | refuse                            | Troubleshoot, or Discard |
+| `DAMAGED`  | refuse                            | Re-diagnose, or Discard  |
+| `COMPLETE` | archive to the graveyard, proceed | none needed              |
+| nothing    | proceed                           | none needed              |
+
+`READY` is the state worth naming explicitly: a full shard set that has not applied yet is work
+nobody has spent, one Resume away from landing. A refusal throws `Pipeline.ScopeOccupiedException`,
+which carries the occupying run diagnosed, so a caller routes to the right button without parsing a
+message.
+
+`DAMAGED` is the one row where Troubleshoot cannot repair anything. Its only finding is
+`UnreadablePrepDir`, whose remedy is `NONE`, so no repair branch matches it. `Troubleshooter` branches
+on exactly three findings: `CorruptIndex`, `MissingSource` and `StrayShard`. A `BLOCKED` run whose
+findings are all `NONE` gets just as little repair from it, so the difference is certainty, not kind.
+
+Troubleshoot is still worth running. Its report names which file failed and with what, which is
+otherwise only in the log. That is a diagnosis, not a fix.
+
+**Two different causes reach `DAMAGED`, and they have opposite answers.** The row names both, which is
+why its way out reads as two steps rather than one.
+
+A read that merely failed is the self-healing case. The bytes are intact and something transient held
+the file. Diagnosis is never cached, so the next poll re-reads from disk. Once the backup finishes or
+the placeholder hydrates, the run reports its real state and that state's own row names the exit. The
+only action is outside the app, and often there is none worth taking.
+
+Content that no reader could parse is the other case, and re-diagnosing never clears it. A garbled
+line in `choices.log` is the example under test. Discard is the only exit, and it costs the whole
+run: every shard, and the model spend behind it.
+
+**That price is wrong for the file it is charged over, and this is a known gap.** `choices.log` holds
+answers to findings, not the decisions themselves, and the ledger is split in two precisely so a
+repair cannot cost the user an answer. The ledger's parsers already skip a line whose shape they do
+not recognise. One whose shape matches and whose content does not still fails the whole read.
+Skipping that too would cost one lost answer instead of the run. The run would then diagnose to its
+real state, usually `BLOCKED` with the original finding re-raised, where Troubleshoot works normally.
+
+**A `COMPLETE` occupant is archived rather than refused, and no confirmation is asked.** The old
+record moves wholesale into `logs/disasters/<scope>-<timestamp>/` and the new run proceeds. The
+outcome's `archivedPriorRun` names where it went. Two reasons it is not a prompt. Curate resolves its
+own scope mid-job, so no dialog could fire there at all. And a monthly curate of the current year
+meets this occupant every single month, which would turn the one-button flow into a recurring toll.
+Nothing is destroyed either way: the archive keeps the same 30-day recovery window every other
+graveyard entry gets.
+
+The question is asked twice. `cull()` asks it synchronously before `JobRunner.submit()`, for the
+earliest possible fail-fast, and `buildFreshAndDispatch()` asks it again once the job is actually
+running. That second call is `CurateEngine`'s only option for an `OldestYear` scope, whose year is
+not known until its sort has resolved it. Only the second call archives, since only it can put the
+resulting graveyard path into the outcome.
+
+## `cull()` / `resume()`
 
 Two forks decide the shape of a run. The first is whether any montage still lacks a shard, which
 decides whether a culler is entered at all. The second is what a `CullException` from dispatch
@@ -24,10 +90,15 @@ for the full reasoning on that one.
 
 ```mermaid
 flowchart TD
-    A["CullEngine.cull(scope)"] --> W{"a WaitingCullJob<br/>already exists for<br/>this scope?"}
-    W -- "yes" --> WZ(["IllegalStateException,<br/>thrown synchronously -<br/>nothing rebuilt"])
-    W -- "no" --> B["JobRunner.submit"]
-    B --> P["prep: MontageRenderer.build<br/>-> PrepDir (or null - see<br/>Cancellation)"]
+    A["CullEngine.cull(scope)"] --> W{"scope's prep dir<br/>occupied?"}
+    W -- "yes, not COMPLETE" --> WZ(["ScopeOccupiedException,<br/>thrown synchronously -<br/>nothing rebuilt"])
+    W -- "no, or COMPLETE" --> B["JobRunner.submit"]
+    B --> CS{"claimScope: ask again,<br/>now on the job thread"}
+    CS -- "occupied, not COMPLETE" --> WZ2(["ScopeOccupiedException"])
+    CS -- "COMPLETE" --> WA["archive it to the graveyard<br/>-> archivedPriorRun"]
+    CS -- "free" --> P
+    WA --> P
+    P["prep: MontageRenderer.build<br/>-> PrepDir (or null - see<br/>Cancellation)"]
     P -- "null" --> PZ(["CullJobOutcome.Cancelled"])
     P -- "PrepDir" --> S{"every montage<br/>already has a shard?"}
     S -- "yes" --> AP["apply: ApplyEngine.apply<br/>-> ApplyReport (or null -<br/>see Cancellation)"]
@@ -85,11 +156,12 @@ there is nothing for a culler to judge, so dispatching would only produce an emp
 
 `resume(prepDir, allowPartial)` re-reads the existing `PrepDir` from `index.json` via
 `cullPrepPort.readIndex()` instead of `MontageRenderer` regenerating it, so no montage is ever
-rebuilt or re-rendered by a resume. `waitingJobs()` is a plain, un-jobbed read:
-it scans `logs/cull-prep/*/` for a prep dir with `index.json` but no merged `decisions.json` yet.
-See `WaitingCullJob`'s own doc for why this is derived live instead of a persisted list. It
-tolerates a transiently-unreadable `index.json` (a concurrent job's own prep dir
-mid-clear/mid-write) by skipping that entry rather than failing the whole scan.
+rebuilt or re-rendered by a resume.
+
+Listing what is on disk is not this class's job at all. `PrepDirDoctor.runs()` enumerates the
+cull-prep root and diagnoses each dir, and `Pipeline.cullRuns()` exposes it - see
+`prep-dir-doctor.md`. `CullEngine` reads it for two things only: the startup watch scan, and the
+one-dir occupancy question above.
 
 `ShardTallyCalculator` answers two different questions, from two different places.
 
@@ -131,7 +203,6 @@ shard as its own scope. Neither affects what actually happens - readiness never 
 | CullEngine method               | What runs                                                           | Phase label(s)                                                         |
 |---------------------------------|---------------------------------------------------------------------|------------------------------------------------------------------------|
 | `cull(CullScope)`               | prep -> (dispatch unless the scope is empty) -> apply               | `"Building montages..."`, `"Culling..."`, `"Applying decisions..."`    |
-| `waitingJobs()`                 | a plain disk scan, no `JobRunner` involved                          | none                                                                   |
 | `resume(Path prepDir, boolean)` | (dispatch only if a shard is missing) -> apply, on the existing dir | `"Culling..."` only when dispatch runs, then `"Applying decisions..."` |
 
 A fresh `cull()` over a scope with any montages in it always dispatches. Prep rebuilds the dir and
@@ -144,7 +215,8 @@ Then no `"Culling..."` bracket is reported and no provider client is built.
 | Scenario                                                                | Outcome                                                                                                                                                    |
 |-------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `cull()` on a scope with no shards dropped yet (fresh manual-mode prep) | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                               |
-| `cull()` called again while that scope's `WaitingCullJob` is unresolved | `IllegalStateException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched       |
+| `cull()` called again while that scope's run is unresolved              | `ScopeOccupiedException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched      |
+| `cull()` called again once that scope's run has applied                 | The old record is archived to the graveyard, named by `archivedPriorRun`, and the fresh run proceeds with no confirm                                       |
 | `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved. No culler is entered, so no `"Culling..."` phase is bracketed                                                       |
 | `resume()` while a shard is still missing                               | Dispatch runs again; `CullJobOutcome.Waiting`, with a freshly recomputed tally                                                                             |
 | `resume()` with every shard present but apply's validation refusing     | `CullJobOutcome.Blocked` carrying the findings; nothing moved, `decisions.json` never written, no watcher armed                                            |
@@ -257,9 +329,10 @@ an internal cadence, not a `CullSettings` field - `mode` is the one documented u
 triggered it (a fresh `cull()`, a manual `resume()` click, or a watcher's own auto-resume). The
 prep dir's watcher, if any, is always retired before a real attempt runs. A manual click racing an
 armed watcher can therefore never leave two pollers on the same job.
-`armWatchesForExistingWaitingJobs()` (called from `Pipeline`'s own `@PostConstruct`) re-arms every
-still-waiting job found on disk at startup. There is no persistent job store, so restarting the app
-would otherwise silently stop watching every job armed before the restart.
+`armWatchesForResumableRuns()` (called from `Pipeline`'s own `@PostConstruct`) re-arms every
+resumable run found on disk at startup, meaning `WAITING` or `READY`. There is no persistent job
+store, so restarting the app would otherwise silently stop watching every job armed before the
+restart.
 
 Retiring by prep dir rather than by watcher identity leaves one known window, accepted rather than
 closed. This is all `CullWatchers`' own state and logic - `CullEngine` only supplies the trigger. A
@@ -281,11 +354,15 @@ for this window. A caller should instead bind any watch indicator to `isWatchAct
 to its own optimistic state. A lost click then shows as a toggle flipping back, not as a click that
 did nothing.
 
-That startup scan reads `waitingJobs()`, which counts a prep dir as waiting whenever `index.json`
-exists and `decisions.json` does not. A blocked dir matches that too, so a restart can arm one
-watcher for it. Its shards are all present and parseable, so that watcher fires once, the resume
-lands `Blocked` again, and nothing re-arms. One wasted job slot per restart, and the run stays where
-the user left it.
+That startup scan arms a run diagnosed `WAITING` or `READY`, and nothing else. Those are the two
+states a run can leave without a person. `WAITING` still expects shards, which is what a watcher
+watches for. `READY` has them all already, which is the ordinary shape of a restart. The agent
+finished while the app was closed, so the first poll resumes on the spot.
+
+`BLOCKED` and `DAMAGED` are left alone, each for its own reason. A blocked run would resume once and
+block again on the same findings. Arming it pays a full validation pass at every launch, for a
+verdict that cannot change until somebody acts on it. A damaged run never reads as ready at all, so
+its watcher would poll for good.
 
 The only state that keeps polling is a montage whose shard never arrives at all, or never finishes
 being written. That is genuinely still waiting, and the card's tally says so. No resume is submitted
@@ -301,7 +378,9 @@ and no file moves. Watch mode never arms for an automated provider, so nothing s
 | Watch mode, a shard is present but never parses                     | The watcher polls on, submitting nothing; the card's tally stays short of total                       |
 | Watch mode, every shard arrives but the batch is invalid            | The watcher fires once; that resume lands `Blocked` with the findings, and nothing re-arms            |
 | Watch mode, a poll tick throws                                      | Logged and treated as "not ready this tick"; the watch survives and retries                           |
-| Watch mode, app restarts while a job is still waiting               | `armWatchesForExistingWaitingJobs()` re-arms a watcher for it purely from `waitingJobs()`             |
+| Watch mode, app restarts while a run is still waiting               | `armWatchesForResumableRuns()` re-arms a watcher for it, from diagnosing the cull-prep root           |
+| Watch mode, app restarts after the agent finished while it was shut | Same scan finds the run `READY` and arms it; the first poll resumes on the spot                       |
+| Watch mode, app restarts while a run sits `BLOCKED` or `DAMAGED`    | Left unarmed - neither can resolve itself, so a watcher would only re-block or poll forever           |
 | Manual mode, the user turns one run's toggle on                     | `startWatching()` arms that prep dir alone; every other run still needs an explicit Resume            |
 | Either mode, the user turns one run's toggle off                    | `stopWatching()` stops the polling only; the run stays Waiting, listed, and blocking its scope        |
 | The user's answer to a troubleshoot finding makes the run appliable | A resume applies it; readiness never asked about the finding, so a watch armed for the run just fires |

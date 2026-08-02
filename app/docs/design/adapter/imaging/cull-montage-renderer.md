@@ -98,10 +98,12 @@ after:
   decode) is the long pass. It runs entirely before the prep dir is ever cleared. A
   cancellation seen here means disk is left completely untouched: nothing to clean up, nothing for
   a caller to resume from.
-- **The montage-write loop** - checked once per montage, before writing it. A prep dir stopped
-  mid-loop here is inert. `index.json` is never written, so it's invisible to
-  `Pipeline.waitingJobs()`, and the next `build()` call for this scope clears it via
-  `clearPrepDir()` anyway.
+- **The montage-write loop** - checked once per montage, before writing it. Whatever montages the
+  run had already written are cleared again on the way out, so this leaves no directory behind at
+  all. That matters because a scope is occupied by any prep dir holding files, and a half-rendered
+  one would refuse every later cull of that scope. It holds nothing worth refusing over. No
+  `index.json` was ever written, so it records not one decision, and its montages cost only the time
+  to render them again.
 
 Either case returns `null` instead of a `PrepDir`. That return value is the sole authority on
 whether the run was cancelled - `Pipeline` never re-checks disk state to decide. A `null` this

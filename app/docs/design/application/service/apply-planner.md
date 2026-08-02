@@ -47,12 +47,27 @@ after a clean validation, classifying every decision for resume (see section 2 b
 anything moves.
 
 The sidecar-derived in-scope set itself isn't read in one flat pass over every montage. A montage
-whose own sidecar can't be read (missing or corrupt) is handled by `collectMontage()`. Depending
-on its state, it's either silently skipped (not yet culled), reported as a fresh
-`Finding.CorruptSidecar`, or resolved per the disposition ledger. Only the healthy montages' srcs
-and shards ever reach `ShardValidator`. The CHOICE remedy that resolves a `CorruptSidecar` finding
-lives elsewhere: see `prep-dir-remedies.md` for `resolveCorruptSidecar()` and the full breakdown of
-each ledger resolution's effect.
+whose own sidecar can't be read (missing or corrupt) is handled by `collectMontage()`. It reports a
+fresh `Finding.CorruptSidecar` unless the disposition ledger already carries an answer for it, in
+which case that answer decides. Only the healthy montages' srcs and shards ever reach
+`ShardValidator`. The CHOICE remedy that resolves a `CorruptSidecar` finding lives elsewhere: see
+`prep-dir-remedies.md` for `resolveCorruptSidecar()` and the full breakdown of each ledger
+resolution's effect.
+
+**The finding is raised whether or not that montage has a shard yet.** A montage with an unreadable
+sidecar and no shard reads like one still being culled, and is not. A culler keys its verdicts
+against the sidecar, so it can never produce a shard for a montage whose sidecar it cannot read. Not
+yet actionable would therefore never become actionable. Left unreported, the run sits `WAITING` with
+an empty findings list, the troubleshoot screen has nothing to offer, and only a discard escapes.
+Reported, `SET_ASIDE` becomes reachable: it drops the montage and leaves its photos in `Sorted` for a
+later cull to see fresh.
+
+A montage whose sidecar reads fine and simply has no shard yet is still skipped in silence. That is
+the genuinely-still-culling case, and flagging it is the noise this finding must not become.
+
+Both ledger answers are terminal, so neither re-raises the finding. `SET_ASIDE` drops the montage
+outright. `APPLY_ANYWAY` trusts the shard as its own scope. A montage answered that way while still
+holding no shard contributes nothing, there being no shard yet to trust.
 
 A shard that is present but won't parse is a `Finding.CorruptShard`, never an exception escaping
 `validate()`. That matters because this is the only gate an apply-only resume passes through, and

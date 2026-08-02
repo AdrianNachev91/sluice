@@ -2,18 +2,22 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
+import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -22,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,10 +35,12 @@ import static photos.sluice.application.service.PipelineTestSupport.BlockingCanc
 import static photos.sluice.application.service.PipelineTestSupport.BlockingIncompleteCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoveTo;
+import static photos.sluice.application.service.PipelineTestSupport.FailableIndexReads;
 import static photos.sluice.application.service.PipelineTestSupport.FixedSettings;
 import static photos.sluice.application.service.PipelineTestSupport.JunkEverythingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.NeverCalledCuller;
+import static photos.sluice.application.service.PipelineTestSupport.PlantOnFirstExists;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
 import static photos.sluice.application.service.PipelineTestSupport.ThrowingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
@@ -42,6 +49,7 @@ import static photos.sluice.application.service.PipelineTestSupport.defaultCullS
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.prepDirRemedies;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
+import static photos.sluice.application.service.PipelineTestSupport.unresolvedRuns;
 import static photos.sluice.application.service.PipelineTestSupport.waitUntil;
 import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
@@ -76,12 +84,10 @@ class CullEngineTest {
                 "started:Culling...", "finished:Culling...");
     }
 
-    // Regression: cull() used to rebuild a scope's prep dir unconditionally, and
-    // MontageRenderer.build() clears that dir before writing. Re-running cull() on a scope that
-    // already has an unresolved WaitingCullJob would silently destroy any shard already dropped
-    // for it.
+    // MontageRenderer.build() clears a scope's prep dir before writing. Re-running cull() on a
+    // scope whose run is still unresolved would destroy every shard already dropped for it.
     @Test
-    void cullRefusesToRebuildAScopeThatAlreadyHasAWaitingJob(@TempDir final Path root) throws IOException {
+    void cullRefusesToRebuildAScopeThatAlreadyHasAWaitingRun(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
@@ -89,28 +95,251 @@ class CullEngineTest {
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
         assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("2019");
+                .isInstanceOfSatisfying(Pipeline.ScopeOccupiedException.class,
+                        refusal -> assertThat(refusal.occupant().scope()).isEqualTo("2019"));
         // The dropped shard must have survived the refused call - proves no rebuild/clear happened.
         assertThat(Files.exists(waiting.job().prepDir().resolve("decisions-001.json"))).isTrue();
     }
 
+    // A run whose shards are all in but whose apply has not run holds the most unspent work of any
+    // unfinished state. It is a full set of shards somebody paid for, one Resume away from
+    // applying. So it refuses like every other one.
     @Test
-    void waitingJobsIsEmptyWhenNoCullHasEverRun(@TempDir final Path root) {
-        assertThat(cullPipeline(root, new RecordingProgressPort()).waitingJobs()).isEmpty();
+    void cullRefusesAScopeWhoseRunIsReadyToApply(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(run -> run.health().state()).isEqualTo(State.READY);
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
+                .isInstanceOfSatisfying(Pipeline.ScopeOccupiedException.class,
+                        refusal -> assertThat(refusal.occupant().health().state()).isEqualTo(State.READY));
+    }
+
+    // The refusal a guard reading index.json could never make. This dir's index is gone entirely,
+    // so nothing it holds can describe itself - and a shard an agent was paid for is sitting right
+    // there. Occupancy is presence of files, which is exactly why this case is covered.
+    @Test
+    void cullRefusesAScopeWhoseIndexIsGoneButWhoseShardsRemain(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        Files.delete(prepDir.resolve("index.json"));
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
+                .isInstanceOf(Pipeline.ScopeOccupiedException.class);
+        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
+    }
+
+    // Archive and proceed, with no confirmation asked. Curate resolves its own scope mid-job so no
+    // dialog could fire there anyway, and a monthly curate of the current year would meet this
+    // occupant every month. Nothing is destroyed: the old record keeps the graveyard's own 30-day
+    // window, and the outcome names where it went.
+    @Test
+    void cullArchivesACompletedRunOfTheSameScopeAndProceeds(@TempDir final Path root) throws IOException {
+        final Path first = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(first, "junk", "blurry"));
+        pipeline.resume(prepDir, false).join();
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+
+        final var second = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        final Path graveyard = second.archivedPriorRun();
+        assertThat(graveyard).isNotNull();
+        assertThat(graveyard.getFileName().toString()).startsWith("2019-");
+        // The completed run's own record survives in the graveyard rather than being overwritten.
+        assertThat(graveyard.resolve("decisions.json")).exists();
+        assertThat(graveyard.resolve("decisions-001.json")).exists();
+        // And the fresh run really did run, over the photo the first one never saw.
+        assertThat(second.job().shards()).isEqualTo(new ShardTally(0, 0, 1));
+        assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
+    }
+
+    // The state a guard reading index.json cannot even name. Nothing here says what the run is, and
+    // the refusal has to happen anyway, because a shard an agent was paid for is sitting in there.
+    @Test
+    void cullRefusesAScopeWhoseRunCannotBeReadAtAll(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var prepStore = new FailableIndexReads();
+        final var pipeline = cullPipeline(root, new RecordingProgressPort(), prepStore);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+        prepStore.startFailing();
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
+                .isInstanceOfSatisfying(Pipeline.ScopeOccupiedException.class,
+                        refusal -> assertThat(refusal.occupant().health().state()).isEqualTo(State.DAMAGED));
+        assertThat(Files.exists(waiting.job().prepDir().resolve("decisions-001.json"))).isTrue();
+    }
+
+    // A damaged run never reads as ready, so a watcher armed for it would poll for good. The 30s
+    // interval means an armed watcher could not have fired and retired itself before the assertion,
+    // so a false reading here means "never armed".
+    @Test
+    void armWatchesForResumableRunsLeavesADamagedRunAlone(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var prepStore = new FailableIndexReads();
+        final var setup = cullPipeline(root, new RecordingProgressPort(), prepStore);
+        final Path prepDir = ((CullJobOutcome.Waiting) setup.cull(new CullScope.Year(2019, null)).join())
+                .job().prepDir();
+        // The same store the scan below reads through, so the run really does diagnose DAMAGED for
+        // it. Wiring a fresh store here would leave the index perfectly readable. The run would
+        // then arm as WAITING, for reasons unrelated to what this test claims.
+        final var watchPipeline = pipeline(root, new RecordingProgressPort(), new NioMediaStore(),
+                watchCullSettings(), List.of(new ManualModeCuller()), Duration.ofSeconds(30), prepStore);
+        prepStore.startFailing();
+
+        watchPipeline.armWatchesForResumableRuns();
+
+        assertThat(watchPipeline.cullRuns()).singleElement()
+                .extracting(run -> run.health().state()).isEqualTo(State.DAMAGED);
+        assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
+    }
+
+    // The occupancy question is asked twice, and this is the second ask carrying its own weight.
+    // The scope is free when cull() checks synchronously, and taken by the time the job thread
+    // claims it. Deleting that second refusal leaves the renderer free to clear the prep dir
+    // planted below, shards and all. The first ask cannot catch this fixture, since at the moment
+    // it runs there is nothing there to catch.
+    @Test
+    void cullRefusesAScopeTakenBetweenTheSynchronousCheckAndTheClaim(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final Path prepDir = root.resolve("logs/cull-prep/2019");
+        // Planted the first time anything asks whether the prep dir exists, which is the
+        // synchronous check's own question. The job thread's claim then finds it there.
+        final var planting = new PlantOnFirstExists(prepDir, () -> plantWaitingRun(prepDir, photo));
+        final var pipeline = pipeline(root, new RecordingProgressPort(), planting, defaultCullSettings(),
+                List.of(new ManualModeCuller()));
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(Pipeline.ScopeOccupiedException.class);
+        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
+    }
+
+    // The archive happens before montage rendering, so every later way a run can end is reachable
+    // with a prior record already filed away. Cancelled is the one furthest from Applied, and the
+    // branch a refactor drops most easily.
+    @Test
+    void aCancelledRunStillReportsWhereItArchivedThePriorRun(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var first = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(first.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+        pipeline.resume(first.job().prepDir(), false).join();
+
+        final var handle = pipeline.cull(new CullScope.Year(2019, null));
+        handle.requestCancellation();
+        final CullJobOutcome outcome = handle.join();
+
+        // A cancellation landing after rendering finished resolves to Waiting instead of Cancelled.
+        // Every variant carries the archive, so this reads it off the interface rather than picking
+        // a case. The claim is about the archive, never about which outcome won.
+        final Path graveyard = outcome.archivedPriorRun();
+        assertThat(outcome).isInstanceOfAny(CullJobOutcome.Cancelled.class, CullJobOutcome.Waiting.class);
+        assertThat(graveyard).isNotNull();
+        assertThat(graveyard.resolve("decisions.json")).exists();
+    }
+
+    // The renderer clearing its own partial output exists so a cancelled run leaves its scope
+    // claimable. That is one layer up from the renderer's own test, which only proves the directory
+    // is gone.
+    // Two photos at one montage each, so the render really does write montage-001 before stopping.
+    // A single photo would leave either no directory or an empty one, and an empty dir never
+    // occupies a scope anyway. The assertion would then hold with the cleanup deleted.
+    @Test
+    void aCancelledRenderLeavesTheScopeFreeForAnotherCull(@TempDir final Path root) throws IOException {
+        final Path dir = sortedPhotosDir(root, "2019", "06");
+        writePhoto(dir, "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(dir, "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var progress = new RecordingProgressPort();
+        // Cancelled the moment montage-001's write is reported, so the stop lands between the first
+        // montage reaching disk and the second starting. That is the only window in which a partial
+        // prep dir exists, and ticking on a real write makes hitting it deterministic.
+        // The latch closes the one race left. The tick can fire before cull() has even returned the
+        // handle, so the hook waits for the test to hand it over rather than reading a null.
+        final var handleReady = new CountDownLatch(1);
+        final var cancel = new AtomicReference<Runnable>(() -> {});
+        progress.cancelOnFirstTick(() -> {
+            try {
+                handleReady.await();
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            cancel.get().run();
+        });
+        final var pipeline = cullPipeline(root, progress);
+
+        final var handle = pipeline.cull(new CullScope.Year(2019, null));
+        cancel.set(handle::requestCancellation);
+        handleReady.countDown();
+        final CullJobOutcome first = handle.join();
+
+        assertThat(first).isInstanceOf(CullJobOutcome.Cancelled.class);
+        assertThat(root.resolve("logs/cull-prep/2019")).doesNotExist();
+        assertThat(pipeline.cull(new CullScope.Year(2019, null)).join())
+                .isInstanceOf(CullJobOutcome.Waiting.class);
+    }
+
+    // A run that never had to archive anything says so, rather than leaving a caller to guess
+    // whether null means "nothing was there" or "nobody looked".
+    @Test
+    void cullOverAFreeScopeReportsNoArchivedPriorRun(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+
+        final var outcome = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome.archivedPriorRun()).isNull();
     }
 
     @Test
-    void waitingJobsListsAPrepDirStillMissingShards(@TempDir final Path root) throws IOException {
+    void cullRunsIsEmptyWhenNoCullHasEverRun(@TempDir final Path root) {
+        assertThat(cullPipeline(root, new RecordingProgressPort()).cullRuns()).isEmpty();
+    }
+
+    @Test
+    void cullRunsListsAPrepDirStillMissingShardsAsWaiting(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         pipeline.cull(new CullScope.Year(2019, null)).join();
 
-        final List<WaitingCullJob> waiting = pipeline.waitingJobs();
+        final List<CullRunSummary> runs = pipeline.cullRuns();
 
-        assertThat(waiting).hasSize(1);
-        assertThat(waiting.getFirst().scope()).isEqualTo("2019");
-        assertThat(waiting.getFirst().shards()).isEqualTo(new ShardTally(0, 0, 1));
+        assertThat(runs).hasSize(1);
+        assertThat(runs.getFirst().scope()).isEqualTo("2019");
+        assertThat(runs.getFirst().health().state()).isEqualTo(State.WAITING);
+        assertThat(runs.getFirst().shards()).isEqualTo(new ShardTally(0, 0, 1));
+    }
+
+    // An applied run stays on disk until the user purges it, so it stays listed. COMPLETE is what
+    // separates it from a run still owing somebody something, and it is the state a re-cull of the
+    // same scope archives rather than refuses.
+    @Test
+    void cullRunsStillListsAnAppliedRunAsComplete(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+        pipeline.resume(waiting.job().prepDir(), false).join();
+
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(run -> run.health().state()).isEqualTo(State.COMPLETE);
     }
 
     @Test
@@ -191,7 +420,7 @@ class CullEngineTest {
                 "decisions-001.json")));
         final var job = new WaitingCullJob("2019", Path.of("prep"), new ShardTally(1, 1, 1), Instant.EPOCH);
 
-        final var blocked = new CullJobOutcome.Blocked(job, mutable);
+        final var blocked = new CullJobOutcome.Blocked(job, mutable, null);
         mutable.clear();
 
         assertThat(blocked.findings()).containsExactly(new Finding.CorruptShard("montage-001", "decisions-001.json"));
@@ -339,14 +568,14 @@ class CullEngineTest {
         assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isTrue();
     }
 
-    // Proves the armWatchIfConfigured() provider gate. armWatchesForExistingWaitingJobs()'s
+    // Proves the armWatchIfConfigured() provider gate. armWatchesForResumableRuns()'s
     // startup scan walks every waiting job on disk regardless of which provider produced it.
     // dispatchAndApply()'s own call site is different: it can only reach armWatchIfConfigured() when
     // the provider already matches. So this scan is the one call site the gate actually changes
     // behavior at. Without it, a leftover mode=WATCH setting would arm a phantom watcher for this
     // automated provider's own cancelled prep dir, risking an unasked-for, API-spending auto-resume.
     @Test
-    void armWatchesForExistingWaitingJobsNeverArmsAWatcherForAnAutomatedProvidersWaitingJob(@TempDir final Path root)
+    void armWatchesForResumableRunsNeverArmsAWatcherForAnAutomatedProvidersRun(@TempDir final Path root)
             throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
@@ -371,7 +600,7 @@ class CullEngineTest {
         final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchSettings, List.of(),
                 Duration.ofMillis(20));
 
-        watchPipeline.armWatchesForExistingWaitingJobs();
+        watchPipeline.armWatchesForResumableRuns();
 
         assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
     }
@@ -477,11 +706,11 @@ class CullEngineTest {
 
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        // Waits on waitingJobs() itself, not just the photo's move. apply() writes decisions.json -
-        // what waitingJobs() actually checks for - only after every decision's file is moved.
-        // Polling the move alone leaves a real window where the photo is gone but the job still
-        // reads as waiting. A CI runner slow/loaded enough to land inside that window flaked here.
-        waitUntil(Duration.ofSeconds(2), () -> pipeline.waitingJobs().isEmpty());
+        // Waits on the run resolving, not just on the photo's move. apply() writes decisions.json -
+        // what makes the run COMPLETE - only after every decision's file is moved. Polling the move
+        // alone leaves a real window where the photo is gone but the run still reads as unresolved.
+        // A CI runner slow or loaded enough to land inside that window flaked here.
+        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
         assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
@@ -510,12 +739,13 @@ class CullEngineTest {
     }
 
     // Proves watch mode survives a restart: nothing calls cull()/resume() on this Pipeline
-    // instance for the job at all. armWatchesForExistingWaitingJobs() (Pipeline's own
-    // @PostConstruct, called directly here since this test has no Spring context) has to discover
-    // it on disk instead. It arms a watcher purely from waitingJobs(), the same as it would after
-    // a real app restart.
+    // instance for the run at all. armWatchesForResumableRuns() has to discover it on disk, purely
+    // from what diagnosing the cull-prep root turns up. It is Pipeline's own @PostConstruct, called
+    // directly here since this test has no Spring context.
+    // The shard is dropped before the restart, so this run is READY rather than WAITING when it is
+    // found. That is the ordinary shape of the case: the agent finished while the app was closed.
     @Test
-    void armWatchesForExistingWaitingJobsAutoResumesAJobItNeverStartedItself(@TempDir final Path root) throws IOException {
+    void armWatchesForResumableRunsAutoResumesARunItNeverStartedItself(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
         final var manualPipeline = cullPipeline(root, new RecordingProgressPort());
@@ -524,10 +754,35 @@ class CullEngineTest {
 
         final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
-        watchPipeline.armWatchesForExistingWaitingJobs();
+        watchPipeline.armWatchesForResumableRuns();
 
         waitUntil(Duration.ofSeconds(2), () -> !Files.exists(photo));
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+    }
+
+    // A blocked run would resume once and block again on the same findings. Arming it buys a full
+    // validation pass at every launch, for a verdict only the user can change.
+    // The poll interval below is long enough that an armed watcher could not have fired and retired
+    // itself before the assertion. So a false reading here means "never armed", never "already
+    // finished".
+    @Test
+    void armWatchesForResumableRunsLeavesABlockedRunAlone(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var manualPipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) manualPipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        // montage-002 belongs to no montage in the index, so the whole-batch gate refuses.
+        writeShard(prepDir, "montage-002", classificationJson(photo, "junk", "blurry"));
+        assertThat(manualPipeline.cullRuns()).singleElement()
+                .extracting(run -> run.health().state()).isEqualTo(State.BLOCKED);
+
+        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        watchPipeline.armWatchesForResumableRuns();
+
+        assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
     }
 
     // The per-run watch toggle's on position, against a manual-mode config. Watching one run is the
@@ -547,7 +802,7 @@ class CullEngineTest {
         pipeline.startWatching(prepDir);
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        waitUntil(Duration.ofSeconds(2), () -> pipeline.waitingJobs().isEmpty());
+        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
 
@@ -565,10 +820,10 @@ class CullEngineTest {
         pipeline.stopWatching(prepDir);
 
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
-        assertThat(pipeline.waitingJobs()).singleElement()
-                .extracting(WaitingCullJob::prepDir).isEqualTo(prepDir);
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(CullRunSummary::prepDir).isEqualTo(prepDir);
         assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(Pipeline.ScopeOccupiedException.class);
     }
 
     // The provider gate holds even for an explicit per-run arm. An automated provider's shards are
@@ -597,13 +852,12 @@ class CullEngineTest {
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
     }
 
-    // A prep dir whose index.json cannot be read at all is skipped, rather than failing the whole
-    // scan. waitingJobs() sits on hot paths: startup arming, and every cull()/curate()'s own
-    // scope-conflict check. One damaged dir must not be able to take those down with it.
-    // Corrupting a sidecar or a shard would not reach this catch. The tally already folds both into
-    // its own counts, so only a failed index read gets there.
+    // A dir whose index.json is unparseable is listed, not dropped, and it does not take the rest
+    // of the scan down with it. Dropping it would hide the run most in need of attention, at the
+    // moment it needs it. Its tally is null because a tally counts montages, and the montage list
+    // is the one thing that could not be read.
     @Test
-    void waitingJobsSkipsAPrepDirWithAnUnreadableIndexAndStillListsTheHealthyOne(@TempDir final Path root) throws IOException {
+    void cullRunsListsACorruptIndexAsBlockedAlongsideTheHealthyRun(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(sortedPhotosDir(root, "2020", "06"), "IMG_2.jpg", Instant.parse("2020-06-01T10:00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
@@ -611,9 +865,16 @@ class CullEngineTest {
         final var healthy = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2020, null)).join();
         Files.writeString(damaged.job().prepDir().resolve("index.json"), "{ not json at all");
 
-        final List<WaitingCullJob> waiting = pipeline.waitingJobs();
+        final List<CullRunSummary> runs = pipeline.cullRuns();
 
-        assertThat(waiting).singleElement().extracting(WaitingCullJob::prepDir).isEqualTo(healthy.job().prepDir());
+        assertThat(runs).extracting(CullRunSummary::prepDir)
+                .containsExactly(damaged.job().prepDir(), healthy.job().prepDir());
+        assertThat(runs.getFirst().health().state()).isEqualTo(State.BLOCKED);
+        assertThat(runs.getFirst().health().findings())
+                .containsExactly(new Finding.CorruptIndex(damaged.job().prepDir().resolve("index.json")));
+        assertThat(runs.getFirst().shards()).isNull();
+        assertThat(runs.getLast().health().state()).isEqualTo(State.WAITING);
+        assertThat(runs.getLast().shards()).isEqualTo(new ShardTally(0, 0, 1));
     }
 
     // The tally's own tolerance, one layer down from the index. Neither an unreadable sidecar nor
@@ -628,8 +889,8 @@ class CullEngineTest {
         Files.writeString(prepDir.resolve("montage-001.json"), "{ not json at all");
         Files.writeString(prepDir.resolve("decisions-001.json"), "{ not json at all");
 
-        assertThat(pipeline.waitingJobs()).singleElement()
-                .extracting(WaitingCullJob::shards).isEqualTo(new ShardTally(1, 0, 1));
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(CullRunSummary::shards).isEqualTo(new ShardTally(1, 0, 1));
     }
 
     // A shard naming a file this platform cannot make a path out of is the culling agent's own
@@ -646,8 +907,8 @@ class CullEngineTest {
                 "{ \"montage\": \"montage-001\", \"decisions\": [ { \"file\": \"bad\\u0000name.jpg\", "
                         + "\"action\": \"junk\", \"reason\": \"blurry\" } ] }");
 
-        assertThat(pipeline.waitingJobs()).singleElement()
-                .extracting(WaitingCullJob::shards).isEqualTo(new ShardTally(1, 0, 1));
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(CullRunSummary::shards).isEqualTo(new ShardTally(1, 0, 1));
     }
 
     // The load-bearing one for readiness. A stray shard is the whole class of problem only the
@@ -671,8 +932,8 @@ class CullEngineTest {
         // The watcher firing is what retires it, so an inactive watch proves the resume ran.
         waitUntil(Duration.ofSeconds(2), () -> !pipeline.isWatchActive(prepDir));
 
-        assertThat(pipeline.waitingJobs()).singleElement()
-                .extracting(WaitingCullJob::shards).isEqualTo(new ShardTally(1, 1, 1));
+        assertThat(pipeline.cullRuns()).singleElement()
+                .extracting(CullRunSummary::shards).isEqualTo(new ShardTally(1, 1, 1));
         assertThat(Files.exists(photo)).isTrue();
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
     }
@@ -701,7 +962,7 @@ class CullEngineTest {
         // state, never a watcher that had quietly died.
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        waitUntil(Duration.ofSeconds(2), () -> pipeline.waitingJobs().isEmpty());
+        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
 
@@ -725,7 +986,27 @@ class CullEngineTest {
 
         pipeline.startWatching(prepDir);
 
-        waitUntil(Duration.ofSeconds(2), () -> pipeline.waitingJobs().isEmpty());
+        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+    }
+
+    /**
+     * Writes a prep dir holding one montage's index, sidecar and shard, standing in for a run
+     * something outside this process created. Deliberately whole rather than a bare directory: the
+     * shard is what makes overwriting it cost something, and what the refusal is protecting.
+     *
+     * @param prepDir {@link Path} the prep directory to plant
+     * @param photo {@link Path} the photo its single decision names
+     */
+    private static void plantWaitingRun(final Path prepDir, final Path photo) {
+        try {
+            Files.createDirectories(prepDir);
+            CullPrepTestSupport.writeIndex(prepDir, 1, List.of("montage-001"));
+            CullPrepTestSupport.writeSidecar(prepDir, "montage-001", CullPrepTestSupport.sidecarEntry(photo));
+            CullPrepTestSupport.writeShard(prepDir, "montage-001",
+                    CullPrepTestSupport.classificationJson(photo, "junk", "blurry"));
+        } catch (final IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }

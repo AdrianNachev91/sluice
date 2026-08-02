@@ -75,8 +75,10 @@ public class ApplyPlanner {
     }
 
     /**
-     * Merges three problem sources into one report, never throwing. A caller that must not proceed
-     * throws on an invalid result itself, while a read-only diagnosis reads the identical report.
+     * Merges three problem sources into one report, reporting a problem rather than throwing on one.
+     * A caller that must not proceed throws on an invalid result itself, while a read-only diagnosis
+     * reads the identical report. A failed read still propagates: this is a claim about findings,
+     * not a totality guarantee, and {@link PrepDirDoctor} is where that distinction is handled.
      *
      * <p>A missing montage shard is a finding only when allowPartial waives it. A diagnosis always
      * passes allowPartial, so a still-culling prep dir reports on the shards it already has rather
@@ -142,11 +144,17 @@ public class ApplyPlanner {
     /**
      * One montage's worth of validate()'s sidecar/shard collection. A readable sidecar always
      * contributes its srcs to the in-scope pool, and its shard too once the montage actually has
-     * one. An unreadable sidecar for a montage that hasn't been culled yet is silently skipped - not
-     * yet actionable, the same reasoning missingMontages already gets. Otherwise the disposition
-     * ledger decides. APPLY_ANYWAY trusts the shard's own decisions as their own scope, no sidecar
-     * needed to corroborate them. SET_ASIDE drops the montage entirely - no shard, no srcs, exactly
-     * like a ledger-skipped file. No resolution yet reports a fresh {@link Finding.CorruptSidecar}.
+     * one. Otherwise the disposition ledger decides. APPLY_ANYWAY trusts the shard's own decisions
+     * as their own scope, no sidecar needed to corroborate them. SET_ASIDE drops the montage
+     * entirely - no shard, no srcs, exactly like a ledger-skipped file. No resolution yet reports a
+     * fresh {@link Finding.CorruptSidecar}.
+     *
+     * <p>That finding is raised whether or not the montage already has a shard. A montage with a
+     * corrupt sidecar and no shard is not a montage still being culled, however much it looks like
+     * one. A culler keys its verdicts against the sidecar, so it cannot produce a shard for a
+     * montage whose sidecar it cannot read. Waiting for one means waiting forever. Reported
+     * instead, SET_ASIDE becomes reachable, which drops the montage and leaves its photos in Sorted
+     * for a later cull to see fresh.
      *
      * <p>A shard that is present but cannot be parsed is a {@link Finding.CorruptShard}, never an
      * exception escaping this method. It is a culling-agent content mistake, so it belongs in the
@@ -174,17 +182,19 @@ public class ApplyPlanner {
             }
             return;
         }
-        if (!hasShard) {
+        final CorruptSidecarResolution resolution = ledger.corruptSidecars().get(montage);
+        if (resolution == null) {
+            extraFindings.add(new Finding.CorruptSidecar(montage));
             return;
         }
-        final CorruptSidecarResolution resolution = ledger.corruptSidecars().get(montage);
-        if (resolution == CorruptSidecarResolution.APPLY_ANYWAY) {
+        // Either answer is terminal, so neither raises the finding again. SET_ASIDE drops the
+        // montage outright. APPLY_ANYWAY trusts the shard as its own scope. A montage answered that
+        // way while still holding no shard contributes nothing, there being no shard yet to trust.
+        if (resolution == CorruptSidecarResolution.APPLY_ANYWAY && hasShard) {
             this.readShard(prepDirPath, montage, extraFindings).ifPresent(shard -> {
                 shard.decisions().forEach(decision -> sidecarSrcs.add(decision.file()));
                 shardFiles.add(new ShardFile(montage, shard));
             });
-        } else if (resolution != CorruptSidecarResolution.SET_ASIDE) {
-            extraFindings.add(new Finding.CorruptSidecar(montage));
         }
     }
 

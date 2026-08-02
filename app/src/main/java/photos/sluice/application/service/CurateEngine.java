@@ -58,10 +58,10 @@ final class CurateEngine {
      * resolves it. knownCullScope() returns null for it; the real mapping happens after the sort
      * runs, from SortSummary.yearsSorted().
      *
-     * <p>A known target CullScope gets the same synchronous, pre-submit checkNoWaitingJobFor()
+     * <p>A known target CullScope gets the same synchronous, pre-submit refuseIfScopeOccupied()
      * cull() gets - failing before the sort even starts. OldestYear can't be checked that early.
      * Its only guard is the same check running again once its year is resolved, after the sort has
-     * already moved real files. That failure can't be a plain IllegalStateException like the
+     * already moved real files. That failure can't be a plain ScopeOccupiedException like the
      * pre-submit one is - the caller would lose the SortSummary describing what already moved. See
      * Pipeline.CurateConflictException's own doc for how that's carried forward instead.
      *
@@ -77,7 +77,7 @@ final class CurateEngine {
     JobHandle<CurateOutcome> curate(final SortScope scope) {
         final CullScope known = knownCullScope(scope);
         if (known != null) {
-            this.cullEngine.checkNoWaitingJobFor(known);
+            this.cullEngine.refuseIfScopeOccupied(known);
         }
         return this.jobRunner.submit(handle -> {
             final SortSummary sortSummary = this.phaseRunner.run(SORTING,
@@ -89,23 +89,29 @@ final class CurateEngine {
             if (cullScope == null) {
                 return new CurateOutcome(sortSummary, null);
             }
-            if (known == null) {
-                // Only OldestYear reaches here without having already passed this same check
-                // synchronously before the sort ran - the one case that can't be checked that
-                // early. Wrapped narrowly around just this call, not the dispatch/apply that
-                // follows. That way a genuine cull failure downstream (a misconfigured provider,
-                // for example) is never mislabeled as this conflict.
-                try {
-                    this.cullEngine.checkNoWaitingJobFor(cullScope);
-                } catch (final IllegalStateException conflict) {
-                    // The sort has already moved real files by this point. CurateConflictException
-                    // carries the SortSummary forward so the caller isn't left blind about what
-                    // already happened.
-                    throw new Pipeline.CurateConflictException(conflict.getMessage(), sortSummary);
+            // Every occupancy refusal from here on shares one problem. The sort has already moved
+            // real files, so a plain ScopeOccupiedException would leave the caller blind to what
+            // happened. CurateConflictException carries the SortSummary forward. It keeps the
+            // occupying run too, being a subtype of what is caught here, so this path refuses no
+            // less usefully than the pre-submit one.
+            //
+            // Two calls can raise it. An OldestYear scope reaches refuseIfScopeOccupied() below
+            // without having been checked before the sort, since its year is not known that early.
+            // And buildFreshAndDispatch()'s own claimScope() re-asks for every scope shape, on the
+            // job thread. A scope free when curate() was called can be taken while a long sort
+            // runs. Only ScopeOccupiedException is caught, so a genuine cull failure downstream
+            // (a misconfigured provider, for example) is never mislabeled as a conflict. The type
+            // is sealed, permitting only CurateConflictException, which is what makes it safe to
+            // wrap the dispatch call rather than the guard alone. No unrelated failure can wear it.
+            try {
+                if (known == null) {
+                    this.cullEngine.refuseIfScopeOccupied(cullScope);
                 }
+                return new CurateOutcome(sortSummary,
+                        this.cullEngine.buildFreshAndDispatch(cullScope, handle::isCancellationRequested));
+            } catch (final Pipeline.ScopeOccupiedException conflict) {
+                throw new Pipeline.CurateConflictException(conflict.occupant(), sortSummary);
             }
-            return new CurateOutcome(sortSummary,
-                    this.cullEngine.buildFreshAndDispatch(cullScope, handle::isCancellationRequested));
         });
     }
 

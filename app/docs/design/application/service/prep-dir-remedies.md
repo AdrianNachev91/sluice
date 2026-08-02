@@ -174,11 +174,18 @@ touched. It returns a `DiscardReport` naming the graveyard directory and how man
 shards (`decisions-NNN.json`) were among the files filed there. That lets a caller tell the user
 how many already-paid vision-model calls this discard gives up on.
 
-This is the raw, ungated mechanism only. `Pipeline.discard()` gates it on `PrepDirDoctor`
-reporting anything but `COMPLETE`. It also retires any watcher polling the prep dir first (an
-auto-resume must never fire against a run mid-discard), and wraps it as a `JobRunner` job. Both of
-this remedy's entry points - this last-resort CHOICE, and giving up on a still-waiting job - call
-that one `Pipeline.discard()` method.
+This is the raw, ungated mechanism only, and its two callers gate it in opposite directions.
+
+`Pipeline.discard()` is the give-up path, so it gates on `PrepDirDoctor` reporting anything but
+`COMPLETE` - `purgeCompleted()` is that state's own verb. It also retires any watcher polling the
+prep dir first (an auto-resume must never fire against a run mid-discard), and wraps it as a
+`JobRunner` job. Both of this remedy's entry points - this last-resort CHOICE, and giving up on a
+still-waiting job - call that one `Pipeline.discard()` method.
+
+The cull engine's own scope claim requires exactly the opposite: `COMPLETE`, and nothing else. A
+fresh run over a finished one archives that record here rather than letting prep overwrite it (see
+`cull-engine.md`). Same file moves, opposite preconditions, because the only question either caller
+asks is whether the run being filed away is finished.
 
 ## Scenarios
 

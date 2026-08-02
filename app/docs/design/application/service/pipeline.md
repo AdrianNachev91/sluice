@@ -7,8 +7,9 @@ with progress reported through `ProgressPort` via `PhaseRunner`
 `app/src/main/java/photos/sluice/application/service/PhaseRunner.java`,
 `app/src/main/java/photos/sluice/application/service/JobRunner.java`,
 `app/src/main/java/photos/sluice/application/port/out/ProgressPort.java`).
-`cull()`/`waitingJobs()`/`resume()` and `curate()` are one-line delegates to
-`CullEngine`/`CurateEngine` - see `cull-engine.md`/`curate-engine.md` for how those actually work.
+`cull()`/`resume()` and `curate()` are one-line delegates to `CullEngine`/`CurateEngine` - see
+`cull-engine.md`/`curate-engine.md` for how those actually work. `cullRuns()` delegates to
+`PrepDirDoctor.runs()` instead, since listing what is on disk is diagnosis rather than orchestration.
 `troubleshoot(prepDir)` and `purgeCompleted()` are each a one-line `JobRunner.submit()` delegate (to
 `Troubleshooter` and `PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing.
 Neither has per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the
@@ -78,7 +79,8 @@ for the watcher it disarms.
 
 ## Related
 
-- `cull-engine.md`: `CullEngine` - `cull()`/`waitingJobs()`/`resume()`, cancellation, and watch mode.
+- `cull-engine.md`: `CullEngine` - `cull()`/`resume()`, scope occupancy, cancellation, and watch mode.
+- `prep-dir-doctor.md`: `PrepDirDoctor` - `runs()` behind `cullRuns()`, and `purgeCompleted()`.
 - `curate-engine.md`: `CurateEngine` - `curate()`, and the `Pipeline.CurateConflictException` type it throws.
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `Pipeline` submits onto): no dedicated design doc
   yet - see the source files directly.

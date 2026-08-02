@@ -205,7 +205,7 @@ class PipelineTest {
 
     // sweepExpiredDisasterDrawers() is Pipeline's own @PostConstruct, called directly here since
     // this test has no Spring context - the same pattern CullEngineTest's own
-    // armWatchesForExistingWaitingJobs() tests already use.
+    // armWatchesForResumableRuns() tests already use.
     @Test
     void sweepExpiredDisasterDrawersDeletesOnlyRetentionExpiredEntries(@TempDir final Path root) throws IOException {
         final Path drawer = root.resolve("logs/cull-prep/2019-06/disasters");

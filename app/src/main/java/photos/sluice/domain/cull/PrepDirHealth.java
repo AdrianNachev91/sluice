@@ -28,9 +28,15 @@ public record PrepDirHealth(State state, List<Finding> findings) {
      * least one montage has no shard yet - still being culled. BLOCKED: every montage has a shard,
      * but something needs a remedy before apply would succeed. READY: every montage has a shard,
      * and nothing blocks apply from running now. COMPLETE: {@code decisions.json} exists - this
-     * run already applied.
+     * run already applied. DAMAGED: reading the prep dir did not get far enough to establish
+     * anything about the run.
+     *
+     * <p>DAMAGED carries a single {@link Finding.UnreadablePrepDir}, whose remedy is NONE. It says
+     * only that the reading stopped, which is the one thing actually known. That covers a read that
+     * failed outright, and equally content past index.json that no reader could make sense of. No
+     * repair is offered either way, because nothing has been established as broken.
      */
     public enum State {
-        WAITING, BLOCKED, READY, COMPLETE
+        WAITING, BLOCKED, READY, COMPLETE, DAMAGED
     }
 }

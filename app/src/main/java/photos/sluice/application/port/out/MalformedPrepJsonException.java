@@ -14,11 +14,15 @@ import java.io.UncheckedIOException;
  * one. Three callers catch it specifically:
  * {@link photos.sluice.application.service.PrepDirDoctor},
  * {@link photos.sluice.application.service.ApplyPlanner} and
- * {@link photos.sluice.application.service.PrepDirRemedies}. That way a read that merely failed
- * propagates instead of being diagnosed as damage. A file held open by a backup or antivirus
- * process, a permission denial, and a cloud placeholder that never hydrated are three such causes.
- * All three leave the underlying content intact. Only this exception means the content itself
- * cannot be trusted.
+ * {@link photos.sluice.application.service.PrepDirRemedies}. That way a read that merely failed is
+ * never mistaken for damaged content, and so never triggers a repair aimed at content that was
+ * fine. A file held open by a backup or antivirus process, a permission denial, and a cloud
+ * placeholder that never hydrated are three such causes. All three leave the underlying content
+ * intact. Only this exception means the content itself cannot be trusted.
+ *
+ * <p>Where a merely-failed read then goes is the catching caller's own call. {@link
+ * photos.sluice.application.service.PrepDirDoctor} reports it as DAMAGED rather than letting it
+ * propagate, because a diagnosis that throws would take down the caller reading every other run.
  */
 public final class MalformedPrepJsonException extends UncheckedIOException {
 

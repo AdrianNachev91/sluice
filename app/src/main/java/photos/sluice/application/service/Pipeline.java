@@ -13,13 +13,13 @@ import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
+import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
-import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -154,7 +154,7 @@ public class Pipeline {
         this.phaseRunner = new PhaseRunner(progressPort);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, montageConfig, jobRunner, progressPort, applyPlanner, ledgerReader,
-                watchPollInterval);
+                prepDirDoctor, prepDirRemedies, watchPollInterval);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, this.cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
@@ -169,8 +169,8 @@ public class Pipeline {
      * directly (not just via @PostConstruct) so a test can drive it without a Spring context.
      */
     @PostConstruct
-    public void armWatchesForExistingWaitingJobs() {
-        this.cullEngine.armWatchesForExistingWaitingJobs();
+    public void armWatchesForResumableRuns() {
+        this.cullEngine.armWatchesForResumableRuns();
     }
 
     /**
@@ -251,12 +251,25 @@ public class Pipeline {
     }
 
     /**
-     * Delegates to CullEngine to list waiting cull jobs.
+     * Every cull run currently on disk, diagnosed. This is the one source the run-card dashboard and
+     * the unresolved-run banner are both meant to render from.
      *
-     * @return a {@link List} of {@link WaitingCullJob} the currently waiting cull jobs
+     * <p>Derived by enumerating the cull-prep root and diagnosing each dir, never from a persisted
+     * list. Enumerating is what keeps a damaged run visible, which is exactly when it most needs to
+     * be. Diagnosis is side-effect-free and never throws, whatever state a dir is in, so one dir
+     * nobody can read reports DAMAGED and the rest still render.
+     *
+     * <p>That makes polling on a timer safe, not cheap. Each pass reads every sidecar, every shard
+     * and the move ledger of every run, twice over. A caller refreshing on a timer picks its
+     * interval accordingly.
+     *
+     * <p>Not routed through JobRunner: it only reads, so it does not compete for the single job
+     * slot.
+     *
+     * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
      */
-    public List<WaitingCullJob> waitingJobs() {
-        return this.cullEngine.waitingJobs();
+    public List<CullRunSummary> cullRuns() {
+        return this.prepDirDoctor.runs(this.cullPrepRoot);
     }
 
     /**
@@ -353,23 +366,66 @@ public class Pipeline {
     }
 
     /**
-     * Thrown by {@code curate()} instead of a plain {@link IllegalStateException} when an
-     * auto-resolved {@code OldestYear} scope's {@code checkNoWaitingJobFor()} conflict surfaces
-     * after its sort has already moved real files. Every other {@code checkNoWaitingJobFor()}
-     * failure happens before anything runs. Only this one needs to carry a partial result
-     * forward: {@link #sortSummary()} is what the sort stage already produced.
+     * Thrown when a fresh cull or curate is refused because an unfinished run already occupies the
+     * scope's own prep dir. It carries that run, diagnosed, so a caller routes the user to the
+     * right way out without parsing the message. Resume for WAITING or READY, Troubleshoot for
+     * BLOCKED or DAMAGED, Discard from any of them.
+     *
+     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
+     * refused needs no knowledge of this type at all.
      */
-    public static final class CurateConflictException extends IllegalStateException {
+    public static sealed class ScopeOccupiedException extends IllegalStateException
+            permits CurateConflictException {
+        private final transient CullRunSummary occupant;
+
+        /**
+         * Creates the exception, rendering the refusal message from the occupying run.
+         *
+         * @param occupant {@link CullRunSummary} the run already occupying the scope
+         */
+        ScopeOccupiedException(final CullRunSummary occupant) {
+            super("A cull of scope '" + occupant.scope() + "' already occupies " + occupant.prepDir() + ", and is "
+                    + occupant.health().state() + " - resume, troubleshoot or discard it before starting a new cull"
+                    + " for the same scope.");
+            this.occupant = occupant;
+        }
+
+        /**
+         * Returns the run occupying the scope, diagnosed.
+         *
+         * @return {@link CullRunSummary} the occupying run
+         */
+        public CullRunSummary occupant() {
+            return this.occupant;
+        }
+    }
+
+    /**
+     * Thrown by {@code curate()} in place of a plain {@link ScopeOccupiedException} whenever the
+     * refusal lands after its sort has already moved real files. Two calls reach that point. An
+     * auto-resolved {@code OldestYear} scope cannot be checked until its year is known, which is
+     * only after the sort. And the claim inside {@code buildFreshAndDispatch} re-asks for every
+     * scope shape, so a scope free when {@code curate()} was called but taken during a long sort
+     * refuses there too.
+     *
+     * <p>Both need to carry a partial result forward, which a plain refusal cannot:
+     * {@link #sortSummary()} is what the sort stage already produced. A refusal raised before the
+     * sort runs stays a plain {@link ScopeOccupiedException}, since nothing has happened to report.
+     *
+     * <p>A subtype rather than a sibling, so it keeps {@link #occupant()} as well. The refusal is
+     * the same refusal either way, and a caller handling one handles both.
+     */
+    public static final class CurateConflictException extends ScopeOccupiedException {
         private final transient SortSummary sortSummary;
 
         /**
-         * Creates the exception carrying the partial sort result.
+         * Creates the exception carrying both the occupying run and the partial sort result.
          *
-         * @param message {@link String} the exception message
+         * @param occupant {@link CullRunSummary} the run already occupying the scope
          * @param sortSummary {@link SortSummary} the sort summary produced before the conflict
          */
-        CurateConflictException(final String message, final SortSummary sortSummary) {
-            super(message);
+        CurateConflictException(final CullRunSummary occupant, final SortSummary sortSummary) {
+            super(occupant);
             this.sortSummary = sortSummary;
         }
 

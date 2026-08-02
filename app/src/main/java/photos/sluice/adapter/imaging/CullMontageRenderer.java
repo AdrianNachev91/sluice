@@ -175,10 +175,13 @@ public class CullMontageRenderer implements MontageRenderer {
         final int totalMontages = (reviewable.size() + tilesPerMontage - 1) / tilesPerMontage;
         final List<String> entries = new ArrayList<>();
         for (int start = 0; start < reviewable.size(); start += tilesPerMontage) {
-            // Checked per montage. A partial prep dir stopped here is inert: with no index.json
-            // ever written, it's invisible to waitingJobs(). The next build() call for this scope
-            // clears it via clearPrepDir() above anyway.
+            // Checked per montage. Whatever montages this run wrote before stopping are cleared
+            // again on the way out, so a cancelled render leaves no directory behind at all. A
+            // scope is occupied by any prep dir holding files, and a half-rendered one holds
+            // nothing worth occupying it with. No index.json was ever written, so nothing here
+            // records a single decision. The images cost only the time to render them again.
             if (cancellation.isCancelled()) {
+                clearPrepDir(prepDir);
                 return null;
             }
             final int end = Math.min(start + tilesPerMontage, reviewable.size());

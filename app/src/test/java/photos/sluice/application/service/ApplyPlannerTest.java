@@ -6,6 +6,7 @@ import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
+import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.Finding.MissingSource;
@@ -25,6 +26,7 @@ import static photos.sluice.application.service.CullPrepTestSupport.classificati
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
+import static photos.sluice.application.service.CullPrepTestSupport.prepDirRemedies;
 import static photos.sluice.application.service.CullPrepTestSupport.readIndex;
 import static photos.sluice.application.service.CullPrepTestSupport.readLedger;
 import static photos.sluice.application.service.CullPrepTestSupport.sidecarEntry;
@@ -191,20 +193,89 @@ class ApplyPlannerTest {
         assertThat(report.decisions()).isEmpty();
     }
 
+    // A montage with an unreadable sidecar and no shard reads like one still being culled, and is
+    // not. A culler keys its verdicts against the sidecar, so it can never produce a shard for a
+    // montage whose sidecar it cannot read. Left unreported, the run sits WAITING with an empty
+    // findings list and only a discard escapes it. Reported, SET_ASIDE becomes reachable.
     @Test
-    void validateSilentlySkipsACorruptSidecarForAMontageWithNoShardYet(@TempDir final Path root) throws IOException {
+    void validateReportsACorruptSidecarForAMontageWithNoShardYet(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
         final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(culled, "x");
         writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
-        // montage-002 has no sidecar and no shard yet - still being culled, not yet actionable.
+        // montage-002 has neither a sidecar nor a shard.
+
+        final ValidationReport report = applyPlanner()
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-002"));
+    }
+
+    // A montage whose sidecar reads fine and simply lacks a shard is skipped in silence, because it
+    // genuinely is still being culled. This is the boundary the corrupt-sidecar finding must not
+    // cross. An implementation flagging every uncalled montage would still satisfy every assertion
+    // about reporting a corrupt one, while burying the user in noise for runs that are mid-cull.
+    @Test
+    void validateSaysNothingAboutAMontageWithAReadableSidecarAndNoShardYet(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path uncalled = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(culled, "x");
+        writeFile(uncalled, "y");
+        writeIndex(prepDir, 2, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(uncalled));
+        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
 
         final ValidationReport report = applyPlanner()
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).isEmpty();
+    }
+
+    // Both answers are terminal, so neither re-raises the finding the user already settled. SET_ASIDE
+    // drops the montage; there is no shard for APPLY_ANYWAY to trust, so it contributes nothing.
+    @Test
+    void validateStopsReportingACorruptSidecarWithNoShardOnceItIsSetAside(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(culled, "x");
+        writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
+                CorruptSidecarResolution.SET_ASIDE, "nothing left to cull it against");
+
+        final ValidationReport report = applyPlanner()
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings()).isEmpty();
+    }
+
+    // APPLY_ANYWAY on a shardless montage says to trust a shard that is not there, so the montage
+    // contributes nothing. What matters is that the answer still counts as given. Re-raising the
+    // finding would ask the user to settle something they already settled.
+    @Test
+    void validateStopsReportingACorruptSidecarWithNoShardOnceItIsApplyAnyway(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path culled = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(culled, "x");
+        writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
+        writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
+        prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
+                CorruptSidecarResolution.APPLY_ANYWAY, "its shard will turn up");
+
+        final ValidationReport report = applyPlanner()
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings()).isEmpty();
+        // Weak on its own, since montage-002 has no shard file for any implementation to read. It
+        // pins the other half of the sentence above: the answered montage contributes nothing while
+        // montage-001 still contributes normally.
+        assertThat(report.decisions()).hasSize(1);
     }
 
     // This gate is the only one an apply-only resume passes through, so an unparseable shard has to
