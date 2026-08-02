@@ -119,6 +119,25 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.isReadyToResume(prepDir)).isFalse();
     }
 
+    // The ledger read tally() itself makes, sitting outside every other guard in this class until a
+    // whole-phase review caught it. Degrades to the raw unreviewable list rather than throwing, the
+    // same tolerance every other read here already has.
+    @Test
+    void aFailedLedgerReadStillReportsATallyRatherThanThrowing(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        final var calculator = new ShardTallyCalculator(new JsonCullPrepStore(), fixedSettings(), applyPlanner(),
+                _ -> {
+                    throw new IllegalStateException("simulated ledger read failure");
+                });
+
+        assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 1, 1));
+    }
+
     private static ShardTallyCalculator shardTallyCalculator() {
         return shardTallyCalculator(new JsonCullPrepStore());
     }

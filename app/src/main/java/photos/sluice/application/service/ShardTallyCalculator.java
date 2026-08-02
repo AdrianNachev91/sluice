@@ -79,8 +79,7 @@ final class ShardTallyCalculator {
                 .map(SidecarPhotoEntry::src)
                 .toList();
         final List<String> categories = this.cullSettings.categories().stream().map(CullCategory::name).toList();
-        final List<Path> unreviewable =
-                this.applyPlanner.resolvedUnreviewable(prep, this.ledgerReader.read(prep.prepDir()));
+        final List<Path> unreviewable = this.resolvedUnreviewable(prep);
 
         final List<MontageShardStatus> statuses = prep.entries().stream()
                 .map(montage -> this.montageShardStatus(prep, montage, sidecarSrcs, categories, unreviewable))
@@ -160,6 +159,23 @@ final class ShardTallyCalculator {
         } catch (final RuntimeException e) {
             log.warn("Could not read {}'s sidecar in {}, contributing no files from it", montage, prep.prepDir(), e);
             return List.of();
+        }
+    }
+
+    /**
+     * prepDir's unreviewable list, ledger-resolved. A transiently unreadable ledger degrades to the
+     * raw, unresolved list here, rather than failing the whole tally. Worst case a montage the user
+     * already resolved briefly displays as invalid again; the next successful read corrects it.
+     *
+     * @param prep {@link PrepDir} the prep dir being tallied
+     * @return a {@link List} of {@link Path} prepDir's unreviewable files, ledger-resolved if the ledger could be read
+     */
+    private List<Path> resolvedUnreviewable(final PrepDir prep) {
+        try {
+            return this.applyPlanner.resolvedUnreviewable(prep, this.ledgerReader.read(prep.prepDir()));
+        } catch (final RuntimeException e) {
+            log.warn("Could not read the ledger for {}, using its unresolved unreviewable list", prep.prepDir(), e);
+            return prep.unreviewable();
         }
     }
 

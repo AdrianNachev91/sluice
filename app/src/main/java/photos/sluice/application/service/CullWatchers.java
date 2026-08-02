@@ -15,9 +15,9 @@ import java.util.function.Function;
 
 /**
  * Owns the watch lifecycle for waiting cull jobs: which prep dirs currently have a
- * {@link CullWatcher} polling them, and the arm/disarm/auto-resume rules around that. Pulled out of
- * {@link CullEngine} once that class grew a second job alongside prep/dispatch/apply orchestration -
- * see the phase doc for the chunk that made this split. Not a Spring bean; {@link CullEngine} owns
+ * {@link CullWatcher} polling them, and the arm/disarm/auto-resume rules around that. A separate
+ * class from {@link CullEngine}, since the watch lifecycle is an independently-testable concern of
+ * its own, alongside prep/dispatch/apply orchestration. Not a Spring bean; {@link CullEngine} owns
  * the one instance it needs.
  */
 final class CullWatchers {
