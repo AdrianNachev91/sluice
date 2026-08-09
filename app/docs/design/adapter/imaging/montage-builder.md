@@ -73,8 +73,8 @@ than captioning a real photo. A caption should stay a consistent, legible size r
 `labelBandHeight()` is computed via a throwaway 1x1 probe image. Font metrics need a `Graphics2D`
 context to measure, but the canvas height must be known before one exists. It's package-private so
 the test class can compute the same expected height directly, rather than hardcoding a
-JDK/OS-dependent pixel value. This project's CI runs both Ubuntu and Windows, and real font metrics
-vary slightly between them.
+JDK/OS-dependent pixel value. This project's CI runs Ubuntu, Windows and macOS, and real font
+metrics vary slightly between them.
 
 ## Scenarios
 
