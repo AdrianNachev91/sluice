@@ -104,6 +104,24 @@ public class CullDestinations {
     }
 
     /**
+     * The Nth collision candidate for baseName. Slot 1 is the name itself, then " (2)", " (3)", and
+     * so on before the extension. Matches the media store's own collision-naming convention exactly.
+     *
+     * @param baseName {@link String} the original file name
+     * @param slot int the 1-based candidate slot
+     * @return {@link String} the candidate file name
+     */
+    static String candidateName(final String baseName, final int slot) {
+        if (slot == 1) {
+            return baseName;
+        }
+        final int dot = baseName.lastIndexOf('.');
+        final String base = dot <= 0 ? baseName : baseName.substring(0, dot);
+        final String extension = dot <= 0 ? "" : baseName.substring(dot);
+        return base + " (" + slot + ")" + extension;
+    }
+
+    /**
      * A Sorted-relative file always sits under a .../&lt;yyyy&gt;/&lt;MM&gt;/ pair of directories.
      * The segments are read off the path directly rather than pattern-matched from its string form.
      * Matching a string is separator-sensitive across platforms, and unnecessary here, since this
@@ -122,23 +140,5 @@ public class CullDestinations {
         final String month = monthDir.getFileName().toString();
         final String year = yearDir.getFileName().toString();
         return year.matches("\\d{4}") && month.matches("\\d{2}") ? year + "-" + month : UNDATED;
-    }
-
-    /**
-     * The Nth collision candidate for baseName. Slot 1 is the name itself, then " (2)", " (3)", and
-     * so on before the extension. Matches the media store's own collision-naming convention exactly.
-     *
-     * @param baseName {@link String} the original file name
-     * @param slot int the 1-based candidate slot
-     * @return {@link String} the candidate file name
-     */
-    static String candidateName(final String baseName, final int slot) {
-        if (slot == 1) {
-            return baseName;
-        }
-        final int dot = baseName.lastIndexOf('.');
-        final String base = dot <= 0 ? baseName : baseName.substring(0, dot);
-        final String extension = dot <= 0 ? "" : baseName.substring(dot);
-        return base + " (" + slot + ")" + extension;
     }
 }

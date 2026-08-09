@@ -231,6 +231,45 @@ final class CullEngine {
     }
 
     /**
+     * Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and
+     * CurateEngine's cull stage; resume() re-enters at dispatchAndApply() directly instead, since it
+     * must never rebuild an existing prep dir. See cull()'s own doc for why the occupancy question
+     * is asked here too, not only at its synchronous pre-submit call site.
+     *
+     * <p>claimScope() runs before anything else, and every outcome below carries what it returned.
+     * The archive happens ahead of montage rendering, so every way this method can end is reachable
+     * with a prior run already filed away. An outcome that dropped that fact would leave a user's
+     * completed record looking like it disappeared.
+     *
+     * @param scope {@link CullScope} the media scope to cull
+     * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
+     * @return {@link CullJobOutcome} the outcome of this cull attempt
+     */
+    CullJobOutcome buildFreshAndDispatch(final CullScope scope, final CancellationSignal cancellation) throws Exception {
+        final Path archivedPriorRun = this.claimScope(scope);
+        // phaseRunner.run/PhaseWork are shared with sort/commit/rescue, which always return non-null -
+        // keeping T itself non-null there avoids leaking a spurious "might be null" possibility
+        // into those callers. Wrapping the result in Optional here instead keeps that shared
+        // contract clean while still letting this call site express a real null case.
+        final Optional<PrepDir> prep = this.phaseRunner.run(PREPPING,
+                progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.cullSettings.montage(),
+                        progress, cancellation)));
+        // Empty means the renderer itself stopped mid-render, clearing whatever it had written and
+        // leaving no prep dir at all - nothing resumable exists. The renderer is the completion
+        // authority here: this branches purely on its return value, never on re-checking disk state.
+        if (prep.isEmpty()) {
+            return new CullJobOutcome.Cancelled(archivedPriorRun);
+        }
+        // Prep just finished and wrote index.json, so a cancellation seen right here resolves
+        // cleanly to Waiting too - a 0/N tally, nothing dispatched yet. No watcher is armed: an
+        // auto-resume moments after a cancel would defy it.
+        if (cancellation.isCancelled()) {
+            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep.get()), archivedPriorRun);
+        }
+        return this.dispatchAndApply(prep.get(), false, cancellation, archivedPriorRun);
+    }
+
+    /**
      * Where cull runs are prepared, worked out on every call. Resolving it once at construction
      * would pin this engine to the folder the app happened to start in. A saved working root would
      * then reach every other engine and not this one.
@@ -292,36 +331,6 @@ final class CullEngine {
     }
 
     /**
-     * Whether prepDir holds a file, holds none, or could not be read at all.
-     *
-     * <p>A boolean has no way to say "I do not know". {@link Occupancy.Unreadable} gives that third
-     * answer its own vocabulary, distinct from occupied. {@link #occupantOf} can then refuse over an
-     * unreadable dir without fabricating a diagnosis or a remedy to justify it. Conflating the two
-     * would route a dropped network mount to DAMAGED's locked Discard, the same as a genuinely stuck
-     * run. If the failure clears between the refusal and the discard, that destroys a healthy run.
-     *
-     * <p>Not knowing what is in prepDir is not the same as knowing it is empty, and the two possible
-     * mistakes cost wildly different amounts. A needless refusal costs one confusing message.
-     * Proceeding clears the dir. So an unreadable prep dir is never treated as empty here - refusing
-     * is the one safe direction, whichever of the two unresolved cases caused it.
-     *
-     * <p>Guarded by a catch-all over both port calls. {@link MediaStore} constrains nothing about
-     * what a read may throw, and the safe answer is the same whatever came back.
-     *
-     * @param prepDir {@link Path} the prep dir to check
-     * @return {@link Occupancy} whether prepDir is empty, occupied, or could not be read
-     */
-    private Occupancy occupancyOf(final Path prepDir) {
-        try {
-            final boolean empty = !this.mediaStore.exists(prepDir) || this.mediaStore.listFiles(prepDir).isEmpty();
-            return empty ? new Occupancy.Empty() : new Occupancy.Occupied();
-        } catch (final RuntimeException e) {
-            log.warn("Could not tell whether {} is occupied", prepDir, e);
-            return new Occupancy.Unreadable(e);
-        }
-    }
-
-    /**
      * {@link #occupancyOf}'s own answer: a prep dir holds a file, holds none, or its own occupancy
      * could not even be determined. The third case is why this is not a boolean.
      */
@@ -349,42 +358,33 @@ final class CullEngine {
     }
 
     /**
-     * Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and
-     * CurateEngine's cull stage; resume() re-enters at dispatchAndApply() directly instead, since it
-     * must never rebuild an existing prep dir. See cull()'s own doc for why the occupancy question
-     * is asked here too, not only at its synchronous pre-submit call site.
+     * Whether prepDir holds a file, holds none, or could not be read at all.
      *
-     * <p>claimScope() runs before anything else, and every outcome below carries what it returned.
-     * The archive happens ahead of montage rendering, so every way this method can end is reachable
-     * with a prior run already filed away. An outcome that dropped that fact would leave a user's
-     * completed record looking like it disappeared.
+     * <p>A boolean has no way to say "I do not know". {@link Occupancy.Unreadable} gives that third
+     * answer its own vocabulary, distinct from occupied. {@link #occupantOf} can then refuse over an
+     * unreadable dir without fabricating a diagnosis or a remedy to justify it. Conflating the two
+     * would route a dropped network mount to DAMAGED's locked Discard, the same as a genuinely stuck
+     * run. If the failure clears between the refusal and the discard, that destroys a healthy run.
      *
-     * @param scope {@link CullScope} the media scope to cull
-     * @param cancellation {@link CancellationSignal} signals whether cancellation has been requested
-     * @return {@link CullJobOutcome} the outcome of this cull attempt
+     * <p>Not knowing what is in prepDir is not the same as knowing it is empty, and the two possible
+     * mistakes cost wildly different amounts. A needless refusal costs one confusing message.
+     * Proceeding clears the dir. So an unreadable prep dir is never treated as empty here - refusing
+     * is the one safe direction, whichever of the two unresolved cases caused it.
+     *
+     * <p>Guarded by a catch-all over both port calls. {@link MediaStore} constrains nothing about
+     * what a read may throw, and the safe answer is the same whatever came back.
+     *
+     * @param prepDir {@link Path} the prep dir to check
+     * @return {@link Occupancy} whether prepDir is empty, occupied, or could not be read
      */
-    CullJobOutcome buildFreshAndDispatch(final CullScope scope, final CancellationSignal cancellation) throws Exception {
-        final Path archivedPriorRun = this.claimScope(scope);
-        // phaseRunner.run/PhaseWork are shared with sort/commit/rescue, which always return non-null -
-        // keeping T itself non-null there avoids leaking a spurious "might be null" possibility
-        // into those callers. Wrapping the result in Optional here instead keeps that shared
-        // contract clean while still letting this call site express a real null case.
-        final Optional<PrepDir> prep = this.phaseRunner.run(PREPPING,
-                progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.cullSettings.montage(),
-                        progress, cancellation)));
-        // Empty means the renderer itself stopped mid-render, clearing whatever it had written and
-        // leaving no prep dir at all - nothing resumable exists. The renderer is the completion
-        // authority here: this branches purely on its return value, never on re-checking disk state.
-        if (prep.isEmpty()) {
-            return new CullJobOutcome.Cancelled(archivedPriorRun);
+    private Occupancy occupancyOf(final Path prepDir) {
+        try {
+            final boolean empty = !this.mediaStore.exists(prepDir) || this.mediaStore.listFiles(prepDir).isEmpty();
+            return empty ? new Occupancy.Empty() : new Occupancy.Occupied();
+        } catch (final RuntimeException e) {
+            log.warn("Could not tell whether {} is occupied", prepDir, e);
+            return new Occupancy.Unreadable(e);
         }
-        // Prep just finished and wrote index.json, so a cancellation seen right here resolves
-        // cleanly to Waiting too - a 0/N tally, nothing dispatched yet. No watcher is armed: an
-        // auto-resume moments after a cancel would defy it.
-        if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep.get()), archivedPriorRun);
-        }
-        return this.dispatchAndApply(prep.get(), false, cancellation, archivedPriorRun);
     }
 
     /**

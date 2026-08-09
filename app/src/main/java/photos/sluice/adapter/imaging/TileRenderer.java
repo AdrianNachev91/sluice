@@ -122,6 +122,21 @@ public class TileRenderer {
     }
 
     /**
+     * The tag's value comes straight from the file's own bytes, not something this code controls.
+     * A corrupted or adversarial file reporting an enormous length must not trigger a huge
+     * allocation. A real EXIF thumbnail is always a small preview image. This cap is generous
+     * relative to any legitimate one - the real Canon CR2 fixture used here is 6162 bytes - while
+     * still ruling out a bogus multi-gigabyte value. Package-private (not private) so
+     * TileRendererTest can exercise the boundary directly.
+     *
+     * @param length int the claimed thumbnail byte length
+     * @return boolean true if the length is a plausible thumbnail size
+     */
+    static boolean isPlausibleThumbnailLength(final int length) {
+        return length > 0 && length <= MAX_EXIF_THUMBNAIL_BYTES;
+    }
+
+    /**
      * Builds a placeholder tile result marked unreviewable.
      *
      * @param tileSize int the tile size in pixels
@@ -278,21 +293,6 @@ public class TileRenderer {
         } catch (ImageProcessingException | IOException | RuntimeException _) {
             return Optional.empty();
         }
-    }
-
-    /**
-     * The tag's value comes straight from the file's own bytes, not something this code controls.
-     * A corrupted or adversarial file reporting an enormous length must not trigger a huge
-     * allocation. A real EXIF thumbnail is always a small preview image. This cap is generous
-     * relative to any legitimate one - the real Canon CR2 fixture used here is 6162 bytes - while
-     * still ruling out a bogus multi-gigabyte value. Package-private (not private) so
-     * TileRendererTest can exercise the boundary directly.
-     *
-     * @param length int the claimed thumbnail byte length
-     * @return boolean true if the length is a plausible thumbnail size
-     */
-    static boolean isPlausibleThumbnailLength(final int length) {
-        return length > 0 && length <= MAX_EXIF_THUMBNAIL_BYTES;
     }
 
     /**

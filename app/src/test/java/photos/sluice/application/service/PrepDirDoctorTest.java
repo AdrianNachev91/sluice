@@ -519,6 +519,30 @@ class PrepDirDoctorTest {
         }
     }
 
+    // Each asserts an empty result, so each first proves the same fixture yields a run through a
+    // working store. Without that control the assertion would hold against a root that simply has
+    // nothing in it, and would pass with no guard in the code at all.
+    @Test
+    void runsReportsNoRunsWhenTheRootListingFailsRatherThanThrowing(@TempDir final Path root) throws IOException {
+        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
+        assertThat(doctor().runs(cullPrepRoot)).hasSize(1);
+
+        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingListing()).runs(cullPrepRoot)).isEmpty();
+    }
+
+    // The epoch reads as "as old as anything", putting a dir nobody can stat at the top of a list
+    // ordered by neglect. The working-store assertion first, so this cannot pass with the guard gone.
+    @Test
+    void aPrepDirWhoseMtimeCannotBeReadIsAgedAsTheEpoch(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root, "2019");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+
+        assertThat(doctor().summaryOf(prepDir).since()).isNotEqualTo(Instant.EPOCH);
+        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingLastModified()).summaryOf(prepDir).since())
+                .isEqualTo(Instant.EPOCH);
+    }
+
     private static Path prepDir(final Path root) throws IOException {
         return prepDir(root, "scope1");
     }
@@ -553,23 +577,6 @@ class PrepDirDoctorTest {
     private static String classificationJson(final Path file, final String category, final String reason) {
         return "{ \"file\": \"%s\", \"action\": \"%s\", \"reason\": \"%s\" }"
                 .formatted(file.toString().replace("\\", "\\\\"), category, reason);
-    }
-
-    private static void writeFile(final Path file, final String content) throws IOException {
-        Files.createDirectories(file.getParent());
-        Files.writeString(file, content);
-    }
-
-    // Each asserts an empty result, so each first proves the same fixture yields a run through a
-    // working store. Without that control the assertion would hold against a root that simply has
-    // nothing in it, and would pass with no guard in the code at all.
-    @Test
-    void runsReportsNoRunsWhenTheRootListingFailsRatherThanThrowing(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/cull-prep");
-        writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
-        assertThat(doctor().runs(cullPrepRoot)).hasSize(1);
-
-        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingListing()).runs(cullPrepRoot)).isEmpty();
     }
 
     // The existence check reaches the same port as the listing does. So the guard covers it too,
@@ -607,16 +614,9 @@ class PrepDirDoctorTest {
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
     }
 
-    // The epoch reads as "as old as anything", putting a dir nobody can stat at the top of a list
-    // ordered by neglect. The working-store assertion first, so this cannot pass with the guard gone.
-    @Test
-    void aPrepDirWhoseMtimeCannotBeReadIsAgedAsTheEpoch(@TempDir final Path root) throws IOException {
-        final Path prepDir = prepDir(root, "2019");
-        writeIndex(prepDir, 1, List.of("montage-001"));
-
-        assertThat(doctor().summaryOf(prepDir).since()).isNotEqualTo(Instant.EPOCH);
-        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingLastModified()).summaryOf(prepDir).since())
-                .isEqualTo(Instant.EPOCH);
+    private static void writeFile(final Path file, final String content) throws IOException {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content);
     }
 
     // A stat that fails with a plain unchecked exception - the guard holds for the whole unchecked

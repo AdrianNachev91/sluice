@@ -133,6 +133,32 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     }
 
     /**
+     * Releases a claim by closing its channel, which drops the OS lock with it. The registry entry
+     * is given up after the close rather than before. For an ordinary release it therefore covers
+     * the root for as long as a lock on it can exist.
+     *
+     * <p>It goes in a finally, which is a deliberate trade rather than an oversight. A close that
+     * fails frees the registry key while the OS lock may still be held, and nothing in this process
+     * can then detect that. The alternative strands the root until the process exits, which is
+     * worse and far easier to hit.
+     *
+     * <p>An instance method, and package-private, so a test can make giving up a claim fail. That
+     * failure is the whole reason {@link #closeQuietly} exists, and no portable way to make a real
+     * channel refuse to close is available.
+     *
+     * @param claim {@link Claim} the claim to give up
+     */
+    void close(final Claim claim) {
+        try {
+            claim.channel().close();
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to release the claim on working root " + claim.root() + ".", e);
+        } finally {
+            CLAIMED_ROOTS.remove(claim.root());
+        }
+    }
+
+    /**
      * Reduces a path to one agreed form, so that two ways of writing the same folder count as the
      * same folder. A relative step, a symlink and a junction all disappear here.
      *
@@ -217,32 +243,6 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
             return FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to open the lock file in working root " + root + ".", e);
-        }
-    }
-
-    /**
-     * Releases a claim by closing its channel, which drops the OS lock with it. The registry entry
-     * is given up after the close rather than before. For an ordinary release it therefore covers
-     * the root for as long as a lock on it can exist.
-     *
-     * <p>It goes in a finally, which is a deliberate trade rather than an oversight. A close that
-     * fails frees the registry key while the OS lock may still be held, and nothing in this process
-     * can then detect that. The alternative strands the root until the process exits, which is
-     * worse and far easier to hit.
-     *
-     * <p>An instance method, and package-private, so a test can make giving up a claim fail. That
-     * failure is the whole reason {@link #closeQuietly} exists, and no portable way to make a real
-     * channel refuse to close is available.
-     *
-     * @param claim {@link Claim} the claim to give up
-     */
-    void close(final Claim claim) {
-        try {
-            claim.channel().close();
-        } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to release the claim on working root " + claim.root() + ".", e);
-        } finally {
-            CLAIMED_ROOTS.remove(claim.root());
         }
     }
 

@@ -68,15 +68,6 @@ public class PathsConfig implements PathsPort {
     }
 
     /**
-     * The folder roots the settings currently in force name.
-     *
-     * @return {@link PathSettings} the configured folder roots
-     */
-    private PathSettings paths() {
-        return this.settings.current().paths();
-    }
-
-    /**
      * Resolves the logs directory under the repo root.
      *
      * @return {@link Path} the logs directory path
@@ -124,6 +115,15 @@ public class PathsConfig implements PathsPort {
     @Override
     public Path unreviewable() {
         return this.repoRoot().resolve("Unreviewable");
+    }
+
+    /**
+     * The folder roots the settings currently in force name.
+     *
+     * @return {@link PathSettings} the configured folder roots
+     */
+    private PathSettings paths() {
+        return this.settings.current().paths();
     }
 
     /**

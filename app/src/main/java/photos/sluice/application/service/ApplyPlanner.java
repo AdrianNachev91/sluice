@@ -217,37 +217,6 @@ public class ApplyPlanner {
     }
 
     /**
-     * Suppresses a {@link Finding.DecisionUnreviewableOverlap} finding once the disposition ledger
-     * records how the user resolved it, dropping the losing side from the decisions this run acts
-     * on. Shards and index.json are never edited. TREAT_AS_UNREVIEWABLE only removes the decision
-     * from this in-memory list. A TRUST_DECISION resolution suppresses the other side instead,
-     * wherever {@link #resolvedUnreviewable} is consulted.
-     *
-     * @param ledger {@link Ledger} the parsed disposition ledger
-     * @param report {@link ValidationReport} the shard validator's own report, before ledger resolution
-     * @return {@link ValidationReport} the same report, with resolved overlaps suppressed
-     */
-    private static ValidationReport resolveOverlaps(final Ledger ledger, final ValidationReport report) {
-        final Map<Path, OverlapResolution> overlaps = ledger.overlaps();
-        if (overlaps.isEmpty()) {
-            return report;
-        }
-        final var findings = new ArrayList<Finding>();
-        final var decisions = new ArrayList<>(report.decisions());
-        for (final Finding finding : report.findings()) {
-            if (finding instanceof Finding.DecisionUnreviewableOverlap(final Decision decision)
-                    && overlaps.containsKey(decision.file())) {
-                if (overlaps.get(decision.file()) == OverlapResolution.TREAT_AS_UNREVIEWABLE) {
-                    decisions.remove(decision);
-                }
-            } else {
-                findings.add(finding);
-            }
-        }
-        return new ValidationReport(findings, report.heals(), decisions);
-    }
-
-    /**
      * prepDir's own unreviewable list, minus any file the disposition ledger has resolved with
      * TRUST_DECISION. The shard's own decision wins for those, so the file is no longer treated as
      * unreviewable at all. index.json itself is never edited; this filtering happens purely in
@@ -363,6 +332,49 @@ public class ApplyPlanner {
     }
 
     /**
+     * Builds the aggregated exception for a list of findings.
+     *
+     * @param findings a {@link List} of {@link Finding} the findings to report
+     * @return {@link ApplyException} the exception describing all findings
+     */
+    static ApplyException failure(final List<Finding> findings) {
+        final List<String> messages = findings.stream().map(Finding::describe).toList();
+        return new ApplyException("Shard validation failed - " + messages.size()
+                + " problem(s), nothing applied:\n  - " + String.join("\n  - ", messages), findings);
+    }
+
+    /**
+     * Suppresses a {@link Finding.DecisionUnreviewableOverlap} finding once the disposition ledger
+     * records how the user resolved it, dropping the losing side from the decisions this run acts
+     * on. Shards and index.json are never edited. TREAT_AS_UNREVIEWABLE only removes the decision
+     * from this in-memory list. A TRUST_DECISION resolution suppresses the other side instead,
+     * wherever {@link #resolvedUnreviewable} is consulted.
+     *
+     * @param ledger {@link Ledger} the parsed disposition ledger
+     * @param report {@link ValidationReport} the shard validator's own report, before ledger resolution
+     * @return {@link ValidationReport} the same report, with resolved overlaps suppressed
+     */
+    private static ValidationReport resolveOverlaps(final Ledger ledger, final ValidationReport report) {
+        final Map<Path, OverlapResolution> overlaps = ledger.overlaps();
+        if (overlaps.isEmpty()) {
+            return report;
+        }
+        final var findings = new ArrayList<Finding>();
+        final var decisions = new ArrayList<>(report.decisions());
+        for (final Finding finding : report.findings()) {
+            if (finding instanceof Finding.DecisionUnreviewableOverlap(final Decision decision)
+                    && overlaps.containsKey(decision.file())) {
+                if (overlaps.get(decision.file()) == OverlapResolution.TREAT_AS_UNREVIEWABLE) {
+                    decisions.remove(decision);
+                }
+            } else {
+                findings.add(finding);
+            }
+        }
+        return new ValidationReport(findings, report.heals(), decisions);
+    }
+
+    /**
      * The move-record log only proves a move happened when its recorded destination still exists
      * and still hashes to the recorded value. A record alone is never trusted on its own.
      *
@@ -375,18 +387,6 @@ public class ApplyPlanner {
         final boolean verified = record != null && this.mediaReader.exists(record.dest())
                 && this.sha256Port.hash(record.dest()).equals(record.hash());
         return verified ? Optional.of(record) : Optional.empty();
-    }
-
-    /**
-     * Builds the aggregated exception for a list of findings.
-     *
-     * @param findings a {@link List} of {@link Finding} the findings to report
-     * @return {@link ApplyException} the exception describing all findings
-     */
-    static ApplyException failure(final List<Finding> findings) {
-        final List<String> messages = findings.stream().map(Finding::describe).toList();
-        return new ApplyException("Shard validation failed - " + messages.size()
-                + " problem(s), nothing applied:\n  - " + String.join("\n  - ", messages), findings);
     }
 
     /**

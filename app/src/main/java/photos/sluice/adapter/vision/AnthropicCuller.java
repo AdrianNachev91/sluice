@@ -331,27 +331,27 @@ class AnthropicCuller implements VisionCuller {
     }
 
     /**
-     * Reads one montage's sidecar, translating an unreadable one into the empty case rather than
-     * failing the run. A sidecar names the photos its montage's tile grid shows. Without one there
-     * is nothing to key the model's verdicts back to files, so that montage cannot be culled.
+     * Package-private so the live verify can wrap the client this builds instead of its own.
      *
-     * <p>Skipping it beats failing the run, because a montage that already holds a shard has a
-     * genuine repair path. The apply phase reports it as a corrupt sidecar and offers the choice of
-     * trusting that shard or setting the montage aside. Failing here would put the run out of reach
-     * of the answer to that question.
-     *
-     * <p>Damaged content and a read that merely failed are both tolerated, matching what the apply
-     * phase does with the same sidecar. Neither is a judgement this class is placed to make.
-     *
-     * @param sidecarPath {@link Path} path of the montage's sidecar
-     * @return an {@link Optional} {@link List} of {@link SidecarPhotoEntry} the entries, or empty if unreadable
+     * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
+     * @return {@link AnthropicClient} the built Anthropic client
      */
-    private Optional<List<SidecarPhotoEntry>> readEntries(final Path sidecarPath) {
-        try {
-            return Optional.of(this.sidecarReader.readEntries(sidecarPath));
-        } catch (final UncheckedIOException e) {
-            return Optional.empty();
+    static AnthropicClient defaultClient(final CullProviderSettings providerSettings) {
+        final String apiKey = System.getenv("ANTHROPIC_API_KEY");
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("Environment variable ANTHROPIC_API_KEY is not set; "
+                    + "the 'anthropic' vision provider needs it to call the API");
         }
+        final var builder = AnthropicOkHttpClient.builder().apiKey(apiKey);
+        final String endpoint = providerSettings.endpoint();
+        if (endpoint != null && !endpoint.isBlank()) {
+            builder.baseUrl(endpoint);
+        }
+        // Transport failures (429/5xx/timeouts) are the SDK's own retry family: exponential
+        // backoff honoring retry-after, separate from the one content retry above.
+        final Integer maxRetries = providerSettings.maxRetries();
+        builder.maxRetries(maxRetries == null ? DEFAULT_TRANSPORT_RETRIES : maxRetries);
+        return builder.build();
     }
 
     /**
@@ -525,6 +525,30 @@ class AnthropicCuller implements VisionCuller {
     }
 
     /**
+     * Reads one montage's sidecar, translating an unreadable one into the empty case rather than
+     * failing the run. A sidecar names the photos its montage's tile grid shows. Without one there
+     * is nothing to key the model's verdicts back to files, so that montage cannot be culled.
+     *
+     * <p>Skipping it beats failing the run, because a montage that already holds a shard has a
+     * genuine repair path. The apply phase reports it as a corrupt sidecar and offers the choice of
+     * trusting that shard or setting the montage aside. Failing here would put the run out of reach
+     * of the answer to that question.
+     *
+     * <p>Damaged content and a read that merely failed are both tolerated, matching what the apply
+     * phase does with the same sidecar. Neither is a judgement this class is placed to make.
+     *
+     * @param sidecarPath {@link Path} path of the montage's sidecar
+     * @return an {@link Optional} {@link List} of {@link SidecarPhotoEntry} the entries, or empty if unreadable
+     */
+    private Optional<List<SidecarPhotoEntry>> readEntries(final Path sidecarPath) {
+        try {
+            return Optional.of(this.sidecarReader.readEntries(sidecarPath));
+        } catch (final UncheckedIOException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Parses the response text into a raw verdict list, recording a problem if it can't be parsed.
      *
      * @param response {@link Message} the model's response to parse
@@ -550,19 +574,6 @@ class AnthropicCuller implements VisionCuller {
             problems.add("response is not valid verdict JSON: " + e.getMessage());
             return null;
         }
-    }
-
-    /**
-     * Concatenates every text block in the response.
-     *
-     * @param response {@link Message} the model's response
-     * @return {@link String} the response's full text content
-     */
-    private static String responseText(final Message response) {
-        return response.content().stream()
-                .flatMap(block -> block.text().stream())
-                .map(TextBlock::text)
-                .collect(Collectors.joining());
     }
 
     /**
@@ -649,6 +660,19 @@ class AnthropicCuller implements VisionCuller {
     }
 
     /**
+     * Concatenates every text block in the response.
+     *
+     * @param response {@link Message} the model's response
+     * @return {@link String} the response's full text content
+     */
+    private static String responseText(final Message response) {
+        return response.content().stream()
+                .flatMap(block -> block.text().stream())
+                .map(TextBlock::text)
+                .collect(Collectors.joining());
+    }
+
+    /**
      * Builds a structured-output schema from a plain map representation.
      *
      * @param schema a {@link Map} of {@link String} to {@link Object}, the schema, as a plain nested map
@@ -689,30 +713,6 @@ class AnthropicCuller implements VisionCuller {
                     + "the 'anthropic' vision provider needs the model id to request");
         }
         return model;
-    }
-
-    /**
-     * Package-private so the live verify can wrap the client this builds instead of its own.
-     *
-     * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
-     * @return {@link AnthropicClient} the built Anthropic client
-     */
-    static AnthropicClient defaultClient(final CullProviderSettings providerSettings) {
-        final String apiKey = System.getenv("ANTHROPIC_API_KEY");
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("Environment variable ANTHROPIC_API_KEY is not set; "
-                    + "the 'anthropic' vision provider needs it to call the API");
-        }
-        final var builder = AnthropicOkHttpClient.builder().apiKey(apiKey);
-        final String endpoint = providerSettings.endpoint();
-        if (endpoint != null && !endpoint.isBlank()) {
-            builder.baseUrl(endpoint);
-        }
-        // Transport failures (429/5xx/timeouts) are the SDK's own retry family: exponential
-        // backoff honoring retry-after, separate from the one content retry above.
-        final Integer maxRetries = providerSettings.maxRetries();
-        builder.maxRetries(maxRetries == null ? DEFAULT_TRANSPORT_RETRIES : maxRetries);
-        return builder.build();
     }
 
     /**

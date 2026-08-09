@@ -93,16 +93,6 @@ public class MoveLedger implements LedgerReader {
     }
 
     /**
-     * The move-record file's own path inside a prep directory.
-     *
-     * @param prepDirPath {@link Path} the prep directory
-     * @return {@link Path} the move-record file's path
-     */
-    private Path moveRecordLogFor(final Path prepDirPath) {
-        return prepDirPath.resolve(MOVE_RECORD_LOG);
-    }
-
-    /**
      * The choices file's own path inside a prep directory. Exposed so a collaborator handling the
      * file itself, rather than its parsed contents, can name it without restating the file name.
      *
@@ -134,6 +124,55 @@ public class MoveLedger implements LedgerReader {
                 .forEach(line -> parseChoice(line, skipped, overlaps, corruptSidecars));
         return new Ledger(this.moveRecordLogFor(prepDirPath), Map.copyOf(moves), Set.copyOf(skipped),
                 Map.copyOf(overlaps), Map.copyOf(corruptSidecars), choiceLines.isEmpty());
+    }
+
+    /**
+     * Records a move this app is about to carry out itself, hashed from the source beforehand.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
+     * @param source {@link Path} the file being moved
+     * @param dest {@link Path} the exact, already-collision-resolved destination
+     * @param hash {@link String} the source's hash, taken before the move
+     */
+    void recordMove(final Path prepDirPath, final Path source, final Path dest, final String hash) {
+        this.mediaStore.appendLine(this.moveRecordLogFor(prepDirPath),
+                source + RECORD_DELIMITER + dest + RECORD_DELIMITER + hash);
+    }
+
+    /**
+     * Records a move inferred after the fact from disk state, the original log having been lost.
+     * The provenance marker keeps a rebuilt log honest about which entries were witnessed.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
+     * @param source {@link Path} the file whose move was inferred
+     * @param dest {@link Path} the destination the file was located at
+     * @param hash {@link String} the hash of whatever was found at dest
+     */
+    void recordReconstructed(final Path prepDirPath, final Path source, final Path dest, final String hash) {
+        this.mediaStore.appendLine(this.moveRecordLogFor(prepDirPath), source + RECORD_DELIMITER + dest
+                + RECORD_DELIMITER + hash + RECORD_DELIMITER + RECONSTRUCTED_MARKER);
+    }
+
+    /**
+     * Records that the user gave up on a missing source rather than restoring it.
+     *
+     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
+     * @param source {@link Path} the missing file's original source path
+     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     */
+    void recordSkip(final Path prepDirPath, final Path source, final String reason) {
+        this.appendChoice(prepDirPath, source + RECORD_DELIMITER + SKIPPED_MARKER
+                + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
+    }
+
+    /**
+     * The move-record file's own path inside a prep directory.
+     *
+     * @param prepDirPath {@link Path} the prep directory
+     * @return {@link Path} the move-record file's path
+     */
+    private Path moveRecordLogFor(final Path prepDirPath) {
+        return prepDirPath.resolve(MOVE_RECORD_LOG);
     }
 
     /**
@@ -181,45 +220,6 @@ public class MoveLedger implements LedgerReader {
             this.disasterDrawer.file(prepDirPath, choicesLog, CHOICES_DRAWER_LABEL);
         }
         this.mediaStore.appendLine(choicesLog, line);
-    }
-
-    /**
-     * Records a move this app is about to carry out itself, hashed from the source beforehand.
-     *
-     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
-     * @param source {@link Path} the file being moved
-     * @param dest {@link Path} the exact, already-collision-resolved destination
-     * @param hash {@link String} the source's hash, taken before the move
-     */
-    void recordMove(final Path prepDirPath, final Path source, final Path dest, final String hash) {
-        this.mediaStore.appendLine(this.moveRecordLogFor(prepDirPath),
-                source + RECORD_DELIMITER + dest + RECORD_DELIMITER + hash);
-    }
-
-    /**
-     * Records a move inferred after the fact from disk state, the original log having been lost.
-     * The provenance marker keeps a rebuilt log honest about which entries were witnessed.
-     *
-     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
-     * @param source {@link Path} the file whose move was inferred
-     * @param dest {@link Path} the destination the file was located at
-     * @param hash {@link String} the hash of whatever was found at dest
-     */
-    void recordReconstructed(final Path prepDirPath, final Path source, final Path dest, final String hash) {
-        this.mediaStore.appendLine(this.moveRecordLogFor(prepDirPath), source + RECORD_DELIMITER + dest
-                + RECORD_DELIMITER + hash + RECORD_DELIMITER + RECONSTRUCTED_MARKER);
-    }
-
-    /**
-     * Records that the user gave up on a missing source rather than restoring it.
-     *
-     * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
-     * @param source {@link Path} the missing file's original source path
-     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
-     */
-    void recordSkip(final Path prepDirPath, final Path source, final String reason) {
-        this.appendChoice(prepDirPath, source + RECORD_DELIMITER + SKIPPED_MARKER
-                + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
     }
 
     /**

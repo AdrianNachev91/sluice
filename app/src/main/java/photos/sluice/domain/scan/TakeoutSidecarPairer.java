@@ -138,21 +138,6 @@ public final class TakeoutSidecarPairer {
     }
 
     /**
-     * Moves a dup number to where the media file carries it. Google numbers the sidecar at the end
-     * of its whole name, while the media file it describes is numbered before its extension.
-     *
-     * @param mediaName {@link String} the media filename recovered from the sidecar's base name
-     * @param dupNumber {@link String} the duplicate counter's digits, without their brackets
-     * @return {@link String} the media filename with the dup number in its own position
-     */
-    private static String withDupNumberBeforeExtension(final String mediaName, final String dupNumber) {
-        final String numbering = "(" + dupNumber + ")";
-        final int dot = mediaName.lastIndexOf('.');
-        return dot < 0 ? mediaName + numbering
-                : mediaName.substring(0, dot) + numbering + mediaName.substring(dot);
-    }
-
-    /**
      * Whether a {@code .json} file names a media file at all. A per-photo sidecar's owner key is
      * built from a media filename, so somewhere in it sits a recognized media extension. A file
      * like {@code metadata.json} or {@code notes.json} derives an owner key with no such component,
@@ -177,6 +162,21 @@ public final class TakeoutSidecarPairer {
             found = MediaTypeDetector.isRecognizedExtension(components.group(1));
         }
         return found;
+    }
+
+    /**
+     * Moves a dup number to where the media file carries it. Google numbers the sidecar at the end
+     * of its whole name, while the media file it describes is numbered before its extension.
+     *
+     * @param mediaName {@link String} the media filename recovered from the sidecar's base name
+     * @param dupNumber {@link String} the duplicate counter's digits, without their brackets
+     * @return {@link String} the media filename with the dup number in its own position
+     */
+    private static String withDupNumberBeforeExtension(final String mediaName, final String dupNumber) {
+        final String numbering = "(" + dupNumber + ")";
+        final int dot = mediaName.lastIndexOf('.');
+        return dot < 0 ? mediaName + numbering
+                : mediaName.substring(0, dot) + numbering + mediaName.substring(dot);
     }
 
     /**

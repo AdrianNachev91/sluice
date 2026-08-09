@@ -68,6 +68,90 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
+     * A file really does carry dimensions in both directory types at once. A real iPhone HEIC is
+     * one: its HeifDirectory reads a 512x512 tile, its Exif SubIFD reads the true 4032x3024
+     * capture. Comparing across both rather than trusting whichever type appears first extends
+     * the same largest-wins safety margin largestAcross already applies within a single type.
+     * Ties keep the first argument, an arbitrary but pinned-down choice - it doesn't matter which
+     * equally-large candidate is reported, only that a real one is.
+     *
+     * @param a {@link Dimensions} the first candidate dimensions, or null
+     * @param b {@link Dimensions} the second candidate dimensions, or null
+     * @return {@link Dimensions} the larger of the two by maximum dimension, or whichever is
+     * non-null
+     */
+    static @Nullable Dimensions largestOf(final @Nullable Dimensions a, final @Nullable Dimensions b) {
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+        return maxDimension(a) >= maxDimension(b) ? a : b;
+    }
+
+    /**
+     * A SubIFD's dimensions can be tagged either way depending on the manufacturer, verified
+     * against real fixtures. Canon uses the EXIF-specific pixel-dimension tags (0xA002/0xA003).
+     * Nikon instead leaves those empty on the SubIFD holding the true capture resolution, and uses
+     * the generic TIFF ImageWidth/ImageHeight tags (0x0100/0x0101) there instead. Both are trusted
+     * equally here, since both live on a SubIFD, not the container's own top-level directory (the
+     * untrusted case the class comment above describes).
+     * Package-private (not private) so ImageDimensionsReaderTest can exercise the tag-priority
+     * order directly with hand-built directories, without needing a crafted real file for every
+     * branch combination.
+     *
+     * @param directory {@link ExifSubIFDDirectory} the SubIFD directory to inspect
+     * @return {@link Dimensions} the directory's width/height as dimensions, or null if neither
+     * tag pair is present
+     */
+    static @Nullable Dimensions subIfdDimensions(final ExifSubIFDDirectory directory) {
+        Integer width = directory.getInteger(ExifSubIFDDirectory.TAG_EXIF_IMAGE_WIDTH);
+        Integer height = directory.getInteger(ExifSubIFDDirectory.TAG_EXIF_IMAGE_HEIGHT);
+        if (!usable(width, height)) {
+            width = directory.getInteger(ExifSubIFDDirectory.TAG_IMAGE_WIDTH);
+            height = directory.getInteger(ExifSubIFDDirectory.TAG_IMAGE_HEIGHT);
+        }
+        return usable(width, height) ? new Dimensions(width, height) : null;
+    }
+
+    /**
+     * Finds the largest dimensions reported across a collection of metadata directories.
+     *
+     * @param directories a {@link Collection} of T, the directories to inspect
+     * @param extractor a {@link Function} of T to {@link Dimensions}, extracts candidate
+     * dimensions from a single directory
+     * @return {@link Dimensions} the largest dimensions found, or null if none had usable
+     * dimensions
+     */
+    static <T extends Directory> @Nullable Dimensions largestAcross(
+            final Collection<T> directories, final Function<T, @Nullable Dimensions> extractor) {
+        Dimensions largest = null;
+        for (final T directory : directories) {
+            final Dimensions candidate = extractor.apply(directory);
+            if (candidate != null && (largest == null || maxDimension(candidate) > maxDimension(largest))) {
+                largest = candidate;
+            }
+        }
+        return largest;
+    }
+
+    /**
+     * A HEIF/AVIF file can expose more than one HeifDirectory. A real AVIF fixture verified this:
+     * one instance carries only brand info, a separate instance carries the actual width/height.
+     * Every instance is checked here too, not just the first.
+     *
+     * @param directory {@link HeifDirectory} the HEIF directory to inspect
+     * @return {@link Dimensions} the directory's width/height as dimensions, or null if not
+     * present
+     */
+    static @Nullable Dimensions heifDimensions(final HeifDirectory directory) {
+        final Integer width = directory.getInteger(HeifDirectory.TAG_IMAGE_WIDTH);
+        final Integer height = directory.getInteger(HeifDirectory.TAG_IMAGE_HEIGHT);
+        return usable(width, height) ? new Dimensions(width, height) : null;
+    }
+
+    /**
      * A RAW file's multi-image IFD chain (thumbnail, preview, full capture) can expose more than
      * one Exif SubIFD directory. Verified against a real Nikon NEF fixture: its first SubIFD (the
      * embedded preview's own) carries no width/height tags at all, while a later SubIFD holds the
@@ -115,75 +199,6 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
     }
 
     /**
-     * A file really does carry dimensions in both directory types at once. A real iPhone HEIC is
-     * one: its HeifDirectory reads a 512x512 tile, its Exif SubIFD reads the true 4032x3024
-     * capture. Comparing across both rather than trusting whichever type appears first extends
-     * the same largest-wins safety margin largestAcross already applies within a single type.
-     * Ties keep the first argument, an arbitrary but pinned-down choice - it doesn't matter which
-     * equally-large candidate is reported, only that a real one is.
-     *
-     * @param a {@link Dimensions} the first candidate dimensions, or null
-     * @param b {@link Dimensions} the second candidate dimensions, or null
-     * @return {@link Dimensions} the larger of the two by maximum dimension, or whichever is
-     * non-null
-     */
-    static @Nullable Dimensions largestOf(final @Nullable Dimensions a, final @Nullable Dimensions b) {
-        if (a == null) {
-            return b;
-        }
-        if (b == null) {
-            return a;
-        }
-        return maxDimension(a) >= maxDimension(b) ? a : b;
-    }
-
-    /**
-     * Finds the largest dimensions reported across a collection of metadata directories.
-     *
-     * @param directories a {@link Collection} of T, the directories to inspect
-     * @param extractor a {@link Function} of T to {@link Dimensions}, extracts candidate
-     * dimensions from a single directory
-     * @return {@link Dimensions} the largest dimensions found, or null if none had usable
-     * dimensions
-     */
-    static <T extends Directory> @Nullable Dimensions largestAcross(
-            final Collection<T> directories, final Function<T, @Nullable Dimensions> extractor) {
-        Dimensions largest = null;
-        for (final T directory : directories) {
-            final Dimensions candidate = extractor.apply(directory);
-            if (candidate != null && (largest == null || maxDimension(candidate) > maxDimension(largest))) {
-                largest = candidate;
-            }
-        }
-        return largest;
-    }
-
-    /**
-     * A SubIFD's dimensions can be tagged either way depending on the manufacturer, verified
-     * against real fixtures. Canon uses the EXIF-specific pixel-dimension tags (0xA002/0xA003).
-     * Nikon instead leaves those empty on the SubIFD holding the true capture resolution, and uses
-     * the generic TIFF ImageWidth/ImageHeight tags (0x0100/0x0101) there instead. Both are trusted
-     * equally here, since both live on a SubIFD, not the container's own top-level directory (the
-     * untrusted case the class comment above describes).
-     * Package-private (not private) so ImageDimensionsReaderTest can exercise the tag-priority
-     * order directly with hand-built directories, without needing a crafted real file for every
-     * branch combination.
-     *
-     * @param directory {@link ExifSubIFDDirectory} the SubIFD directory to inspect
-     * @return {@link Dimensions} the directory's width/height as dimensions, or null if neither
-     * tag pair is present
-     */
-    static @Nullable Dimensions subIfdDimensions(final ExifSubIFDDirectory directory) {
-        Integer width = directory.getInteger(ExifSubIFDDirectory.TAG_EXIF_IMAGE_WIDTH);
-        Integer height = directory.getInteger(ExifSubIFDDirectory.TAG_EXIF_IMAGE_HEIGHT);
-        if (!usable(width, height)) {
-            width = directory.getInteger(ExifSubIFDDirectory.TAG_IMAGE_WIDTH);
-            height = directory.getInteger(ExifSubIFDDirectory.TAG_IMAGE_HEIGHT);
-        }
-        return usable(width, height) ? new Dimensions(width, height) : null;
-    }
-
-    /**
      * A tag that is present but zero is as good as absent, and has to be rejected the same way. Real
      * phone exports carry zeroed pixel-dimension tags. Treating a zero as a real answer reports a
      * dimension of 0, which reads as the smallest possible image rather than as no answer at all.
@@ -196,21 +211,6 @@ public class ImageDimensionsReader implements ImageDimensionsPort {
      */
     private static boolean usable(final @Nullable Integer width, final @Nullable Integer height) {
         return width != null && height != null && width > 0 && height > 0;
-    }
-
-    /**
-     * A HEIF/AVIF file can expose more than one HeifDirectory. A real AVIF fixture verified this:
-     * one instance carries only brand info, a separate instance carries the actual width/height.
-     * Every instance is checked here too, not just the first.
-     *
-     * @param directory {@link HeifDirectory} the HEIF directory to inspect
-     * @return {@link Dimensions} the directory's width/height as dimensions, or null if not
-     * present
-     */
-    static @Nullable Dimensions heifDimensions(final HeifDirectory directory) {
-        final Integer width = directory.getInteger(HeifDirectory.TAG_IMAGE_WIDTH);
-        final Integer height = directory.getInteger(HeifDirectory.TAG_IMAGE_HEIGHT);
-        return usable(width, height) ? new Dimensions(width, height) : null;
     }
 
     /**

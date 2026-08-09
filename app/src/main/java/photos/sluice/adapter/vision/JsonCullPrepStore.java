@@ -141,6 +141,104 @@ public class JsonCullPrepStore implements CullPrepPort {
     }
 
     /**
+     * Writes index.json wholesale - the recovery-time counterpart to {@code CullMontageRenderer}'s
+     * own prep-time write, used only to persist an index {@link
+     * photos.sluice.application.service.PrepDirRemedies#rebuildIndex} reconstructed from surviving
+     * sidecars.
+     *
+     * @param prepDir {@link Path} the prep directory to write into
+     * @param index {@link PrepDir} the index to persist
+     */
+    @Override
+    @SuppressWarnings("DuplicatedCode")
+    public void writeIndex(final Path prepDir, final PrepDir index) {
+        final var document = new RawIndexOut(
+                index.scope(),
+                index.categories(),
+                index.basePath().toString(),
+                index.photos(),
+                index.unreviewable().stream().map(Path::toString).toList(),
+                index.montages(),
+                index.prepDir().toString(),
+                index.entries());
+        final Path path = prepDir.resolve("index.json");
+        try (final var output = Files.newOutputStream(path)) {
+            this.mapper.writeValue(output, document);
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to write prep index " + path, e);
+        } catch (final JacksonException e) {
+            throw new UncheckedIOException("Failed to write prep index " + path, new IOException(e));
+        }
+    }
+
+    /**
+     * Reads one montage's sidecar photo entries.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @return a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
+     */
+    @Override
+    public List<SidecarPhotoEntry> readSidecar(final Path prepDir, final String montage) {
+        return this.sidecarReader.readEntries(prepDir.resolve(montage + ".json"));
+    }
+
+    /**
+     * Checks whether a montage's shard file exists.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @return boolean true if the montage's shard file exists
+     */
+    @Override
+    public boolean hasShard(final Path prepDir, final String montage) {
+        return Files.exists(prepDir.resolve(MontageNaming.shardFileFor(montage)));
+    }
+
+    /**
+     * The JSON shape {@link #writeIndex} serializes. Mirrors {@code PrepIndexWriter}'s own Index DTO
+     * one field at a time, kept as a distinct type rather than shared. This reader/writer pair and
+     * {@code CullMontageRenderer}'s own writer are separate call sites for the same JSON shape.
+     * They're free to diverge later without coupling adapter subpackages - neither may depend on
+     * the other's classes, per {@code ArchitectureTest.adaptersAreSiblings}.
+     *
+     * @param scope {@link String} the on-disk tag identifying this prep dir's scope
+     * @param categories a {@link List} of {@link String} the category names this run was prepped under
+     * @param basePath {@link String} the base path reported for this scope
+     * @param photos int count of candidates found
+     * @param unreviewable a {@link List} of {@link String} candidates that couldn't render a judgeable tile
+     * @param montages int count of montages generated
+     * @param prepDir {@link String} the prep directory path
+     * @param entries a {@link List} of {@link String} the montage entry filenames
+     */
+    private record RawIndexOut(String scope, List<String> categories, String basePath, int photos,
+                               List<String> unreviewable, int montages, String prepDir, List<String> entries) {
+    }
+
+    /**
+     * Reads one montage's decision shard.
+     *
+     * @param prepDir {@link Path} the prep directory
+     * @param montage {@link String} the montage name
+     * @return {@link DecisionShard} the montage's decision shard
+     */
+    @Override
+    public DecisionShard readShard(final Path prepDir, final String montage) {
+        return this.shardCodec.read(prepDir.resolve(MontageNaming.shardFileFor(montage)));
+    }
+
+    /**
+     * Reads a shard file directly by its own path.
+     *
+     * @param shardFile {@link Path} the shard file's own path
+     * @return {@link DecisionShard} the parsed decision shard
+     */
+    @Override
+    public DecisionShard readShardFile(final Path shardFile) {
+        return this.shardCodec.read(shardFile);
+    }
+
+    /**
      * The category set the prep dir was culled under. Absent is malformed content, unlike an absent
      * {@code unreviewable} or {@code entries} just above. Those two have a true empty meaning: no
      * file was skipped, no montage was built. No run is ever prepped without a category set, and an
@@ -205,104 +303,6 @@ public class JsonCullPrepStore implements CullPrepPort {
             throw new MalformedPrepJsonException("Prep index " + indexPath + " has an unusable " + field
                     + ": " + value, new IOException(e));
         }
-    }
-
-    /**
-     * The JSON shape {@link #writeIndex} serializes. Mirrors {@code PrepIndexWriter}'s own Index DTO
-     * one field at a time, kept as a distinct type rather than shared. This reader/writer pair and
-     * {@code CullMontageRenderer}'s own writer are separate call sites for the same JSON shape.
-     * They're free to diverge later without coupling adapter subpackages - neither may depend on
-     * the other's classes, per {@code ArchitectureTest.adaptersAreSiblings}.
-     *
-     * @param scope {@link String} the on-disk tag identifying this prep dir's scope
-     * @param categories a {@link List} of {@link String} the category names this run was prepped under
-     * @param basePath {@link String} the base path reported for this scope
-     * @param photos int count of candidates found
-     * @param unreviewable a {@link List} of {@link String} candidates that couldn't render a judgeable tile
-     * @param montages int count of montages generated
-     * @param prepDir {@link String} the prep directory path
-     * @param entries a {@link List} of {@link String} the montage entry filenames
-     */
-    private record RawIndexOut(String scope, List<String> categories, String basePath, int photos,
-                               List<String> unreviewable, int montages, String prepDir, List<String> entries) {
-    }
-
-    /**
-     * Writes index.json wholesale - the recovery-time counterpart to {@code CullMontageRenderer}'s
-     * own prep-time write, used only to persist an index {@link
-     * photos.sluice.application.service.PrepDirRemedies#rebuildIndex} reconstructed from surviving
-     * sidecars.
-     *
-     * @param prepDir {@link Path} the prep directory to write into
-     * @param index {@link PrepDir} the index to persist
-     */
-    @Override
-    @SuppressWarnings("DuplicatedCode")
-    public void writeIndex(final Path prepDir, final PrepDir index) {
-        final var document = new RawIndexOut(
-                index.scope(),
-                index.categories(),
-                index.basePath().toString(),
-                index.photos(),
-                index.unreviewable().stream().map(Path::toString).toList(),
-                index.montages(),
-                index.prepDir().toString(),
-                index.entries());
-        final Path path = prepDir.resolve("index.json");
-        try (final var output = Files.newOutputStream(path)) {
-            this.mapper.writeValue(output, document);
-        } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to write prep index " + path, e);
-        } catch (final JacksonException e) {
-            throw new UncheckedIOException("Failed to write prep index " + path, new IOException(e));
-        }
-    }
-
-    /**
-     * Reads one montage's sidecar photo entries.
-     *
-     * @param prepDir {@link Path} the prep directory
-     * @param montage {@link String} the montage name
-     * @return a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
-     */
-    @Override
-    public List<SidecarPhotoEntry> readSidecar(final Path prepDir, final String montage) {
-        return this.sidecarReader.readEntries(prepDir.resolve(montage + ".json"));
-    }
-
-    /**
-     * Checks whether a montage's shard file exists.
-     *
-     * @param prepDir {@link Path} the prep directory
-     * @param montage {@link String} the montage name
-     * @return boolean true if the montage's shard file exists
-     */
-    @Override
-    public boolean hasShard(final Path prepDir, final String montage) {
-        return Files.exists(prepDir.resolve(MontageNaming.shardFileFor(montage)));
-    }
-
-    /**
-     * Reads one montage's decision shard.
-     *
-     * @param prepDir {@link Path} the prep directory
-     * @param montage {@link String} the montage name
-     * @return {@link DecisionShard} the montage's decision shard
-     */
-    @Override
-    public DecisionShard readShard(final Path prepDir, final String montage) {
-        return this.shardCodec.read(prepDir.resolve(MontageNaming.shardFileFor(montage)));
-    }
-
-    /**
-     * Reads a shard file directly by its own path.
-     *
-     * @param shardFile {@link Path} the shard file's own path
-     * @return {@link DecisionShard} the parsed decision shard
-     */
-    @Override
-    public DecisionShard readShardFile(final Path shardFile) {
-        return this.shardCodec.read(shardFile);
     }
 
     /**

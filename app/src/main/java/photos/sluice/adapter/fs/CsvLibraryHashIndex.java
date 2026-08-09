@@ -53,15 +53,6 @@ public class CsvLibraryHashIndex implements HashIndexPort {
     }
 
     /**
-     * The index file under the configured logs directory.
-     *
-     * @return {@link Path} the CSV hash index file
-     */
-    private Path indexFile() {
-        return this.paths.logs().resolve(INDEX_FILE_NAME);
-    }
-
-    /**
      * Loads every entry from the index file, grouped by hash.
      *
      * @return a {@link Map} of {@link String} to a {@link List} of {@link Path}, grouped by
@@ -131,6 +122,15 @@ public class CsvLibraryHashIndex implements HashIndexPort {
     @Override
     public Session openSession() {
         return new CsvSession();
+    }
+
+    /**
+     * The index file under the configured logs directory.
+     *
+     * @return {@link Path} the CSV hash index file
+     */
+    private Path indexFile() {
+        return this.paths.logs().resolve(INDEX_FILE_NAME);
     }
 
     /**

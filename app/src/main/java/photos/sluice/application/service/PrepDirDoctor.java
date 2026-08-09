@@ -123,6 +123,90 @@ public class PrepDirDoctor {
     }
 
     /**
+     * Every cull run currently sitting under cullPrepRoot, diagnosed.
+     *
+     * <p>Enumerating the root is the point, rather than deriving the list from anything a prep dir
+     * says about itself. A run whose index cannot be read is the one most in need of attention. A
+     * derivation starting from that index would be blind to exactly that run.
+     *
+     * <p>Ordered by scope so a dashboard's rows hold still between refreshes.
+     *
+     * @param cullPrepRoot {@link Path} the cull-prep root directory to enumerate
+     * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
+     */
+    public List<CullRunSummary> runs(final Path cullPrepRoot) {
+        return this.prepDirsUnder(cullPrepRoot).stream().map(this::summaryOf).toList();
+    }
+
+    /**
+     * One prep dir's diagnosis, with its shard tally and age, as a run card renders it.
+     *
+     * <p>The tally is null whenever the diagnosis did not get far enough to compute one. Three
+     * states reach that: DAMAGED, the {@link Finding.CorruptIndex} form of BLOCKED, and COMPLETE.
+     * Check for null rather than deriving it from the state. DAMAGED covers a dir whose montage list
+     * was never read as well as one where the list read fine and a later read gave out.
+     *
+     * <p>Never throws, the same contract {@link #diagnose} carries and held the same way. The mtime
+     * read is guarded too, since a prep dir can be purged or discarded between being enumerated and
+     * being summarised.
+     *
+     * @param prepDirPath {@link Path} the prep directory to summarise
+     * @return {@link CullRunSummary} that run's scope, diagnosis, tally and age
+     */
+    public CullRunSummary summaryOf(final Path prepDirPath) {
+        final Diagnosis diagnosis = this.examine(prepDirPath);
+        return new CullRunSummary(scopeOf(prepDirPath), prepDirPath, diagnosis.health(),
+                diagnosis.shards(), this.lastModifiedOrEpoch(prepDirPath));
+    }
+
+    /**
+     * One examination's two results.
+     *
+     * @param health {@link PrepDirHealth} the state and open findings
+     * @param shards {@link ShardTally} the shard counts, or null when the read never reached one
+     */
+    private record Diagnosis(PrepDirHealth health, @Nullable ShardTally shards) {
+    }
+
+    /**
+     * Manual, one-button housekeeping: hard-deletes every prep dir under cullPrepRoot this sweep
+     * diagnoses COMPLETE, and reports every other one it looked at alongside the state that kept
+     * it. No age-based auto-purge, and no graveyard detour. A completed run holds no image weight
+     * worth salvaging - apply()'s own cleanup already dropped the montage/tile images. Letting go
+     * of its shards, index.json, move-record log, and any disaster drawer is a decision only the
+     * user makes, never a timer.
+     *
+     * <p>A run diagnosed DAMAGED, or a COMPLETE run whose own delete fails partway, lands in the
+     * report's unreadable bucket rather than skipped or purged - neither is a state a user can act
+     * on the way WAITING or BLOCKED are. {@link #purgeDir} guards its own failure, so the sweep
+     * continues on to the rest regardless.
+     *
+     * @param cullPrepRoot {@link Path} the cull-prep root directory to sweep
+     * @return {@link PurgeReport} every scope purged, skipped with its state, or left unreadable, this sweep
+     */
+    public PurgeReport purgeCompleted(final Path cullPrepRoot) {
+        final var purged = new ArrayList<String>();
+        final var skipped = new LinkedHashMap<String, State>();
+        final var unreadable = new LinkedHashMap<String, String>();
+        for (final Path prepDir : this.prepDirsUnder(cullPrepRoot)) {
+            final String scope = scopeOf(prepDir);
+            final State state = this.diagnose(prepDir).state();
+            if (state == State.DAMAGED) {
+                unreadable.put(scope, "could not be read");
+            } else if (state == State.COMPLETE) {
+                if (this.purgeDir(prepDir)) {
+                    purged.add(scope);
+                } else {
+                    unreadable.put(scope, "could not be deleted");
+                }
+            } else {
+                skipped.put(scope, state);
+            }
+        }
+        return new PurgeReport(purged, skipped, unreadable);
+    }
+
+    /**
      * diagnose()'s whole body, keeping the shard tally it computes on the way rather than throwing
      * it away. {@link #summaryOf} needs both, and recomputing the tally means re-reading every
      * sidecar and every shard in the dir.
@@ -198,52 +282,6 @@ public class PrepDirDoctor {
         return findings.isEmpty()
                 ? new Diagnosis(new PrepDirHealth(State.READY, List.of()), tally)
                 : new Diagnosis(new PrepDirHealth(State.BLOCKED, ordered(findings)), tally);
-    }
-
-    /**
-     * One examination's two results.
-     *
-     * @param health {@link PrepDirHealth} the state and open findings
-     * @param shards {@link ShardTally} the shard counts, or null when the read never reached one
-     */
-    private record Diagnosis(PrepDirHealth health, @Nullable ShardTally shards) {
-    }
-
-    /**
-     * Every cull run currently sitting under cullPrepRoot, diagnosed.
-     *
-     * <p>Enumerating the root is the point, rather than deriving the list from anything a prep dir
-     * says about itself. A run whose index cannot be read is the one most in need of attention. A
-     * derivation starting from that index would be blind to exactly that run.
-     *
-     * <p>Ordered by scope so a dashboard's rows hold still between refreshes.
-     *
-     * @param cullPrepRoot {@link Path} the cull-prep root directory to enumerate
-     * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
-     */
-    public List<CullRunSummary> runs(final Path cullPrepRoot) {
-        return this.prepDirsUnder(cullPrepRoot).stream().map(this::summaryOf).toList();
-    }
-
-    /**
-     * One prep dir's diagnosis, with its shard tally and age, as a run card renders it.
-     *
-     * <p>The tally is null whenever the diagnosis did not get far enough to compute one. Three
-     * states reach that: DAMAGED, the {@link Finding.CorruptIndex} form of BLOCKED, and COMPLETE.
-     * Check for null rather than deriving it from the state. DAMAGED covers a dir whose montage list
-     * was never read as well as one where the list read fine and a later read gave out.
-     *
-     * <p>Never throws, the same contract {@link #diagnose} carries and held the same way. The mtime
-     * read is guarded too, since a prep dir can be purged or discarded between being enumerated and
-     * being summarised.
-     *
-     * @param prepDirPath {@link Path} the prep directory to summarise
-     * @return {@link CullRunSummary} that run's scope, diagnosis, tally and age
-     */
-    public CullRunSummary summaryOf(final Path prepDirPath) {
-        final Diagnosis diagnosis = this.examine(prepDirPath);
-        return new CullRunSummary(scopeOf(prepDirPath), prepDirPath, diagnosis.health(),
-                diagnosis.shards(), this.lastModifiedOrEpoch(prepDirPath));
     }
 
     /**
@@ -328,44 +366,6 @@ public class PrepDirDoctor {
             log.warn("Could not check whether {} holds any files, treating it as occupied", prepDir, e);
             return true;
         }
-    }
-
-    /**
-     * Manual, one-button housekeeping: hard-deletes every prep dir under cullPrepRoot this sweep
-     * diagnoses COMPLETE, and reports every other one it looked at alongside the state that kept
-     * it. No age-based auto-purge, and no graveyard detour. A completed run holds no image weight
-     * worth salvaging - apply()'s own cleanup already dropped the montage/tile images. Letting go
-     * of its shards, index.json, move-record log, and any disaster drawer is a decision only the
-     * user makes, never a timer.
-     *
-     * <p>A run diagnosed DAMAGED, or a COMPLETE run whose own delete fails partway, lands in the
-     * report's unreadable bucket rather than skipped or purged - neither is a state a user can act
-     * on the way WAITING or BLOCKED are. {@link #purgeDir} guards its own failure, so the sweep
-     * continues on to the rest regardless.
-     *
-     * @param cullPrepRoot {@link Path} the cull-prep root directory to sweep
-     * @return {@link PurgeReport} every scope purged, skipped with its state, or left unreadable, this sweep
-     */
-    public PurgeReport purgeCompleted(final Path cullPrepRoot) {
-        final var purged = new ArrayList<String>();
-        final var skipped = new LinkedHashMap<String, State>();
-        final var unreadable = new LinkedHashMap<String, String>();
-        for (final Path prepDir : this.prepDirsUnder(cullPrepRoot)) {
-            final String scope = scopeOf(prepDir);
-            final State state = this.diagnose(prepDir).state();
-            if (state == State.DAMAGED) {
-                unreadable.put(scope, "could not be read");
-            } else if (state == State.COMPLETE) {
-                if (this.purgeDir(prepDir)) {
-                    purged.add(scope);
-                } else {
-                    unreadable.put(scope, "could not be deleted");
-                }
-            } else {
-                skipped.put(scope, state);
-            }
-        }
-        return new PurgeReport(purged, skipped, unreadable);
     }
 
     /**

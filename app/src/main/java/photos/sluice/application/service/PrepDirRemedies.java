@@ -257,40 +257,6 @@ public class PrepDirRemedies {
     }
 
     /**
-     * Whether sortedNumbers runs 1, 2, 3, ... with no gaps.
-     *
-     * @param sortedNumbers a {@link List} of {@link Integer}, ascending
-     * @return boolean true if the sequence is contiguous starting from 1
-     */
-    private static boolean isContiguousFromOne(final List<Integer> sortedNumbers) {
-        for (int i = 0; i < sortedNumbers.size(); i++) {
-            if (sortedNumbers.get(i) != i + 1) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * The deepest directory every file's own parent shares in common. Assumes every file shares a
-     * root - they all come from this one prep dir's own scope, always a single Sorted tree. Two
-     * files on unrelated roots would shrink common past its own root into a null parent.
-     *
-     * @param files a {@link List} of {@link Path}, non-empty
-     * @return {@link Path} the deepest common parent directory
-     */
-    private static Path commonParent(final List<Path> files) {
-        Path common = files.getFirst().getParent();
-        for (final Path file : files) {
-            final Path parent = file.getParent();
-            while (!parent.startsWith(common)) {
-                common = common.getParent();
-            }
-        }
-        return common;
-    }
-
-    /**
      * Files a whole prep dir into the global graveyard, leaving its scope free. Every non-image file
      * is moved wholesale into {@code logs/disasters/<scope>-<timestamp>/}, keeping its own relative
      * layout. That covers shards, sidecars, index.json, the move ledger, and any disaster drawer.
@@ -347,5 +313,39 @@ public class PrepDirRemedies {
         }
         this.mediaStore.removeIfEmptyOfFiles(prepDirPath);
         return new DiscardReport(graveyard, shardsSetAside);
+    }
+
+    /**
+     * Whether sortedNumbers runs 1, 2, 3, ... with no gaps.
+     *
+     * @param sortedNumbers a {@link List} of {@link Integer}, ascending
+     * @return boolean true if the sequence is contiguous starting from 1
+     */
+    private static boolean isContiguousFromOne(final List<Integer> sortedNumbers) {
+        for (int i = 0; i < sortedNumbers.size(); i++) {
+            if (sortedNumbers.get(i) != i + 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The deepest directory every file's own parent shares in common. Assumes every file shares a
+     * root - they all come from this one prep dir's own scope, always a single Sorted tree. Two
+     * files on unrelated roots would shrink common past its own root into a null parent.
+     *
+     * @param files a {@link List} of {@link Path}, non-empty
+     * @return {@link Path} the deepest common parent directory
+     */
+    private static Path commonParent(final List<Path> files) {
+        Path common = files.getFirst().getParent();
+        for (final Path file : files) {
+            final Path parent = file.getParent();
+            while (!parent.startsWith(common)) {
+                common = common.getParent();
+            }
+        }
+        return common;
     }
 }
