@@ -125,6 +125,27 @@
       <version>1.4.2</version>
       <scope>test</scope>
     </dependency>
+    <!-- Drives the real window in a test: starts the toolkit, runs work on the FX thread, and
+         clicks controls. The OSGi jar it carries is only wanted when running as a bundle, and
+         nothing manages its version, so it is excluded rather than left on the test classpath. -->
+    <dependency>
+      <groupId>org.testfx</groupId>
+      <artifactId>testfx-core</artifactId>
+      <version>4.0.18</version>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.osgi</groupId>
+          <artifactId>org.osgi.core</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.testfx</groupId>
+      <artifactId>testfx-junit5</artifactId>
+      <version>4.0.18</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -148,7 +169,16 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+          <!-- The native-access flag silences the warning JavaFX raises when it loads its own
+               native libraries. A later JDK turns that warning into a hard failure. -->
+          <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar} --enable-native-access=ALL-UNNAMED</argLine>
+          <systemPropertyVariables>
+            <!-- JavaFX's own headless backend, part of javafx.graphics on every platform since 26.
+                 A test that opens a window then needs no display, so CI needs no virtual one and no
+                 separate native library to supply it. Set for the test JVM only; the real app still
+                 opens a real window. -->
+            <glass.platform>headless</glass.platform>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
       <plugin>
@@ -157,9 +187,15 @@
         <version>0.8.15</version>
         <configuration>
           <excludes>
-            <!-- Spring Boot's bootstrap entry point: a one-line SpringApplication.run() call,
-                 not meaningfully unit-testable. Standard exclusion for this kind of class. -->
+            <!-- The application's bootstrap entry point: it locates the config file and hands the
+                 launch on, with nothing to unit-test. Standard exclusion for this kind of class. -->
             <exclude>photos/sluice/SluiceApplication.class</exclude>
+            <!-- The JavaFX classes themselves. Logic lives in presenters one package up, which stay
+                 inside the gate; what is left here constructs controls and binds them. Driving all
+                 of that through the toolkit to 95% instruction coverage would buy a slower, more
+                 brittle suite and no more confidence. The package's own doc holds the line that
+                 makes this honest, and views still get driven end to end by their own tests. -->
+            <exclude>photos/sluice/adapter/ui/view/**</exclude>
           </excludes>
         </configuration>
         <executions>
