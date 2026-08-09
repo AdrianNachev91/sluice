@@ -97,18 +97,17 @@ class SluiceFxApplicationTest {
         }
     }
 
-    // The reason JavaFX starts before Spring rather than after it. A context that refuses to come
-    // up has a window to say so in, instead of the app never appearing at all.
+    // A machine where nobody has chosen a folder yet is the ordinary first launch, not a failure.
+    // The app comes up, and what it can do about it is the first-run flow rather than a stack trace.
     //
     // Started with no arguments, so nothing configures the paths. One assumption rides on that. An
     // OS environment variable outranks the bundled defaults. So a machine exporting a SLUICE_PATHS_
-    // variable configures them anyway, and fails this for a reason unrelated to the code.
+    // variable configures them anyway, and passes this for a reason unrelated to the code.
     @Test
-    void anUnconfiguredInstallOpensAWindowSayingWhy() throws Exception {
+    void anUnconfiguredInstallOpensItsWindowRatherThanAFailure() throws Exception {
         this.startApplication();
 
-        assertThat(styleClassesOfRoot()).contains("failure-screen");
-        assertThat(failureDetail()).contains("sluice.paths.repo-root");
+        assertThat(styleClassesOfRoot()).contains("screen").doesNotContain("failure-screen");
     }
 
     // The stylesheet is loaded off the classpath, so it can be present in source and absent from

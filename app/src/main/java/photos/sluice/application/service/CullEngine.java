@@ -62,7 +62,7 @@ final class CullEngine {
     private final CullWatchers cullWatchers;
     private final PrepDirDoctor prepDirDoctor;
     private final PrepDirRemedies prepDirRemedies;
-    private final Path cullPrepRoot;
+    private final PathsPort pathsPort;
 
     /**
      * Wires together every collaborator this engine dispatches cull jobs through.
@@ -103,7 +103,7 @@ final class CullEngine {
                 prepDir -> this.resume(prepDir, false));
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
-        this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
+        this.pathsPort = pathsPort;
     }
 
     /**
@@ -131,7 +131,7 @@ final class CullEngine {
         if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH || this.jobRunner.isBusy()) {
             return;
         }
-        this.prepDirDoctor.runs(this.cullPrepRoot).stream()
+        this.prepDirDoctor.runs(this.cullPrepRoot()).stream()
                 .filter(run -> run.health().state() == State.WAITING || run.health().state() == State.READY)
                 .forEach(run -> this.cullWatchers.armWatchIfConfigured(run.prepDir()));
     }
@@ -231,6 +231,17 @@ final class CullEngine {
     }
 
     /**
+     * Where cull runs are prepared, worked out on every call. Resolving it once at construction
+     * would pin this engine to the folder the app happened to start in. A saved working root would
+     * then reach every other engine and not this one.
+     *
+     * @return {@link Path} the cull-prep root under the working root
+     */
+    private Path cullPrepRoot() {
+        return this.pathsPort.logs().resolve("cull-prep");
+    }
+
+    /**
      * Frees scope's prep dir for a fresh run, and reports where a completed occupant was filed.
      *
      * <p>A COMPLETE run is archived into the graveyard rather than overwritten, and no confirmation
@@ -271,7 +282,7 @@ final class CullEngine {
      * @throws Pipeline.ScopeUnreadableException if the prep dir's own occupancy could not be determined
      */
     private Optional<CullRunSummary> occupantOf(final CullScope scope) {
-        final Path prepDir = this.cullPrepRoot.resolve(CullScope.tag(scope));
+        final Path prepDir = this.cullPrepRoot().resolve(CullScope.tag(scope));
         return switch (this.occupancyOf(prepDir)) {
             case final Occupancy.Empty ignored -> Optional.empty();
             case final Occupancy.Occupied ignored -> Optional.of(this.prepDirDoctor.summaryOf(prepDir));

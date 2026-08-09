@@ -28,6 +28,7 @@ import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
@@ -278,6 +279,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Optional<Path> realDirectory(final Path path) {
+            return this.delegate.realDirectory(path);
+        }
+
+        @Override
         public long size(final Path path) {
             return this.delegate.size(path);
         }
@@ -379,8 +385,11 @@ final class PipelineTestSupport {
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
                              final CullSettings cullSettings, final List<VisionCuller> cullers,
                              final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort) {
-        final Path libraryRoot = root.resolve("Library");
-        final var pathsConfig = SettingsFixture.pathsConfig(root, libraryRoot, root.resolve("Inbox"));
+        final Path libraryRoot = createDirectory(root.resolve("Library"));
+        final Path inbox = createDirectory(root.resolve("Inbox"));
+        final var settings = SettingsFixture.holder(root, libraryRoot, inbox);
+        final var pathsConfig = new PathsConfig(settings);
+        final var pathValidation = new PathValidationService(mediaStore, settings);
         final var hashIndex = new CsvLibraryHashIndex(pathsConfig);
         final var sha256Port = new Sha256Hasher();
 
@@ -412,11 +421,22 @@ final class PipelineTestSupport {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                     prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig,
                     new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner,
-                    moveLedger);
+                    moveLedger, pathValidation);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                 prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, new JobRunner(),
-                progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pollInterval);
+                progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pathValidation,
+                pollInterval);
+    }
+
+    // The folder roots have to be there for the pipeline's own path check to pass, the same way a
+    // real install's are.
+    private static Path createDirectory(final Path directory) {
+        try {
+            return Files.createDirectories(directory);
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to create " + directory, e);
+        }
     }
 
     // The same PrepDirRemedies the pipeline() factory above wires into its own Pipeline, built
@@ -590,6 +610,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Optional<Path> realDirectory(final Path path) {
+            return this.delegate.realDirectory(path);
+        }
+
+        @Override
         public Path move(final Path source, final Path destDir) {
             throw new RuntimeException("simulated crash");
         }
@@ -681,6 +706,11 @@ final class PipelineTestSupport {
         @Override
         public Instant lastModifiedTime(final Path path) {
             return this.delegate.lastModifiedTime(path);
+        }
+
+        @Override
+        public Optional<Path> realDirectory(final Path path) {
+            return this.delegate.realDirectory(path);
         }
 
         @Override
@@ -793,6 +823,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Optional<Path> realDirectory(final Path path) {
+            return this.delegate.realDirectory(path);
+        }
+
+        @Override
         public Path move(final Path source, final Path destDir) {
             return this.delegate.move(source, destDir);
         }
@@ -885,6 +920,11 @@ final class PipelineTestSupport {
         @Override
         public Instant lastModifiedTime(final Path path) {
             return this.delegate.lastModifiedTime(path);
+        }
+
+        @Override
+        public Optional<Path> realDirectory(final Path path) {
+            return this.delegate.realDirectory(path);
         }
 
         @Override

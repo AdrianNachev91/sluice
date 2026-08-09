@@ -14,6 +14,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -171,6 +172,27 @@ public class NioMediaStore implements MediaStore {
     @Override
     public boolean exists(final Path path) {
         return Files.exists(path);
+    }
+
+    /**
+     * Resolves a path to its real directory form, or reports that no directory is there.
+     *
+     * <p>The directory check runs first, so a path naming nothing reports absence rather than
+     * failing. A failure after that check has passed is a real one and stays loud.
+     *
+     * @param path {@link Path} path to resolve
+     * @return an {@link Optional} of {@link Path}, the real directory, or empty if there is none
+     */
+    @Override
+    public Optional<Path> realDirectory(final Path path) {
+        if (!Files.isDirectory(path)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(path.toRealPath());
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to resolve the real path of " + path, e);
+        }
     }
 
     /**

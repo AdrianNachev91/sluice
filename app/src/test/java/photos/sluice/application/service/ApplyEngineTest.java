@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -852,6 +853,11 @@ class ApplyEngineTest {
         @Override
         public Instant lastModifiedTime(final Path path) {
             return this.delegate.lastModifiedTime(path);
+        }
+
+        @Override
+        public Optional<Path> realDirectory(final Path path) {
+            return this.delegate.realDirectory(path);
         }
 
         @Override

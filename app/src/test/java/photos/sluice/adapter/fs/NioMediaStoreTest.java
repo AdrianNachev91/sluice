@@ -1,5 +1,6 @@
 package photos.sluice.adapter.fs;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -170,6 +171,42 @@ class NioMediaStoreTest {
 
         assertThat(this.store.exists(file)).isTrue();
         assertThat(this.store.exists(missing)).isFalse();
+    }
+
+    @Test
+    void realDirectoryResolvesAFolderThatIsThere(@TempDir final Path root) throws IOException {
+        final Path dir = Files.createDirectory(root.resolve("folder"));
+
+        assertThat(this.store.realDirectory(dir)).contains(dir.toRealPath());
+    }
+
+    @Test
+    void realDirectoryIsEmptyForAFolderThatIsNotThere(@TempDir final Path root) {
+        assertThat(this.store.realDirectory(root.resolve("absent"))).isEmpty();
+    }
+
+    // A configured root naming a file is a user mistake this has to report as absence, not resolve.
+    @Test
+    void realDirectoryIsEmptyForARegularFile(@TempDir final Path root) throws IOException {
+        final Path file = root.resolve("file.jpg");
+        Files.writeString(file, "bytes");
+
+        assertThat(this.store.realDirectory(file)).isEmpty();
+    }
+
+    // Resolving through the link is what lets two configured roots naming one folder be compared as
+    // plain paths. Windows junctions behave the same way.
+    @Test
+    void realDirectoryFollowsALinkToItsTarget(@TempDir final Path root) throws IOException {
+        final Path target = Files.createDirectory(root.resolve("target"));
+        final Path link = root.resolve("link");
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (final IOException | UnsupportedOperationException e) {
+            Assumptions.abort("Symbolic links are not supported in this environment: " + e.getMessage());
+        }
+
+        assertThat(this.store.realDirectory(link)).contains(target.toRealPath());
     }
 
     @Test

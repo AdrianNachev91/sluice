@@ -2,12 +2,18 @@ package photos.sluice.adapter.ui;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.application.port.in.PathValidationUseCase;
+import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.paths.PathRole;
+import photos.sluice.domain.paths.PathViolation;
+import photos.sluice.domain.paths.PathViolation.NotConfigured;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
@@ -26,7 +32,7 @@ class StartupSequenceTest {
     @Test
     void runClaimsTheWorkingRootBeforeAnythingReachesAFile(@TempDir final Path root) {
         final var lock = mock(WorkingRootLock.class);
-        final var sequence = new StartupSequence(lock, paths(root), this.pipeline);
+        final var sequence = new StartupSequence(lock, paths(root), this.pipeline, usableRoots());
 
         sequence.run();
 
@@ -36,11 +42,25 @@ class StartupSequenceTest {
         order.verify(this.pipeline).sweepExpiredDisasterDrawers();
     }
 
+    // An install with no folders chosen has nothing to claim, and the claim is not this class's to
+    // take on its behalf. The save that first names a working root takes it.
+    @Test
+    void unusableRootsStopTheSequenceBeforeTheClaim(@TempDir final Path root) {
+        final var lock = mock(WorkingRootLock.class);
+        final var sequence = new StartupSequence(lock, paths(root), this.pipeline,
+                violating(new NotConfigured(PathRole.REPO_ROOT)));
+
+        sequence.run();
+
+        verifyNoInteractions(lock);
+        verifyNoInteractions(this.pipeline);
+    }
+
     // The sweep deletes and an armed watcher can auto-resume into an apply. A run that could not
     // claim the root must therefore stop before either, not merely report the refusal afterwards.
     @Test
     void aRefusedClaimStopsBeforeTheHousekeeping(@TempDir final Path root) {
-        final var sequence = new StartupSequence(new RefusingLock(), paths(root), this.pipeline);
+        final var sequence = new StartupSequence(new RefusingLock(), paths(root), this.pipeline, usableRoots());
 
         assertThatThrownBy(sequence::run).isInstanceOf(WorkingRootBusyException.class);
 
@@ -50,7 +70,7 @@ class StartupSequenceTest {
     @Test
     void shutdownGivesTheWorkingRootBack(@TempDir final Path root) {
         final var lock = mock(WorkingRootLock.class);
-        final var sequence = new StartupSequence(lock, paths(root), this.pipeline);
+        final var sequence = new StartupSequence(lock, paths(root), this.pipeline, usableRoots());
 
         sequence.shutdown();
 
@@ -59,6 +79,26 @@ class StartupSequenceTest {
 
     private static PathsPort paths(final Path root) {
         return new FixedPaths(root);
+    }
+
+    private static PathValidationUseCase usableRoots() {
+        return new FixedViolations(List.of());
+    }
+
+    private static PathValidationUseCase violating(final PathViolation violation) {
+        return new FixedViolations(List.of(violation));
+    }
+
+    private record FixedViolations(List<PathViolation> violations) implements PathValidationUseCase {
+        @Override
+        public List<PathViolation> violations(final PathSettings paths) {
+            return this.violations;
+        }
+
+        @Override
+        public List<PathViolation> violationsInForce() {
+            return this.violations;
+        }
     }
 
     private static final class RefusingLock implements WorkingRootLock {

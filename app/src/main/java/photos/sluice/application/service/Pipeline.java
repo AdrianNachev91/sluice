@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
+import photos.sluice.application.port.in.PathValidationUseCase;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MediaStore;
@@ -20,6 +22,7 @@ import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
+import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.rescue.RescueSummary;
 
 import java.nio.file.Path;
@@ -34,6 +37,12 @@ import java.util.List;
  * <p>Cull and curate orchestration live in {@link CullEngine} and {@link CurateEngine}. Pipeline
  * builds and wires both, then exposes their methods under one type so a driving adapter depends
  * on a single class.
+ *
+ * <p>Every entry point that resolves a folder path checks the three roots first. They have to be
+ * set, to exist, and not to sit inside each other. Anything else refuses with
+ * {@link PathsMisconfiguredException}. That includes the calls that only read, since reading a run
+ * still needs to know where the working root is. An install with nothing configured yet therefore
+ * meets a typed refusal here rather than a failure deeper down.
  *
  * <p>Depends on the engines' concrete classes rather than their {@code SortUseCase}/
  * {@code CommitUseCase}/{@code RescueUseCase} port-in interfaces. The progress-callback overloads
@@ -65,8 +74,8 @@ public class Pipeline {
     private final Troubleshooter troubleshooter;
     private final PrepDirDoctor prepDirDoctor;
     private final PrepDirRemedies prepDirRemedies;
-    private final Path cullPrepRoot;
-    private final Path graveyardRoot;
+    private final PathsPort pathsPort;
+    private final PathValidationUseCase pathValidation;
 
     /**
      * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
@@ -91,6 +100,7 @@ public class Pipeline {
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
+     * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
      */
     @Autowired
     public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -102,10 +112,11 @@ public class Pipeline {
                     final JobRunner jobRunner,
                     final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
                     final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
-                    final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
+                    final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
+                    final PathValidationUseCase pathValidation) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
                 cullPrepPort, cullSettings, mediaStore, pathsPort, jobRunner, progressPort,
-                disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader,
+                disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader, pathValidation,
                 DEFAULT_WATCH_POLL_INTERVAL);
     }
 
@@ -133,6 +144,7 @@ public class Pipeline {
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses prep dirs and purges completed runs
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
+     * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -142,7 +154,8 @@ public class Pipeline {
              final JobRunner jobRunner,
              final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
              final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
-             final ApplyPlanner applyPlanner, final LedgerReader ledgerReader, final Duration watchPollInterval) {
+             final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
+             final PathValidationUseCase pathValidation, final Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
@@ -156,8 +169,8 @@ public class Pipeline {
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
-        this.cullPrepRoot = pathsPort.logs().resolve("cull-prep");
-        this.graveyardRoot = pathsPort.logs().resolve("disasters");
+        this.pathsPort = pathsPort;
+        this.pathValidation = pathValidation;
     }
 
     /**
@@ -166,6 +179,7 @@ public class Pipeline {
      * only reads never calls it at all, and so never arms pollers it is about to kill.
      */
     public void armWatchesForResumableRuns() {
+        this.requireUsableRoots();
         this.cullEngine.armWatchesForResumableRuns();
     }
 
@@ -177,8 +191,9 @@ public class Pipeline {
      * before that.
      */
     public void sweepExpiredDisasterDrawers() {
-        this.disasterDrawer.sweepExpired(this.cullPrepRoot);
-        this.disasterDrawer.sweepExpiredGraveyard(this.graveyardRoot);
+        this.requireUsableRoots();
+        this.disasterDrawer.sweepExpired(this.cullPrepRoot());
+        this.disasterDrawer.sweepExpiredGraveyard(this.graveyardRoot());
     }
 
     /**
@@ -188,6 +203,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link SortSummary} a handle to the running job
      */
     public JobHandle<SortSummary> sort(final SortScope scope) {
+        this.requireUsableRoots();
         return this.jobRunner.submit(handle -> this.runPhase(SORTING,
                 progress -> this.sortEngine.sort(scope, progress, handle::isCancellationRequested)));
     }
@@ -199,6 +215,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CommitSummary} a handle to the running job
      */
     public JobHandle<CommitSummary> commit(final CommitScope scope) {
+        this.requireUsableRoots();
         return this.jobRunner.submit(handle -> this.runPhase(COMMITTING,
                 progress -> this.commitEngine.commit(scope, progress, handle::isCancellationRequested)));
     }
@@ -210,6 +227,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link RescueSummary} a handle to the running job
      */
     public JobHandle<RescueSummary> rescue(final String reviewFolder) {
+        this.requireUsableRoots();
         return this.jobRunner.submit(handle -> this.runPhase(RESCUING,
                 progress -> this.rescueEngine.rescue(reviewFolder, progress, handle::isCancellationRequested)));
     }
@@ -221,6 +239,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
      */
     public JobHandle<CullJobOutcome> cull(final CullScope scope) {
+        this.requireUsableRoots();
         return this.cullEngine.cull(scope);
     }
 
@@ -231,6 +250,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CurateOutcome} a handle to the running job
      */
     public JobHandle<CurateOutcome> curate(final SortScope scope) {
+        this.requireUsableRoots();
         return this.curateEngine.curate(scope);
     }
 
@@ -242,6 +262,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
      */
     public JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
+        this.requireUsableRoots();
         return this.cullEngine.resume(prepDir, allowPartial);
     }
 
@@ -264,7 +285,8 @@ public class Pipeline {
      * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
      */
     public List<CullRunSummary> cullRuns() {
-        return this.prepDirDoctor.runs(this.cullPrepRoot);
+        this.requireUsableRoots();
+        return this.prepDirDoctor.runs(this.cullPrepRoot());
     }
 
     /**
@@ -278,6 +300,7 @@ public class Pipeline {
      * @param prepDir {@link Path} the cull prep directory to watch
      */
     public void startWatching(final Path prepDir) {
+        this.requireUsableRoots();
         this.cullEngine.armWatch(prepDir);
     }
 
@@ -287,6 +310,7 @@ public class Pipeline {
      * @param prepDir {@link Path} the cull prep directory to stop watching
      */
     public void stopWatching(final Path prepDir) {
+        this.requireUsableRoots();
         this.cullEngine.disarmWatch(prepDir);
     }
 
@@ -299,6 +323,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link TroubleshootReport} a handle to the running job
      */
     public JobHandle<TroubleshootReport> troubleshoot(final Path prepDir) {
+        this.requireUsableRoots();
         return this.jobRunner.submit(_ -> this.troubleshooter.troubleshoot(prepDir));
     }
 
@@ -310,7 +335,8 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link PurgeReport} a handle to the running job
      */
     public JobHandle<PurgeReport> purgeCompleted() {
-        return this.jobRunner.submit(_ -> this.prepDirDoctor.purgeCompleted(this.cullPrepRoot));
+        this.requireUsableRoots();
+        return this.jobRunner.submit(_ -> this.prepDirDoctor.purgeCompleted(this.cullPrepRoot()));
     }
 
     /**
@@ -327,6 +353,7 @@ public class Pipeline {
      * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
      */
     public JobHandle<DiscardReport> discard(final Path prepDir) {
+        this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
             if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new IllegalStateException("Prep dir " + prepDir
@@ -347,6 +374,43 @@ public class Pipeline {
      */
     boolean isWatchActive(final Path prepDir) {
         return this.cullEngine.isWatchActive(prepDir);
+    }
+
+    /**
+     * Refuses the call when the folder roots it would reach are not usable. Every entry point that
+     * resolves a path runs this first, including the ones that only read.
+     *
+     * <p>The guard sits here rather than in a screen, because both a screen and a command line pass
+     * through this class. A check written into either one would be walked past by the other. The
+     * same reasoning puts the working-root claim one layer up.
+     *
+     * @throws PathsMisconfiguredException if any of the three roots is unset, missing, or overlapping
+     */
+    private void requireUsableRoots() {
+        final List<PathViolation> violations = this.pathValidation.violationsInForce();
+        if (!violations.isEmpty()) {
+            throw new PathsMisconfiguredException(violations);
+        }
+    }
+
+    /**
+     * Where cull runs are prepared, worked out on every call rather than held. A saved working root
+     * has to reach this class the same way it reaches every engine.
+     *
+     * @return {@link Path} the cull-prep root under the working root
+     */
+    private Path cullPrepRoot() {
+        return this.pathsPort.logs().resolve("cull-prep");
+    }
+
+    /**
+     * Where discarded runs are filed, worked out on every call for the same reason as
+     * {@link #cullPrepRoot()}.
+     *
+     * @return {@link Path} the disaster-drawer graveyard root under the working root
+     */
+    private Path graveyardRoot() {
+        return this.pathsPort.logs().resolve("disasters");
     }
 
     /**

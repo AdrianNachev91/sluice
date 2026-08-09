@@ -1,5 +1,6 @@
 package photos.sluice.config;
 
+import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
@@ -23,8 +24,21 @@ public final class SettingsFixture {
     }
 
     // The roots as a config file would carry them, for a test that cares how a raw value resolves.
-    public static PathsConfig pathsConfig(final String repoRoot, final String libraryRoot, final String inbox) {
-        return new PathsConfig(new SettingsHolder(settings(new PathSettings(repoRoot, libraryRoot, inbox))));
+    // Nullable throughout, since that is how an install with nothing chosen yet carries them.
+    public static PathsConfig pathsConfig(final @Nullable String repoRoot, final @Nullable String libraryRoot,
+                                          final @Nullable String inbox) {
+        return new PathsConfig(holder(repoRoot, libraryRoot, inbox));
+    }
+
+    // For a test wiring two collaborators that read the same settings, such as a paths config and
+    // the validation over it. Both take this one holder, as they take one bean in production.
+    public static SettingsHolder holder(final Path repoRoot, final Path libraryRoot, final Path inbox) {
+        return holder(repoRoot.toString(), libraryRoot.toString(), inbox.toString());
+    }
+
+    public static SettingsHolder holder(final @Nullable String repoRoot, final @Nullable String libraryRoot,
+                                        final @Nullable String inbox) {
+        return new SettingsHolder(settings(new PathSettings(repoRoot, libraryRoot, inbox)));
     }
 
     // For a test that reads only the directories derived from the working root, such as logs or

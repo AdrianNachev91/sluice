@@ -5,6 +5,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The inspect-only half of media storage: what is on disk, and what it looks like. Nothing here
@@ -57,6 +58,20 @@ public interface MediaReader {
      * @return boolean true if the path exists
      */
     boolean exists(Path path);
+
+    /**
+     * The real, symlink- and junction-free form of path, when a directory actually sits there.
+     * Empty when nothing does, or when what does is not a directory.
+     *
+     * <p>One call answers both halves of checking a configured folder root. Whether it is there at
+     * all, and what it really is once the filesystem has followed every name. Two roots configured
+     * under different names that reach one directory come back equal here, which is what lets a
+     * caller compare them as plain paths.
+     *
+     * @param path {@link Path} the path to resolve
+     * @return an {@link Optional} of {@link Path}, the real directory, or empty if there is none
+     */
+    Optional<Path> realDirectory(Path path);
 
     /**
      * Reads a file's size.
