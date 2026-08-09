@@ -14,6 +14,15 @@ on:
     paths:
       - 'app/**'
       - '.github/workflows/ci.yml'
+  # The macOS job below runs on these two events only, never on a push. A macOS runner draws ten
+  # times its wall-clock against the account's monthly minute allowance, and a private repo's
+  # workflows stop running once that allowance is spent. So the cadence is chosen against the
+  # allowance rather than against a bill. Weekly plus the manual trigger costs about a tenth of
+  # it. Nightly would cost most of it, and the price of getting that wrong is CI stopping in the
+  # middle of a phase.
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
 
 jobs:
   build:
@@ -66,6 +75,49 @@ jobs:
           $binDir = (Get-ChildItem -Path $dest -Recurse -Filter 'heif-convert.exe' | Select-Object -First 1).DirectoryName
           if (-not $binDir) { throw "heif-convert.exe not found in the extracted libheif archive - its internal layout may have changed." }
           Add-Content -Path $env:GITHUB_PATH -Value $binDir
+
+      - name: Build and test
+        run: mvn -f app/pom.xml test
+
+  # A separate job rather than a third entry in the matrix above, because it answers to different
+  # events. A matrix cannot hold one leg back from a push while the other two run.
+  build-macos:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '26'
+          cache: maven
+
+      - name: Install libheif CLI (macOS)
+        run: brew install libheif
+
+      # This is the first time any of this code meets macOS, so report the environment before the
+      # suite runs. Three things decide how the results are read. Which decoder name Homebrew
+      # ships, since the other two runners are pinned to heif-convert. A rename here is a decoder
+      # gap rather than a test bug. Whether the workspace volume is case-insensitive, which is
+      # what would expose a file-move collision the other two runners cannot see. And the
+      # architecture, since arm64 is what real users run.
+      # It never fails the job. A missing tool should surface as the test that needs it going red,
+      # with the reason already printed above it.
+      - name: Report the environment
+        continue-on-error: true
+        run: |
+          sw_vers
+          uname -m
+          echo "heif-convert: $(command -v heif-convert || echo 'absent')"
+          echo "heif-dec:     $(command -v heif-dec || echo 'absent')"
+          touch casing_A casing_a
+          if [ "$(ls | grep -c '^casing_')" -eq 2 ]; then
+            echo "workspace volume: case-SENSITIVE"
+          else
+            echo "workspace volume: case-INSENSITIVE"
+          fi
+          rm -f casing_A casing_a
 
       - name: Build and test
         run: mvn -f app/pom.xml test
