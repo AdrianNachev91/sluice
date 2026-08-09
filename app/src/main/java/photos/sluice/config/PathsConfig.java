@@ -134,6 +134,7 @@ public class PathsConfig implements PathsPort {
      *
      * @return {@link Path} the absolute repo root path
      */
+    @Override
     public Path repoRoot() {
         return resolve(Objects.requireNonNull(this.properties.repoRoot()));
     }

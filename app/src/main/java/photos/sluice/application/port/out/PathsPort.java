@@ -9,6 +9,14 @@ import java.nio.file.Path;
 public interface PathsPort {
 
     /**
+     * The working root: the folder Sluice stages everything under, and the one a process claims
+     * before it mutates anything inside it.
+     *
+     * @return {@link Path} the working root directory
+     */
+    Path repoRoot();
+
+    /**
      * The Inbox root path.
      *
      * @return {@link Path} the Inbox directory

@@ -203,9 +203,6 @@ class PipelineTest {
         assertThat(Files.exists(reasonsFile)).isTrue();
     }
 
-    // sweepExpiredDisasterDrawers() is Pipeline's own @PostConstruct, called directly here since
-    // this test has no Spring context - the same pattern CullEngineTest's own
-    // armWatchesForResumableRuns() tests already use.
     @Test
     void sweepExpiredDisasterDrawersDeletesOnlyRetentionExpiredEntries(@TempDir final Path root) throws IOException {
         final Path drawer = root.resolve("logs/cull-prep/2019-06/disasters");
@@ -220,10 +217,10 @@ class PipelineTest {
         assertThat(Files.exists(freshEntry)).isTrue();
     }
 
-    // Pipeline.sweepExpiredDisasterDrawers() (the @PostConstruct hook) sweeps both per-prep-dir
-    // drawers and PrepDirRemedies.discard()'s global graveyard folders. DisasterDrawerTest already
-    // covers sweepExpiredGraveyard()'s own logic in full, so this only needs one expired and one
-    // fresh graveyard folder to prove the wiring reaches it too.
+    // Pipeline.sweepExpiredDisasterDrawers() sweeps two places: every per-prep-dir drawer, and the
+    // global graveyard folders PrepDirRemedies.discard() writes. DisasterDrawerTest already covers
+    // sweepExpiredGraveyard()'s own logic in full, so this only needs one expired and one fresh
+    // graveyard folder to prove the wiring reaches it too.
     @Test
     void sweepExpiredDisasterDrawersAlsoSweepsTheDiscardGraveyard(@TempDir final Path root) throws IOException {
         final Path oldGraveyard = root.resolve("logs/disasters/scope1-2019-01-01_00-00-00");

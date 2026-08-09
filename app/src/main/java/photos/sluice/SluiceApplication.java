@@ -1,29 +1,30 @@
 package photos.sluice;
 
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.builder.SpringApplicationBuilder;
 import photos.sluice.config.ConfigDirLocator;
+import photos.sluice.config.UiLauncher;
 
 import java.nio.file.Path;
 
 /**
- * The application's entry point. It locates the user's optional config file before Spring starts.
- * That makes its properties available as an ordinary Spring config-import source, alongside the
+ * The application's entry point. It locates the user's optional config file before anything starts.
+ * That file's properties then load as an ordinary Spring config-import source, alongside the
  * bundled defaults and any OS environment variables.
+ *
+ * <p>It hands the launch to {@link UiLauncher} rather than naming a window class itself. Only the
+ * wiring layer is allowed to name a concrete effect implementation, and this class sits outside it.
  */
 @SpringBootApplication
 public class SluiceApplication {
 
     /**
-     * Starts the Spring Boot application, importing the user's config file if present.
+     * Starts the application, importing the user's config file if present.
      *
      * @param args {@link String}[] command-line arguments
      */
     static void main(final String[] args) {
         final Path configFile = ConfigDirLocator.locate(System.getProperty("os.name"), System.getenv())
                 .resolve("config.yml");
-        new SpringApplicationBuilder(SluiceApplication.class)
-                .properties("spring.config.import=optional:file:" + configFile)
-                .run(args);
+        UiLauncher.launch(configFile, args);
     }
 }

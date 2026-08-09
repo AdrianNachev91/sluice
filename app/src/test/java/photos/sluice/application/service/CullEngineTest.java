@@ -821,8 +821,7 @@ class CullEngineTest {
 
     // Proves watch mode survives a restart: nothing calls cull()/resume() on this Pipeline
     // instance for the run at all. armWatchesForResumableRuns() has to discover it on disk, purely
-    // from what diagnosing the cull-prep root turns up. It is Pipeline's own @PostConstruct, called
-    // directly here since this test has no Spring context.
+    // from what diagnosing the cull-prep root turns up.
     // The shard is dropped before the restart, so this run is READY rather than WAITING when it is
     // found. That is the ordinary shape of the case: the agent finished while the app was closed.
     @Test

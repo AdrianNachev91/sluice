@@ -1,6 +1,5 @@
 package photos.sluice.application.service;
 
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
@@ -165,10 +164,10 @@ public class Pipeline {
     }
 
     /**
-     * Delegates to CullEngine, which does the real work - see its own doc. Public and callable
-     * directly (not just via @PostConstruct) so a test can drive it without a Spring context.
+     * Delegates to CullEngine, which does the real work - see its own doc. A driving adapter that
+     * stays open calls this itself, once its process owns the working root. A one-shot caller that
+     * only reads never calls it at all, and so never arms pollers it is about to kill.
      */
-    @PostConstruct
     public void armWatchesForResumableRuns() {
         this.cullEngine.armWatchesForResumableRuns();
     }
@@ -176,11 +175,10 @@ public class Pipeline {
     /**
      * Delegates to DisasterDrawer to sweep every prep dir's disaster drawer for retention-expired
      * entries, meaning a corrupt original or a troubleshoot report older than 30 days. It sweeps
-     * every PrepDirRemedies.discard() graveyard folder past that same window too. Public and
-     * callable directly (not just via @PostConstruct) so a test can drive it without a Spring
-     * context.
+     * every PrepDirRemedies.discard() graveyard folder past that same window too. The caller runs
+     * this itself, once its process owns the working root. The sweep deletes, so it must never run
+     * before that.
      */
-    @PostConstruct
     public void sweepExpiredDisasterDrawers() {
         this.disasterDrawer.sweepExpired(this.cullPrepRoot);
         this.disasterDrawer.sweepExpiredGraveyard(this.graveyardRoot);

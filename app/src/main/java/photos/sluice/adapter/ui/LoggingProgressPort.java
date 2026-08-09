@@ -2,6 +2,7 @@ package photos.sluice.adapter.ui;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ProgressPort;
 
@@ -11,6 +12,7 @@ import photos.sluice.application.port.out.ProgressPort;
  * {@link ProgressPort} implementation until a desktop dashboard adapter exists to replace it.
  */
 @Component
+@Profile("!cli")
 public class LoggingProgressPort implements ProgressPort {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingProgressPort.class);

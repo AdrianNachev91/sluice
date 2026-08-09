@@ -113,8 +113,8 @@ final class CullEngine {
     /**
      * Re-arms a watcher for every resumable run found on disk. There is no persistent job store (see
      * WaitingCullJob's own doc), so restarting the app would otherwise stop watching every run armed
-     * before it. A no-op when mode is MANUAL. Callable directly, not just via Pipeline's own
-     * {@code @PostConstruct}, so a test can drive it without a Spring context.
+     * before it. A no-op when mode is MANUAL. Pipeline calls this explicitly, on behalf of a
+     * driving adapter that stays open long enough for a watcher to be worth arming.
      *
      * <p>Resumable means WAITING or READY: the two states a run can leave without a person. WAITING
      * still expects shards, which is what a watcher watches for. READY has them all already, the

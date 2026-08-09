@@ -343,8 +343,8 @@ an internal cadence, not a `CullSettings` field - `mode` is the one documented u
 triggered it (a fresh `cull()`, a manual `resume()` click, or a watcher's own auto-resume). The
 prep dir's watcher, if any, is always retired before a real attempt runs. A manual click racing an
 armed watcher can therefore never leave two pollers on the same job.
-`armWatchesForResumableRuns()` (called from `Pipeline`'s own `@PostConstruct`) re-arms every
-resumable run found on disk at startup, meaning `WAITING` or `READY`. There is no persistent job
+`armWatchesForResumableRuns()` (called through `Pipeline`, by a driving adapter that stays open)
+re-arms every resumable run found on disk at startup, meaning `WAITING` or `READY`. There is no persistent job
 store, so restarting the app would otherwise silently stop watching every job armed before the
 restart.
 

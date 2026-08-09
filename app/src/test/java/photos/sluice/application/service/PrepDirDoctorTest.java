@@ -35,9 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 // validate()/checkMissingSources() internally, so the same shard/sidecar/index fixtures apply.
 //
 // The never-throws tests share one stake, stated here rather than repeated on each. A dashboard poll
-// and the @PostConstruct startup scan both call diagnose() and runs(), so an escape takes down a
-// whole reading or the app's own startup. Each test below names only what is distinct about its own
-// failure.
+// and the startup scan both call diagnose() and runs(), so an escape takes down a whole reading or
+// the app's own startup. Each test below names only what is distinct about its own failure.
 class PrepDirDoctorTest {
 
     @Test

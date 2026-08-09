@@ -4,6 +4,8 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.InputStream;
@@ -13,14 +15,13 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
-/**
- * Package visibility is flat, so the layering is only a convention until something checks it. These
- * rules turn a boundary violation into a build failure instead of a review-time catch, which is the
- * only mechanical guard on the architecture in a single-module project.
- */
+// Package visibility is flat, so the layering is only a convention until something checks it. These
+// rules turn a boundary violation into a build failure instead of a review-time catch. That is the
+// only mechanical guard on the architecture in a single-module project.
 // Each rule field is discovered reflectively by the ArchUnit JUnit engine, never referenced from
 // source, so the IDE's unused-symbol inspection flags them as a false positive.
 @SuppressWarnings("unused")
@@ -112,6 +113,19 @@ class ArchitectureTest {
                     .as("a class placed directly in adapter must not depend on an adapter subpackage; depend on its " +
                             "port instead")
                     .allowEmptyShould(true);
+
+    // Every Spring bean under adapter/ui carries a @Profile, so a process that is not the desktop
+    // app can leave the desktop's beans unbuilt. The house default everywhere else is a bare
+    // @Component under a blanket scan. That is why this needs checking rather than remembering. A
+    // new screen's beans would otherwise be added correctly by local convention and wrongly by this
+    // one. The rule checks the annotation is present, not which profile it names, since a missed
+    // annotation is what actually happens.
+    @ArchTest
+    static final ArchRule uiBeansAreProfileGated =
+            classes().that().resideInAPackage("..adapter.ui..")
+                    .and().areMetaAnnotatedWith(Component.class)
+                    .should().beAnnotatedWith(Profile.class)
+                    .as("every Spring bean in adapter/ui must also be annotated @Profile");
 
     @ArchTest
     static final ArchRule adapterSubpackagesDoNotReachIntoLooseAdapterClasses =

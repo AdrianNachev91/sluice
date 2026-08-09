@@ -1,0 +1,37 @@
+/*
+ * The base stylesheet every Sluice window inherits. Appearance lives here rather than in the Java.
+ * A taste change is then an edit and a re-run, with nothing new to read in a view class.
+ *
+ * One rule holds across every screen: nothing sizes to a fixed pixel width. Layouts size to their
+ * content, and a control that holds text grows with the text in it. Text length is not a constant.
+ * The same sentence runs roughly a third longer in German, and copy gets rewritten on taste alone.
+ * A label sized to fit its English string breaks the first time either happens. Spacing, padding
+ * and font sizes are fine to pin. Widths of things holding words are not.
+ */
+
+.root {
+    -fx-font-family: "Segoe UI", "SF Pro Text", "Ubuntu", "Helvetica Neue", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background-color: #fbfbfd;
+}
+
+/* Every screen's outer container. Padding only, so the screen fills whatever space it is given. */
+.screen {
+    -fx-padding: 24px;
+}
+
+.failure-screen {
+    -fx-spacing: 12px;
+    -fx-alignment: center-left;
+}
+
+.failure-headline {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+/* Wraps rather than truncates. The text is whatever the failure said, at whatever length. */
+.failure-detail {
+    -fx-text-fill: #4a4a55;
+    -fx-wrap-text: true;
+}

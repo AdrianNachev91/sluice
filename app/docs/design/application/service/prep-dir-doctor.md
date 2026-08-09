@@ -84,11 +84,11 @@ health for a run in trouble.
 escape lands on `DAMAGED`. Not every later failure does: a shard that fails to parse reports
 `CorruptShard`, and a sidecar that cannot be read reports `CorruptSidecar`. The guard is a catch-all
 rather than a list of expected types, which is what lets the contract hold with no list to keep in
-step. That is what makes it safe for the startup watch scan to call from a `@PostConstruct`, and for
-a dashboard to poll. `runs()` and `summaryOf()` extend the same guarantee, guarded the same way, over
-the mtime read and both of `prepDirsUnder`'s own reads (see section 1 above). Neither the root's own
-listing failing nor one candidate's own occupancy check failing can take the whole reading down. The
-former reports no runs at all. The latter costs one entry, reported `DAMAGED`.
+step. That is what makes it safe for the startup watch scan to call, and for a dashboard to poll.
+`runs()` and `summaryOf()` extend the same guarantee, guarded the same way, over the mtime read and
+both of `prepDirsUnder`'s own reads (see section 1 above). Neither the root's own listing failing
+nor one candidate's own occupancy check failing can take the whole reading down. The former reports
+no runs at all. The latter costs one entry, reported `DAMAGED`.
 
 A transient read failure and genuinely damaged content are distinguished on the findings path a
 `CHOICE` answer follows from. A sidecar that merely failed to open propagates, rather than being
