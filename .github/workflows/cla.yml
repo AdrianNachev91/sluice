@@ -1,0 +1,39 @@
+name: CLA Assistant
+
+# Blocks a pull request until its author has signed CLA.md, per Phase 19
+# (docs/plans/java-port-phases/phase-19-license-and-marks.md). The relicensing
+# grant in CLA.md's Section 4 is why this check exists at all - see that file.
+#
+# path-to-document below points at this repository's own CLA.md. When this
+# workflow is carried into the public "sluice" repo at the final public-cut
+# sweep (see docs/plans/2026-07-10-public-migration.md), that URL must be
+# updated to the public repo's own raw CLA.md URL, or contributors reading
+# the PR comment will be sent to a private repo they cannot see.
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  CLAAssistant:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "CLA Assistant"
+        if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
+        # Pinned to the last tag cut before the upstream repo was archived
+        # (2026-03-23). Existing releases stay functional; there is no
+        # actively maintained successor to move to as of this writing.
+        uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-document: 'https://raw.githubusercontent.com/AdrianNachev91/PhotoOrganizer/master/CLA.md'
+          path-to-signatures: 'signatures/version1/cla.json'
+          branch: 'cla-signatures'

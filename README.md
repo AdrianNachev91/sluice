@@ -90,3 +90,11 @@ or your phone anywhere; a dead laptop loses nothing once sync completes.
 `photo-sorter` runs on **Haiku** (it just invokes the engines and reads a summary — cheap).
 `photo-culler` runs on **Sonnet** (good visual judgement at low cost, kept low by downscaling +
 montages). For ~16k photos, do one year per run (≈5-6 runs); ongoing imports are tiny.
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only ([`LICENSE`](LICENSE)). A
+narrow exception ([`LICENSE-EXCEPTION.md`](LICENSE-EXCEPTION.md)) covers modules that implement
+the `VisionCuller` vision-provider interface and nothing else. "Sluice" is a trademark of its
+maintainer; a fork must use a different name ([`TRADEMARK.md`](TRADEMARK.md)). This is a display
+project with no support promise, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
