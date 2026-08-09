@@ -27,7 +27,8 @@ public interface WorkingRootLock {
      *
      * <p>A process holding one root and claiming another takes the new one first, and gives the old
      * one up only once that succeeds. A refused claim therefore changes nothing: the caller still
-     * holds what it held before.
+     * holds what it held before. Anything that goes wrong while giving the old root up is not a
+     * refusal. The new one is held by then, so it cannot reach the caller as one.
      *
      * @param workingRoot {@link Path} the working root to claim
      * @throws WorkingRootBusyException if another process already holds workingRoot

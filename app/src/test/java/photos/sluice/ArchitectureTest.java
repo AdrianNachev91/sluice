@@ -6,6 +6,7 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.LiveSettings;
 
 import java.io.File;
 import java.io.InputStream;
@@ -126,6 +127,17 @@ class ArchitectureTest {
                     .and().areMetaAnnotatedWith(Component.class)
                     .should().beAnnotatedWith(Profile.class)
                     .as("every Spring bean in adapter/ui must also be annotated @Profile");
+
+    // Putting settings in force is a step of saving them, never a thing to do on its own. Reached
+    // directly, it skips the write to disk, the working-root claim and the refusal to move a folder
+    // root mid-job. A screen goes through SettingsUseCase, which does all four in one order. Stated
+    // as "the adapter layer does not know this type", so a new screen is governed the moment it
+    // exists rather than when someone remembers the rule.
+    @ArchTest
+    static final ArchRule adaptersDoNotPutSettingsInForceThemselves =
+            noClasses().that().resideInAPackage("..adapter..")
+                    .should().dependOnClassesThat().belongToAnyOf(LiveSettings.class)
+                    .as("adapters must not depend on LiveSettings; save through the settings use case instead");
 
     @ArchTest
     static final ArchRule adapterSubpackagesDoNotReachIntoLooseAdapterClasses =

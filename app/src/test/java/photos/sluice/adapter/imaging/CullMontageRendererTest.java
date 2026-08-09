@@ -10,7 +10,7 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
@@ -348,8 +348,7 @@ class CullMontageRendererTest {
     }
 
     private static PathsConfig pathsConfig(final Path root) {
-        return new PathsConfig(new PathsProperties(
-                root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
+        return SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
     }
 
     private static CullMontageRenderer renderer(final PathsConfig pathsConfig) {
@@ -380,6 +379,11 @@ class CullMontageRendererTest {
         @Override
         public ExternalAgentSettings externalAgent() {
             return new ExternalAgentSettings(WatchMode.MANUAL);
+        }
+
+        @Override
+        public MontageConfig montage() {
+            return MontageConfig.defaults();
         }
     }
 

@@ -3,8 +3,8 @@ package photos.sluice.config;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
@@ -14,7 +14,7 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class MontageConfigTest {
+class MontagePropertiesTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withInitializer(new ConfigDataApplicationContextInitializer())
@@ -28,7 +28,7 @@ class MontageConfigTest {
     @Test
     void bundledDefaultsBindFromApplicationYml() {
         this.runner.run(context -> {
-            final MontageConfig config = context.getBean(MontageConfig.class);
+            final MontageProperties config = context.getBean(MontageProperties.class);
             assertThat(config.tilesPerRow()).isEqualTo(5);
             assertThat(config.tileSize()).isEqualTo(224);
         });
@@ -38,7 +38,7 @@ class MontageConfigTest {
     void explicitPropertyOverridesBundledDefault() {
         this.runner.withPropertyValues("sluice.montage.tiles-per-row=7")
                 .run(context -> {
-                    final MontageConfig config = context.getBean(MontageConfig.class);
+                    final MontageProperties config = context.getBean(MontageProperties.class);
                     assertThat(config.tilesPerRow()).isEqualTo(7);
                 });
     }
@@ -54,7 +54,7 @@ class MontageConfigTest {
 
         this.runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
                 .run(context -> {
-                    final MontageConfig config = context.getBean(MontageConfig.class);
+                    final MontageProperties config = context.getBean(MontageProperties.class);
                     assertThat(config.tilesPerRow()).isEqualTo(7);
                     assertThat(config.tileSize()).isEqualTo(224);
                 });
@@ -72,13 +72,13 @@ class MontageConfigTest {
 
         this.runner.withPropertyValues("spring.config.import=optional:file:" + userFile)
                 .run(context -> {
-                    final MontageConfig config = context.getBean(MontageConfig.class);
+                    final MontageProperties config = context.getBean(MontageProperties.class);
                     assertThat(config.tilesPerRow()).isEqualTo(9);
                 });
     }
 
     @Configuration
-    @EnableConfigurationProperties(MontageConfig.class)
+    @EnableConfigurationProperties(MontageProperties.class)
     static class TestConfig {
     }
 }

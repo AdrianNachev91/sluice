@@ -10,6 +10,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.job.WatchMode;
@@ -118,6 +119,11 @@ class CullDispatcherTest {
         @Override
         public String provider() {
             return this.provider;
+        }
+
+        @Override
+        public MontageConfig montage() {
+            return MontageConfig.defaults();
         }
 
         @Override

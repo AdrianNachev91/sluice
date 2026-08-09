@@ -28,8 +28,7 @@ import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.VisionCuller;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.Decision;
@@ -381,9 +380,8 @@ final class PipelineTestSupport {
                              final CullSettings cullSettings, final List<VisionCuller> cullers,
                              final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort) {
         final Path libraryRoot = root.resolve("Library");
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, libraryRoot, root.resolve("Inbox"));
+        final var hashIndex = new CsvLibraryHashIndex(pathsConfig);
         final var sha256Port = new Sha256Hasher();
 
         final var dateResolver =
@@ -410,18 +408,14 @@ final class PipelineTestSupport {
                 disasterDrawer, moveLedger);
         final var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner, moveLedger);
         final var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
-        // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
-        // given photo lands in via mtime ordering alone, without depending on batch-size math.
-        final var montageConfig = new MontageConfig(64, 1);
-
         if (pollInterval == null) {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
-                    prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig,
+                    prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig,
                     new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner,
                     moveLedger);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
-                prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, montageConfig, new JobRunner(),
+                prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, new JobRunner(),
                 progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pollInterval);
     }
 
@@ -430,8 +424,7 @@ final class PipelineTestSupport {
     // then watch the pipeline honour it. Pipeline exposes troubleshoot() but not the individual
     // CHOICE remedies, which a troubleshoot screen calls directly.
     static PrepDirRemedies prepDirRemedies(final Path root) {
-        final var pathsConfig = new PathsConfig(new PathsProperties(root.toString(),
-                root.resolve("Library").toString(), root.resolve("Inbox").toString()));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
         final var mediaStore = new NioMediaStore();
         final var disasterDrawer = new DisasterDrawer(mediaStore);
         return new PrepDirRemedies(mediaStore, new JsonCullPrepStore(), pathsConfig, defaultCullSettings(),
@@ -1183,6 +1176,13 @@ final class PipelineTestSupport {
         @Override
         public CullProviderSettings providerSettings() {
             return new CullProviderSettings(null, null, null, null);
+        }
+
+        // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
+        // given photo lands in via mtime ordering alone, without depending on batch-size math.
+        @Override
+        public MontageConfig montage() {
+            return new MontageConfig(64, 1);
         }
     }
 }

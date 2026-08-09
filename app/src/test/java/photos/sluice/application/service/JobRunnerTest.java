@@ -84,6 +84,80 @@ class JobRunnerTest {
     }
 
     @Test
+    void runIfIdleRunsTheWorkAndSaysSoWhenNoJobIsRunning() {
+        final var ran = new AtomicBoolean(false);
+
+        final boolean reported = this.runner.runIfIdle(() -> ran.set(true));
+
+        assertThat(reported).isTrue();
+        assertThat(ran).isTrue();
+    }
+
+    @Test
+    void runIfIdleLeavesTheWorkUnrunAndSaysSoWhileAJobIsRunning() throws InterruptedException {
+        // started/release: see isBusyWhileRunningThenFreeOnceTheJobCompletes. Needed so the call
+        // below is proven to meet a job genuinely still in flight.
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final var ran = new AtomicBoolean(false);
+        final JobHandle<String> job = this.runner.submit(_ -> {
+            started.countDown();
+            release.await();
+            return "done";
+        });
+        started.await();
+
+        final boolean reported = this.runner.runIfIdle(() -> ran.set(true));
+
+        assertThat(reported).isFalse();
+        assertThat(ran).isFalse();
+        release.countDown();
+        job.join();
+    }
+
+    // The whole point of the method. A job that could start here would be moving the tree while the
+    // work is deciding what the tree is.
+    @Test
+    void noJobStartsWhileRunIfIdleWorkIsStillRunning() throws InterruptedException {
+        final var working = new CountDownLatch(1);
+        final var submitted = new CountDownLatch(1);
+        final var reachedSubmit = new CountDownLatch(1);
+        final var finishWork = new CountDownLatch(1);
+        final var running = Thread.ofVirtual().start(() -> this.runner.runIfIdle(() -> {
+            working.countDown();
+            await(finishWork);
+        }));
+        working.await();
+        final var submitting = Thread.ofVirtual().start(() -> {
+            reachedSubmit.countDown();
+            this.runner.submit(_ -> "done").join();
+            submitted.countDown();
+        });
+        reachedSubmit.await();
+
+        try {
+            // Margin rather than a guess at a duration. A submit that waits cannot get through at
+            // all until the work below is released, so no load can make this fail.
+            assertThat(submitted.await(200, TimeUnit.MILLISECONDS)).isFalse();
+        } finally {
+            finishWork.countDown();
+            running.join();
+            submitting.join();
+        }
+        assertThat(this.runner.isBusy()).isFalse();
+    }
+
+    // A monitor left held would wedge every later job behind work that already gave up.
+    @Test
+    void theSlotIsUsableAgainAfterRunIfIdleWorkThrows() {
+        assertThatThrownBy(() -> this.runner.runIfIdle(() -> {
+            throw new IllegalStateException("the work gave up");
+        })).isInstanceOf(IllegalStateException.class);
+
+        assertThat(this.runner.submit(_ -> "done").join()).isEqualTo("done");
+    }
+
+    @Test
     void slotFreesAndFailureIsWrappedWhenWorkThrows() {
         final var failure = new RuntimeException("Defqon 1 canceled, queue the next edition");
         final JobHandle<String> handle = this.runner.submit(_ -> {
@@ -171,5 +245,14 @@ class JobRunnerTest {
         handle.onComplete().thenAccept(received::set).toCompletableFuture().join();
 
         assertThat(received.get()).isEqualTo("result");
+    }
+
+    private static void await(final CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 }

@@ -15,7 +15,6 @@ import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DiscardReport;
-import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
@@ -85,7 +84,6 @@ public class Pipeline {
      * @param cullSettings {@link CullSettings} user-facing cull configuration
      * @param mediaStore {@link MediaStore} moves/copies media files
      * @param pathsPort {@link PathsPort} resolves configured library/inbox paths
-     * @param montageConfig {@link MontageConfig} montage grid sizing configuration
      * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
@@ -100,13 +98,13 @@ public class Pipeline {
                     final ApplyEngine applyEngine,
                     final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort,
                     final CullSettings cullSettings,
-                    final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig,
+                    final MediaStore mediaStore, final PathsPort pathsPort,
                     final JobRunner jobRunner,
                     final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
                     final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
                     final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
-                cullPrepPort, cullSettings, mediaStore, pathsPort, montageConfig, jobRunner, progressPort,
+                cullPrepPort, cullSettings, mediaStore, pathsPort, jobRunner, progressPort,
                 disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader,
                 DEFAULT_WATCH_POLL_INTERVAL);
     }
@@ -128,7 +126,6 @@ public class Pipeline {
      * @param cullSettings {@link CullSettings} user-facing cull configuration
      * @param mediaStore {@link MediaStore} moves/copies media files
      * @param pathsPort {@link PathsPort} resolves configured library/inbox paths
-     * @param montageConfig {@link MontageConfig} montage grid sizing configuration
      * @param jobRunner {@link JobRunner} runs work as cancellable background jobs
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param disasterDrawer {@link DisasterDrawer} sweeps retention-expired recovery artifacts at startup
@@ -141,7 +138,7 @@ public class Pipeline {
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
              final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
              final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
-             final MediaStore mediaStore, final PathsPort pathsPort, final MontageConfig montageConfig,
+             final MediaStore mediaStore, final PathsPort pathsPort,
              final JobRunner jobRunner,
              final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
              final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
@@ -152,7 +149,7 @@ public class Pipeline {
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
-                mediaStore, pathsPort, montageConfig, jobRunner, progressPort, applyPlanner, ledgerReader,
+                mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
                 prepDirDoctor, prepDirRemedies, watchPollInterval);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, this.cullEngine);
         this.disasterDrawer = disasterDrawer;

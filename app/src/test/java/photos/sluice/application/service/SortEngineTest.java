@@ -12,8 +12,7 @@ import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.application.port.out.HashIndexPort;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
@@ -659,18 +658,17 @@ class SortEngineTest {
     }
 
     private SortEngine sortEngine(final Path root) {
-        return this.sortEngine(root, new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv")));
+        return this.sortEngine(root, new CsvLibraryHashIndex(SettingsFixture.workingRoot(root)));
     }
 
     private SortEngine sortEngine(final Path root, final HashIndexPort hashIndex) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.toString(), root.resolve("Inbox").toString()));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root, root.resolve("Inbox"));
         return new SortEngine(pathsConfig, this.inboxScanner, this.dateResolver, this.sha256Port, hashIndex,
                 this.imageDimensionsPort, this.mediaStore);
     }
 
     private static HashIndexPort seededIndex(final Path root, final String hash, final Path libraryPath) {
-        final var index = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
+        final var index = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         index.append(List.of(new IndexEntry(hash, libraryPath)));
         return index;
     }

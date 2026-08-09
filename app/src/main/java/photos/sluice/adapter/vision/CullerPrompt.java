@@ -3,7 +3,6 @@ package photos.sluice.adapter.vision;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.io.IOException;
@@ -18,8 +17,8 @@ import java.util.stream.Collectors;
  * the prompt engineering. A card contributes only its plain-words name and description.
  *
  * <p>The user turn is built per montage from its sidecar entries. Grid dimensions come from the
- * injected {@link MontageConfig} because the sidecar records no grid info. Prompt assembly
- * assumes a cull runs with the same montage config that rendered its prep directory.
+ * cull settings because the sidecar records no grid info. Prompt assembly assumes a cull runs with
+ * the same montage config that rendered its prep directory.
  */
 @Component
 class CullerPrompt {
@@ -28,18 +27,16 @@ class CullerPrompt {
     private static final String TEMPLATE_RESOURCE = "/cull/culler-prompt.md";
 
     private final CullSettings settings;
-    private final MontageConfig montageConfig;
     private final String template;
 
     /**
      * Constructs the prompt builder, loading the bundled template.
      *
      * @param settings {@link CullSettings} the cull settings, supplying the configured categories
-     * @param montageConfig {@link MontageConfig} the montage grid configuration
+     *     and the montage grid
      */
-    CullerPrompt(final CullSettings settings, final MontageConfig montageConfig) {
+    CullerPrompt(final CullSettings settings) {
         this.settings = settings;
-        this.montageConfig = montageConfig;
         this.template = loadTemplate();
     }
 
@@ -80,7 +77,7 @@ class CullerPrompt {
                 .append(" - sheet ").append(montage.replaceFirst("^montage-", ""))
                 .append(" (").append(ordinal).append(" of ").append(total).append(")\n");
         text.append("Grid: ").append(entries.size()).append(" photos in rows of ")
-                .append(this.montageConfig.tilesPerRow())
+                .append(this.settings.montage().tilesPerRow())
                 .append(", numbered left-to-right then top-to-bottom.\n");
         text.append("Photos:\n");
         for (int i = 0; i < entries.size(); i++) {

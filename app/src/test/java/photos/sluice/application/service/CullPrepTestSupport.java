@@ -13,10 +13,11 @@ import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.job.WatchMode;
@@ -134,8 +135,7 @@ final class CullPrepTestSupport {
     }
 
     static PathsConfig pathsConfig(final Path repoRoot, final Path libraryRoot) {
-        return new PathsConfig(
-                new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
+        return SettingsFixture.pathsConfig(repoRoot, libraryRoot, repoRoot.resolve("Inbox"));
     }
 
     static CullSettings fixedSettings() {
@@ -245,7 +245,7 @@ final class CullPrepTestSupport {
     }
 
     static CsvLibraryHashIndex hashIndex(final Path repoRoot) {
-        return new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv"));
+        return new CsvLibraryHashIndex(SettingsFixture.workingRoot(repoRoot));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
@@ -258,6 +258,11 @@ final class CullPrepTestSupport {
         @Override
         public ExternalAgentSettings externalAgent() {
             return new ExternalAgentSettings(WatchMode.MANUAL);
+        }
+
+        @Override
+        public MontageConfig montage() {
+            return MontageConfig.defaults();
         }
     }
 

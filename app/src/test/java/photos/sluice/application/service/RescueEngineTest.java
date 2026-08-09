@@ -6,8 +6,7 @@ import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.MediaStore;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateSource;
 import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.ProgressCallback;
@@ -49,7 +48,7 @@ class RescueEngineTest {
         final Path source = root.resolve("Review/2019-06/IMG_1.jpg");
         writeFile(source, "keeper");
         final String expectedHash = new Sha256Hasher().hash(source);
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
 
         rescueEngine(root, libraryRoot, hashIndex, noDate(), noDate()).rescue("2019-06");
 
@@ -112,7 +111,7 @@ class RescueEngineTest {
         final Path second = root.resolve("Review/2019-06/b.jpg");
         writeFile(first, "keeper1");
         writeFile(second, "keeper2");
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         final String firstHash = new Sha256Hasher().hash(first);
         // Allows exactly one move to succeed, then throws - simulating a process crash right after
         // the first file's move-and-index but before the loop reaches the second.
@@ -224,7 +223,7 @@ class RescueEngineTest {
 
     private static RescueEngine rescueEngine(final Path repoRoot, final Path libraryRoot, final DateSource exifSource
             , final DateSource filenameSource) {
-        return rescueEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")),
+        return rescueEngine(repoRoot, libraryRoot, new CsvLibraryHashIndex(SettingsFixture.workingRoot(repoRoot)),
                 exifSource, filenameSource);
     }
 
@@ -238,8 +237,7 @@ class RescueEngineTest {
                                              final CsvLibraryHashIndex hashIndex,
                                              final DateSource exifSource, final DateSource filenameSource,
                                              final MediaStore mediaStore) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
+        final var pathsConfig = SettingsFixture.pathsConfig(repoRoot, libraryRoot, repoRoot.resolve("Inbox"));
         final var rescueDateResolver = new RescueDateResolver(exifSource, filenameSource);
         return new RescueEngine(pathsConfig, mediaStore, new Sha256Hasher(), hashIndex, rescueDateResolver);
     }

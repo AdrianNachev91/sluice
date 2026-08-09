@@ -75,16 +75,6 @@ class CullConfigTest {
     }
 
     @Test
-    void rejectsTwoCardsSharingAName() {
-        this.runner.withPropertyValues(
-                "sluice.cull.categories[0].name=receipts",
-                "sluice.cull.categories[0].description=Paper receipts and invoices",
-                "sluice.cull.categories[1].name=receipts",
-                "sluice.cull.categories[1].description=Photos of till slips"
-        ).run(context -> assertThat(context).hasFailed());
-    }
-
-    @Test
     void externalAgentDefaultsToManualModeWhenAbsent() {
         this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);

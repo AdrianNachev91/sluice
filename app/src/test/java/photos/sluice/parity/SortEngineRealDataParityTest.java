@@ -14,8 +14,7 @@ import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.application.service.SortEngine;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.model.SortScope;
 
@@ -156,15 +155,9 @@ class SortEngineRealDataParityTest {
         }
     }
 
-    /**
-     * Removes, from both sides, the entries that are the same file name under two different
-     * folders. Those are the dating divergence: both engines sorted the file and kept it, they
-     * just disagreed about which month it belongs to.
-     *
-     * @param onlyInReference a {@link Set} of {@link String} leftover paths found only in the reference's tree
-     * @param onlyInJava a {@link Set} of {@link String} leftover paths found only in Java's tree
-     * @return a {@link Set} of {@link String} the file names that appeared on both sides
-     */
+    // Removes, from both sides, the entries that are the same file name under two different folders.
+    // Those are the dating divergence. Both engines sorted the file and kept it, and only disagreed
+    // about which month it belongs to.
     private static Set<String> drainRefiledUnderADifferentDate(final Set<String> onlyInReference,
                                                                final Set<String> onlyInJava) {
         final Set<String> onBothSides = new HashSet<>(fileNames(onlyInReference));
@@ -183,13 +176,7 @@ class SortEngineRealDataParityTest {
         return onBothSides;
     }
 
-    /**
-     * Removes one side's refiled entries, recording the folders they came from.
-     *
-     * @param side a {@link Set} of {@link String} one side's leftover paths, drained in place
-     * @param refiledNames a {@link Set} of {@link String} file names found on both sides
-     * @param touchedFolders a {@link Set} of {@link String} collects the folders the drained entries sat in
-     */
+    // Removes one side's refiled entries, recording the folders they came from.
     private static void collectRefiled(final Set<String> side, final Set<String> refiledNames,
                                        final Set<String> touchedFolders) {
         side.stream()
@@ -273,9 +260,8 @@ class SortEngineRealDataParityTest {
     }
 
     private static SortEngine sortEngine(final Path root) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.toString(), root.resolve("Inbox").toString()));
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root, root.resolve("Inbox"));
+        final var hashIndex = new CsvLibraryHashIndex(pathsConfig);
         final var dateResolver =
                 new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
         return new SortEngine(pathsConfig, new InboxScanner(), dateResolver, new Sha256Hasher(), hashIndex,

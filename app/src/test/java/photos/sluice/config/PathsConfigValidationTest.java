@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -16,7 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PathsConfigValidationTest {
 
+    // The bundled application.yml is loaded because PathsConfig now reads through SettingsHolder,
+    // which needs the cull and montage defaults to build a settings value at all.
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
+            .withInitializer(new ConfigDataApplicationContextInitializer())
             .withUserConfiguration(TestConfig.class);
 
     @Test
@@ -182,8 +186,8 @@ class PathsConfigValidationTest {
     }
 
     @Configuration
-    @EnableConfigurationProperties(PathsProperties.class)
-    @Import(PathsConfig.class)
+    @EnableConfigurationProperties({PathsProperties.class, CullConfig.class, MontageProperties.class})
+    @Import({SettingsHolder.class, PathsConfig.class})
     static class TestConfig {
     }
 }

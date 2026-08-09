@@ -72,7 +72,7 @@ class CullerPromptTest {
 
         assertThat(turn).isEqualTo("""
                 Scope: 2019-06 - sheet 007 (7 of 12)
-                Grid: 3 photos in rows of 5, numbered left-to-right then top-to-bottom.
+                Grid: 3 photos in rows of 7, numbered left-to-right then top-to-bottom.
                 Photos:
                 1. IMG_001.jpg | taken 2019-06-20T13:00:10Z
                 2. IMG-20190620-WA0003.jpg | taken 2019-06-20T13:00:12Z | received
@@ -95,10 +95,11 @@ class CullerPromptTest {
     }
 
     private static CullerPrompt cullerPrompt(final List<CullCategory> categories) {
-        return new CullerPrompt(new FixedSettings("anthropic", categories), new MontageConfig(224, 5));
+        return new CullerPrompt(new FixedSettings("anthropic", categories, new MontageConfig(224, 7)));
     }
 
-    private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {
+    private record FixedSettings(String provider, List<CullCategory> categories, MontageConfig montage)
+            implements CullSettings {
 
         @Override
         public CullProviderSettings providerSettings() {

@@ -19,7 +19,6 @@ import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.CancellationSignal;
@@ -57,7 +56,6 @@ final class CullEngine {
     private final CullPrepPort cullPrepPort;
     private final CullSettings cullSettings;
     private final MediaStore mediaStore;
-    private final MontageConfig montageConfig;
     private final JobRunner jobRunner;
     private final PhaseRunner phaseRunner;
     private final ShardTallyCalculator shardTallyCalculator;
@@ -73,10 +71,9 @@ final class CullEngine {
      * @param cullDispatcher {@link CullDispatcher} runs the cull phase
      * @param applyEngine {@link ApplyEngine} runs the apply phase
      * @param cullPrepPort {@link CullPrepPort} reads/writes prep dir index state
-     * @param cullSettings {@link CullSettings} configured provider and watch-mode settings
+     * @param cullSettings {@link CullSettings} configured provider, watch-mode and montage-grid settings
      * @param mediaStore {@link MediaStore} filesystem access for prep dirs
      * @param pathsPort {@link PathsPort} resolves repo-relative paths
-     * @param montageConfig {@link MontageConfig} montage grid configuration
      * @param jobRunner {@link JobRunner} runs cull jobs one at a time
      * @param progressPort {@link ProgressPort} reports phase progress
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
@@ -89,7 +86,7 @@ final class CullEngine {
                final ApplyEngine applyEngine,
                final CullPrepPort cullPrepPort, final CullSettings cullSettings, final MediaStore mediaStore,
                final PathsPort pathsPort,
-               final MontageConfig montageConfig, final JobRunner jobRunner, final ProgressPort progressPort,
+               final JobRunner jobRunner, final ProgressPort progressPort,
                final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
                final PrepDirDoctor prepDirDoctor, final PrepDirRemedies prepDirRemedies,
                final Duration watchPollInterval) {
@@ -99,7 +96,6 @@ final class CullEngine {
         this.cullPrepPort = cullPrepPort;
         this.cullSettings = cullSettings;
         this.mediaStore = mediaStore;
-        this.montageConfig = montageConfig;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
@@ -363,8 +359,8 @@ final class CullEngine {
         // into those callers. Wrapping the result in Optional here instead keeps that shared
         // contract clean while still letting this call site express a real null case.
         final Optional<PrepDir> prep = this.phaseRunner.run(PREPPING,
-                progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.montageConfig, progress,
-                        cancellation)));
+                progress -> Optional.ofNullable(this.montageRenderer.build(scope, this.cullSettings.montage(),
+                        progress, cancellation)));
         // Empty means the renderer itself stopped mid-render, clearing whatever it had written and
         // leaving no prep dir at all - nothing resumable exists. The renderer is the completion
         // authority here: this branches purely on its return value, never on re-checking disk state.

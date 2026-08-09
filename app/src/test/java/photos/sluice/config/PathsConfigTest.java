@@ -1,6 +1,7 @@
 package photos.sluice.config;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.application.port.out.PathSettings;
 
 import java.nio.file.Path;
 
@@ -10,7 +11,7 @@ class PathsConfigTest {
 
     @Test
     void relativePathsResolveAgainstWorkingDirectory() {
-        final var config = new PathsConfig(new PathsProperties("relative-repo", "relative-lib", "relative-inbox"));
+        final var config = SettingsFixture.pathsConfig("relative-repo", "relative-lib", "relative-inbox");
 
         final Path expectedBase = Path.of("").toAbsolutePath().normalize();
         assertThat(config.repoRoot()).isEqualTo(expectedBase.resolve("relative-repo"));
@@ -21,8 +22,7 @@ class PathsConfigTest {
     @Test
     void absolutePathsResolveUnchanged() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
-                absolute.toString()));
+        final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
         assertThat(config.repoRoot()).isEqualTo(absolute);
     }
@@ -30,8 +30,7 @@ class PathsConfigTest {
     @Test
     void logsIsDerivedFromRepoRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
-                absolute.toString()));
+        final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
         assertThat(config.logs()).isEqualTo(absolute.resolve("logs"));
     }
@@ -39,8 +38,7 @@ class PathsConfigTest {
     @Test
     void sortedIsDerivedFromRepoRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
-                absolute.toString()));
+        final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
         assertThat(config.sorted()).isEqualTo(absolute.resolve("Sorted"));
     }
@@ -48,9 +46,25 @@ class PathsConfigTest {
     @Test
     void reviewIsDerivedFromRepoRoot() {
         final Path absolute = Path.of("").toAbsolutePath().normalize();
-        final var config = new PathsConfig(new PathsProperties(absolute.toString(), absolute.toString(),
-                absolute.toString()));
+        final var config = SettingsFixture.pathsConfig(absolute, absolute, absolute);
 
         assertThat(config.review()).isEqualTo(absolute.resolve("Review"));
+    }
+
+    @Test
+    void everyPathFollowsASavedWorkingRootWithNothingRestarted() {
+        final Path before = Path.of("before").toAbsolutePath().normalize();
+        final Path after = Path.of("after").toAbsolutePath().normalize();
+        final var holder = new SettingsHolder(SettingsFixture.settings(
+                new PathSettings(before.toString(), before.toString(), before.resolve("Inbox").toString())));
+        final var config = new PathsConfig(holder);
+
+        holder.apply(SettingsFixture.settings(
+                new PathSettings(after.toString(), after.toString(), after.resolve("Inbox").toString())));
+
+        assertThat(config.repoRoot()).isEqualTo(after);
+        assertThat(config.logs()).isEqualTo(after.resolve("logs"));
+        assertThat(config.sorted()).isEqualTo(after.resolve("Sorted"));
+        assertThat(config.inbox()).isEqualTo(after.resolve("Inbox"));
     }
 }

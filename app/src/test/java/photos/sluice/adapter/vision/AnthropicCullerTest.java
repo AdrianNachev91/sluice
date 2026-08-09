@@ -800,7 +800,7 @@ class AnthropicCullerTest {
     }
 
     private static CullerPrompt cullerPrompt(final CullSettings settings) {
-        return new CullerPrompt(settings, new MontageConfig(224, 5));
+        return new CullerPrompt(settings);
     }
 
     private static CullSettings settings(final @Nullable String model) {
@@ -819,6 +819,11 @@ class AnthropicCullerTest {
         @Override
         public ExternalAgentSettings externalAgent() {
             return new ExternalAgentSettings(WatchMode.MANUAL);
+        }
+
+        @Override
+        public MontageConfig montage() {
+            return MontageConfig.defaults();
         }
     }
 }

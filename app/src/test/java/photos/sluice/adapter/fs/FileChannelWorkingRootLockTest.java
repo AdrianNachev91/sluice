@@ -162,6 +162,24 @@ class FileChannelWorkingRootLockTest {
         this.lock().acquire(oldRoot);
     }
 
+    // Giving up the old root is the last step of a move, after the new one is already held. A
+    // failure there is not a refusal. Reported as one, it sends the caller off to take back a root
+    // it never lost. All while holding the new one it was told it did not get.
+    //
+    // No portable way exists to make a real channel refuse to close. The failure is injected at the
+    // one seam inside the class where the decision is made.
+    @Test
+    void aFailureGivingUpTheOldRootIsNotReportedAsARefusedClaim(
+            @TempDir final Path oldRoot, @TempDir final Path newRoot) {
+        final var lock = new FailsToGiveUpAClaim();
+        this.locks.add(lock);
+        lock.acquire(oldRoot);
+
+        lock.acquire(newRoot);
+
+        assertThat(lock.holds(newRoot)).isTrue();
+    }
+
     // The half of the move that has to hold when it goes wrong. A save naming a root somebody else
     // has must leave this process exactly where it was, still holding what it held.
     @Test
@@ -301,5 +319,23 @@ class FileChannelWorkingRootLockTest {
         holder.getOutputStream().close();
         assertThat(holder.waitFor(PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS))
                 .withFailMessage("the holder process did not exit").isTrue();
+    }
+
+    // Fails the first attempt to give a claim up, the way a channel that refuses to close would.
+    // The channel is still closed and the registry entry still dropped first. So the failure is what
+    // a real one looks like, reported after the work rather than instead of it. Only the first is
+    // failed, so the teardown release can still run.
+    private static final class FailsToGiveUpAClaim extends FileChannelWorkingRootLock {
+
+        private boolean failed;
+
+        @Override
+        void close(final Claim claim) {
+            super.close(claim);
+            if (!this.failed) {
+                this.failed = true;
+                throw new UncheckedIOException(new IOException("the channel refused to close"));
+            }
+        }
     }
 }

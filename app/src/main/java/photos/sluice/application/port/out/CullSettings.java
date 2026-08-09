@@ -1,5 +1,7 @@
 package photos.sluice.application.port.out;
 
+import photos.sluice.domain.cull.MontageConfig;
+
 import java.util.List;
 
 /**
@@ -42,4 +44,12 @@ public interface CullSettings {
      * @return {@link ExternalAgentSettings} the external-agent tuning settings
      */
     ExternalAgentSettings externalAgent();
+
+    /**
+     * The contact-sheet grid a cull renders: tile size, and how many tiles form a row. Asked for at
+     * the moment it is needed, so a saved change reaches a cull without a restart.
+     *
+     * @return {@link MontageConfig} the montage grid configuration
+     */
+    MontageConfig montage();
 }

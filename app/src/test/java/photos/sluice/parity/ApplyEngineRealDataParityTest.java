@@ -19,8 +19,8 @@ import photos.sluice.application.service.ApplyPlanner;
 import photos.sluice.application.service.CullDestinations;
 import photos.sluice.application.service.DisasterDrawer;
 import photos.sluice.application.service.MoveLedger;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
+import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.WatchMode;
 
@@ -101,8 +101,8 @@ class ApplyEngineRealDataParityTest {
         assertTreesIdentical(differ, "Duplicates", rootA.resolve("Duplicates"), rootB.resolve("Duplicates"));
         assertTreesIdentical(differ, "Library", rootA.resolve("Library"), rootB.resolve("Library"));
 
-        final var hashIndexA = new CsvLibraryHashIndex(rootA.resolve("logs").resolve("library-hashes.csv"));
-        final var hashIndexB = new CsvLibraryHashIndex(rootB.resolve("logs").resolve("library-hashes.csv"));
+        final var hashIndexA = new CsvLibraryHashIndex(SettingsFixture.workingRoot(rootA));
+        final var hashIndexB = new CsvLibraryHashIndex(SettingsFixture.workingRoot(rootB));
         assertThat(hashIndexB.load().keySet())
                 .as("appended index hashes")
                 .isEqualTo(hashIndexA.load().keySet());
@@ -208,10 +208,8 @@ class ApplyEngineRealDataParityTest {
     }
 
     private static ApplyEngine applyEngine(final Path root) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.resolve("Library").toString(),
-                        root.resolve("Inbox").toString()));
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
+        final var hashIndex = new CsvLibraryHashIndex(pathsConfig);
         final var mediaStore = new NioMediaStore();
         final var cullPrepPort = new JsonCullPrepStore();
         final var sha256Port = new Sha256Hasher();
@@ -239,6 +237,11 @@ class ApplyEngineRealDataParityTest {
         @Override
         public ExternalAgentSettings externalAgent() {
             return new ExternalAgentSettings(WatchMode.MANUAL);
+        }
+
+        @Override
+        public MontageConfig montage() {
+            return MontageConfig.defaults();
         }
     }
 

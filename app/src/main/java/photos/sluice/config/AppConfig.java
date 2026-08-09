@@ -3,26 +3,28 @@ package photos.sluice.config;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import photos.sluice.adapter.fs.CsvLibraryHashIndex;
+import photos.sluice.adapter.fs.YamlSettingsStore;
 import photos.sluice.adapter.imaging.CliHeifDecoder;
 import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
+import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
 
 /**
  * The Spring configuration class that wires beans needing constructor arguments Spring cannot
  * resolve through component scanning alone. That covers ambiguous {@code DateSource} chains, and
- * adapters that need a config-bound value at construction time.
+ * adapters that need a config-computed value at construction time.
  *
  * <p>It also enables the {@code @ConfigurationProperties} records that carry Sluice's bound
- * settings: {@link PathsProperties}, {@link MontageConfig}, {@link CullConfig}, and
+ * settings: {@link PathsProperties}, {@link MontageProperties}, {@link CullConfig}, and
  * {@link ImagingConfig}.
  */
 @Configuration
-@EnableConfigurationProperties({PathsProperties.class, MontageConfig.class, CullConfig.class, ImagingConfig.class})
+@EnableConfigurationProperties({PathsProperties.class, MontageProperties.class, CullConfig.class,
+        ImagingConfig.class})
 public class AppConfig {
 
     /**
@@ -55,17 +57,6 @@ public class AppConfig {
     }
 
     /**
-     * Builds the CSV-backed library hash index at the configured logs path.
-     *
-     * @param pathsConfig {@link PathsConfig} resolved application paths
-     * @return {@link CsvLibraryHashIndex} the CSV library hash index bean
-     */
-    @Bean
-    public CsvLibraryHashIndex csvLibraryHashIndex(final PathsConfig pathsConfig) {
-        return new CsvLibraryHashIndex(pathsConfig.logs().resolve("library-hashes.csv"));
-    }
-
-    /**
      * Builds the HEIF decoder bean that shells out to the configured CLI command.
      *
      * @param imagingConfig {@link ImagingConfig} imaging configuration properties
@@ -77,15 +68,16 @@ public class AppConfig {
     }
 
     /**
-     * The domain grid record the montage pipeline consumes, built from the bound properties
-     * record. Mapped by accessor name, so a reordering of either record's fields cannot
-     * silently swap the two ints.
+     * Writes settings back to the user's config file. Its location is worked out here the same way
+     * it is at launch, through one method, so neither side can name a file the other does not.
      *
-     * @param properties {@link MontageConfig} bound montage configuration properties
-     * @return {@link photos.sluice.domain.cull.MontageConfig} the domain montage config
+     * <p>An explicit config-import argument on the command line is read but not written back to. A
+     * launcher passes none, so only someone starting the app by hand reaches that.
+     *
+     * @return {@link SettingsStore} the settings store bean
      */
     @Bean
-    public photos.sluice.domain.cull.MontageConfig montageConfig(final MontageConfig properties) {
-        return new photos.sluice.domain.cull.MontageConfig(properties.tileSize(), properties.tilesPerRow());
+    public SettingsStore settingsStore() {
+        return new YamlSettingsStore(ConfigDirLocator.configFile(System.getProperty("os.name"), System.getenv()));
     }
 }

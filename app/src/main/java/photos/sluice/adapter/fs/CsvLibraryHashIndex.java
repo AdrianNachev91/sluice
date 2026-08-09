@@ -1,7 +1,9 @@
 package photos.sluice.adapter.fs;
 
 import org.jspecify.annotations.Nullable;
+import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.HashIndexPort;
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.BufferedWriter;
@@ -23,23 +25,40 @@ import java.util.Map;
  * sha256 hash and its path. The row format is fixed: always-quoted fields, UTF-8 encoding, and an
  * optional leading byte-order mark. That keeps this adapter interoperable with an existing
  * on-disk hash index in that exact shape.
+ *
+ * <p>The file sits under the logs directory of whichever working root is configured, and is
+ * resolved on every call rather than once. This index is what authorizes deleting an Inbox file as
+ * a copy that is already safe. A snapshot taken at startup would keep answering for the old library
+ * after a user pointed Sluice at a different one. The file it vouched for would then never arrive
+ * in the new one.
  */
+@Component
 public class CsvLibraryHashIndex implements HashIndexPort {
 
     private static final String HEADER = "\"sha256\",\"path\"";
+    private static final String INDEX_FILE_NAME = "library-hashes.csv";
     // A UTF-8 byte-order-mark may appear at the start of the file; Java's UTF-8 decoder does not
     // strip it automatically, so it survives as a literal leading character.
     private static final char BOM = '﻿';
 
-    private final Path indexFile;
+    private final PathsPort paths;
 
     /**
-     * Creates an index backed by a CSV file at the given path.
+     * Creates an index over the logs directory of the configured working root.
      *
-     * @param indexFile {@link Path} path to the CSV hash index file
+     * @param paths {@link PathsPort} resolves the logs directory
      */
-    public CsvLibraryHashIndex(final Path indexFile) {
-        this.indexFile = indexFile;
+    public CsvLibraryHashIndex(final PathsPort paths) {
+        this.paths = paths;
+    }
+
+    /**
+     * The index file under the configured logs directory.
+     *
+     * @return {@link Path} the CSV hash index file
+     */
+    private Path indexFile() {
+        return this.paths.logs().resolve(INDEX_FILE_NAME);
     }
 
     /**
@@ -50,12 +69,13 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      */
     @Override
     public Map<String, List<Path>> load() {
-        if (!Files.isRegularFile(this.indexFile)) {
+        final Path indexFile = this.indexFile();
+        if (!Files.isRegularFile(indexFile)) {
             return Map.of();
         }
         final Map<String, List<Path>> result = new LinkedHashMap<>();
         try {
-            final List<String> lines = Files.readAllLines(this.indexFile, StandardCharsets.UTF_8);
+            final List<String> lines = Files.readAllLines(indexFile, StandardCharsets.UTF_8);
             for (int i = 0; i < lines.size(); i++) {
                 // The BOM (if present) and the header row only ever appear on line 0.
                 final String line = i == 0 ? stripBom(lines.get(i)) : lines.get(i);
@@ -69,7 +89,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
                 }
             }
         } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to read hash index " + this.indexFile, e);
+            throw new UncheckedIOException("Failed to read hash index " + indexFile, e);
         }
         return result;
     }
@@ -118,9 +138,13 @@ public class CsvLibraryHashIndex implements HashIndexPort {
      * checks that precede opening it, on the first {@link #append} call rather than on
      * construction. A session that never appends anything - an empty commit or rescue scope -
      * leaves the index file untouched.
+     *
+     * <p>It resolves the index file once, when it opens. A session writes to the one file it began
+     * against, and names that same file if it fails.
      */
     private final class CsvSession implements Session {
 
+        private final Path indexFile = CsvLibraryHashIndex.this.indexFile();
         private @Nullable BufferedWriter writer;
 
         /**
@@ -132,14 +156,13 @@ public class CsvLibraryHashIndex implements HashIndexPort {
         public void append(final IndexEntry entry) {
             try {
                 if (this.writer == null) {
-                    this.writer = CsvLibraryHashIndex.this.openWriter();
+                    this.writer = openWriter(this.indexFile);
                 }
                 this.writer.write(formatLine(entry));
                 this.writer.newLine();
                 this.writer.flush();
             } catch (final IOException e) {
-                throw new UncheckedIOException("Failed to append to hash index " + CsvLibraryHashIndex.this.indexFile
-                        , e);
+                throw new UncheckedIOException("Failed to append to hash index " + this.indexFile, e);
             }
         }
 
@@ -154,7 +177,7 @@ public class CsvLibraryHashIndex implements HashIndexPort {
             try {
                 this.writer.close();
             } catch (final IOException e) {
-                throw new UncheckedIOException("Failed to close hash index " + CsvLibraryHashIndex.this.indexFile, e);
+                throw new UncheckedIOException("Failed to close hash index " + this.indexFile, e);
             }
         }
     }
@@ -162,19 +185,20 @@ public class CsvLibraryHashIndex implements HashIndexPort {
     /**
      * Opens the index file for appending, writing a leading newline and/or header as needed.
      *
+     * @param indexFile {@link Path} the CSV hash index file to append to
      * @return a {@link BufferedWriter} positioned to append new rows
      */
-    private BufferedWriter openWriter() throws IOException {
-        Files.createDirectories(this.indexFile.getParent());
-        final boolean exists = Files.isRegularFile(this.indexFile);
-        final long size = exists ? Files.size(this.indexFile) : 0;
+    private static BufferedWriter openWriter(final Path indexFile) throws IOException {
+        Files.createDirectories(indexFile.getParent());
+        final boolean exists = Files.isRegularFile(indexFile);
+        final long size = exists ? Files.size(indexFile) : 0;
         final boolean writeHeader = !exists || size == 0;
         // Defensive: the file can arrive here without a trailing newline (a manual edit, an
         // editor that strips trailing whitespace, an interrupted write). Appending straight
         // onto such a line would merge it with the next row into one unparsable line and
         // break load() for the whole file.
-        final boolean needsLeadingNewline = size > 0 && !endsWithNewline(this.indexFile);
-        final BufferedWriter writer = Files.newBufferedWriter(this.indexFile, StandardCharsets.UTF_8,
+        final boolean needsLeadingNewline = size > 0 && !endsWithNewline(indexFile);
+        final BufferedWriter writer = Files.newBufferedWriter(indexFile, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         if (needsLeadingNewline) {
             writer.newLine();

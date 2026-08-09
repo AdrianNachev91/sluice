@@ -3,6 +3,10 @@ package photos.sluice.adapter.fs;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.HashIndexPort;
+import photos.sluice.application.port.out.PathSettings;
+import photos.sluice.config.PathsConfig;
+import photos.sluice.config.SettingsFixture;
+import photos.sluice.config.SettingsHolder;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.IOException;
@@ -21,6 +25,45 @@ class CsvLibraryHashIndexTest {
         final CsvLibraryHashIndex index = indexAt(repoRoot);
 
         assertThat(index.load()).isEmpty();
+    }
+
+    // The index is what authorizes deleting an Inbox file as a copy already safe in the library. If
+    // it kept answering out of the old working root after a save, it would vouch for a library the
+    // user is no longer filing into.
+    @Test
+    void aReadOrWriteBegunAfterASavedWorkingRootUsesIt(@TempDir final Path before, @TempDir final Path after) {
+        final var holder = new SettingsHolder(SettingsFixture.settings(
+                new PathSettings(before.toString(), before.toString(), before.resolve("Inbox").toString())));
+        final var index = new CsvLibraryHashIndex(new PathsConfig(holder));
+        index.append(List.of(new IndexEntry("aaa", Path.of("before.jpg"))));
+
+        holder.apply(SettingsFixture.settings(
+                new PathSettings(after.toString(), after.toString(), after.resolve("Inbox").toString())));
+        index.append(List.of(new IndexEntry("bbb", Path.of("after.jpg"))));
+
+        assertThat(index.load()).containsOnlyKeys("bbb");
+        assertThat(after.resolve("logs").resolve("library-hashes.csv")).isRegularFile();
+    }
+
+    // A session writes to the one file it opened against. Following a mid-session save would split
+    // a single commit's rows across two indexes, so neither would account for the run.
+    @Test
+    void anOpenSessionKeepsWritingToTheWorkingRootItBeganOn(@TempDir final Path before, @TempDir final Path after)
+            throws IOException {
+        final var holder = new SettingsHolder(SettingsFixture.settings(
+                new PathSettings(before.toString(), before.toString(), before.resolve("Inbox").toString())));
+        final var index = new CsvLibraryHashIndex(new PathsConfig(holder));
+
+        try (final HashIndexPort.Session session = index.openSession()) {
+            session.append(new IndexEntry("aaa", Path.of("first.jpg")));
+            holder.apply(SettingsFixture.settings(
+                    new PathSettings(after.toString(), after.toString(), after.resolve("Inbox").toString())));
+            session.append(new IndexEntry("bbb", Path.of("second.jpg")));
+        }
+
+        assertThat(Files.readAllLines(before.resolve("logs").resolve("library-hashes.csv"), StandardCharsets.UTF_8))
+                .contains("\"aaa\",\"first.jpg\"", "\"bbb\",\"second.jpg\"");
+        assertThat(after.resolve("logs")).doesNotExist();
     }
 
     @Test
@@ -169,6 +212,6 @@ class CsvLibraryHashIndexTest {
     }
 
     private static CsvLibraryHashIndex indexAt(final Path repoRoot) {
-        return new CsvLibraryHashIndex(repoRoot.resolve("logs").resolve("library-hashes.csv"));
+        return new CsvLibraryHashIndex(SettingsFixture.workingRoot(repoRoot));
     }
 }

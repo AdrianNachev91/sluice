@@ -3,27 +3,21 @@ package photos.sluice.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Binds the {@code sluice.cull} settings: which provider drives the culler, that provider's own
  * settings, the classification categories it routes photos to, and the external-agent watch mode.
  *
- * <p>Implements {@link CullSettings} directly, so the application layer can select and configure a
- * culler without importing this config record.
+ * <p>These are the values the app starts on. {@link SettingsHolder} takes them from here once and
+ * is what everything reads afterwards. So a save changes what a cull sees without a restart.
  */
 @ConfigurationProperties(prefix = "sluice.cull")
 public record CullConfig(String provider, CullProviderSettings providerSettings, List<CullCategory> categories,
-                         ExternalAgentSettings externalAgent) implements CullSettings {
-
-    // provider() is supplied by the record's own accessor, satisfying CullSettings so the application
-    // layer selects a culler without importing this config record.
+                         ExternalAgentSettings externalAgent) {
 
     /**
      * categories are the classification cards the culler routes to (junk/scenery/food/funny by
@@ -38,8 +32,8 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
      * @param externalAgent {@link ExternalAgentSettings} external-agent watch mode settings
      */
     public CullConfig {
-        // Spring can bind null here when the property is absent or written with no value; the IDE
-        // can't model that reflective path and reads the guards as always-false.
+        // Spring can bind null here when the property is absent or written with no value. The IDE
+        // can't model that reflective path, so it reads the guards as always-false.
         //noinspection ConstantValue
         categories = categories == null ? List.of() : List.copyOf(categories);
         // The port requires a non-null settings object whose fields are null when unset, so an
@@ -54,18 +48,6 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
         //noinspection ConstantValue
         if (externalAgent == null) {
             externalAgent = new ExternalAgentSettings(WatchMode.MANUAL);
-        }
-        // Two cards sharing a name would silently alias one category, so duplicates fail loud.
-        final List<String> duplicates = categories.stream()
-                .collect(Collectors.groupingBy(CullCategory::name, Collectors.counting()))
-                .entrySet().stream()
-                .filter(entry -> entry.getValue() > 1)
-                .map(Map.Entry::getKey)
-                .sorted()
-                .toList();
-        if (!duplicates.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Cull categories contain duplicate name(s): " + String.join(", ", duplicates));
         }
     }
 }

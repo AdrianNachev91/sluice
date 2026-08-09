@@ -13,8 +13,7 @@ import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
@@ -98,20 +97,18 @@ class LocaleIndependentNumeralsTest {
     }
 
     private SortEngine sortEngine(final Path root) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.toString(), root.resolve("Inbox").toString()));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root, root.resolve("Inbox"));
         final var dateResolver =
                 new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
         return new SortEngine(pathsConfig, new InboxScanner(), dateResolver, new Sha256Hasher(),
-                new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv")),
+                new CsvLibraryHashIndex(SettingsFixture.workingRoot(root)),
                 new ImageDimensionsReader(), new NioMediaStore());
     }
 
     private CommitEngine commitEngine(final Path root, final Path libraryRoot) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), libraryRoot.toString(), root.resolve("Inbox").toString()));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, libraryRoot, root.resolve("Inbox"));
         return new CommitEngine(pathsConfig, new NioMediaStore(), new Sha256Hasher(),
-                new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv")));
+                new CsvLibraryHashIndex(pathsConfig));
     }
 
     private static void writeFile(final Path file, final String content) throws IOException {

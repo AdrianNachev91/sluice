@@ -1,6 +1,8 @@
 package photos.sluice.adapter.fs;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.port.out.WorkingRootLock;
@@ -47,6 +49,8 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
 
     static final String LOCK_FILE_NAME = ".sluice-lock";
 
+    private static final Logger log = LoggerFactory.getLogger(FileChannelWorkingRootLock.class);
+
     // Every root this process has claimed, however many instances of this class took them. The
     // constraint being modelled belongs to the process rather than to any one instance, so the
     // record of it has to as well.
@@ -63,11 +67,14 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     /**
      * One held claim: the root it covers, and the open channel and lock keeping it.
      *
+     * <p>Package-private rather than private, so a test overriding {@link #close} can name what it
+     * is being handed.
+     *
      * @param root {@link Path} the claimed working root, in canonical form
      * @param channel {@link FileChannel} the open channel the lock is held on
      * @param lock {@link FileLock} the OS lock itself
      */
-    private record Claim(Path root, FileChannel channel, FileLock lock) {
+    record Claim(Path root, FileChannel channel, FileLock lock) {
     }
 
     /**
@@ -91,7 +98,7 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
             // settings save change nothing.
             this.claim = claimOf(root);
             if (current != null) {
-                close(current);
+                this.closeQuietly(current);
             }
         }
     }
@@ -107,7 +114,7 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
                 return;
             }
             this.claim = null;
-            close(current);
+            this.close(current);
         }
     }
 
@@ -215,23 +222,49 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
 
     /**
      * Releases a claim by closing its channel, which drops the OS lock with it. The registry entry
-     * is given up after the close rather than before, so for an ordinary release it covers the root
-     * for as long as a lock on it can exist.
+     * is given up after the close rather than before. For an ordinary release it therefore covers
+     * the root for as long as a lock on it can exist.
      *
      * <p>It goes in a finally, which is a deliberate trade rather than an oversight. A close that
      * fails frees the registry key while the OS lock may still be held, and nothing in this process
      * can then detect that. The alternative strands the root until the process exits, which is
      * worse and far easier to hit.
      *
+     * <p>An instance method, and package-private, so a test can make giving up a claim fail. That
+     * failure is the whole reason {@link #closeQuietly} exists, and no portable way to make a real
+     * channel refuse to close is available.
+     *
      * @param claim {@link Claim} the claim to give up
      */
-    private static void close(final Claim claim) {
+    void close(final Claim claim) {
         try {
             claim.channel().close();
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to release the claim on working root " + claim.root() + ".", e);
         } finally {
             CLAIMED_ROOTS.remove(claim.root());
+        }
+    }
+
+    /**
+     * Gives up the root a move has just replaced, reporting a failure to close rather than raising
+     * it.
+     *
+     * <p>The claim on the new root is already taken and recorded by the time this runs. A close
+     * failure raised here would tell the caller its claim was refused, while the caller does in fact
+     * hold the new root. It would then go looking for the old one to take back.
+     *
+     * <p>Nothing is lost by not raising it. A failed close frees the registry key while the OS lock
+     * may still be held, and this process cannot detect that either way. That trade is the same one
+     * {@link #close} already documents.
+     *
+     * @param claim {@link Claim} the claim being given up
+     */
+    private void closeQuietly(final Claim claim) {
+        try {
+            this.close(claim);
+        } catch (final UncheckedIOException e) {
+            log.warn("Failed to release the claim on the previous working root {}.", claim.root(), e);
         }
     }
 

@@ -6,8 +6,7 @@ import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.MediaStore;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
@@ -48,7 +47,7 @@ class CommitEngineTest {
         final Path source = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(source, "keeper");
         final String expectedHash = new Sha256Hasher().hash(source);
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
 
         commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
 
@@ -114,7 +113,7 @@ class CommitEngineTest {
     void committingAnEmptyScopeIsANoOp(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
         Files.createDirectories(root.resolve("Sorted"));
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
 
         final CommitSummary summary = commitEngine(root, libraryRoot, hashIndex).commit(new CommitScope.All());
 
@@ -139,7 +138,7 @@ class CommitEngineTest {
         final Path second = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(first, "keeper1");
         writeFile(second, "keeper2");
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         final String firstHash = new Sha256Hasher().hash(first);
         // Allows exactly one move to succeed, then throws - simulating a process crash right after
         // the first file's move-and-index but before the loop reaches the second.
@@ -208,7 +207,7 @@ class CommitEngineTest {
 
     private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot) {
         return commitEngine(repoRoot, libraryRoot,
-                new CsvLibraryHashIndex(repoRoot.resolve("logs/library-hashes.csv")));
+                new CsvLibraryHashIndex(SettingsFixture.workingRoot(repoRoot)));
     }
 
     private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot,
@@ -219,8 +218,7 @@ class CommitEngineTest {
     private static CommitEngine commitEngine(final Path repoRoot, final Path libraryRoot,
                                              final CsvLibraryHashIndex hashIndex,
                                              final MediaStore mediaStore) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(repoRoot.toString(), libraryRoot.toString(), repoRoot.resolve("Inbox").toString()));
+        final var pathsConfig = SettingsFixture.pathsConfig(repoRoot, libraryRoot, repoRoot.resolve("Inbox"));
         return new CommitEngine(pathsConfig, mediaStore, new Sha256Hasher(), hashIndex);
     }
 

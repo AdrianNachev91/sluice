@@ -23,8 +23,7 @@ public class SluiceApplication {
      * @param args {@link String}[] command-line arguments
      */
     static void main(final String[] args) {
-        final Path configFile = ConfigDirLocator.locate(System.getProperty("os.name"), System.getenv())
-                .resolve("config.yml");
+        final Path configFile = ConfigDirLocator.configFile(System.getProperty("os.name"), System.getenv());
         UiLauncher.launch(configFile, args);
     }
 }

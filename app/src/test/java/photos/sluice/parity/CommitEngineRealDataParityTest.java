@@ -8,8 +8,7 @@ import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.service.CommitEngine;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.commit.CommitScope;
 
 import java.io.IOException;
@@ -68,8 +67,8 @@ class CommitEngineRealDataParityTest {
                         sortedDiff.onlyInA(), sortedDiff.onlyInB())
                 .isTrue();
 
-        final var hashIndexA = new CsvLibraryHashIndex(rootA.resolve("logs").resolve("library-hashes.csv"));
-        final var hashIndexB = new CsvLibraryHashIndex(rootB.resolve("logs").resolve("library-hashes.csv"));
+        final var hashIndexA = new CsvLibraryHashIndex(SettingsFixture.workingRoot(rootA));
+        final var hashIndexB = new CsvLibraryHashIndex(SettingsFixture.workingRoot(rootB));
         assertThat(hashIndexB.load().keySet())
                 .as("appended index hashes")
                 .isEqualTo(hashIndexA.load().keySet());
@@ -106,10 +105,8 @@ class CommitEngineRealDataParityTest {
     }
 
     private static CommitEngine commitEngine(final Path root) {
-        final var pathsConfig = new PathsConfig(
-                new PathsProperties(root.toString(), root.resolve("Library").toString(),
-                        root.resolve("Inbox").toString()));
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs").resolve("library-hashes.csv"));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
+        final var hashIndex = new CsvLibraryHashIndex(pathsConfig);
         return new CommitEngine(pathsConfig, new NioMediaStore(), new Sha256Hasher(), hashIndex);
     }
 

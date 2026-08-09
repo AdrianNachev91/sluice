@@ -8,6 +8,7 @@ import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Finding.MissingShard;
 import photos.sluice.domain.cull.Finding.StrayShard;
@@ -106,7 +107,7 @@ class ApplyEngineTest {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/meme.jpg");
         writeFile(photo, "haha");
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "funny", "genuinely funny"));
@@ -326,7 +327,7 @@ class ApplyEngineTest {
         writeFile(pending, "haha");
         final Path priorDest = libraryRoot.resolve("Funny/old-meme.jpg");
         writeFile(priorDest, "already-there");
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         final String priorHash = new Sha256Hasher().hash(priorDest);
         hashIndex.append(List.of(new IndexEntry(priorHash, priorDest)));
         writeMoveRecord(prepDir, alreadyMoved, priorDest, priorHash);
@@ -353,7 +354,7 @@ class ApplyEngineTest {
         final Path dest = libraryRoot.resolve("Funny/meme.jpg");
         writeFile(dest, "haha");
         writeMoveRecord(prepDir, photo, dest, new Sha256Hasher().hash(dest));
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "funny", "genuinely funny"));
@@ -380,7 +381,7 @@ class ApplyEngineTest {
         writeFile(existingDest, "identical bytes");
         writeFile(dest, "identical bytes");
         final String hash = new Sha256Hasher().hash(dest);
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         hashIndex.append(List.of(new IndexEntry(hash, existingDest)));
         writeMoveRecord(prepDir, photo, dest, hash);
         writeIndex(prepDir, 1, List.of("montage-001"));
@@ -421,7 +422,7 @@ class ApplyEngineTest {
         final Path second = root.resolve("Sorted/Photos/2019/06/second-meme.jpg");
         writeFile(first, "haha1");
         writeFile(second, "haha2");
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second));
         writeShard(prepDir, "montage-001",
@@ -678,7 +679,7 @@ class ApplyEngineTest {
         final Path meme = root.resolve("Sorted/Photos/2019/06/meme.jpg");
         writeFile(junk, "blurry");
         writeFile(meme, "haha");
-        final var hashIndex = new CsvLibraryHashIndex(root.resolve("logs/library-hashes.csv"));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
         writeIndex(prepDir, 2, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(junk), sidecarEntry(meme));
         writeShard(prepDir, "montage-001",

@@ -22,8 +22,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
-import photos.sluice.config.PathsConfig;
-import photos.sluice.config.PathsProperties;
+import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
@@ -69,6 +68,9 @@ import static org.mockito.Mockito.mock;
 class AnthropicCullerLiveTest {
 
     private static final String MODEL = "claude-sonnet-5";
+    // Four photos in rows of two, so the sheet is small enough to eyeball against the model's
+    // verdicts when this test is run by hand.
+    private static final MontageConfig LIVE_GRID = new MontageConfig(224, 2);
     private static final List<String> PHOTO_NAMES = List.of(
             "IMG_20190601_100000.jpg", "IMG_20190602_100000.jpg",
             "IMG_20190603_100000.jpg", "IMG_20190604_100000.jpg");
@@ -89,7 +91,7 @@ class AnthropicCullerLiveTest {
         // Wrapping the production-built client exercises the whole real path: the env-var key
         // read, the absent endpoint override, and the transport-retry knob.
         final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings());
-        final var culler = new AnthropicCuller(new CullerPrompt(settings, new MontageConfig(224, 2)),
+        final var culler = new AnthropicCuller(new CullerPrompt(settings),
                 new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real));
 
         final CullReport report = culler.cull(prep, new CullOptions(false, null));
@@ -106,8 +108,7 @@ class AnthropicCullerLiveTest {
 
     // Four distinct-colored photos through the real pipeline: one 2x2 sheet at production tile size.
     private static PrepDir renderRealMontage(final Path root) throws IOException {
-        final var pathsConfig = new PathsConfig(new PathsProperties(
-                root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
         final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         final List<Color> colors = List.of(Color.RED, Color.GREEN, Color.BLUE, Color.ORANGE);
         for (int i = 0; i < PHOTO_NAMES.size(); i++) {
@@ -117,7 +118,7 @@ class AnthropicCullerLiveTest {
         final var renderer = new CullMontageRenderer(
                 new TileRenderer(stubHeifDecoder), new MontageBuilder(), new SidecarWriter(),
                 new PrepIndexWriter(), new NioMediaStore(), pathsConfig, settings());
-        return renderer.build(new CullScope.Year(2019, List.of(6)), new MontageConfig(224, 2));
+        return renderer.build(new CullScope.Year(2019, List.of(6)), LIVE_GRID);
     }
 
     private static void writePhoto(final Path dir, final String name, final Color color) throws IOException {
@@ -180,6 +181,13 @@ class AnthropicCullerLiveTest {
         @Override
         public ExternalAgentSettings externalAgent() {
             return new ExternalAgentSettings(WatchMode.MANUAL);
+        }
+
+        // The same grid renderRealMontage() lays the sheet out on, so the prompt describes the
+        // montage the model is actually looking at.
+        @Override
+        public MontageConfig montage() {
+            return LIVE_GRID;
         }
     }
 }

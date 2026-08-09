@@ -3,6 +3,8 @@ package photos.sluice.config;
 import jakarta.annotation.PostConstruct;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.LiveSettings;
+import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.PathsPort;
 
 import java.io.IOException;
@@ -14,26 +16,29 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Resolves Sluice's working paths from the bound {@link PathsProperties}. At startup it validates
+ * Resolves Sluice's working paths from the settings currently in force. At startup it validates
  * that the repo root, library root, and inbox all point to directories that actually exist. It
  * also checks that the three roots don't overlap. An overlap could let a file be deleted as a
  * redundant duplicate while being the only copy that exists.
  *
  * <p>The logs, Sorted, Review, Duplicates, and Unreviewable directories are all derived from the
  * repo root rather than configured independently.
+ *
+ * <p>Every accessor reads the settings again rather than holding a resolved path. That is what
+ * makes a saved folder root reach the engines with nothing restarted.
  */
 @Component
 public class PathsConfig implements PathsPort {
 
-    private final PathsProperties properties;
+    private final LiveSettings settings;
 
     /**
-     * Creates a paths config backed by the given bound properties.
+     * Creates a paths config over the settings in force.
      *
-     * @param properties {@link PathsProperties} bound path properties
+     * @param settings {@link LiveSettings} the settings the app is running on
      */
-    public PathsConfig(final PathsProperties properties) {
-        this.properties = properties;
+    public PathsConfig(final LiveSettings settings) {
+        this.settings = settings;
     }
 
     /**
@@ -42,9 +47,10 @@ public class PathsConfig implements PathsPort {
      */
     @PostConstruct
     void validate() {
-        requireExistingDirectory("sluice.paths.repo-root", this.properties.repoRoot());
-        requireExistingDirectory("sluice.paths.library-root", this.properties.libraryRoot());
-        requireExistingDirectory("sluice.paths.inbox", this.properties.inbox());
+        final PathSettings paths = this.paths();
+        requireExistingDirectory("sluice.paths.repo-root", paths.repoRoot());
+        requireExistingDirectory("sluice.paths.library-root", paths.libraryRoot());
+        requireExistingDirectory("sluice.paths.inbox", paths.inbox());
 
         final List<String> violations = rootOverlapViolations(this.repoRoot(), this.library(), this.inbox());
         if (!violations.isEmpty()) {
@@ -136,7 +142,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path repoRoot() {
-        return resolve(Objects.requireNonNull(this.properties.repoRoot()));
+        return resolve(Objects.requireNonNull(this.paths().repoRoot()));
     }
 
     /**
@@ -146,7 +152,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path library() {
-        return resolve(Objects.requireNonNull(this.properties.libraryRoot()));
+        return resolve(Objects.requireNonNull(this.paths().libraryRoot()));
     }
 
     /**
@@ -156,7 +162,16 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path inbox() {
-        return resolve(Objects.requireNonNull(this.properties.inbox()));
+        return resolve(Objects.requireNonNull(this.paths().inbox()));
+    }
+
+    /**
+     * The folder roots the settings currently in force name.
+     *
+     * @return {@link PathSettings} the configured folder roots
+     */
+    private PathSettings paths() {
+        return this.settings.current().paths();
     }
 
     /**
