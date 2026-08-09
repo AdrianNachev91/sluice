@@ -2,6 +2,8 @@ package photos.sluice.adapter.imaging;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.CullCategory;
+import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
@@ -54,6 +56,7 @@ public class CullMontageRenderer implements MontageRenderer {
     private final PrepIndexWriter prepIndexWriter;
     private final MediaStore mediaStore;
     private final PathsPort pathsPort;
+    private final CullSettings cullSettings;
     private final CullScopeSelector cullScopeSelector = new CullScopeSelector();
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
 
@@ -66,17 +69,20 @@ public class CullMontageRenderer implements MontageRenderer {
      * @param prepIndexWriter {@link PrepIndexWriter} writes the prep dir's index file
      * @param mediaStore {@link MediaStore} lists and checks files on disk
      * @param pathsPort {@link PathsPort} resolves the Sorted and logs roots
+     * @param cullSettings {@link CullSettings} supplies the category set this run is stamped with
      */
     public CullMontageRenderer(final TileRenderer tileRenderer, final MontageBuilder montageBuilder,
                                final SidecarWriter sidecarWriter, final PrepIndexWriter prepIndexWriter,
                                final MediaStore mediaStore,
-                               final PathsPort pathsPort) {
+                               final PathsPort pathsPort,
+                               final CullSettings cullSettings) {
         this.tileRenderer = tileRenderer;
         this.montageBuilder = montageBuilder;
         this.sidecarWriter = sidecarWriter;
         this.prepIndexWriter = prepIndexWriter;
         this.mediaStore = mediaStore;
         this.pathsPort = pathsPort;
+        this.cullSettings = cullSettings;
     }
 
     /**
@@ -197,8 +203,12 @@ public class CullMontageRenderer implements MontageRenderer {
         // photos reports reviewable.size(), not the raw count found in scope. An unreviewable file
         // never appears in any montage or sidecar. Counting it here would make this number
         // disagree with what a caller can actually see on disk.
+        //
+        // The category set is read once, here, and travels with the run from now on. This is the
+        // last moment it is a live value rather than a recorded one.
         final var result = new PrepDir(
                 scopeTag,
+                this.cullSettings.categories().stream().map(CullCategory::name).toList(),
                 this.cullScopeSelector.basePath(photosRoot, scope),
                 reviewable.size(),
                 unreviewable,

@@ -787,7 +787,7 @@ class AnthropicCullerTest {
     }
 
     private PrepDir prep(final List<Path> unreviewable, final String... montages) {
-        return new PrepDir("2019-06", this.prepDir.resolve("base"), 0, unreviewable, montages.length,
+        return new PrepDir("2019-06", List.of("junk"), this.prepDir.resolve("base"), 0, unreviewable, montages.length,
                 this.prepDir, List.of(montages));
     }
 

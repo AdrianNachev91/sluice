@@ -52,8 +52,8 @@ class JsonCullPrepStoreTest {
 
     @Test
     void readsBackAnIndexWrittenByPrepIndexWriter(@TempDir final Path dir) {
-        final var prepDir = new PrepDir("2019-06", dir.resolve("base"), 3, List.of(dir.resolve("skip.jpg")), 1, dir,
-                List.of("montage-001"));
+        final var prepDir = new PrepDir("2019-06", List.of("junk", "food"), dir.resolve("base"), 3,
+                List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
         new PrepIndexWriter().write(dir.resolve("index.json"), prepDir);
 
         assertThat(this.store.readIndex(dir)).isEqualTo(prepDir);
@@ -62,13 +62,56 @@ class JsonCullPrepStoreTest {
     @Test
     void readIndexTreatsAMissingUnreviewableOrEntriesArrayAsEmpty(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
-                { "scope": "2019-06", "basePath": "%s", "photos": 0, "montages": 0, "prepDir": "%s" }
+                { "scope": "2019-06", "categories": ["junk"], "basePath": "%s", "photos": 0, "montages": 0,
+                  "prepDir": "%s" }
                 """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
 
         final PrepDir prepDir = this.store.readIndex(dir);
 
         assertThat(prepDir.unreviewable()).isEmpty();
         assertThat(prepDir.entries()).isEmpty();
+    }
+
+    // Absent categories is malformed rather than empty, unlike the two arrays above. No run is ever
+    // prepped without a category set. An empty one still serializes as []. So the field can only go
+    // missing on a damaged index.
+    @Test
+    void readIndexOnAMissingCategoriesArrayThrowsMalformedPrepJsonException(@TempDir final Path dir)
+            throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "basePath": "%s", "photos": 0, "montages": 0, "prepDir": "%s",
+                  "entries": [] }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("no categories");
+    }
+
+    // A null inside either array would otherwise reach PrepDir's defensive List.copyOf and escape as
+    // a NullPointerException, past every caller's read-failure handling.
+    @Test
+    void readIndexOnANullArrayElementThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "categories": ["junk", null], "basePath": "%s", "photos": 0, "montages": 0,
+                  "prepDir": "%s", "entries": [] }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("null entry in categories");
+    }
+
+    @Test
+    void readIndexOnANullEntriesElementThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                { "scope": "2019-06", "categories": ["junk"], "basePath": "%s", "photos": 0, "montages": 0,
+                  "prepDir": "%s", "entries": ["montage-001", null] }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("null entry in entries");
     }
 
     @Test
@@ -98,7 +141,7 @@ class JsonCullPrepStoreTest {
     @Test
     void readIndexOnANullBasePathThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
-                { "scope": "2019-06", "basePath": null, "photos": 0, "montages": 0, "prepDir": "%s" }
+                { "scope": "2019-06", "categories": ["junk"], "basePath": null, "photos": 0, "montages": 0, "prepDir": "%s" }
                 """.formatted(jsonEscaped(dir)));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
@@ -109,7 +152,8 @@ class JsonCullPrepStoreTest {
     @Test
     void readIndexOnANullPrepDirThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
-                { "scope": "2019-06", "basePath": "%s", "photos": 0, "montages": 0, "prepDir": null }
+                { "scope": "2019-06", "categories": ["junk"], "basePath": "%s", "photos": 0, "montages": 0,
+                  "prepDir": null }
                 """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
@@ -120,7 +164,8 @@ class JsonCullPrepStoreTest {
     @Test
     void readIndexOnANullUnreviewableEntryThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
-                { "scope": "2019-06", "basePath": "%s", "photos": 0, "unreviewable": [ null ], "montages": 0,
+                { "scope": "2019-06", "categories": ["junk"], "basePath": "%s", "photos": 0,
+                  "unreviewable": [ null ], "montages": 0,
                   "prepDir": "%s" }
                 """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
 
@@ -134,7 +179,8 @@ class JsonCullPrepStoreTest {
     @Test
     void readIndexOnAPathComponentThisPlatformRejectsThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
-                { "scope": "2019-06", "basePath": "bad\\u0000path", "photos": 0, "montages": 0, "prepDir": "%s" }
+                { "scope": "2019-06", "categories": ["junk"], "basePath": "bad\\u0000path", "photos": 0, "montages": 0,
+                  "prepDir": "%s" }
                 """.formatted(jsonEscaped(dir)));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
@@ -206,8 +252,8 @@ class JsonCullPrepStoreTest {
 
     @Test
     void writeIndexRoundTripsThroughReadIndex(@TempDir final Path dir) {
-        final var prepDir = new PrepDir("2019-06", dir.resolve("base"), 3, List.of(dir.resolve("skip.jpg")), 1, dir,
-                List.of("montage-001"));
+        final var prepDir = new PrepDir("2019-06", List.of("junk", "food"), dir.resolve("base"), 3,
+                List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
 
         this.store.writeIndex(dir, prepDir);
 
@@ -217,7 +263,8 @@ class JsonCullPrepStoreTest {
     @Test
     void writeIndexReplacesWhateverIndexJsonHeldBefore(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), "not valid json");
-        final var rebuilt = new PrepDir("2019-06", dir.resolve("base"), 1, List.of(), 1, dir, List.of("montage-001"));
+        final var rebuilt = new PrepDir("2019-06", List.of("junk"), dir.resolve("base"), 1, List.of(), 1, dir,
+                List.of("montage-001"));
 
         this.store.writeIndex(dir, rebuilt);
 
@@ -227,7 +274,8 @@ class JsonCullPrepStoreTest {
     @Test
     void wrapsAnIndexWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
         final Path missingParent = dir.resolve("missing-parent");
-        final var prepDir = new PrepDir("2019-06", dir.resolve("base"), 0, List.of(), 0, dir, List.of());
+        final var prepDir = new PrepDir("2019-06", List.of("junk"), dir.resolve("base"), 0, List.of(), 0, dir,
+                List.of());
 
         assertThatThrownBy(() -> this.store.writeIndex(missingParent, prepDir))
                 .isInstanceOf(UncheckedIOException.class)
@@ -239,7 +287,8 @@ class JsonCullPrepStoreTest {
         final var mapper = mock(JsonMapper.class);
         doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
         final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
-        final var prepDir = new PrepDir("2019-06", dir.resolve("base"), 0, List.of(), 0, dir, List.of());
+        final var prepDir = new PrepDir("2019-06", List.of("junk"), dir.resolve("base"), 0, List.of(), 0, dir,
+                List.of());
 
         assertThatThrownBy(() -> storeWithFailingMapper.writeIndex(dir, prepDir))
                 .isInstanceOf(UncheckedIOException.class)

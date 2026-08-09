@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.service.MoveLedger.Ledger;
@@ -71,17 +70,16 @@ public class PrepDirDoctor {
      *
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir index, sidecars, and shards
      * @param mediaStore {@link MediaStore} filesystem access for prep dirs
-     * @param cullSettings {@link CullSettings} configured cull categories, for the shard tally
      * @param applyPlanner {@link ApplyPlanner} the merged shard-contract and missing-source checks
      * @param ledgerReader {@link LedgerReader} takes a read-only move-ledger snapshot per diagnosis
      */
-    public PrepDirDoctor(final CullPrepPort cullPrepPort, final MediaStore mediaStore, final CullSettings cullSettings,
+    public PrepDirDoctor(final CullPrepPort cullPrepPort, final MediaStore mediaStore,
                          final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
         this.cullPrepPort = cullPrepPort;
         this.mediaStore = mediaStore;
         this.applyPlanner = applyPlanner;
         this.ledgerReader = ledgerReader;
-        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings, applyPlanner, ledgerReader);
+        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
     }
 
     /**

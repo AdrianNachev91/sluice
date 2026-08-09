@@ -46,8 +46,8 @@ public class PrepIndexWriter {
      * path values substituted as plain strings.
      */
     private record Index(
-            String scope, String basePath, int photos, List<String> unreviewable, int montages,
-            String prepDir, List<String> entries) {
+            String scope, List<String> categories, String basePath, int photos, List<String> unreviewable,
+            int montages, String prepDir, List<String> entries) {
     }
 
     /**
@@ -60,6 +60,7 @@ public class PrepIndexWriter {
     public void write(final Path indexPath, final PrepDir prepDir) {
         final var document = new Index(
                 prepDir.scope(),
+                prepDir.categories(),
                 prepDir.basePath().toString(),
                 prepDir.photos(),
                 prepDir.unreviewable().stream().map(Path::toString).toList(),

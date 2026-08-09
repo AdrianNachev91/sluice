@@ -1,7 +1,9 @@
 package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
@@ -47,6 +49,7 @@ public class PrepDirRemedies {
     private final MediaStore mediaStore;
     private final CullPrepPort cullPrepPort;
     private final PathsPort pathsPort;
+    private final CullSettings cullSettings;
     private final DisasterDrawer disasterDrawer;
     private final MoveLedger moveLedger;
 
@@ -56,14 +59,17 @@ public class PrepDirRemedies {
      * @param mediaStore {@link MediaStore} moves, deletes and lists prep-dir files
      * @param cullPrepPort {@link CullPrepPort} reads and writes prep-dir index, sidecars and shards
      * @param pathsPort {@link PathsPort} resolves the logs root holding the global graveyard
+     * @param cullSettings {@link CullSettings} supplies the category set a rebuilt index falls back to
      * @param disasterDrawer {@link DisasterDrawer} files unsalvageable artifacts instead of deleting them
      * @param moveLedger {@link MoveLedger} records every CHOICE resolution
      */
     public PrepDirRemedies(final MediaStore mediaStore, final CullPrepPort cullPrepPort, final PathsPort pathsPort,
-                           final DisasterDrawer disasterDrawer, final MoveLedger moveLedger) {
+                           final CullSettings cullSettings, final DisasterDrawer disasterDrawer,
+                           final MoveLedger moveLedger) {
         this.mediaStore = mediaStore;
         this.cullPrepPort = cullPrepPort;
         this.pathsPort = pathsPort;
+        this.cullSettings = cullSettings;
         this.disasterDrawer = disasterDrawer;
         this.moveLedger = moveLedger;
     }
@@ -192,13 +198,22 @@ public class PrepDirRemedies {
      *
      * <p>The unreviewable list is genuinely unrecoverable - no sidecar or shard mentions it, since
      * it was never montaged at all. So a rebuilt index always reports it empty. Losing it costs a
-     * report line, not safety. A photo dropped from the rebuilt list is simply not acted on. The
-     * scope is read straight off the prep dir's own folder name, which is the on-disk convention
-     * every real index.json already mirrors. The basePath is reconstructed as the deepest common
-     * parent of every surviving sidecar's own src files. That's
-     * exact for a Year scope, an approximation for OldestN spanning a single year. The field is
-     * purely a display value no engine logic ever consults, so the approximation costs nothing
-     * beyond a slightly less precise report line.
+     * report line, not safety. A photo dropped from the rebuilt list is simply not acted on.
+     *
+     * <p>The category set is unrecoverable the same way, and it does not degrade as harmlessly. A
+     * sidecar carries only {@code src}, {@code name}, {@code time} and {@code received}, so nothing
+     * on disk remembers what this run was culled under. The currently configured set is substituted
+     * instead. That means a run repaired after a category edit is judged against today's rules,
+     * which is how every run behaved before the set was recorded at all. So the repair path is no
+     * worse than what it replaces, while the happy path stops drifting. This is the one place the
+     * substitution is made, and it is made deliberately rather than inherited.
+     *
+     * <p>The scope is read straight off the prep dir's own folder name, which is the on-disk
+     * convention every real index.json already mirrors. The basePath is reconstructed as the
+     * deepest common parent of every surviving sidecar's own src files. That's exact for a Year
+     * scope, an approximation for OldestN spanning a single year. The field is purely a display
+     * value no engine logic ever consults, so the approximation costs nothing beyond a slightly
+     * less precise report line.
      *
      * <p>Any existing index.json is filed into prepDir's disaster drawer first, wholesale, mirroring
      * the same "never salvage a corrupt artifact line-by-line" treatment the move ledger gets. That
@@ -234,8 +249,9 @@ public class PrepDirRemedies {
         if (this.mediaStore.exists(indexPath)) {
             this.disasterDrawer.file(prepDirPath, indexPath, "index-json");
         }
-        final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(), commonParent(allSrcs), photos,
-                List.of(), entries.size(), prepDirPath, entries);
+        final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(),
+                this.cullSettings.categories().stream().map(CullCategory::name).toList(),
+                commonParent(allSrcs), photos, List.of(), entries.size(), prepDirPath, entries);
         this.cullPrepPort.writeIndex(prepDirPath, rebuilt);
         return Optional.of(rebuilt);
     }

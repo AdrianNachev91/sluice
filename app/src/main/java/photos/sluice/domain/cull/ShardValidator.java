@@ -39,7 +39,9 @@ import java.util.regex.Pattern;
  * all three.
  *
  * <p>Pure: no I/O. The caller supplies the parsed shards, the authoritative in-scope file list
- * (every montage sidecar's {@code src}), and the configured category set.
+ * (every montage sidecar's {@code src}), and the category set to judge against. That set is the one
+ * {@link PrepDir} recorded at prep time, never whatever config holds at the moment of validation.
+ * See {@link PrepDir#categories()} for why.
  *
  * <p>The contract, stated positively:
  *
@@ -49,7 +51,7 @@ import java.util.regex.Pattern;
  *       exists on disk is a separate, later concern; this class does no I/O.
  *   <li>The shard's {@code montage} field must be present and equal to the montage id its filename
  *       implies.
- *   <li>A classification's category must be one of the configured categories, matched exactly.
+ *   <li>A classification's category must be one of the prep dir's own categories, matched exactly.
  *   <li>Each decision carries its required reasons ({@code reason}, or {@code chosen_reason} for a
  *       near-dup keeper).
  *   <li>Each near-dup group has exactly one chosen keeper and at least one reject, and belongs to a
@@ -79,7 +81,7 @@ public final class ShardValidator {
      *
      * @param shards a {@link List} of {@link ShardFile} the parsed shards paired with their expected montage ids
      * @param sidecarSrcs a {@link Collection} of {@link Path} every in-scope file the montages actually showed
-     * @param categories a {@link List} of {@link String} the configured category set
+     * @param categories a {@link List} of {@link String} the category set the prep dir recorded
      * @param unreviewable a {@link Collection} of {@link Path} files that could not be rendered for review
      * @return {@link ValidationReport} the aggregated validation report
      */
@@ -179,7 +181,7 @@ public final class ShardValidator {
      * @param inScope a {@link Set} of {@link Path} every in-scope file the montages actually showed
      * @param healableByBasename a {@link Map} of {@link String} to {@link Path} in-scope files healable by unique
      * basename
-     * @param categorySet a {@link Set} of {@link String} the configured category set
+     * @param categorySet a {@link Set} of {@link String} the category set the prep dir recorded
      * @param allowedClause {@link String} message fragment listing allowed categories
      * @param montagesByGroup a {@link Map} of {@link String} to {@link Set} of {@link String} group id to the
      * montage ids referencing it
@@ -238,7 +240,7 @@ public final class ShardValidator {
      * @param decision {@link Decision} the decision to validate
      * @param montage {@link String} the montage id this decision belongs to
      * @param index int the decision's 1-based position within its shard
-     * @param categorySet a {@link Set} of {@link String} the configured category set
+     * @param categorySet a {@link Set} of {@link String} the category set the prep dir recorded
      * @param allowedClause {@link String} message fragment listing allowed categories
      * @param chosenPerGroup a {@link Map} of {@link String} to {@link Integer} accumulated chosen-keeper count per
      * group

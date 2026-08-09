@@ -20,7 +20,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.application.service.CullPrepTestSupport.applyPlanner;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
-import static photos.sluice.application.service.CullPrepTestSupport.fixedSettings;
 import static photos.sluice.application.service.CullPrepTestSupport.moveLedger;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDirRemedies;
@@ -56,6 +55,32 @@ class ShardTallyCalculatorTest {
                 .resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, "the decision is right");
 
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 1, 1));
+    }
+
+    // The tally judges a shard against the prep dir's own recorded categories, the same source
+    // ApplyPlanner uses. Worth its own test rather than leaning on the planner's. This is a second,
+    // independent call into ShardValidator. The field it has to pass shares its type with entries,
+    // so handing over the wrong one would compile.
+    //
+    // The index records a set the live settings do not have, and omits one they do. A montage whose
+    // shard names the configured-but-unrecorded category reads invalid, which is the reverse of what
+    // live config would say.
+    @Test
+    void aMontageIsJudgedAgainstTheCategoriesThePrepDirRecorded(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path recorded = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path configured = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        writeFile(recorded, "paperwork");
+        writeFile(configured, "blurry");
+        writeIndex(prepDir, List.of("receipts"), 2, List.of(), List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(recorded));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(configured));
+        writeShard(prepDir, "montage-001", classificationJson(recorded, "receipts", "photographed paperwork"));
+        writeShard(prepDir, "montage-002", classificationJson(configured, "junk", "blurry"));
+
+        final ShardTally tally = shardTallyCalculator().tally(readIndex(prepDir));
+
+        assertThat(tally).isEqualTo(new ShardTally(2, 1, 2));
     }
 
     // Readiness is what a watcher polls, so the same shard file appears in both halves and only its
@@ -130,7 +155,7 @@ class ShardTallyCalculatorTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        final var calculator = new ShardTallyCalculator(new JsonCullPrepStore(), fixedSettings(), applyPlanner(),
+        final var calculator = new ShardTallyCalculator(new JsonCullPrepStore(), applyPlanner(),
                 _ -> {
                     throw new IllegalStateException("simulated ledger read failure");
                 });
@@ -143,7 +168,7 @@ class ShardTallyCalculatorTest {
     }
 
     private static ShardTallyCalculator shardTallyCalculator(final CullPrepPort cullPrepPort) {
-        return new ShardTallyCalculator(cullPrepPort, fixedSettings(), applyPlanner(new NioMediaStore(), cullPrepPort),
+        return new ShardTallyCalculator(cullPrepPort, applyPlanner(new NioMediaStore(), cullPrepPort),
                 moveLedger(new NioMediaStore()));
     }
 

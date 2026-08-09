@@ -27,7 +27,7 @@ flowchart TD
     E -- won't parse --> N["problem:<br/>shard unreadable"]
     A --> F["any decisions-*.json<br/>present with no<br/>matching montage?"]
     F -- yes --> G["problem:<br/>no matching montage"]
-    E -- parsed --> H["ShardValidator.validate<br/>against the sidecar-derived<br/>in-scope set + configured<br/>categories"]
+    E -- parsed --> H["ShardValidator.validate<br/>against the sidecar-derived<br/>in-scope set + the categories<br/>index.json recorded"]
     H -- contract violation --> I["problem<br/>(aggregated)"]
     H -- unresolvable file --> I
     H -- resolvable via a unique<br/>sidecar basename --> J["healed - not a<br/>problem, but reported"]
@@ -171,7 +171,8 @@ exists and still hashes to the recorded value. A record alone is never trusted o
 | A decisions file exists with no matching montage                                              | `ApplyException`, zero files moved (regardless of `allowPartial`)                        |
 | A montage's shard is present but its content will not parse                                   | `CorruptShard` - `ApplyException`, zero files moved; every other montage still validates |
 | A montage's shard is present but the read itself fails, content intact                        | Propagates as a plain `UncheckedIOException` - never diagnosed as the culler's mistake   |
-| A decision's category isn't configured, or a required field is blank                          | `ApplyException`, zero files moved                                                       |
+| A decision's category is absent from index.json's own set, or a required field is blank       | `ApplyException`, zero files moved                                                       |
+| A category was edited or deleted in settings after this run was prepped                       | Irrelevant - the run is judged against the set index.json recorded at prep time          |
 | A decision's `file` doesn't match any sidecar entry, but its basename does (and is unique)    | Healed - applied to the resolved path, reported as a heal                                |
 | A move-based decision's file is missing, with no move record verifying it already ran         | Unresolved - `ApplyException`, zero files moved                                          |
 | A move-based decision's file is missing, and its move record's destination hash-verifies      | Done - not reprocessed; a missing secondary write is backfilled (`apply-engine.md`)      |

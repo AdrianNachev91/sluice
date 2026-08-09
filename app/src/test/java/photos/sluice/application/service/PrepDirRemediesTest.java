@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.CullPrepTestSupport.FailingSidecarRead;
 import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
+import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
@@ -237,8 +238,13 @@ class PrepDirRemediesTest {
         assertThat(rebuilt.get().unreviewable()).isEmpty();
         assertThat(rebuilt.get().scope()).isEqualTo("scope1");
         assertThat(rebuilt.get().basePath()).isEqualTo(root.resolve("Sorted/Photos/2019/06"));
+        // The one genuinely lossy field, alongside the unreviewable list above. No sidecar carries
+        // the category set, so the currently configured one is substituted. Named here rather than
+        // left implicit, since a rebuilt run is judged against today's rules from this point on.
+        assertThat(rebuilt.get().categories()).isEqualTo(fixedCategories());
         // Persisted, not just returned - a later read sees the rebuilt content.
         assertThat(readIndex(prepDir).entries()).containsExactly("montage-001", "montage-002");
+        assertThat(readIndex(prepDir).categories()).isEqualTo(fixedCategories());
         final Path drawer = prepDir.resolve("disasters");
         try (final var entries = Files.list(drawer)) {
             assertThat(entries.toList().getFirst().getFileName().toString()).contains("index-json");

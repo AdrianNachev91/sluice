@@ -396,19 +396,19 @@ final class PipelineTestSupport {
 
         final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
         final var montageRenderer = new CullMontageRenderer(new TileRenderer(stubHeifDecoder), new MontageBuilder(),
-                new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig);
+                new SidecarWriter(), new PrepIndexWriter(), mediaStore, pathsConfig, cullSettings);
         final var cullDispatcher = new CullDispatcher(cullers, cullSettings);
         final var disasterDrawer = new DisasterDrawer(mediaStore);
         final var moveLedger = new MoveLedger(mediaStore, disasterDrawer);
         final var cullDestinations = new CullDestinations(pathsConfig);
-        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, cullSettings, sha256Port);
+        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, sha256Port);
         final var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,
                 moveLedger, applyPlanner);
         final var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
                 cullDestinations, moveLedger, applyPlanner);
-        final var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, disasterDrawer,
-                moveLedger);
-        final var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, cullSettings, applyPlanner, moveLedger);
+        final var prepDirRemedies = new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig, cullSettings,
+                disasterDrawer, moveLedger);
+        final var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner, moveLedger);
         final var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a
         // given photo lands in via mtime ordering alone, without depending on batch-size math.
@@ -434,8 +434,8 @@ final class PipelineTestSupport {
                 root.resolve("Library").toString(), root.resolve("Inbox").toString()));
         final var mediaStore = new NioMediaStore();
         final var disasterDrawer = new DisasterDrawer(mediaStore);
-        return new PrepDirRemedies(mediaStore, new JsonCullPrepStore(), pathsConfig, disasterDrawer,
-                new MoveLedger(mediaStore, disasterDrawer));
+        return new PrepDirRemedies(mediaStore, new JsonCullPrepStore(), pathsConfig, defaultCullSettings(),
+                disasterDrawer, new MoveLedger(mediaStore, disasterDrawer));
     }
 
     static CullSettings defaultCullSettings() {

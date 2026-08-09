@@ -15,6 +15,14 @@ import java.util.List;
  * <p>There is no source field: a cull run only ever reads Sorted, since the library is final once
  * committed and is never re-scanned by cull.
  *
+ * <p>{@code categories} is the classification category set this run was prepped under, captured at
+ * prep time. {@link ShardValidator} accepts only these names. So a run is judged against the rules
+ * it was culled under, never against whatever config holds when its shards finally arrive.
+ * Those two moments can be days apart while an external agent works. Without this field, editing a
+ * category would fail every waiting run that named it, with cause and symptom on different screens
+ * and different days. Names only: a category's description is prompt material, rendered live at
+ * cull time, and a second copy here would only go stale.
+ *
  * <p>{@code unreviewable} lists every candidate this run found but could not render a judgeable
  * tile for, whether undecodable or with real pixels below the reviewable floor. Entries are
  * absolute paths, never mentioned in any montage or sidecar. Without this, a skipped file would
@@ -26,6 +34,7 @@ import java.util.List;
  */
 public record PrepDir(
         String scope,
+        List<String> categories,
         Path basePath,
         int photos,
         List<Path> unreviewable,
@@ -36,7 +45,11 @@ public record PrepDir(
     /**
      * Defensively copies the mutable collection fields.
      *
+     * <p>{@code categories} sits second rather than beside {@code entries}, which shares its type.
+     * Adjacent same-typed components would let a swapped pair compile.
+     *
      * @param scope {@link String} the on-disk tag identifying this prep dir's scope
+     * @param categories a {@link List} of {@link String} the category names this run was prepped under
      * @param basePath {@link Path} the base path reported for this scope
      * @param photos int count of candidates found
      * @param unreviewable a {@link List} of {@link Path} candidates that couldn't render a judgeable tile
@@ -45,6 +58,7 @@ public record PrepDir(
      * @param entries a {@link List} of {@link String} the montage entry filenames
      */
     public PrepDir {
+        categories = List.copyOf(categories);
         entries = List.copyOf(entries);
         unreviewable = List.copyOf(unreviewable);
     }

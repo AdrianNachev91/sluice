@@ -102,7 +102,7 @@ final class CullEngine {
         this.montageConfig = montageConfig;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
-        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, cullSettings, applyPlanner, ledgerReader);
+        this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
         this.cullWatchers = new CullWatchers(cullSettings, this.shardTallyCalculator, watchPollInterval,
                 prepDir -> this.resume(prepDir, false));
         this.prepDirDoctor = prepDirDoctor;

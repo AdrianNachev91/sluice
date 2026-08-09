@@ -3,9 +3,7 @@ package photos.sluice.application.service;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.Sha256Port;
@@ -47,6 +45,10 @@ import java.util.stream.Collectors;
  * snapshot rather than reading one itself. This class cannot even read the ledger files on its
  * own, let alone append to them.
  *
+ * <p>It holds no cull settings either, on the same principle. A run is judged against the category
+ * set its own {@link PrepDir} recorded at prep time. With no settings to reach for, judging it
+ * against live config instead is a compile error rather than a convention.
+ *
  * <p>Flowchart: {@code app/docs/design/application/service/apply-planner.md}.
  */
 @Component
@@ -54,7 +56,6 @@ public class ApplyPlanner {
 
     private final MediaReader mediaReader;
     private final CullPrepPort cullPrepPort;
-    private final CullSettings cullSettings;
     private final Sha256Port sha256Port;
     private final ShardValidator shardValidator = new ShardValidator();
 
@@ -63,14 +64,12 @@ public class ApplyPlanner {
      *
      * @param mediaReader {@link MediaReader} checks file existence and lists prep-dir files
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir sidecars and shards
-     * @param cullSettings {@link CullSettings} configured cull categories
      * @param sha256Port {@link Sha256Port} hashes a destination to verify a recorded move
      */
-    public ApplyPlanner(final MediaReader mediaReader, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
+    public ApplyPlanner(final MediaReader mediaReader, final CullPrepPort cullPrepPort,
                         final Sha256Port sha256Port) {
         this.mediaReader = mediaReader;
         this.cullPrepPort = cullPrepPort;
-        this.cullSettings = cullSettings;
         this.sha256Port = sha256Port;
     }
 
@@ -130,10 +129,8 @@ public class ApplyPlanner {
             this.collectMontage(prepDirPath, montage, !missingMontages.contains(montage), ledger,
                     sidecarSrcs, shardFiles, extraFindings);
         }
-        final List<String> categories = this.cullSettings.categories().stream().map(CullCategory::name).toList();
-
         final ValidationReport report = resolveOverlaps(ledger,
-                this.shardValidator.validate(shardFiles, sidecarSrcs, categories, prepDir.unreviewable()));
+                this.shardValidator.validate(shardFiles, sidecarSrcs, prepDir.categories(), prepDir.unreviewable()));
         if (extraFindings.isEmpty()) {
             return report;
         }

@@ -29,8 +29,8 @@ class PrepIndexWriterTest {
         final Path basePath = dir.resolve("Sorted");
         final Path prepDir = dir.resolve("prep");
         final Path corrupt = dir.resolve("corrupt.cr2");
-        final var prep = new PrepDir("2023", basePath, 42, List.of(corrupt), 2, prepDir, List.of("montage-001",
-                "montage-002"));
+        final var prep = new PrepDir("2023", List.of("junk", "scenery"), basePath, 42, List.of(corrupt), 2, prepDir,
+                List.of("montage-001", "montage-002"));
 
         this.writer.write(indexPath, prep);
 
@@ -38,6 +38,7 @@ class PrepIndexWriterTest {
         assertThat(json).isEqualToIgnoringWhitespace("""
                 {
                   "scope": "2023",
+                  "categories": ["junk", "scenery"],
                   "basePath": "%s",
                   "photos": 42,
                   "unreviewable": ["%s"],
@@ -51,7 +52,7 @@ class PrepIndexWriterTest {
     @Test
     void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
         final Path indexPath = dir.resolve("missing-parent").resolve("index.json");
-        final var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
+        final var prep = new PrepDir("2023", List.of("junk"), dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> this.writer.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
@@ -64,7 +65,7 @@ class PrepIndexWriterTest {
         doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(java.io.OutputStream.class), any());
         final var writerWithFailingMapper = new PrepIndexWriter(mapper);
         final Path indexPath = dir.resolve("index.json");
-        final var prep = new PrepDir("2023", dir, 0, List.of(), 0, dir, List.of());
+        final var prep = new PrepDir("2023", List.of("junk"), dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> writerWithFailingMapper.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)

@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -76,15 +77,19 @@ class ApplyEngineRealDataParityTest {
         // sourceDir is <repoRoot>/logs/cull-prep/<leaf> - the fixed layout CLAUDE.md documents.
         final Path sourceRepoRoot = sourceDir.getParent().getParent().getParent();
 
-        final PrepDir sourcePrepDir = new JsonCullPrepStore().readIndex(sourceDir);
-        final Path relativeBase = sourceRepoRoot.relativize(sourcePrepDir.basePath());
-
         final Path prepDirA = rootA.resolve("logs/cull-prep").resolve(leaf);
         final Path prepDirB = rootB.resolve("logs/cull-prep").resolve(leaf);
         copyPrepDirJson(sourceDir, prepDirA, sourceRepoRoot, rootA);
         copyPrepDirJson(sourceDir, prepDirB, sourceRepoRoot, rootB);
-        copyRecursively(sourcePrepDir.basePath(), rootA.resolve(relativeBase));
-        copyRecursively(sourcePrepDir.basePath(), rootB.resolve(relativeBase));
+
+        // Read the index from the copy rather than the source. The reference engine writes no
+        // category set, so copyPrepDirJson stamps one in and only the copy is readable. The copy is
+        // also the version whose paths already sit in this test's own coordinate space. So every
+        // path below is relative to rootA, not the real machine's repo root.
+        final PrepDir prepDir = new JsonCullPrepStore().readIndex(prepDirA);
+        final Path relativeBase = rootA.relativize(prepDir.basePath());
+        copyRecursively(sourceRepoRoot.resolve(relativeBase), rootA.resolve(relativeBase));
+        copyRecursively(sourceRepoRoot.resolve(relativeBase), rootB.resolve(relativeBase));
 
         final Path scriptRepoRoot = findRepoRoot();
         runReferenceEngine(scriptRepoRoot, prepDirA, rootA);
@@ -102,7 +107,7 @@ class ApplyEngineRealDataParityTest {
                 .as("appended index hashes")
                 .isEqualTo(hashIndexA.load().keySet());
 
-        assertUnreviewableFilesRelocated(sourcePrepDir, sourceRepoRoot, rootB);
+        assertUnreviewableFilesRelocated(prepDir, rootA, rootB);
     }
 
     private static void assertTreesIdentical(final MoveDiffer differ, final String label, final Path treeA,
@@ -141,10 +146,10 @@ class ApplyEngineRealDataParityTest {
     // Every unreviewable path index.json recorded (rewritten into rootB's own coordinate space) has
     // moved out of Sorted and landed under Unreviewable/<yyyy>/<mm>/. The year/month derivation
     // mirrors CullDestinations.yearMonthOf()'s parent/grandparent parsing and UNDATED fallback.
-    private static void assertUnreviewableFilesRelocated(final PrepDir sourcePrepDir, final Path sourceRepoRoot,
+    private static void assertUnreviewableFilesRelocated(final PrepDir prepDir, final Path rootA,
                                                          final Path rootB) {
-        for (final Path sourceFile : sourcePrepDir.unreviewable()) {
-            final Path original = rootB.resolve(sourceRepoRoot.relativize(sourceFile));
+        for (final Path fileInA : prepDir.unreviewable()) {
+            final Path original = rootB.resolve(rootA.relativize(fileInA));
             assertThat(Files.exists(original)).as("unreviewable file left behind: %s", original).isFalse();
             final String[] yearMonth = yearMonthOf(original);
             final Path expectedDest = rootB.resolve("Unreviewable")
@@ -211,7 +216,7 @@ class ApplyEngineRealDataParityTest {
         final var cullPrepPort = new JsonCullPrepStore();
         final var sha256Port = new Sha256Hasher();
         final var moveLedger = new MoveLedger(mediaStore, new DisasterDrawer(mediaStore));
-        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), sha256Port);
+        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, sha256Port);
         return new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex,
                 new CullDestinations(pathsConfig), moveLedger, applyPlanner);
     }
@@ -248,9 +253,29 @@ class ApplyEngineRealDataParityTest {
         try (final Stream<Path> files = Files.list(source).filter(ApplyEngineRealDataParityTest::isPrepJson)) {
             for (final Path file : (Iterable<Path>) files::iterator) {
                 final String rewritten = rewriteRoot(Files.readString(file), fromRoot, toRoot);
-                Files.writeString(dest.resolve(file.getFileName()), rewritten);
+                final String name = file.getFileName().toString();
+                Files.writeString(dest.resolve(name),
+                        name.equals("index.json") ? withCategories(rewritten) : rewritten);
             }
         }
+    }
+
+    // The reference engine's index.json has no category set. It never had one to record: it checks
+    // a decision's category against its own hardcoded list at apply time. So a real prep dir copied
+    // here carries no such field, and the Java reader treats that as a damaged index.
+    //
+    // Stamped into the copy rather than the source, which this test only ever reads. The stamped
+    // set is the one the reference script itself accepts. Both engines then judge the copied shards
+    // against identical categories, which is what makes the diff meaningful. The reference engine
+    // ignores the extra field: it reads only scope and entries out of this file.
+    private static String withCategories(final String indexJson) {
+        if (indexJson.contains("\"categories\"")) {
+            return indexJson;
+        }
+        final String names = fixedSettings().categories().stream()
+                .map(category -> '"' + category.name() + '"')
+                .collect(Collectors.joining(", "));
+        return indexJson.replaceFirst("\\{", Matcher.quoteReplacement("{ \"categories\": [" + names + "],"));
     }
 
     private static boolean isPrepJson(final Path file) {

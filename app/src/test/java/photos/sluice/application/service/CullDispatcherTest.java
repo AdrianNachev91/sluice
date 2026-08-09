@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CullDispatcherTest {
 
     private static final PrepDir PREP =
-            new PrepDir("2019", Path.of("base"), 0, List.of(), 0, Path.of("prep"), List.of());
+            new PrepDir("2019", List.of("junk"), Path.of("base"), 0, List.of(), 0, Path.of("prep"), List.of());
     private static final CullOptions OPTIONS = new CullOptions(false, null);
 
     @Test

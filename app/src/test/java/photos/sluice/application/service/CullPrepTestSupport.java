@@ -63,9 +63,20 @@ final class CullPrepTestSupport {
 
     static void writeIndex(final Path prepDir, final int photos, final List<Path> unreviewable,
                            final List<String> entries) {
+        writeIndex(prepDir, fixedCategories(), photos, unreviewable, entries);
+    }
+
+    // The category set an index records, defaulted to the one fixedSettings() configures so the two
+    // agree unless a test deliberately pulls them apart.
+    static void writeIndex(final Path prepDir, final List<String> categories, final int photos,
+                           final List<Path> unreviewable, final List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
-                new PrepDir("2019-06", prepDir.resolve("base"), photos, unreviewable, entries.size(), prepDir,
-                        entries));
+                new PrepDir("2019-06", categories, prepDir.resolve("base"), photos, unreviewable, entries.size(),
+                        prepDir, entries));
+    }
+
+    static List<String> fixedCategories() {
+        return fixedSettings().categories().stream().map(CullCategory::name).toList();
     }
 
     static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {
@@ -170,7 +181,7 @@ final class CullPrepTestSupport {
     }
 
     static ApplyPlanner applyPlanner(final MediaStore mediaStore, final CullPrepPort cullPrepPort) {
-        return new ApplyPlanner(mediaStore, cullPrepPort, fixedSettings(), new Sha256Hasher());
+        return new ApplyPlanner(mediaStore, cullPrepPort, new Sha256Hasher());
     }
 
     // A caller takes the ledger snapshot and passes it into ApplyPlanner. A test driving the
@@ -195,7 +206,7 @@ final class CullPrepTestSupport {
     // applyPlanner(CullPrepPort) above uses.
     static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot, final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
-        return new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig(repoRoot, libraryRoot),
+        return new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig(repoRoot, libraryRoot), fixedSettings(),
                 new DisasterDrawer(mediaStore), moveLedger(mediaStore));
     }
 
@@ -213,7 +224,7 @@ final class CullPrepTestSupport {
     // only an index-read failure could ever be injected.
     static PrepDirDoctor prepDirDoctor(final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
-        return new PrepDirDoctor(cullPrepPort, mediaStore, fixedSettings(), applyPlanner(mediaStore, cullPrepPort),
+        return new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner(mediaStore, cullPrepPort),
                 moveLedger(mediaStore));
     }
 
@@ -223,7 +234,7 @@ final class CullPrepTestSupport {
     // everything except the doctor's own direct calls.
     static PrepDirDoctor prepDirDoctor(final MediaStore mediaStore) {
         final var cullPrepPort = new JsonCullPrepStore();
-        return new PrepDirDoctor(cullPrepPort, mediaStore, fixedSettings(), applyPlanner(mediaStore, cullPrepPort),
+        return new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner(mediaStore, cullPrepPort),
                 moveLedger(mediaStore));
     }
 

@@ -92,8 +92,9 @@ public class JsonCullPrepStore implements CullPrepPort {
      * The JSON shape {@link #readIndex} parses: one scope's prep directory index, as written by
      * this app's own prep step.
      */
-    private record RawIndex(String scope, String basePath, int photos, @Nullable List<String> unreviewable,
-                            int montages, String prepDir, @Nullable List<String> entries) {
+    private record RawIndex(String scope, @Nullable List<String> categories, String basePath, int photos,
+                            @Nullable List<String> unreviewable, int montages, String prepDir,
+                            @Nullable List<String> entries) {
     }
 
     /**
@@ -130,10 +131,56 @@ public class JsonCullPrepStore implements CullPrepPort {
                     new IOException("null document"));
         }
         final List<String> unreviewable = raw.unreviewable() == null ? List.of() : raw.unreviewable();
-        final List<String> entries = raw.entries() == null ? List.of() : raw.entries();
-        return new PrepDir(raw.scope(), requiredPath(raw.basePath(), "basePath", path), raw.photos(),
+        final List<String> entries = raw.entries() == null
+                ? List.of()
+                : withoutNulls(raw.entries(), "entries", path);
+        return new PrepDir(raw.scope(), requiredCategories(raw.categories(), path),
+                requiredPath(raw.basePath(), "basePath", path), raw.photos(),
                 unreviewable.stream().map(entry -> requiredPath(entry, "an unreviewable entry", path)).toList(),
                 raw.montages(), requiredPath(raw.prepDir(), "prepDir", path), entries);
+    }
+
+    /**
+     * The category set the prep dir was culled under. Absent is malformed content, unlike an absent
+     * {@code unreviewable} or {@code entries} just above. Those two have a true empty meaning: no
+     * file was skipped, no montage was built. No run is ever prepped without a category set, and an
+     * empty one serializes as {@code []} rather than vanishing. So a missing field can only mean
+     * the index is damaged.
+     *
+     * <p>Reported as malformed rather than defaulted, because the default would have to be live
+     * config. Silently judging a run against rules it was never culled under is exactly what
+     * recording the field prevents. Malformed instead reaches {@link
+     * photos.sluice.application.service.PrepDirRemedies#rebuildIndex}, which makes that same
+     * substitution deliberately and says so.
+     *
+     * @param values a {@link List} of {@link String} the raw field value, possibly null
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return a {@link List} of {@link String} the category names
+     */
+    private static List<String> requiredCategories(final @Nullable List<String> values, final Path indexPath) {
+        if (values == null) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has no categories",
+                    new IOException("null categories"));
+        }
+        return withoutNulls(values, "categories", indexPath);
+    }
+
+    /**
+     * Rejects a null element inside a JSON string array. {@link PrepDir} copies its list components
+     * defensively, and that copy throws on a null element. Left unchecked, the throw would be an
+     * unchecked escape route out of every caller's read-failure handling.
+     *
+     * @param values a {@link List} of {@link String} the parsed array, non-null
+     * @param field {@link String} the field's name, used only for the error message
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return a {@link List} of {@link String} the same values
+     */
+    private static List<String> withoutNulls(final List<String> values, final String field, final Path indexPath) {
+        if (values.contains(null)) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a null entry in " + field,
+                    new IOException("null " + field + " entry"));
+        }
+        return values;
     }
 
     /**
@@ -168,6 +215,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * the other's classes, per {@code ArchitectureTest.adaptersAreSiblings}.
      *
      * @param scope {@link String} the on-disk tag identifying this prep dir's scope
+     * @param categories a {@link List} of {@link String} the category names this run was prepped under
      * @param basePath {@link String} the base path reported for this scope
      * @param photos int count of candidates found
      * @param unreviewable a {@link List} of {@link String} candidates that couldn't render a judgeable tile
@@ -175,8 +223,8 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param prepDir {@link String} the prep directory path
      * @param entries a {@link List} of {@link String} the montage entry filenames
      */
-    private record RawIndexOut(String scope, String basePath, int photos, List<String> unreviewable,
-                               int montages, String prepDir, List<String> entries) {
+    private record RawIndexOut(String scope, List<String> categories, String basePath, int photos,
+                               List<String> unreviewable, int montages, String prepDir, List<String> entries) {
     }
 
     /**
@@ -193,6 +241,7 @@ public class JsonCullPrepStore implements CullPrepPort {
     public void writeIndex(final Path prepDir, final PrepDir index) {
         final var document = new RawIndexOut(
                 index.scope(),
+                index.categories(),
                 index.basePath().toString(),
                 index.photos(),
                 index.unreviewable().stream().map(Path::toString).toList(),

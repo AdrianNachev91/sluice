@@ -126,7 +126,7 @@ class ExternalAgentCullerTest {
     }
 
     private static PrepDir prep(final Path prepDir, final String... entries) {
-        return new PrepDir("2019-06", prepDir.resolve("base"), entries.length * 2, List.of(),
+        return new PrepDir("2019-06", List.of("junk"), prepDir.resolve("base"), entries.length * 2, List.of(),
                 entries.length, prepDir, List.of(entries));
     }
 }

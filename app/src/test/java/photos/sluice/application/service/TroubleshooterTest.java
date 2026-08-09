@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
 
 // Fixture-writing helpers below mirror ApplyPlannerTest's and PrepDirDoctorTest's own.
 // Troubleshooter reuses both PrepDirDoctor.diagnose() and ReconcileEngine.reconcile() internally,
@@ -321,7 +322,8 @@ class TroubleshooterTest {
 
     private static void writeIndex(final Path prepDir, final int photos, final List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
-                new PrepDir("2019-06", prepDir.resolve("base"), photos, List.of(), entries.size(), prepDir, entries));
+                new PrepDir("2019-06", fixedCategories(), prepDir.resolve("base"), photos, List.of(), entries.size(),
+                        prepDir, entries));
     }
 
     private static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {

@@ -85,8 +85,7 @@ class AnthropicCullerLiveTest {
     void cullsARealMontageAndSurvivesAForcedContentRetry(@TempDir final Path root) throws Exception {
         final PrepDir prep = renderRealMontage(root);
         assertThat(prep.entries()).containsExactly("montage-001");
-        final CullSettings settings = new FixedSettings("anthropic", CARDS,
-                new CullProviderSettings(MODEL, null, true, null));
+        final CullSettings settings = settings();
         // Wrapping the production-built client exercises the whole real path: the env-var key
         // read, the absent endpoint override, and the transport-retry knob.
         final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings());
@@ -117,7 +116,7 @@ class AnthropicCullerLiveTest {
         final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
         final var renderer = new CullMontageRenderer(
                 new TileRenderer(stubHeifDecoder), new MontageBuilder(), new SidecarWriter(),
-                new PrepIndexWriter(), new NioMediaStore(), pathsConfig);
+                new PrepIndexWriter(), new NioMediaStore(), pathsConfig, settings());
         return renderer.build(new CullScope.Year(2019, List.of(6)), new MontageConfig(224, 2));
     }
 
@@ -169,6 +168,10 @@ class AnthropicCullerLiveTest {
             }
         }
         return response;
+    }
+
+    private static CullSettings settings() {
+        return new FixedSettings("anthropic", CARDS, new CullProviderSettings(MODEL, null, true, null));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,

@@ -2,9 +2,7 @@ package photos.sluice.application.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullPrepPort;
-import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ShardValidator;
@@ -35,23 +33,20 @@ final class ShardTallyCalculator {
     private static final Logger log = LoggerFactory.getLogger(ShardTallyCalculator.class);
 
     private final CullPrepPort cullPrepPort;
-    private final CullSettings cullSettings;
     private final ApplyPlanner applyPlanner;
     private final LedgerReader ledgerReader;
     private final ShardValidator shardValidator = new ShardValidator();
 
     /**
-     * Creates a calculator backed by the given prep-dir reader, cull settings, and apply gate.
+     * Creates a calculator backed by the given prep-dir reader and apply gate.
      *
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir index, sidecars, and shards
-     * @param cullSettings {@link CullSettings} the configured cull categories
      * @param applyPlanner {@link ApplyPlanner} the single validator readiness is decided by
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that validator honours
      */
-    ShardTallyCalculator(final CullPrepPort cullPrepPort, final CullSettings cullSettings,
-                         final ApplyPlanner applyPlanner, final LedgerReader ledgerReader) {
+    ShardTallyCalculator(final CullPrepPort cullPrepPort, final ApplyPlanner applyPlanner,
+                         final LedgerReader ledgerReader) {
         this.cullPrepPort = cullPrepPort;
-        this.cullSettings = cullSettings;
         this.applyPlanner = applyPlanner;
         this.ledgerReader = ledgerReader;
     }
@@ -79,11 +74,10 @@ final class ShardTallyCalculator {
                 .flatMap(montage -> this.readSidecar(prep, montage).stream())
                 .map(SidecarPhotoEntry::src)
                 .toList();
-        final List<String> categories = this.cullSettings.categories().stream().map(CullCategory::name).toList();
         final List<Path> unreviewable = this.resolvedUnreviewable(prep);
 
         final List<MontageShardStatus> statuses = prep.entries().stream()
-                .map(montage -> this.montageShardStatus(prep, montage, sidecarSrcs, categories, unreviewable))
+                .map(montage -> this.montageShardStatus(prep, montage, sidecarSrcs, unreviewable))
                 .toList();
         final int present = (int) statuses.stream().filter(MontageShardStatus::present).count();
         final int valid = (int) statuses.stream().filter(MontageShardStatus::valid).count();
@@ -186,20 +180,19 @@ final class ShardTallyCalculator {
      * @param prep {@link PrepDir} the prep dir being tallied
      * @param montage {@link String} the montage id to check
      * @param sidecarSrcs a {@link List} of {@link Path} source paths of every in-scope sidecar entry
-     * @param categories a {@link List} of {@link String} the configured cull category names
      * @param unreviewable a {@link List} of {@link Path} the ledger-resolved unreviewable files
      * @return {@link MontageShardStatus} the montage's presence and validity
      */
     private MontageShardStatus montageShardStatus(final PrepDir prep, final String montage,
                                                   final List<Path> sidecarSrcs,
-                                                  final List<String> categories,
                                                   final List<Path> unreviewable) {
         try {
             if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
                 return new MontageShardStatus(false, false);
             }
             final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage));
-            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, categories, unreviewable);
+            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, prep.categories(),
+                    unreviewable);
             return new MontageShardStatus(true, report.valid());
         } catch (final RuntimeException e) {
             // Present but unparseable, or its own presence could not even be confirmed - either way
@@ -211,7 +204,7 @@ final class ShardTallyCalculator {
 
     /**
      * One montage's shard status: whether its shard file exists at all, and whether it parses and
-     * validates against the prep dir's sidecars and configured categories.
+     * validates against the prep dir's own sidecars and recorded categories.
      */
     private record MontageShardStatus(boolean present, boolean valid) {
     }

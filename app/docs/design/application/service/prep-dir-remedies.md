@@ -97,7 +97,7 @@ flowchart TD
     C --> D{"contiguous 1..N,<br/>every one parseable?"}
     D -- no --> E(["guard refuses -<br/>Optional.empty(),<br/>nothing written"])
     D -- yes --> F["file the corrupt<br/>original into the<br/>disaster drawer, if present"]
-    F --> G(["write a fresh index.json:<br/>entries + photos derived<br/>from sidecars, basePath =<br/>deepest common parent,<br/>unreviewable = empty"])
+    F --> G(["write a fresh index.json:<br/>entries + photos derived<br/>from sidecars, basePath =<br/>deepest common parent,<br/>unreviewable = empty,<br/>categories = live config"])
 ```
 
 `rebuildIndex()`'s guard only trusts a *contiguous* montage sequence where *every* sidecar in it
@@ -110,6 +110,13 @@ from the rebuilt list is simply not acted on. `basePath` is reconstructed as the
 parent of every surviving sidecar's own `src` files. That's exact for a `Year` scope, an
 approximation for `OldestN` narrowed to one year. The field is display-only, though, and no engine
 logic ever consults it.
+
+The category set is unrecoverable the same way, and it does not degrade as quietly. A sidecar
+carries only `src`, `name`, `time` and `received`, so nothing left on disk remembers what this run
+was culled under. The currently configured set is substituted. A run repaired after a category edit
+is therefore judged against today's rules, which is how every run behaved before the set was
+recorded at all. So the repair path is no worse than what it replaces, while the happy path stops
+drifting. This is the only place in the app that makes that substitution.
 
 A montage's own sidecar failing to read, with `index.json` itself intact, is a narrower problem:
 `Finding.CorruptSidecar` (CHOICE). This per-montage check is `ApplyPlanner.collectMontage()`, run
@@ -132,9 +139,9 @@ flowchart TD
 mechanism from section 1 above, keyed by montage id rather than a file path). It also files the
 sidecar itself into the disaster drawer if it's still present, its scope evidence is spent either
 way once a choice is made. `SET_ASIDE` means a future cull of the same scope sees those photos
-fresh. `APPLY_ANYWAY` means every other safety net (files must exist, categories configured,
-cross-shard duplicate check, never-overwrite) still applies. Only the membership cross-check is
-skipped.
+fresh. `APPLY_ANYWAY` means every other safety net still applies: files must exist, categories must
+be ones index.json recorded, the cross-shard duplicate check runs, and nothing is overwritten. Only
+the membership cross-check is skipped.
 
 ### Why one validator, and why it is the apply phase's
 

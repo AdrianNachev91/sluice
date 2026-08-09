@@ -76,6 +76,47 @@ class ApplyPlannerTest {
         assertThat(Files.exists(julyReject)).isTrue();
     }
 
+    // The pair below is why a prep dir records its own category set. Both run against the standard
+    // fixedSettings() wiring, whose categories are junk/scenery/food/funny. Each index deliberately
+    // disagrees with that set, and the index is what decides.
+    //
+    // Here the shard names a category nobody has configured. It applies anyway, because the run was
+    // prepped under a set that had it. Editing a category cannot strand a run that already named it.
+    @Test
+    void aCategoryOnlyThePrepDirRecordsStillValidates(@TempDir final Path root) throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "paperwork");
+        writeIndex(prepDir, List.of("receipts"), 1, List.of(), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "receipts", "photographed paperwork"));
+
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        assertThat(Files.exists(photo)).as("routed out of Sorted").isFalse();
+        assertThat(Files.exists(root.resolve("Review/receipts/a.jpg"))).isTrue();
+    }
+
+    // The mirror. junk IS configured, and the run was not prepped under it, so it is refused. A
+    // planner still consulting config would let this through.
+    @Test
+    void aConfiguredCategoryThePrepDirNeverRecordedIsRefused(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "blurry");
+        writeIndex(prepDir, List.of("receipts"), 1, List.of(), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(ApplyException.class)
+                .isInstanceOfSatisfying(ApplyException.class, e -> assertThat(e.findings()).containsExactly(
+                        new Finding.InvalidCategory("montage-001", 1, "junk", "allowed: receipts")));
+        assertThat(Files.exists(photo)).as("left where it was").isTrue();
+    }
+
     @Test
     void aMissingFileWithNoMoveRecordFailsLoudlyAndRefusesToGuess(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");

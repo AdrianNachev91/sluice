@@ -3,7 +3,12 @@ package photos.sluice.adapter.imaging;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
+import photos.sluice.application.port.out.CullCategory;
+import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
+import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.PathsProperties;
 import photos.sluice.domain.cull.CullScope;
@@ -11,6 +16,7 @@ import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
+import photos.sluice.domain.job.WatchMode;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -38,6 +44,10 @@ class CullMontageRendererTest {
     // Above LowResGate.MIN_DIMENSION (640) on the long side, so these photos are always reviewable.
     private static final int PHOTO_WIDTH = 800;
     private static final int PHOTO_HEIGHT = 600;
+
+    private static final List<CullCategory> CATEGORIES = List.of(
+            new CullCategory("junk", "objectively worthless shots"),
+            new CullCategory("scenery", "landscapes with nobody in them"));
 
     @Test
     void buildBatchesIntoMultipleMontagesComputesReceivedFlagsAndDropsUnreviewableFiles(@TempDir final Path root)
@@ -95,6 +105,7 @@ class CullMontageRendererTest {
         assertThat(index).isEqualToIgnoringWhitespace("""
                 {
                   "scope": "2019",
+                  "categories": ["junk", "scenery"],
                   "basePath": "%s",
                   "photos": 5,
                   "unreviewable": ["%s"],
@@ -316,16 +327,60 @@ class CullMontageRendererTest {
         assertThat(pathsConfig.logs().resolve("cull-prep").resolve("2019")).doesNotExist();
     }
 
+    // The category set is captured at prep time and travels with the run. Proved against a set that
+    // is not the default, so a renderer ignoring its settings and hardcoding something would fail
+    // rather than coincidentally match.
+    @Test
+    void buildStampsTheConfiguredCategorySetOntoThePrepDirAndItsIndex(@TempDir final Path root) throws IOException {
+        final var pathsConfig = pathsConfig(root);
+        final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
+        writePhoto(juneDir, "IMG_20190601_100000.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final List<CullCategory> configured = List.of(
+                new CullCategory("blurry", "out of focus"),
+                new CullCategory("receipts", "photographed paperwork"));
+
+        final PrepDir result = renderer(pathsConfig, configured)
+                .build(new CullScope.Year(2019, null), new MontageConfig(64, 2));
+
+        assertThat(result.categories()).containsExactly("blurry", "receipts");
+        assertThat(Files.readString(result.prepDir().resolve("index.json"), StandardCharsets.UTF_8))
+                .contains("\"categories\":[\"blurry\",\"receipts\"]");
+    }
+
     private static PathsConfig pathsConfig(final Path root) {
         return new PathsConfig(new PathsProperties(
                 root.toString(), root.resolve("Library").toString(), root.resolve("Inbox").toString()));
     }
 
     private static CullMontageRenderer renderer(final PathsConfig pathsConfig) {
+        return renderer(pathsConfig, CATEGORIES);
+    }
+
+    private static CullMontageRenderer renderer(final PathsConfig pathsConfig, final List<CullCategory> categories) {
         final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
         return new CullMontageRenderer(
                 new TileRenderer(stubHeifDecoder), new MontageBuilder(), new SidecarWriter(),
-                new PrepIndexWriter(), new NioMediaStore(), pathsConfig);
+                new PrepIndexWriter(), new NioMediaStore(), pathsConfig, new FixedSettings(categories));
+    }
+
+    // Only categories() is ever read here. The rest of the port is provider routing, which the
+    // renderer has no part in.
+    private record FixedSettings(List<CullCategory> categories) implements CullSettings {
+
+        @Override
+        public String provider() {
+            return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+        }
+
+        @Override
+        public CullProviderSettings providerSettings() {
+            return new CullProviderSettings(null, null, null, null);
+        }
+
+        @Override
+        public ExternalAgentSettings externalAgent() {
+            return new ExternalAgentSettings(WatchMode.MANUAL);
+        }
     }
 
     private static Path writePhoto(final Path dir, final String name, final Instant mtime) throws IOException {
