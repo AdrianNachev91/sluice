@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.CsvLibraryHashIndex;
@@ -62,6 +63,37 @@ class ApplyEngineTest {
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
         assertThat(Files.readString(root.resolve("Review/junk/_reasons.txt")))
                 .contains("IMG_1.jpg - phone photo of a monitor");
+    }
+
+    // Exercises recordThenMove()'s own resolveDestination-then-moveTo pair, not just the media
+    // store directly. On a case-insensitive volume the second decision's destination check folds
+    // onto the first's, so it lands on the collision suffix instead of overwriting it. See
+    // docs/plans/macos-verification-plan.md for why this only proves anything on such a volume.
+    @Test
+    void twoJunkDecisionsWhoseSourceNamesDifferOnlyInCaseBothSurviveTheMoveIntoOneReviewFolder(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        Assumptions.assumeTrue(isCaseInsensitive(root),
+                "Filesystem is case-sensitive; the collision this test targets cannot occur here.");
+        // Two different source months. The case fold this test targets should happen only once
+        // the files land in the shared Review/junk destination, not a moment earlier between the
+        // sources.
+        final Path first = root.resolve("Sorted/Photos/2019/06/photo.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/07/PHOTO.jpg");
+        writeFile(first, "first");
+        writeFile(second, "second");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second));
+        writeShard(prepDir, "montage-001",
+                classificationJson(first, "junk", "blurry"),
+                classificationJson(second, "junk", "also blurry"));
+
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        final Path reviewDir = root.resolve("Review/junk");
+        assertThat(Files.readString(reviewDir.resolve("photo.jpg"))).isEqualTo("first");
+        assertThat(Files.readString(reviewDir.resolve("PHOTO (2).jpg"))).isEqualTo("second");
     }
 
     // The safety property behind the ledger's tolerance of a damaged file. Reading a ruined
@@ -789,6 +821,18 @@ class ApplyEngineTest {
         // file is actually moved.
         assertThat(ticks).containsExactly("1/2", "2/2");
         assertThat(Files.exists(root.resolve("Unreviewable/2019/06/corrupt.heic"))).isTrue();
+    }
+
+    // Probes the real filesystem instead of checking the OS name, since a case-sensitive volume can
+    // be mounted on any platform.
+    private static boolean isCaseInsensitive(final Path dir) throws IOException {
+        final Path lower = dir.resolve("case_probe.tmp");
+        Files.writeString(lower, "probe");
+        try {
+            return Files.exists(dir.resolve("CASE_PROBE.TMP"));
+        } finally {
+            Files.delete(lower);
+        }
     }
 
     // Where the simulated crash lands relative to the move that triggers it. BEFORE_THE_MOVE leaves

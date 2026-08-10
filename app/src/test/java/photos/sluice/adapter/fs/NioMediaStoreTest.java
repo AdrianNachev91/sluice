@@ -71,6 +71,32 @@ class NioMediaStoreTest {
         assertThat(Files.readString(destDir.resolve("IMG_1234 (2).jpg"))).isEqualTo("existing2");
     }
 
+    // On a case-insensitive volume, Files.exists folds the two names to one lookup, so the second
+    // move lands on the collision path instead of silently overwriting the first. See
+    // docs/plans/macos-verification-plan.md for why this only proves anything on such a volume.
+    @Test
+    void moveDoesNotOverwriteAFileWhoseNameDiffersOnlyInCase(@TempDir final Path root) throws IOException {
+        final Path destDir = Files.createDirectories(root.resolve("dest"));
+        Assumptions.assumeTrue(isCaseInsensitive(destDir),
+                "Filesystem is case-sensitive; the collision this test targets cannot occur here.");
+        // Two different source directories. The case fold this test targets should happen only
+        // once the files land in the shared destination, not a moment earlier between the sources.
+        final Path from1 = Files.createDirectories(root.resolve("from1"));
+        final Path from2 = Files.createDirectories(root.resolve("from2"));
+        final Path first = from1.resolve("photo.jpg");
+        Files.writeString(first, "first");
+        final Path second = from2.resolve("PHOTO.jpg");
+        Files.writeString(second, "second");
+
+        final Path firstDest = this.store.move(first, destDir);
+        final Path secondDest = this.store.move(second, destDir);
+
+        assertThat(firstDest).isEqualTo(destDir.resolve("photo.jpg"));
+        assertThat(secondDest).isEqualTo(destDir.resolve("PHOTO (2).jpg"));
+        assertThat(Files.readString(firstDest)).isEqualTo("first");
+        assertThat(Files.readString(secondDest)).isEqualTo("second");
+    }
+
     @Test
     void moveHandlesFilenameWithNoExtension(@TempDir final Path root) throws IOException {
         final Path destDir = Files.createDirectories(root.resolve("dest"));
@@ -341,6 +367,18 @@ class NioMediaStoreTest {
         this.store.removeIfEmptyOfFiles(missing);
 
         assertThat(Files.exists(missing)).isFalse();
+    }
+
+    // Probes the real filesystem instead of checking the OS name, since a case-sensitive volume can
+    // be mounted on any platform.
+    private static boolean isCaseInsensitive(final Path dir) throws IOException {
+        final Path lower = dir.resolve("case_probe.tmp");
+        Files.writeString(lower, "probe");
+        try {
+            return Files.exists(dir.resolve("CASE_PROBE.TMP"));
+        } finally {
+            Files.delete(lower);
+        }
     }
 
     private static List<String> readLines(final Path file) {
