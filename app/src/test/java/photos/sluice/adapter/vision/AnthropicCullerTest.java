@@ -22,6 +22,9 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.application.port.out.SecretId;
+import photos.sluice.application.port.out.SecretStatus;
+import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
@@ -43,6 +46,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -713,6 +717,35 @@ class AnthropicCullerTest {
                 .hasMessageContaining("sluice.cull.provider-settings.model");
     }
 
+    // Two routes lead to a stored key, and someone hitting this has taken neither. The message
+    // names both rather than the one the app happens to check first.
+    @Test
+    void failsLoudNamingBothRoutesToAKeyWhenNoTierHoldsOne() {
+        final SecretStore empty = new FixedSecretStore(null);
+
+        assertThatThrownBy(() -> AnthropicCuller.defaultClient(
+                settings("claude-sonnet-5").providerSettings(), empty))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Settings")
+                .hasMessageContaining("ANTHROPIC_API_KEY");
+    }
+
+    // Nothing observes the key after the client is built. What this proves is that the store's
+    // answer was carried through rather than dropped, since dropping it reaches the no-key refusal.
+    @Test
+    void buildsTheClientFromTheKeyTheStoreHolds() {
+        assertThatCode(() -> AnthropicCuller.defaultClient(settings("claude-sonnet-5").providerSettings(),
+                new FixedSecretStore("sk-synthetic-0001"))).doesNotThrowAnyException();
+    }
+
+    // The provider half becomes the credential's filename, and a settings screen saves under the
+    // same id this culler reads back. Two separate literals agreeing today is not the same as them
+    // being tied together.
+    @Test
+    void namesItsCredentialAfterTheProviderItRegistersAs() {
+        assertThat(AnthropicCuller.API_KEY.provider()).isEqualTo(this.culler().id());
+    }
+
     private AnthropicCuller culler() {
         return this.culler(settings("claude-sonnet-5"));
     }
@@ -824,6 +857,31 @@ class AnthropicCullerTest {
         @Override
         public MontageConfig montage() {
             return MontageConfig.defaults();
+        }
+    }
+
+    // Stands in for whatever this machine's tiers hold, a credential or nothing. Building a client
+    // neither stores nor clears one, so those two refuse rather than pretending to work.
+    private record FixedSecretStore(@Nullable String held) implements SecretStore {
+
+        @Override
+        public Optional<String> secret(final SecretId id) {
+            return Optional.ofNullable(this.held);
+        }
+
+        @Override
+        public SecretStatus status(final SecretId id) {
+            return this.held == null ? new SecretStatus.Absent() : new SecretStatus.InFile();
+        }
+
+        @Override
+        public void save(final SecretId id, final String secret) {
+            throw new UnsupportedOperationException("building a client stores no credential");
+        }
+
+        @Override
+        public void remove(final SecretId id) {
+            throw new UnsupportedOperationException("building a client clears no credential");
         }
     }
 }

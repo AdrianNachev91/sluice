@@ -14,7 +14,7 @@ contract.
 flowchart TD
     A["cull(prep, opts)"] --> B["require sluice.cull.<br/>provider-settings.model"]
     B --> C["render the system prompt<br/>(CullerPrompt + category cards)"]
-    C --> D["build the API client<br/>(ANTHROPIC_API_KEY, optional endpoint,<br/>transport max-retries)"]
+    C --> D["build the API client<br/>(API key via SecretStore, optional endpoint,<br/>transport max-retries)"]
     D --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>an unreadable one contributes<br/>nothing and drops its montage)"]
     W --> E["for each montage, in sidecar order"]
     E --> Q{"sidecar<br/>readable?"}
@@ -134,14 +134,14 @@ deliberate - a model that fails the same montage twice stops burning tokens.
 
 ## Failure channels
 
-| Failure                                                                             | Who fixes it               | How it surfaces                                                        |
-|-------------------------------------------------------------------------------------|----------------------------|------------------------------------------------------------------------|
-| `provider-settings.model` unset                                                     | User config                | Unchecked `IllegalStateException` naming the property                  |
-| `ANTHROPIC_API_KEY` unset                                                           | User environment           | Unchecked `IllegalStateException` naming the variable                  |
-| Montage image unreadable                                                            | Re-prep the scope          | Unchecked `UncheckedIOException` - the prep dir is broken app output   |
-| Sidecar unreadable                                                                  | Answer at the apply phase  | That montage is skipped; apply reports it as a corrupt sidecar         |
-| Response fails validation twice (attempt + corrective retry)                        | Re-run the cull            | Checked `CullException` naming the montage and both attempts' problems |
-| Transport trouble (429/5xx/timeout) beyond `provider-settings.max-retries` backoffs | Wait / raise the retry cap | The SDK's own exception after its exponential backoff gives up         |
+| Failure                                                                             | Who fixes it                 | How it surfaces                                                        |
+|-------------------------------------------------------------------------------------|------------------------------|------------------------------------------------------------------------|
+| `provider-settings.model` unset                                                     | User config                  | Unchecked `IllegalStateException` naming the property                  |
+| No API key in any credential tier                                                   | Settings, or the environment | Unchecked `IllegalStateException` naming both routes                   |
+| Montage image unreadable                                                            | Re-prep the scope            | Unchecked `UncheckedIOException` - the prep dir is broken app output   |
+| Sidecar unreadable                                                                  | Answer at the apply phase    | That montage is skipped; apply reports it as a corrupt sidecar         |
+| Response fails validation twice (attempt + corrective retry)                        | Re-run the cull              | Checked `CullException` naming the montage and both attempts' problems |
+| Transport trouble (429/5xx/timeout) beyond `provider-settings.max-retries` backoffs | Wait / raise the retry cap   | The SDK's own exception after its exponential backoff gives up         |
 
 ## Scenarios
 

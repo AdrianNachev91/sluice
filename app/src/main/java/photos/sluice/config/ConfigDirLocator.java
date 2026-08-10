@@ -10,10 +10,15 @@ import java.util.Map;
  *
  * <p>Windows resolves under {@code %APPDATA%}, macOS under {@code ~/Library/Application Support},
  * and other platforms follow the XDG base directory convention.
+ *
+ * <p>A map rather than a lookup, unlike the credential tier that reads an override. Every name read
+ * here is one the OS itself sets and spells consistently, so nothing is lost by matching it exactly.
+ * A user-typed name would be the case where that stops being true.
  */
 public final class ConfigDirLocator {
 
     private static final String CONFIG_FILE_NAME = "config.yml";
+    private static final String SECRETS_DIR_NAME = "secrets";
 
     /**
      * Prevents instantiation of this static utility class.
@@ -34,6 +39,18 @@ public final class ConfigDirLocator {
      */
     public static Path configFile(final String osName, final Map<String, String> env) {
         return locate(osName, env).resolve(CONFIG_FILE_NAME);
+    }
+
+    /**
+     * Resolves the directory stored credentials live in, beside the config file rather than inside
+     * it. A config file is meant to be readable and shareable, and a credential is neither.
+     *
+     * @param osName {@link String} the raw OS name (e.g. system property os.name)
+     * @param env a {@link Map} of {@link String} to {@link String} environment variables to resolve paths from
+     * @return {@link Path} the resolved credential directory path
+     */
+    public static Path secretsDir(final String osName, final Map<String, String> env) {
+        return locate(osName, env).resolve(SECRETS_DIR_NAME);
     }
 
     /**

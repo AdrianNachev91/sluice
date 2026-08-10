@@ -40,6 +40,19 @@ class ConfigDirLocatorTest {
         assertThat(dir).isEqualTo(Path.of("/home/pat/.config/sluice"));
     }
 
+    // Credentials sit beside the config file rather than inside it, and the difference is one
+    // character in a path expression. A directory resolved against the file instead of the folder
+    // would only fail at the first save, on a real machine.
+    @Test
+    void secretsGetTheirOwnDirectoryBesideTheConfigFile() {
+        final Map<String, String> env = Map.of("HOME", "/home/pat");
+
+        final Path secrets = ConfigDirLocator.secretsDir("Linux", env);
+
+        assertThat(secrets).isEqualTo(Path.of("/home/pat/.config/sluice/secrets"));
+        assertThat(secrets.getParent()).isEqualTo(ConfigDirLocator.configFile("Linux", env).getParent());
+    }
+
     @Test
     void unknownOsFallsBackToDotConfigLikeLinux() {
         final Path dir = ConfigDirLocator.locate("SomeExoticOS", Map.of("HOME", "/home/pat"));

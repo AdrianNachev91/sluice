@@ -24,6 +24,8 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.SecretId;
+import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
@@ -94,6 +96,10 @@ import java.util.stream.Collectors;
 @Component
 class AnthropicCuller implements VisionCuller {
 
+    // This provider names its own credential rather than reading it from a central registry. A
+    // second API provider then adds its own id instead of editing a shared table.
+    static final SecretId API_KEY = new SecretId("anthropic", "ANTHROPIC_API_KEY");
+
     // The response ceiling, which doubles as a per-call cost cap. Sizing: a verdict runs about
     // 70 tokens, so the largest list a sheet can produce is ~3.5k for a dense 7x7 grid. 8192
     // holds that worst case more than twice over.
@@ -145,12 +151,13 @@ class AnthropicCuller implements VisionCuller {
      * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
      * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
      * @param settings {@link CullSettings} the cull settings
+     * @param secretStore {@link SecretStore} where this provider's API key is stored
      */
     @Autowired
     AnthropicCuller(final CullerPrompt prompt, final ShardCodec shardCodec, final SidecarReader sidecarReader,
-                    final CullSettings settings) {
+                    final CullSettings settings, final SecretStore secretStore) {
         this(prompt, shardCodec, sidecarReader, settings,
-                () -> defaultClient(settings.providerSettings()));
+                () -> defaultClient(settings.providerSettings(), secretStore));
     }
 
     /**
@@ -334,14 +341,14 @@ class AnthropicCuller implements VisionCuller {
      * Package-private so the live verify can wrap the client this builds instead of its own.
      *
      * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
+     * @param secretStore {@link SecretStore} where this provider's API key is stored
      * @return {@link AnthropicClient} the built Anthropic client
      */
-    static AnthropicClient defaultClient(final CullProviderSettings providerSettings) {
-        final String apiKey = System.getenv("ANTHROPIC_API_KEY");
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("Environment variable ANTHROPIC_API_KEY is not set; "
-                    + "the 'anthropic' vision provider needs it to call the API");
-        }
+    static AnthropicClient defaultClient(final CullProviderSettings providerSettings,
+            final SecretStore secretStore) {
+        final String apiKey = secretStore.secret(API_KEY).orElseThrow(() -> new IllegalStateException(
+                "No API key is stored for the 'anthropic' vision provider; add one in Settings, "
+                        + "or set the " + API_KEY.environmentVariable() + " environment variable"));
         final var builder = AnthropicOkHttpClient.builder().apiKey(apiKey);
         final String endpoint = providerSettings.endpoint();
         if (endpoint != null && !endpoint.isBlank()) {

@@ -9,6 +9,8 @@ import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
+import photos.sluice.adapter.secrets.TieredSecretStore;
+import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
@@ -79,5 +81,18 @@ public class AppConfig {
     @Bean
     public SettingsStore settingsStore() {
         return new YamlSettingsStore(ConfigDirLocator.configFile(System.getProperty("os.name"), System.getenv()));
+    }
+
+    /**
+     * Builds the credential store over the tiers this machine offers. The store picks its own
+     * tiers. What this supplies is the environment and the directory they need, which is why the
+     * store is an explicit bean rather than a scanned component.
+     *
+     * @return {@link SecretStore} the credential store bean
+     */
+    @Bean
+    public SecretStore secretStore() {
+        return TieredSecretStore.forMachine(System::getenv,
+                ConfigDirLocator.secretsDir(System.getProperty("os.name"), System.getenv()));
     }
 }

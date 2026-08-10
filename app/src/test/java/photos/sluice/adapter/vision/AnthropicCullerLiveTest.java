@@ -15,6 +15,7 @@ import photos.sluice.adapter.imaging.MontageBuilder;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.adapter.imaging.TileRenderer;
+import photos.sluice.adapter.secrets.TieredSecretStore;
 import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
@@ -64,7 +65,11 @@ import static org.mockito.Mockito.mock;
 // The montage is real: four distinct synthetic photos run through the full imaging pipeline, so the
 // API sees exactly what a production cull sends. Cost per run is a fraction of a cent.
 @EnabledIfEnvironmentVariable(named = "SLUICE_LIVE_CULL", matches = "true")
-@EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = ".+")
+// The key gate wants a value carrying something other than whitespace. A variable holding only
+// spaces counts as unset everywhere else in the app. Matching on it would enable this test and then
+// fail it for want of a key. The pattern matches the whole value, so it has to allow the
+// surrounding whitespace a real key can arrive with rather than demand none.
+@EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = "(?s).*\\S.*")
 class AnthropicCullerLiveTest {
 
     private static final String MODEL = "claude-sonnet-5";
@@ -88,9 +93,11 @@ class AnthropicCullerLiveTest {
         final PrepDir prep = renderRealMontage(root);
         assertThat(prep.entries()).containsExactly("montage-001");
         final CullSettings settings = settings();
-        // Wrapping the production-built client exercises the whole real path: the env-var key
-        // read, the absent endpoint override, and the transport-retry knob.
-        final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings());
+        // Wrapping the production-built client exercises the whole real path: the key read through
+        // the machine's own credential tiers, the absent endpoint override, and the transport-retry
+        // knob. The environment tier answers first, so the file tier's directory is never reached.
+        final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings(),
+                TieredSecretStore.forMachine(System::getenv, root.resolve("secrets")));
         final var culler = new AnthropicCuller(new CullerPrompt(settings),
                 new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real));
 
