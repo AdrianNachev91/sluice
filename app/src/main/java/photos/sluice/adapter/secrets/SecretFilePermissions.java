@@ -1,5 +1,7 @@
 package photos.sluice.adapter.secrets;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,39 +61,63 @@ final class SecretFilePermissions {
         }
         final var acl = Files.getFileAttributeView(file, AclFileAttributeView.class);
         if (acl != null) {
-            return applyOwnerOnlyAcl(acl);
+            return applyOwnerOnlyAcl(acl, processPrincipal(file));
         }
         return false;
     }
 
     /**
-     * Replaces a file's access rules with a single one naming its owner.
+     * Replaces a file's access rules with a single one naming one account.
      *
-     * <p>Replacing the whole list rather than appending is the point. An entry granting the owner
+     * <p>Replacing the whole list rather than appending is the point. An entry granting one account
      * full control means nothing while an inherited entry still grants a wider group.
      *
-     * <p>Package-private rather than private because the principal it refuses cannot be produced on
-     * demand. A filesystem hands over whichever owner a real file has.
+     * <p>The file's own owner is used where it names an account. Where it names a group, the account
+     * running this process is used instead. A Windows token can default new objects to
+     * {@code BUILTIN\Administrators}, which is ordinary on an administrator account and on CI. A
+     * rule granting that group would restrict the file to everyone in it. Refusing there instead
+     * would leave such a machine unable to store a credential at all.
+     *
+     * <p>Package-private rather than private because neither of those owners can be produced on
+     * demand. A filesystem hands over whichever one a real file has.
      *
      * @param acl {@link AclFileAttributeView} the view over the file to restrict
-     * @return boolean true when a single owner-only rule was applied
+     * @param fallback {@link UserPrincipal} the account to name when the owner is a group, or null
+     *         when this platform could not resolve one
+     * @return boolean true when a single rule naming one account was applied
      * @throws IOException when the view rejects the change
      */
-    static boolean applyOwnerOnlyAcl(final AclFileAttributeView acl) throws IOException {
+    static boolean applyOwnerOnlyAcl(final AclFileAttributeView acl,
+            final @Nullable UserPrincipal fallback) throws IOException {
         final UserPrincipal owner = acl.getOwner();
-        // A Windows process whose token names a group as its default owner creates files owned by
-        // that group. Granting a group full control restricts the file to everyone in it, so there
-        // is no owner-only rule to write and this reports the refusal instead.
-        if (owner instanceof GroupPrincipal) {
+        final UserPrincipal grantee = owner instanceof GroupPrincipal ? fallback : owner;
+        if (grantee == null || grantee instanceof GroupPrincipal) {
             return false;
         }
-        acl.setAcl(List.of(ownerFullControl(owner)));
+        acl.setAcl(List.of(ownerFullControl(grantee)));
         // A volume can accept the change and drop it. Reporting a credential as protected when it
         // is not is the one outcome this refusal exists to prevent, so the rule is read back.
         final List<AclEntry> applied = acl.getAcl();
         return applied.size() == 1
                 && applied.getFirst().type() == AclEntryType.ALLOW
-                && applied.getFirst().principal().equals(owner);
+                && applied.getFirst().principal().equals(grantee);
+    }
+
+    /**
+     * Looks up the account this process runs as, for a file whose owner names a group.
+     *
+     * @param file {@link Path} the file whose filesystem resolves the name
+     * @return {@link UserPrincipal} that account, or null when the platform cannot resolve it
+     */
+    private static @Nullable UserPrincipal processPrincipal(final Path file) {
+        try {
+            return file.getFileSystem().getUserPrincipalLookupService()
+                    .lookupPrincipalByName(System.getProperty("user.name"));
+        } catch (final IOException | RuntimeException unresolvable) {
+            // A name the lookup service does not recognise leaves nothing to grant, and the caller
+            // refuses rather than storing a credential it cannot protect.
+            return null;
+        }
     }
 
     /**

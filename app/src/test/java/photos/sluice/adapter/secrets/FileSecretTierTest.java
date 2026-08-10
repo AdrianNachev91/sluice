@@ -12,12 +12,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.FileAttributeView;
 import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.UserPrincipal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -25,7 +25,6 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 // A real directory rather than a fake filesystem. What this tier is for is the state it leaves on
@@ -323,21 +322,24 @@ class FileSecretTierTest {
                             PosixFilePermission.OWNER_WRITE);
         }
 
+        // Deliberately not gated on who owns the file. A process whose token names a group as the
+        // default owner is exactly the case worth running here. Skipping it is what let a build
+        // that could not store a credential at all pass every local run.
         @Test
-        void storesTheCredentialUnderASingleAccessRuleNamingItsOwner(@TempDir final Path secrets)
+        void storesTheCredentialUnderOneAccessRuleNamingOneAccount(@TempDir final Path secrets)
                 throws IOException {
             assumeTrue(supports(secrets, AclFileAttributeView.class),
                     "the filesystem answers with access rules");
-            assumeFalse(ownerOfAFileIn(secrets) instanceof GroupPrincipal,
-                    "this process creates files owned by a group, which no single rule can restrict");
             final var tier = new FileSecretTier(secrets);
 
             tier.write(ANTHROPIC, "sk-synthetic-0001");
 
             final var acl = Files.getFileAttributeView(secrets.resolve(KEY_FILE),
                     AclFileAttributeView.class);
-            assertThat(acl.getAcl()).singleElement()
-                    .satisfies(entry -> assertThat(entry.principal()).isEqualTo(acl.getOwner()));
+            assertThat(acl.getAcl()).singleElement().satisfies(entry -> {
+                assertThat(entry.type()).isEqualTo(AclEntryType.ALLOW);
+                assertThat(entry.principal()).isNotInstanceOf(GroupPrincipal.class);
+            });
         }
     }
 
@@ -415,17 +417,6 @@ class FileSecretTierTest {
     private static boolean supports(final Path directory,
             final Class<? extends FileAttributeView> view) throws IOException {
         return Files.getFileStore(directory).supportsFileAttributeView(view);
-    }
-
-    // Answers who owns a file this process creates in the given directory. A probe file rather than
-    // the credential file, because the assumption it feeds has to be settled before the write runs.
-    private static UserPrincipal ownerOfAFileIn(final Path directory) throws IOException {
-        final Path probe = Files.createTempFile(directory, "owner-probe", ".tmp");
-        try {
-            return Files.getFileAttributeView(probe, AclFileAttributeView.class).getOwner();
-        } finally {
-            Files.deleteIfExists(probe);
-        }
     }
 
     // Fails the read itself rather than the check ahead of it, so the tier's own classification of

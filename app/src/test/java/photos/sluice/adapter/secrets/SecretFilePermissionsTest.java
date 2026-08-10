@@ -26,7 +26,7 @@ class SecretFilePermissionsTest {
         final var owner = new NamedPrincipal("SLUICE\\owner");
         final var view = new RecordingAclView(owner);
 
-        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view)).isTrue();
+        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view, null)).isTrue();
 
         assertThat(view.applied).singleElement().satisfies(entry -> {
             assertThat(entry.principal()).isEqualTo(owner);
@@ -35,25 +35,66 @@ class SecretFilePermissionsTest {
         });
     }
 
+    // A Windows token can name a group as the default owner of everything it creates. That is
+    // ordinary on an administrator account, and it is what the CI runner does. Granting the group would
+    // restrict the file to everyone in it, and refusing would leave that machine unable to store a
+    // credential at all. The account running the process is the one that needs the access.
+    @Test
+    void namesTheProcessAccountWhenTheFileIsOwnedByAGroup() throws IOException {
+        final var view = new RecordingAclView(new NamedGroup("BUILTIN\\Administrators"));
+        final var process = new NamedPrincipal("SLUICE\\runner");
+
+        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view, process)).isTrue();
+
+        assertThat(view.applied).singleElement()
+                .satisfies(entry -> assertThat(entry.principal()).isEqualTo(process));
+    }
+
+    // Nothing is left to grant, so storing a credential this cannot protect is the wrong answer.
+    @Test
+    void refusesAGroupOwnedFileWhenTheProcessAccountCannotBeResolved() throws IOException {
+        final var view = new RecordingAclView(new NamedGroup("BUILTIN\\Administrators"));
+
+        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view, null)).isFalse();
+
+        assertThat(view.applied).isNull();
+    }
+
+    // A lookup service answering with a group rather than an account leaves the same problem one
+    // step later, so it is refused at the same place.
+    @Test
+    void refusesWhenTheResolvedProcessAccountIsItselfAGroup() throws IOException {
+        final var view = new RecordingAclView(new NamedGroup("BUILTIN\\Administrators"));
+
+        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view, new NamedGroup("BUILTIN\\Users")))
+                .isFalse();
+
+        assertThat(view.applied).isNull();
+    }
+
     // A volume can accept an access-rule change and drop it. Reporting the credential as protected
     // then tells the user something untrue about it, which is what the refusal exists to prevent.
     @Test
     void refusesWhenTheRuleDidNotSurviveBeingApplied() throws IOException {
         final var view = new DiscardingAclView(new NamedPrincipal("SLUICE\\owner"));
 
-        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view)).isFalse();
+        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view, null)).isFalse();
     }
 
-    // A Windows process whose token names a group as its default owner creates files owned by that
-    // group. A rule granting it full control would leave every member of the group able to read the
-    // credential, while the app reports the file as protected.
+    // A rule granting a group full control would leave every member of it able to read the
+    // credential, while the app reported the file as protected. The group is never the grantee, no
+    // matter which side of the decision it arrives on.
     @Test
-    void refusesAFileOwnedByAGroupRatherThanGrantingTheGroupFullControl() throws IOException {
-        final var view = new RecordingAclView(new NamedGroup("BUILTIN\\Administrators"));
+    void neverGrantsAGroupFullControl() throws IOException {
+        final var ownedByGroup = new RecordingAclView(new NamedGroup("BUILTIN\\Administrators"));
+        final var ownedByAccount = new RecordingAclView(new NamedPrincipal("SLUICE\\owner"));
 
-        assertThat(SecretFilePermissions.applyOwnerOnlyAcl(view)).isFalse();
+        SecretFilePermissions.applyOwnerOnlyAcl(ownedByGroup, new NamedGroup("BUILTIN\\Users"));
+        SecretFilePermissions.applyOwnerOnlyAcl(ownedByAccount, new NamedGroup("BUILTIN\\Users"));
 
-        assertThat(view.applied).isNull();
+        assertThat(ownedByGroup.applied).isNull();
+        assertThat(ownedByAccount.applied).singleElement()
+                .satisfies(entry -> assertThat(entry.principal()).isNotInstanceOf(GroupPrincipal.class));
     }
 
     private record NamedPrincipal(String name) implements UserPrincipal {
