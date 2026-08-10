@@ -61,11 +61,16 @@ public final class SidecarSweep {
      */
     public List<Path> findOrphaned(final List<Path> remainingMedia, final List<Path> remainingJsonPaths,
                                    final Map<Path, Path> sidecarsByMedia) {
-        final Map<Path, Set<String>> mediaNamesByDir = new HashMap<>();
+        // Raw names are grouped by their own lowercased form, not collapsed into it. A genuine
+        // case-variant collision between two remaining media files then stays visible to
+        // ownedByName, the same reason TakeoutSidecarPairer groups sidecar candidates this way.
+        final Map<Path, Map<String, List<String>>> mediaNamesByDir = new HashMap<>();
         final Set<Path> pairedToRemainingMedia = new HashSet<>();
         for (final Path media : remainingMedia) {
-            mediaNamesByDir.computeIfAbsent(TakeoutSidecarPairer.directoryKeyOf(media), _ -> new HashSet<>())
-                    .add(media.getFileName().toString().toLowerCase(Locale.ROOT));
+            final String fileName = media.getFileName().toString();
+            mediaNamesByDir.computeIfAbsent(TakeoutSidecarPairer.directoryKeyOf(media), _ -> new HashMap<>())
+                    .computeIfAbsent(fileName.toLowerCase(Locale.ROOT), _ -> new ArrayList<>())
+                    .add(fileName);
             final Path paired = sidecarsByMedia.get(media);
             if (paired != null) {
                 pairedToRemainingMedia.add(paired);
@@ -87,21 +92,23 @@ public final class SidecarSweep {
      *
      * @param json {@link Path} the sidecar being judged
      * @param pairedToRemainingMedia a {@link Set} of {@link Path} sidecar paths some remaining media file is paired to
-     * @param mediaNamesByDir a {@link Map} of {@link Path} to {@link Set} of {@link String} lowercased remaining
-     * media file names, keyed by their directory
+     * @param mediaNamesByDir a {@link Map} of {@link Path} to {@link Map} of {@link String} to {@link List} of
+     * {@link String}, each directory's remaining media file names grouped by their own lowercased form
      * @return boolean true if nothing left in the Inbox owns this sidecar
      */
     private static boolean isOrphaned(final Path json, final Set<Path> pairedToRemainingMedia,
-                                      final Map<Path, Set<String>> mediaNamesByDir) {
+                                      final Map<Path, Map<String, List<String>>> mediaNamesByDir) {
         if (pairedToRemainingMedia.contains(json)) {
             return false;
         }
-        final String ownerKeyLower = TakeoutSidecarPairer.ownerKeyOf(json).toLowerCase(Locale.ROOT);
+        final String ownerKey = TakeoutSidecarPairer.ownerKeyOf(json);
+        final String ownerKeyLower = ownerKey.toLowerCase(Locale.ROOT);
         if (!couldHaveBeenASidecar(json, ownerKeyLower)) {
             return false;
         }
-        return mediaNamesByDir.getOrDefault(TakeoutSidecarPairer.directoryKeyOf(json), Set.of()).stream()
-                .noneMatch(mediaName -> ownedByName(mediaName, ownerKeyLower));
+        final Map<String, List<String>> namesInDir =
+                mediaNamesByDir.getOrDefault(TakeoutSidecarPairer.directoryKeyOf(json), Map.of());
+        return !ownedByName(namesInDir, ownerKey, ownerKeyLower);
     }
 
     /**
@@ -122,17 +129,28 @@ public final class SidecarSweep {
     }
 
     /**
-     * Whether one remaining media file's name claims this sidecar. An exact owner-key match always
-     * counts. A prefix match counts only from the truncation length up, where a raw cut of the
-     * media filename is the likely explanation. Below it, a shared opening is coincidence.
+     * Whether some remaining media file's name claims this sidecar. An exact match always counts.
+     * A lone name sharing the owner key's lowercased form is trusted regardless of its own case.
+     * Among several such names, only one matching exactly counts - the same rule
+     * {@code TakeoutSidecarPairer.bestOwnerMatch} applies on the sidecar side of a collision. A
+     * prefix match counts only from the truncation length up. It is checked across every
+     * remaining name in the directory, regardless of its own lowercased bucket. A raw cut of any
+     * of them is an equally likely explanation.
      *
-     * @param mediaNameLower {@link String} one lowercased media file name from the sidecar's own directory
+     * @param namesInDir a {@link Map} of {@link String} to {@link List} of {@link String}, this directory's
+     * remaining media file names grouped by their own lowercased form
+     * @param ownerKey {@link String} the raw owner key derived from the sidecar
      * @param ownerKeyLower {@link String} the lowercased owner key derived from the sidecar
-     * @return boolean true if that media file owns this sidecar
+     * @return boolean true if some remaining media file owns this sidecar
      */
-    private static boolean ownedByName(final String mediaNameLower, final String ownerKeyLower) {
-        return mediaNameLower.equals(ownerKeyLower)
-                || (ownerKeyLower.length() >= MIN_TRUNCATED_OWNER_KEY_LENGTH
-                        && mediaNameLower.startsWith(ownerKeyLower));
+    private static boolean ownedByName(final Map<String, List<String>> namesInDir, final String ownerKey,
+                                       final String ownerKeyLower) {
+        final List<String> candidates = namesInDir.getOrDefault(ownerKeyLower, List.of());
+        if (candidates.size() == 1 || candidates.contains(ownerKey)) {
+            return true;
+        }
+        return ownerKeyLower.length() >= MIN_TRUNCATED_OWNER_KEY_LENGTH
+                && namesInDir.values().stream().flatMap(List::stream)
+                        .anyMatch(name -> name.toLowerCase(Locale.ROOT).startsWith(ownerKeyLower));
     }
 }

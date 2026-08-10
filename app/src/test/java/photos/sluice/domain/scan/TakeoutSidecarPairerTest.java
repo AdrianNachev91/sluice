@@ -112,6 +112,82 @@ class TakeoutSidecarPairerTest {
         assertThat(result.sidecarsByMedia()).containsEntry(media, shorterMatch);
     }
 
+    // Two genuinely distinct media files in one directory, differing only in case - possible only
+    // on a case-sensitive filesystem. Each has its own correctly-cased sidecar. Without the
+    // exact-case preference in bestOwnerMatch, both would silently pair to whichever sidecar
+    // happened to claim the shared lowercased key first.
+    //
+    // Each media file is paired in its own pair() call against the same two sidecars, rather than
+    // both together. The result is read back by filename string, not by Path equality. Path folds
+    // case on Windows even for values that never touch disk. A single call with both case-variant
+    // media as keys, or an equals()-based assertion on the sidecar value, would silently pass
+    // regardless of whether the fix works. Pairing scoping only depends on the sidecar list,
+    // which is identical across both calls, so this still reproduces the same ambiguity
+    // bestOwnerMatch has to resolve.
+    @Test
+    void twoMediaFilesDifferingOnlyInCaseEachPairToTheirOwnSidecar() {
+        final Path lower = Path.of("dir/photo.jpg");
+        final Path upper = Path.of("dir/PHOTO.jpg");
+        final Path lowerJson = Path.of("dir/photo.jpg.json");
+        final Path upperJson = Path.of("dir/PHOTO.jpg.json");
+        final List<Path> bothSidecars = List.of(lowerJson, upperJson);
+
+        final PairingResult lowerResult = this.pairer.pair(List.of(lower), bothSidecars);
+        final PairingResult upperResult = this.pairer.pair(List.of(upper), bothSidecars);
+
+        assertThat(fileNameOf(lowerResult.sidecarsByMedia().get(lower))).isEqualTo("photo.jpg.json");
+        assertThat(fileNameOf(upperResult.sidecarsByMedia().get(upper))).isEqualTo("PHOTO.jpg.json");
+    }
+
+    // A single sidecar whose own casing genuinely differs from its media's - Google's own export
+    // casing is not always consistent. This is the tolerance bestOwnerMatch's lone-candidate
+    // shortcut exists to preserve, distinct from the ambiguous multi-candidate case above.
+    @Test
+    void aSingleSidecarWhoseCasingDiffersFromItsMediaStillPairs() {
+        final Path media = Path.of("dir/IMG_1234.JPG");
+        final Path json = Path.of("dir/img_1234.jpg.json");
+
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(json));
+
+        assertThat(result.sidecarsByMedia()).containsEntry(media, json);
+    }
+
+    // Two sidecars naming the exact same media file, differing only in their own suffix. Both
+    // candidates' raw owner keys equal the media filename exactly, so bestOwnerMatch's
+    // exact-match loop finds a hit either way. Which one is arbitrary, and that is fine, since
+    // both name the identical photo.
+    @Test
+    void twoDifferentlySuffixedSidecarsForOnePhotoStillPairSomeSidecar() {
+        final Path media = Path.of("dir/IMG_1234.jpg");
+        final Path firstVariant = Path.of("dir/IMG_1234.jpg.json");
+        final Path secondVariant = Path.of("dir/IMG_1234.jpg.supplemental-metadata.json");
+
+        final PairingResult result = this.pairer.pair(List.of(media), List.of(firstVariant, secondVariant));
+
+        assertThat(result.sidecarsByMedia()).containsKey(media);
+        assertThat(result.sidecarsByMedia().get(media)).isIn(firstVariant, secondVariant);
+    }
+
+    // Same case-variant scenario as above, but routed through the prefix fallback rather than an
+    // exact owner-key match. A non-standard suffix on both sidecars means ownerKeyOf doesn't
+    // recognize either exactly, so this exercises shortestStartingWith's own exact-case
+    // preference instead of bestOwnerMatch's. Two separate pair() calls and a filename-string
+    // read-back, for the same Windows Path-equality reason as the test above.
+    @Test
+    void prefixFallbackPrefersTheExactCaseMatchOverACaseFoldedOne() {
+        final Path lower = Path.of("dir/photo.jpg");
+        final Path upper = Path.of("dir/PHOTO.jpg");
+        final Path lowerJson = Path.of("dir/photo.jpg.someextra.json");
+        final Path upperJson = Path.of("dir/PHOTO.jpg.someextra.json");
+        final List<Path> bothSidecars = List.of(lowerJson, upperJson);
+
+        final PairingResult lowerResult = this.pairer.pair(List.of(lower), bothSidecars);
+        final PairingResult upperResult = this.pairer.pair(List.of(upper), bothSidecars);
+
+        assertThat(fileNameOf(lowerResult.sidecarsByMedia().get(lower))).isEqualTo("photo.jpg.someextra.json");
+        assertThat(fileNameOf(upperResult.sidecarsByMedia().get(upper))).isEqualTo("PHOTO.jpg.someextra.json");
+    }
+
     @Test
     void unmatchedMediaFallsThroughUnpaired() {
         final Path media = Path.of("dir/IMG_5678.jpg");
@@ -201,5 +277,9 @@ class TakeoutSidecarPairerTest {
         // owner key stops naming a media file and the sweep has to leave the JSON alone.
         assertThat(TakeoutSidecarPairer.looksLikeMediaSidecar(
                 Path.of("dir/VeryLongOriginalPhotoFilenameFromGoogleExpo.json"))).isFalse();
+    }
+
+    private static String fileNameOf(final Path path) {
+        return path.getFileName().toString();
     }
 }

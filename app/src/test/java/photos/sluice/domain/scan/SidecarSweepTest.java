@@ -184,6 +184,31 @@ class SidecarSweepTest {
                 .isEmpty();
     }
 
+    // Two genuinely distinct media files differ only in case, both still present. A third,
+    // already-unpaired sidecar's owner key shares their lowercased form but matches neither
+    // exactly - its own media departed separately. Only a lone remaining candidate gets the
+    // lowercased tolerance; with two, only an exact match keeps a sidecar alive.
+    @Test
+    void aSidecarMatchingNeitherOfTwoCaseVariantSiblingsExactlyIsOrphaned() {
+        final Path lowerMedia = Path.of("Inbox", "photo.jpg");
+        final Path upperMedia = Path.of("Inbox", "PHOTO.jpg");
+        final Path orphanJson = Path.of("Inbox", "Photo.jpg.json");
+
+        assertThat(this.sweep.findOrphaned(List.of(lowerMedia, upperMedia), List.of(orphanJson), Map.of()))
+                .containsExactly(orphanJson);
+    }
+
+    // The counterpart: among the same two siblings, a sidecar whose owner key matches one of them
+    // exactly is still recognized. It doesn't need a live pairing to tell the sweep so directly.
+    @Test
+    void aSidecarMatchingOneOfTwoCaseVariantSiblingsExactlyIsKeptEvenWithoutALivePairing() {
+        final Path lowerMedia = Path.of("Inbox", "photo.jpg");
+        final Path upperMedia = Path.of("Inbox", "PHOTO.jpg");
+        final Path json = Path.of("Inbox", "PHOTO.jpg.json");
+
+        assertThat(this.sweep.findOrphaned(List.of(lowerMedia, upperMedia), List.of(json), Map.of())).isEmpty();
+    }
+
     @Test
     void multipleSidecarsAreEvaluatedIndependently() {
         final Path keptMedia = Path.of("Inbox", "keep.jpg");

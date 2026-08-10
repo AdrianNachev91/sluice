@@ -75,14 +75,16 @@ public final class TakeoutSidecarPairer {
         final Map<Path, List<Path>> jsonsByDir = jsonPaths.stream()
                 .collect(Collectors.groupingBy(TakeoutSidecarPairer::directoryKeyOf, LinkedHashMap::new,
                         Collectors.toList()));
-        final Map<Path, Map<String, Path>> ownersByDir = new HashMap<>();
+        final Map<Path, Map<String, List<Path>>> ownersByDir = new HashMap<>();
         jsonsByDir.forEach((dir, sidecars) -> {
-            final Map<String, Path> owners = new LinkedHashMap<>();
+            // Every sidecar deriving a given lowercased key is kept, not just the first. Two
+            // sidecars can land on one key for two different reasons. Either they are genuinely
+            // differently-suffixed sidecars for one photo, or two distinct media files whose
+            // names differ only in case. Only bestOwnerMatch, which sees the queried filename's
+            // own case, can tell those apart.
+            final Map<String, List<Path>> owners = new LinkedHashMap<>();
             for (final Path json : sidecars) {
-                // First sidecar to claim an owner key wins; a second sidecar deriving the same
-                // key (rare, e.g. two differently-suffixed sidecars for one photo) is ignored
-                // rather than overwriting the first match.
-                owners.putIfAbsent(ownerKeyOf(json).toLowerCase(Locale.ROOT), json);
+                owners.computeIfAbsent(ownerKeyOf(json).toLowerCase(Locale.ROOT), _ -> new ArrayList<>()).add(json);
             }
             ownersByDir.put(dir, owners);
         });
@@ -183,26 +185,54 @@ public final class TakeoutSidecarPairer {
      * Tries the media's own filename first, then its edited-suffix-stripped form - an edited
      * copy has no sidecar of its own, so it must be looked up under its original's key instead.
      *
-     * @param owners a {@link Map} of {@link String} to {@link Path} owner key to sidecar path index for the media's
-     * directory
+     * @param owners a {@link Map} of {@link String} to {@link List} of {@link Path}, owner key to the sidecars
+     * deriving it, for the media's directory
      * @param mediaFileName {@link String} the media file's own filename
      * @return {@link Path} the matching sidecar, if any
      */
-    private static @Nullable Path matchByOwnerKey(final @Nullable Map<String, Path> owners,
+    private static @Nullable Path matchByOwnerKey(final @Nullable Map<String, List<Path>> owners,
                                                   final String mediaFileName) {
         if (owners == null) {
             return null;
         }
-        Path hit = owners.get(mediaFileName.toLowerCase(Locale.ROOT));
+        Path hit = bestOwnerMatch(owners.get(mediaFileName.toLowerCase(Locale.ROOT)), mediaFileName);
         if (hit != null) {
             return hit;
         }
         final Matcher edited = EDITED.matcher(mediaFileName);
         if (edited.matches()) {
             final String editedBase = edited.group(1) + "." + edited.group(2);
-            hit = owners.get(editedBase.toLowerCase(Locale.ROOT));
+            hit = bestOwnerMatch(owners.get(editedBase.toLowerCase(Locale.ROOT)), editedBase);
         }
         return hit;
+    }
+
+    /**
+     * Picks the right sidecar among those sharing one lowercased owner key. A lone candidate is
+     * returned regardless of its own case - the existing tolerance for a sidecar whose casing
+     * genuinely differs from its media's. Among several, the one whose raw owner key matches the
+     * queried filename exactly wins, which is what tells two distinct case-variant media files
+     * apart. Genuine ambiguity - several candidates, none matching exactly - returns null rather
+     * than guessing, so the caller's prefix fallback gets a chance to resolve it instead.
+     *
+     * @param candidates a {@link List} of {@link Path} sidecars sharing one lowercased owner key, or null if none
+     * @param queriedFileName {@link String} the exact filename being looked up (media name or its edited-stripped
+     * form)
+     * @return {@link Path} the matching sidecar, if any
+     */
+    private static @Nullable Path bestOwnerMatch(final @Nullable List<Path> candidates, final String queriedFileName) {
+        if (candidates == null) {
+            return null;
+        }
+        if (candidates.size() == 1) {
+            return candidates.getFirst();
+        }
+        for (final Path json : candidates) {
+            if (ownerKeyOf(json).equals(queriedFileName)) {
+                return json;
+            }
+        }
+        return null;
     }
 
     /**
@@ -268,18 +298,36 @@ public final class TakeoutSidecarPairer {
     /**
      * Among sidecars whose base name starts with this prefix, the shortest is the closest match
      * to the prefix itself - a longer one is more likely to be an unrelated sidecar that merely
-     * happens to share the same leading characters.
+     * happens to share the same leading characters. An exact-case match is preferred over a
+     * case-folded one, so two sidecars for case-variant media in one directory each reach their
+     * own. Case-folded matching still runs when nothing matches exactly, which is what keeps the
+     * existing tolerance for a sidecar whose own casing differs from its media's.
      *
      * @param dirSidecars a {@link List} of {@link Path} sidecar paths in the media's directory
      * @param prefix {@link String} the prefix to match sidecar base names against
      * @return {@link Path} the shortest matching sidecar, if any
      */
     private static @Nullable Path shortestStartingWith(final List<Path> dirSidecars, final String prefix) {
+        final Path exact = shortestStartingWith(dirSidecars, prefix, false);
+        return exact != null ? exact : shortestStartingWith(dirSidecars, prefix, true);
+    }
+
+    /**
+     * The single-pass search {@link #shortestStartingWith(List, String)} runs twice, once per
+     * case-sensitivity setting.
+     *
+     * @param dirSidecars a {@link List} of {@link Path} sidecar paths in the media's directory
+     * @param prefix {@link String} the prefix to match sidecar base names against
+     * @param ignoreCase boolean whether the prefix comparison folds case
+     * @return {@link Path} the shortest matching sidecar, if any
+     */
+    private static @Nullable Path shortestStartingWith(final List<Path> dirSidecars, final String prefix,
+                                                        final boolean ignoreCase) {
         Path best = null;
         int bestLength = Integer.MAX_VALUE;
         for (final Path json : dirSidecars) {
             final String base = stripJsonExtension(json.getFileName().toString());
-            if (base.length() < bestLength && base.regionMatches(true, 0, prefix, 0, prefix.length())) {
+            if (base.length() < bestLength && base.regionMatches(ignoreCase, 0, prefix, 0, prefix.length())) {
                 best = json;
                 bestLength = base.length();
             }
