@@ -14,8 +14,9 @@ import java.util.function.Supplier;
  * binding here, or has one that will not load, gets no keyring tier at all. The store above then
  * falls through to the protected file. That is a working install rather than a degraded one.
  *
- * <p>Answering with nothing is what lets a platform's binding land on its own. Until it does, that
- * platform behaves exactly as it did before any binding existed.
+ * <p>All three desktop platforms have a binding. What still answers with nothing is a platform none
+ * is written for, a BSD or a Solaris, and a machine whose own platform's library will not load.
+ * Both keep their credential in the protected file.
  *
  * <p>The operating system's name arrives from the caller, and the reading of it happens here. An
  * adapter cannot reach the code that locates the config directory, so sharing a predicate with it
@@ -46,6 +47,9 @@ final class PlatformKeyring {
         }
         if (isLinux(osName)) {
             return linuxSecretService().map(LinuxSecretServiceTier::new);
+        }
+        if (isMac(osName)) {
+            return macKeychain().map(MacKeychainTier::new);
         }
         return Optional.empty();
     }
@@ -78,6 +82,20 @@ final class PlatformKeyring {
     }
 
     /**
+     * Whether the given operating system name is a macOS one.
+     *
+     * <p>The JVM reports {@code Mac OS X} there, and has done across every release this ships to.
+     * The version rides in a separate property rather than in this string, so the name has stayed
+     * put while the product name changed around it.
+     *
+     * @param osName {@link String} the raw OS name (e.g. system property os.name)
+     * @return boolean true when the name is a macOS one
+     */
+    static boolean isMac(final String osName) {
+        return osName.toLowerCase(Locale.ROOT).contains("mac");
+    }
+
+    /**
      * Binds the Windows Credential Manager, or answers with nothing where this machine has none.
      *
      * @return an {@link Optional} of {@link WindowsCredentialManager}, empty where this machine has
@@ -97,6 +115,17 @@ final class PlatformKeyring {
      */
     private static Optional<LinuxSecretService> linuxSecretService() {
         return bindOrExplain(LibsecretService::open);
+    }
+
+    /**
+     * Binds the macOS keychain through Security.framework, or answers with nothing where this
+     * machine will not load it.
+     *
+     * @return an {@link Optional} of {@link MacKeychain}, empty where this machine has no keychain
+     *         to bind
+     */
+    private static Optional<MacKeychain> macKeychain() {
+        return bindOrExplain(SecurityFrameworkKeychain::open);
     }
 
     /**

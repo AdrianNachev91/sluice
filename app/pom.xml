@@ -218,6 +218,18 @@
                  property of the native call and does not survive the seam. Every other decision
                  stays in the tier. -->
             <exclude>photos/sluice/adapter/secrets/LibsecretService.class</exclude>
+            <!-- The second such exception, and the same shape as the one above. The macOS binding
+                 rules that an entry the keychain matched and then produced no bytes for is a
+                 failure. That ruling has to sit here, because the pairing of a status code with an
+                 empty result is a property of the native call and does not survive the seam.
+                 The second line is for this binding's nested types, which compile to their own
+                 class files and so are not covered by the first. It is the only binding with any.
+                 The gate stays green without it, since the rule below measures the whole bundle and
+                 absorbs two small classes. Kept anyway: they are exactly as uncoverable off macOS
+                 as their enclosing class, and leaving them in would dilute the ratio rather than
+                 be excluded by it. -->
+            <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain.class</exclude>
+            <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain$*.class</exclude>
           </excludes>
         </configuration>
         <executions>

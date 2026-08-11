@@ -39,8 +39,22 @@ class PlatformKeyringTest {
         assertThat(PlatformKeyring.isLinux(osName)).isFalse();
     }
 
-    // A platform with no binding yet gets no keyring tier, and the store above falls through to the
-    // protected file. This is the answer every platform gives until its own binding lands.
+    // The JVM has reported "Mac OS X" across every release this ships to, whatever the product has
+    // been called meanwhile. The version rides in a separate property.
+    @ParameterizedTest
+    @ValueSource(strings = {"Mac OS X", "mac os x"})
+    void recognisesMac(final String osName) {
+        assertThat(PlatformKeyring.isMac(osName)).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Windows 10", "Linux", "FreeBSD", "SunOS", "AIX"})
+    void recognisesEveryOtherPlatformAsNotMac(final String osName) {
+        assertThat(PlatformKeyring.isMac(osName)).isFalse();
+    }
+
+    // A platform none of the three bindings is written for gets no keyring tier, and the store above
+    // falls through to the protected file. That is a working install rather than a degraded one.
     @Test
     void offersNoKeyringForAPlatformWithNoBinding() {
         assertThat(PlatformKeyring.forThisMachine("FreeBSD")).isEmpty();
@@ -80,5 +94,24 @@ class PlatformKeyringTest {
     @DisabledOnOs(OS.LINUX)
     void answersWithNothingWhenLibsecretIsNotOnThisMachine() {
         assertThat(PlatformKeyring.forThisMachine("Linux")).isEmpty();
+    }
+
+    // Every Mac carries Security.framework, so this asks whether the binding resolves every name it
+    // reads out of it. A missing symbol answers with nothing here rather than failing, which would
+    // leave the tier silently absent on the one platform it was written for.
+    @Test
+    @EnabledOnOs(OS.MAC)
+    void offersTheKeychainOnMac() {
+        assertThat(PlatformKeyring.forThisMachine(System.getProperty("os.name")))
+                .containsInstanceOf(MacKeychainTier.class);
+    }
+
+    // The same fact for the macOS binding, and the one that would have caught a platform-specific
+    // value resolved while the class loads. Such a failure is an Error rather than an exception,
+    // so it would escape the selector's own handling and kill the store instead of degrading it.
+    @Test
+    @DisabledOnOs(OS.MAC)
+    void answersWithNothingWhenSecurityFrameworkIsNotOnThisMachine() {
+        assertThat(PlatformKeyring.forThisMachine("Mac OS X")).isEmpty();
     }
 }
