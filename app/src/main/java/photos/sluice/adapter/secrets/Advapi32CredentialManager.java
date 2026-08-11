@@ -228,8 +228,9 @@ final class Advapi32CredentialManager implements WindowsCredentialManager {
      */
     private static SecretStoreException failed(final String operation, final String target,
             final int error) {
-        return new SecretStoreException("The Windows Credential Manager refused to " + operation
-                + " the entry '" + target + "', with error code " + error);
+        return new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                "The Windows Credential Manager refused to " + operation
+                        + " the entry '" + target + "', with error code " + error);
     }
 
     /**
@@ -373,7 +374,7 @@ final class Advapi32CredentialManager implements WindowsCredentialManager {
      * @return {@link SecretStoreException} the failure to report
      */
     private static SecretStoreException binding(final Throwable cause) {
-        return new SecretStoreException(
+        return new SecretStoreException(SecretStoreException.Tier.KEYRING,
                 "Sluice's binding to the Windows Credential Manager is built wrong and could not be "
                         + "called", cause);
     }

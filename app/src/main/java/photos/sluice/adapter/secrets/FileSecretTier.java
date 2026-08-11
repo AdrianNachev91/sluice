@@ -67,8 +67,9 @@ class FileSecretTier implements WritableSecretTier {
         } catch (final NoSuchFileException _) {
             return Optional.empty();
         } catch (final IOException e) {
-            throw new SecretStoreException("Reading the credential for provider '" + id.provider()
-                    + "' from " + file + " failed", e);
+            throw new SecretStoreException(SecretStoreException.Tier.FILE,
+                    "Reading the credential for provider '" + id.provider()
+                            + "' from " + file + " failed", e);
         }
         // Stripped on the way out. Nothing stops a user creating this file by hand, and the ordinary
         // ways of doing that append a newline. That newline would reach the provider as part of the
@@ -112,16 +113,17 @@ class FileSecretTier implements WritableSecretTier {
             // never lands at all.
             final boolean restricted = this.restrict(temporary);
             if (!restricted) {
-                throw new SecretStoreException("The filesystem at " + this.directory
-                        + " cannot restrict a file to its owner, so the credential for provider '"
-                        + id.provider() + "' was not stored");
+                throw new SecretStoreException(SecretStoreException.Tier.FILE,
+                        "The filesystem at " + this.directory
+                                + " cannot restrict a file to its owner, so the credential for provider '"
+                                + id.provider() + "' was not stored");
             }
             this.writeFile(temporary, secret);
             // An atomic rename replaces whatever the name already held. A plain move is allowed by
             // its own contract to copy, which can leave a partial credential at the final name.
             Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE);
         } catch (final IOException e) {
-            throw new SecretStoreException(
+            throw new SecretStoreException(SecretStoreException.Tier.FILE,
                     "Could not store the credential for provider '" + id.provider() + "' at " + file, e);
         } finally {
             discard(temporary);
@@ -134,7 +136,7 @@ class FileSecretTier implements WritableSecretTier {
         try {
             this.deleteFile(file);
         } catch (final IOException e) {
-            throw new SecretStoreException(
+            throw new SecretStoreException(SecretStoreException.Tier.FILE,
                     "Could not clear the credential for provider '" + id.provider() + "' at " + file, e);
         }
     }

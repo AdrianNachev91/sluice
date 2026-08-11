@@ -101,7 +101,7 @@ public class TieredSecretStore implements SecretStore {
         final WritableSecretTier target = this.writable.stream()
                 .filter(WritableSecretTier::available)
                 .findFirst()
-                .orElseThrow(() -> new SecretStoreException(
+                .orElseThrow(() -> new SecretStoreException(SecretStoreException.Tier.STORE,
                         "No tier on this machine can store the credential for provider '"
                                 + id.provider() + "'"));
         target.write(id, stored);
@@ -134,8 +134,9 @@ public class TieredSecretStore implements SecretStore {
      */
     private static SecretStoreException clearingFailed(final SecretId id,
             final List<RuntimeException> failures) {
-        final var failure = new SecretStoreException("The credential for provider '" + id.provider()
-                + "' was not cleared from every tier that can hold one, so it may still answer a read");
+        final var failure = new SecretStoreException(SecretStoreException.Tier.STORE,
+                "The credential for provider '" + id.provider()
+                        + "' was not cleared from every tier that can hold one, so it may still answer a read");
         failures.forEach(failure::addSuppressed);
         return failure;
     }

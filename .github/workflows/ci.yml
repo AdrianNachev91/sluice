@@ -33,6 +33,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # A green run takes about three minutes. The ceiling is here because a native credential-store
+    # call can hang rather than fail, and GitHub's own default would let one hold a runner for six
+    # hours. Generous against the real duration, so an ordinary slow run is never cut short.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -54,6 +58,26 @@ jobs:
         # dependency; the HEVC decoder plugin HEIC needs is merely suggested, so heif-convert
         # silently fails on real HEIC input unless it's installed explicitly too.
         run: sudo apt-get update && sudo apt-get install -y libheif-examples libheif-plugin-libde265
+
+      # The Linux keyring tests need a real Secret Service on a session bus, and a headless runner
+      # has neither. Start both: a private D-Bus session, then gnome-keyring's secrets daemon
+      # unlocked with a throwaway password. Both daemonize and outlive the step, and the bus
+      # address is exported so the test step's JVM finds the service. The secret-tool round-trip
+      # proves the service answers before Maven runs, so a broken daemon fails right here with its
+      # own message instead of surfacing as an obscure Java test failure.
+      - name: Start a Secret Service (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          # Its own update, rather than leaning on the libheif step above having run one. Both
+          # steps are Linux-only today, so the ordering happens to work; nothing enforces it.
+          sudo apt-get update
+          sudo apt-get install -y gnome-keyring libsecret-1-0 libsecret-tools dbus-x11
+          eval "$(dbus-launch --sh-syntax)"
+          eval "$(printf 'sluice-ci\n' | gnome-keyring-daemon --unlock --replace --components=secrets)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          printf 'smoke' | secret-tool store --label='Sluice CI smoke test' sluice-ci-smoke check
+          test "$(secret-tool lookup sluice-ci-smoke check)" = 'smoke'
+          secret-tool clear sluice-ci-smoke check
 
       - name: Install libheif CLI (Windows)
         if: runner.os == 'Windows'
@@ -87,6 +111,9 @@ jobs:
   build-macos:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: macos-latest
+    # Same ceiling as the matrix above, and it matters more here: this runner bills at ten times
+    # its wall-clock against the monthly allowance.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 

@@ -212,6 +212,12 @@
                  live in the tier and the selector, inside the gate. A binding's own proof is its
                  round-trip test against the real credential store. -->
             <exclude>photos/sluice/adapter/secrets/Advapi32CredentialManager.class</exclude>
+            <!-- One deliberate exception to "decides nothing", named rather than glossed over.
+                 LibsecretService.write rules that a store reporting neither success nor an error
+                 is a failure. That ruling has to sit here, because the silence it reads is a
+                 property of the native call and does not survive the seam. Every other decision
+                 stays in the tier. -->
+            <exclude>photos/sluice/adapter/secrets/LibsecretService.class</exclude>
           </excludes>
         </configuration>
         <executions>

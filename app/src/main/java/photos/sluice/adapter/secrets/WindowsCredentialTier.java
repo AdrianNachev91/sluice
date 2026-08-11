@@ -36,8 +36,15 @@ final class WindowsCredentialTier implements WritableSecretTier {
      * The entry name the availability probe reads. Nothing ever stores it, so a healthy credential
      * store answers that it holds no such entry, and that answer is the proof being sought.
      *
-     * <p>Capitalised so no provider can ever name it. A provider id is lower case by the rule that
-     * validates one, which makes this name unreachable rather than merely unlikely.
+     * <p>Capitalised so this app can never name it itself. A provider id is lower case by the rule
+     * that validates one, which puts this name out of reach rather than merely making it unlikely.
+     *
+     * <p>Nothing reserves it against other applications, and the credential store offers no way to
+     * do so. Entries live in one flat namespace per account, and the prefix on this app's names is
+     * a convention rather than something enforced. What that costs is bounded. An entry stored by
+     * something else under this exact name would be read and then discarded, because the probe
+     * judges whether the call worked and never looks at what came back. So a collision reads a
+     * stranger's credential into memory for an instant. It cannot produce a wrong answer.
      */
     private static final String PROBE_TARGET = TARGET_PREFIX + "AvailabilityProbe";
 

@@ -352,13 +352,15 @@ class WindowsCredentialTierTest {
 
         private void refuseIfBroken() {
             if (this.refusing) {
-                throw new SecretStoreException("this credential store refuses every call");
+                throw new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                        "this credential store refuses every call");
             }
         }
 
         private void refuseIfNamed(final String target) {
             if (this.refusedNames.contains(target)) {
-                throw new SecretStoreException("this credential store cannot read " + target);
+                throw new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                        "this credential store cannot read " + target);
             }
         }
     }

@@ -97,10 +97,6 @@ class Advapi32CredentialManagerTest {
         this.credentials.delete(NEVER_STORED);
     }
 
-    // The other half of the error handling. Every case above ends in success or in the one code
-    // that means absence, so none of them reaches the code reporting a refusal. A binding
-    // mishandling every other code would still pass them all.
-    //
     // An oversized secret is the refusal a write can be given on demand. Windows caps a credential
     // blob at 2560 bytes and rejects a larger one outright. The exact code is not asserted, because
     // what this proves is that a refusal arrives as a failure rather than as silence.
@@ -112,7 +108,11 @@ class Advapi32CredentialManagerTest {
         assertThatThrownBy(() -> this.credentials.write(TARGET, USER_NAME, oversized))
                 .isInstanceOf(SecretStoreException.class)
                 .hasMessageContaining(TARGET)
-                .hasMessageContaining("error code");
+                .hasMessageContaining("error code")
+                // A surface wording a credential failure branches on the tier field rather than
+                // on message prose, so the field is part of what this binding promises.
+                .satisfies(thrown -> assertThat(((SecretStoreException) thrown).tier())
+                        .isEqualTo(SecretStoreException.Tier.KEYRING));
     }
 
     // A read and a removal need their own, because they route a refusal through the code that first

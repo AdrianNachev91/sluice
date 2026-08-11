@@ -113,7 +113,11 @@ class FileSecretTierTest {
             assertThatThrownBy(() -> tier.read(ANTHROPIC))
                     .isInstanceOf(SecretStoreException.class)
                     .hasMessageContaining("anthropic")
-                    .hasCauseInstanceOf(IOException.class);
+                    .hasCauseInstanceOf(IOException.class)
+                    // A surface wording a credential failure branches on the tier field rather
+                    // than on message prose, so the field is part of what this tier promises.
+                    .satisfies(thrown -> assertThat(((SecretStoreException) thrown).tier())
+                            .isEqualTo(SecretStoreException.Tier.FILE));
         }
 
         // A secrets directory that lost its execute bit, or a file whose access rules stop naming

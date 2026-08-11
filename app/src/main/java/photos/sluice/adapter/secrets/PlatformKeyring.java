@@ -1,7 +1,11 @@
 package photos.sluice.adapter.secrets;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Picks the credential store this machine's operating system offers, where it offers one.
@@ -21,6 +25,8 @@ import java.util.Optional;
  */
 final class PlatformKeyring {
 
+    private static final Logger log = LoggerFactory.getLogger(PlatformKeyring.class);
+
     /**
      * Prevents instantiation of this static utility class.
      */
@@ -37,6 +43,9 @@ final class PlatformKeyring {
     static Optional<WritableSecretTier> forThisMachine(final String osName) {
         if (isWindows(osName)) {
             return windowsCredentialManager().map(WindowsCredentialTier::new);
+        }
+        if (isLinux(osName)) {
+            return linuxSecretService().map(LinuxSecretServiceTier::new);
         }
         return Optional.empty();
     }
@@ -56,25 +65,60 @@ final class PlatformKeyring {
     }
 
     /**
+     * Whether the given operating system name is a Linux one.
+     *
+     * <p>The JVM reports plain {@code Linux} there, with no release riding along. The substring
+     * check matches how the other platforms are read rather than being needed for variety.
+     *
+     * @param osName {@link String} the raw OS name (e.g. system property os.name)
+     * @return boolean true when the name is a Linux one
+     */
+    static boolean isLinux(final String osName) {
+        return osName.toLowerCase(Locale.ROOT).contains("linux");
+    }
+
+    /**
      * Binds the Windows Credential Manager, or answers with nothing where this machine has none.
-     *
-     * <p>Turning a refusal into an absent tier is this class's decision rather than the binding's.
-     * The binding reports what the machine did, and what that means is the question this class
-     * exists to answer.
-     *
-     * <p>The catch is wider than the two causes worth naming, and cannot be narrowed by type. A
-     * function descriptor written wrong here throws the same exception an absent library does. The
-     * round-trip test is what stops that shipping as a silent downgrade to the file tier. It binds
-     * the credential store directly rather than through this method, so a wrong descriptor fails the
-     * build instead of quietly reducing that test to nothing.
      *
      * @return an {@link Optional} of {@link WindowsCredentialManager}, empty where this machine has
      *         no Windows Credential Manager to bind
      */
     private static Optional<WindowsCredentialManager> windowsCredentialManager() {
+        return bindOrExplain(Advapi32CredentialManager::open);
+    }
+
+    /**
+     * Binds the Secret Service through libsecret, or answers with nothing where this machine has
+     * none. A Linux install without a desktop keyring is ordinary, a server most of all. Such a
+     * machine keeps its credential in the protected file rather than being a broken one.
+     *
+     * @return an {@link Optional} of {@link LinuxSecretService}, empty where this machine has no
+     *         Secret Service to bind
+     */
+    private static Optional<LinuxSecretService> linuxSecretService() {
+        return bindOrExplain(LibsecretService::open);
+    }
+
+    /**
+     * Binds a platform's credential store, or answers with nothing and says why.
+     *
+     * <p>The reason is recorded rather than swallowed, because the ways a binding fails are worth
+     * telling apart and only the failure itself knows which happened. A machine without the
+     * library reports that it could not be loaded. An installation too old to carry a function
+     * this app needs reports which symbol it lacks. That is the difference between "no keyring
+     * here" and "your keyring is older than this app supports". Both leave the machine on the
+     * protected file, which works, so this is a diagnosis rather than a fault.
+     *
+     * @param binding a {@link Supplier} that binds one platform's store, or throws
+     * @param <T> the bound store's own type
+     * @return an {@link Optional} of the bound store, empty where this machine has none
+     */
+    private static <T> Optional<T> bindOrExplain(final Supplier<T> binding) {
         try {
-            return Optional.of(Advapi32CredentialManager.open());
+            return Optional.of(binding.get());
         } catch (final IllegalArgumentException | UnsatisfiedLinkError absent) {
+            log.info("Could not bind a credential store on this machine, so credentials go to the"
+                    + " protected file instead. Reason: {}", absent.getMessage());
             return Optional.empty();
         }
     }

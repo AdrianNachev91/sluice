@@ -186,7 +186,11 @@ class TieredSecretStoreTest {
 
             assertThatThrownBy(() -> store.save(ANTHROPIC, "fresh"))
                     .isInstanceOf(SecretStoreException.class)
-                    .hasMessageContaining("anthropic");
+                    .hasMessageContaining("anthropic")
+                    // No single tier failed here, and a surface wording the failure must not name
+                    // one. The tier field is what it branches on, so the field is the claim.
+                    .satisfies(thrown -> assertThat(((SecretStoreException) thrown).tier())
+                            .isEqualTo(SecretStoreException.Tier.STORE));
         }
     }
 
@@ -243,7 +247,11 @@ class TieredSecretStoreTest {
             assertThatThrownBy(() -> store.remove(ANTHROPIC))
                     .isInstanceOf(SecretStoreException.class)
                     .hasMessageContaining("anthropic")
-                    .satisfies(thrown -> assertThat(thrown.getSuppressed()).hasSize(1));
+                    .satisfies(thrown -> assertThat(thrown.getSuppressed()).hasSize(1))
+                    // The refusing tier's own failure rides along suppressed. The wrapper spans
+                    // tiers, so it reports the store's composition rather than the tier that threw.
+                    .satisfies(thrown -> assertThat(((SecretStoreException) thrown).tier())
+                            .isEqualTo(SecretStoreException.Tier.STORE));
             assertThat(file.erased).isTrue();
         }
 
@@ -279,7 +287,7 @@ class TieredSecretStoreTest {
     @Nested
     class ForMachine {
 
-        private static final String NO_KEYRING = "Linux";
+        private static final String NO_KEYRING = "FreeBSD";
 
         @Test
         void storesThroughTheFileTierInTheDirectoryItWasHanded(@TempDir final Path secrets) {
@@ -316,8 +324,14 @@ class TieredSecretStoreTest {
         }
 
         // Where the platform does offer one, the save has to reach it rather than the file. This is
-        // the one case in this class whose answer depends on the machine underneath it, so it runs
-        // only where that answer is Windows.
+        // the one case in this class whose answer depends on the machine underneath it. So it runs
+        // only on the platforms whose credential store has a binding.
+        //
+        // On Windows a binding implies a working store. On Linux it does not. A machine can carry
+        // libsecret with no Secret Service on the bus. The save then lands in the file tier and
+        // fails the assertion below. That is deliberate rather than overlooked, and it matches the
+        // stance the binding's own test takes. A Linux machine expected to carry a keyring and not
+        // carrying one should go red rather than quietly skip.
         //
         // It writes into the real credential store of whoever runs it, and then clears what it
         // wrote. Going through the tier means the entry name is built from a provider id, and those
@@ -330,7 +344,7 @@ class TieredSecretStoreTest {
         // nobody has rather than destroying a credential on one somebody does. That is not the
         // skipped-configuration blind spot: what is skipped is foreign data, not a code path.
         @Test
-        @EnabledOnOs(OS.WINDOWS)
+        @EnabledOnOs({OS.WINDOWS, OS.LINUX})
         void savesThroughTheCredentialStoreWherePlatformOffersOne(@TempDir final Path secrets) {
             final var fixture = new SecretId("sluice-fixture-tier-routing", "SLUICE_FIXTURE_TIER_ROUTING");
             final SecretStore store = TieredSecretStore.forMachine(
@@ -383,12 +397,14 @@ class TieredSecretStoreTest {
         return new BrokenTier() {
             @Override
             public Optional<String> read(final SecretId id) {
-                throw new SecretStoreException("the credential store on this machine cannot be read");
+                throw new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                        "the credential store on this machine cannot be read");
             }
 
             @Override
             public boolean holds(final SecretId id) {
-                throw new SecretStoreException("the credential store on this machine cannot be read");
+                throw new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                        "the credential store on this machine cannot be read");
             }
         };
     }
@@ -511,7 +527,8 @@ class TieredSecretStoreTest {
 
         @Override
         public void erase(final SecretId id) {
-            throw new SecretStoreException("this credential store refused to clear the credential");
+            throw new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                    "this credential store refused to clear the credential");
         }
     }
 }
