@@ -184,9 +184,9 @@ final class LibsecretService implements LinuxSecretService {
      * removals name no collection and search all of them, so a working service refuses none.
      *
      * <p>Whatever name a caller passes may use only letters, digits and underscores, because it
-     * becomes part of an object path and those are the only characters a path element allows. An
-     * alias is turned into a path under the aliases prefix before anything is sent, so a hyphen in
-     * the name yields a syntactically invalid path. The library asserts on that and abandons the
+     * becomes part of a D-Bus object path and those are the only characters a path element allows.
+     * An alias is turned into a path under the aliases prefix before anything is sent, so a hyphen
+     * in the name yields a syntactically invalid path. The library asserts on that and abandons the
      * call without completing it, and the synchronous wrapper then waits for an answer that never
      * arrives. A hyphen here hangs the calling thread rather than failing it.
      *

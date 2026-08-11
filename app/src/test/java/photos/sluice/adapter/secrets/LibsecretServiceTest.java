@@ -119,8 +119,8 @@ class LibsecretServiceTest {
     // this is the one place the real service's refusal path can be watched carrying it.
     //
     // The underscores in this name are load-bearing, and the object-path shape is not. A name
-    // reaches the service inside an object path, whose elements may hold only letters, digits and
-    // underscores. A hyphen makes that path invalid, the library asserts, and the call never
+    // reaches the service inside a D-Bus object path, whose elements may hold only letters, digits
+    // and underscores. A hyphen makes that path invalid, the library asserts, and the call never
     // returns at all. That wedged a CI runner until the run was cancelled by hand, which is why
     // this class carries a timeout.
     //
