@@ -97,7 +97,8 @@ class AnthropicCullerLiveTest {
         // the machine's own credential tiers, the absent endpoint override, and the transport-retry
         // knob. The environment tier answers first, so the file tier's directory is never reached.
         final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings(),
-                TieredSecretStore.forMachine(System::getenv, root.resolve("secrets")));
+                TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
+                        root.resolve("secrets")));
         final var culler = new AnthropicCuller(new CullerPrompt(settings),
                 new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real));
 

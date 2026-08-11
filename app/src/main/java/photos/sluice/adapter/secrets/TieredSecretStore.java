@@ -37,15 +37,22 @@ public class TieredSecretStore implements SecretStore {
      * adding a platform's credential store is a change here and nowhere else. The tiers themselves
      * stay inside this package.
      *
+     * <p>The file tier is always registered and the keyring tier only where the platform offers
+     * one. So a machine with no credential store is not a machine with nowhere to keep a credential.
+     *
      * @param environment a {@link Function} resolving an environment variable name to its value,
      *         normally {@code System::getenv}
+     * @param osName {@link String} the raw OS name (e.g. system property os.name), which decides
+     *         which platform's credential store is looked for
      * @param secretsDirectory {@link Path} the directory the file tier keeps credentials in
      * @return {@link SecretStore} the credential store for this machine
      */
     public static SecretStore forMachine(final Function<String, @Nullable String> environment,
-            final Path secretsDirectory) {
-        return new TieredSecretStore(new EnvironmentSecretTier(environment),
-                List.of(new FileSecretTier(secretsDirectory)));
+            final String osName, final Path secretsDirectory) {
+        final List<WritableSecretTier> tiers = new ArrayList<>(2);
+        PlatformKeyring.forThisMachine(osName).ifPresent(tiers::add);
+        tiers.add(new FileSecretTier(secretsDirectory));
+        return new TieredSecretStore(new EnvironmentSecretTier(environment), tiers);
     }
 
     /**

@@ -3,6 +3,8 @@ package photos.sluice.adapter.secrets;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
@@ -17,6 +19,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assumptions.assumeThat;
 
 // The tiers are fakes rather than the real ones on purpose. This class decides which tier each
 // operation reaches, and a real file tier would answer that question with disk state instead.
@@ -269,12 +272,18 @@ class TieredSecretStoreTest {
 
     // Real tiers here rather than fakes, unlike the rest of this file. What these prove is which
     // tiers get registered and in what order, and a fake would be the answer rather than the check.
+    //
+    // The OS name is named rather than read from the machine, so these cases mean the same thing on
+    // every runner. A platform with no credential-store binding is the configuration that leaves
+    // the file tier answering, which is what all but the last of them are about.
     @Nested
     class ForMachine {
 
+        private static final String NO_KEYRING = "Linux";
+
         @Test
         void storesThroughTheFileTierInTheDirectoryItWasHanded(@TempDir final Path secrets) {
-            final SecretStore store = TieredSecretStore.forMachine(_ -> null, secrets);
+            final SecretStore store = TieredSecretStore.forMachine(_ -> null, NO_KEYRING, secrets);
 
             store.save(ANTHROPIC, "sk-synthetic-0001");
 
@@ -286,12 +295,58 @@ class TieredSecretStoreTest {
         @Test
         void putsTheEnvironmentAheadOfTheStoredFile(@TempDir final Path secrets) {
             final SecretStore store = TieredSecretStore.forMachine(
-                    Map.of("ANTHROPIC_API_KEY", "from-environment")::get, secrets);
+                    Map.of("ANTHROPIC_API_KEY", "from-environment")::get, NO_KEYRING, secrets);
             store.save(ANTHROPIC, "sk-synthetic-0001");
 
             assertThat(store.secret(ANTHROPIC)).contains("from-environment");
             assertThat(store.status(ANTHROPIC))
                     .isEqualTo(new SecretStatus.InEnvironment("ANTHROPIC_API_KEY"));
+        }
+
+        // A machine whose platform offers no credential store is still a machine that can keep a
+        // credential. The registration has to add the file tier unconditionally for that to hold.
+        @Test
+        void registersAWritableTierEvenWhereThePlatformOffersNoCredentialStore(
+                @TempDir final Path secrets) {
+            final SecretStore store = TieredSecretStore.forMachine(_ -> null, NO_KEYRING, secrets);
+
+            store.save(ANTHROPIC, "sk-synthetic-0001");
+
+            assertThat(store.status(ANTHROPIC)).isEqualTo(new SecretStatus.InFile());
+        }
+
+        // Where the platform does offer one, the save has to reach it rather than the file. This is
+        // the one case in this class whose answer depends on the machine underneath it, so it runs
+        // only where that answer is Windows.
+        //
+        // It writes into the real credential store of whoever runs it, and then clears what it
+        // wrote. Going through the tier means the entry name is built from a provider id, and those
+        // are lower case by the rule that validates one. The capitalised name the binding's own test
+        // hides behind is therefore unavailable here. Nothing structurally reserves this name: a
+        // plugin may supply its own provider id, which SecretId contemplates by design.
+        //
+        // So it refuses to touch an occupied name rather than trusting the name to be free. A
+        // machine already holding something there skips instead, which loses a test on a machine
+        // nobody has rather than destroying a credential on one somebody does. That is not the
+        // skipped-configuration blind spot: what is skipped is foreign data, not a code path.
+        @Test
+        @EnabledOnOs(OS.WINDOWS)
+        void savesThroughTheCredentialStoreWherePlatformOffersOne(@TempDir final Path secrets) {
+            final var fixture = new SecretId("sluice-fixture-tier-routing", "SLUICE_FIXTURE_TIER_ROUTING");
+            final SecretStore store = TieredSecretStore.forMachine(
+                    _ -> null, System.getProperty("os.name"), secrets);
+            assumeThat(store.status(fixture))
+                    .as("refusing to overwrite a credential this machine already holds")
+                    .isEqualTo(new SecretStatus.Absent());
+
+            store.save(fixture, "sk-synthetic-0001");
+            try {
+                assertThat(store.status(fixture)).isEqualTo(new SecretStatus.InKeyring());
+                assertThat(store.secret(fixture)).contains("sk-synthetic-0001");
+                assertThat(secrets.resolve("sluice-fixture-tier-routing.key")).doesNotExist();
+            } finally {
+                store.remove(fixture);
+            }
         }
     }
 

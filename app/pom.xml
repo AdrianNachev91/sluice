@@ -204,6 +204,14 @@
                  brittle suite and no more confidence. The package's own doc holds the line that
                  makes this honest, and views still get driven end to end by their own tests. -->
             <exclude>photos/sluice/adapter/ui/view/**</exclude>
+            <!-- The native credential-store bindings, one per platform. A binding only runs on the
+                 platform whose library it binds, so no single leg of the matrix can cover one and
+                 the gate would measure the matrix rather than the tests. Excluded on the same terms
+                 as the views above: it stays honest only while a binding carries bytes and decides
+                 nothing. What to store, what a refusal means and which platform to reach for all
+                 live in the tier and the selector, inside the gate. A binding's own proof is its
+                 round-trip test against the real credential store. -->
+            <exclude>photos/sluice/adapter/secrets/Advapi32CredentialManager.class</exclude>
           </excludes>
         </configuration>
         <executions>

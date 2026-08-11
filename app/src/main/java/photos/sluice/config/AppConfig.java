@@ -85,14 +85,18 @@ public class AppConfig {
 
     /**
      * Builds the credential store over the tiers this machine offers. The store picks its own
-     * tiers. What this supplies is the environment and the directory they need, which is why the
-     * store is an explicit bean rather than a scanned component.
+     * tiers. What this supplies is the environment, the operating system's name and the directory
+     * they need. That is why the store is an explicit bean rather than a scanned component.
+     *
+     * <p>The OS name is read once and passed to both. The credential store and the directory it
+     * falls back to can then never be resolved against two different answers.
      *
      * @return {@link SecretStore} the credential store bean
      */
     @Bean
     public SecretStore secretStore() {
-        return TieredSecretStore.forMachine(System::getenv,
-                ConfigDirLocator.secretsDir(System.getProperty("os.name"), System.getenv()));
+        final String osName = System.getProperty("os.name");
+        return TieredSecretStore.forMachine(System::getenv, osName,
+                ConfigDirLocator.secretsDir(osName, System.getenv()));
     }
 }
