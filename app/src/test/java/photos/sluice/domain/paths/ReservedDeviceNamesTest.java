@@ -43,20 +43,14 @@ class ReservedDeviceNamesTest {
     }
 
     // The list omits com0 and lpt0 on a claim about Windows itself, and only a real Windows can
-    // answer it. The com1 half is the control: without it, a build reserving nothing at all would
-    // pass the com0 half and look like confirmation. Written against 10.0.19045; the CI runner is
-    // a later build, so this is where a divergence would first show.
+    // answer it. Nothing is asserted here about a name that IS on the list. Which of those a
+    // machine reserves turns on its hardware, so no portable negative control exists to pair with
+    // this. ReservedDeviceNames' own Javadoc carries the measurements.
     @EnabledOnOs(OS.WINDOWS)
     @Test
-    void windowsMakesCom0AnOrdinaryFileAndKeepsCom1ForTheDevice(@TempDir final Path dir) throws IOException {
+    void windowsMakesCom0AndLpt0OrdinaryFiles(@TempDir final Path dir) throws IOException {
         Files.createFile(dir.resolve("com0"));
         Files.createFile(dir.resolve("lpt0"));
-        try {
-            Files.createFile(dir.resolve("com1"));
-        } catch (final IOException reserved) {
-            // Windows either refuses outright or routes the create to the device. Either way it
-            // leaves no directory entry, which is what the assertion below reads.
-        }
 
         try (final Stream<Path> listing = Files.list(dir)) {
             final List<String> names = listing.map(entry -> entry.getFileName().toString()).sorted().toList();

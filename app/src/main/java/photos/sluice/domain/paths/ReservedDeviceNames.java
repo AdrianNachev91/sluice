@@ -15,9 +15,16 @@ import java.util.regex.Pattern;
  * gates on an ASCII-only allowlist first, so a superscript is refused a step earlier.
  *
  * <p>{@code com0} and {@code lpt0} are deliberately absent, because that guidance does not list
- * them. A probe created both as ordinary files, and {@code com1} and {@code lpt1} were refused on
- * the same machine. That probe covers Windows 10 only. Windows 11 is untested, here and in the
- * public reports that made this a question.
+ * them. Probes on two Windows machines created both as ordinary files, which is what
+ * {@code ReservedDeviceNamesTest} pins.
+ *
+ * <p>Which of the listed names a machine actually reserves is not fixed. That is the real argument
+ * for refusing them everywhere. {@code com1} is a symbolic link to a serial device, not a name the
+ * path parser reserves outright. A machine with no such device therefore does not have it.
+ *
+ * <p>Measured: {@code com1} is refused on a Windows 10 desktop (10.0.19045). It creates as an
+ * ordinary file on a GitHub Windows Server 2025 runner (10.0.26100). One config, two machines, two
+ * answers. A name whose meaning turns on installed hardware must not decide where a photo goes.
  */
 public final class ReservedDeviceNames {
 
