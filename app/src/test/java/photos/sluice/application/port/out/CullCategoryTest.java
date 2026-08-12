@@ -23,6 +23,19 @@ class CullCategoryTest {
     }
 
     @Test
+    void rejectsANameThatCannotBecomeAFolder() {
+        assertThatThrownBy(() -> new CullCategory("../Photos", "Escapes the review root"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("lower-case");
+        assertThatThrownBy(() -> new CullCategory("Receipts", "Capitalised"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("lower-case");
+        assertThatThrownBy(() -> new CullCategory("con", "A Windows device"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("reserved device name");
+    }
+
+    @Test
     void rejectsABlankDescription() {
         assertThatThrownBy(() -> new CullCategory("receipts", " "))
                 .isInstanceOf(IllegalArgumentException.class)

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.CullPrepTestSupport.pathsConfig;
 
 // Where a culled file ends up. Deciding what folder a decision or an unreviewable file belongs in
@@ -59,6 +60,41 @@ class CullDestinationsTest {
         final Path file = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
 
         assertThat(destinations.unreviewableDir(file)).isEqualTo(root.resolve("Unreviewable/2019/06"));
+    }
+
+    @Test
+    void aCategoryResolvingOutsideTheReviewRootIsRefused(@TempDir final Path root) {
+        final var destinations = new CullDestinations(pathsConfig(root, root.resolve("Library")));
+        final var escaping = new Classification(root.resolve("Sorted/Photos/2019/06/a.jpg"),
+                "../Photos/2019/06", "blurry");
+
+        assertThatThrownBy(() -> destinations.destinationDirFor(escaping))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outside");
+    }
+
+    @Test
+    void aCategoryResolvingToTheReviewRootItselfIsRefused(@TempDir final Path root) {
+        final var destinations = new CullDestinations(pathsConfig(root, root.resolve("Library")));
+        final var blank = new Classification(root.resolve("Sorted/Photos/2019/06/a.jpg"), "", "blurry");
+
+        assertThatThrownBy(() -> destinations.destinationDirFor(blank))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("itself")
+                .hasMessageNotContaining("outside");
+    }
+
+    // Three parent references, not one. The group id is joined onto the year-month, so the first
+    // is glued into a literal "2019-06_.." name. The second only pops that back off.
+    @Test
+    void aNearDupGroupResolvingOutsideTheDuplicatesRootIsRefused(@TempDir final Path root) {
+        final var destinations = new CullDestinations(pathsConfig(root, root.resolve("Library")));
+        final Path anchor = root.resolve("Sorted/Photos/2019/06/a.jpg");
+
+        assertThat(destinations.duplicatesDir(anchor, "../../lake")).isEqualTo(root.resolve("Duplicates/lake"));
+        assertThatThrownBy(() -> destinations.duplicatesDir(anchor, "../../../lake"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outside");
     }
 
     @Test

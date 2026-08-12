@@ -99,6 +99,12 @@ near-dup group's folder (given the group's chosen file as its anchor - see `near
 directories, so agreement between the two is what keeps an already-moved file from looking
 permanently lost on reconcile. See `reconcile-engine.md`.
 
+All three refuse a destination that does not land strictly inside the root it resolved from. Every
+segment they are handed is already constrained upstream. A category is checked by `CategoryName`
+when the prep index is read, a group id by `ShardValidator`'s slug rule, a year-month by its own
+digit pattern. The refusal is still the last line before a move, and the only place the resolved
+path itself is compared against its root.
+
 ### Why NearDupChosen still needs its own resume guard
 
 Every other decision type is a *move*: once it genuinely runs, its source file disappearing is

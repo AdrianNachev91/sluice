@@ -2,10 +2,12 @@ package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.PathsPort;
+import photos.sluice.domain.cull.CategoryName;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -18,9 +20,9 @@ import java.util.Map;
  * <p>Carrying a decision out and reconciling one after the fact must agree on this exactly. An
  * offline reconcile searches the very directory a real apply would have moved the file into. Any
  * disagreement between the two would make an already-moved file look permanently lost. Neither
- * {@link ApplyEngine} nor {@link ReconcileEngine} is given a {@link PathsPort} of its own, so
- * neither has any way to resolve the library, review, duplicates or unreviewable root except
- * through this class.
+ * {@link ApplyEngine} nor {@link ReconcileEngine} is given a {@link PathsPort} of its own. So
+ * neither can resolve the library, review, duplicates or unreviewable root except through this
+ * class.
  */
 @Component
 public class CullDestinations {
@@ -53,7 +55,7 @@ public class CullDestinations {
     Path destinationDirFor(final Classification decision) {
         return decision.category().equals(FUNNY_CATEGORY)
                 ? this.pathsPort.library().resolve("Funny")
-                : this.pathsPort.review().resolve(decision.category());
+                : under(this.pathsPort.review(), decision.category());
     }
 
     /**
@@ -69,7 +71,7 @@ public class CullDestinations {
      * @return {@link Path} the group's duplicates folder
      */
     Path duplicatesDir(final Path anchorFile, final String group) {
-        return this.pathsPort.duplicates().resolve(yearMonthOf(anchorFile) + "_" + group);
+        return under(this.pathsPort.duplicates(), yearMonthOf(anchorFile) + "_" + group);
     }
 
     /**
@@ -100,7 +102,7 @@ public class CullDestinations {
      */
     Path unreviewableDir(final Path file) {
         final String[] yearMonth = yearMonthOf(file).split("-", 2);
-        return this.pathsPort.unreviewable().resolve(yearMonth[0]).resolve(yearMonth[1]);
+        return under(this.pathsPort.unreviewable(), yearMonth[0], yearMonth[1]);
     }
 
     /**
@@ -140,5 +142,55 @@ public class CullDestinations {
         final String month = monthDir.getFileName().toString();
         final String year = yearDir.getFileName().toString();
         return year.matches("\\d{4}") && month.matches("\\d{2}") ? year + "-" + month : UNDATED;
+    }
+
+    /**
+     * Resolves segments under a root and refuses anything not landing strictly inside it. This is
+     * the last line before a move. It is also the only one that sees the resolved path rather than
+     * the text it was built from.
+     *
+     * <p>Every segment reaching here is already constrained upstream. A category is checked by
+     * {@link CategoryName} when the prep index is read. A near-dup group id is checked by
+     * {@code ShardValidator}'s slug rule, and a year-month by the digit pattern
+     * {@link #yearMonthOf} matches. The check here is still uniform across all three rather than
+     * argued away per caller. Such an argument is only as durable as the upstream rule it rests
+     * on, and this method cannot notice that rule loosening.
+     *
+     * <p>Two shapes escape a root. A segment carrying a parent reference walks out of it. One the
+     * platform reads as absolute replaces it outright. Resolving first and comparing the result
+     * catches both without naming either.
+     *
+     * <p>The root itself is refused too. A segment resolving to nothing at all would move media
+     * into the shared root, loose among the category folders rather than in one of them.
+     *
+     * @param root {@link Path} the configured root the result must sit inside
+     * @param segments the path segments to resolve under root, in order
+     * @return {@link Path} the resolved directory, normalized
+     * @throws IllegalStateException if the segments do not resolve strictly inside root, or if this
+     * platform cannot make a path out of one of them
+     */
+    private static Path under(final Path root, final String... segments) {
+        final Path normalRoot = root.normalize();
+        Path resolved = normalRoot;
+        try {
+            for (final String segment : segments) {
+                resolved = resolved.resolve(segment);
+            }
+        } catch (final InvalidPathException e) {
+            // Path.resolve's own escape route out of every caller's handling. A name this platform
+            // cannot make a path out of never becomes a destination on any platform.
+            throw new IllegalStateException("Refusing a destination under " + normalRoot + ": "
+                    + String.join(", ", segments) + " is not a usable path", e);
+        }
+        final Path normalized = resolved.normalize();
+        if (normalized.equals(normalRoot)) {
+            throw new IllegalStateException("Refusing a destination that is " + normalRoot + " itself: "
+                    + String.join(", ", segments) + " names no folder under it");
+        }
+        if (!normalized.startsWith(normalRoot)) {
+            throw new IllegalStateException("Refusing a destination outside " + normalRoot + ": "
+                    + String.join(", ", segments) + " resolves to " + normalized);
+        }
+        return normalized;
     }
 }

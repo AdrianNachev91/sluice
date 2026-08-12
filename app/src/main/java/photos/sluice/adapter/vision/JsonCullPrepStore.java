@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CategoryName;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
@@ -26,8 +27,10 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The {@link CullPrepPort} implementation. It lives alongside {@link ShardCodec} and
@@ -133,7 +136,7 @@ public class JsonCullPrepStore implements CullPrepPort {
         final List<String> unreviewable = raw.unreviewable() == null ? List.of() : raw.unreviewable();
         final List<String> entries = raw.entries() == null
                 ? List.of()
-                : withoutNulls(raw.entries(), "entries", path);
+                : montageIds(withoutNulls(raw.entries(), "entries", path), path);
         return new PrepDir(raw.scope(), requiredCategories(raw.categories(), path),
                 requiredPath(raw.basePath(), "basePath", path), raw.photos(),
                 unreviewable.stream().map(entry -> requiredPath(entry, "an unreviewable entry", path)).toList(),
@@ -251,6 +254,14 @@ public class JsonCullPrepStore implements CullPrepPort {
      * photos.sluice.application.service.PrepDirRemedies#rebuildIndex}, which makes that same
      * substitution deliberately and says so.
      *
+     * <p>Each name is checked against {@link CategoryName}, and the set against itself. A recorded
+     * name goes on to become a folder that media is moved into, and {@code ShardValidator} judges a
+     * shard's category against this very set. So a bad name recorded here would pass the one check
+     * that stands between it and the move. {@code CullDestinations} refuses an escaping destination
+     * as a second line, which is a guard on the resolved path rather than on the name. A repeat is
+     * refused for the reason {@code Settings} refuses one on the config side, since two cards under
+     * one name alias a single category.
+     *
      * @param values a {@link List} of {@link String} the raw field value, possibly null
      * @param indexPath {@link Path} index.json's own path, used only for the error message
      * @return a {@link List} of {@link String} the category names
@@ -260,7 +271,40 @@ public class JsonCullPrepStore implements CullPrepPort {
             throw new MalformedPrepJsonException("Prep index " + indexPath + " has no categories",
                     new IOException("null categories"));
         }
-        return withoutNulls(values, "categories", indexPath);
+        final List<String> names = withoutNulls(values, "categories", indexPath);
+        final Set<String> seen = new HashSet<>();
+        for (final String name : names) {
+            final String problem = CategoryName.problemWith(name);
+            if (problem != null) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
+                        + "' that " + problem, new IOException("unusable category name"));
+            }
+            if (!seen.add(name)) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " repeats the category '" + name
+                        + "'", new IOException("duplicate category"));
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Holds every montage entry to the id shape this app's own prep step produces. An entry is not
+     * only a label. {@link MontageNaming#shardFileFor} turns it into a filename resolved against
+     * the prep dir, and {@code PrepDirRemedies} moves a stray shard to one of those names. An entry
+     * off disk therefore chooses a move destination, which is what the id rule refuses it.
+     *
+     * @param values a {@link List} of {@link String} the parsed entries, non-null and null-free
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return a {@link List} of {@link String} the same values
+     */
+    private static List<String> montageIds(final List<String> values, final Path indexPath) {
+        for (final String montage : values) {
+            if (!MontageNaming.isMontageId(montage)) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " has an entry '" + montage
+                        + "' that is not a montage id", new IOException("unusable montage entry"));
+            }
+        }
+        return values;
     }
 
     /**

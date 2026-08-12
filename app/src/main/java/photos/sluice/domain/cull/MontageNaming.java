@@ -22,10 +22,25 @@ public final class MontageNaming {
     // sidecars survive on disk are the only remaining record of which montages existed.
     private static final Pattern SIDECAR_NAME = Pattern.compile("^montage-(\\d+)\\.json$");
 
+    // What montageIdFor() produces, stated so a reader off disk can be held to it. An id becomes a
+    // filename under the prep dir through shardFileFor(). One of those names a move destination, so
+    // an id is a path segment as much as an identifier.
+    private static final Pattern MONTAGE_ID = Pattern.compile("montage-\\d+");
+
     /**
      * Prevents instantiation of this utility class.
      */
     private MontageNaming() {
+    }
+
+    /**
+     * Whether a string is a montage id this app could have produced.
+     *
+     * @param montage {@link String} the candidate montage id
+     * @return boolean true if montage is a well-formed id
+     */
+    public static boolean isMontageId(final String montage) {
+        return MONTAGE_ID.matcher(montage).matches();
     }
 
     /**
