@@ -15,7 +15,6 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
@@ -25,6 +24,7 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStore;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
@@ -610,6 +610,47 @@ class AnthropicCullerTest {
     }
 
     @Test
+    void rendersTheSystemPromptFromTheCardsTheRunRecordedRatherThanLiveConfig() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        final var recorded = new CullCategory("receipts", "Photographed paperwork and invoices.");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
+                  ]
+                }
+                """, 100, 10));
+
+        this.culler().cull(this.prep(List.of(recorded), List.of(), "montage-001"), OPTIONS);
+
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages).create(captor.capture());
+        assertThat(captor.getValue().system().orElseThrow().string().orElseThrow())
+                .contains("### `receipts`")
+                .contains("Photographed paperwork and invoices.")
+                .doesNotContain("### `junk`");
+    }
+
+    @Test
+    void acceptsAVerdictNamingARecordedCategoryThatLiveConfigDoesNotCarry() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        final var recorded = new CullCategory("receipts", "Photographed paperwork and invoices.");
+        this.respondWith(response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "IMG_0001.jpg", "action": "receipts", "reason": "a scanned invoice" }
+                  ]
+                }
+                """, 100, 10));
+
+        final CullReport report = this.culler().cull(this.prep(List.of(recorded), List.of(), "montage-001"), OPTIONS);
+
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions()).containsExactly(
+                new Classification(this.src("IMG_0001.jpg"), "receipts", "a scanned invoice"));
+        assertThat(report.montagesCulled()).isEqualTo(1);
+    }
+
+    @Test
     void sendsSystemPromptMontageImageAndPhotoTable() throws Exception {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         this.respondWith(response("""
@@ -820,7 +861,12 @@ class AnthropicCullerTest {
     }
 
     private PrepDir prep(final List<Path> unreviewable, final String... montages) {
-        return new PrepDir("2019-06", List.of("junk"), this.prepDir.resolve("base"), 0, unreviewable, montages.length,
+        return this.prep(CARDS, unreviewable, montages);
+    }
+
+    private PrepDir prep(final List<CullCategory> categories, final List<Path> unreviewable,
+                         final String... montages) {
+        return new PrepDir("2019-06", categories, this.prepDir.resolve("base"), 0, unreviewable, montages.length,
                 this.prepDir, List.of(montages));
     }
 

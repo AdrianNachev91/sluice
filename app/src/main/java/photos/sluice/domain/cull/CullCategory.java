@@ -1,10 +1,8 @@
-package photos.sluice.application.port.out;
-
-import photos.sluice.domain.cull.CategoryName;
+package photos.sluice.domain.cull;
 
 /**
  * One user-configured classification category. The {@code name} field is the action id a culling
- * decision carries, and {@code ShardValidator} accepts only the configured names. The
+ * decision carries, and {@link ShardValidator} accepts only the recorded names. The
  * {@code description} field is the "what belongs here" prose an automated vision provider renders
  * into its culling prompt.
  *
@@ -13,6 +11,10 @@ import photos.sluice.domain.cull.CategoryName;
  *
  * <p>The name also becomes the folder a culled file is moved into, which is what constrains its
  * shape. {@link CategoryName} owns that rule and states why.
+ *
+ * <p>A card is a domain value rather than a port type because {@link PrepDir} carries the set a run
+ * was prepped under. The cull settings port hands back the configured cards the same way it hands
+ * back a {@link MontageConfig}.
  */
 public record CullCategory(String name, String description) {
 

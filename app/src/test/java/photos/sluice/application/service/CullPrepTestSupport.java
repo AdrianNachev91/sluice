@@ -6,7 +6,6 @@ import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.adapter.vision.JsonCullPrepStore;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
@@ -16,6 +15,7 @@ import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
@@ -29,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 
 // Shared fixtures for every test that drives a real prep directory. It writes the on-disk artifacts
@@ -70,15 +71,21 @@ final class CullPrepTestSupport {
 
     // The category set an index records, defaulted to the one fixedSettings() configures so the two
     // agree unless a test deliberately pulls them apart.
-    static void writeIndex(final Path prepDir, final List<String> categories, final int photos,
+    static void writeIndex(final Path prepDir, final List<CullCategory> categories, final int photos,
                            final List<Path> unreviewable, final List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
                 new PrepDir("2019-06", categories, prepDir.resolve("base"), photos, unreviewable, entries.size(),
                         prepDir, entries));
     }
 
-    static List<String> fixedCategories() {
-        return fixedSettings().categories().stream().map(CullCategory::name).toList();
+    static List<CullCategory> fixedCategories() {
+        return fixedSettings().categories();
+    }
+
+    // For a test whose subject is which names a run recorded. The description is filled in so the
+    // card is well-formed, never because its text matters to the assertion.
+    static List<CullCategory> cards(final String... names) {
+        return Arrays.stream(names).map(name -> new CullCategory(name, name + " description")).toList();
     }
 
     static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {

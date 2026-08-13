@@ -3,10 +3,10 @@ package photos.sluice.adapter.fs;
 import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
+import photos.sluice.domain.cull.CullCategory;
 
 import java.io.BufferedWriter;
 import java.io.IOException;

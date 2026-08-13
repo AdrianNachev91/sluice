@@ -237,6 +237,45 @@ class ShardCodecTest {
     }
 
     @Test
+    void aFailedWriteLeavesThePreviousShardIntactAndNoTemporaryFileBehind(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-008.json");
+        this.codec.write(shardPath, new DecisionShard("montage-008", List.of(
+                new Classification(dir.resolve("a.jpg"), "junk", "blurry"))));
+        final String before = Files.readString(shardPath, StandardCharsets.UTF_8);
+        final var mapper = mock(JsonMapper.class);
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+        final var failing = new ShardCodec(mapper);
+
+        assertThatThrownBy(() -> failing.write(shardPath, new DecisionShard("montage-008", List.of())))
+                .isInstanceOf(UncheckedIOException.class);
+
+        assertThat(Files.readString(shardPath, StandardCharsets.UTF_8)).isEqualTo(before);
+        try (final var entries = Files.list(dir)) {
+            assertThat(entries).containsExactly(shardPath);
+        }
+    }
+
+    // A shard is what a billed model call produced, so a rename that fails must not take it with it.
+    // The failure is induced through Files.move's own specified contract rather than an OS quirk: a
+    // non-empty directory at the destination fails the move on every platform.
+    @Test
+    void aShardSurvivesInThePrepDirWhenOnlyTheRenameFails(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-011.json");
+        Files.createDirectory(shardPath);
+        Files.writeString(shardPath.resolve("occupant.txt"), "blocks the rename");
+
+        assertThatThrownBy(() -> this.codec.write(shardPath, new DecisionShard("montage-011", List.of(
+                new Classification(dir.resolve("a.jpg"), "junk", "blurry")))))
+                .isInstanceOf(UncheckedIOException.class);
+
+        try (final var entries = Files.list(dir)) {
+            final List<Path> survivors = entries.filter(Files::isRegularFile).toList();
+            assertThat(survivors).singleElement().satisfies(kept ->
+                    assertThat(Files.readString(kept, StandardCharsets.UTF_8)).contains("montage-011"));
+        }
+    }
+
+    @Test
     void wrapsAMalformedJsonReadIntoMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-008.json");
         Files.writeString(shardPath, "{ not valid json");

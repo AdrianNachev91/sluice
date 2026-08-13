@@ -1,7 +1,6 @@
 package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
@@ -249,8 +248,7 @@ public class PrepDirRemedies {
         if (this.mediaStore.exists(indexPath)) {
             this.disasterDrawer.file(prepDirPath, indexPath, "index-json");
         }
-        final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(),
-                this.cullSettings.categories().stream().map(CullCategory::name).toList(),
+        final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(), this.cullSettings.categories(),
                 commonParent(allSrcs), photos, List.of(), entries.size(), prepDirPath, entries);
         this.cullPrepPort.writeIndex(prepDirPath, rebuilt);
         return Optional.of(rebuilt);

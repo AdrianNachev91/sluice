@@ -3,7 +3,6 @@ package photos.sluice.adapter.imaging;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
@@ -11,6 +10,7 @@ import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
@@ -105,7 +105,8 @@ class CullMontageRendererTest {
         assertThat(index).isEqualToIgnoringWhitespace("""
                 {
                   "scope": "2019",
-                  "categories": ["junk", "scenery"],
+                  "categories": [{ "name": "junk", "description": "objectively worthless shots" },
+                                 { "name": "scenery", "description": "landscapes with nobody in them" }],
                   "basePath": "%s",
                   "photos": 5,
                   "unreviewable": ["%s"],
@@ -342,9 +343,10 @@ class CullMontageRendererTest {
         final PrepDir result = renderer(pathsConfig, configured)
                 .build(new CullScope.Year(2019, null), new MontageConfig(64, 2));
 
-        assertThat(result.categories()).containsExactly("blurry", "receipts");
+        assertThat(result.categories()).containsExactlyElementsOf(configured);
         assertThat(Files.readString(result.prepDir().resolve("index.json"), StandardCharsets.UTF_8))
-                .contains("\"categories\":[\"blurry\",\"receipts\"]");
+                .contains("\"categories\":[{\"name\":\"blurry\",\"description\":\"out of focus\"},"
+                        + "{\"name\":\"receipts\",\"description\":\"photographed paperwork\"}]");
     }
 
     private static PathsConfig pathsConfig(final Path root) {

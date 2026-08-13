@@ -6,6 +6,7 @@ import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
@@ -37,6 +38,9 @@ import static org.mockito.Mockito.when;
 
 class JsonCullPrepStoreTest {
 
+    private static final CullCategory JUNK = new CullCategory("junk", "objectively worthless");
+    private static final CullCategory FOOD = new CullCategory("food", "meals and menus");
+
     private final JsonCullPrepStore store = new JsonCullPrepStore(new ShardCodec(), new SidecarReader());
 
     @Test
@@ -52,7 +56,7 @@ class JsonCullPrepStoreTest {
 
     @Test
     void readsBackAnIndexWrittenByPrepIndexWriter(@TempDir final Path dir) {
-        final var prepDir = new PrepDir("2019-06", List.of("junk", "food"), dir.resolve("base"), 3,
+        final var prepDir = new PrepDir("2019-06", List.of(JUNK, FOOD), dir.resolve("base"), 3,
                 List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
         new PrepIndexWriter().write(dir.resolve("index.json"), prepDir);
 
@@ -65,7 +69,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -110,7 +114,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk",
+                    { "name": "junk", "description": "objectively worthless" },
                     null
                   ],
                   "basePath": "%s",
@@ -132,7 +136,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -157,8 +161,8 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk",
-                    "../Photos/2019/06"
+                    { "name": "junk", "description": "objectively worthless" },
+                    { "name": "../Photos/2019/06", "description": "escapes the review root" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -180,7 +184,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    ""
+                    { "name": "", "description": "objectively worthless" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -195,15 +199,99 @@ class JsonCullPrepStoreTest {
                 .hasMessageContaining("lower-case");
     }
 
+    // Empty is legal where absent is malformed, and it is what a run prepped with nothing
+    // configured records. CullerPrompt is where that run is refused, before any billed call.
+    @Test
+    void readIndexAcceptsAnEmptyCategoriesArray(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                {
+                  "scope": "2019-06",
+                  "categories": [],
+                  "basePath": "%s",
+                  "photos": 0,
+                  "montages": 0,
+                  "prepDir": "%s",
+                  "entries": []
+                }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThat(this.store.readIndex(dir).categories()).isEmpty();
+    }
+
+    @Test
+    void readIndexOnACategoryWithNoNameThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                {
+                  "scope": "2019-06",
+                  "categories": [
+                    { "description": "objectively worthless" }
+                  ],
+                  "basePath": "%s",
+                  "photos": 0,
+                  "montages": 0,
+                  "prepDir": "%s",
+                  "entries": []
+                }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("category with no name");
+    }
+
+    @Test
+    void readIndexOnACategoryWithABlankDescriptionThrowsMalformedPrepJsonException(@TempDir final Path dir)
+            throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                {
+                  "scope": "2019-06",
+                  "categories": [
+                    { "name": "junk", "description": "  " }
+                  ],
+                  "basePath": "%s",
+                  "photos": 0,
+                  "montages": 0,
+                  "prepDir": "%s",
+                  "entries": []
+                }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("category 'junk' with no description");
+    }
+
+    // A bare name where a card belongs reads as a damaged index, which routes to the rebuild
+    // remedy. That chain is the entire migration story for an index already sitting on a disk.
+    @Test
+    void readIndexOnABareCategoryNameThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                {
+                  "scope": "2019-06",
+                  "categories": [
+                    "junk"
+                  ],
+                  "basePath": "%s",
+                  "photos": 0,
+                  "montages": 0,
+                  "prepDir": "%s",
+                  "entries": []
+                }
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class);
+    }
+
     @Test
     void readIndexOnARepeatedCategoryThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk",
-                    "food",
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" },
+                    { "name": "food", "description": "meals and menus" },
+                    { "name": "junk", "description": "a second card under one name" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -225,7 +313,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -272,7 +360,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" }
                   ],
                   "basePath": null,
                   "photos": 0,
@@ -292,7 +380,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -312,7 +400,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" }
                   ],
                   "basePath": "%s",
                   "photos": 0,
@@ -337,7 +425,7 @@ class JsonCullPrepStoreTest {
                 {
                   "scope": "2019-06",
                   "categories": [
-                    "junk"
+                    { "name": "junk", "description": "objectively worthless" }
                   ],
                   "basePath": "bad\\u0000path",
                   "photos": 0,
@@ -415,7 +503,7 @@ class JsonCullPrepStoreTest {
 
     @Test
     void writeIndexRoundTripsThroughReadIndex(@TempDir final Path dir) {
-        final var prepDir = new PrepDir("2019-06", List.of("junk", "food"), dir.resolve("base"), 3,
+        final var prepDir = new PrepDir("2019-06", List.of(JUNK, FOOD), dir.resolve("base"), 3,
                 List.of(dir.resolve("skip.jpg")), 1, dir, List.of("montage-001"));
 
         this.store.writeIndex(dir, prepDir);
@@ -426,7 +514,7 @@ class JsonCullPrepStoreTest {
     @Test
     void writeIndexReplacesWhateverIndexJsonHeldBefore(@TempDir final Path dir) throws IOException {
         Files.writeString(dir.resolve("index.json"), "not valid json");
-        final var rebuilt = new PrepDir("2019-06", List.of("junk"), dir.resolve("base"), 1, List.of(), 1, dir,
+        final var rebuilt = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 1, List.of(), 1, dir,
                 List.of("montage-001"));
 
         this.store.writeIndex(dir, rebuilt);
@@ -437,7 +525,7 @@ class JsonCullPrepStoreTest {
     @Test
     void wrapsAnIndexWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
         final Path missingParent = dir.resolve("missing-parent");
-        final var prepDir = new PrepDir("2019-06", List.of("junk"), dir.resolve("base"), 0, List.of(), 0, dir,
+        final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 0, List.of(), 0, dir,
                 List.of());
 
         assertThatThrownBy(() -> this.store.writeIndex(missingParent, prepDir))
@@ -450,13 +538,48 @@ class JsonCullPrepStoreTest {
         final var mapper = mock(JsonMapper.class);
         doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
         final var storeWithFailingMapper = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
-        final var prepDir = new PrepDir("2019-06", List.of("junk"), dir.resolve("base"), 0, List.of(), 0, dir,
+        final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 0, List.of(), 0, dir,
                 List.of());
 
         assertThatThrownBy(() -> storeWithFailingMapper.writeIndex(dir, prepDir))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasCauseInstanceOf(IOException.class)
                 .cause().hasCauseInstanceOf(JacksonException.class);
+    }
+
+    @Test
+    void aFailedIndexWriteLeavesThePreviousIndexIntactAndNoTemporaryFileBehind(@TempDir final Path dir)
+            throws IOException {
+        this.store.writeIndex(dir, new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 3, List.of(), 0, dir,
+                List.of()));
+        final String before = Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8);
+        final var mapper = mock(JsonMapper.class);
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+        final var failing = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+
+        assertThatThrownBy(() -> failing.writeIndex(dir, new PrepDir("2019-06", List.of(FOOD), dir.resolve("base"), 9,
+                List.of(), 0, dir, List.of())))
+                .isInstanceOf(UncheckedIOException.class);
+
+        assertThat(Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8)).isEqualTo(before);
+        try (final var entries = Files.list(dir)) {
+            assertThat(entries).containsExactly(dir.resolve("index.json"));
+        }
+    }
+
+    @Test
+    void aFailedMergedWriteLeavesNoDecisionsFileBehindAtAll(@TempDir final Path dir) throws IOException {
+        final var mapper = mock(JsonMapper.class);
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+        final var failing = new JsonCullPrepStore(new ShardCodec(), new SidecarReader(), mapper);
+        final var report = new ApplyReport(0, Map.of(), 0, 0, 0, List.of());
+
+        assertThatThrownBy(() -> failing.writeMergedDecisions(dir, "2019-06", List.of(), report))
+                .isInstanceOf(UncheckedIOException.class);
+
+        try (final var entries = Files.list(dir)) {
+            assertThat(entries).isEmpty();
+        }
     }
 
     @Test

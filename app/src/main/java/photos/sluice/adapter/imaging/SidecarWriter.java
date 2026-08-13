@@ -7,7 +7,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -68,8 +67,8 @@ public class SidecarWriter {
                 photos.stream()
                         .map(p -> new Photo(p.src().toString(), p.name(), p.time().toString(), p.received()))
                         .toList());
-        try (final var output = Files.newOutputStream(sidecarPath)) {
-            this.mapper.writeValue(output, document);
+        try {
+            AtomicJsonWrite.write(sidecarPath, this.mapper, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write sidecar " + sidecarPath, e);
         } catch (final JacksonException e) {

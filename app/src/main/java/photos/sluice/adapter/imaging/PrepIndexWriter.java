@@ -7,7 +7,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -46,8 +45,15 @@ public class PrepIndexWriter {
      * path values substituted as plain strings.
      */
     private record Index(
-            String scope, List<String> categories, String basePath, int photos, List<String> unreviewable,
+            String scope, List<Category> categories, String basePath, int photos, List<String> unreviewable,
             int montages, String prepDir, List<String> entries) {
+    }
+
+    /**
+     * The on-disk shape of one recorded category card. Written as an object rather than the bare
+     * name, so a run carries the prose its culling prompt was rendered from.
+     */
+    private record Category(String name, String description) {
     }
 
     /**
@@ -60,15 +66,15 @@ public class PrepIndexWriter {
     public void write(final Path indexPath, final PrepDir prepDir) {
         final var document = new Index(
                 prepDir.scope(),
-                prepDir.categories(),
+                prepDir.categories().stream().map(card -> new Category(card.name(), card.description())).toList(),
                 prepDir.basePath().toString(),
                 prepDir.photos(),
                 prepDir.unreviewable().stream().map(Path::toString).toList(),
                 prepDir.montages(),
                 prepDir.prepDir().toString(),
                 prepDir.entries());
-        try (final var output = Files.newOutputStream(indexPath)) {
-            this.mapper.writeValue(output, document);
+        try {
+            AtomicJsonWrite.write(indexPath, this.mapper, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write prep index " + indexPath, e);
         } catch (final JacksonException e) {

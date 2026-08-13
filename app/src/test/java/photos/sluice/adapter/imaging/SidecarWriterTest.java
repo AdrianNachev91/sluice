@@ -7,6 +7,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -95,7 +96,7 @@ class SidecarWriterTest {
     @Test
     void wrapsAJacksonExceptionDuringTheWriteItselfIntoUncheckedIOException(@TempDir final Path dir) {
         final var mapper = mock(JsonMapper.class);
-        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(java.io.OutputStream.class), any());
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
         final var writerWithFailingMapper = new SidecarWriter(mapper);
         final Path sidecarPath = dir.resolve("montage-005.json");
         final Path montagePath = dir.resolve("montage-005.jpg");
@@ -107,6 +108,28 @@ class SidecarWriterTest {
                 .hasMessageContaining(sidecarPath.toString())
                 .hasCauseInstanceOf(IOException.class)
                 .cause().hasCauseInstanceOf(JacksonException.class);
+    }
+
+    @Test
+    void aFailedWriteLeavesThePreviousSidecarIntactAndNoTemporaryFileBehind(@TempDir final Path dir)
+            throws IOException {
+        final Path sidecarPath = dir.resolve("montage-006.json");
+        final Path montagePath = dir.resolve("montage-006.jpg");
+        final var photo = new SidecarPhotoEntry(dir.resolve("a.jpg"), "a.jpg", Instant.parse("2023-01-01T00:00:00Z"),
+                false);
+        this.writer.write(sidecarPath, montagePath, List.of(photo));
+        final String before = Files.readString(sidecarPath, StandardCharsets.UTF_8);
+        final var mapper = mock(JsonMapper.class);
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+        final var failing = new SidecarWriter(mapper);
+
+        assertThatThrownBy(() -> failing.write(sidecarPath, montagePath, List.of(photo)))
+                .isInstanceOf(UncheckedIOException.class);
+
+        assertThat(Files.readString(sidecarPath, StandardCharsets.UTF_8)).isEqualTo(before);
+        try (final var entries = Files.list(dir)) {
+            assertThat(entries).containsExactly(sidecarPath);
+        }
     }
 
     private static String jsonEscaped(final Path path) {

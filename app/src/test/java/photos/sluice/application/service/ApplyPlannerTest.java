@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.CullPrepTestSupport.FailingSidecarRead;
 import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
 import static photos.sluice.application.service.CullPrepTestSupport.applyPlanner;
+import static photos.sluice.application.service.CullPrepTestSupport.cards;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
@@ -88,7 +89,7 @@ class ApplyPlannerTest {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "paperwork");
-        writeIndex(prepDir, List.of("receipts"), 1, List.of(), List.of("montage-001"));
+        writeIndex(prepDir, cards("receipts"), 1, List.of(), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "receipts", "photographed paperwork"));
 
@@ -106,7 +107,7 @@ class ApplyPlannerTest {
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "blurry");
-        writeIndex(prepDir, List.of("receipts"), 1, List.of(), List.of("montage-001"));
+        writeIndex(prepDir, cards("receipts"), 1, List.of(), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 

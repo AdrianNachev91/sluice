@@ -13,7 +13,7 @@ contract.
 ```mermaid
 flowchart TD
     A["cull(prep, opts)"] --> B["require sluice.cull.<br/>provider-settings.model"]
-    B --> C["render the system prompt<br/>(CullerPrompt + category cards)"]
+    B --> C["render the system prompt<br/>(CullerPrompt + the cards<br/>index.json recorded)"]
     C --> D["build the API client<br/>(API key via SecretStore, optional endpoint,<br/>transport max-retries)"]
     D --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>an unreadable one contributes<br/>nothing and drops its montage)"]
     W --> E["for each montage, in sidecar order"]
@@ -145,22 +145,22 @@ deliberate - a model that fails the same montage twice stops burning tokens.
 
 ## Scenarios
 
-| Input                                                           | Outcome                                                                                                           |
-|-----------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| Valid verdicts for every tile                                   | Shard written; keeps omitted; tokens counted                                                                      |
-| Every verdict is `keep`                                         | Empty-decisions shard written - marks the montage reviewed                                                        |
-| First response invalid, retry valid                             | Shard written; both attempts' tokens counted                                                                      |
-| A verdict names the wrong photo for its index, twice            | `CullException`; no shard written for that montage                                                                |
-| A tile has no verdict, or two, twice                            | `CullException` listing the gap or the duplicate                                                                  |
-| Action is not `keep`, near-dup, or a configured category, twice | `CullException` via `ShardValidator`                                                                              |
-| Two montages reuse one near-dup group id, twice                 | `CullException` at the second montage; the first montage's shard stays on disk                                    |
-| Response is not the schema's JSON, twice                        | `CullException`                                                                                                   |
-| Run fails at montage N                                          | Shards 1..N-1 remain; the run reports failure and nothing is applied (missing shards stay a hard gate downstream) |
-| Re-run after a failure or interruption                          | Montages with valid shards resume (skipped, no API call); the rest are culled                                     |
-| Existing shard unreadable or contract-breaking                  | Re-culled; the fresh shard overwrites it                                                                          |
-| A montage's sidecar is unreadable, and it has no shard          | Skipped, no API call; apply reports the corrupt sidecar and the missing shard                                     |
-| A montage's sidecar is unreadable, and it already has a shard   | Skipped, no API call; that shard is left untouched for the apply-phase answer to act on                           |
-| A file is named by both a decision and the unreviewable list    | Shard written; the overlap is apply's to report, with the user's own answer applied                               |
+| Input                                                         | Outcome                                                                                                           |
+|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| Valid verdicts for every tile                                 | Shard written; keeps omitted; tokens counted                                                                      |
+| Every verdict is `keep`                                       | Empty-decisions shard written - marks the montage reviewed                                                        |
+| First response invalid, retry valid                           | Shard written; both attempts' tokens counted                                                                      |
+| A verdict names the wrong photo for its index, twice          | `CullException`; no shard written for that montage                                                                |
+| A tile has no verdict, or two, twice                          | `CullException` listing the gap or the duplicate                                                                  |
+| Action is not `keep`, near-dup, or a recorded category, twice | `CullException` via `ShardValidator`                                                                              |
+| Two montages reuse one near-dup group id, twice               | `CullException` at the second montage; the first montage's shard stays on disk                                    |
+| Response is not the schema's JSON, twice                      | `CullException`                                                                                                   |
+| Run fails at montage N                                        | Shards 1..N-1 remain; the run reports failure and nothing is applied (missing shards stay a hard gate downstream) |
+| Re-run after a failure or interruption                        | Montages with valid shards resume (skipped, no API call); the rest are culled                                     |
+| Existing shard unreadable or contract-breaking                | Re-culled; the fresh shard overwrites it                                                                          |
+| A montage's sidecar is unreadable, and it has no shard        | Skipped, no API call; apply reports the corrupt sidecar and the missing shard                                     |
+| A montage's sidecar is unreadable, and it already has a shard | Skipped, no API call; that shard is left untouched for the apply-phase answer to act on                           |
+| A file is named by both a decision and the unreviewable list  | Shard written; the overlap is apply's to report, with the user's own answer applied                               |
 
 ## Known limitations
 
@@ -177,7 +177,9 @@ deliberate - a model that fails the same montage twice stops burning tokens.
 
 ## Related
 
-- `adapter/vision/CullerPrompt` - renders the system prompt and each montage's user turn.
+- `adapter/vision/CullerPrompt` - renders the system prompt and each montage's user turn. The
+  cards come from the prep dir rather than live settings, so the prompt and the validation that
+  judges its answer read one source.
 - `adapter/vision/SidecarReader` - the authoritative in-scope photo list per montage.
 - `adapter/vision/ShardCodec` - writes the accepted shard in the shared on-disk shape.
 - `adapter/vision/ExternalAgentCuller` - the sibling provider; same output contract, judgement

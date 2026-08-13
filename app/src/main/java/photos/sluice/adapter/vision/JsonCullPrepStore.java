@@ -9,6 +9,7 @@ import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CategoryName;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
@@ -27,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -95,9 +97,17 @@ public class JsonCullPrepStore implements CullPrepPort {
      * The JSON shape {@link #readIndex} parses: one scope's prep directory index, as written by
      * this app's own prep step.
      */
-    private record RawIndex(String scope, @Nullable List<String> categories, String basePath, int photos,
+    private record RawIndex(String scope, @Nullable List<@Nullable RawCategory> categories, String basePath, int photos,
                             @Nullable List<String> unreviewable, int montages, String prepDir,
                             @Nullable List<String> entries) {
+    }
+
+    /**
+     * The JSON shape of one recorded category card. Both fields are nullable here and checked in
+     * {@link #requiredCategories}. A card missing either one is then reported as a damaged index,
+     * instead of crashing {@link CullCategory}'s own constructor.
+     */
+    private record RawCategory(@Nullable String name, @Nullable String description) {
     }
 
     /**
@@ -157,7 +167,7 @@ public class JsonCullPrepStore implements CullPrepPort {
     public void writeIndex(final Path prepDir, final PrepDir index) {
         final var document = new RawIndexOut(
                 index.scope(),
-                index.categories(),
+                index.categories().stream().map(card -> new RawCategory(card.name(), card.description())).toList(),
                 index.basePath().toString(),
                 index.photos(),
                 index.unreviewable().stream().map(Path::toString).toList(),
@@ -165,8 +175,8 @@ public class JsonCullPrepStore implements CullPrepPort {
                 index.prepDir().toString(),
                 index.entries());
         final Path path = prepDir.resolve("index.json");
-        try (final var output = Files.newOutputStream(path)) {
-            this.mapper.writeValue(output, document);
+        try {
+            AtomicJsonWrite.write(path, this.mapper, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write prep index " + path, e);
         } catch (final JacksonException e) {
@@ -206,7 +216,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * the other's classes, per {@code ArchitectureTest.adaptersAreSiblings}.
      *
      * @param scope {@link String} the on-disk tag identifying this prep dir's scope
-     * @param categories a {@link List} of {@link String} the category names this run was prepped under
+     * @param categories a {@link List} of {@link RawCategory} the category cards this run was prepped under
      * @param basePath {@link String} the base path reported for this scope
      * @param photos int count of candidates found
      * @param unreviewable a {@link List} of {@link String} candidates that couldn't render a judgeable tile
@@ -214,7 +224,7 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param prepDir {@link String} the prep directory path
      * @param entries a {@link List} of {@link String} the montage entry filenames
      */
-    private record RawIndexOut(String scope, List<String> categories, String basePath, int photos,
+    private record RawIndexOut(String scope, List<RawCategory> categories, String basePath, int photos,
                                List<String> unreviewable, int montages, String prepDir, List<String> entries) {
     }
 
@@ -262,18 +272,37 @@ public class JsonCullPrepStore implements CullPrepPort {
      * refused for the reason {@code Settings} refuses one on the config side, since two cards under
      * one name alias a single category.
      *
-     * @param values a {@link List} of {@link String} the raw field value, possibly null
+     * <p>A description is required and non-blank, the rule {@link CullCategory} enforces on the
+     * config side. A blank one renders a hollow prompt section and quietly costs cull recall. Its
+     * length is deliberately unbounded. It is prose a user writes, and config accepts it unbounded,
+     * so a cap here would refuse an index the app itself could have produced.
+     *
+     * <p>Every field is checked before any card is built, so {@link CullCategory}'s own
+     * {@link IllegalArgumentException} is unreachable from here. That exception would otherwise be
+     * an unchecked escape route out of every caller's read-failure handling.
+     *
+     * @param values a {@link List} of {@link RawCategory} the raw field value, possibly null
      * @param indexPath {@link Path} index.json's own path, used only for the error message
-     * @return a {@link List} of {@link String} the category names
+     * @return a {@link List} of {@link CullCategory} the recorded category cards
      */
-    private static List<String> requiredCategories(final @Nullable List<String> values, final Path indexPath) {
+    private static List<CullCategory> requiredCategories(final @Nullable List<@Nullable RawCategory> values,
+                                                         final Path indexPath) {
         if (values == null) {
             throw new MalformedPrepJsonException("Prep index " + indexPath + " has no categories",
                     new IOException("null categories"));
         }
-        final List<String> names = withoutNulls(values, "categories", indexPath);
+        final var cards = new ArrayList<CullCategory>();
         final Set<String> seen = new HashSet<>();
-        for (final String name : names) {
+        for (final RawCategory raw : values) {
+            if (raw == null) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a null entry in categories",
+                        new IOException("null categories entry"));
+            }
+            final String name = raw.name();
+            if (name == null) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category with no name",
+                        new IOException("null category name"));
+            }
             final String problem = CategoryName.problemWith(name);
             if (problem != null) {
                 throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
@@ -283,8 +312,14 @@ public class JsonCullPrepStore implements CullPrepPort {
                 throw new MalformedPrepJsonException("Prep index " + indexPath + " repeats the category '" + name
                         + "'", new IOException("duplicate category"));
             }
+            final String description = raw.description();
+            if (description == null || description.isBlank()) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
+                        + "' with no description", new IOException("blank category description"));
+            }
+            cards.add(new CullCategory(name, description));
         }
-        return names;
+        return cards;
     }
 
     /**
@@ -391,8 +426,10 @@ public class JsonCullPrepStore implements CullPrepPort {
                 new Summary(report.reviewed(), report.byCategory(), report.nearDupGroups(),
                         report.nearDupRejects(), report.unreviewable()));
         final Path path = prepDir.resolve("decisions.json");
-        try (final var output = Files.newOutputStream(path)) {
-            this.mapper.writeValue(output, document);
+        // This file's mere existence is what marks a run COMPLETE. A torn one would leave the run
+        // reading as finished while carrying a truncated record of what it did.
+        try {
+            AtomicJsonWrite.write(path, this.mapper, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write merged decisions " + path, e);
         } catch (final JacksonException e) {

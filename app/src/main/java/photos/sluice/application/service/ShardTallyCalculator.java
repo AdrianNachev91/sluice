@@ -191,7 +191,7 @@ final class ShardTallyCalculator {
                 return new MontageShardStatus(false, false);
             }
             final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage));
-            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, prep.categories(),
+            final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, prep.categoryNames(),
                     unreviewable);
             return new MontageShardStatus(true, report.valid());
         } catch (final RuntimeException e) {

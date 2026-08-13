@@ -2,7 +2,6 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.Nullable;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
@@ -10,6 +9,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.ProgressCallback;
@@ -24,7 +24,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CullDispatcherTest {
 
     private static final PrepDir PREP =
-            new PrepDir("2019", List.of("junk"), Path.of("base"), 0, List.of(), 0, Path.of("prep"), List.of());
+            new PrepDir("2019", List.of(new CullCategory("junk", "objectively worthless")), Path.of("base"), 0,
+                    List.of(), 0, Path.of("prep"), List.of());
     private static final CullOptions OPTIONS = new CullOptions(false, null);
 
     @Test

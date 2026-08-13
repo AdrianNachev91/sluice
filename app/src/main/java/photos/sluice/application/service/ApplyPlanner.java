@@ -144,7 +144,8 @@ public class ApplyPlanner {
         }
         this.checkSourceRoot(sidecarSrcs, prepDir.unreviewable(), extraFindings);
         final ValidationReport report = resolveOverlaps(ledger,
-                this.shardValidator.validate(shardFiles, sidecarSrcs, prepDir.categories(), prepDir.unreviewable()));
+                this.shardValidator.validate(shardFiles, sidecarSrcs, prepDir.categoryNames(),
+                        prepDir.unreviewable()));
         if (extraFindings.isEmpty()) {
             return report;
         }

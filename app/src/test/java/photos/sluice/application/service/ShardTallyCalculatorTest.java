@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.application.service.CullPrepTestSupport.applyPlanner;
+import static photos.sluice.application.service.CullPrepTestSupport.cards;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
 import static photos.sluice.application.service.CullPrepTestSupport.moveLedger;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
@@ -72,7 +73,7 @@ class ShardTallyCalculatorTest {
         final Path configured = root.resolve("Sorted/Photos/2019/06/b.jpg");
         writeFile(recorded, "paperwork");
         writeFile(configured, "blurry");
-        writeIndex(prepDir, List.of("receipts"), 2, List.of(), List.of("montage-001", "montage-002"));
+        writeIndex(prepDir, cards("receipts"), 2, List.of(), List.of("montage-001", "montage-002"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(recorded));
         writeSidecar(prepDir, "montage-002", sidecarEntry(configured));
         writeShard(prepDir, "montage-001", classificationJson(recorded, "receipts", "photographed paperwork"));

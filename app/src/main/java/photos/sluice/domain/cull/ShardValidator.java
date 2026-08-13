@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
  * <p>Pure: no I/O. The caller supplies the parsed shards, the authoritative in-scope file list
  * (every montage sidecar's {@code src}), and the category set to judge against. That set is the one
  * {@link PrepDir} recorded at prep time, never whatever config holds at the moment of validation.
- * See {@link PrepDir#categories()} for why.
+ * See {@link PrepDir} for why.
  *
  * <p>The contract, stated positively:
  *

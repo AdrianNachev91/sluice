@@ -5,7 +5,7 @@ import org.springframework.boot.test.context.ConfigDataApplicationContextInitial
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
-import photos.sluice.application.port.out.CullCategory;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.job.WatchMode;
 
 import static org.assertj.core.api.Assertions.assertThat;

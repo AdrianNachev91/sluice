@@ -16,12 +16,17 @@ import java.util.List;
  * committed and is never re-scanned by cull.
  *
  * <p>{@code categories} is the classification category set this run was prepped under, captured at
- * prep time. {@link ShardValidator} accepts only these names. So a run is judged against the rules
- * it was culled under, never against whatever config holds when its shards finally arrive.
- * Those two moments can be days apart while an external agent works. Without this field, editing a
- * category would fail every waiting run that named it, with cause and symptom on different screens
- * and different days. Names only: a category's description is prompt material, rendered live at
- * cull time, and a second copy here would only go stale.
+ * prep time. {@link ShardValidator} accepts only these names, via {@link #categoryNames()}. So a run
+ * is judged against the rules it was culled under, never against whatever config holds when its
+ * shards finally arrive. Those two moments can be days apart while an external agent works. Without
+ * this field, editing a category would fail every waiting run that named it, with cause and symptom
+ * on different screens and different days.
+ *
+ * <p>Whole cards rather than names, because a name alone cannot render a culling prompt. An
+ * automated provider needs each card's "what belongs here" description. The set it judges a
+ * response against has to be the set it asked the model to use. Names alone would leave the prompt
+ * reading live config while validation read the run, so the two could disagree about what a
+ * category even means.
  *
  * <p>{@code unreviewable} lists every candidate this run found but could not render a judgeable
  * tile for, whether undecodable or with real pixels below the reviewable floor. Entries are
@@ -34,7 +39,7 @@ import java.util.List;
  */
 public record PrepDir(
         String scope,
-        List<String> categories,
+        List<CullCategory> categories,
         Path basePath,
         int photos,
         List<Path> unreviewable,
@@ -45,11 +50,8 @@ public record PrepDir(
     /**
      * Defensively copies the mutable collection fields.
      *
-     * <p>{@code categories} sits second rather than beside {@code entries}, which shares its type.
-     * Adjacent same-typed components would let a swapped pair compile.
-     *
      * @param scope {@link String} the on-disk tag identifying this prep dir's scope
-     * @param categories a {@link List} of {@link String} the category names this run was prepped under
+     * @param categories a {@link List} of {@link CullCategory} the category cards this run was prepped under
      * @param basePath {@link Path} the base path reported for this scope
      * @param photos int count of candidates found
      * @param unreviewable a {@link List} of {@link Path} candidates that couldn't render a judgeable tile
@@ -61,5 +63,15 @@ public record PrepDir(
         categories = List.copyOf(categories);
         entries = List.copyOf(entries);
         unreviewable = List.copyOf(unreviewable);
+    }
+
+    /**
+     * The recorded cards' names, in recorded order. Derived rather than stored, so the names a
+     * decision is judged against and the cards a prompt is rendered from can never drift apart.
+     *
+     * @return a {@link List} of {@link String} the recorded category names
+     */
+    public List<String> categoryNames() {
+        return this.categories.stream().map(CullCategory::name).toList();
     }
 }

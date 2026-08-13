@@ -1,8 +1,8 @@
 package photos.sluice.adapter.vision;
 
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.io.IOException;
@@ -13,8 +13,12 @@ import java.util.stream.Collectors;
 
 /**
  * Assembles the text of an automated culling request. The system prompt is the bundled fixed
- * template with the configured category cards rendered into its placeholder. The template owns
- * the prompt engineering. A card contributes only its plain-words name and description.
+ * template with the run's category cards rendered into its placeholder. The template owns the
+ * prompt engineering. A card contributes only its plain-words name and description.
+ *
+ * <p>The cards are a parameter rather than a settings read. They come from the prep dir the run is
+ * culling, the same recorded set the response is then validated against. Rendering from live config
+ * would let the prompt describe one rule set while validation judged another.
  *
  * <p>The user turn is built per montage from its sidecar entries. Grid dimensions come from the
  * cull settings because the sidecar records no grid info. Prompt assembly assumes a cull runs with
@@ -32,8 +36,7 @@ class CullerPrompt {
     /**
      * Constructs the prompt builder, loading the bundled template.
      *
-     * @param settings {@link CullSettings} the cull settings, supplying the configured categories
-     *     and the montage grid
+     * @param settings {@link CullSettings} the cull settings, supplying the montage grid
      */
     CullerPrompt(final CullSettings settings) {
         this.settings = settings;
@@ -41,18 +44,20 @@ class CullerPrompt {
     }
 
     /**
-     * The system prompt shared by every montage in a run. No configured cards would render a
-     * prompt with no set-aside classes at all, silently gutting the cull's rule set - fail loud
-     * instead.
+     * The system prompt shared by every montage in a run. An empty card set would render a prompt
+     * with no set-aside classes at all, silently gutting the cull's rule set - fail loud instead.
+     * The refusal names no remedy. Getting a card into this run means re-prepping the scope, which
+     * discards any shards already bought for it, so that is the user's call rather than advice.
      *
+     * @param categories a {@link List} of {@link CullCategory}, the cards the run recorded at prep time
      * @return {@link String} the rendered system prompt
      */
-    String systemPrompt() {
-        if (this.settings.categories().isEmpty()) {
-            throw new IllegalStateException("No cull categories configured (sluice.cull.categories); "
-                    + "an automated cull needs at least one");
+    String systemPrompt(final List<CullCategory> categories) {
+        if (categories.isEmpty()) {
+            throw new IllegalStateException("This cull run recorded no categories, and an automated cull "
+                    + "needs at least one");
         }
-        return rendered(this.template, this.settings.categories());
+        return rendered(this.template, categories);
     }
 
     /**
@@ -119,7 +124,7 @@ class CullerPrompt {
      * bundled resource.
      *
      * @param template {@link String} the prompt template containing the categories placeholder
-     * @param categories a {@link List} of {@link CullCategory}, the configured cull categories to render into the
+     * @param categories a {@link List} of {@link CullCategory}, the run's cull categories to render into the
      * template
      * @return {@link String} the template with the categories placeholder replaced
      */

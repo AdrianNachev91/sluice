@@ -1,11 +1,11 @@
 package photos.sluice.config;
 
 import org.jspecify.annotations.Nullable;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.job.WatchMode;
 

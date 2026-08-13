@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.PrepDir;
@@ -126,7 +127,7 @@ class ExternalAgentCullerTest {
     }
 
     private static PrepDir prep(final Path prepDir, final String... entries) {
-        return new PrepDir("2019-06", List.of("junk"), prepDir.resolve("base"), entries.length * 2, List.of(),
-                entries.length, prepDir, List.of(entries));
+        return new PrepDir("2019-06", List.of(new CullCategory("junk", "objectively worthless")),
+                prepDir.resolve("base"), entries.length * 2, List.of(), entries.length, prepDir, List.of(entries));
     }
 }

@@ -1,10 +1,10 @@
 package photos.sluice.adapter.vision;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.job.WatchMode;
@@ -24,7 +24,7 @@ class CullerPromptTest {
 
     @Test
     void systemPromptRendersEveryCategoryCardIntoTheTemplate() {
-        final String prompt = cullerPrompt(CARDS).systemPrompt();
+        final String prompt = cullerPrompt().systemPrompt(CARDS);
 
         assertThat(prompt)
                 .contains("### `junk`\n\nObjectively worthless photos.")
@@ -34,7 +34,7 @@ class CullerPromptTest {
 
     @Test
     void systemPromptCarriesTheFixedCoreRules() {
-        final String prompt = cullerPrompt(CARDS).systemPrompt();
+        final String prompt = cullerPrompt().systemPrompt(CARDS);
 
         assertThat(prompt)
                 .contains("When unsure, keep.")
@@ -43,12 +43,12 @@ class CullerPromptTest {
     }
 
     @Test
-    void systemPromptFailsLoudWhenNoCategoriesAreConfigured() {
-        final var prompt = cullerPrompt(List.of());
+    void systemPromptFailsLoudWhenTheRunRecordedNoCategories() {
+        final var prompt = cullerPrompt();
 
-        assertThatThrownBy(prompt::systemPrompt)
+        assertThatThrownBy(() -> prompt.systemPrompt(List.of()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("sluice.cull.categories");
+                .hasMessageContaining("recorded no categories");
     }
 
     @Test
@@ -68,7 +68,7 @@ class CullerPromptTest {
                 new SidecarPhotoEntry(Path.of("D:/sorted/IMG_002.jpg"), "IMG_002.jpg",
                         Instant.parse("2019-06-20T13:00:14Z"), false));
 
-        final String turn = cullerPrompt(CARDS).userTurn("2019-06", "montage-007", 7, 12, entries);
+        final String turn = cullerPrompt().userTurn("2019-06", "montage-007", 7, 12, entries);
 
         assertThat(turn).isEqualTo("""
                 Scope: 2019-06 - sheet 007 (7 of 12)
@@ -82,7 +82,7 @@ class CullerPromptTest {
 
     @Test
     void correctionTurnListsEveryProblemAndAsksForTheFullList() {
-        final String turn = cullerPrompt(CARDS).correctionTurn(List.of(
+        final String turn = cullerPrompt().correctionTurn(List.of(
                 "no verdict for photo 3 (IMG_003.jpg)",
                 "montage-007[#1]: missing 'reason'"));
 
@@ -94,8 +94,10 @@ class CullerPromptTest {
                 """);
     }
 
-    private static CullerPrompt cullerPrompt(final List<CullCategory> categories) {
-        return new CullerPrompt(new FixedSettings("anthropic", categories, new MontageConfig(224, 7)));
+    // The settings this builds on supply the grid alone. Their empty card list is deliberate: a
+    // prompt renders from the cards it is handed, so nothing here can quietly come from config.
+    private static CullerPrompt cullerPrompt() {
+        return new CullerPrompt(new FixedSettings("anthropic", List.of(), new MontageConfig(224, 7)));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories, MontageConfig montage)

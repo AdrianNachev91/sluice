@@ -1,9 +1,9 @@
 package photos.sluice.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;

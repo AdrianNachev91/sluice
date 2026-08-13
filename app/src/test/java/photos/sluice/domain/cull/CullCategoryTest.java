@@ -1,4 +1,4 @@
-package photos.sluice.application.port.out;
+package photos.sluice.domain.cull;
 
 import org.junit.jupiter.api.Test;
 

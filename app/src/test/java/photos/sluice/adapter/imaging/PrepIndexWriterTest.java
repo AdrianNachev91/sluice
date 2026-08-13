@@ -2,11 +2,13 @@ package photos.sluice.adapter.imaging;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.PrepDir;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,6 +23,9 @@ import static org.mockito.Mockito.mock;
 
 class PrepIndexWriterTest {
 
+    private static final CullCategory JUNK = new CullCategory("junk", "objectively worthless");
+    private static final CullCategory SCENERY = new CullCategory("scenery", "landscapes with nobody in them");
+
     private final PrepIndexWriter writer = new PrepIndexWriter();
 
     @Test
@@ -29,7 +34,7 @@ class PrepIndexWriterTest {
         final Path basePath = dir.resolve("Sorted");
         final Path prepDir = dir.resolve("prep");
         final Path corrupt = dir.resolve("corrupt.cr2");
-        final var prep = new PrepDir("2023", List.of("junk", "scenery"), basePath, 42, List.of(corrupt), 2, prepDir,
+        final var prep = new PrepDir("2023", List.of(JUNK, SCENERY), basePath, 42, List.of(corrupt), 2, prepDir,
                 List.of("montage-001", "montage-002"));
 
         this.writer.write(indexPath, prep);
@@ -38,7 +43,8 @@ class PrepIndexWriterTest {
         assertThat(json).isEqualToIgnoringWhitespace("""
                 {
                   "scope": "2023",
-                  "categories": ["junk", "scenery"],
+                  "categories": [{"name": "junk", "description": "objectively worthless"},
+                                 {"name": "scenery", "description": "landscapes with nobody in them"}],
                   "basePath": "%s",
                   "photos": 42,
                   "unreviewable": ["%s"],
@@ -52,7 +58,7 @@ class PrepIndexWriterTest {
     @Test
     void wrapsAWriteFailureIntoUncheckedIOException(@TempDir final Path dir) {
         final Path indexPath = dir.resolve("missing-parent").resolve("index.json");
-        final var prep = new PrepDir("2023", List.of("junk"), dir, 0, List.of(), 0, dir, List.of());
+        final var prep = new PrepDir("2023", List.of(JUNK), dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> this.writer.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
@@ -62,16 +68,35 @@ class PrepIndexWriterTest {
     @Test
     void wrapsAJacksonExceptionDuringTheWriteItselfIntoUncheckedIOException(@TempDir final Path dir) {
         final var mapper = mock(JsonMapper.class);
-        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(java.io.OutputStream.class), any());
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
         final var writerWithFailingMapper = new PrepIndexWriter(mapper);
         final Path indexPath = dir.resolve("index.json");
-        final var prep = new PrepDir("2023", List.of("junk"), dir, 0, List.of(), 0, dir, List.of());
+        final var prep = new PrepDir("2023", List.of(JUNK), dir, 0, List.of(), 0, dir, List.of());
 
         assertThatThrownBy(() -> writerWithFailingMapper.write(indexPath, prep))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining(indexPath.toString())
                 .hasCauseInstanceOf(IOException.class)
                 .cause().hasCauseInstanceOf(JacksonException.class);
+    }
+
+    @Test
+    void aFailedWriteLeavesThePreviousIndexIntactAndNoTemporaryFileBehind(@TempDir final Path dir) throws IOException {
+        final Path indexPath = dir.resolve("index.json");
+        this.writer.write(indexPath, new PrepDir("2023", List.of(JUNK), dir, 7, List.of(), 0, dir, List.of()));
+        final String before = Files.readString(indexPath, StandardCharsets.UTF_8);
+        final var mapper = mock(JsonMapper.class);
+        doThrow(mock(JacksonException.class)).when(mapper).writeValue(any(OutputStream.class), any());
+        final var failing = new PrepIndexWriter(mapper);
+
+        assertThatThrownBy(() -> failing.write(indexPath,
+                new PrepDir("2023", List.of(SCENERY), dir, 99, List.of(), 0, dir, List.of())))
+                .isInstanceOf(UncheckedIOException.class);
+
+        assertThat(Files.readString(indexPath, StandardCharsets.UTF_8)).isEqualTo(before);
+        try (final var entries = Files.list(dir)) {
+            assertThat(entries).containsExactly(indexPath);
+        }
     }
 
     private static String jsonEscaped(final Path path) {

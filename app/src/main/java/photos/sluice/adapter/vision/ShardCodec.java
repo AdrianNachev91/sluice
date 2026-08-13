@@ -99,8 +99,8 @@ class ShardCodec {
         final var document = new RawShard(
                 shard.montage(),
                 shard.decisions().stream().map(ShardCodec::toRaw).toList());
-        try (final var output = Files.newOutputStream(shardPath)) {
-            this.mapper.writeValue(output, document);
+        try {
+            AtomicJsonWrite.write(shardPath, this.mapper, document);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write shard " + shardPath, e);
         } catch (final JacksonException e) {

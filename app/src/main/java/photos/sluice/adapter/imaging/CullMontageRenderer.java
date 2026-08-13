@@ -2,7 +2,6 @@ package photos.sluice.adapter.imaging;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
@@ -208,7 +207,7 @@ public class CullMontageRenderer implements MontageRenderer {
         // last moment it is a live value rather than a recorded one.
         final var result = new PrepDir(
                 scopeTag,
-                this.cullSettings.categories().stream().map(CullCategory::name).toList(),
+                this.cullSettings.categories(),
                 this.cullScopeSelector.basePath(photosRoot, scope),
                 reviewable.size(),
                 unreviewable,

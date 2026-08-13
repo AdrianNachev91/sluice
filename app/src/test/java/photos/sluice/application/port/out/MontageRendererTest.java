@@ -1,6 +1,7 @@
 package photos.sluice.application.port.out;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
@@ -17,8 +18,8 @@ class MontageRendererTest {
 
     @Test
     void progressAndCancellationAwareOverloadsDefaultToThePlainBuildMethod() {
-        final var prepDir = new PrepDir("2020", List.of("junk"), Path.of("base"), 5, List.of(), 1, Path.of("prep"),
-                List.of());
+        final var prepDir = new PrepDir("2020", List.of(new CullCategory("junk", "objectively worthless")),
+                Path.of("base"), 5, List.of(), 1, Path.of("prep"), List.of());
         final var calls = new ArrayList<String>();
         final MontageRenderer renderer = (_, _) -> {
             calls.add("build");

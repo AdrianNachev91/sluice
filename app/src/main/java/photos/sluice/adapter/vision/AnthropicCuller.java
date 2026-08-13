@@ -18,7 +18,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
@@ -255,8 +254,8 @@ class AnthropicCuller implements VisionCuller {
             throws CullException {
         final String model = this.requiredModel();
         final boolean thinking = Boolean.TRUE.equals(this.settings.providerSettings().thinking());
-        final String systemPrompt = this.prompt.systemPrompt();
-        final List<String> categoryNames = this.settings.categories().stream().map(CullCategory::name).toList();
+        final String systemPrompt = this.prompt.systemPrompt(prep.categories());
+        final List<String> categoryNames = prep.categoryNames();
         long inputTokens = 0;
         long outputTokens = 0;
         int culled = 0;

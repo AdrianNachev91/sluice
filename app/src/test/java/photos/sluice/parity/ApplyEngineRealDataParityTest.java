@@ -10,7 +10,6 @@ import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.adapter.vision.JsonCullPrepStore;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
-import photos.sluice.application.port.out.CullCategory;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
@@ -20,6 +19,7 @@ import photos.sluice.application.service.CullDestinations;
 import photos.sluice.application.service.DisasterDrawer;
 import photos.sluice.application.service.MoveLedger;
 import photos.sluice.config.SettingsFixture;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.WatchMode;
@@ -275,10 +275,10 @@ class ApplyEngineRealDataParityTest {
         if (indexJson.contains("\"categories\"")) {
             return indexJson;
         }
-        final String names = fixedSettings().categories().stream()
-                .map(category -> '"' + category.name() + '"')
+        final String cards = fixedSettings().categories().stream()
+                .map(card -> "{ \"name\": \"" + card.name() + "\", \"description\": \"" + card.description() + "\" }")
                 .collect(Collectors.joining(", "));
-        return indexJson.replaceFirst("\\{", Matcher.quoteReplacement("{ \"categories\": [" + names + "],"));
+        return indexJson.replaceFirst("\\{", Matcher.quoteReplacement("{ \"categories\": [" + cards + "],"));
     }
 
     private static boolean isPrepJson(final Path file) {

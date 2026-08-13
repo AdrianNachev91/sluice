@@ -1,5 +1,6 @@
 package photos.sluice.application.port.out;
 
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 
 import java.util.List;
