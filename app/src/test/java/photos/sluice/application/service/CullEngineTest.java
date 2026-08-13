@@ -1089,10 +1089,13 @@ class CullEngineTest {
         // resuming by hand runs the apply the refusal withheld, and the latch trips inside the same
         // window on the same fixture. A window too short to see a move would fail here rather than
         // pass the assertion above for the wrong reason.
+        // Joined, not left running: the latch trips mid-move, so returning here would race JUnit's
+        // own @TempDir delete against a job still writing into it.
         Files.createDirectory(root.resolve("Library"));
-        pipeline.resume(prepDir, false);
+        final JobHandle<CullJobOutcome> control = pipeline.resume(prepDir, false);
 
         assertThat(moveStarted.await(WINDOW.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+        control.join();
     }
 
     // The sort is submitted and provably in flight before the shard lands. Otherwise the watcher
