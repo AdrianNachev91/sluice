@@ -8,6 +8,7 @@ import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.WorkingRootBusyException;
+import photos.sluice.application.port.out.FolderRootsChangeListener;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.config.SettingsFixture;
 
@@ -28,7 +29,7 @@ class SettingsServiceTest {
         final var live = new RecordingLive(settings(before));
         final var store = new RecordingStore();
         final var lock = new RecordingLock();
-        final var service = new SettingsService(live, store, lock, new JobRunner());
+        final var service = settingsService(live, store, lock, new JobRunner());
 
         service.save(settings(after));
 
@@ -43,7 +44,7 @@ class SettingsServiceTest {
         final var lock = new RecordingLock();
         final List<Integer> claimsWhenWritten = new ArrayList<>();
         final SettingsStore store = _ -> claimsWhenWritten.add(lock.claimed.size());
-        final var service = new SettingsService(live, store, lock, new JobRunner());
+        final var service = settingsService(live, store, lock, new JobRunner());
 
         service.save(settings(after));
 
@@ -56,7 +57,7 @@ class SettingsServiceTest {
     void aSaveThatLeavesTheFolderRootsAloneClaimsNothing(@TempDir final Path root) {
         final var live = new RecordingLive(settings(root));
         final var lock = new RecordingLock();
-        final var service = new SettingsService(live, new RecordingStore(), lock, new JobRunner());
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
 
         service.save(withProvider(settings(root), "anthropic"));
 
@@ -70,7 +71,7 @@ class SettingsServiceTest {
         final var live = new RecordingLive(settings(before));
         final var store = new RecordingStore();
         final var lock = new RefusingLock();
-        final var service = new SettingsService(live, store, lock, new JobRunner());
+        final var service = settingsService(live, store, lock, new JobRunner());
 
         assertThatThrownBy(() -> service.save(settings(after)))
                 .isInstanceOf(WorkingRootBusyException.class);
@@ -87,7 +88,7 @@ class SettingsServiceTest {
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
-        final var service = new SettingsService(live, store, lock, new JobRunner());
+        final var service = settingsService(live, store, lock, new JobRunner());
 
         assertThatThrownBy(() -> service.save(settings(after)))
                 .isInstanceOf(IllegalStateException.class)
@@ -102,7 +103,7 @@ class SettingsServiceTest {
     void anUnconfiguredInstallClaimsTheWorkingRootTheFirstSaveNames(@TempDir final Path root) {
         final var live = new RecordingLive(unconfigured());
         final var lock = new RecordingLock();
-        final var service = new SettingsService(live, new RecordingStore(), lock, new JobRunner());
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
 
         service.save(settings(root));
 
@@ -118,7 +119,7 @@ class SettingsServiceTest {
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
-        final var service = new SettingsService(live, store, lock, new JobRunner());
+        final var service = settingsService(live, store, lock, new JobRunner());
 
         assertThatThrownBy(() -> service.save(settings(root))).isInstanceOf(IllegalStateException.class);
 
@@ -133,7 +134,7 @@ class SettingsServiceTest {
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
-        final var service = new SettingsService(live, store, new RefusingSecondClaim(), new JobRunner());
+        final var service = settingsService(live, store, new RefusingSecondClaim(), new JobRunner());
 
         assertThatThrownBy(() -> service.save(settings(after)))
                 .isInstanceOf(IllegalStateException.class)
@@ -149,7 +150,7 @@ class SettingsServiceTest {
     void aSaveThatMovesOnlyTheLibraryRootClaimsNothing(@TempDir final Path root, @TempDir final Path library) {
         final var live = new RecordingLive(settings(root));
         final var lock = new RecordingLock();
-        final var service = new SettingsService(live, new RecordingStore(), lock, new JobRunner());
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
 
         service.save(SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
                 root.resolve("Inbox").toString())));
@@ -164,7 +165,7 @@ class SettingsServiceTest {
     void clearingTheWorkingRootGivesUpTheClaimOnIt(@TempDir final Path root) {
         final var live = new RecordingLive(settings(root));
         final var lock = new RecordingLock();
-        final var service = new SettingsService(live, new RecordingStore(), lock, new JobRunner());
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
 
         service.save(unconfigured());
 
@@ -172,12 +173,94 @@ class SettingsServiceTest {
         assertThat(lock.releases).isEqualTo(1);
     }
 
+    @Test
+    void aSaveThatMovesTheWorkingRootTellsTheListeners(@TempDir final Path before, @TempDir final Path after) {
+        final var listener = new RecordingListener();
+        final var service = settingsService(new RecordingLive(settings(before)), new RecordingStore(),
+                new RecordingLock(), new JobRunner(), List.of(listener));
+
+        service.save(settings(after));
+
+        assertThat(listener.calls).isEqualTo(1);
+        assertThat(listener.lastWorkingRootMoved).isTrue();
+    }
+
+    @Test
+    void theFirstSaveToNameAWorkingRootTellsTheListeners(@TempDir final Path root) {
+        final var listener = new RecordingListener();
+        final var service = settingsService(new RecordingLive(unconfigured()), new RecordingStore(),
+                new RecordingLock(), new JobRunner(), List.of(listener));
+
+        service.save(settings(root));
+
+        assertThat(listener.calls).isEqualTo(1);
+    }
+
+    @Test
+    void aSaveThatMovesNoFolderRootTellsNobody(@TempDir final Path root) {
+        final var listener = new RecordingListener();
+        final var service = settingsService(new RecordingLive(settings(root)), new RecordingStore(),
+                new RecordingLock(), new JobRunner(), List.of(listener));
+
+        service.save(withProvider(settings(root), "anthropic"));
+
+        assertThat(listener.calls).isZero();
+    }
+
+    @Test
+    void aSaveThatMovesOnlyTheLibraryRootTellsTheListenersButNotThatTheWorkingRootMoved(
+            @TempDir final Path root, @TempDir final Path library) {
+        final var listener = new RecordingListener();
+        final var service = settingsService(new RecordingLive(settings(root)), new RecordingStore(),
+                new RecordingLock(), new JobRunner(), List.of(listener));
+
+        service.save(SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
+                root.resolve("Inbox").toString())));
+
+        assertThat(listener.calls).isEqualTo(1);
+        assertThat(listener.lastWorkingRootMoved).isFalse();
+    }
+
+    @Test
+    void aSaveThatFailsPartWayTellsNobody(@TempDir final Path before, @TempDir final Path after) {
+        final var listener = new RecordingListener();
+        final SettingsStore store = _ -> {
+            throw new IllegalStateException("disk full");
+        };
+        final var service = settingsService(new RecordingLive(settings(before)), store,
+                new RecordingLock(), new JobRunner(), List.of(listener));
+
+        assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(IllegalStateException.class);
+
+        assertThat(listener.calls).isZero();
+    }
+
+    // The throwing listener is registered first, so the second one running at all is what proves the
+    // failure was contained rather than merely not rethrown.
+    @Test
+    void aListenerThatThrowsDoesNotFailTheSaveOrStopTheNextOne(
+            @TempDir final Path before, @TempDir final Path after) {
+        final var live = new RecordingLive(settings(before));
+        final var second = new RecordingListener();
+        // An Error, not an exception, so narrowing the catch back to RuntimeException fails here.
+        final FolderRootsChangeListener first = _ -> {
+            throw new StackOverflowError();
+        };
+        final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner(),
+                List.of(first, second));
+
+        service.save(settings(after));
+
+        assertThat(second.calls).isEqualTo(1);
+        assertThat(live.current()).isEqualTo(settings(after));
+    }
+
     // Blank is what a config file with the key present and empty binds to, and it names no folder
     // any more than an absent key does.
     @Test
     void savingABlankWorkingRootClaimsNothing() {
         final var lock = new RecordingLock();
-        final var service = new SettingsService(new RecordingLive(unconfigured()), new RecordingStore(), lock,
+        final var service = settingsService(new RecordingLive(unconfigured()), new RecordingStore(), lock,
                 new JobRunner());
 
         service.save(SettingsFixture.settings(new PathSettings("  ", null, null)));
@@ -191,7 +274,7 @@ class SettingsServiceTest {
         final var live = new RecordingLive(settings(before));
         final var store = new RecordingStore();
         final var jobRunner = new JobRunner();
-        final var service = new SettingsService(live, store, new RecordingLock(), jobRunner);
+        final var service = settingsService(live, store, new RecordingLock(), jobRunner);
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
         final JobHandle<String> job = jobRunner.submit(_ -> {
@@ -221,7 +304,7 @@ class SettingsServiceTest {
         final var live = new RecordingLive(settings(root));
         final var store = new RecordingStore();
         final var jobRunner = new JobRunner();
-        final var service = new SettingsService(live, store, new RecordingLock(), jobRunner);
+        final var service = settingsService(live, store, new RecordingLock(), jobRunner);
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
         final JobHandle<String> job = jobRunner.submit(_ -> {
@@ -256,7 +339,7 @@ class SettingsServiceTest {
             writing.countDown();
             await(finishWriting);
         };
-        final var service = new SettingsService(live, store, new RecordingLock(), jobRunner);
+        final var service = settingsService(live, store, new RecordingLock(), jobRunner);
         final var saving = Thread.ofVirtual().start(() -> service.save(settings(after)));
         writing.await();
         final var submitting = Thread.ofVirtual().start(() -> {
@@ -277,6 +360,39 @@ class SettingsServiceTest {
         assertThat(live.current()).isEqualTo(settings(after));
     }
 
+    // Fails the moment the announce moves out of the runIfIdle lambda.
+    @Test
+    void noJobCanStartWhileTheListenersAreStillBeingTold(
+            @TempDir final Path before, @TempDir final Path after) throws InterruptedException {
+        final var jobRunner = new JobRunner();
+        final var announcing = new CountDownLatch(1);
+        final var reachedSubmit = new CountDownLatch(1);
+        final var submitted = new CountDownLatch(1);
+        final var finishAnnouncing = new CountDownLatch(1);
+        final FolderRootsChangeListener slowListener = _ -> {
+            announcing.countDown();
+            await(finishAnnouncing);
+        };
+        final var service = settingsService(new RecordingLive(settings(before)), new RecordingStore(),
+                new RecordingLock(), jobRunner, List.of(slowListener));
+        final var saving = Thread.ofVirtual().start(() -> service.save(settings(after)));
+        announcing.await();
+        final var submitting = Thread.ofVirtual().start(() -> {
+            reachedSubmit.countDown();
+            jobRunner.submit(_ -> "done");
+            submitted.countDown();
+        });
+        reachedSubmit.await();
+
+        try {
+            assertThat(submitted.await(200, TimeUnit.MILLISECONDS)).isFalse();
+        } finally {
+            finishAnnouncing.countDown();
+            saving.join();
+            submitting.join();
+        }
+    }
+
     // Neither folder can be held now: the one the settings name was taken while this save ran, and
     // the one it claimed is a folder nothing names. Keeping the second would lock every other Sluice
     // out of a folder this process will never work in.
@@ -288,7 +404,7 @@ class SettingsServiceTest {
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
-        final var service = new SettingsService(live, store, lock, new JobRunner());
+        final var service = settingsService(live, store, lock, new JobRunner());
 
         assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(IllegalStateException.class);
 
@@ -320,7 +436,7 @@ class SettingsServiceTest {
             }
         };
         final var lock = new RecordingLock();
-        final var service = new SettingsService(live, store, lock, new JobRunner());
+        final var service = settingsService(live, store, lock, new JobRunner());
         final var first = Thread.ofVirtual().start(() -> service.save(withProvider(settings(before), "anthropic")));
         firstWriting.await();
         final var second = Thread.ofVirtual().start(() -> {
@@ -357,7 +473,7 @@ class SettingsServiceTest {
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
-        final var service = new SettingsService(live, store, new RefusingSecondClaimAndRelease(), new JobRunner());
+        final var service = settingsService(live, store, new RefusingSecondClaimAndRelease(), new JobRunner());
 
         assertThatThrownBy(() -> service.save(settings(after)))
                 .isInstanceOf(IllegalStateException.class)
@@ -374,6 +490,17 @@ class SettingsServiceTest {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
+    }
+
+    private static SettingsService settingsService(final LiveSettings live, final SettingsStore store,
+                                                   final WorkingRootLock lock, final JobRunner jobRunner) {
+        return settingsService(live, store, lock, jobRunner, List.of());
+    }
+
+    private static SettingsService settingsService(final LiveSettings live, final SettingsStore store,
+                                                   final WorkingRootLock lock, final JobRunner jobRunner,
+                                                   final List<FolderRootsChangeListener> listeners) {
+        return new SettingsService(live, store, lock, jobRunner, listeners);
     }
 
     private static Settings withProvider(final Settings settings, final String provider) {
@@ -416,6 +543,19 @@ class SettingsServiceTest {
         @Override
         public void save(final Settings settings) {
             this.saved.add(settings);
+        }
+    }
+
+    private static final class RecordingListener implements FolderRootsChangeListener {
+
+        private int calls;
+
+        private boolean lastWorkingRootMoved;
+
+        @Override
+        public void folderRootsChanged(final boolean workingRootMoved) {
+            this.calls++;
+            this.lastWorkingRootMoved = workingRootMoved;
         }
     }
 

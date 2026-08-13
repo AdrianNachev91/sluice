@@ -49,10 +49,9 @@ class PrepIndexWriterTest {
                   "photos": 42,
                   "unreviewable": ["%s"],
                   "montages": 2,
-                  "prepDir": "%s",
                   "entries": ["montage-001", "montage-002"]
                 }
-                """.formatted(jsonEscaped(basePath), jsonEscaped(corrupt), jsonEscaped(prepDir)));
+                """.formatted(jsonEscaped(basePath), jsonEscaped(corrupt)));
     }
 
     @Test

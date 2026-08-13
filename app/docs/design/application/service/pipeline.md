@@ -14,9 +14,12 @@ with progress reported through `ProgressPort` via `PhaseRunner`
 `Troubleshooter` and `PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing.
 Neither has per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the
 whole reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each
-actually does. `startWatching(prepDir)`/`stopWatching(prepDir)` are the last pair of delegates, and
-the only ones that are not jobs at all. They switch one waiting run's auto-resume on and off, which
-is bookkeeping against an in-memory map rather than work - see `cull-engine.md`.
+actually does. `startWatching(prepDir)`, `stopWatching(prepDir)` and `stopAllWatching()` are the
+last delegates, and the only ones that are not jobs at all. They switch auto-resume on and off,
+which is bookkeeping against an in-memory map rather than work - see `cull-engine.md`. The first
+two govern one waiting run. `stopAllWatching()` retires every poller at once, for a save that moved
+the working root and so left them all polling outside it. It is the one entry point that runs no
+root check. A save moving only the library or the inbox does not come here.
 
 ## How one call works
 

@@ -170,6 +170,12 @@ there is nothing for a culler to judge, so dispatching would only produce an emp
 `cullPrepPort.readIndex()` instead of `MontageRenderer` regenerating it, so no montage is ever
 rebuilt or re-rendered by a resume.
 
+It checks the folder roots first, and refuses with `PathsMisconfiguredException` if any is unset,
+missing or overlapping. `Pipeline` runs the same check on its own way in, so the one this buys is a
+watcher's auto-resume, which reaches this method without passing the facade. Apply moves files, and
+a move recreates any missing ancestor of its destination. So a resume against roots the app has
+already refused would put a folder back that the user had removed.
+
 Listing what is on disk is not this class's job at all. `PrepDirDoctor.runs()` enumerates the
 cull-prep root and diagnoses each dir, and `Pipeline.cullRuns()` exposes it - see
 `prep-dir-doctor.md`. `CullEngine` reads it for two things only: the startup watch scan, and the
@@ -347,6 +353,19 @@ armed watcher can therefore never leave two pollers on the same job.
 re-arms every resumable run found on disk at startup, meaning `WAITING` or `READY`. There is no persistent job
 store, so restarting the app would otherwise silently stop watching every job armed before the
 restart.
+
+`CullWatchers.disarmAll()` retires every poller at once, reached through `Pipeline.stopAllWatching()`.
+Its caller is a save that moved the **working** root specifically. Every armed watcher polls a prep
+dir under that root, so only that move leaves them all naming a folder outside the roots in force. A
+library or inbox move strands nothing, and retiring there would switch off a watch a user turned on
+by hand for one run. The same save then re-arms against the new roots, which is why the retire has
+to come first. The whole sequence runs with the job slot held shut. Arming is skipped while a job
+runs, so a watcher taking the slot in between would leave the re-arm doing nothing at all.
+
+An auto-resume refused because a root is unusable retires its own watcher rather than polling on.
+Nothing the watcher can see will clear that condition. The run stays `Waiting`, and a manual Resume
+surfaces the refusal where somebody can act on it. Repairing the root through Settings re-arms,
+since any root move fires the same housekeeping.
 
 Retiring by prep dir rather than by watcher identity leaves one known window, accepted rather than
 closed. This is all `CullWatchers`' own state and logic - `CullEngine` only supplies the trigger. A

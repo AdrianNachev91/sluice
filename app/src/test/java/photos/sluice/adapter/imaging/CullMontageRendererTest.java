@@ -111,10 +111,9 @@ class CullMontageRendererTest {
                   "photos": 5,
                   "unreviewable": ["%s"],
                   "montages": 2,
-                  "prepDir": "%s",
                   "entries": ["montage-001", "montage-002"]
                 }
-                """.formatted(jsonEscaped(result.basePath()), jsonEscaped(corrupt), jsonEscaped(result.prepDir())));
+                """.formatted(jsonEscaped(result.basePath()), jsonEscaped(corrupt)));
     }
 
     @Test

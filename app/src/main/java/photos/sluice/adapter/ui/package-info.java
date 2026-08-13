@@ -1,6 +1,6 @@
-// The driving side of the pipeline: a job's own progress, and (later) the desktop UI that starts
-// jobs and watches their progress. LoggingProgressPort is a console stand-in for the desktop
-// dashboard.
+// The desktop app's own driving side. The work it does at startup, the housekeeping it redoes when
+// its working root moves, and the UI that starts jobs. Every bean here is profile-gated, so a
+// process that is not the desktop leaves them unbuilt.
 @NullMarked
 package photos.sluice.adapter.ui;
 

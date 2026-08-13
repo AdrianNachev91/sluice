@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -41,17 +42,27 @@ class PipelineSurfaceTest {
             "cullRuns()",
             "startWatching(Path)",
             "stopWatching(Path)",
+            "stopAllWatching()",
             "troubleshoot(Path)",
             "purgeCompleted()",
             "discard(Path)");
 
+    // The methods that must run whatever the roots say. Named rather than detected, because what
+    // exempts one is what its caller is doing, which no property of the method reveals.
+    // stopAllWatching's caller is a folder root that just moved. Refusing there would strand every
+    // watcher on a folder nothing is working in, for the life of the process. It resolves no path
+    // of its own, so the check has nothing here to protect.
+    private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK = Set.of("stopAllWatching()");
+
     // The facade is where every driving adapter passes through, so it is where the folder-root check
     // belongs. A guard written into a screen would be walked past by a command line. This reads the
     // call rather than a list of names, so a new entry point is covered the moment it exists. Public
-    // only: the package-private test seam resolves no path.
+    // only: the package-private test seam resolves no path. The exemptions above are the one list
+    // this cannot read, and adding to it is the decision this rule exists to force.
     @ArchTest
     static final ArchRule everyEntryPointChecksTheFolderRoots =
             methods().that().areDeclaredIn(Pipeline.class).and().arePublic()
+                    .and(isNotExempt())
                     .should(callTheFolderRootCheck())
                     .as("every public Pipeline method must check the folder roots before resolving one");
 
@@ -73,6 +84,11 @@ class PipelineSurfaceTest {
                         method.getFullName() + (checks ? " calls " : " does not call ") + ROOT_CHECK));
             }
         };
+    }
+
+    private static DescribedPredicate<JavaMethod> isNotExempt() {
+        return DescribedPredicate.describe("not exempt from the folder-root check",
+                method -> !EXEMPT_FROM_THE_ROOT_CHECK.contains(signature(method)));
     }
 
     private static ArchCondition<JavaMethod> bePinned() {

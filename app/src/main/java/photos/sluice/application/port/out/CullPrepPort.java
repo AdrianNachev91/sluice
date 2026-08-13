@@ -30,8 +30,13 @@ public interface CullPrepPort {
      * lock, a permission denial) throws a plain {@link UncheckedIOException} instead. That is how a
      * caller tells the two apart.
      *
+     * <p>A caller may rely on the answer's own {@code prepDir} being the directory it asked about.
+     * That value decides where a resume applies, which watcher is retired, and what a cleanup
+     * deletes, so a caller acting on it is acting on a path it chose rather than one the file
+     * named.
+     *
      * @param prepDir {@link Path} the prep directory to read
-     * @return {@link PrepDir} the parsed prep directory index
+     * @return {@link PrepDir} the parsed prep directory index, carrying prepDir as passed here
      */
     PrepDir readIndex(Path prepDir);
 

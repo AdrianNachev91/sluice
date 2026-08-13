@@ -14,6 +14,7 @@ import photos.sluice.config.SettingsFixture;
 import photos.sluice.config.SettingsHolder;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -99,7 +100,7 @@ class SettingsServiceLockTest {
             this.otherProcess.acquire(before);
             throw new IllegalStateException("disk full");
         };
-        final var service = new SettingsService(live, store, this.lock, new JobRunner());
+        final var service = new SettingsService(live, store, this.lock, new JobRunner(), List.of());
         this.lock.acquire(before);
 
         assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(IllegalStateException.class);
@@ -110,7 +111,7 @@ class SettingsServiceLockTest {
     private SettingsService service(final Path repoRoot, final Path configDir) {
         final LiveSettings live = new SettingsHolder(settings(repoRoot));
         return new SettingsService(live, new YamlSettingsStore(configDir.resolve("config.yml")), this.lock,
-                new JobRunner());
+                new JobRunner(), List.of());
     }
 
     private static Settings settings(final Path root) {

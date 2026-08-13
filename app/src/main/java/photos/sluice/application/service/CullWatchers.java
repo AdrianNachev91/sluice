@@ -3,6 +3,7 @@ package photos.sluice.application.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.job.WatchMode;
@@ -128,22 +129,49 @@ final class CullWatchers {
     }
 
     /**
-     * The heavier action a CullWatcher runs at most once it thinks isReadyToResume(). Returns whether
-     * it actually got to run. True means resume's own jobRunner.submit() succeeded - the watcher's
-     * job is then done, win or lose (see CullEngine's own dispatchAndApply() re-arm-on-Waiting note).
-     * False means the job runner was busy with something else, so the watcher keeps polling and
-     * retries. The submitted job runs and completes fully asynchronously; nothing here waits on it. A
-     * failure there would otherwise vanish silently, so it's logged here instead. That matches the
-     * visibility a manual Resume gets for free from whatever UI/CLI surfaces its own
-     * join()/onComplete() failure.
+     * Retires every active watcher. Its caller is a save that moved the working root, which leaves
+     * every watcher polling a prep dir outside the root now in force.
+     *
+     * <p>Safe to iterate while disarming, since {@link ConcurrentHashMap}'s own key view tolerates
+     * removal during traversal. A watcher armed concurrently may or may not be seen. A copy taken
+     * up front would simply never see it, so neither shape settles that race, and this one needs no
+     * second collection.
+     */
+    void disarmAll() {
+        this.activeWatches.keySet().forEach(this::disarmWatch);
+    }
+
+    /**
+     * The heavier action a CullWatcher runs at most once it thinks isReadyToResume(). Returns
+     * whether this watcher has anything left to do. False means keep polling. True means stop, and
+     * two different things produce it.
+     *
+     * <p>A submitted resume is the ordinary one - the watcher's job is then done, win or lose (see
+     * CullEngine's own dispatchAndApply() re-arm-on-Waiting note). The submitted job runs and
+     * completes fully asynchronously; nothing here waits on it. A failure there would otherwise
+     * vanish silently, so it's logged here instead. That matches the visibility a manual Resume gets
+     * for free from whatever UI/CLI surfaces its own join()/onComplete() failure.
+     *
+     * <p>A refused resume is the other. Unusable folder roots are not a condition that clears by
+     * waiting, so polling on would spend a tally read every interval to be refused again. The
+     * watcher stops and the run stays exactly as it is, still Waiting and still listed. A manual
+     * Resume then surfaces the same refusal on a screen, where it can be acted on.
+     *
+     * <p>The narrow clause is what tells them apart, and it has to be there. A busy job runner
+     * throws IllegalStateException, and PathsMisconfiguredException is one of those. The broad
+     * clause alone therefore reads a refusal as "runner busy, keep polling", and polls for the life
+     * of the process over a condition no poll will resolve.
      *
      * @param prepDir {@link Path} the prep dir to attempt to resume
-     * @return boolean whether the resume attempt was actually submitted
+     * @return boolean false only when a busy job runner makes it worth retrying
      */
     private boolean tryAutoResume(final Path prepDir) {
         final JobHandle<CullJobOutcome> handle;
         try {
             handle = this.resume.apply(prepDir);
+        } catch (final PathsMisconfiguredException refused) {
+            log.warn("Watch-mode auto-resume for {} was refused and this watcher is stopping", prepDir, refused);
+            return true;
         } catch (final IllegalStateException busy) {
             return false;
         }

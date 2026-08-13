@@ -22,7 +22,6 @@ import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
-import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.rescue.RescueSummary;
 
 import java.nio.file.Path;
@@ -75,7 +74,7 @@ public class Pipeline {
     private final PrepDirDoctor prepDirDoctor;
     private final PrepDirRemedies prepDirRemedies;
     private final PathsPort pathsPort;
-    private final PathValidationUseCase pathValidation;
+    private final RootsGuard rootsGuard;
 
     /**
      * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
@@ -161,16 +160,16 @@ public class Pipeline {
         this.rescueEngine = rescueEngine;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
+        this.rootsGuard = new RootsGuard(pathValidation);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
-                prepDirDoctor, prepDirRemedies, watchPollInterval);
+                prepDirDoctor, prepDirRemedies, this.rootsGuard, watchPollInterval);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, this.cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
         this.pathsPort = pathsPort;
-        this.pathValidation = pathValidation;
     }
 
     /**
@@ -315,6 +314,27 @@ public class Pipeline {
     }
 
     /**
+     * Retires every poller this process has armed. No run is started, stopped or altered by it.
+     *
+     * <p>What a caller with a moved working root needs, and only that caller. Every armed watcher
+     * polls a prep dir under {@code logs/cull-prep}, which hangs off the working root. So for that
+     * one move, "armed under the old root" and "armed at all" name the same set. A watcher left
+     * behind would poll a folder outside the working root in force, for as long as the process
+     * lives. A library or inbox move strands nothing and must not come here, since this would also
+     * retire a watch a user turned on by hand.
+     *
+     * <p>Retiring a watcher does not reach into a poll already running. A watcher whose thread is
+     * mid-attempt when this arrives still finishes that attempt, resume included. What this
+     * guarantees is that no further poll starts.
+     *
+     * <p>The one facade method with no roots check. It resolves no path, and the caller that needs
+     * it most is one whose roots have just changed underneath it.
+     */
+    public void stopAllWatching() {
+        this.cullEngine.disarmAllWatches();
+    }
+
+    /**
      * Runs a troubleshoot pass over prepDir as a background job. Routing it through JobRunner buys
      * the same one-job-at-a-time discipline every other job gets. A reconcile's move-log rewrite can
      * then never race a concurrent apply/cull/commit against the same prep dir.
@@ -387,10 +407,7 @@ public class Pipeline {
      * @throws PathsMisconfiguredException if any of the three roots is unset, missing, or overlapping
      */
     private void requireUsableRoots() {
-        final List<PathViolation> violations = this.pathValidation.violationsInForce();
-        if (!violations.isEmpty()) {
-            throw new PathsMisconfiguredException(violations);
-        }
+        this.rootsGuard.requireUsable();
     }
 
     /**

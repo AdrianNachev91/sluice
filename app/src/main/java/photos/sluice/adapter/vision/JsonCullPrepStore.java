@@ -96,9 +96,13 @@ public class JsonCullPrepStore implements CullPrepPort {
     /**
      * The JSON shape {@link #readIndex} parses: one scope's prep directory index, as written by
      * this app's own prep step.
+     *
+     * <p>There is no {@code prepDir} field. {@link PrepDir} carries one, and its only trustworthy
+     * source is the directory the index was read from. The file's own claim about where it lives is
+     * not that. An index written by an older build still carries the key, and it is ignored.
      */
     private record RawIndex(String scope, @Nullable List<@Nullable RawCategory> categories, String basePath, int photos,
-                            @Nullable List<String> unreviewable, int montages, String prepDir,
+                            @Nullable List<String> unreviewable, int montages,
                             @Nullable List<String> entries) {
     }
 
@@ -112,6 +116,11 @@ public class JsonCullPrepStore implements CullPrepPort {
 
     /**
      * Reads a prep directory's index.json into a {@link PrepDir}.
+     *
+     * <p>The returned record's own {@code prepDir} is this call's argument, never a value off disk.
+     * A culler is handed the record and nothing else, so that field is its only handle on the
+     * directory it is working in. Taking it from the file would let a doctored index in one
+     * directory send every downstream step to another.
      *
      * @param prepDir {@link Path} the prep directory to read
      * @return {@link PrepDir} the parsed prep directory index
@@ -150,7 +159,7 @@ public class JsonCullPrepStore implements CullPrepPort {
         return new PrepDir(raw.scope(), requiredCategories(raw.categories(), path),
                 requiredPath(raw.basePath(), "basePath", path), raw.photos(),
                 unreviewable.stream().map(entry -> requiredPath(entry, "an unreviewable entry", path)).toList(),
-                raw.montages(), requiredPath(raw.prepDir(), "prepDir", path), entries);
+                raw.montages(), prepDir, entries);
     }
 
     /**
@@ -172,7 +181,6 @@ public class JsonCullPrepStore implements CullPrepPort {
                 index.photos(),
                 index.unreviewable().stream().map(Path::toString).toList(),
                 index.montages(),
-                index.prepDir().toString(),
                 index.entries());
         final Path path = prepDir.resolve("index.json");
         try {
@@ -221,11 +229,10 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param photos int count of candidates found
      * @param unreviewable a {@link List} of {@link String} candidates that couldn't render a judgeable tile
      * @param montages int count of montages generated
-     * @param prepDir {@link String} the prep directory path
      * @param entries a {@link List} of {@link String} the montage entry filenames
      */
     private record RawIndexOut(String scope, List<RawCategory> categories, String basePath, int photos,
-                               List<String> unreviewable, int montages, String prepDir, List<String> entries) {
+                               List<String> unreviewable, int montages, List<String> entries) {
     }
 
     /**

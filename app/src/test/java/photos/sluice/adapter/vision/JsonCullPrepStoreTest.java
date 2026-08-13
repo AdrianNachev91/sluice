@@ -73,10 +73,9 @@ class JsonCullPrepStoreTest {
                   ],
                   "basePath": "%s",
                   "photos": 0,
-                  "montages": 0,
-                  "prepDir": "%s"
+                  "montages": 0
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         final PrepDir prepDir = this.store.readIndex(dir);
 
@@ -96,10 +95,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -120,10 +118,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -141,13 +138,12 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": [
                     "montage-001",
                     null
                   ]
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -167,10 +163,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -189,10 +184,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -210,10 +204,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThat(this.store.readIndex(dir).categories()).isEmpty();
     }
@@ -229,10 +222,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -251,10 +243,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -274,10 +265,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class);
@@ -296,10 +286,9 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": "%s",
                   "entries": []
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -318,12 +307,11 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 1,
-                  "prepDir": "%s",
                   "entries": [
                     "../../../evil"
                   ]
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -364,10 +352,9 @@ class JsonCullPrepStoreTest {
                   ],
                   "basePath": null,
                   "photos": 0,
-                  "montages": 0,
-                  "prepDir": "%s"
+                  "montages": 0
                 }
-                """.formatted(jsonEscaped(dir)));
+                """);
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -375,7 +362,8 @@ class JsonCullPrepStoreTest {
     }
 
     @Test
-    void readIndexOnANullPrepDirThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+    void readIndexAnswersTheDirectoryItWasReadFromRatherThanTheOneTheFileNames(
+            @TempDir final Path dir, @TempDir final Path elsewhere) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
                 {
                   "scope": "2019-06",
@@ -385,13 +373,11 @@ class JsonCullPrepStoreTest {
                   "basePath": "%s",
                   "photos": 0,
                   "montages": 0,
-                  "prepDir": null
+                  "prepDir": "%s"
                 }
-                """.formatted(jsonEscaped(dir.resolve("base"))));
+                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(elsewhere)));
 
-        assertThatThrownBy(() -> this.store.readIndex(dir))
-                .isInstanceOf(MalformedPrepJsonException.class)
-                .hasMessageContaining("prepDir");
+        assertThat(this.store.readIndex(dir).prepDir()).isEqualTo(dir);
     }
 
     @Test
@@ -407,10 +393,9 @@ class JsonCullPrepStoreTest {
                   "unreviewable": [
                     null
                   ],
-                  "montages": 0,
-                  "prepDir": "%s"
+                  "montages": 0
                 }
-                """.formatted(jsonEscaped(dir.resolve("base")), jsonEscaped(dir)));
+                """.formatted(jsonEscaped(dir.resolve("base"))));
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class);
@@ -429,10 +414,9 @@ class JsonCullPrepStoreTest {
                   ],
                   "basePath": "bad\\u0000path",
                   "photos": 0,
-                  "montages": 0,
-                  "prepDir": "%s"
+                  "montages": 0
                 }
-                """.formatted(jsonEscaped(dir)));
+                """);
 
         assertThatThrownBy(() -> this.store.readIndex(dir))
                 .isInstanceOf(MalformedPrepJsonException.class)

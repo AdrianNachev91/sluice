@@ -150,5 +150,7 @@ genuinely resumable `Waiting` job.
 - `adapter/imaging/SidecarWriter` / `PrepIndexWriter` - JSON emission for each montage and for the
   overall `index.json`.
 - `domain/cull/CullScopeSelector` + `CullCandidate` - pure scope-resolution and ordering logic.
-- `domain/cull/PrepDir` - the receipt this class returns, mirroring `index.json`'s field shape.
+- `domain/cull/PrepDir` - the receipt this class returns, mirroring `index.json`'s field shape but
+  for `prepDir`, which is not written to the file at all. A reader fills that from the directory it
+  read the file out of.
 - `application/port/out/MontageRenderer` - the port this class implements.

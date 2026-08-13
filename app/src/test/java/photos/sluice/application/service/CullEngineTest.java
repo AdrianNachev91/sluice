@@ -15,6 +15,8 @@ import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
+import photos.sluice.domain.model.SortScope;
+import photos.sluice.domain.model.SortSummary;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -31,11 +33,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static photos.sluice.application.service.PipelineTestSupport.assertHoldsFor;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingCancellableCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingIncompleteCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoveTo;
+import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.FailableIndexReads;
 import static photos.sluice.application.service.PipelineTestSupport.FailingListingOfPrepDir;
 import static photos.sluice.application.service.PipelineTestSupport.FixedSettings;
@@ -45,9 +47,12 @@ import static photos.sluice.application.service.PipelineTestSupport.NeverCalledC
 import static photos.sluice.application.service.PipelineTestSupport.PlantOnFirstExists;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
 import static photos.sluice.application.service.PipelineTestSupport.ThrowingCuller;
+import static photos.sluice.application.service.PipelineTestSupport.assertHoldsFor;
 import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.defaultCullSettings;
+import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
+import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.prepDirRemedies;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
@@ -55,10 +60,16 @@ import static photos.sluice.application.service.PipelineTestSupport.unresolvedRu
 import static photos.sluice.application.service.PipelineTestSupport.waitUntil;
 import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
+import static photos.sluice.application.service.PipelineTestSupport.writeFile;
 import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 import static photos.sluice.application.service.PipelineTestSupport.writeShard;
 
 class CullEngineTest {
+
+    // How long a test waits on a latch that should never trip, proving no apply started. Every use
+    // is paired with a control trip inside the same window, so the number is checked by the test
+    // rather than picked to feel safe.
+    private static final Duration WINDOW = Duration.ofMillis(500);
 
     @Test
     void cullReturnsWaitingWithAnEmptyTallyWhenNoShardsHaveBeenDropped(@TempDir final Path root) throws IOException {
@@ -1016,6 +1027,97 @@ class CullEngineTest {
                 .extracting(CullRunSummary::shards).isEqualTo(new ShardTally(1, 1, 1));
         assertThat(Files.exists(photo)).isTrue();
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
+    }
+
+    @Test
+    void stopAllWatchingRetiresEveryArmedWatcher(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2020", "06"), "IMG_2.jpg", Instant.parse("2020-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        final Path first = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
+                .job().prepDir();
+        final Path second = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2020, null)).join())
+                .job().prepDir();
+        assertThat(pipeline.isWatchActive(first)).isTrue();
+        assertThat(pipeline.isWatchActive(second)).isTrue();
+
+        pipeline.stopAllWatching();
+
+        assertThat(pipeline.isWatchActive(first)).isFalse();
+        assertThat(pipeline.isWatchActive(second)).isFalse();
+    }
+
+    @Test
+    void stopAllWatchingStillRetiresWatchersOnceAFolderRootHasGone(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
+                .job().prepDir();
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
+        Files.delete(root.resolve("Library"));
+
+        pipeline.stopAllWatching();
+
+        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
+    }
+
+    @Test
+    void watchModeRefusesToAutoResumeOnceAFolderRootHasGone(@TempDir final Path root) throws Exception {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        final var moveStarted = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort(),
+                new BlockingMoveTo(moveStarted, new CountDownLatch(0)), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
+        Files.delete(root.resolve("Library"));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        // Retiring proves the poll reached the resume, not which way that resume went. A submitted
+        // one retires the watcher just as fast, then moves files on the job's own thread a moment
+        // later. The latch is what separates them.
+        waitUntil(Duration.ofSeconds(2), () -> !pipeline.isWatchActive(prepDir));
+        assertThat(moveStarted.await(WINDOW.toMillis(), TimeUnit.MILLISECONDS)).isFalse();
+        assertThat(Files.exists(photo)).isTrue();
+        assertThat(prepDir.resolve("decisions.json")).doesNotExist();
+
+        // The control, and the reason the window above is not a guess. Restoring the root and
+        // resuming by hand runs the apply the refusal withheld, and the latch trips inside the same
+        // window on the same fixture. A window too short to see a move would fail here rather than
+        // pass the assertion above for the wrong reason.
+        Files.createDirectory(root.resolve("Library"));
+        pipeline.resume(prepDir, false);
+
+        assertThat(moveStarted.await(WINDOW.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+    }
+
+    // The sort is submitted and provably in flight before the shard lands. Otherwise the watcher
+    // could take the job slot first, and sort() would throw instead of the test proving anything.
+    @Test
+    void watchModeKeepsPollingWhileAnotherJobHoldsTheRunner(@TempDir final Path root) throws Exception {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
+                ":00:00Z"));
+        writeFile(inboxOf(root).resolve("20210315_other.jpg"), padded("keeper"));
+        final var moveStarted = new CountDownLatch(1);
+        final var releaseMove = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove),
+                watchCullSettings(), List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+
+        final JobHandle<SortSummary> sorting = pipeline.sort(new SortScope.OldestYear());
+        moveStarted.await();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        assertHoldsFor(Duration.ofMillis(200), () -> pipeline.isWatchActive(prepDir));
+        releaseMove.countDown();
+        sorting.join();
+
+        waitUntil(Duration.ofSeconds(2), () -> !Files.exists(photo));
+        assertThat(root.resolve("Review/junk/IMG_1.jpg")).exists();
     }
 
     // A shard file exists from the moment the agent opens it for writing. Presence alone would then

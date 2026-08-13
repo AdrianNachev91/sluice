@@ -23,12 +23,13 @@ import java.util.function.BooleanSupplier;
  *
  * <p>{@code isReady} is a cheap status check ({@link CullEngine}'s own shard tally, via
  * {@link ShardTallyCalculator}). {@code attemptConsume} is the heavier action, a real resume
- * attempt, run only once {@code isReady} says so. It returns whether it actually got to run.
- * False means the job runner was busy with something else, so this watcher keeps polling and
- * retries later rather than giving up. True means this watcher's job is done. A resume attempt
- * can still land back in Waiting itself if a shard went bad between the tally check and the real
- * validation. When that happens, the same {@link CullEngine} call that produces that outcome arms
- * a fresh watcher. This instance does not loop on its own.
+ * attempt, run only once {@code isReady} says so. It returns whether this watcher has anything
+ * left to do. False means the job runner was busy with something else, so this watcher keeps
+ * polling and retries later rather than giving up. True means this watcher's job is done, whether
+ * because a resume went in or because one was refused on grounds no amount of polling will change.
+ * A resume attempt can still land back in Waiting itself if a shard went bad between the tally
+ * check and the real validation. When that happens, the same {@link CullEngine} call that produces
+ * that outcome arms a fresh watcher. This instance does not loop on its own.
  *
  * <p>There is no time limit on the polling. A watch that never fires costs one cheap tally read per
  * interval, and a watch that does fire either completes the run or lands it Blocked and stops. So
@@ -55,7 +56,8 @@ final class CullWatcher {
      *
      * @param pollInterval {@link Duration} how often to check readiness
      * @param isReady {@link BooleanSupplier} cheap readiness check
-     * @param attemptConsume {@link BooleanSupplier} the real resume attempt to run once ready
+     * @param attemptConsume {@link BooleanSupplier} the real resume attempt to run once ready,
+     *         answering whether this watcher is done
      */
     CullWatcher(final Duration pollInterval, final BooleanSupplier isReady, final BooleanSupplier attemptConsume) {
         this.pollInterval = pollInterval;

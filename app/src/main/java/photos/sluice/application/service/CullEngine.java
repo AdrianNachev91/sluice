@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullException;
@@ -63,6 +64,7 @@ final class CullEngine {
     private final PrepDirDoctor prepDirDoctor;
     private final PrepDirRemedies prepDirRemedies;
     private final PathsPort pathsPort;
+    private final RootsGuard rootsGuard;
 
     /**
      * Wires together every collaborator this engine dispatches cull jobs through.
@@ -80,6 +82,7 @@ final class CullEngine {
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses whatever already occupies a scope
      * @param prepDirRemedies {@link PrepDirRemedies} archives a completed run out of the way
+     * @param rootsGuard {@link RootsGuard} refuses a resume whose folder roots are not usable
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      */
     CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
@@ -89,7 +92,9 @@ final class CullEngine {
                final JobRunner jobRunner, final ProgressPort progressPort,
                final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
                final PrepDirDoctor prepDirDoctor, final PrepDirRemedies prepDirRemedies,
+               final RootsGuard rootsGuard,
                final Duration watchPollInterval) {
+        this.rootsGuard = rootsGuard;
         this.montageRenderer = montageRenderer;
         this.cullDispatcher = cullDispatcher;
         this.applyEngine = applyEngine;
@@ -167,11 +172,18 @@ final class CullEngine {
      * then lands right back in Waiting with a freshly recomputed tally. A full shard set means only
      * apply is left, so no culler is entered at all - see dispatchAndApply()'s own doc.
      *
+     * <p>The roots check runs here rather than only on {@link Pipeline}'s own way in. A watcher's
+     * auto-resume calls this method directly, so a check at the facade alone would be walked past
+     * by the one caller nobody is watching. Apply moves files, and an unusable working root gets
+     * silently recreated the moment a move resolves a path under it.
+     *
      * @param prepDir {@link Path} the existing prep dir to resume
      * @param allowPartial boolean whether a partial shard set is acceptable
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
+     * @throws PathsMisconfiguredException if the folder roots are unset, missing, or overlapping
      */
     JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
+        this.rootsGuard.requireUsable();
         return this.jobRunner.submit(handle ->
                 this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
                         handle::isCancellationRequested, null));
@@ -204,6 +216,13 @@ final class CullEngine {
      */
     void disarmWatch(final Path prepDir) {
         this.cullWatchers.disarmWatch(prepDir);
+    }
+
+    /**
+     * Delegates to {@link CullWatchers#disarmAll}. {@link Pipeline#stopAllWatching}'s own route in.
+     */
+    void disarmAllWatches() {
+        this.cullWatchers.disarmAll();
     }
 
     /**

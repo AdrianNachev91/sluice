@@ -14,9 +14,11 @@ import java.util.List;
  * Writes a {@link PrepDir}'s metadata to disk as {@code index.json}.
  *
  * <p>{@link PrepDir} already mirrors the file's field shape and order (see its own doc comment).
- * This class substitutes {@link String} for its {@link java.nio.file.Path}-typed fields
- * ({@code basePath}, {@code prepDir}, and each entry in {@code unreviewable}), for the same reason
- * as {@link SidecarWriter}.
+ * This class substitutes {@link String} for its {@link Path}-typed fields ({@code basePath}, and
+ * each entry in {@code unreviewable}), for the same reason as {@link SidecarWriter}.
+ *
+ * <p>The record's own {@code prepDir} is not written. A reader takes that from the directory it
+ * read the file out of, which is the one source a doctored file cannot supply.
  */
 @Component
 public class PrepIndexWriter {
@@ -46,7 +48,7 @@ public class PrepIndexWriter {
      */
     private record Index(
             String scope, List<Category> categories, String basePath, int photos, List<String> unreviewable,
-            int montages, String prepDir, List<String> entries) {
+            int montages, List<String> entries) {
     }
 
     /**
@@ -71,7 +73,6 @@ public class PrepIndexWriter {
                 prepDir.photos(),
                 prepDir.unreviewable().stream().map(Path::toString).toList(),
                 prepDir.montages(),
-                prepDir.prepDir().toString(),
                 prepDir.entries());
         try {
             AtomicJsonWrite.write(indexPath, this.mapper, document);

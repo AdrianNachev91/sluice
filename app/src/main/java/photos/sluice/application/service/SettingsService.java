@@ -1,14 +1,18 @@
 package photos.sluice.application.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
+import photos.sluice.application.port.out.FolderRootsChangeListener;
 import photos.sluice.application.port.out.WorkingRootLock;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -30,9 +34,15 @@ import java.util.Optional;
  *
  * <p>One save at a time, so a second one cannot decide what to do from settings the first is
  * halfway through replacing.
+ *
+ * <p>A save that moved any of the folder roots then tells its {@link FolderRootsChangeListener}s,
+ * and says whether the working root was one of them. Whatever a driving adapter does inside those
+ * roots, it did against the old ones, and this is the only moment that fact is known.
  */
 @Component
 public class SettingsService implements SettingsUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(SettingsService.class);
 
     // Held for a whole save. Every save reads the settings in force to work out what it is
     // changing, and that answer has to still be true when it acts on it.
@@ -41,6 +51,7 @@ public class SettingsService implements SettingsUseCase {
     private final SettingsStore store;
     private final WorkingRootLock workingRootLock;
     private final JobRunner jobRunner;
+    private final List<FolderRootsChangeListener> folderRootsListeners;
 
     /**
      * Creates the settings service.
@@ -49,13 +60,17 @@ public class SettingsService implements SettingsUseCase {
      * @param store {@link SettingsStore} writes settings so a restart reads them back
      * @param workingRootLock {@link WorkingRootLock} claims the working root for this process
      * @param jobRunner {@link JobRunner} says whether a job is running
+     * @param folderRootsListeners a {@link List} of {@link FolderRootsChangeListener} told once a
+     *         save has moved any folder root, empty in a process that wants none
      */
     public SettingsService(final LiveSettings live, final SettingsStore store,
-                           final WorkingRootLock workingRootLock, final JobRunner jobRunner) {
+                           final WorkingRootLock workingRootLock, final JobRunner jobRunner,
+                           final List<FolderRootsChangeListener> folderRootsListeners) {
         this.live = live;
         this.store = store;
         this.workingRootLock = workingRootLock;
         this.jobRunner = jobRunner;
+        this.folderRootsListeners = List.copyOf(folderRootsListeners);
     }
 
     /**
@@ -81,7 +96,11 @@ public class SettingsService implements SettingsUseCase {
                 this.writeAndApply(settings);
                 return;
             }
-            if (!this.jobRunner.runIfIdle(() -> this.moveRoots(settings, previous))) {
+            final boolean workingRootMoved = !workingRoot(settings).equals(workingRoot(previous));
+            if (!this.jobRunner.runIfIdle(() -> {
+                this.moveRoots(settings, previous);
+                this.announceFolderRootsChange(workingRootMoved);
+            })) {
                 throw new JobInProgressException();
             }
         }
@@ -118,6 +137,40 @@ public class SettingsService implements SettingsUseCase {
             // while this one is not working in it.
             this.workingRootLock.release();
         }
+    }
+
+    /**
+     * Tells every listener a folder root has moved.
+     *
+     * <p>Runs with the job slot still held shut, which is what makes it worth the delay it costs
+     * every waiting {@code submit}. A listener re-arms watchers, and arming is skipped while a job
+     * runs. Announced after the slot was free, a watcher armed under the old root could take that
+     * slot in between. The re-arm would then silently do nothing for the life of the process.
+     *
+     * <p>That delay is real and this is the widest {@link JobRunner#runIfIdle} gets stretched. A
+     * listener surveys every run on disk, so folder roots on a slow or stalled network mount hold
+     * every waiting {@code submit} for as long as that read takes.
+     *
+     * <p>A listener that throws would report a save that has already reached disk as a failed one,
+     * so each is documented to report its own failures instead. This catch is what makes the port's
+     * wording true of a listener that gets it wrong rather than merely instructing one not to.
+     *
+     * <p>It takes {@link Throwable} because a listener walks directory trees, which is where
+     * {@code JobRunner} already names an {@link Error} as a real outcome rather than a theoretical
+     * one. Only the hazard is borrowed from there, not the handling: that class forwards what it
+     * catches to the caller's own future, while there is no caller here left to tell. Everything
+     * durable is already on disk, so a log line is the whole remedy.
+     *
+     * @param workingRootMoved boolean whether this save moved the working root itself
+     */
+    private void announceFolderRootsChange(final boolean workingRootMoved) {
+        this.folderRootsListeners.forEach(listener -> {
+            try {
+                listener.folderRootsChanged(workingRootMoved);
+            } catch (final Throwable t) {
+                log.warn("A folder-roots change listener failed after the save had already landed", t);
+            }
+        });
     }
 
     /**

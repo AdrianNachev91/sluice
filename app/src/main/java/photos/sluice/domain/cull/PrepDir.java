@@ -5,7 +5,8 @@ import java.util.List;
 
 /**
  * The receipt {@link photos.sluice.application.port.out.MontageRenderer#build} hands back to its
- * caller, mirroring {@code index.json}'s own field shape and order. The record is what travels in
+ * caller. It mirrors {@code index.json}'s own field shape and order, but for {@code prepDir}. The
+ * file does not carry that one at all, for the reason given below. The record is what travels in
  * memory: the caller reports a summary from it and hands it to the
  * {@link photos.sluice.application.port.out.VisionCuller} port. {@code index.json} makes the same
  * data durable, so a later session can rebuild the record without re-running prep. The record
@@ -14,6 +15,13 @@ import java.util.List;
  *
  * <p>There is no source field: a cull run only ever reads Sorted, since the library is final once
  * committed and is never re-scanned by cull.
+ *
+ * <p>{@code prepDir} is the one field with no counterpart in the file. A reader fills it from the
+ * directory it read the file out of. It is a plugin's only handle on its own directory, since
+ * {@link photos.sluice.application.port.out.VisionCuller#cull} hands over this record and nothing
+ * else. Every other consumer is called from something that already knows the directory. Recording
+ * it would let a doctored file in one directory point every downstream step at another, and the
+ * value would be overwritten on read anyway.
  *
  * <p>{@code categories} is the classification category set this run was prepped under, captured at
  * prep time. {@link ShardValidator} accepts only these names, via {@link #categoryNames()}. So a run
