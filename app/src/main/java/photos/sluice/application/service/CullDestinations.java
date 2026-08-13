@@ -134,6 +134,33 @@ public class CullDestinations {
     }
 
     /**
+     * Refuses a path that does not sit inside the library root, immediately before it is recorded
+     * as library content in the hash index.
+     *
+     * <p>A row in that index means the file is in the library, which is the folder the user's cloud
+     * storage syncs and backs up. A row naming anywhere else says a file is safe somewhere nothing
+     * is protecting. A later sort then treats a matching Inbox file as redundant and deletes it.
+     * The bytes do survive that moment, since the sort only counts a hash whose recorded path still
+     * exists. What does not survive is the guarantee: the remaining copy sits outside everything
+     * that would preserve it.
+     *
+     * <p>{@link ApplyEngine} appends to the index at two places. One resolves its destination
+     * through this class and is already covered by {@link #under}. The other backfills a row for a
+     * move an earlier run made, taking the path from the move-record log on disk. That one is what
+     * this guards, and nothing else stands between it and the index.
+     *
+     * @param dest {@link Path} the path about to be recorded as library content
+     * @throws IllegalStateException if dest does not sit strictly inside the library root
+     */
+    void requireUnderLibrary(final Path dest) {
+        final Path library = this.pathsPort.library();
+        if (!Containment.strictlyUnder(library, dest)) {
+            throw new IllegalStateException("Refusing to record a file outside " + library
+                    + " as library content: " + dest);
+        }
+    }
+
+    /**
      * The Nth collision candidate for baseName. Slot 1 is the name itself, then " (2)", " (3)", and
      * so on before the extension. Matches the media store's own collision-naming convention exactly.
      *

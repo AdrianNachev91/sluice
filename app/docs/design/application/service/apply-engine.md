@@ -105,6 +105,16 @@ when the prep index is read, a group id by `ShardValidator`'s slug rule, a year-
 digit pattern. The refusal is still the last line before a move, and the only place the resolved
 path itself is compared against its root.
 
+`requireUnderLibrary()` guards the one place a path reaches the library hash index without this
+class having resolved it. `backfillClassificationWrite()` takes that path off the move-record log.
+A damaged or edited log could otherwise record a file as library content while it sits anywhere at
+all. That row claims cloud-synced safety for a path nothing is protecting, and a later sort then
+treats a matching Inbox file as redundant. The bytes still survive that deletion, because a sort
+counts only a hash whose recorded path still exists (`SortEngine.existingLibraryHashes`). What does
+not survive is the guarantee the index is supposed to carry. The other append, in
+`applyClassification()`, resolves its destination through `destinationDirFor()` and is already
+covered by `under()`.
+
 `requireUnderSorted()` is the same refusal on the source side. Together the two bound what a run
 relocates at both ends: it moves and copies only out of `Sorted`, and only into a configured root.
 What it merely reads is wider, since it opens the whole prep dir and hashes a recorded destination

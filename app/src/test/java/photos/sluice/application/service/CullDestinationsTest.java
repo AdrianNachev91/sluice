@@ -119,6 +119,29 @@ class CullDestinationsTest {
                 .hasMessageContaining("outside");
     }
 
+    // The accepted call first, so the refusal below cannot pass against a method that refuses
+    // everything.
+    @Test
+    void aPathOutsideTheLibraryIsRefusedAsLibraryContent(@TempDir final Path root) {
+        final Path libraryRoot = root.resolve("Library");
+        final var destinations = new CullDestinations(pathsConfig(root, libraryRoot));
+
+        destinations.requireUnderLibrary(libraryRoot.resolve("Funny/meme.jpg"));
+        assertThatThrownBy(() -> destinations.requireUnderLibrary(root.resolve("Sorted/Photos/2019/06/meme.jpg")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outside");
+    }
+
+    @Test
+    void theLibraryRootItselfIsRefusedAsLibraryContent(@TempDir final Path root) {
+        final Path libraryRoot = root.resolve("Library");
+        final var destinations = new CullDestinations(pathsConfig(root, libraryRoot));
+
+        assertThatThrownBy(() -> destinations.requireUnderLibrary(libraryRoot))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outside");
+    }
+
     @Test
     void candidateNameIsThePlainNameAtSlotOneAndAParentheticalCountAfter() {
         assertThat(CullDestinations.candidateName("a.jpg", 1)).isEqualTo("a.jpg");

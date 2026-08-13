@@ -259,6 +259,7 @@ public class ApplyEngine {
      */
     private void backfillClassificationWrite(final Classification c, final MoveRecord record) {
         if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
+            this.cullDestinations.requireUnderLibrary(record.dest());
             // HashIndexPort.contains(hash) alone isn't enough. The index legitimately allows several
             // paths under one hash (byte-identical files kept in more than one place). Another entry
             // sharing this hash would wrongly read as "this decision's own row is already there" -

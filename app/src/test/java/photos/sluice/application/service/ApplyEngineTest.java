@@ -400,6 +400,29 @@ class ApplyEngineTest {
         assertThat(hashIndex.load()).containsOnlyKeys(new Sha256Hasher().hash(dest));
     }
 
+    // Its control is the test above, which proves this same fixture shape does backfill a row. The
+    // hash matches the file at the recorded path, so classification reads the move as done and
+    // reaches the backfill with a destination nothing else has vetted.
+    @Test
+    void aMoveRecordPointingOutsideTheLibraryIsRefusedRatherThanIndexedAsLibraryContent(@TempDir final Path root)
+            throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/meme.jpg");
+        final Path outside = root.resolve("Elsewhere/meme.jpg");
+        writeFile(outside, "haha");
+        writeMoveRecord(prepDir, photo, outside, new Sha256Hasher().hash(outside));
+        final var hashIndex = new CsvLibraryHashIndex(SettingsFixture.workingRoot(root));
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "funny", "genuinely funny"));
+
+        assertThatThrownBy(() -> applyEngine(root, libraryRoot, hashIndex).apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(outside.toString());
+        assertThat(hashIndex.load()).isEmpty();
+    }
+
     @Test
     void aCrashBetweenAFunnyMoveAndItsIndexRowIsReconciledEvenWhenAnotherFileSharesItsHash(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");
