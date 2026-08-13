@@ -27,6 +27,9 @@ flowchart TD
     E -- won't parse --> N["problem:<br/>shard unreadable"]
     A --> F["any decisions-*.json<br/>present with no<br/>matching montage?"]
     F -- yes --> G["problem:<br/>no matching montage"]
+    A --> O["every sidecar src +<br/>index.json's unreviewable<br/>entries, merged"]
+    O --> P{"inside the<br/>Sorted root?"}
+    P -- no --> Q["problem:<br/>source outside Sorted"]
     E -- parsed --> H["ShardValidator.validate<br/>against the sidecar-derived<br/>in-scope set + the categories<br/>index.json recorded"]
     H -- contract violation --> I["problem<br/>(aggregated)"]
     H -- unresolvable file --> I
@@ -35,6 +38,7 @@ flowchart TD
     G --> K
     I --> K
     N --> K
+    Q --> K
     K -- yes --> L(["ApplyException"])
     K -- no --> M(["merged, heal-corrected<br/>decision list"])
 ```
@@ -45,6 +49,30 @@ healable basename are always fatal. `ShardValidator` itself does no I/O. It chec
 file against the sidecar-derived set, never the filesystem. So classification runs one more pass
 after a clean validation, classifying every decision for resume (see section 2 below), before
 anything moves.
+
+### Which files a run may touch at all
+
+`checkSourceRoot()` answers that, separately from the shard contract. Every file this run could act
+on must sit strictly inside the configured Sorted root. Anything else is a
+`Finding.SourceOutsideSorted`, and the run stops before a single file moves.
+
+The root comes from `PathsPort`, which reads configuration. It is deliberately not `index.json`'s own
+`basePath`. That field sits in the very file the rule guards, so it could vouch for an entry an
+editor put there. Prep only ever scans `Sorted/Photos`, so the configured root is also exactly what a
+real run can produce.
+
+Both source lists are checked. `index.json` carries the unreviewable entries, which nothing else on
+disk corroborates. The sidecars carry the `src` set. A decision's own file is admitted only because
+that set vouches for it, so checking the set is what covers every decision too. Both files are
+written by this app and neither is protected from being edited afterwards, so trusting one while
+distrusting the other would leave a way in. The two lists are merged before checking, so a file named
+in both is reported once.
+
+Containment normalizes both paths and compares whole segments. That refuses a parent reference
+climbing out of the root, and a relative path anchored somewhere else entirely. Symlinks are not
+resolved: that would cost a filesystem call per file and fail outright on a source an earlier run
+already moved. `CullDestinations.requireUnderSorted()` repeats the check immediately before each move
+or copy (see `apply-engine.md`), the mirror of the destination refusal on the other side.
 
 The sidecar-derived in-scope set itself isn't read in one flat pass over every montage. A montage
 whose own sidecar can't be read (missing or corrupt) is handled by `collectMontage()`. It reports a
@@ -179,6 +207,7 @@ exists and still hashes to the recorded value. A record alone is never trusted o
 | A move record's destination is missing, or its content no longer matches the recorded hash    | Unresolved - `ApplyException`, zero files moved; the record alone is never trusted       |
 | An unreviewable file's move record verifies (destination hash-matches) but its source is gone | Done - not reprocessed; there is no secondary write to backfill                          |
 | An unreviewable file is missing, with no move record verifying it already ran                 | Unresolved - `ApplyException`, zero files moved (same gate as any decision)              |
+| An unreviewable entry, or a sidecar `src`, names a path outside the Sorted root               | `SourceOutsideSorted` - `ApplyException`, zero files moved, that path never opened       |
 
 ## Related
 

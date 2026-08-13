@@ -105,6 +105,15 @@ when the prep index is read, a group id by `ShardValidator`'s slug rule, a year-
 digit pattern. The refusal is still the last line before a move, and the only place the resolved
 path itself is compared against its root.
 
+`requireUnderSorted()` is the same refusal on the source side. Together the two bound what a run
+relocates at both ends: it moves and copies only out of `Sorted`, and only into a configured root.
+What it merely reads is wider, since it opens the whole prep dir and hashes a recorded destination
+inside the library. `recordThenMove()` calls the refusal for every move, and `applyNearDupChosen()`
+calls it for the one copy that never reaches `recordThenMove()`. `ApplyPlanner` has already reported
+an outside source as a finding, which aborts the run before either call is reached (see
+`apply-planner.md`). The check stays because that argument is only as durable as the caller making
+it, and neither method can notice a future caller skipping validation.
+
 ### Why NearDupChosen still needs its own resume guard
 
 Every other decision type is a *move*: once it genuinely runs, its source file disappearing is

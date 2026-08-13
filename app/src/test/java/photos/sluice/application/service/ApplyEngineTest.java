@@ -611,6 +611,22 @@ class ApplyEngineTest {
         assertThat(Files.exists(root.resolve("Unreviewable/2019/06/corrupt.heic"))).isTrue();
     }
 
+    // Its control: the same fixture shape moves the file when the entry is inside Sorted.
+    @Test
+    void anUnreviewableEntryOutsideSortedIsRefusedAndTheFileIsLeftWhereItIs(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path outside = root.resolve("Documents/taxes.pdf");
+        writeFile(outside, "not media at all");
+        writeIndex(prepDir, 0, List.of(outside), List.of());
+
+        assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(ApplyException.class)
+                .hasMessageContaining(outside.toString());
+        assertThat(Files.readString(outside)).isEqualTo("not media at all");
+        assertThat(Files.exists(root.resolve("Unreviewable"))).isFalse();
+    }
+
     @Test
     void resumingRecognizesAnAlreadyMovedUnreviewableFileWithoutReprocessingIt(@TempDir final Path root) throws IOException, ApplyException {
         final Path libraryRoot = root.resolve("Library");

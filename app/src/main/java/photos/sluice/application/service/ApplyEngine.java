@@ -361,6 +361,9 @@ public class ApplyEngine {
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
     private void applyNearDupChosen(final NearDupChosen c, final List<Decision> group, final ApplyOutcome outcome) {
+        // A copy rather than a move, so it takes the source check directly. Every other decision
+        // type picks it up from recordThenMove.
+        this.cullDestinations.requireUnderSorted(c.file());
         final Path dupDir = this.cullDestinations.duplicatesDir(c.file(), c.group());
         final Path dest = dupDir.resolve(c.file().getFileName().toString());
         if (!this.mediaStore.exists(dest)) {
@@ -400,6 +403,7 @@ public class ApplyEngine {
      * @return {@link MoveOutcome} the resolved destination and source hash
      */
     private MoveOutcome recordThenMove(final Path source, final Path destDir, final Path prepDirPath) {
+        this.cullDestinations.requireUnderSorted(source);
         final Path dest = this.mediaStore.resolveDestination(source, destDir);
         final String hash = this.sha256Port.hash(source);
         this.moveLedger.recordMove(prepDirPath, source, dest, hash);

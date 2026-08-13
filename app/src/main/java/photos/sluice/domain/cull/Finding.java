@@ -229,6 +229,32 @@ public sealed interface Finding {
     // shard contract ShardValidator checks above.
 
     /**
+     * A file a run would act on sits outside the Sorted root. Every candidate a cull can produce is
+     * found by scanning Sorted, so a path naming anything else was not put there by a prep run.
+     * Both lists a run draws its sources from can carry one: index.json's own unreviewable entries,
+     * and the {@code src} set the montage sidecars record.
+     *
+     * <p>Distinct from {@link FileOutOfScope}, which says a decision named a file the montages never
+     * showed. That check measures a decision against the sidecar set. This one measures the sidecar
+     * set itself, and an edited sidecar passes the first check while failing this one.
+     *
+     * <p>The root naming itself gets its own wording. The general sentence reads as a contradiction
+     * there, since the offending path and the root it escaped are the same string.
+     *
+     * <p>NONE, because no engine can tell which file was meant. Dropping the entry would silently
+     * shrink what the run acts on. Correcting the prep dir, or discarding it and re-culling, are the
+     * ways out.
+     */
+    record SourceOutsideSorted(Path file, Path sortedRoot) implements Finding {
+        @Override
+        public String describe() {
+            return this.file.equals(this.sortedRoot)
+                    ? "the Sorted root itself is named as a file to act on: " + this.file
+                    : "file outside " + this.sortedRoot + ", the only place a cull may take files from: " + this.file;
+        }
+    }
+
+    /**
      * A decisions-NNN.json file with no montage entry expecting it - almost always a culler
      * numbering slip. Always reports AUTO: this record is a pure value with no I/O, built before
      * any lookup of which montages are currently unclaimed. It cannot itself know whether the

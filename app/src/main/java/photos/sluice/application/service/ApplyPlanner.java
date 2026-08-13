@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaReader;
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.application.service.MoveLedger.MoveRecord;
@@ -20,6 +21,7 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.paths.Containment;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -49,6 +51,9 @@ import java.util.stream.Collectors;
  * set its own {@link PrepDir} recorded at prep time. With no settings to reach for, judging it
  * against live config instead is a compile error rather than a convention.
  *
+ * <p>The {@link PathsPort} it does hold is no exception to any of that. It resolves configured
+ * folder roots and offers nothing that writes.
+ *
  * <p>Flowchart: {@code app/docs/design/application/service/apply-planner.md}.
  */
 @Component
@@ -57,6 +62,7 @@ public class ApplyPlanner {
     private final MediaReader mediaReader;
     private final CullPrepPort cullPrepPort;
     private final Sha256Port sha256Port;
+    private final PathsPort pathsPort;
     private final ShardValidator shardValidator = new ShardValidator();
 
     /**
@@ -65,12 +71,14 @@ public class ApplyPlanner {
      * @param mediaReader {@link MediaReader} checks file existence and lists prep-dir files
      * @param cullPrepPort {@link CullPrepPort} reads prep-dir sidecars and shards
      * @param sha256Port {@link Sha256Port} hashes a destination to verify a recorded move
+     * @param pathsPort {@link PathsPort} resolves the Sorted root every source is held to
      */
     public ApplyPlanner(final MediaReader mediaReader, final CullPrepPort cullPrepPort,
-                        final Sha256Port sha256Port) {
+                        final Sha256Port sha256Port, final PathsPort pathsPort) {
         this.mediaReader = mediaReader;
         this.cullPrepPort = cullPrepPort;
         this.sha256Port = sha256Port;
+        this.pathsPort = pathsPort;
     }
 
     /**
@@ -93,6 +101,11 @@ public class ApplyPlanner {
      * <p>This is the single validator on the resume path, so it has to catch everything a culler's
      * own batch check would have. That means a stray shard, a group id reused across two montages,
      * and a shard present but unparseable, alongside the whole per-decision contract.
+     *
+     * <p>It also answers which files this run may touch at all, over both lists its sources come
+     * from. Every one of them must sit inside the configured Sorted root, which is the only place
+     * prep looks for candidates. Anything else is a {@link Finding.SourceOutsideSorted}. See
+     * {@link #checkSourceRoot} for why both lists need it.
      *
      * @param prepDirPath {@link Path} the prep directory being validated
      * @param prepDir {@link PrepDir} the prep directory's index
@@ -129,6 +142,7 @@ public class ApplyPlanner {
             this.collectMontage(prepDirPath, montage, !missingMontages.contains(montage), ledger,
                     sidecarSrcs, shardFiles, extraFindings);
         }
+        this.checkSourceRoot(sidecarSrcs, prepDir.unreviewable(), extraFindings);
         final ValidationReport report = resolveOverlaps(ledger,
                 this.shardValidator.validate(shardFiles, sidecarSrcs, prepDir.categories(), prepDir.unreviewable()));
         if (extraFindings.isEmpty()) {
@@ -136,6 +150,35 @@ public class ApplyPlanner {
         }
         extraFindings.addAll(report.findings());
         return new ValidationReport(extraFindings, report.heals(), report.decisions());
+    }
+
+    /**
+     * Holds every file this run could act on to the configured Sorted root, reporting one
+     * {@link Finding.SourceOutsideSorted} per offender. A path naming any other place did not come
+     * from a prep run, so the run stops before a single file moves.
+     *
+     * <p>Both lists are checked, because both are files on disk that something other than this app
+     * could have written. index.json carries the unreviewable entries. The sidecars carry the
+     * {@code src} set. A decision's own file is only ever trusted by way of that set, so checking
+     * the set is what covers every decision too. A prep dir whose sidecars are intact but whose
+     * index.json was edited, or the reverse, is caught either way round.
+     *
+     * <p>The two lists are merged before checking, so one escaping path named by both is reported
+     * once. Twice would read as two separate things to put right.
+     *
+     * @param sidecarSrcs a {@link List} of {@link Path} every in-scope file the montages showed
+     * @param unreviewable a {@link List} of {@link Path} index.json's own unreviewable entries
+     * @param extraFindings a {@link List} of {@link Finding} accumulated findings beyond the shard contract
+     */
+    private void checkSourceRoot(final List<Path> sidecarSrcs, final List<Path> unreviewable,
+                                 final List<Finding> extraFindings) {
+        final Path sortedRoot = this.pathsPort.sorted();
+        final Set<Path> sources = new LinkedHashSet<>(sidecarSrcs);
+        sources.addAll(unreviewable);
+        sources.stream()
+                .filter(source -> !Containment.strictlyUnder(sortedRoot, source))
+                .map(source -> new Finding.SourceOutsideSorted(source, sortedRoot))
+                .forEach(extraFindings::add);
     }
 
     /**

@@ -227,7 +227,7 @@ class ApplyPlannerTest {
         // fail the same way (readSidecar() throws UncheckedIOException either way).
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
@@ -249,7 +249,7 @@ class ApplyPlannerTest {
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         // montage-002 has neither a sidecar nor a shard.
 
-        final ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).containsExactly(new Finding.CorruptSidecar("montage-002"));
@@ -271,7 +271,7 @@ class ApplyPlannerTest {
         writeSidecar(prepDir, "montage-002", sidecarEntry(uncalled));
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
 
-        final ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).isEmpty();
@@ -290,7 +290,7 @@ class ApplyPlannerTest {
         prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
                 CorruptSidecarResolution.SET_ASIDE, "nothing left to cull it against");
 
-        final ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).isEmpty();
@@ -310,7 +310,7 @@ class ApplyPlannerTest {
         prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
                 CorruptSidecarResolution.APPLY_ANYWAY, "its shard will turn up");
 
-        final ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings()).isEmpty();
@@ -332,7 +332,7 @@ class ApplyPlannerTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeFile(prepDir.resolve("decisions-001.json"), "{ not valid json");
 
-        final ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings())
@@ -356,7 +356,7 @@ class ApplyPlannerTest {
         writeFile(prepDir.resolve("decisions-001.json"), "{ not valid json");
         writeShard(prepDir, "montage-002", classificationJson(second, "junk", "blurry"));
 
-        final ValidationReport report = applyPlanner()
+        final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
 
         assertThat(report.findings())
@@ -377,7 +377,7 @@ class ApplyPlannerTest {
         // A directory where the shard file belongs: present to hasShard(), unreadable to the codec.
         Files.createDirectory(prepDir.resolve("decisions-001.json"));
 
-        assertThatThrownBy(() -> applyPlanner()
+        assertThatThrownBy(() -> applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir)))
                 .isInstanceOf(UncheckedIOException.class)
                 .isNotInstanceOf(MalformedPrepJsonException.class);
@@ -397,9 +397,101 @@ class ApplyPlannerTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
 
-        assertThatThrownBy(() -> applyPlanner(new FailingSidecarRead())
+        assertThatThrownBy(() -> applyPlanner(root, new FailingSidecarRead())
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir)))
                 .isInstanceOf(UncheckedIOException.class)
                 .isNotInstanceOf(MalformedPrepJsonException.class);
+    }
+
+    @Test
+    void validateRefusesAnUnreviewableEntryOutsideTheSortedRoot(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path inside = root.resolve("Sorted/Photos/2019/06/undecodable.jpg");
+        final Path outside = root.resolve("Documents/taxes.pdf");
+        writeFile(inside, "x");
+        writeFile(outside, "not media at all");
+        writeIndex(prepDir, 0, List.of(inside, outside), List.of());
+
+        final ValidationReport report = applyPlanner(root)
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings())
+                .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
+    }
+
+    @Test
+    void validateRefusesAnUnreviewableEntryClimbingOutOfTheSortedRoot(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path escaping = root.resolve("Sorted/Photos/../../Documents/taxes.pdf");
+        writeFile(root.resolve("Documents/taxes.pdf"), "not media at all");
+        writeIndex(prepDir, 0, List.of(escaping), List.of());
+
+        final ValidationReport report = applyPlanner(root)
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings())
+                .containsExactly(new Finding.SourceOutsideSorted(escaping, root.resolve("Sorted")));
+    }
+
+    @Test
+    void validateRefusesASidecarSourceOutsideTheSortedRoot(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path outside = root.resolve("Documents/taxes.pdf");
+        writeFile(outside, "not media at all");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(outside));
+        writeShard(prepDir, "montage-001", classificationJson(outside, "junk", "blurry"));
+
+        final ValidationReport report = applyPlanner(root)
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings())
+                .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
+    }
+
+    // A rule reading only the sidecars passes this fixture, which has none.
+    @Test
+    void validateRefusesAnApplyAnywayShardsFileOutsideTheSortedRoot(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path outside = root.resolve("Documents/taxes.pdf");
+        writeFile(outside, "not media at all");
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeShard(prepDir, "montage-001", classificationJson(outside, "junk", "blurry"));
+        prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-001",
+                CorruptSidecarResolution.APPLY_ANYWAY, "the shard reads fine");
+
+        final ValidationReport report = applyPlanner(root)
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings())
+                .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
+    }
+
+    @Test
+    void validateRefusesAFileNamedByBothSourceListsOnlyOnce(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path outside = root.resolve("Documents/taxes.pdf");
+        writeFile(outside, "not media at all");
+        writeIndex(prepDir, 1, List.of(outside), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(outside));
+
+        final ValidationReport report = applyPlanner(root)
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings())
+                .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
+    }
+
+    @Test
+    void validateRefusesTheSortedRootItselfAsAnUnreviewableEntry(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path sorted = root.resolve("Sorted");
+        Files.createDirectories(sorted);
+        writeIndex(prepDir, 0, List.of(sorted), List.of());
+
+        final ValidationReport report = applyPlanner(root)
+                .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
+
+        assertThat(report.findings()).containsExactly(new Finding.SourceOutsideSorted(sorted, sorted));
     }
 }

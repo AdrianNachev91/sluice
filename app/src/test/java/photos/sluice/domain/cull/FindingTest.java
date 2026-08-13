@@ -13,6 +13,7 @@ import photos.sluice.domain.cull.Finding.MissingMontageField;
 import photos.sluice.domain.cull.Finding.MissingReason;
 import photos.sluice.domain.cull.Finding.MissingShard;
 import photos.sluice.domain.cull.Finding.MissingSource;
+import photos.sluice.domain.cull.Finding.SourceOutsideSorted;
 import photos.sluice.domain.cull.Finding.StrayShard;
 import photos.sluice.domain.cull.Finding.TooFewRejects;
 import photos.sluice.domain.cull.Finding.UnreadablePrepDir;
@@ -22,7 +23,7 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Proves describe() for 16 of Finding's 21 shapes. ShardValidatorTest covers the other 5. Four of
+// Proves describe() for 17 of Finding's 22 shapes. ShardValidatorTest covers the other 5. Four of
 // those sit in its own describe() sample, and one in a test of its own. The two sets are disjoint,
 // so between them every shape has its rendered prose checked exactly once.
 class FindingTest {
@@ -32,6 +33,7 @@ class FindingTest {
     @Test
     void describeRendersTheExactProseForEachRemainingFindingShape() {
         final var file = Path.of("Sorted", "Photos", "2019", "06", "a.jpg");
+        final var sortedRoot = Path.of("Sorted");
         final var indexPath = Path.of("cull-prep", "2019-06", "index.json");
         final var moveLog = Path.of("cull-prep", "2019-06", "move-records.log");
 
@@ -65,6 +67,22 @@ class FindingTest {
                         + "(lowercase a-z0-9, hyphenated, max 32 chars)");
         assertThat(new DuplicateFileReference("a.jpg", 3).describe())
                 .isEqualTo("file listed 3 times across shards/unreviewable: a.jpg");
+        assertThat(new SourceOutsideSorted(file, sortedRoot).describe())
+                .isEqualTo("file outside " + sortedRoot + ", the only place a cull may take files from: " + file);
+    }
+
+    @Test
+    void sourceOutsideSortedNamesTheRootPlainlyWhenTheRootItselfIsTheOffender() {
+        final var sortedRoot = Path.of("Sorted");
+
+        assertThat(new SourceOutsideSorted(sortedRoot, sortedRoot).describe())
+                .isEqualTo("the Sorted root itself is named as a file to act on: " + sortedRoot);
+    }
+
+    @Test
+    void sourceOutsideSortedOffersNoRemedyBecauseNoEngineCanTellWhichFileWasMeant() {
+        assertThat(new SourceOutsideSorted(Path.of("a.jpg"), Path.of("Sorted")).remedy())
+                .isEqualTo(Finding.Remedy.NONE);
     }
 
     @Test

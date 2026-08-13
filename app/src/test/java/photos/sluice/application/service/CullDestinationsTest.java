@@ -97,6 +97,28 @@ class CullDestinationsTest {
                 .hasMessageContaining("outside");
     }
 
+    // The unasserted first call is the control: a method refusing everything would fail there.
+    @Test
+    void aSourceOutsideTheSortedRootIsRefused(@TempDir final Path root) {
+        final var destinations = new CullDestinations(pathsConfig(root, root.resolve("Library")));
+
+        destinations.requireUnderSorted(root.resolve("Sorted/Photos/2019/06/a.jpg"));
+        assertThatThrownBy(() -> destinations.requireUnderSorted(root.resolve("Documents/taxes.pdf")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outside");
+    }
+
+    // The nearest sibling root to Sorted, so the one an over-wide rule would most plausibly admit.
+    @Test
+    void aSourceInTheLibraryIsRefused(@TempDir final Path root) {
+        final Path libraryRoot = root.resolve("Library");
+        final var destinations = new CullDestinations(pathsConfig(root, libraryRoot));
+
+        assertThatThrownBy(() -> destinations.requireUnderSorted(libraryRoot.resolve("Photos/2019/06/a.jpg")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outside");
+    }
+
     @Test
     void candidateNameIsThePlainNameAtSlotOneAndAParentheticalCountAfter() {
         assertThat(CullDestinations.candidateName("a.jpg", 1)).isEqualTo("a.jpg");

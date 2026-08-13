@@ -12,6 +12,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
@@ -156,32 +157,39 @@ final class CullPrepTestSupport {
 
     static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot, final CsvLibraryHashIndex hashIndex,
                                    final MediaStore mediaStore) {
+        // One paths config for both, as in production, where they take the one bean. The engine's
+        // destination refusals and the planner's source refusals must be measuring the same roots.
+        final PathsConfig paths = pathsConfig(repoRoot, libraryRoot);
         return new ApplyEngine(mediaStore, new JsonCullPrepStore(), new Sha256Hasher(), hashIndex,
-                new CullDestinations(pathsConfig(repoRoot, libraryRoot)), moveLedger(mediaStore),
-                applyPlanner(mediaStore));
+                new CullDestinations(paths), moveLedger(mediaStore), applyPlanner(paths, mediaStore));
     }
 
     static MoveLedger moveLedger(final MediaStore mediaStore) {
         return new MoveLedger(mediaStore, new DisasterDrawer(mediaStore));
     }
 
-    static ApplyPlanner applyPlanner() {
-        return applyPlanner(new NioMediaStore());
+    static ApplyPlanner applyPlanner(final Path repoRoot) {
+        return applyPlanner(SettingsFixture.workingRoot(repoRoot), new NioMediaStore());
     }
 
-    static ApplyPlanner applyPlanner(final MediaStore mediaStore) {
-        return applyPlanner(mediaStore, new JsonCullPrepStore());
+    static ApplyPlanner applyPlanner(final Path repoRoot, final MediaStore mediaStore) {
+        return applyPlanner(SettingsFixture.workingRoot(repoRoot), mediaStore);
     }
 
     // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
-    // owns, the same seam prepDirDoctor(CullPrepPort) below uses. A real NioMediaStore backs every
-    // other read, so only the sidecar/shard reads this port covers are the ones a test can fail.
-    static ApplyPlanner applyPlanner(final CullPrepPort cullPrepPort) {
-        return applyPlanner(new NioMediaStore(), cullPrepPort);
+    // owns rather than through the filesystem. A real NioMediaStore backs every other read, so the
+    // sidecar and shard reads this port covers are the only ones a test can fail.
+    static ApplyPlanner applyPlanner(final Path repoRoot, final CullPrepPort cullPrepPort) {
+        return applyPlanner(SettingsFixture.workingRoot(repoRoot), new NioMediaStore(), cullPrepPort);
     }
 
-    static ApplyPlanner applyPlanner(final MediaStore mediaStore, final CullPrepPort cullPrepPort) {
-        return new ApplyPlanner(mediaStore, cullPrepPort, new Sha256Hasher());
+    static ApplyPlanner applyPlanner(final PathsPort paths, final MediaStore mediaStore) {
+        return applyPlanner(paths, mediaStore, new JsonCullPrepStore());
+    }
+
+    static ApplyPlanner applyPlanner(final PathsPort paths, final MediaStore mediaStore,
+                                     final CullPrepPort cullPrepPort) {
+        return new ApplyPlanner(mediaStore, cullPrepPort, new Sha256Hasher(), paths);
     }
 
     // A caller takes the ledger snapshot and passes it into ApplyPlanner. A test driving the
@@ -193,25 +201,26 @@ final class CullPrepTestSupport {
 
     static ReconcileEngine reconcileEngine(final Path repoRoot, final Path libraryRoot) {
         final var mediaStore = new NioMediaStore();
+        final PathsConfig paths = pathsConfig(repoRoot, libraryRoot);
         return new ReconcileEngine(mediaStore, new JsonCullPrepStore(), new Sha256Hasher(),
-                new DisasterDrawer(mediaStore), new CullDestinations(pathsConfig(repoRoot, libraryRoot)),
-                moveLedger(mediaStore), applyPlanner(mediaStore));
+                new DisasterDrawer(mediaStore), new CullDestinations(paths),
+                moveLedger(mediaStore), applyPlanner(paths, mediaStore));
     }
 
     static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot) {
         return prepDirRemedies(repoRoot, libraryRoot, new JsonCullPrepStore());
     }
 
-    // Lets a test inject a prep-dir reader that fails the way it wants to test, the same seam
-    // applyPlanner(CullPrepPort) above uses.
+    // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
+    // owns rather than through the filesystem.
     static PrepDirRemedies prepDirRemedies(final Path repoRoot, final Path libraryRoot, final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
         return new PrepDirRemedies(mediaStore, cullPrepPort, pathsConfig(repoRoot, libraryRoot), fixedSettings(),
                 new DisasterDrawer(mediaStore), moveLedger(mediaStore));
     }
 
-    static PrepDirDoctor prepDirDoctor() {
-        return prepDirDoctor(new JsonCullPrepStore());
+    static PrepDirDoctor prepDirDoctor(final Path repoRoot) {
+        return prepDirDoctor(repoRoot, new JsonCullPrepStore());
     }
 
     // Lets a test inject a prep-dir reader that fails the way it wants to test, at a seam this code
@@ -222,9 +231,10 @@ final class CullPrepTestSupport {
     // The planner reads through the same port, matching production, where both take the one bean.
     // Handing it a separate real store would leave every read past the index working normally, so
     // only an index-read failure could ever be injected.
-    static PrepDirDoctor prepDirDoctor(final CullPrepPort cullPrepPort) {
+    static PrepDirDoctor prepDirDoctor(final Path repoRoot, final CullPrepPort cullPrepPort) {
         final var mediaStore = new NioMediaStore();
-        return new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner(mediaStore, cullPrepPort),
+        return new PrepDirDoctor(cullPrepPort, mediaStore,
+                applyPlanner(SettingsFixture.workingRoot(repoRoot), mediaStore, cullPrepPort),
                 moveLedger(mediaStore));
     }
 
@@ -232,15 +242,16 @@ final class CullPrepTestSupport {
     // planner and the ledger too, matching production, where all three take the one bean. Building
     // those with a fresh real store instead would leave the injected failure unreachable from
     // everything except the doctor's own direct calls.
-    static PrepDirDoctor prepDirDoctor(final MediaStore mediaStore) {
+    static PrepDirDoctor prepDirDoctor(final Path repoRoot, final MediaStore mediaStore) {
         final var cullPrepPort = new JsonCullPrepStore();
-        return new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner(mediaStore, cullPrepPort),
+        return new PrepDirDoctor(cullPrepPort, mediaStore,
+                applyPlanner(SettingsFixture.workingRoot(repoRoot), mediaStore, cullPrepPort),
                 moveLedger(mediaStore));
     }
 
     static Troubleshooter troubleshooter(final Path repoRoot, final Path libraryRoot) {
         final var mediaStore = new NioMediaStore();
-        return new Troubleshooter(prepDirDoctor(), reconcileEngine(repoRoot, libraryRoot),
+        return new Troubleshooter(prepDirDoctor(repoRoot), reconcileEngine(repoRoot, libraryRoot),
                 prepDirRemedies(repoRoot, libraryRoot), new DisasterDrawer(mediaStore));
     }
 

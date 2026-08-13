@@ -48,7 +48,7 @@ class ShardTallyCalculatorTest {
         writeIndex(prepDir, 1, List.of(photo), List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        final ShardTallyCalculator calculator = shardTallyCalculator();
+        final ShardTallyCalculator calculator = shardTallyCalculator(root);
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 0, 1));
 
         prepDirRemedies(root, root.resolve("Library"))
@@ -78,7 +78,7 @@ class ShardTallyCalculatorTest {
         writeShard(prepDir, "montage-001", classificationJson(recorded, "receipts", "photographed paperwork"));
         writeShard(prepDir, "montage-002", classificationJson(configured, "junk", "blurry"));
 
-        final ShardTally tally = shardTallyCalculator().tally(readIndex(prepDir));
+        final ShardTally tally = shardTallyCalculator(root).tally(readIndex(prepDir));
 
         assertThat(tally).isEqualTo(new ShardTally(2, 1, 2));
     }
@@ -97,7 +97,7 @@ class ShardTallyCalculatorTest {
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        final ShardTallyCalculator calculator = shardTallyCalculator();
+        final ShardTallyCalculator calculator = shardTallyCalculator(root);
 
         writeFile(prepDir.resolve("decisions-001.json"), "{ \"montage\": \"montage-001\", \"decis");
         assertThat(calculator.isReadyToResume(prepDir)).isFalse();
@@ -114,7 +114,7 @@ class ShardTallyCalculatorTest {
         final Path prepDir = prepDir(root);
         writeIndex(prepDir, 1, List.of("montage-001"));
 
-        assertThat(shardTallyCalculator().isReadyToResume(prepDir)).isFalse();
+        assertThat(shardTallyCalculator(root).isReadyToResume(prepDir)).isFalse();
     }
 
     // A non-I/O RuntimeException from hasShard(), read inside the same guard as the shard read and
@@ -126,7 +126,7 @@ class ShardTallyCalculatorTest {
         writeFile(photo, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
-        final ShardTallyCalculator calculator = shardTallyCalculator(new ThrowingHasShard());
+        final ShardTallyCalculator calculator = shardTallyCalculator(root, new ThrowingHasShard());
 
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 0, 1));
     }
@@ -139,7 +139,7 @@ class ShardTallyCalculatorTest {
             throws IOException {
         final Path prepDir = prepDir(root);
         writeIndex(prepDir, 1, List.of("montage-001"));
-        final ShardTallyCalculator calculator = shardTallyCalculator(new ThrowingHasShard());
+        final ShardTallyCalculator calculator = shardTallyCalculator(root, new ThrowingHasShard());
 
         assertThat(calculator.isReadyToResume(prepDir)).isFalse();
     }
@@ -155,7 +155,7 @@ class ShardTallyCalculatorTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
-        final var calculator = new ShardTallyCalculator(new JsonCullPrepStore(), applyPlanner(),
+        final var calculator = new ShardTallyCalculator(new JsonCullPrepStore(), applyPlanner(root),
                 _ -> {
                     throw new IllegalStateException("simulated ledger read failure");
                 });
@@ -163,12 +163,12 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 1, 1));
     }
 
-    private static ShardTallyCalculator shardTallyCalculator() {
-        return shardTallyCalculator(new JsonCullPrepStore());
+    private static ShardTallyCalculator shardTallyCalculator(final Path root) {
+        return shardTallyCalculator(root, new JsonCullPrepStore());
     }
 
-    private static ShardTallyCalculator shardTallyCalculator(final CullPrepPort cullPrepPort) {
-        return new ShardTallyCalculator(cullPrepPort, applyPlanner(new NioMediaStore(), cullPrepPort),
+    private static ShardTallyCalculator shardTallyCalculator(final Path root, final CullPrepPort cullPrepPort) {
+        return new ShardTallyCalculator(cullPrepPort, applyPlanner(root, cullPrepPort),
                 moveLedger(new NioMediaStore()));
     }
 

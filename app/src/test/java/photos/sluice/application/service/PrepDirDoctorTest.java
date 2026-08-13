@@ -50,7 +50,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         Files.writeString(prepDir.resolve("decisions.json"), "{}");
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.COMPLETE);
         assertThat(health.findings()).isEmpty();
@@ -65,7 +65,7 @@ class PrepDirDoctorTest {
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
         Files.writeString(prepDir.resolve("decisions.json"), "{}");
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.COMPLETE);
         assertThat(health.findings()).isEmpty();
@@ -76,7 +76,7 @@ class PrepDirDoctorTest {
         final Path prepDir = prepDir(root);
         Files.writeString(prepDir.resolve("index.json"), "not valid json");
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
@@ -87,10 +87,50 @@ class PrepDirDoctorTest {
     void aMissingIndexReportsBlockedWithAnAutoRemedyFinding(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root); // index.json never written at all
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptIndex(prepDir.resolve("index.json")));
+    }
+
+    @Test
+    void anUnreviewableEntryOutsideSortedReportsBlockedOnceEveryShardHasArrived(@TempDir final Path root)
+            throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path outside = root.resolve("Documents/taxes.pdf");
+        writeFile(photo, "x");
+        writeFile(outside, "not media at all");
+        writeIndex(prepDir, 1, List.of(outside), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.BLOCKED);
+        assertThat(health.findings())
+                .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
+    }
+
+    // The shard-count branch is checked before validity, so a run still being culled reports WAITING
+    // even carrying a finding no shard can resolve. A watcher then arms and auto-resume runs, and the
+    // refusal lands as Blocked at apply. Pinned because that sequence is what a user sees.
+    @Test
+    void anUnreviewableEntryOutsideSortedStillReportsWaitingWhileAShardIsOutstanding(@TempDir final Path root)
+            throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path outside = root.resolve("Documents/taxes.pdf");
+        writeFile(photo, "x");
+        writeFile(outside, "not media at all");
+        writeIndex(prepDir, 1, List.of(outside), List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
+
+        assertThat(health.state()).isEqualTo(State.WAITING);
+        assertThat(health.findings())
+                .containsExactly(new Finding.SourceOutsideSorted(outside, root.resolve("Sorted")));
     }
 
     // A read that merely failed is DAMAGED, never corrupt. CorruptIndex carries an AUTO remedy, so
@@ -103,7 +143,7 @@ class PrepDirDoctorTest {
         final Path prepDir = prepDir(root);
         writeIndex(prepDir, 1, List.of("montage-001"));
 
-        final PrepDirHealth health = doctor(new FailingIndexRead()).diagnose(prepDir);
+        final PrepDirHealth health = doctor(root, new FailingIndexRead()).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.DAMAGED);
         assertThat(health.findings()).containsExactly(new Finding.UnreadablePrepDir(prepDir));
@@ -122,7 +162,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final PrepDirHealth health = doctor(new FailingShardRead()).diagnose(prepDir);
+        final PrepDirHealth health = doctor(root, new FailingShardRead()).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.DAMAGED);
         assertThat(health.findings()).containsExactly(new Finding.UnreadablePrepDir(prepDir));
@@ -138,7 +178,7 @@ class PrepDirDoctorTest {
         final Path prepDir = prepDir(root);
         Files.createDirectory(prepDir.resolve("index.json"));
 
-        assertThat(doctor().diagnose(prepDir).state()).isEqualTo(State.DAMAGED);
+        assertThat(doctor(root).diagnose(prepDir).state()).isEqualTo(State.DAMAGED);
     }
 
     // A line well-formed enough to reach the parser and garbled where it counts, so its resolution
@@ -155,7 +195,7 @@ class PrepDirDoctorTest {
         Files.writeString(prepDir.resolve("choices.log"),
                 "montage-001" + d + "CORRUPT_SIDECAR_RESOLVED" + d + "NOT_A_RESOLUTION" + d + "why" + d + "when");
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.WAITING);
         assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
@@ -178,7 +218,7 @@ class PrepDirDoctorTest {
         writeIndex(damaged, 1, List.of("montage-001"));
 
         final List<CullRunSummary> runs =
-                doctor(new FailingIndexReadOf(damaged)).runs(root.resolve("logs/cull-prep"));
+                doctor(root, new FailingIndexReadOf(damaged)).runs(root.resolve("logs/cull-prep"));
 
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
@@ -195,7 +235,7 @@ class PrepDirDoctorTest {
         // No sidecar written for montage-001 at all - stands in for a missing or corrupt one.
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-001"));
@@ -213,7 +253,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeFile(prepDir.resolve("decisions-001.json"), "{ not valid json");
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings())
@@ -238,7 +278,7 @@ class PrepDirDoctorTest {
         // reason this dir is WAITING rather than BLOCKED. montage-003 has neither.
         writeSidecar(prepDir, "montage-002", sidecarEntry(root.resolve("Sorted/Photos/2019/06/b.jpg")));
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.WAITING);
         assertThat(health.findings()).containsExactly(new Finding.CorruptSidecar("montage-003"));
@@ -257,7 +297,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         // montage-002 has no shard yet - still being culled.
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.WAITING);
         assertThat(health.findings()).isEmpty();
@@ -272,7 +312,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.READY);
         assertThat(health.findings()).isEmpty();
@@ -287,7 +327,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "meme", "not a configured category"));
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
@@ -305,7 +345,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         writeShard(prepDir, "montage-002"); // no montage-002 entry in index.json - a stray shard
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(new StrayShard("decisions-002.json"));
@@ -320,7 +360,7 @@ class PrepDirDoctorTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).hasSize(1);
@@ -342,7 +382,7 @@ class PrepDirDoctorTest {
         writeShard(prepDir, "montage-001", classificationJson(offContract, "meme", "not a configured category"));
         writeShard(prepDir, "montage-002"); // stray shard, AUTO remedy
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).extracting(Finding::remedy)
@@ -365,7 +405,7 @@ class PrepDirDoctorTest {
                 classificationJson(offContract, "meme", "not a configured category"),
                 classificationJson(missingSource, "junk", "blurry"));
 
-        final PrepDirHealth health = doctor().diagnose(prepDir);
+        final PrepDirHealth health = doctor(root).diagnose(prepDir);
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
@@ -385,7 +425,7 @@ class PrepDirDoctorTest {
         final Path waiting = prepDir(root, "waiting1");
         writeIndex(waiting, 1, List.of("montage-001")); // no shard yet - still culling
 
-        final PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
+        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).containsExactly("complete1");
         assertThat(report.skipped()).containsExactly(entry("waiting1", State.WAITING));
@@ -406,7 +446,7 @@ class PrepDirDoctorTest {
         final Path indexless = prepDir(root, "indexless1");
         writeShard(indexless, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
+        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).isEmpty();
         assertThat(report.skipped()).containsExactly(entry("indexless1", State.BLOCKED));
@@ -429,14 +469,14 @@ class PrepDirDoctorTest {
         writeFile(real.resolve("drawer/corrupt-sidecar-montage-001.json"), "{}");
         writeFile(cullPrepRoot.resolve("stray-note.txt"), "not part of any run");
 
-        final List<CullRunSummary> runs = doctor().runs(cullPrepRoot);
+        final List<CullRunSummary> runs = doctor(root).runs(cullPrepRoot);
 
         assertThat(runs).singleElement().extracting(CullRunSummary::scope).isEqualTo("2019");
     }
 
     @Test
     void purgeCompletedOnAMissingCullPrepRootReturnsAnEmptyReport(@TempDir final Path root) {
-        final PurgeReport report = doctor().purgeCompleted(root.resolve("logs/cull-prep"));
+        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).isEmpty();
         assertThat(report.skipped()).isEmpty();
@@ -459,7 +499,7 @@ class PrepDirDoctorTest {
         final var store = new FailingListingOf(unreadable);
 
         final PurgeReport report =
-                CullPrepTestSupport.prepDirDoctor(store).purgeCompleted(root.resolve("logs/cull-prep"));
+                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).containsExactly("complete1");
         assertThat(report.skipped()).isEmpty();
@@ -491,7 +531,7 @@ class PrepDirDoctorTest {
         final var store = new FailingDeleteUnder(first);
 
         final PurgeReport report =
-                CullPrepTestSupport.prepDirDoctor(store).purgeCompleted(root.resolve("logs/cull-prep"));
+                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/cull-prep"));
 
         assertThat(report.purged()).containsExactly("complete2");
         assertThat(report.skipped()).isEmpty();
@@ -526,9 +566,9 @@ class PrepDirDoctorTest {
     void runsReportsNoRunsWhenTheRootListingFailsRatherThanThrowing(@TempDir final Path root) throws IOException {
         final Path cullPrepRoot = root.resolve("logs/cull-prep");
         writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
-        assertThat(doctor().runs(cullPrepRoot)).hasSize(1);
+        assertThat(doctor(root).runs(cullPrepRoot)).hasSize(1);
 
-        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingListing()).runs(cullPrepRoot)).isEmpty();
+        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingListing()).runs(cullPrepRoot)).isEmpty();
     }
 
     // The epoch reads as "as old as anything", putting a dir nobody can stat at the top of a list
@@ -538,8 +578,8 @@ class PrepDirDoctorTest {
         final Path prepDir = prepDir(root, "2019");
         writeIndex(prepDir, 1, List.of("montage-001"));
 
-        assertThat(doctor().summaryOf(prepDir).since()).isNotEqualTo(Instant.EPOCH);
-        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingLastModified()).summaryOf(prepDir).since())
+        assertThat(doctor(root).summaryOf(prepDir).since()).isNotEqualTo(Instant.EPOCH);
+        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingLastModified()).summaryOf(prepDir).since())
                 .isEqualTo(Instant.EPOCH);
     }
 
@@ -554,9 +594,14 @@ class PrepDirDoctorTest {
     }
 
     private static void writeIndex(final Path prepDir, final int photos, final List<String> entries) {
+        writeIndex(prepDir, photos, List.of(), entries);
+    }
+
+    private static void writeIndex(final Path prepDir, final int photos, final List<Path> unreviewable,
+                                   final List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
-                new PrepDir("2019-06", fixedCategories(), prepDir.resolve("base"), photos, List.of(), entries.size(),
-                        prepDir, entries));
+                new PrepDir("2019-06", fixedCategories(), prepDir.resolve("base"), photos, unreviewable,
+                        entries.size(), prepDir, entries));
     }
 
     private static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {
@@ -586,9 +631,9 @@ class PrepDirDoctorTest {
             throws IOException {
         final Path cullPrepRoot = root.resolve("logs/cull-prep");
         writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
-        assertThat(doctor().runs(cullPrepRoot)).hasSize(1);
+        assertThat(doctor(root).runs(cullPrepRoot)).hasSize(1);
 
-        assertThat(CullPrepTestSupport.prepDirDoctor(new FailingExists()).runs(cullPrepRoot)).isEmpty();
+        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingExists()).runs(cullPrepRoot)).isEmpty();
     }
 
     // The new, narrower guard: only one candidate's own occupancy check fails, so only that one
@@ -607,7 +652,7 @@ class PrepDirDoctorTest {
         writeIndex(unreadable, 1, List.of("montage-001"));
         final var store = new FailingListingOf(unreadable);
 
-        final List<CullRunSummary> runs = CullPrepTestSupport.prepDirDoctor(store).runs(root.resolve("logs/cull-prep"));
+        final List<CullRunSummary> runs = CullPrepTestSupport.prepDirDoctor(root, store).runs(root.resolve("logs/cull-prep"));
 
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getFirst().health().state()).isEqualTo(State.READY);
@@ -629,12 +674,12 @@ class PrepDirDoctorTest {
         }
     }
 
-    private static PrepDirDoctor doctor() {
-        return CullPrepTestSupport.prepDirDoctor();
+    private static PrepDirDoctor doctor(final Path root) {
+        return CullPrepTestSupport.prepDirDoctor(root);
     }
 
-    private static PrepDirDoctor doctor(final CullPrepPort cullPrepPort) {
-        return CullPrepTestSupport.prepDirDoctor(cullPrepPort);
+    private static PrepDirDoctor doctor(final Path root, final CullPrepPort cullPrepPort) {
+        return CullPrepTestSupport.prepDirDoctor(root, cullPrepPort);
     }
 
     // A media store whose directory listing fails with a plain unchecked exception rather than an

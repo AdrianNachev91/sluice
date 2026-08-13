@@ -6,6 +6,7 @@ import photos.sluice.domain.cull.CategoryName;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
+import photos.sluice.domain.paths.Containment;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -21,8 +22,12 @@ import java.util.Map;
  * offline reconcile searches the very directory a real apply would have moved the file into. Any
  * disagreement between the two would make an already-moved file look permanently lost. Neither
  * {@link ApplyEngine} nor {@link ReconcileEngine} is given a {@link PathsPort} of its own. So
- * neither can resolve the library, review, duplicates or unreviewable root except through this
- * class.
+ * neither can resolve the Sorted, library, review, duplicates or unreviewable root except through
+ * this class.
+ *
+ * <p>Sorted is the exception to the opening sentence, being the one root read here rather than
+ * written to. {@link #requireUnderSorted} bounds where a run may take a file from, and it lives
+ * beside the destination refusals because this is the class that holds the roots.
  */
 @Component
 public class CullDestinations {
@@ -38,7 +43,7 @@ public class CullDestinations {
     /**
      * Creates a destination resolver over the configured paths.
      *
-     * @param pathsPort {@link PathsPort} resolves the library, review, duplicates and unreviewable roots
+     * @param pathsPort {@link PathsPort} resolves the Sorted, library, review, duplicates and unreviewable roots
      */
     public CullDestinations(final PathsPort pathsPort) {
         this.pathsPort = pathsPort;
@@ -103,6 +108,29 @@ public class CullDestinations {
     Path unreviewableDir(final Path file) {
         final String[] yearMonth = yearMonthOf(file).split("-", 2);
         return under(this.pathsPort.unreviewable(), yearMonth[0], yearMonth[1]);
+    }
+
+    /**
+     * Refuses a source file sitting anywhere but inside the Sorted root. This is the last line
+     * before a cull touches a file, and the mirror of {@link #under}'s refusal on the destination
+     * side. Together they bound what a run relocates at both ends: it moves and copies only out of
+     * Sorted, and only into a configured root. What it merely reads is wider, prep-dir state and
+     * the library among it.
+     *
+     * <p>{@code ApplyPlanner} already reports a file outside Sorted as a finding, which aborts the
+     * whole run before this can be reached. The check stays because that argument is only as
+     * durable as the caller that makes it, and this method cannot notice a future one skipping
+     * validation. It sits here rather than in the engine for the same reason every root resolution
+     * does: the engines are deliberately given no {@link PathsPort} of their own.
+     *
+     * @param source {@link Path} the file about to be moved or copied
+     * @throws IllegalStateException if source does not sit strictly inside the Sorted root
+     */
+    void requireUnderSorted(final Path source) {
+        final Path sorted = this.pathsPort.sorted();
+        if (!Containment.strictlyUnder(sorted, source)) {
+            throw new IllegalStateException("Refusing to act on a file outside " + sorted + ": " + source);
+        }
     }
 
     /**
@@ -187,7 +215,7 @@ public class CullDestinations {
             throw new IllegalStateException("Refusing a destination that is " + normalRoot + " itself: "
                     + String.join(", ", segments) + " names no folder under it");
         }
-        if (!normalized.startsWith(normalRoot)) {
+        if (!Containment.strictlyUnder(normalRoot, normalized)) {
             throw new IllegalStateException("Refusing a destination outside " + normalRoot + ": "
                     + String.join(", ", segments) + " resolves to " + normalized);
         }

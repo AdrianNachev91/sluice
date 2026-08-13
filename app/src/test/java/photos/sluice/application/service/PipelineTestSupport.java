@@ -408,7 +408,7 @@ final class PipelineTestSupport {
         final var disasterDrawer = new DisasterDrawer(mediaStore);
         final var moveLedger = new MoveLedger(mediaStore, disasterDrawer);
         final var cullDestinations = new CullDestinations(pathsConfig);
-        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, sha256Port);
+        final var applyPlanner = new ApplyPlanner(mediaStore, cullPrepPort, sha256Port, pathsConfig);
         final var applyEngine = new ApplyEngine(mediaStore, cullPrepPort, sha256Port, hashIndex, cullDestinations,
                 moveLedger, applyPlanner);
         final var reconcileEngine = new ReconcileEngine(mediaStore, cullPrepPort, sha256Port, disasterDrawer,
