@@ -54,16 +54,32 @@ final class SecretFilePermissions {
         // rather than removed; on Windows it is the other branch that runs.
         //noinspection ConstantValue
         if (posix != null) {
-            posix.setPermissions(OWNER_ONLY);
-            // Reading the rule back is what makes the refusal true. A mount that accepts the change
-            // and drops it would otherwise be reported as protected.
-            return posix.readAttributes().permissions().equals(OWNER_ONLY);
+            return applyOwnerOnlyPosix(posix);
         }
         final var acl = Files.getFileAttributeView(file, AclFileAttributeView.class);
         if (acl != null) {
             return applyOwnerOnlyAcl(acl, processPrincipal(file));
         }
         return false;
+    }
+
+    /**
+     * Restricts a file to its owner under the POSIX permission model, and reports whether the
+     * change held.
+     *
+     * <p>Package-private rather than private because a mount that accepts the change and silently
+     * drops it cannot be produced on demand, the same reason {@link #applyOwnerOnlyAcl} is
+     * package-private.
+     *
+     * @param view {@link PosixFileAttributeView} the view over the file to restrict
+     * @return boolean true when the file now carries exactly the owner-only permissions
+     * @throws IOException when the view rejects the change
+     */
+    static boolean applyOwnerOnlyPosix(final PosixFileAttributeView view) throws IOException {
+        view.setPermissions(OWNER_ONLY);
+        // Reading the rule back is what makes the refusal true. A mount that accepts the change and
+        // drops it would otherwise be reported as protected.
+        return view.readAttributes().permissions().equals(OWNER_ONLY);
     }
 
     /**

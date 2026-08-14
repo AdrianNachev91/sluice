@@ -48,11 +48,17 @@ public interface SecretStore {
      * reads it back gets that rather than what it passed. A key pasted out of a browser or a
      * terminal carries whatever came with it, and a provider counts that as part of the key.
      *
+     * <p>Nothing is cleared until the write succeeds, so a failed save can never lose a credential
+     * already stored. Once it does, every writable tier that outranks the one just written to is
+     * cleared. An unavailable tier can otherwise leave a stale value behind for a later session to
+     * rediscover. An environment variable is never touched by a save, matching {@link #remove}.
+     *
      * @param id {@link SecretId} which credential to store
      * @param secret {@link String} the credential to store
      * @throws IllegalArgumentException when the credential is blank
-     * @throws SecretStoreException when no tier on this machine can store one, or when the tier
-     *         that took it refused
+     * @throws SecretStoreException when no tier on this machine can store one, when the tier that
+     *         took it refused, or when the value was stored but a stale copy above it could not be
+     *         cleared
      */
     void save(SecretId id, String secret);
 

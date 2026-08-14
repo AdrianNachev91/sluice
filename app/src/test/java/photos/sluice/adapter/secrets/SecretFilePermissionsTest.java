@@ -8,10 +8,15 @@ import java.nio.file.attribute.AclEntry;
 import java.nio.file.attribute.AclEntryPermission;
 import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.GroupPrincipal;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.UserPrincipal;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -97,6 +102,23 @@ class SecretFilePermissionsTest {
                 .satisfies(entry -> assertThat(entry.principal()).isNotInstanceOf(GroupPrincipal.class));
     }
 
+    @Test
+    void appliesOwnerOnlyPermissionsAndConfirmsTheyHeld() throws IOException {
+        final var view = new RecordingPosixView();
+
+        assertThat(SecretFilePermissions.applyOwnerOnlyPosix(view)).isTrue();
+
+        assertThat(view.applied).isEqualTo(
+                EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+    }
+
+    @Test
+    void refusesWhenTheOwnerOnlyPermissionsDidNotSurviveBeingApplied() throws IOException {
+        final var view = new DiscardingPosixView();
+
+        assertThat(SecretFilePermissions.applyOwnerOnlyPosix(view)).isFalse();
+    }
+
     private record NamedPrincipal(String name) implements UserPrincipal {
 
         @Override
@@ -161,6 +183,118 @@ class SecretFilePermissionsTest {
         @Override
         public void setOwner(final UserPrincipal owner) {
             throw new UnsupportedOperationException("nothing under test changes a file's owner");
+        }
+    }
+
+    // Keeps whatever permissions were applied, so a refusal is distinguishable from an empty set.
+    private static class RecordingPosixView implements PosixFileAttributeView {
+
+        private Set<PosixFilePermission> applied = EnumSet.noneOf(PosixFilePermission.class);
+
+        @Override
+        public String name() {
+            return "posix";
+        }
+
+        @Override
+        public PosixFileAttributes readAttributes() {
+            return new FakePosixAttributes(this.applied);
+        }
+
+        @Override
+        public void setPermissions(final Set<PosixFilePermission> perms) {
+            this.applied = Set.copyOf(perms);
+        }
+
+        @Override
+        public void setGroup(final GroupPrincipal group) {
+            throw new UnsupportedOperationException("nothing under test changes a file's group");
+        }
+
+        @Override
+        public UserPrincipal getOwner() {
+            throw new UnsupportedOperationException("nothing under test reads a file's owner");
+        }
+
+        @Override
+        public void setOwner(final UserPrincipal owner) {
+            throw new UnsupportedOperationException("nothing under test changes a file's owner");
+        }
+
+        @Override
+        public void setTimes(final FileTime lastModifiedTime, final FileTime lastAccessTime,
+                final FileTime createTime) {
+            throw new UnsupportedOperationException(
+                    "nothing under test changes a file's timestamps");
+        }
+    }
+
+    // Accepts the change and reports the permissions unchanged afterwards, the way a mount that
+    // accepts a permission change and drops it behaves.
+    private static final class DiscardingPosixView extends RecordingPosixView {
+
+        @Override
+        public PosixFileAttributes readAttributes() {
+            return new FakePosixAttributes(EnumSet.noneOf(PosixFilePermission.class));
+        }
+    }
+
+    private record FakePosixAttributes(Set<PosixFilePermission> permissions)
+            implements PosixFileAttributes {
+
+        @Override
+        public UserPrincipal owner() {
+            throw new UnsupportedOperationException("nothing under test reads a file's owner");
+        }
+
+        @Override
+        public GroupPrincipal group() {
+            throw new UnsupportedOperationException("nothing under test reads a file's group");
+        }
+
+        @Override
+        public FileTime lastModifiedTime() {
+            throw new UnsupportedOperationException("nothing under test reads a file's timestamps");
+        }
+
+        @Override
+        public FileTime lastAccessTime() {
+            throw new UnsupportedOperationException("nothing under test reads a file's timestamps");
+        }
+
+        @Override
+        public FileTime creationTime() {
+            throw new UnsupportedOperationException("nothing under test reads a file's timestamps");
+        }
+
+        @Override
+        public boolean isRegularFile() {
+            throw new UnsupportedOperationException("nothing under test reads a file's kind");
+        }
+
+        @Override
+        public boolean isDirectory() {
+            throw new UnsupportedOperationException("nothing under test reads a file's kind");
+        }
+
+        @Override
+        public boolean isSymbolicLink() {
+            throw new UnsupportedOperationException("nothing under test reads a file's kind");
+        }
+
+        @Override
+        public boolean isOther() {
+            throw new UnsupportedOperationException("nothing under test reads a file's kind");
+        }
+
+        @Override
+        public long size() {
+            throw new UnsupportedOperationException("nothing under test reads a file's size");
+        }
+
+        @Override
+        public @Nullable Object fileKey() {
+            return null;
         }
     }
 }

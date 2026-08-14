@@ -74,6 +74,22 @@ class SecurityFrameworkKeychainTest {
         }
     }
 
+    // A transposed digit here misroutes a call: an absent item stops reading as absent, or a fresh
+    // add stops reading as a clash needing an update.
+    @Nested
+    class ControlFlowCodes {
+
+        @Test
+        void itemNotFoundIsTranscribedCorrectly() {
+            assertThat(SecurityFrameworkKeychain.ITEM_NOT_FOUND).isEqualTo(-25300);
+        }
+
+        @Test
+        void duplicateItemIsTranscribedCorrectly() {
+            assertThat(SecurityFrameworkKeychain.DUPLICATE_ITEM).isEqualTo(-25299);
+        }
+    }
+
     // Only a real keychain can answer these. A global pointer read one dereference short, a
     // dictionary paired wrong, a length field four bytes too narrow. All three pass against a
     // double.

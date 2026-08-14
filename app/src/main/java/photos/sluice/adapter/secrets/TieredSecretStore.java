@@ -18,11 +18,13 @@ import java.util.function.Function;
  * to.
  *
  * <p>The three operations reach different tiers, and that asymmetry is the whole of this class. A
- * read tries all of them. A save reaches only the writable one that ranks highest and says it can
- * be used here. A remove reaches every writable tier.
+ * read tries all of them. A save writes to the writable one that ranks highest and says it can be
+ * used here, then clears any tier that outranks it. A remove reaches every writable tier.
  *
  * <p>A remove clearing only the tier that answered would expose an older credential sitting in a
- * tier below it, which reads as the removal having silently failed.
+ * tier below it, which reads as the removal having silently failed. A save leaving a stale value
+ * in a tier above the one it wrote to has the same shape. The fresh credential is stored, and
+ * still loses every read to whatever was already sitting higher up.
  *
  * <p>The environment sits ahead of every stored tier on a read, matching the precedence the app's
  * configuration already follows.
@@ -105,6 +107,7 @@ public class TieredSecretStore implements SecretStore {
                         "No tier on this machine can store the credential for provider '"
                                 + id.provider() + "'"));
         target.write(id, stored);
+        this.clearStaleValueInHigherTiers(id, target);
     }
 
     @Override
@@ -137,6 +140,57 @@ public class TieredSecretStore implements SecretStore {
         final var failure = new SecretStoreException(SecretStoreException.Tier.STORE,
                 "The credential for provider '" + id.provider()
                         + "' was not cleared from every tier that can hold one, so it may still answer a read");
+        failures.forEach(failure::addSuppressed);
+        return failure;
+    }
+
+    /**
+     * Clears every writable tier that outranks the one just written to, so an older value cannot
+     * outrank the fresh one on the next read.
+     *
+     * <p>Reached only after {@code target}'s own write has already succeeded. A session with no
+     * D-Bus can save through the file tier while the keyring above it still holds an older
+     * credential from an earlier session. Nothing on the desktop tells the two tiers apart, so the
+     * keyring would keep answering first once it is reachable again.
+     *
+     * <p>Every outranking tier is attempted even after one refuses, the same reasoning
+     * {@link #remove} follows. Stopping at the first failure would leave a tier below it still
+     * holding the stale value.
+     *
+     * @param id {@link SecretId} which credential was just stored
+     * @param target {@link WritableSecretTier} the tier that took the write
+     * @throws SecretStoreException when a stale value could not be cleared from every tier above
+     *         {@code target}
+     */
+    private void clearStaleValueInHigherTiers(final SecretId id, final WritableSecretTier target) {
+        final List<RuntimeException> failures = new ArrayList<>();
+        final List<WritableSecretTier> outranking =
+                this.writable.subList(0, this.writable.indexOf(target));
+        for (final WritableSecretTier tier : outranking) {
+            try {
+                tier.erase(id);
+            } catch (final RuntimeException e) {
+                failures.add(e);
+            }
+        }
+        if (!failures.isEmpty()) {
+            throw staleValueNotCleared(id, failures);
+        }
+    }
+
+    /**
+     * Builds the one failure a partly-cleared save reports, carrying each tier's own refusal.
+     *
+     * @param id {@link SecretId} the credential whose fresh write may still be shadowed
+     * @param failures a {@link List} of {@link RuntimeException} what each refusing tier threw
+     * @return {@link SecretStoreException} the failure to report to the caller
+     */
+    private static SecretStoreException staleValueNotCleared(final SecretId id,
+            final List<RuntimeException> failures) {
+        final var failure = new SecretStoreException(SecretStoreException.Tier.STORE,
+                "The credential for provider '" + id.provider()
+                        + "' was stored, but an older value above it could not be cleared, so it"
+                        + " may still answer a read");
         failures.forEach(failure::addSuppressed);
         return failure;
     }

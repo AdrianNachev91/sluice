@@ -66,8 +66,14 @@ final class SecurityFrameworkKeychain implements MacKeychain {
     private static final int UTF8 = 0x08000100;
 
     private static final int SUCCESS = 0;
-    private static final int ITEM_NOT_FOUND = -25300;
-    private static final int DUPLICATE_ITEM = -25299;
+
+    // Package-private, not private, so a second independent transcription in the test can catch a
+    // transposed digit here. Unlike the four codes explain() words, these two are read by the
+    // control flow itself rather than by a message. A wrong value misroutes a call instead of
+    // misdescribing one.
+    static final int ITEM_NOT_FOUND = -25300;
+    static final int DUPLICATE_ITEM = -25299;
+
     private static final int USER_CANCELED = -128;
     private static final int AUTH_FAILED = -25293;
     private static final int NO_DEFAULT_KEYCHAIN = -25307;

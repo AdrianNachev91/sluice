@@ -26,6 +26,14 @@ class PlatformKeyringTest {
         assertThat(PlatformKeyring.isWindows(osName)).isFalse();
     }
 
+    // "Darwin" contains "win", which is what a bare substring match on "win" would have matched.
+    // Nothing enforces that the JVM never reports this name. The check itself has to be safe,
+    // rather than relying on the input happening to avoid it.
+    @Test
+    void doesNotMistakeDarwinForWindows() {
+        assertThat(PlatformKeyring.isWindows("Darwin")).isFalse();
+    }
+
     // The JVM reports the one name on Linux, so the row that matters is the lower-cased echo of it.
     @ParameterizedTest
     @ValueSource(strings = {"Linux", "linux"})

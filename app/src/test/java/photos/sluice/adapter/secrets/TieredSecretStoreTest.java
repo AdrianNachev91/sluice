@@ -141,6 +141,46 @@ class TieredSecretStoreTest {
             assertThat(file.written).containsExactly("fresh");
         }
 
+        @Test
+        void clearsAStaleValueFromEveryTierAboveTheOneWritten() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, false, "stale-from-keyring");
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
+
+            store.save(ANTHROPIC, "fresh");
+
+            assertThat(file.written).containsExactly("fresh");
+            assertThat(keyring.erased).isTrue();
+            assertThat(store.status(ANTHROPIC)).isEqualTo(new SecretStatus.InFile());
+        }
+
+        @Test
+        void leavesTiersBelowTheOneWrittenAlone() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, true, null);
+            final var file = writableTier(SecretTierKind.FILE, 0, true, "stale-from-file");
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
+
+            store.save(ANTHROPIC, "fresh");
+
+            assertThat(keyring.written).containsExactly("fresh");
+            assertThat(file.erased).isFalse();
+        }
+
+        @Test
+        void reportsAPartialFailureWhenAHigherTierRefusesToClear() {
+            final var keyring = new UnavailableEraseRefusingTier();
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
+
+            assertThatThrownBy(() -> store.save(ANTHROPIC, "fresh"))
+                    .isInstanceOf(SecretStoreException.class)
+                    .hasMessageContaining("anthropic")
+                    .satisfies(thrown -> assertThat(thrown.getSuppressed()).hasSize(1))
+                    .satisfies(thrown -> assertThat(((SecretStoreException) thrown).tier())
+                            .isEqualTo(SecretStoreException.Tier.STORE));
+            assertThat(file.written).containsExactly("fresh");
+        }
+
         // The environment is never a save target, so a set variable must not absorb the write. It
         // does shadow the value on the way back out, which is the surprise the status reports.
         @Test
@@ -327,11 +367,12 @@ class TieredSecretStoreTest {
         // the one case in this class whose answer depends on the machine underneath it. So it runs
         // only on the platforms whose credential store has a binding.
         //
-        // On Windows a binding implies a working store. On Linux it does not. A machine can carry
-        // libsecret with no Secret Service on the bus. The save then lands in the file tier and
-        // fails the assertion below. That is deliberate rather than overlooked, and it matches the
-        // stance the binding's own test takes. A Linux machine expected to carry a keyring and not
-        // carrying one should go red rather than quietly skip.
+        // On Windows and macOS a binding implies a working store. Every Mac carries
+        // Security.framework, the same fact PlatformKeyringTest relies on. On Linux it does not. A
+        // machine can carry libsecret with no Secret Service on the bus. The save then lands in the
+        // file tier and fails the assertion below. That is deliberate rather than overlooked, and it
+        // matches the stance the binding's own test takes. A Linux machine expected to carry a
+        // keyring and not carrying one should go red rather than quietly skip.
         //
         // It writes into the real credential store of whoever runs it, and then clears what it
         // wrote. Going through the tier means the entry name is built from a provider id, and those
@@ -344,7 +385,7 @@ class TieredSecretStoreTest {
         // nobody has rather than destroying a credential on one somebody does. That is not the
         // skipped-configuration blind spot: what is skipped is foreign data, not a code path.
         @Test
-        @EnabledOnOs({OS.WINDOWS, OS.LINUX})
+        @EnabledOnOs({OS.WINDOWS, OS.LINUX, OS.MAC})
         void savesThroughTheCredentialStoreWherePlatformOffersOne(@TempDir final Path secrets) {
             final var fixture = new SecretId("sluice-fixture-tier-routing", "SLUICE_FIXTURE_TIER_ROUTING");
             final SecretStore store = TieredSecretStore.forMachine(
@@ -524,6 +565,22 @@ class TieredSecretStoreTest {
     }
 
     private static final class EraseRefusingTier extends BrokenTier {
+
+        @Override
+        public void erase(final SecretId id) {
+            throw new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                    "this credential store refused to clear the credential");
+        }
+    }
+
+    // A tier unreachable for a save can still be reached, and still refuse, when a later save
+    // elsewhere tries to clear the stale value it holds.
+    private static final class UnavailableEraseRefusingTier extends BrokenTier {
+
+        @Override
+        public boolean available() {
+            return false;
+        }
 
         @Override
         public void erase(final SecretId id) {

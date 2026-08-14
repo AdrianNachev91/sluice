@@ -32,9 +32,10 @@ public class SecretStoreException extends RuntimeException {
         FILE,
 
         /**
-         * The failure belongs to the store's composition rather than to any one tier: a save no
-         * tier could accept, or a removal that partly failed. The refusing tiers' own failures ride
-         * along as suppressed exceptions.
+         * The failure belongs to the store's composition rather than to any one tier. It covers a
+         * save no tier could accept, a save that stored but could not clear a stale copy above it,
+         * or a removal that partly failed. The refusing tiers' own failures ride along as
+         * suppressed exceptions.
          */
         STORE
     }
