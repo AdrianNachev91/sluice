@@ -6,6 +6,7 @@ import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.LiveSettings;
+import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
@@ -17,6 +18,7 @@ import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.NotAPath;
 import photos.sluice.domain.paths.PathViolation.Overlap;
+import photos.sluice.domain.paths.PathViolation.Unreadable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -24,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -365,6 +368,28 @@ class SettingsServiceTest {
         assertThat(lock.claimed).isEmpty();
     }
 
+    // aSavedSettingIsWrittenAndInForce is the control: the same fixture shape, with nothing refusing
+    // to resolve, saves.
+    @Test
+    void aFolderRootThatIsThereAndCannotBeResolvedIsRefusedWithTheRest(@TempDir final Path root,
+                                                                       @TempDir final Path after) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var lock = new RecordingLock();
+        final Path library = createDirectory(after.resolve("Library"));
+        final Settings candidate = settings(after);
+        final var service = new SettingsService(live, store, lock, new JobRunner(),
+                new PathValidationService(refusingToResolve(library), live), List.of());
+
+        assertThatThrownBy(() -> service.save(candidate))
+                .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
+                        .containsExactly(new Unreadable(PathRole.LIBRARY_ROOT, library)));
+
+        assertThat(store.saved).isEmpty();
+        assertThat(lock.claimed).isEmpty();
+        assertThat(live.current()).isEqualTo(settings(root));
+    }
+
     @Test
     void anInstallThatHasOnlyChosenItsWorkingRootSoFarIsSaved(@TempDir final Path root) {
         final var live = new RecordingLive(unconfigured());
@@ -648,6 +673,20 @@ class SettingsServiceTest {
                                                    final List<FolderRootsChangeListener> listeners) {
         return new SettingsService(live, store, lock, jobRunner,
                 new PathValidationService(new NioMediaStore(), live), listeners);
+    }
+
+    // The real store everywhere except the one call the failure is about. Every other root in the
+    // candidate still gets the verdict a real filesystem gives it.
+    private static MediaReader refusingToResolve(final Path refused) {
+        return new NioMediaStore() {
+            @Override
+            public Optional<Path> realDirectory(final Path path) {
+                if (path.equals(refused)) {
+                    throw new UncheckedIOException(new IOException("the share went away"));
+                }
+                return super.realDirectory(path);
+            }
+        };
     }
 
     private static Settings withProvider(final Settings settings, final String provider) {

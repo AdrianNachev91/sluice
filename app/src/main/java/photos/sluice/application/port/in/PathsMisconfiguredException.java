@@ -6,6 +6,7 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.NotAPath;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
 import photos.sluice.domain.paths.PathViolation.Overlap;
+import photos.sluice.domain.paths.PathViolation.Unreadable;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -70,6 +71,7 @@ public final class PathsMisconfiguredException extends IllegalStateException {
             case final NotConfigured v -> property(v.role()) + " is not set.";
             case final NotAPath v -> property(v.role()) + " (" + v.value() + ") is not a usable folder path.";
             case final NotADirectory v -> property(v.role()) + " (" + v.path() + ") is not an existing folder.";
+            case final Unreadable v -> property(v.role()) + " (" + v.path() + ") is there but could not be read.";
             case final Overlap v -> property(v.first()) + " and " + property(v.second())
                     + " must not contain each other.";
         };

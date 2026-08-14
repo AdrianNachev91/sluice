@@ -18,6 +18,7 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.NotAPath;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
 import photos.sluice.domain.paths.PathViolation.Overlap;
+import photos.sluice.domain.paths.PathViolation.Unreadable;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -122,7 +123,8 @@ public class SettingsService implements SettingsUseCase {
                 this.moveRoots(settings, previous);
                 this.announceFolderRootsChange(workingRootMoved);
             })) {
-                throw new JobInProgressException();
+                throw new JobInProgressException(
+                        "Sluice is running a job. Finish the current run before changing where its folders are.");
             }
         }
     }
@@ -170,7 +172,7 @@ public class SettingsService implements SettingsUseCase {
     private static boolean refuses(final PathViolation violation) {
         return switch (violation) {
             case NotConfigured _ -> false;
-            case NotAPath _, NotADirectory _, Overlap _ -> true;
+            case NotAPath _, NotADirectory _, Unreadable _, Overlap _ -> true;
         };
     }
 

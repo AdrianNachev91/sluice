@@ -1,6 +1,7 @@
 package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.application.port.in.JobInProgressException;
 
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -77,7 +78,7 @@ class JobRunnerTest {
         started.await();
 
         assertThatThrownBy(() -> this.runner.submit(_ -> "second"))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(JobInProgressException.class);
 
         release.countDown();
         first.join();

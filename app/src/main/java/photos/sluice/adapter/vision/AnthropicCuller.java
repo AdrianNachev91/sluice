@@ -23,6 +23,7 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.VisionCuller;
@@ -342,10 +343,11 @@ class AnthropicCuller implements VisionCuller {
      * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
      * @param secretStore {@link SecretStore} where this provider's API key is stored
      * @return {@link AnthropicClient} the built Anthropic client
+     * @throws MissingCredentialException if no tier holds this provider's API key
      */
     static AnthropicClient defaultClient(final CullProviderSettings providerSettings,
             final SecretStore secretStore) {
-        final String apiKey = secretStore.secret(API_KEY).orElseThrow(() -> new IllegalStateException(
+        final String apiKey = secretStore.secret(API_KEY).orElseThrow(() -> new MissingCredentialException(API_KEY,
                 "No API key is stored for the 'anthropic' vision provider; add one in Settings, "
                         + "or set the " + API_KEY.environmentVariable() + " environment variable"));
         final var builder = AnthropicOkHttpClient.builder().apiKey(apiKey);

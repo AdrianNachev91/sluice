@@ -21,6 +21,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStore;
@@ -755,6 +756,7 @@ class AnthropicCullerTest {
 
         assertThatThrownBy(() -> culler.cull(prep, OPTIONS))
                 .isInstanceOf(IllegalStateException.class)
+                .isNotInstanceOf(MissingCredentialException.class)
                 .hasMessageContaining("sluice.cull.provider-settings.model");
     }
 
@@ -766,7 +768,8 @@ class AnthropicCullerTest {
 
         assertThatThrownBy(() -> AnthropicCuller.defaultClient(
                 settings("claude-sonnet-5").providerSettings(), empty))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOfSatisfying(MissingCredentialException.class,
+                        e -> assertThat(e.id()).isEqualTo(AnthropicCuller.API_KEY))
                 .hasMessageContaining("Settings")
                 .hasMessageContaining("ANTHROPIC_API_KEY");
     }

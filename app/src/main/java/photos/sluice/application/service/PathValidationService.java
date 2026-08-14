@@ -1,6 +1,8 @@
 package photos.sluice.application.service;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.out.LiveSettings;
@@ -11,8 +13,10 @@ import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.NotAPath;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
+import photos.sluice.domain.paths.PathViolation.Unreadable;
 import photos.sluice.domain.paths.RootLayout;
 
+import java.io.UncheckedIOException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -32,6 +36,8 @@ import java.util.List;
  */
 @Component
 public class PathValidationService implements PathValidationUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(PathValidationService.class);
 
     private final MediaReader media;
     private final LiveSettings settings;
@@ -79,6 +85,11 @@ public class PathValidationService implements PathValidationUseCase {
      * Resolves one configured value to the real directory behind it, recording why it could not be
      * where it could not.
      *
+     * <p>A read failure is recorded as a violation rather than thrown. Everything that calls here
+     * wants a verdict on three roots, and a root nobody can read is one this app must not work in
+     * either way. Letting it out untyped would hand a screen an exception naming no root, in place
+     * of a list that marks the field. The failure itself is logged, since nothing renders it.
+     *
      * @param role {@link PathRole} which root the value belongs to
      * @param raw {@link String} the configured value, or null when nothing is set
      * @param violations a {@link List} of {@link PathViolation} collected so far, added to here
@@ -97,7 +108,14 @@ public class PathValidationService implements PathValidationUseCase {
             violations.add(new NotAPath(role, raw));
             return null;
         }
-        final Path real = this.media.realDirectory(path).orElse(null);
+        final Path real;
+        try {
+            real = this.media.realDirectory(path).orElse(null);
+        } catch (final UncheckedIOException e) {
+            log.warn("Could not resolve the folder root {}", path, e);
+            violations.add(new Unreadable(role, path));
+            return null;
+        }
         if (real == null) {
             violations.add(new NotADirectory(role, path));
         }

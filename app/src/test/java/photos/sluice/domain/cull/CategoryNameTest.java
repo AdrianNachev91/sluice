@@ -69,9 +69,15 @@ class CategoryNameTest {
         assertThat(CategoryName.problemWith("com0")).isNull();
     }
 
+    // Compared rather than substring-matched. A negative quoting the shape refusal's own wording
+    // would stop proving anything the moment that sentence is reworded, and would go on passing.
+    // Both are asserted non-null so a rule that stopped refusing at all cannot pass as "distinct".
     @Test
     void reportsTheShapeAndTheDeviceRefusalDistinctly() {
-        assertThat(CategoryName.problemWith("Junk")).contains("lower-case");
-        assertThat(CategoryName.problemWith("con")).doesNotContain("lower-case");
+        final String shape = CategoryName.problemWith("Junk");
+        final String device = CategoryName.problemWith("con");
+
+        assertThat(shape).isNotNull();
+        assertThat(device).isNotNull().isNotEqualTo(shape);
     }
 }

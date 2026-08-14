@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
+import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.config.SettingsHolder;
@@ -13,11 +14,14 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.NotAPath;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
 import photos.sluice.domain.paths.PathViolation.Overlap;
+import photos.sluice.domain.paths.PathViolation.Unreadable;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -71,6 +75,36 @@ class PathValidationServiceTest {
 
         assertThat(validate(new PathSettings(paths.repoRoot(), paths.libraryRoot(), file.toString())))
                 .containsExactly(new NotADirectory(PathRole.INBOX, file));
+    }
+
+    // A directory that is there and refuses to resolve. Injected at the port rather than staged on
+    // disk. What produces it is a share that goes away between the two calls, or a permission
+    // denial partway down. Neither is reproducible, nor even the same failure on every platform.
+    // The same fixture with nothing refusing is the one threeExistingSeparateFoldersAreUsable uses.
+    @Test
+    void aFolderThatIsThereAndCannotBeResolvedIsRecordedRatherThanThrown(@TempDir final Path root)
+            throws IOException {
+        final Path work = Files.createDirectories(root.resolve("work"));
+        final Path library = Files.createDirectories(root.resolve("library"));
+        final Path inbox = Files.createDirectories(root.resolve("inbox"));
+        final var paths = new PathSettings(work.toString(), library.toString(), inbox.toString());
+
+        assertThat(new PathValidationService(refusingToResolve(library), unconfiguredHolder()).violations(paths))
+                .containsExactly(new Unreadable(PathRole.LIBRARY_ROOT, library));
+    }
+
+    // The fixture does overlap, proved on the first line, and no Overlap is reported once a root
+    // stops resolving.
+    @Test
+    void noOverlapIsClaimedWhileARootCouldNotBeResolved(@TempDir final Path root) throws IOException {
+        final Path inbox = Files.createDirectories(root.resolve("inbox"));
+        final Path library = Files.createDirectories(inbox.resolve("library"));
+        final Path workingRoot = Files.createDirectories(root.resolve("work"));
+        final var paths = new PathSettings(workingRoot.toString(), library.toString(), inbox.toString());
+        assertThat(validate(paths)).containsExactly(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX));
+
+        assertThat(new PathValidationService(refusingToResolve(workingRoot), unconfiguredHolder()).violations(paths))
+                .containsExactly(new Unreadable(PathRole.REPO_ROOT, workingRoot));
     }
 
     @Test
@@ -138,8 +172,24 @@ class PathValidationServiceTest {
     // Checking candidates never reads the settings in force, so the holder here names nothing. The
     // one test that does read them builds its own.
     private static List<PathViolation> validate(final PathSettings paths) {
-        return new PathValidationService(new NioMediaStore(),
-                new SettingsHolder(SettingsFixture.settings(new PathSettings(null, null, null))))
-                .violations(paths);
+        return new PathValidationService(new NioMediaStore(), unconfiguredHolder()).violations(paths);
+    }
+
+    private static SettingsHolder unconfiguredHolder() {
+        return new SettingsHolder(SettingsFixture.settings(new PathSettings(null, null, null)));
+    }
+
+    // The real store everywhere except the one call the failure is about. Every other root in the
+    // fixture still gets the verdict a real filesystem gives it.
+    private static MediaReader refusingToResolve(final Path refused) {
+        return new NioMediaStore() {
+            @Override
+            public Optional<Path> realDirectory(final Path path) {
+                if (path.equals(refused)) {
+                    throw new UncheckedIOException(new IOException("the share went away"));
+                }
+                return super.realDirectory(path);
+            }
+        };
     }
 }

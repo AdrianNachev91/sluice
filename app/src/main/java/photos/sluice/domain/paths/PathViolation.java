@@ -41,6 +41,24 @@ public sealed interface PathViolation {
     }
 
     /**
+     * A directory is there, and the filesystem then refused to say what it really is. A folder root
+     * on a network share that went away mid-check, a permission denial somewhere on the way down,
+     * and a link that resolves to nothing all land here.
+     *
+     * <p>Separate from {@link NotADirectory} because the two send a user to different places. That
+     * one says the folder is not there, so go and find it. This one says the folder is there and
+     * cannot be read, so the thing to fix is the share, the drive or the permission.
+     *
+     * <p>What went wrong is logged where it was caught rather than carried here. A failure object in
+     * a domain value would leak an adapter's own exception into the core, and no surface renders it.
+     *
+     * @param role {@link PathRole} the root the value belongs to
+     * @param path {@link Path} the configured value, made absolute
+     */
+    record Unreadable(PathRole role, Path path) implements PathViolation {
+    }
+
+    /**
      * Two roots sit inside each other, or are the same folder. This is the violation that matters
      * most. An overlap is what could let a file be deleted as a redundant duplicate while being the
      * only copy left.

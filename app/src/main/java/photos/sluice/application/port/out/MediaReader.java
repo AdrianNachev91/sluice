@@ -68,8 +68,13 @@ public interface MediaReader {
      * under different names that reach one directory come back equal here, which is what lets a
      * caller compare them as plain paths.
      *
+     * <p>Empty means nothing is there. It never means the filesystem refused to answer. A directory
+     * that is there and cannot be resolved throws instead. So a caller weighing whether a folder is
+     * usable is never handed a "no" it would read as an empty folder.
+     *
      * @param path {@link Path} the path to resolve
      * @return an {@link Optional} of {@link Path}, the real directory, or empty if there is none
+     * @throws UncheckedIOException if a directory is there and resolving it failed
      */
     Optional<Path> realDirectory(Path path);
 

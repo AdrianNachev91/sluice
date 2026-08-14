@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.yaml.snakeyaml.Yaml;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.config.SettingsFixture;
@@ -138,7 +139,7 @@ class YamlSettingsStoreTest {
         Files.writeString(file, original);
 
         assertThatThrownBy(() -> new YamlSettingsStore(file).save(settings()))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(MalformedSettingsException.class);
 
         assertThat(Files.readString(file)).isEqualTo(original);
     }
@@ -191,7 +192,7 @@ class YamlSettingsStoreTest {
         Files.writeString(file, "sluice:\n  paths:\n - broken: [\n");
 
         assertThatThrownBy(() -> new YamlSettingsStore(file).save(settings()))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(MalformedSettingsException.class)
                 .hasMessageContaining("not valid YAML");
     }
 
@@ -201,7 +202,7 @@ class YamlSettingsStoreTest {
         Files.writeString(file, "just a string\n");
 
         assertThatThrownBy(() -> new YamlSettingsStore(file).save(settings()))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(MalformedSettingsException.class)
                 .hasMessageContaining("not a group of settings");
     }
 
@@ -211,8 +212,20 @@ class YamlSettingsStoreTest {
         Files.writeString(file, "sluice: off\n");
 
         assertThatThrownBy(() -> new YamlSettingsStore(file).save(settings()))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(MalformedSettingsException.class)
                 .hasMessageContaining("sluice");
+    }
+
+    // The entry branch rather than the top-level one, because that branch reports a key rather than
+    // the file. A store passing the wrong thing there would still look right.
+    @Test
+    void aRefusalNamesTheConfigFileItWasReading(@TempDir final Path dir) throws IOException {
+        final Path file = dir.resolve("config.yml");
+        Files.writeString(file, "sluice: off\n");
+
+        assertThatThrownBy(() -> new YamlSettingsStore(file).save(settings()))
+                .isInstanceOfSatisfying(MalformedSettingsException.class,
+                        e -> assertThat(e.settingsFile()).isEqualTo(file));
     }
 
     @Test

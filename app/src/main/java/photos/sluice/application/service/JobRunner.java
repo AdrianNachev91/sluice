@@ -1,6 +1,7 @@
 package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.in.JobInProgressException;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -35,11 +36,13 @@ public class JobRunner {
      *
      * @param work a {@link JobWork} of T the job logic to execute
      * @return a {@link JobHandle} of T a handle for the started job
+     * @throws JobInProgressException if a job is already running
      */
     public <T> JobHandle<T> submit(final JobWork<T> work) {
         synchronized (this.slot) {
             if (!this.busy.compareAndSet(false, true)) {
-                throw new IllegalStateException("A job is already running; only one job runs at a time");
+                throw new JobInProgressException(
+                        "Sluice is already running a job. Wait for it to finish, then start this one.");
             }
         }
         final var resultFuture = new CompletableFuture<T>();

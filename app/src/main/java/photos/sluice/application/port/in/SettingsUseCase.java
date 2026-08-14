@@ -1,7 +1,10 @@
 package photos.sluice.application.port.in;
 
+import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.WorkingRootBusyException;
+
+import java.io.UncheckedIOException;
 
 /**
  * Reading and changing the app's settings. The one entry point a settings screen, or a future
@@ -29,6 +32,9 @@ public interface SettingsUseCase {
      *         still choosing its folders looks like
      * @throws WorkingRootBusyException if another process holds the working root these settings name
      * @throws JobInProgressException if a job is running and these settings move a folder root
+     * @throws MalformedSettingsException if the stored settings cannot be understood, so nothing can
+     *         be merged into them
+     * @throws UncheckedIOException if the stored settings cannot be read or written
      */
     void save(Settings settings);
 }

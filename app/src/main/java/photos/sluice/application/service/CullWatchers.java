@@ -3,6 +3,7 @@ package photos.sluice.application.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
@@ -75,7 +76,7 @@ final class CullWatchers {
      * <p>The provider check stays even here, where the user asked for this explicitly. Watch mode
      * exists to notice when the user's own separate culling agent, running outside this app, drops
      * a shard. An automated provider's shards never arrive that way, so its waiting run has nothing
-     * to notice, and a run that already looks ready would only trigger an unasked-for, API-spending
+     * to notice. A run that already looks ready would only trigger an unasked-for, API-spending
      * resume. The toggle is absent from an automated provider's card for the same reason.
      *
      * @param prepDir {@link Path} the prep dir to watch
@@ -112,8 +113,8 @@ final class CullWatchers {
 
     /**
      * Stops and removes the active watcher for a prep dir, if one exists. Giving up on a
-     * still-waiting job must stop it from ever auto-resuming a prep dir that's about to be filed
-     * into the graveyard, so this is package-private rather than private: dispatchAndApply()'s own
+     * still-waiting job must stop it from ever auto-resuming a prep dir that is about to be filed
+     * into the graveyard. So this is package-private rather than private: dispatchAndApply()'s own
      * call site isn't the only place that needs to retire a watcher. It is also armWatch()'s
      * opposite, and so the off position of the waiting card's own per-run watch toggle. Turning
      * that off leaves the run exactly as it is: still Waiting, still listed, still blocking a
@@ -157,10 +158,11 @@ final class CullWatchers {
      * watcher stops and the run stays exactly as it is, still Waiting and still listed. A manual
      * Resume then surfaces the same refusal on a screen, where it can be acted on.
      *
-     * <p>The narrow clause is what tells them apart, and it has to be there. A busy job runner
-     * throws IllegalStateException, and PathsMisconfiguredException is one of those. The broad
-     * clause alone therefore reads a refusal as "runner busy, keep polling", and polls for the life
-     * of the process over a condition no poll will resolve.
+     * <p>Both clauses name their exact type, which is what tells them apart. Both are
+     * IllegalStateException subtypes. A clause catching that supertype would read a refusal as
+     * "runner busy, keep polling". It would then poll for the life of the process, over a condition
+     * no poll resolves. Naming the types also leaves anything else to propagate: an auto-resume
+     * that failed for a third reason is not a reason to keep asking.
      *
      * @param prepDir {@link Path} the prep dir to attempt to resume
      * @return boolean false only when a busy job runner makes it worth retrying
@@ -172,7 +174,7 @@ final class CullWatchers {
         } catch (final PathsMisconfiguredException refused) {
             log.warn("Watch-mode auto-resume for {} was refused and this watcher is stopping", prepDir, refused);
             return true;
-        } catch (final IllegalStateException busy) {
+        } catch (final JobInProgressException busy) {
             return false;
         }
         handle.onComplete().whenComplete((_, failure) -> {

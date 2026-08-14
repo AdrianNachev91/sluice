@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 import photos.sluice.application.port.out.CullProviderSettings;
+import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.domain.cull.CullCategory;
@@ -69,33 +70,35 @@ public class YamlSettingsStore implements SettingsStore {
      * Writes the given settings into the config file.
      *
      * @param settings {@link Settings} the settings to persist
+     * @throws MalformedSettingsException if the file that is there cannot be understood
+     * @throws UncheckedIOException if the file cannot be read or written
      */
     @Override
     public void save(final Settings settings) {
         final Map<String, Object> document = this.read();
-        final Map<String, Object> sluice = child(document, "sluice");
+        final Map<String, Object> sluice = this.child(document, "sluice");
 
-        final Map<String, Object> paths = child(sluice, "paths");
+        final Map<String, Object> paths = this.child(sluice, "paths");
         put(paths, "repo-root", settings.paths().repoRoot());
         put(paths, "library-root", settings.paths().libraryRoot());
         put(paths, "inbox", settings.paths().inbox());
 
-        final Map<String, Object> montage = child(sluice, "montage");
+        final Map<String, Object> montage = this.child(sluice, "montage");
         put(montage, "tile-size", settings.montage().tileSize());
         put(montage, "tiles-per-row", settings.montage().tilesPerRow());
 
-        final Map<String, Object> cull = child(sluice, "cull");
+        final Map<String, Object> cull = this.child(sluice, "cull");
         put(cull, "provider", settings.provider());
         put(cull, "categories", categories(settings.categories()));
 
         final CullProviderSettings provider = settings.providerSettings();
-        final Map<String, Object> providerSettings = child(cull, "provider-settings");
+        final Map<String, Object> providerSettings = this.child(cull, "provider-settings");
         put(providerSettings, "model", provider.model());
         put(providerSettings, "endpoint", provider.endpoint());
         put(providerSettings, "thinking", provider.thinking());
         put(providerSettings, "max-retries", provider.maxRetries());
 
-        final Map<String, Object> externalAgent = child(cull, "external-agent");
+        final Map<String, Object> externalAgent = this.child(cull, "external-agent");
         put(externalAgent, "mode", settings.externalAgent().mode().name().toLowerCase(Locale.ROOT));
 
         this.write(document);
@@ -121,6 +124,8 @@ public class YamlSettingsStore implements SettingsStore {
      * Reads the config file into a mutable map, or an empty one when there is no file yet.
      *
      * @return a {@link Map} of {@link String} to {@link Object}, the parsed document
+     * @throws MalformedSettingsException if what is there is not valid YAML
+     * @throws UncheckedIOException if the file cannot be read
      */
     private Map<String, Object> read() {
         if (!Files.isRegularFile(this.configFile)) {
@@ -132,13 +137,13 @@ public class YamlSettingsStore implements SettingsStore {
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read the settings file " + this.configFile, e);
         } catch (final RuntimeException e) {
-            throw new IllegalStateException("The settings file " + this.configFile
+            throw new MalformedSettingsException(this.configFile, "The settings file " + this.configFile
                     + " is not valid YAML. Fix or remove it, then try again.", e);
         }
         if (loaded == null) {
             return new LinkedHashMap<>();
         }
-        return mapping(loaded, this.configFile.toString());
+        return this.mapping(loaded, "The top level of the settings file " + this.configFile);
     }
 
     /**
@@ -215,12 +220,13 @@ public class YamlSettingsStore implements SettingsStore {
      * @param parent a {@link Map} of {@link String} to {@link Object}, the mapping to look in
      * @param key {@link String} the child's canonical key
      * @return a {@link Map} of {@link String} to {@link Object}, the child mapping
+     * @throws MalformedSettingsException if what is stored under the key is not a group of settings
      */
-    private static Map<String, Object> child(final Map<String, Object> parent, final String key) {
+    private Map<String, Object> child(final Map<String, Object> parent, final String key) {
         final Object existing = take(parent, key);
         final Map<String, Object> mapping = existing == null
                 ? new LinkedHashMap<>()
-                : mapping(existing, key);
+                : this.mapping(existing, "The entry " + key + " in the settings file " + this.configFile);
         parent.put(key, mapping);
         return mapping;
     }
@@ -276,13 +282,14 @@ public class YamlSettingsStore implements SettingsStore {
      * as something other than a mapping would throw their file away without saying so.
      *
      * @param node {@link Object} the loaded node
-     * @param name {@link String} what the node is, for the failure message
+     * @param subject {@link String} what the node is, as the opening of the failure sentence
      * @return a {@link Map} of {@link String} to {@link Object}, the node as a mapping
+     * @throws MalformedSettingsException if the node is anything other than a mapping
      */
-    private static Map<String, Object> mapping(final Object node, final String name) {
+    private Map<String, Object> mapping(final Object node, final String subject) {
         if (!(node instanceof final Map<?, ?> map)) {
-            throw new IllegalStateException("The settings file entry " + name
-                    + " is not a group of settings. Fix or remove it, then try again.");
+            throw new MalformedSettingsException(this.configFile,
+                    subject + " is not a group of settings. Fix or remove it, then try again.");
         }
         final Map<String, Object> result = new LinkedHashMap<>();
         map.forEach((key, value) -> result.put(String.valueOf(key), value));
