@@ -1094,6 +1094,23 @@ class CullEngineTest {
         control.join();
     }
 
+    // Retiring is the whole proof, and it discriminates. A poll that met a shut runner without
+    // recognising the refusal would log and keep polling, leaving the watch active here.
+    @Test
+    void watchModeRetiresItsWatcherOnceTheRunnerIsShut(@TempDir final Path root) throws Exception {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
+        assertThat(pipeline.stopAcceptingJobs(Duration.ofSeconds(5))).isTrue();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        waitUntil(Duration.ofSeconds(2), () -> !pipeline.isWatchActive(prepDir));
+    }
+
     // The sort is submitted and provably in flight before the shard lands. Otherwise the watcher
     // could take the job slot first, and sort() would throw instead of the test proving anything.
     @Test

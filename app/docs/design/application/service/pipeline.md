@@ -14,19 +14,29 @@ with progress reported through `ProgressPort` via `PhaseRunner`
 `Troubleshooter` and `PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing.
 Neither has per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the
 whole reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each
-actually does. `startWatching(prepDir)`, `stopWatching(prepDir)` and `stopAllWatching()` are the
-last delegates, and the only ones that are not jobs at all. They switch auto-resume on and off,
-which is bookkeeping against an in-memory map rather than work - see `cull-engine.md`. The first
-two govern one waiting run. `stopAllWatching()` retires every poller at once, for a save that moved
-the working root and so left them all polling outside it. It is the one entry point that runs no
-root check. A save moving only the library or the inbox does not come here.
+actually does. `startWatching(prepDir)`, `stopWatching(prepDir)` and `stopAllWatching()` switch
+auto-resume on and off, which is bookkeeping against an in-memory map rather than work - see
+`cull-engine.md`. The first two govern one waiting run. `stopAllWatching()` retires every poller at
+once. Two callers need that: a save that moved the working root and so left them all polling outside
+it, and an app that is closing. A save moving only the library or the inbox does not come here.
+
+`stopAcceptingJobs(timeout)` is the last delegate, and the exit path's own. It shuts `JobRunner` for
+good, asks the job in flight to stop, and waits up to `timeout` for it to. It answers whether
+anything is still executing, which is what decides whether the caller may hand the working root
+back. Cancellation is cooperative, so a false answer means the job had not reached its next stage
+boundary in time. Nothing forces it to stop, and process exit is what ends one that will not. See
+`StartupSequence.shutdown()` for the ordering it sits in.
+
+Those two are the only entry points that run no root check. Neither resolves a path, and an install
+whose roots are unusable has to be able to close as cleanly as one whose roots are fine.
 
 ## How one call works
 
 ```mermaid
 flowchart TD
     A["Pipeline.sort/commit/rescue/discard(...)"] --> B["JobRunner.submit(JobWork)"]
-    B -- " a job is already running " --> Z(["IllegalStateException,<br/>thrown synchronously -<br/>nothing started"])
+    B -- " a job is already running,<br/>or the slot did not<br/>come free in time " --> Z(["JobInProgressException,<br/>thrown synchronously -<br/>nothing started"])
+    B -- " the app is closing,<br/>which outranks<br/>either refusal above " --> Y(["ShuttingDownException,<br/>thrown synchronously -<br/>and nothing reopens it"])
     B -- " slot free " --> C["work runs on a<br/>virtual thread;<br/>JobHandle returned<br/>immediately"]
     C --> D["progressPort.phaseStarted(phase)"]
     D --> E["the matching engine call"]
@@ -44,6 +54,11 @@ can additionally disable it while a job runs. The check becomes a backstop there
 one-shot command-line invocation) has nothing else standing between two concurrent calls. That check is therefore that
 caller's actual enforcement, not just a backstop. Either way, catching the exception and showing a plain message is the
 caller's own job, not `Pipeline`'s.
+
+`B` can also wait before it answers. A settings save that moves a folder root holds the slot shut
+for its whole length. That wait is bounded rather than indefinite, and `JobRunner`'s own constant
+carries the value and why. So a driving adapter must not assume the call returns at once. One
+calling from a thread it cannot afford to block, such as a UI's event thread, accounts for the wait.
 
 `phaseFinished` (`G`) fires whether or not the engine call throws, via `PhaseRunner`. Without that, a job that dies
 mid-call would leave a `ProgressPort` listener with a `phaseStarted` event and no matching `phaseFinished`. The phase
@@ -70,15 +85,19 @@ for the watcher it disarms.
 
 ### Scenarios
 
-| Scenario                                                                                 | Outcome                                                                                                                                                                                       |
-|------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| A job is already running when `sort`/`commit`/`rescue`/`discard` is called               | `IllegalStateException` immediately; the running job is unaffected, no new job starts                                                                                                         |
-| The engine call succeeds                                                                 | `phaseStarted` -> N ticks -> `phaseFinished`, `JobHandle.join()` returns the engine's summary                                                                                                 |
-| The engine call throws mid-run                                                           | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                                      |
-| Cancellation requested via the returned `JobHandle` (`sort`)                             | `SortEngine` checks it once per file in both its dating pass (aborts cleanly, nothing moved) and its routing pass (already-moved files stay moved) - see `sort-engine.md`                     |
-| Cancellation requested via the returned `JobHandle` (`commit`/`rescue`)                  | `CommitEngine`/`RescueEngine` each check it once per file in their one move loop; already-moved/rescued files stay that way - see `rescue-engine.md` for `rescue`'s dissolve-gate interaction |
-| `discard(prepDir)` is called on a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE` | `IllegalStateException` immediately - `purgeCompleted()` is that state's own verb, not `discard()`                                                                                            |
-| Cancellation requested via the returned `JobHandle` (`discard`)                          | Not checked - `discard()` has no cancellation signal; once started it runs every file to completion                                                                                           |
+| Scenario                                                                                   | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|--------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| A job is already running when `sort`/`commit`/`rescue`/`discard` is called                 | `JobInProgressException` immediately; the running job is unaffected, no new job starts                                                                                                                                                                                                                                                                                                                                                                        |
+| The slot is held shut by a settings save, and does not come free within `JobRunner`'s wait | `JobInProgressException` once the wait runs out; nothing started, and the caller is free to try again                                                                                                                                                                                                                                                                                                                                                         |
+| Any job entry point is called after `stopAcceptingJobs`                                    | `ShuttingDownException`; nothing reopens the runner, so this is not a refusal to retry                                                                                                                                                                                                                                                                                                                                                                        |
+| `stopAcceptingJobs(timeout)` with a job still running when the timeout runs out            | Returns false; the job is untouched and still moving files, and the caller keeps the working root rather than handing it on                                                                                                                                                                                                                                                                                                                                   |
+| `stopAcceptingJobs(timeout)` while a settings save holds the job slot past the timeout     | Returns false without ever reading what is running. The runner is still shut, so the refusal above holds. The save finishes, having been admitted before the shut. One moving the working root takes the new root's claim as it goes. So the process exits holding that root rather than the one the exit path decided to keep. That is the safe direction, since the save is writing into the new root, and the kernel drops the claim when the process ends |
+| The engine call succeeds                                                                   | `phaseStarted` -> N ticks -> `phaseFinished`, `JobHandle.join()` returns the engine's summary                                                                                                                                                                                                                                                                                                                                                                 |
+| The engine call throws mid-run                                                             | `phaseStarted` -> `phaseFinished` still fires -> `JobHandle.join()` throws `CompletionException` wrapping the real cause                                                                                                                                                                                                                                                                                                                                      |
+| Cancellation requested via the returned `JobHandle` (`sort`)                               | `SortEngine` checks it once per file in both its dating pass (aborts cleanly, nothing moved) and its routing pass (already-moved files stay moved) - see `sort-engine.md`                                                                                                                                                                                                                                                                                     |
+| Cancellation requested via the returned `JobHandle` (`commit`/`rescue`)                    | `CommitEngine`/`RescueEngine` each check it once per file in their one move loop; already-moved/rescued files stay that way - see `rescue-engine.md` for `rescue`'s dissolve-gate interaction                                                                                                                                                                                                                                                                 |
+| `discard(prepDir)` is called on a prep dir `PrepDirDoctor.diagnose()` reports `COMPLETE`   | `IllegalStateException` immediately - `purgeCompleted()` is that state's own verb, not `discard()`                                                                                                                                                                                                                                                                                                                                                            |
+| Cancellation requested via the returned `JobHandle` (`discard`)                            | Not checked - `discard()` has no cancellation signal; once started it runs every file to completion                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Related
 

@@ -16,10 +16,13 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class StartupSequenceTest {
 
@@ -67,14 +70,31 @@ class StartupSequenceTest {
         verifyNoInteractions(this.pipeline);
     }
 
+    // Checked separately, an implementation that handed the root back first would pass.
     @Test
-    void shutdownGivesTheWorkingRootBack(@TempDir final Path root) {
+    void shutdownRetiresWatchersAndDrainsBeforeGivingTheWorkingRootBack(@TempDir final Path root) {
         final var lock = mock(WorkingRootLock.class);
+        when(this.pipeline.stopAcceptingJobs(any())).thenReturn(true);
         final var sequence = new StartupSequence(lock, paths(root), this.pipeline, usableRoots());
 
         sequence.shutdown();
 
-        verify(lock).release();
+        final var order = inOrder(this.pipeline, lock);
+        order.verify(this.pipeline).stopAllWatching();
+        order.verify(this.pipeline).stopAcceptingJobs(any());
+        order.verify(lock).release();
+    }
+
+    @Test
+    void shutdownKeepsTheWorkingRootWhenAJobOutlastsTheDrain(@TempDir final Path root) {
+        final var lock = mock(WorkingRootLock.class);
+        when(this.pipeline.stopAcceptingJobs(any())).thenReturn(false);
+        final var sequence = new StartupSequence(lock, paths(root), this.pipeline, usableRoots());
+
+        sequence.shutdown();
+
+        verify(this.pipeline).stopAllWatching();
+        verify(lock, never()).release();
     }
 
     private static PathsPort paths(final Path root) {

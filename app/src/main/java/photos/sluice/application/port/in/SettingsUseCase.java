@@ -32,6 +32,9 @@ public interface SettingsUseCase {
      *         still choosing its folders looks like
      * @throws WorkingRootBusyException if another process holds the working root these settings name
      * @throws JobInProgressException if a job is running and these settings move a folder root
+     * @throws ShuttingDownException if the app is closing and these settings move a folder root. A
+     *         save that leaves every root where it found it still goes through, since it never asks
+     *         the job runner for anything
      * @throws MalformedSettingsException if the stored settings cannot be understood, so nothing can
      *         be merged into them
      * @throws UncheckedIOException if the stored settings cannot be read or written

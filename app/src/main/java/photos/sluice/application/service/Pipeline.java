@@ -6,6 +6,7 @@ import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MediaStore;
@@ -316,22 +317,50 @@ public class Pipeline {
     /**
      * Retires every poller this process has armed. No run is started, stopped or altered by it.
      *
-     * <p>What a caller with a moved working root needs, and only that caller. Every armed watcher
-     * polls a prep dir under {@code logs/cull-prep}, which hangs off the working root. So for that
-     * one move, "armed under the old root" and "armed at all" name the same set. A watcher left
-     * behind would poll a folder outside the working root in force, for as long as the process
-     * lives. A library or inbox move strands nothing and must not come here, since this would also
-     * retire a watch a user turned on by hand.
+     * <p>Two callers need it. One has just moved the working root. Every armed watcher polls a prep
+     * dir under {@code logs/cull-prep}, which hangs off that root. So for that one move, "armed
+     * under the old root" and "armed at all" name the same set. A watcher left behind would poll a folder
+     * outside the working root in force, for as long as the process lives. A library or inbox move
+     * strands nothing and must not come here, since this would also retire a watch a user turned on
+     * by hand.
+     *
+     * <p>The other is the app closing, where every watcher is stale for the same reason: there will
+     * be no process left to poll in. That caller retires them first, so nothing is still deciding to
+     * start a job while the next step is settling what is still running.
      *
      * <p>Retiring a watcher does not reach into a poll already running. A watcher whose thread is
      * mid-attempt when this arrives still finishes that attempt, resume included. What this
      * guarantees is that no further poll starts.
      *
-     * <p>The one facade method with no roots check. It resolves no path, and the caller that needs
-     * it most is one whose roots have just changed underneath it.
+     * <p>One of the two facade methods with no roots check, alongside {@link #stopAcceptingJobs}. It
+     * resolves no path, and the caller that needs it most is one whose roots have just changed
+     * underneath it.
      */
     public void stopAllWatching() {
         this.cullEngine.disarmAllWatches();
+    }
+
+    /**
+     * Shuts the job runner for good and drains the job that may be running. Answers whether anything
+     * of the app's is still executing by the time it returns.
+     *
+     * <p>What an exit path calls once its window has gone, after {@link #stopAllWatching}. A false
+     * answer means a job ran past the wait and is still touching files. The caller then keeps hold of
+     * whatever it was about to give back. That is what stops the working root reaching the next
+     * Sluice while this one is still moving things inside it.
+     *
+     * <p>One-way. Nothing reopens the runner, so anything reaching a job entry point afterwards is
+     * refused with {@link ShuttingDownException}.
+     *
+     * <p>The second entry point with no roots check, and for the same kind of reason as
+     * {@link #stopAllWatching}. It resolves no path, and an install whose roots are unusable has to
+     * be able to close as cleanly as one whose roots are fine.
+     *
+     * @param timeout {@link Duration} how long to wait for a running job to stop
+     * @return boolean true when no job is still executing
+     */
+    public boolean stopAcceptingJobs(final Duration timeout) {
+        return this.jobRunner.shutdown(timeout);
     }
 
     /**

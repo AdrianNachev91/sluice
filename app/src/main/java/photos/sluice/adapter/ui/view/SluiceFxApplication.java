@@ -66,11 +66,16 @@ public class SluiceFxApplication extends Application {
     }
 
     /**
-     * Gives the working root back and closes the Spring context. Called by JavaFX as the last window
+     * Winds the app down, then closes the Spring context. Called by JavaFX as the last window
      * closes, and the ordinary way a run ends.
      *
-     * <p>The context closes even when giving the root back fails, so one stuck release cannot leave
-     * a whole context running behind a window that is gone.
+     * <p>What winding down means is {@link StartupSequence#shutdown}'s to say, and it is the
+     * mirror of what that class does at boot. This method's own contribution is the ordering
+     * against the context: the context closes last, because a job still finishing is running
+     * against beans inside it.
+     *
+     * <p>It closes even when winding down fails, so one stuck step cannot leave a whole context
+     * running behind a window that is gone.
      */
     @Override
     public void stop() {

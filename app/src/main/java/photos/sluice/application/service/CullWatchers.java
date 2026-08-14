@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.job.WatchMode;
@@ -130,8 +131,9 @@ final class CullWatchers {
     }
 
     /**
-     * Retires every active watcher. Its caller is a save that moved the working root, which leaves
-     * every watcher polling a prep dir outside the root now in force.
+     * Retires every active watcher. Two callers reach it. A save that moved the working root leaves
+     * every watcher polling a prep dir outside the root now in force. An app that is closing leaves
+     * them with no process to poll in at all.
      *
      * <p>Safe to iterate while disarming, since {@link ConcurrentHashMap}'s own key view tolerates
      * removal during traversal. A watcher armed concurrently may or may not be seen. A copy taken
@@ -145,7 +147,7 @@ final class CullWatchers {
     /**
      * The heavier action a CullWatcher runs at most once it thinks isReadyToResume(). Returns
      * whether this watcher has anything left to do. False means keep polling. True means stop, and
-     * two different things produce it.
+     * three different things produce it.
      *
      * <p>A submitted resume is the ordinary one - the watcher's job is then done, win or lose (see
      * CullEngine's own dispatchAndApply() re-arm-on-Waiting note). The submitted job runs and
@@ -158,11 +160,15 @@ final class CullWatchers {
      * watcher stops and the run stays exactly as it is, still Waiting and still listed. A manual
      * Resume then surfaces the same refusal on a screen, where it can be acted on.
      *
-     * <p>Both clauses name their exact type, which is what tells them apart. Both are
+     * <p>An app that is closing is the third, and it stops for the same reason as a refusal: no
+     * amount of polling reopens a shut runner. It logs nothing, because nothing failed. The window
+     * is a poll already inside this method when the exit path shuts the runner behind it.
+     *
+     * <p>Each clause names its exact type, which is what tells them apart. All three are
      * IllegalStateException subtypes. A clause catching that supertype would read a refusal as
      * "runner busy, keep polling". It would then poll for the life of the process, over a condition
      * no poll resolves. Naming the types also leaves anything else to propagate: an auto-resume
-     * that failed for a third reason is not a reason to keep asking.
+     * that failed for a fourth reason is not a reason to keep asking.
      *
      * @param prepDir {@link Path} the prep dir to attempt to resume
      * @return boolean false only when a busy job runner makes it worth retrying
@@ -173,6 +179,8 @@ final class CullWatchers {
             handle = this.resume.apply(prepDir);
         } catch (final PathsMisconfiguredException refused) {
             log.warn("Watch-mode auto-resume for {} was refused and this watcher is stopping", prepDir, refused);
+            return true;
+        } catch (final ShuttingDownException closing) {
             return true;
         } catch (final JobInProgressException busy) {
             return false;

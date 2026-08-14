@@ -134,8 +134,8 @@ public class SettingsService implements SettingsUseCase {
      *
      * <p>Runs before the claim and before the job slot, so a refused save has taken nothing and
      * changed nothing. Outside the slot rather than inside it, because the check reads directories.
-     * A folder root on a stalled mount would otherwise hold every waiting {@code submit} for as
-     * long as that read takes.
+     * A folder root on a stalled mount would otherwise cost every concurrent {@code submit} its own
+     * wait on the slot, then a refusal it did nothing to deserve.
      *
      * <p>It does still run under the save monitor, which no save can avoid: working out what is
      * changing means reading the settings in force. So a stalled root holds up the next save. That
@@ -218,8 +218,9 @@ public class SettingsService implements SettingsUseCase {
      * slot in between. The re-arm would then silently do nothing for the life of the process.
      *
      * <p>That delay is real and this is the widest {@link JobRunner#runIfIdle} gets stretched. A
-     * listener surveys every run on disk, so folder roots on a slow or stalled network mount hold
-     * every waiting {@code submit} for as long as that read takes.
+     * listener surveys every run on disk. So folder roots on a slow or stalled network mount make a
+     * concurrent {@code submit} wait out its own bound and then be refused. Bounded is the whole
+     * difference: a stall costs a caller one refusal it can retry from, not the runner itself.
      *
      * <p>A listener that throws would report a save that has already reached disk as a failed one,
      * so each is documented to report its own failures instead. This catch is what makes the port's
