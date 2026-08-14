@@ -38,7 +38,17 @@ import java.util.Map;
  * writer leaves alone.
  *
  * <p>The write goes to a temporary file in the same folder and is then moved into place, so an
- * interrupted save cannot leave a half-written config behind.
+ * interrupted save cannot leave a half-written config behind. The temporary name is unique per
+ * call. What keeps two Sluice processes off each other's files is the working-root claim, and this
+ * file sits outside it. The config belongs to the user rather than to a working root. So two
+ * processes can be saving at once, and one shared name would have them writing over each other.
+ *
+ * <p>What that closes is a corrupt file, not a lost change. Two saves that overlap still both read,
+ * merge and rename, so the one that renames last wins outright and the other's edits are gone with
+ * nothing said. Whole and stale beats half-written, which is the whole of the claim here.
+ *
+ * <p>Nothing here is flushed to the device. What this closes is a process that stops mid-write,
+ * not a machine that loses power.
  */
 public class YamlSettingsStore implements SettingsStore {
 
@@ -92,6 +102,22 @@ public class YamlSettingsStore implements SettingsStore {
     }
 
     /**
+     * Serializes the document into the given file. Package-private for two reasons. A test can fail
+     * the write once the temporary file exists, which on a real filesystem means breaking the
+     * volume. And it is the only moment the temporary name is visible, since a save that works
+     * renames that file away before returning.
+     *
+     * @param file {@link Path} the file to write to
+     * @param document a {@link Map} of {@link String} to {@link Object}, the document to write
+     * @throws IOException when the write fails
+     */
+    void dump(final Path file, final Map<String, Object> document) throws IOException {
+        try (final BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+            yaml().dump(document, writer);
+        }
+    }
+
+    /**
      * Reads the config file into a mutable map, or an empty one when there is no file yet.
      *
      * @return a {@link Map} of {@link String} to {@link Object}, the parsed document
@@ -118,20 +144,56 @@ public class YamlSettingsStore implements SettingsStore {
     /**
      * Writes the document to a temporary file beside the config file, then moves it into place.
      *
+     * <p>{@link Path#getParent()} answers null for a bare filename, which is why the absolute form
+     * is taken first.
+     *
+     * <p>Removing the temporary file is attempted however the write went, a finished write whose
+     * rename then failed included. Both halves of what it holds outlive the failure. The settings
+     * came from the caller, and the file they were merged into is still on disk untouched. So the
+     * same save runs again and builds the same document. Keeping it deliberately would leave a file
+     * in a folder the user opens by hand, named closely enough to the config to be mistaken for it.
+     *
+     * <p>A process killed between the two steps leaves one behind that no cleanup could have run
+     * for, and unique names mean those accumulate rather than being reused. Sweeping them at the top
+     * of a save is what that argues for, and it is refused. A sweep cannot tell a dead process's
+     * leftover from a live process's file mid-write. Deleting the second is the corruption the
+     * unique name exists to prevent.
+     *
      * @param document a {@link Map} of {@link String} to {@link Object}, the document to write
      */
     private void write(final Map<String, Object> document) {
-        final Path temporary = this.configFile.resolveSibling(this.configFile.getFileName() + TEMP_SUFFIX);
+        final Path target = this.configFile.toAbsolutePath();
+        final Path directory = target.getParent();
+        Path temporary = null;
         try {
-            Files.createDirectories(this.configFile.getParent());
-            try (final BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
-                yaml().dump(document, writer);
-            }
-            Files.move(temporary, this.configFile,
+            Files.createDirectories(directory);
+            temporary = Files.createTempFile(directory, target.getFileName().toString(), TEMP_SUFFIX);
+            this.dump(temporary, document);
+            Files.move(temporary, target,
                     StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to write the settings file " + this.configFile, e);
+        } finally {
+            discard(temporary);
         }
+    }
+
+    /**
+     * Removes the temporary file a write worked through. A move into place leaves nothing here to
+     * remove.
+     *
+     * <p>A failure to remove it is swallowed. A leftover is not what the caller needs to hear
+     * about, whether their save failed or landed.
+     *
+     * @param temporary {@link Path} the temporary file to remove, or null when none was created
+     */
+    private static void discard(final @Nullable Path temporary) {
+        if (temporary == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(temporary);
+        } catch (final IOException ignored) {}
     }
 
     /**

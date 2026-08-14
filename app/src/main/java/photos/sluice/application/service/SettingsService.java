@@ -4,12 +4,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.PathValidationUseCase;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.LiveSettings;
+import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
 import photos.sluice.application.port.out.WorkingRootLock;
+import photos.sluice.domain.paths.PathViolation;
+import photos.sluice.domain.paths.PathViolation.NotADirectory;
+import photos.sluice.domain.paths.PathViolation.NotAPath;
+import photos.sluice.domain.paths.PathViolation.NotConfigured;
+import photos.sluice.domain.paths.PathViolation.Overlap;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -22,6 +30,11 @@ import java.util.Optional;
  * has open, before anything has been written or changed. A refused save therefore leaves the app
  * exactly as it was. Writing before putting the new values in force means the app never runs on
  * settings that failed to reach disk.
+ *
+ * <p>A folder root that moves is checked before any of that. A root set to somewhere that cannot be
+ * worked in is refused. That covers text naming no path at all, a folder that is not there, and two
+ * roots put inside each other. A root left unset is not refused. An install chooses its three
+ * folders one picker at a time, and the facade goes on refusing jobs while any of them is empty.
  *
  * <p>A save that moves a folder root runs with the job slot held shut. Jobs start from more than
  * one thread. Asking whether one is running and then saving would leave a window for a job to start
@@ -51,6 +64,7 @@ public class SettingsService implements SettingsUseCase {
     private final SettingsStore store;
     private final WorkingRootLock workingRootLock;
     private final JobRunner jobRunner;
+    private final PathValidationUseCase pathValidation;
     private final List<FolderRootsChangeListener> folderRootsListeners;
 
     /**
@@ -60,16 +74,20 @@ public class SettingsService implements SettingsUseCase {
      * @param store {@link SettingsStore} writes settings so a restart reads them back
      * @param workingRootLock {@link WorkingRootLock} claims the working root for this process
      * @param jobRunner {@link JobRunner} says whether a job is running
+     * @param pathValidation {@link PathValidationUseCase} checks folder roots a save would put in
+     *         force
      * @param folderRootsListeners a {@link List} of {@link FolderRootsChangeListener} told once a
      *         save has moved any folder root, empty in a process that wants none
      */
     public SettingsService(final LiveSettings live, final SettingsStore store,
                            final WorkingRootLock workingRootLock, final JobRunner jobRunner,
+                           final PathValidationUseCase pathValidation,
                            final List<FolderRootsChangeListener> folderRootsListeners) {
         this.live = live;
         this.store = store;
         this.workingRootLock = workingRootLock;
         this.jobRunner = jobRunner;
+        this.pathValidation = pathValidation;
         this.folderRootsListeners = List.copyOf(folderRootsListeners);
     }
 
@@ -87,6 +105,8 @@ public class SettingsService implements SettingsUseCase {
      * Saves the given settings and puts them in force.
      *
      * @param settings {@link Settings} the settings to save
+     * @throws PathsMisconfiguredException if a folder root this save moves is set to a folder that
+     *         cannot be worked in
      */
     @Override
     public void save(final Settings settings) {
@@ -96,6 +116,7 @@ public class SettingsService implements SettingsUseCase {
                 this.writeAndApply(settings);
                 return;
             }
+            this.requireUsableRoots(settings.paths());
             final boolean workingRootMoved = !workingRoot(settings).equals(workingRoot(previous));
             if (!this.jobRunner.runIfIdle(() -> {
                 this.moveRoots(settings, previous);
@@ -104,6 +125,53 @@ public class SettingsService implements SettingsUseCase {
                 throw new JobInProgressException();
             }
         }
+    }
+
+    /**
+     * Refuses candidate roots that are set to somewhere unusable.
+     *
+     * <p>Runs before the claim and before the job slot, so a refused save has taken nothing and
+     * changed nothing. Outside the slot rather than inside it, because the check reads directories.
+     * A folder root on a stalled mount would otherwise hold every waiting {@code submit} for as
+     * long as that read takes.
+     *
+     * <p>It does still run under the save monitor, which no save can avoid: working out what is
+     * changing means reading the settings in force. So a stalled root holds up the next save. That
+     * is one caller rather than every job in the process.
+     *
+     * <p>Two refusals can be due at once, when a job is running and the roots are also unusable.
+     * This one wins. It names a value the user can go and correct, and it is the same answer
+     * however long the job takes. Whether a job happened to be running is neither.
+     *
+     * <p>Only a save that moves a folder root reaches this. A user whose library drive is unplugged
+     * can still change a category, since that save leaves every root exactly where it found it.
+     *
+     * @param paths {@link PathSettings} the folder roots this save would put in force
+     * @throws PathsMisconfiguredException if a root that is set cannot be worked in
+     */
+    private void requireUsableRoots(final PathSettings paths) {
+        final List<PathViolation> refusals = this.pathValidation.violations(paths).stream()
+                .filter(SettingsService::refuses)
+                .toList();
+        if (!refusals.isEmpty()) {
+            throw new PathsMisconfiguredException(refusals);
+        }
+    }
+
+    /**
+     * Whether one violation is enough on its own to refuse a save.
+     *
+     * <p>A switch over every case rather than a test for the one that passes. A fifth kind of
+     * violation then fails to compile here until somebody says which side of the line it falls on.
+     *
+     * @param violation {@link PathViolation} the violation to judge
+     * @return boolean true when a save carrying this violation is refused
+     */
+    private static boolean refuses(final PathViolation violation) {
+        return switch (violation) {
+            case NotConfigured _ -> false;
+            case NotAPath _, NotADirectory _, Overlap _ -> true;
+        };
     }
 
     /**

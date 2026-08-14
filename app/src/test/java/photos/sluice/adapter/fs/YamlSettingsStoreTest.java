@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -59,6 +60,34 @@ class YamlSettingsStoreTest {
 
         new YamlSettingsStore(file).save(settings());
 
+        try (final var entries = Files.list(dir)) {
+            assertThat(entries).containsExactly(file);
+        }
+    }
+
+    @Test
+    void everySaveWritesThroughATemporaryNameOfItsOwn(@TempDir final Path dir) {
+        final Path file = dir.resolve("config.yml");
+        final var store = new RecordingTemporaryStore(file);
+
+        store.save(settings());
+        store.save(settings());
+
+        assertThat(store.written).hasSize(2).doesNotHaveDuplicates().doesNotContain(file)
+                .allSatisfy(temporary -> assertThat(temporary.getParent()).isEqualTo(dir));
+    }
+
+    // The write dies once the temporary file exists, which is the mess a volume filling up leaves.
+    @Test
+    void aFailedWriteLeavesNeitherALeftoverNorAChangedConfigFile(@TempDir final Path dir) throws IOException {
+        final Path file = dir.resolve("config.yml");
+        final String original = "sluice:\n  cull:\n    provider: manual\n";
+        Files.writeString(file, original);
+
+        assertThatThrownBy(() -> new FailingWriteStore(file).save(settings()))
+                .isInstanceOf(UncheckedIOException.class);
+
+        assertThat(Files.readString(file)).isEqualTo(original);
         try (final var entries = Files.list(dir)) {
             assertThat(entries).containsExactly(file);
         }
@@ -251,5 +280,37 @@ class YamlSettingsStoreTest {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> asMap(final Object node) {
         return (Map<String, Object>) node;
+    }
+
+    // Names the file each save worked through. A successful save moves that file away, so nothing
+    // left on disk afterwards can say which name was used.
+    private static final class RecordingTemporaryStore extends YamlSettingsStore {
+
+        private final List<Path> written = new ArrayList<>();
+
+        private RecordingTemporaryStore(final Path configFile) {
+            super(configFile);
+        }
+
+        @Override
+        void dump(final Path file, final Map<String, Object> document) throws IOException {
+            this.written.add(file);
+            super.dump(file, document);
+        }
+    }
+
+    // Fails the write after the temporary file exists, so the cleanup runs against a real leftover
+    // rather than against nothing. Thrown as IOException, the type the cleanup is attached to.
+    private static final class FailingWriteStore extends YamlSettingsStore {
+
+        private FailingWriteStore(final Path configFile) {
+            super(configFile);
+        }
+
+        @Override
+        void dump(final Path file, final Map<String, Object> document) throws IOException {
+            super.dump(file, document);
+            throw new IOException("the volume stopped responding part-way through the write");
+        }
     }
 }

@@ -2,7 +2,9 @@ package photos.sluice.application.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
@@ -11,7 +13,14 @@ import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.config.SettingsFixture;
+import photos.sluice.domain.paths.PathRole;
+import photos.sluice.domain.paths.PathViolation.NotADirectory;
+import photos.sluice.domain.paths.PathViolation.NotAPath;
+import photos.sluice.domain.paths.PathViolation.Overlap;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -152,8 +161,7 @@ class SettingsServiceTest {
         final var lock = new RecordingLock();
         final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
 
-        service.save(SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
-                root.resolve("Inbox").toString())));
+        service.save(settingsWithLibrary(root, library));
 
         assertThat(lock.claimed).isEmpty();
         assertThat(live.current().paths().libraryRoot()).isEqualTo(library.toString());
@@ -214,8 +222,7 @@ class SettingsServiceTest {
         final var service = settingsService(new RecordingLive(settings(root)), new RecordingStore(),
                 new RecordingLock(), new JobRunner(), List.of(listener));
 
-        service.save(SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
-                root.resolve("Inbox").toString())));
+        service.save(settingsWithLibrary(root, library));
 
         assertThat(listener.calls).isEqualTo(1);
         assertThat(listener.lastWorkingRootMoved).isFalse();
@@ -266,6 +273,145 @@ class SettingsServiceTest {
         service.save(SettingsFixture.settings(new PathSettings("  ", null, null)));
 
         assertThat(lock.claimed).isEmpty();
+    }
+
+    @Test
+    void aFolderRootSetToAFolderThatIsNotThereIsRefused(@TempDir final Path root, @TempDir final Path after) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var lock = new RecordingLock();
+        final var service = settingsService(live, store, lock, new JobRunner());
+        final Path missing = after.resolve("Library");
+        final Settings candidate = SettingsFixture.settings(new PathSettings(after.toString(),
+                missing.toString(), createDirectory(after.resolve("Inbox")).toString()));
+
+        assertThatThrownBy(() -> service.save(candidate))
+                .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
+                        .containsExactly(new NotADirectory(PathRole.LIBRARY_ROOT, missing)));
+
+        assertThat(store.saved).isEmpty();
+        assertThat(lock.claimed).isEmpty();
+        assertThat(live.current()).isEqualTo(settings(root));
+    }
+
+    @Test
+    void folderRootsThatSitInsideEachOtherAreRefused(@TempDir final Path root, @TempDir final Path after) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
+        final Path library = createDirectory(after.resolve("Library"));
+        final Settings candidate = SettingsFixture.settings(new PathSettings(after.toString(),
+                library.toString(), createDirectory(library.resolve("Inbox")).toString()));
+
+        assertThatThrownBy(() -> service.save(candidate))
+                .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
+                        .containsExactly(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX)));
+
+        assertThat(store.saved).isEmpty();
+    }
+
+    @Test
+    void aFolderRootThatNamesNoPathThisSystemCouldHaveIsRefused(@TempDir final Path root,
+                                                                @TempDir final Path after) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
+        // Neither path parser will encode a NUL, so this is a string Path.of refuses on every
+        // platform rather than only on the one running the test.
+        final String impossible = "photos" + (char) 0 + "inbox";
+        final Settings candidate = SettingsFixture.settings(new PathSettings(after.toString(),
+                createDirectory(after.resolve("Library")).toString(), impossible));
+
+        assertThatThrownBy(() -> service.save(candidate))
+                .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
+                        .containsExactly(new NotAPath(PathRole.INBOX, impossible)));
+
+        assertThat(store.saved).isEmpty();
+    }
+
+    // One refused root beside one admitted root. A rule that filters to the unusable violations and
+    // a rule that refuses whenever no violation is an unset one agree on every other fixture.
+    @Test
+    void anUnsetRootIsStillAdmittedWhenAnUnusableOneRefusesTheSave(@TempDir final Path root,
+                                                                   @TempDir final Path after) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
+        final Path missing = after.resolve("Inbox");
+        final Settings candidate = SettingsFixture.settings(
+                new PathSettings(after.toString(), null, missing.toString()));
+
+        assertThatThrownBy(() -> service.save(candidate))
+                .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
+                        .containsExactly(new NotADirectory(PathRole.INBOX, missing)));
+
+        assertThat(store.saved).isEmpty();
+    }
+
+    // The working root is the one value save reads for itself, to work out whether the claim moves.
+    // Unparseable, it threw from there with no violation to show for it.
+    @Test
+    void aWorkingRootThatNamesNoPathThisSystemCouldHaveIsRefused(@TempDir final Path root) {
+        final var live = new RecordingLive(settings(root));
+        final var lock = new RecordingLock();
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
+        final String impossible = "photos" + (char) 0 + "work";
+        final Settings candidate = SettingsFixture.settings(new PathSettings(impossible, null, null));
+
+        assertThatThrownBy(() -> service.save(candidate))
+                .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
+                        .containsExactly(new NotAPath(PathRole.REPO_ROOT, impossible)));
+
+        assertThat(lock.claimed).isEmpty();
+    }
+
+    @Test
+    void anInstallThatHasOnlyChosenItsWorkingRootSoFarIsSaved(@TempDir final Path root) {
+        final var live = new RecordingLive(unconfigured());
+        final var lock = new RecordingLock();
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
+
+        service.save(SettingsFixture.settings(new PathSettings(root.toString(), null, null)));
+
+        assertThat(lock.claimed).containsExactly(root.toAbsolutePath().normalize());
+        assertThat(live.current().paths().repoRoot()).isEqualTo(root.toString());
+    }
+
+    @Test
+    void aSaveThatMovesNoFolderRootIsNotRefusedByAMissingRoot(@TempDir final Path root) throws IOException {
+        final var live = new RecordingLive(settings(root));
+        final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner());
+        final Settings sameRootsNewProvider = withProvider(settings(root), "anthropic");
+        Files.delete(root.resolve("Library"));
+
+        service.save(sameRootsNewProvider);
+
+        assertThat(live.current().provider()).isEqualTo("anthropic");
+    }
+
+    @Test
+    void aSaveRefusedForBothReasonsReportsTheUnusableRoot(@TempDir final Path root, @TempDir final Path after)
+            throws InterruptedException {
+        final var live = new RecordingLive(settings(root));
+        final var jobRunner = new JobRunner();
+        final var service = settingsService(live, new RecordingStore(), new RecordingLock(), jobRunner);
+        final Settings candidate = SettingsFixture.settings(new PathSettings(after.toString(),
+                after.resolve("Library").toString(), createDirectory(after.resolve("Inbox")).toString()));
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final JobHandle<String> job = jobRunner.submit(_ -> {
+            started.countDown();
+            release.await();
+            return "done";
+        });
+        started.await();
+
+        try {
+            assertThatThrownBy(() -> service.save(candidate)).isInstanceOf(PathsMisconfiguredException.class);
+        } finally {
+            release.countDown();
+            job.join();
+        }
     }
 
     @Test
@@ -500,7 +646,8 @@ class SettingsServiceTest {
     private static SettingsService settingsService(final LiveSettings live, final SettingsStore store,
                                                    final WorkingRootLock lock, final JobRunner jobRunner,
                                                    final List<FolderRootsChangeListener> listeners) {
-        return new SettingsService(live, store, lock, jobRunner, listeners);
+        return new SettingsService(live, store, lock, jobRunner,
+                new PathValidationService(new NioMediaStore(), live), listeners);
     }
 
     private static Settings withProvider(final Settings settings, final String provider) {
@@ -512,9 +659,27 @@ class SettingsServiceTest {
         return SettingsFixture.settings(new PathSettings(null, null, null));
     }
 
+    // The library moves to a folder of its own, the working root and inbox stay put. Builds its own
+    // inbox rather than relying on a settings() call earlier in the test having made one.
+    private static Settings settingsWithLibrary(final Path root, final Path library) {
+        return SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
+                createDirectory(root.resolve("Inbox")).toString()));
+    }
+
+    // The two folders are made real, the way a real install's are. A fixture naming folders nobody
+    // created is refused before it reaches the claim, the write or the listeners.
     private static Settings settings(final Path root) {
-        return SettingsFixture.settings(new PathSettings(root.toString(), root.resolve("Library").toString(),
-                root.resolve("Inbox").toString()));
+        return SettingsFixture.settings(new PathSettings(root.toString(),
+                createDirectory(root.resolve("Library")).toString(),
+                createDirectory(root.resolve("Inbox")).toString()));
+    }
+
+    private static Path createDirectory(final Path directory) {
+        try {
+            return Files.createDirectories(directory);
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to create " + directory, e);
+        }
     }
 
     private static final class RecordingLive implements LiveSettings {

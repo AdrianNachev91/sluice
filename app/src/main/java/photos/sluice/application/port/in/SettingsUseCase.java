@@ -24,6 +24,9 @@ public interface SettingsUseCase {
      * Persists the given settings and puts them in force.
      *
      * @param settings {@link Settings} the settings to save
+     * @throws PathsMisconfiguredException if a folder root these settings move is set to somewhere
+     *         that cannot be worked in. A root left unset saves, since that is what an install
+     *         still choosing its folders looks like
      * @throws WorkingRootBusyException if another process holds the working root these settings name
      * @throws JobInProgressException if a job is running and these settings move a folder root
      */

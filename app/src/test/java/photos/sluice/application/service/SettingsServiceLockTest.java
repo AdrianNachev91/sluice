@@ -4,15 +4,20 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.FileChannelWorkingRootLock;
+import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.YamlSettingsStore;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.WorkingRootBusyException;
+import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.config.SettingsHolder;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -83,7 +88,7 @@ class SettingsServiceLockTest {
         this.otherProcess.acquire(root);
 
         service.save(SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
-                root.resolve("Inbox").toString())));
+                createDirectory(root.resolve("Inbox")).toString())));
 
         assertThat(service.settings().paths().libraryRoot()).isEqualTo(library.toString());
     }
@@ -100,7 +105,7 @@ class SettingsServiceLockTest {
             this.otherProcess.acquire(before);
             throw new IllegalStateException("disk full");
         };
-        final var service = new SettingsService(live, store, this.lock, new JobRunner(), List.of());
+        final var service = settingsService(live, store, this.lock);
         this.lock.acquire(before);
 
         assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(IllegalStateException.class);
@@ -110,12 +115,28 @@ class SettingsServiceLockTest {
 
     private SettingsService service(final Path repoRoot, final Path configDir) {
         final LiveSettings live = new SettingsHolder(settings(repoRoot));
-        return new SettingsService(live, new YamlSettingsStore(configDir.resolve("config.yml")), this.lock,
-                new JobRunner(), List.of());
+        return settingsService(live, new YamlSettingsStore(configDir.resolve("config.yml")), this.lock);
     }
 
+    private static SettingsService settingsService(final LiveSettings live, final SettingsStore store,
+                                                   final WorkingRootLock lock) {
+        return new SettingsService(live, store, lock, new JobRunner(),
+                new PathValidationService(new NioMediaStore(), live), List.of());
+    }
+
+    // The folder roots have to be there for the save's own check to pass, the same way a real
+    // install's are.
     private static Settings settings(final Path root) {
-        return SettingsFixture.settings(new PathSettings(root.toString(), root.resolve("Library").toString(),
-                root.resolve("Inbox").toString()));
+        return SettingsFixture.settings(new PathSettings(root.toString(),
+                createDirectory(root.resolve("Library")).toString(),
+                createDirectory(root.resolve("Inbox")).toString()));
+    }
+
+    private static Path createDirectory(final Path directory) {
+        try {
+            return Files.createDirectories(directory);
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to create " + directory, e);
+        }
     }
 }
