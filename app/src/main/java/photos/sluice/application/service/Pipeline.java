@@ -397,6 +397,21 @@ public class Pipeline {
     }
 
     /**
+     * Test seam: whether a job's work is currently executing. A test that starts a background job it
+     * holds no handle to waits on this going false. That is the only point at which the job's file
+     * work is known to be over. Waiting on any effect the job produces instead leaves whatever the
+     * job does afterwards racing the test's own teardown.
+     *
+     * <p>False on its own says nothing, since it is also false before the job ever starts. A caller
+     * pairs it with a signal that the work happened at all.
+     *
+     * @return boolean true if a job's work is currently executing
+     */
+    boolean isBusy() {
+        return this.jobRunner.isBusy();
+    }
+
+    /**
      * Refuses the call when the folder roots it would reach are not usable. Every entry point that
      * resolves a path runs this first, including the ones that only read.
      *

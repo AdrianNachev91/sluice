@@ -114,10 +114,18 @@ final class PipelineTestSupport {
         return root.resolve("Inbox");
     }
 
+    // What a test waits on when a background job it holds no handle to has to finish: the run
+    // resolved, and the job that resolved it returned. Both halves are load-bearing. An empty
+    // unresolved list alone goes true at decisions.json, and cleanupIntermediates() deletes inside
+    // the prep dir after that, so teardown would race it. An idle runner alone is true before the
+    // job ever starts. What holds the two together is the run being unresolved when the wait
+    // begins: a caller whose run already reads COMPLETE gets no wait at all.
+    static void waitForJobToFinish(final Pipeline pipeline, final Duration timeout) {
+        waitUntil(timeout, () -> unresolvedRuns(pipeline).isEmpty() && !pipeline.isBusy());
+    }
+
     // Every run still owing somebody something - anything but COMPLETE. An applied run stays on
     // disk until purged, so cullRuns() keeps listing it and "no runs at all" would never come true.
-    // A test waiting for an apply to land waits on this going empty. Waiting on a moved file
-    // instead would pass part way through, before decisions.json makes the run COMPLETE.
     static List<CullRunSummary> unresolvedRuns(final Pipeline pipeline) {
         return pipeline.cullRuns().stream()
                 .filter(run -> run.health().state() != State.COMPLETE)

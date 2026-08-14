@@ -56,7 +56,7 @@ import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.prepDirRemedies;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
-import static photos.sluice.application.service.PipelineTestSupport.unresolvedRuns;
+import static photos.sluice.application.service.PipelineTestSupport.waitForJobToFinish;
 import static photos.sluice.application.service.PipelineTestSupport.waitUntil;
 import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
@@ -798,11 +798,7 @@ class CullEngineTest {
 
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        // Waits on the run resolving, not just on the photo's move. apply() writes decisions.json -
-        // what makes the run COMPLETE - only after every decision's file is moved. Polling the move
-        // alone leaves a real window where the photo is gone but the run still reads as unresolved.
-        // A CI runner slow or loaded enough to land inside that window flaked here.
-        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
+        waitForJobToFinish(pipeline, Duration.ofSeconds(2));
         assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
@@ -893,7 +889,7 @@ class CullEngineTest {
         pipeline.startWatching(prepDir);
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
+        waitForJobToFinish(pipeline, Duration.ofSeconds(2));
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
 
@@ -1119,7 +1115,8 @@ class CullEngineTest {
         releaseMove.countDown();
         sorting.join();
 
-        waitUntil(Duration.ofSeconds(2), () -> !Files.exists(photo));
+        waitForJobToFinish(pipeline, Duration.ofSeconds(2));
+        assertThat(Files.exists(photo)).isFalse();
         assertThat(root.resolve("Review/junk/IMG_1.jpg")).exists();
     }
 
@@ -1147,7 +1144,7 @@ class CullEngineTest {
         // state, never a watcher that had quietly died.
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
+        waitForJobToFinish(pipeline, Duration.ofSeconds(2));
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
 
@@ -1177,7 +1174,7 @@ class CullEngineTest {
 
         pipeline.startWatching(prepDir);
 
-        waitUntil(Duration.ofSeconds(2), () -> unresolvedRuns(pipeline).isEmpty());
+        waitForJobToFinish(pipeline, Duration.ofSeconds(2));
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
     }
 
