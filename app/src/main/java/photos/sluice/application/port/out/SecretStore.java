@@ -50,8 +50,14 @@ public interface SecretStore {
      *
      * <p>Nothing is cleared until the write succeeds, so a failed save can never lose a credential
      * already stored. Once it does, every writable tier that outranks the one just written to is
-     * cleared. An unavailable tier can otherwise leave a stale value behind for a later session to
-     * rediscover. An environment variable is never touched by a save, matching {@link #remove}.
+     * asked to clear what it holds. An environment variable is never touched by a save, matching
+     * {@link #remove}.
+     *
+     * <p>That clearing is best effort, and its limit is worth knowing. A tier only outranks the one
+     * written to when it could not be written to itself, which on this machine means it could not be
+     * reached. A store that cannot be reached cannot be cleared either, and reports nothing. So the
+     * case where a stale value survives a save is exactly the case this cannot fix, and the save
+     * reports success. What settles which value is really in force is {@link #status}.
      *
      * @param id {@link SecretId} which credential to store
      * @param secret {@link String} the credential to store

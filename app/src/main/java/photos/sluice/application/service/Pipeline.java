@@ -595,4 +595,41 @@ public class Pipeline {
             return this.prepDir;
         }
     }
+
+    /**
+     * Thrown when a resume is refused because its prep dir does not sit under the working root now
+     * in force. The run belongs to a folder this app has moved off, so resuming it would work a
+     * tree the current settings do not name.
+     *
+     * <p>Raised from inside the job rather than at the call, because the folder roots can move while
+     * a caller is queueing for the job slot. A check before that wait answers about roots that may
+     * be replaced before the job starts.
+     *
+     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
+     * refused needs no knowledge of this type at all.
+     */
+    public static final class RunOutsideWorkingRootException extends IllegalStateException {
+        private final transient Path prepDir;
+
+        /**
+         * Creates the exception, naming the prep dir that sits outside the roots in force.
+         *
+         * @param prepDir {@link Path} the prep dir that could not be resumed
+         */
+        RunOutsideWorkingRootException(final Path prepDir) {
+            super("The run at " + prepDir + " is not inside the working root Sluice is set up with now, "
+                    + "so it was not resumed - point the working root back at the folder holding it, "
+                    + "or discard the run.");
+            this.prepDir = prepDir;
+        }
+
+        /**
+         * Returns the prep dir that sits outside the roots in force.
+         *
+         * @return {@link Path} the prep dir that could not be resumed
+         */
+        public Path prepDir() {
+            return this.prepDir;
+        }
+    }
 }

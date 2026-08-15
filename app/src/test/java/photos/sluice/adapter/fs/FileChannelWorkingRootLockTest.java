@@ -37,7 +37,7 @@ class FileChannelWorkingRootLockTest {
         RuntimeException failure = null;
         for (final var lock : this.locks) {
             try {
-                lock.release();
+                lock.releaseAll();
             } catch (final RuntimeException e) {
                 failure = failure == null ? e : failure;
             }
@@ -115,7 +115,7 @@ class FileChannelWorkingRootLockTest {
     void releaseLetsAnotherHolderTakeTheRoot(@TempDir final Path root) {
         final var first = this.lock();
         first.acquire(root);
-        first.release();
+        first.release(root);
         final var second = this.lock();
 
         second.acquire(root);
@@ -125,16 +125,32 @@ class FileChannelWorkingRootLockTest {
     }
 
     @Test
-    void acquireOfTheSameRootTwiceKeepsTheOneClaim(@TempDir final Path root) {
+    void acquireOfTheSameRootTwiceCountsASecondHolder(@TempDir final Path root) {
         final var lock = this.lock();
         lock.acquire(root);
 
         lock.acquire(root);
 
         assertThat(lock.holds(root)).isTrue();
-        // One release is enough because the second acquire never opened a second claim. Were it a
-        // fresh one, the root would still be held here and this would fail.
-        lock.release();
+        assertThat(lock.holdersOf(root)).isEqualTo(2);
+    }
+
+    @Test
+    void aRootAcquiredTwiceStaysHeldUntilBothHoldsAreGivenUp(@TempDir final Path root) {
+        final var lock = this.lock();
+        lock.acquire(root);
+        lock.acquire(root);
+
+        lock.release(root);
+
+        assertThat(lock.holds(root)).isTrue();
+        // Still genuinely locked, not merely still recorded. A second instance stands in for the
+        // next process to try the folder.
+        assertThatThrownBy(() -> this.lock().acquire(root)).isInstanceOf(WorkingRootBusyException.class);
+
+        lock.release(root);
+
+        assertThat(lock.holds(root)).isFalse();
         this.lock().acquire(root);
     }
 
@@ -150,34 +166,109 @@ class FileChannelWorkingRootLockTest {
         assertThat(lock.holds(root)).isTrue();
     }
 
+    // A caller moving between roots holds both until it says which to give up. So the root its own
+    // settings still name is never unheld, and nothing else can take it while the move is in doubt.
     @Test
-    void acquireOfANewRootGivesUpTheOldOne(@TempDir final Path oldRoot, @TempDir final Path newRoot) {
+    void acquireOfANewRootKeepsTheOldOne(@TempDir final Path oldRoot, @TempDir final Path newRoot) {
         final var lock = this.lock();
         lock.acquire(oldRoot);
 
         lock.acquire(newRoot);
 
         assertThat(lock.holds(newRoot)).isTrue();
+        assertThat(lock.holds(oldRoot)).isTrue();
+    }
+
+    @Test
+    void releasingOneOfTwoHeldRootsLeavesTheOtherHeld(@TempDir final Path oldRoot, @TempDir final Path newRoot) {
+        final var lock = this.lock();
+        lock.acquire(oldRoot);
+        lock.acquire(newRoot);
+
+        lock.release(oldRoot);
+
+        assertThat(lock.holds(newRoot)).isTrue();
         assertThat(lock.holds(oldRoot)).isFalse();
+        // The freed root really is free, rather than merely forgotten by the instance that held it.
         this.lock().acquire(oldRoot);
     }
 
-    // Giving up the old root is the last step of a move, after the new one is already held. A
-    // failure there is not a refusal. Reported as one, it sends the caller off to take back a root
-    // it never lost. All while holding the new one it was told it did not get.
+    @Test
+    void releaseAllGivesUpEveryHeldRoot(@TempDir final Path oldRoot, @TempDir final Path newRoot) {
+        final var lock = this.lock();
+        lock.acquire(oldRoot);
+        lock.acquire(newRoot);
+
+        lock.releaseAll();
+
+        assertThat(lock.holds(oldRoot)).isFalse();
+        assertThat(lock.holds(newRoot)).isFalse();
+        this.lock().acquire(oldRoot);
+        this.lock().acquire(newRoot);
+    }
+
+    // A close that fails still gives the claim up. A caller that cannot act on the failure is then
+    // not left holding a root nothing will free before the process ends.
     //
     // No portable way exists to make a real channel refuse to close. The failure is injected at the
     // one seam inside the class where the decision is made.
     @Test
-    void aFailureGivingUpTheOldRootIsNotReportedAsARefusedClaim(
-            @TempDir final Path oldRoot, @TempDir final Path newRoot) {
+    void aReleaseWhoseCloseFailsStillGivesTheRootUp(@TempDir final Path root) {
         final var lock = new FailsToGiveUpAClaim();
         this.locks.add(lock);
-        lock.acquire(oldRoot);
+        lock.acquire(root);
 
-        lock.acquire(newRoot);
+        assertThatThrownBy(() -> lock.release(root)).isInstanceOf(UncheckedIOException.class);
 
-        assertThat(lock.holds(newRoot)).isTrue();
+        assertThat(lock.holds(root)).isFalse();
+        this.lock().acquire(root);
+    }
+
+    // One failing close must not strand the claims behind it, which is the whole reason an exit path
+    // calls this rather than releasing each root by name.
+    @Test
+    void releaseAllGivesUpEveryRootEvenWhenOneCloseFails(@TempDir final Path first, @TempDir final Path second) {
+        final var lock = new FailsToGiveUpAClaim();
+        this.locks.add(lock);
+        lock.acquire(first);
+        lock.acquire(second);
+
+        assertThatThrownBy(lock::releaseAll).isInstanceOf(UncheckedIOException.class);
+
+        assertThat(lock.holds(first)).isFalse();
+        assertThat(lock.holds(second)).isFalse();
+        this.lock().acquire(first);
+        this.lock().acquire(second);
+    }
+
+    // Every failure is carried, not just whichever the map happened to hand back first. One close
+    // that fails silently would be a root nobody knows is still locked.
+    @Test
+    void releaseAllCarriesEveryCloseFailureItMet(@TempDir final Path first, @TempDir final Path second) {
+        final var lock = new FailsEveryClose();
+        this.locks.add(lock);
+        lock.acquire(first);
+        lock.acquire(second);
+
+        final var failure = catchThrowableOfType(UncheckedIOException.class, lock::releaseAll);
+
+        assertThat(failure.getSuppressed()).hasSize(1);
+        assertThat(lock.holds(first)).isFalse();
+        assertThat(lock.holds(second)).isFalse();
+    }
+
+    // An exit path hands everything back without knowing what is held, so a root held twice has to
+    // go too. Counting holders here would leave it claimed for the life of the process.
+    @Test
+    void releaseAllGivesUpARootHeldMoreThanOnce(@TempDir final Path root) {
+        final var lock = this.lock();
+        lock.acquire(root);
+        lock.acquire(root);
+
+        lock.releaseAll();
+
+        assertThat(lock.holds(root)).isFalse();
+        this.lock().acquire(root);
     }
 
     // The half of the move that has to hold when it goes wrong. A save naming a root somebody else
@@ -205,7 +296,7 @@ class FileChannelWorkingRootLockTest {
         holder.acquire(takenRoot);
         assertThatThrownBy(() -> lock.acquire(takenRoot)).isInstanceOf(WorkingRootBusyException.class);
 
-        holder.release();
+        holder.release(takenRoot);
         lock.acquire(takenRoot);
 
         assertThat(lock.holds(takenRoot)).isTrue();
@@ -225,7 +316,7 @@ class FileChannelWorkingRootLockTest {
     void releaseWithoutAClaimLeavesTheRootFree(@TempDir final Path root) {
         final var lock = this.lock();
 
-        lock.release();
+        lock.release(root);
 
         final var other = this.lock();
         other.acquire(root);
@@ -249,7 +340,7 @@ class FileChannelWorkingRootLockTest {
         final var lock = this.lock();
         lock.acquire(root);
 
-        lock.release();
+        lock.release(root);
 
         assertThat(root.resolve(FileChannelWorkingRootLock.LOCK_FILE_NAME)).exists();
     }
@@ -336,6 +427,17 @@ class FileChannelWorkingRootLockTest {
                 this.failed = true;
                 throw new UncheckedIOException(new IOException("the channel refused to close"));
             }
+        }
+    }
+
+    // The channel is closed for real first, so a test using this leaves no root behind. Only the
+    // reporting fails.
+    private static final class FailsEveryClose extends FileChannelWorkingRootLock {
+
+        @Override
+        void close(final Claim claim) {
+            super.close(claim);
+            throw new UncheckedIOException(new IOException("the channel refused to close"));
         }
     }
 }

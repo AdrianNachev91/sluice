@@ -22,13 +22,21 @@ import java.nio.file.Path;
 public interface WorkingRootLock {
 
     /**
-     * Claims workingRoot for this process and holds it until {@link #release()} or process exit.
-     * Claiming a root this process already holds does nothing.
+     * Claims workingRoot for this process and holds it until it is released or the process exits.
      *
-     * <p>A process holding one root and claiming another takes the new one first, and gives the old
-     * one up only once that succeeds. A refused claim therefore changes nothing: the caller still
-     * holds what it held before. Anything that goes wrong while giving the old root up is not a
-     * refusal. The new one is held by then, so it cannot reach the caller as one.
+     * <p>Nothing already held is given up here. A caller moving from one root to another therefore
+     * holds both until it says which to give up, and neither root is unheld in between. What makes
+     * that worth the second claim is that the caller's own work between the two calls can fail. A
+     * save that has taken the root it is moving to, and then cannot write, still holds the root it
+     * is moving from.
+     *
+     * <p>Two paths a caller reads as different roots can be one folder underneath, and an
+     * implementation is free to recognise that. Acquiring such a folder a second time adds a hold on
+     * the claim already there rather than a second claim, and {@link #release} then gives up one
+     * hold rather than the folder. So a caller pairing each acquire with a release keeps what it
+     * still means to hold, whichever way the two paths resolve.
+     *
+     * <p>A refused claim changes nothing. The caller still holds exactly what it held before.
      *
      * @param workingRoot {@link Path} the working root to claim
      * @throws WorkingRootBusyException if another process already holds workingRoot
@@ -36,7 +44,19 @@ public interface WorkingRootLock {
     void acquire(Path workingRoot);
 
     /**
-     * Gives up whatever root this process holds. Does nothing when it holds none.
+     * Gives up one hold on a claimed root, naming it. Does nothing when this process does not hold
+     * it. Where the same folder was acquired more than once, it stays held until the last of those
+     * is given up.
+     *
+     * @param workingRoot {@link Path} the working root to give up
      */
-    void release();
+    void release(Path workingRoot);
+
+    /**
+     * Gives up every root this process holds. Does nothing when it holds none.
+     *
+     * <p>For a caller that has to hand everything back without knowing what is held, which is what
+     * an exit path needs. A caller giving up one root of several names it instead.
+     */
+    void releaseAll();
 }

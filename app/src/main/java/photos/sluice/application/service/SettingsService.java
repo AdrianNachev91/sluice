@@ -32,10 +32,16 @@ import java.util.Optional;
  * exactly as it was. Writing before putting the new values in force means the app never runs on
  * settings that failed to reach disk.
  *
+ * <p>A save that moves the working root holds both roots across the write, and gives the old one up
+ * only once the write has succeeded. There is therefore no window where this process has stopped
+ * holding the root its own settings still name. A failed save has nothing to take back, so it
+ * cannot be refused a folder it needs, and cannot end up holding neither.
+ *
  * <p>A folder root that moves is checked before any of that. A root set to somewhere that cannot be
- * worked in is refused. That covers text naming no path at all, a folder that is not there, and two
- * roots put inside each other. A root left unset is not refused. An install chooses its three
- * folders one picker at a time, and the facade goes on refusing jobs while any of them is empty.
+ * worked in is refused. That covers text naming no path at all, a folder no directory could be
+ * confirmed at, one that is there and cannot be resolved, and two roots put inside each other. A
+ * root left unset is not refused. An install chooses its three folders one picker at a time, and
+ * the facade goes on refusing jobs while any of them is empty.
  *
  * <p>A save that moves a folder root runs with the job slot held shut. Jobs start from more than
  * one thread. Asking whether one is running and then saving would leave a window for a job to start
@@ -106,8 +112,6 @@ public class SettingsService implements SettingsUseCase {
      * Saves the given settings and puts them in force.
      *
      * @param settings {@link Settings} the settings to save
-     * @throws PathsMisconfiguredException if a folder root this save moves is set to a folder that
-     *         cannot be worked in
      */
     @Override
     public void save(final Settings settings) {
@@ -180,33 +184,34 @@ public class SettingsService implements SettingsUseCase {
      * Saves settings that move a folder root. The claim moves with them when the root that is moving
      * is the working one.
      *
+     * <p>Both roots are held across the write, and the one being left is given up only once the
+     * write has succeeded. So there is no moment where this process has stopped holding the root its
+     * settings still name. A write that fails needs nothing put back: the old claim was never let
+     * go, and the only claim to undo is the one this save took.
+     *
      * @param settings {@link Settings} the settings to save
      * @param previous {@link Settings} the settings in force until this succeeds
      */
     private void moveRoots(final Settings settings, final Settings previous) {
-        final Optional<Path> claimed = workingRoot(settings);
-        if (claimed.equals(workingRoot(previous))) {
+        final Optional<Path> movingTo = workingRoot(settings);
+        final Optional<Path> heldUntilNow = workingRoot(previous);
+        if (movingTo.equals(heldUntilNow)) {
             // The library or the inbox moved and the working root stayed put, so there is no claim
             // to move. The job gate still applied above, since a run reads all three.
             this.writeAndApply(settings);
             return;
         }
-        claimed.ifPresent(this.workingRootLock::acquire);
+        movingTo.ifPresent(this.workingRootLock::acquire);
         try {
             this.writeAndApply(settings);
         } catch (final RuntimeException e) {
-            // Where a claim moved, it now sits on a folder the settings naming it never landed on.
-            // This process would hold a folder it is not working in, and hold nothing on the one it
-            // still is. Putting the claim back where it was puts that right.
-            this.restoreClaim(claimed, previous, e);
+            movingTo.ifPresent(root -> this.releaseReporting(root, e));
             throw e;
         }
-        if (claimed.isEmpty()) {
-            // These settings name no working root, and the ones they replaced did. Left held, that
-            // folder would be locked against every other Sluice for as long as this process runs,
-            // while this one is not working in it.
-            this.workingRootLock.release();
-        }
+        // Covers both shapes of a successful move. A root the settings moved off, and a root the
+        // settings replaced with nothing at all. Left held, either would lock a folder this process
+        // is no longer working in against every other Sluice for as long as it runs.
+        heldUntilNow.ifPresent(this::releaseOnceTheSaveHasLanded);
     }
 
     /**
@@ -255,44 +260,39 @@ public class SettingsService implements SettingsUseCase {
     }
 
     /**
-     * Puts the claim back after a failed save. When the settings still in force name no working
-     * root, there is nothing to put it back on and the claim is given up instead.
+     * Gives up the claim a failed save took, reporting a failure to do so against the failure
+     * already on its way out rather than in place of it.
      *
-     * <p>A folder taken in the meantime cannot be taken back. The claim this save made is then
-     * given up too. Held on, it would lock a folder nothing names against every other Sluice, for
-     * the life of this process.
+     * <p>The root the settings still in force name is untouched here, because this save never let
+     * go of it. Nothing has to be taken back, so nothing can be refused.
      *
-     * <p>Whatever went wrong here is reported against the failure already on its way out, rather
-     * than in place of it.
-     *
-     * @param claimed an {@link Optional} of {@link Path} the working root this save claimed, if any
-     * @param previous {@link Settings} the settings still in force
+     * @param root {@link Path} the working root this save claimed
      * @param failure {@link RuntimeException} the save failure the caller is about to throw
      */
-    private void restoreClaim(final Optional<Path> claimed, final Settings previous,
-                              final RuntimeException failure) {
-        if (claimed.isEmpty()) {
-            return;
-        }
+    private void releaseReporting(final Path root, final RuntimeException failure) {
         try {
-            workingRoot(previous).ifPresentOrElse(this.workingRootLock::acquire, this.workingRootLock::release);
+            this.workingRootLock.release(root);
         } catch (final RuntimeException e) {
             failure.addSuppressed(e);
-            this.releaseReporting(failure);
         }
     }
 
     /**
-     * Gives up whatever this process holds, reporting a failure to do so against the failure already
-     * on its way out.
+     * Gives up the root a successful save has moved off, logging a failure to do so rather than
+     * raising it.
      *
-     * @param failure {@link RuntimeException} the save failure the caller is about to throw
+     * <p>The settings have reached disk and are in force by the time this runs. A caller told the
+     * save failed would be told something untrue, and would have no step left to retry. The
+     * listeners after this would also never run, leaving watchers armed for a root the app has
+     * moved off.
+     *
+     * @param root {@link Path} the working root the save moved off
      */
-    private void releaseReporting(final RuntimeException failure) {
+    private void releaseOnceTheSaveHasLanded(final Path root) {
         try {
-            this.workingRootLock.release();
+            this.workingRootLock.release(root);
         } catch (final RuntimeException e) {
-            failure.addSuppressed(e);
+            log.warn("The save landed, but the claim on the previous working root {} was not given up", root, e);
         }
     }
 

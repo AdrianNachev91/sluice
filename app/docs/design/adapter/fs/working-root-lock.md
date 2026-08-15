@@ -23,24 +23,35 @@ flowchart TD
     I -- "null: another process" --> J["close the channel"]
     J --> K["drop the registry entry"]
     K --> F
-    I -- "lock taken" --> L["record the claim"]
-    L --> M{"was another root held?"}
-    M -- no --> N(["holding the new root"])
-    M -- yes --> O["close the old channel, drop its entry"]
-    O --> N
+    I -- "lock taken" --> L["record the claim<br/>alongside any already held"]
+    L --> N(["holding the new root"])
 ```
 
-Two orderings in that flow are load-bearing.
+**The registry is consulted before the marker is opened**, and that ordering is load-bearing. An OS
+file lock belongs to the process, not to the object holding it. On Linux the kernel releases a lock
+of this kind as soon as any descriptor for that file closes in the same process. So a refusal that
+opened the marker and closed it again would release the lock the first claim still believes it
+holds. That leaves a claim which only looks held. Refusing from the registry means no second
+descriptor is ever opened.
 
-**The registry is consulted before the marker is opened.** An OS file lock belongs to the process,
-not to the object holding it. On Linux the kernel releases a lock of this kind as soon as any
-descriptor for that file closes in the same process. So a refusal that opened the marker and closed
-it again would release the lock the first claim still believes it holds. That leaves a claim which
-only looks held. Refusing from the registry means no second descriptor is ever opened.
+**Taking a claim gives nothing up.** A caller moving between roots holds both, and says which to
+give up once it knows. That is what leaves no window where the root a caller's own settings still
+name is unheld. A refusal throws with every existing claim intact, so a rejected settings save
+changes nothing.
 
-**The new root is taken before the old one is given up.** A refusal throws with the old claim still
-intact, so a rejected settings save changes nothing. Doing it the other way round would leave a
-process holding neither root whenever the new one turned out to be taken.
+Holding two claims is bounded in practice rather than by this class. A settings save is the only
+caller that moves between roots, and one save runs at a time.
+
+**Holders are counted per folder.** `canonical()` below collapses two spellings of one directory
+onto a single key, and a caller comparing raw configured paths does not. So a caller can acquire
+what it reads as two roots and get one claim, then release what it reads as the other and mean to
+keep the folder. The count is what makes that release a decrement rather than a handover.
+
+The count balances per folder, not per caller, and that is the thing to hold on to. A settings save
+issues one acquire and one release, so it comes out even only because the session's own startup
+claim is already on that key. A process that holds nothing to begin with has no such holder, and the
+same save gives the folder up. `releaseAll()` ignores the count entirely, since an exit path means
+all of it.
 
 ## Root identity
 
@@ -60,10 +71,19 @@ itself does the refusing. The claim is still refused; one descriptor leaks.
 
 ## Giving a claim up
 
+`release(workingRoot)` gives up the one root it names and leaves any other held.
+`releaseAll()` gives up everything, for a caller that has to hand back whatever it has without
+knowing what that is, which is what an exit path needs. `releaseAll` attempts every claim even after
+one fails to close, and reports one failure with the rest hung off it as suppressed. Which one it
+keeps is arbitrary, since all of them are carried either way. Stopping at the first would strand the
+claims behind it for the life of the process.
+
 Closing the channel drops the OS lock with it. The registry entry goes afterwards, in a `finally`,
 which is a trade rather than an oversight. A close that fails frees the key while the lock may still
 be held, and nothing in this process can detect that. Holding the key instead would strand the root
-until the process exits, which is worse and far easier to hit.
+until the process exits, which is worse and far easier to hit. The claim is dropped from the
+instance either way. A caller that cannot act on a close failure is therefore not left believing it
+still holds the root.
 
 The marker file stays on disk. Deleting it would race a process opening it at that moment, and an
 abandoned marker is an empty file.

@@ -25,6 +25,7 @@ import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.job.WatchMode;
+import photos.sluice.domain.paths.Containment;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -177,16 +178,25 @@ final class CullEngine {
      * by the one caller nobody is watching. Apply moves files, and an unusable working root gets
      * silently recreated the moment a move resolves a path under it.
      *
+     * <p>Taking the job slot can mean waiting, and the roots can move during that wait. So where
+     * the prep dir sits is asked again inside the job, once this call is certain to be the next one
+     * to run. Asking only before the wait would answer about roots that a settings save then
+     * replaces, admitting a run belonging to a folder the app has since moved off.
+     *
      * @param prepDir {@link Path} the existing prep dir to resume
      * @param allowPartial boolean whether a partial shard set is acceptable
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
-     * @throws PathsMisconfiguredException if the folder roots are unset, missing, or overlapping
+     * @throws PathsMisconfiguredException if the folder roots are unset, missing, or overlapping.
+     *         Thrown from this call for roots already unusable, and delivered on the returned
+     *         handle for roots that became so while this call waited for the job slot
      */
     JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         this.rootsGuard.requireUsable();
-        return this.jobRunner.submit(handle ->
-                this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
-                        handle::isCancellationRequested, null));
+        return this.jobRunner.submit(handle -> {
+            this.refuseRunOutsideTheWorkingRoot(prepDir);
+            return this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
+                    handle::isCancellationRequested, null);
+        });
     }
 
     /**
@@ -297,6 +307,33 @@ final class CullEngine {
      */
     private Path cullPrepRoot() {
         return this.pathsPort.logs().resolve("cull-prep");
+    }
+
+    /**
+     * Refuses a resume whose prep dir does not sit under the cull-prep root in force.
+     *
+     * <p>Both callers can reach this. A watcher parked on the job slot behind a root-moving save is
+     * admitted the moment that save releases it. It then carries a prep dir under the root that
+     * save has just left. A person reaches it by resuming from a screen listing runs surveyed
+     * before the same save.
+     *
+     * <p>The roots are re-checked first, and not only for symmetry with the caller's own check. A
+     * save that cleared the working root leaves nothing to resolve a cull-prep root from. Asking
+     * where the prep dir sits has no answer at all until that case is ruled out.
+     *
+     * <p>Refusing costs the run nothing. Nothing has been read or moved at this point, and the run
+     * stays on disk exactly as it was. Pointing the working root back at its folder makes it
+     * resumable again.
+     *
+     * @param prepDir {@link Path} the prep dir this resume was asked for
+     * @throws PathsMisconfiguredException if the folder roots stopped being usable during the wait
+     * @throws Pipeline.RunOutsideWorkingRootException if it sits outside the cull-prep root in force
+     */
+    private void refuseRunOutsideTheWorkingRoot(final Path prepDir) {
+        this.rootsGuard.requireUsable();
+        if (!Containment.strictlyUnder(this.cullPrepRoot(), prepDir)) {
+            throw new Pipeline.RunOutsideWorkingRootException(prepDir);
+        }
     }
 
     /**

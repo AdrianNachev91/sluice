@@ -75,7 +75,7 @@ class SluiceFxApplicationTest {
         try {
             assertThatCode(() -> lock.acquire(repoRoot)).doesNotThrowAnyException();
         } finally {
-            lock.release();
+            lock.releaseAll();
         }
     }
 
@@ -93,7 +93,7 @@ class SluiceFxApplicationTest {
             assertThat(styleClassesOfRoot()).contains("failure-screen");
             assertThat(failureDetail()).contains("Another Sluice process is already using");
         } finally {
-            holder.release();
+            holder.releaseAll();
         }
     }
 

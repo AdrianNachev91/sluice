@@ -1,8 +1,6 @@
 package photos.sluice.adapter.fs;
 
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.port.out.WorkingRootLock;
@@ -14,6 +12,9 @@ import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,8 +50,6 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
 
     static final String LOCK_FILE_NAME = ".sluice-lock";
 
-    private static final Logger log = LoggerFactory.getLogger(FileChannelWorkingRootLock.class);
-
     // Every root this process has claimed, however many instances of this class took them. The
     // constraint being modelled belongs to the process rather than to any one instance, so the
     // record of it has to as well.
@@ -62,7 +61,14 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     // leaving it racing every other instance for the same process-wide registry.
     private static final Object CLAIMS = new Object();
 
-    private @Nullable Claim claim;
+    // Every root this instance holds, keyed by the canonical form of that root. More than one entry
+    // only while a settings save moves the working root. The new root is taken while the old one is
+    // still held, so a write that fails leaves the old claim exactly where it was.
+    //
+    // Keyed by path. A claimed directory renamed or deleted underneath its claim stops matching that
+    // key, so release() misses it and the descriptor is held until the process ends. The class
+    // Javadoc describes the same effect on the registry. The kernel still drops the lock at exit.
+    private final Map<Path, Held> claims = new HashMap<>();
 
     /**
      * One held claim: the root it covers, and the open channel and lock keeping it.
@@ -78,10 +84,37 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     }
 
     /**
-     * Claims workingRoot, taking a new root before giving up a currently held one.
+     * One claim and how many callers are holding it.
+     *
+     * <p>The count exists because two paths a caller reads as different roots can canonicalise to
+     * one. A settings save moving between two spellings of the same folder acquires and releases
+     * what it believes are two roots. The folder has to come out of that still claimed, so a claim
+     * is given up when its last holder does, rather than on the first release.
+     *
+     * @param claim {@link Claim} the held claim
+     * @param holders int how many acquires are outstanding against it
+     */
+    private record Held(Claim claim, int holders) {
+
+        private Held plusOne() {
+            return new Held(this.claim, this.holders + 1);
+        }
+
+        private Held minusOne() {
+            return new Held(this.claim, this.holders - 1);
+        }
+    }
+
+    /**
+     * Claims workingRoot, keeping every root this instance already holds.
      *
      * <p>Guarded because a settings save can move the root while startup or shutdown is still
-     * running, and both touch the same claim.
+     * running, and all three touch the same claims.
+     *
+     * <p>A root already held gains a holder and nothing else. No marker file is opened and no lock
+     * is taken, so the count is the only thing that moves. That is the point rather than a
+     * shortcut. A second channel on a marker this process already holds would hand the first claim's
+     * lock away as soon as either descriptor closed, per the Linux behaviour described above.
      *
      * @param workingRoot {@link Path} the working root to claim
      */
@@ -89,32 +122,66 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     public void acquire(final Path workingRoot) {
         synchronized (CLAIMS) {
             final Path root = canonical(workingRoot);
-            final Claim current = this.claim;
-            if (current != null && current.root().equals(root)) {
+            final Held current = this.claims.get(root);
+            if (current != null) {
+                this.claims.put(root, current.plusOne());
                 return;
             }
-            // The new claim is taken first and recorded before the old one is given up. A refusal
-            // throws out of claimOf() with the old root still held, which is what makes a rejected
-            // settings save change nothing.
-            this.claim = claimOf(root);
-            if (current != null) {
-                this.closeQuietly(current);
-            }
+            // Nothing is given up here. A refusal throws out of claimOf() with every existing claim
+            // untouched, which is what makes a rejected settings save change nothing.
+            this.claims.put(root, new Held(claimOf(root), 1));
         }
     }
 
     /**
-     * Gives up the held root, if there is one.
+     * Gives up one hold on a claimed root, leaving any other root this instance holds.
+     *
+     * <p>The claim itself goes when its last holder does. A caller that took the same folder twice,
+     * under two spellings it read as different roots, still holds it after giving one of them up.
+     *
+     * @param workingRoot {@link Path} the working root to give up
      */
     @Override
-    public void release() {
+    public void release(final Path workingRoot) {
         synchronized (CLAIMS) {
-            final Claim current = this.claim;
+            final Path root = canonical(workingRoot);
+            final Held current = this.claims.get(root);
             if (current == null) {
                 return;
             }
-            this.claim = null;
-            this.close(current);
+            if (current.holders() > 1) {
+                this.claims.put(root, current.minusOne());
+                return;
+            }
+            this.claims.remove(root);
+            this.close(current.claim());
+        }
+    }
+
+    /**
+     * Gives up every root this instance holds, however many holders each has.
+     *
+     * <p>For a caller handing everything back at once, where counting holders would only leave a
+     * claim behind. Every claim is attempted even after one fails to close, and one failure carries
+     * the rest. Stopping at the first would strand the claims after it for the life of the process,
+     * which is the one outcome an exit path exists to avoid.
+     */
+    @Override
+    public void releaseAll() {
+        synchronized (CLAIMS) {
+            final List<Held> held = List.copyOf(this.claims.values());
+            this.claims.clear();
+            UncheckedIOException failure = null;
+            for (final Held entry : held) {
+                try {
+                    this.close(entry.claim());
+                } catch (final UncheckedIOException e) {
+                    failure = reporting(failure, e);
+                }
+            }
+            if (failure != null) {
+                throw failure;
+            }
         }
     }
 
@@ -123,13 +190,48 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * a caller either took the root or was refused it.
      *
      * @param workingRoot {@link Path} the working root to check
-     * @return boolean true when this instance holds exactly that root
+     * @return boolean true when this instance holds that root
      */
     boolean holds(final Path workingRoot) {
         synchronized (CLAIMS) {
-            final Claim current = this.claim;
-            return current != null && current.root().equals(canonical(workingRoot));
+            return this.claims.containsKey(canonical(workingRoot));
         }
+    }
+
+    /**
+     * Test seam: how many outstanding acquires this instance has against workingRoot.
+     *
+     * <p>A count rather than a boolean, because the case worth pinning is a folder reached under
+     * two spellings. Only the count tells that apart from the ordinary single hold.
+     *
+     * @param workingRoot {@link Path} the working root to count holders for
+     * @return int how many acquires are outstanding, zero when the root is not held
+     */
+    int holdersOf(final Path workingRoot) {
+        synchronized (CLAIMS) {
+            final Held current = this.claims.get(canonical(workingRoot));
+            return current == null ? 0 : current.holders();
+        }
+    }
+
+    /**
+     * Keeps one failure of a run to report and hangs every later one off it as suppressed.
+     *
+     * <p>Which one is kept is whichever the map handed back first, and that order is arbitrary. It
+     * makes no difference to a caller: all of them are carried either way, and nothing acts on a
+     * close failure beyond reporting it.
+     *
+     * @param kept {@link UncheckedIOException} the failure kept so far, null until one happens
+     * @param next {@link UncheckedIOException} the failure just caught
+     * @return {@link UncheckedIOException} the failure to keep
+     */
+    private static UncheckedIOException reporting(final @Nullable UncheckedIOException kept,
+                                                  final UncheckedIOException next) {
+        if (kept == null) {
+            return next;
+        }
+        kept.addSuppressed(next);
+        return kept;
     }
 
     /**
@@ -142,9 +244,9 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * can then detect that. The alternative strands the root until the process exits, which is
      * worse and far easier to hit.
      *
-     * <p>An instance method, and package-private, so a test can make giving up a claim fail. That
-     * failure is the whole reason {@link #closeQuietly} exists, and no portable way to make a real
-     * channel refuse to close is available.
+     * <p>An instance method, and package-private, so a test can make giving up a claim fail. No
+     * portable way to make a real channel refuse to close is available, and both callers above
+     * document what they do when one does.
      *
      * @param claim {@link Claim} the claim to give up
      */
@@ -243,28 +345,6 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
             return FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to open the lock file in working root " + root + ".", e);
-        }
-    }
-
-    /**
-     * Gives up the root a move has just replaced, reporting a failure to close rather than raising
-     * it.
-     *
-     * <p>The claim on the new root is already taken and recorded by the time this runs. A close
-     * failure raised here would tell the caller its claim was refused, while the caller does in fact
-     * hold the new root. It would then go looking for the old one to take back.
-     *
-     * <p>Nothing is lost by not raising it. A failed close frees the registry key while the OS lock
-     * may still be held, and this process cannot detect that either way. That trade is the same one
-     * {@link #close} already documents.
-     *
-     * @param claim {@link Claim} the claim being given up
-     */
-    private void closeQuietly(final Claim claim) {
-        try {
-            this.close(claim);
-        } catch (final UncheckedIOException e) {
-            log.warn("Failed to release the claim on the previous working root {}.", claim.root(), e);
         }
     }
 

@@ -31,8 +31,11 @@ public sealed interface PathViolation {
     }
 
     /**
-     * The path is well formed but no directory sits there. Covers a folder that was moved or
-     * deleted, a typo, and a path naming a regular file.
+     * No directory could be confirmed at a well formed path. Covers a folder that was moved or
+     * deleted, a typo, and a path naming a regular file. It also takes every case where the
+     * filesystem would not say what is there at all, a permission denial on the way down and a
+     * broken link included. Those are indistinguishable from an absence at the point this is
+     * decided.
      *
      * @param role {@link PathRole} the root the value belongs to
      * @param path {@link Path} the configured value, made absolute
@@ -41,13 +44,15 @@ public sealed interface PathViolation {
     }
 
     /**
-     * A directory is there, and the filesystem then refused to say what it really is. A folder root
-     * on a network share that went away mid-check, a permission denial somewhere on the way down,
-     * and a link that resolves to nothing all land here.
+     * A directory was confirmed, and resolving what it really is then failed. The general case is a
+     * filesystem that accepted a directory is there and could not follow it, of which a share
+     * dropping mid-check is one instance.
      *
      * <p>Separate from {@link NotADirectory} because the two send a user to different places. That
-     * one says the folder is not there, so go and find it. This one says the folder is there and
-     * cannot be read, so the thing to fix is the share, the drive or the permission.
+     * one says no folder could be found, so go and find it. This one says the folder is there and
+     * cannot be read, so the thing to fix is the share, the drive or the permission. The split is
+     * by what the filesystem answered rather than by what went wrong, so an unreadable folder can
+     * land in either.
      *
      * <p>What went wrong is logged where it was caught rather than carried here. A failure object in
      * a domain value would leak an adapter's own exception into the core, and no surface renders it.

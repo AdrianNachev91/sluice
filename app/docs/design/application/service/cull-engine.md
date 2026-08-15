@@ -72,7 +72,7 @@ the only exit, and it costs the whole run: every shard, and the model spend behi
 `choices.log` holds answers to findings, not the decisions themselves, and the ledger is split in
 two precisely so a repair cannot cost the user an answer. A line whose shape neither ledger parser
 recognises is skipped. So is one whose shape matches but whose subject or resolution field is
-garbled - a `Path.of` or `Enum.valueOf` failure costs that one line's answer rather than the whole
+garbled. A `Path.of` or `Enum.valueOf` failure costs that one line's answer rather than the whole
 file. The run then diagnoses to its real state, usually `BLOCKED` with the original finding
 re-raised, where Troubleshoot works normally. `move-records.log` gets the same treatment for its own
 malformed line, though its own loss is never permanent: a reconcile rebuilds it from disk regardless.
@@ -355,12 +355,17 @@ store, so restarting the app would otherwise silently stop watching every job ar
 restart.
 
 `CullWatchers.disarmAll()` retires every poller at once, reached through `Pipeline.stopAllWatching()`.
-Its caller is a save that moved the **working** root specifically. Every armed watcher polls a prep
+It is reached from a settings save and from the exit path, for different reasons.
+
+A save that moved the **working** root specifically. Every armed watcher polls a prep
 dir under that root, so only that move leaves them all naming a folder outside the roots in force. A
 library or inbox move strands nothing, and retiring there would switch off a watch a user turned on
 by hand for one run. The same save then re-arms against the new roots, which is why the retire has
-to come first. The whole sequence runs with the job slot held shut. Arming is skipped while a job
-runs, so a watcher taking the slot in between would leave the re-arm doing nothing at all.
+to come first. That sequence runs with the job slot held shut. Arming is skipped while a job runs,
+so a watcher taking the slot in between would leave the re-arm doing nothing at all.
+
+The exit path retires every watcher before draining the job runner, so nothing is still deciding to
+start a job. It holds no job slot, and re-arms nothing.
 
 An auto-resume refused because a root is unusable retires its own watcher rather than polling on.
 Nothing the watcher can see will clear that condition. The run stays `Waiting`, and a manual Resume

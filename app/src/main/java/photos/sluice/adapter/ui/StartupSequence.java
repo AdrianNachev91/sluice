@@ -9,8 +9,17 @@ import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.paths.PathRole;
+import photos.sluice.domain.paths.PathViolation;
+import photos.sluice.domain.paths.PathViolation.NotADirectory;
+import photos.sluice.domain.paths.PathViolation.NotAPath;
+import photos.sluice.domain.paths.PathViolation.NotConfigured;
+import photos.sluice.domain.paths.PathViolation.Overlap;
+import photos.sluice.domain.paths.PathViolation.Unreadable;
 
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 
 /**
  * The work the desktop app does once its Spring context is up: claim the working root, then run the
@@ -20,9 +29,11 @@ import java.time.Duration;
  * auto-resume a waiting run straight into an apply. Neither may happen before this process owns the
  * root.
  *
- * <p>An install whose folders are not set up yet does none of it. There is no folder to claim, and
- * nothing to house-keep inside one. The claim is taken instead by the save that first names a
- * working root, which is what completing first-run configuration does.
+ * <p>The two steps are gated separately, on what each one needs. The claim needs a usable working
+ * root and nothing else, so an install still choosing its library or inbox still owns the folder it
+ * stages in. Housekeeping reaches all three roots, so it waits for all three. An install with no
+ * usable working root does neither, and the claim is taken instead by the save that first names
+ * one.
  *
  * <p>Arming is the desktop's own concern rather than every caller's. A watcher is only worth
  * arming in a process that stays open for it to poll in.
@@ -70,16 +81,24 @@ public class StartupSequence {
 
     /**
      * Claims the working root, then runs the startup housekeeping inside it. A refused claim stops
-     * the sequence before anything has touched a file. Folders that are not set up yet stop it
-     * before the claim.
+     * the sequence before anything has touched a file.
+     *
+     * <p>A working root that cannot be worked in stops it before the claim, since there is nothing
+     * to hold. Everything else stops the housekeeping and not the claim: another root left unset or
+     * unusable, and two roots overlapping. The folder this process stages in is still its own, and
+     * holding it is what keeps a second Sluice out of a half-configured install.
      *
      * @throws WorkingRootBusyException if another process holds the working root
      */
     public void run() {
-        if (!this.pathValidation.violationsInForce().isEmpty()) {
+        final List<PathViolation> violations = this.pathValidation.violationsInForce();
+        if (violations.stream().anyMatch(StartupSequence::leavesTheWorkingRootUnusable)) {
             return;
         }
         this.workingRootLock.acquire(this.paths.repoRoot());
+        if (!violations.isEmpty()) {
+            return;
+        }
         this.pipeline.armWatchesForResumableRuns();
         this.pipeline.sweepExpiredDisasterDrawers();
     }
@@ -109,6 +128,40 @@ public class StartupSequence {
             log.warn("Work was still in progress at exit, so the working root stays claimed until this process ends");
             return;
         }
-        this.workingRootLock.release();
+        this.workingRootLock.releaseAll();
+    }
+
+    /**
+     * Whether a violation says the working root itself cannot be worked in.
+     *
+     * <p>Only these gate the claim, because a claim covers one folder. A library root nobody has
+     * chosen yet says nothing about whether this process is working in its own. An install part way
+     * through choosing its three folders is still staging into one of them, and a claim is what
+     * keeps a second process out of it.
+     *
+     * <p>Each arm earns its place, for one of two reasons. {@code NotConfigured} and
+     * {@code NotAPath} are the two ways {@link PathsPort#repoRoot} itself throws, so admitting
+     * either would fail before a claim was even attempted. {@code NotADirectory} and
+     * {@code Unreadable} let that call return, and the claim then fails opening its marker file
+     * inside a folder that is not there. Admitting those would turn a misconfigured install into a
+     * hard startup failure.
+     *
+     * <p>An overlap does not gate it, and the reason is structural rather than a reading of what an
+     * overlap means. Overlaps are only computed once all three roots have resolved to real
+     * directories, so an {@code Overlap} in the list is itself proof that the working root is one.
+     * That is exactly what a claim needs. Housekeeping is what such a configuration is unsafe for,
+     * and that still waits for every root.
+     *
+     * @param violation {@link PathViolation} one reason the configured roots cannot be worked in
+     * @return boolean true when the working root is the root it makes unusable
+     */
+    private static boolean leavesTheWorkingRootUnusable(final PathViolation violation) {
+        return switch (violation) {
+            case NotConfigured(final PathRole role) -> role == PathRole.REPO_ROOT;
+            case NotAPath(final PathRole role, final String _) -> role == PathRole.REPO_ROOT;
+            case NotADirectory(final PathRole role, final Path _) -> role == PathRole.REPO_ROOT;
+            case Unreadable(final PathRole role, final Path _) -> role == PathRole.REPO_ROOT;
+            case Overlap _ -> false;
+        };
     }
 }

@@ -25,7 +25,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -96,7 +98,7 @@ class SettingsServiceTest {
     void aFailedWriteLeavesNeitherTheClaimNorTheSettingsMoved(
             @TempDir final Path before, @TempDir final Path after) {
         final var live = new RecordingLive(settings(before));
-        final var lock = new RecordingLock();
+        final var lock = lockHolding(before);
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
@@ -106,9 +108,25 @@ class SettingsServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("disk full");
 
-        assertThat(lock.claimed).containsExactly(after.toAbsolutePath().normalize(),
-                before.toAbsolutePath().normalize());
+        assertThat(lock.released).containsExactly(after.toAbsolutePath().normalize());
+        assertThat(lock.held()).containsExactly(before.toAbsolutePath().normalize());
         assertThat(live.current()).isEqualTo(settings(before));
+    }
+
+    // Asserted from inside the write, the only moment the question is live. By the time save()
+    // returns, holding it throughout and re-taking it at the end look identical.
+    @Test
+    void theRootStillInForceIsNeverLetGoWhileASaveIsWriting(
+            @TempDir final Path before, @TempDir final Path after) {
+        final var live = new RecordingLive(settings(before));
+        final var lock = lockHolding(before);
+        final Path held = before.toAbsolutePath().normalize();
+        final SettingsStore store = _ -> assertThat(lock.held()).contains(held);
+        final var service = settingsService(live, store, lock, new JobRunner());
+
+        service.save(settings(after));
+
+        assertThat(lock.held()).containsExactly(after.toAbsolutePath().normalize());
     }
 
     @Test
@@ -136,26 +154,10 @@ class SettingsServiceTest {
         assertThatThrownBy(() -> service.save(settings(root))).isInstanceOf(IllegalStateException.class);
 
         assertThat(lock.claimed).containsExactly(root.toAbsolutePath().normalize());
-        assertThat(lock.releases).isEqualTo(1);
+        assertThat(lock.released).containsExactly(root.toAbsolutePath().normalize());
     }
 
-    @Test
-    void aFailedSaveReportsAFailedTakeBackAgainstTheFailureThatCausedIt(
-            @TempDir final Path before, @TempDir final Path after) {
-        final var live = new RecordingLive(settings(before));
-        final SettingsStore store = _ -> {
-            throw new IllegalStateException("disk full");
-        };
-        final var service = settingsService(live, store, new RefusingSecondClaim(), new JobRunner());
-
-        assertThatThrownBy(() -> service.save(settings(after)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("disk full")
-                .satisfies(failure -> assertThat(failure.getSuppressed())
-                        .hasOnlyElementsOfType(WorkingRootBusyException.class));
-    }
-
-    // The library moved and the working root did not, so there is no claim to move. A process that
+    // The library moved and the working root did not, so there is no claim to move. A process
     // holding no root can still make this change. That is a command-line one, run while the desktop
     // app has the folder open, not being refused a folder it was never going to touch.
     @Test
@@ -181,7 +183,49 @@ class SettingsServiceTest {
         service.save(unconfigured());
 
         assertThat(lock.claimed).isEmpty();
-        assertThat(lock.releases).isEqualTo(1);
+        assertThat(lock.released).containsExactly(root.toAbsolutePath().normalize());
+    }
+
+    @Test
+    void aSaveBetweenTwoSpellingsOfOneFolderKeepsTheClaim(
+            @TempDir final Path before, @TempDir final Path after) {
+        final var live = new RecordingLive(settings(before));
+        final var lock = new AliasingLock(before.toAbsolutePath().normalize());
+        lock.acquire(before.toAbsolutePath().normalize());
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
+
+        service.save(settings(after));
+
+        assertThat(lock.holdersOfTheFolder()).isEqualTo(1);
+    }
+
+    // The boundary of the counting, and the reason the claim cannot be left to this save alone. One
+    // acquire and one release over one claim net out, so a process that starts holding nothing ends
+    // holding nothing. What keeps that from mattering is upstream. A command line holds no root by
+    // design, and a desktop claims its working root at startup whenever that root is usable.
+    @Test
+    void aSaveBetweenTwoSpellingsLeavesAnUnclaimedProcessAsItFoundIt(
+            @TempDir final Path before, @TempDir final Path after) {
+        final var live = new RecordingLive(settings(before));
+        final var lock = new AliasingLock(before.toAbsolutePath().normalize());
+        final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
+
+        service.save(settings(after));
+
+        assertThat(lock.holdersOfTheFolder()).isZero();
+    }
+
+    @Test
+    void aReleaseRefusedAfterTheSaveLandedNeitherFailsItNorSkipsTheListeners(@TempDir final Path root) {
+        final var live = new RecordingLive(settings(root));
+        final var listener = new RecordingListener();
+        final var service = settingsService(live, new RecordingStore(), new ReleaseRefusingLock(),
+                new JobRunner(), List.of(listener));
+
+        service.save(unconfigured());
+
+        assertThat(live.current()).isEqualTo(unconfigured());
+        assertThat(listener.calls).isEqualTo(1);
     }
 
     @Test
@@ -564,14 +608,13 @@ class SettingsServiceTest {
         }
     }
 
-    // Neither folder can be held now: the one the settings name was taken while this save ran, and
-    // the one it claimed is a folder nothing names. Keeping the second would lock every other Sluice
-    // out of a folder this process will never work in.
+    // Whether another process is genuinely locked out is SettingsServiceLockTest's question, against
+    // the real lock. This one is only about what the service asks of it.
     @Test
-    void aSaveThatCannotTakeTheOldRootBackGivesUpTheNewOneToo(
+    void aFailedSaveNeverAsksForTheOldRootBack(
             @TempDir final Path before, @TempDir final Path after) {
         final var live = new RecordingLive(settings(before));
-        final var lock = new RefusingSecondClaim();
+        final var lock = lockHolding(before);
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
@@ -579,7 +622,11 @@ class SettingsServiceTest {
 
         assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(IllegalStateException.class);
 
-        assertThat(lock.releases).isEqualTo(1);
+        assertThat(lock.held()).containsExactly(before.toAbsolutePath().normalize());
+        // Exactly two claims: the one this process started with, and the one the save took. A third
+        // would mean the old root had been let go and asked for back.
+        assertThat(lock.claimed).containsExactly(before.toAbsolutePath().normalize(),
+                after.toAbsolutePath().normalize());
     }
 
     // A save reads the settings in force to work out what it is changing, then acts on that answer.
@@ -644,13 +691,13 @@ class SettingsServiceTest {
         final SettingsStore store = _ -> {
             throw new IllegalStateException("disk full");
         };
-        final var service = settingsService(live, store, new RefusingSecondClaimAndRelease(), new JobRunner());
+        final var service = settingsService(live, store, new ReleaseRefusingLock(), new JobRunner());
 
         assertThatThrownBy(() -> service.save(settings(after)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("disk full")
                 .satisfies(failure -> assertThat(failure.getSuppressed())
-                        .hasSize(2)
+                        .hasSize(1)
                         .hasOnlyElementsOfType(WorkingRootBusyException.class));
     }
 
@@ -692,6 +739,14 @@ class SettingsServiceTest {
     private static Settings withProvider(final Settings settings, final String provider) {
         return new Settings(settings.paths(), provider, settings.providerSettings(), settings.categories(),
                 settings.externalAgent(), settings.montage());
+    }
+
+    // A running process holds the root its settings name, claimed when it started. A save that moves
+    // that root begins from there, so a fixture about what happens to the old claim has to as well.
+    private static RecordingLock lockHolding(final Path root) {
+        final var lock = new RecordingLock();
+        lock.acquire(root.toAbsolutePath().normalize());
+        return lock;
     }
 
     private static Settings unconfigured() {
@@ -766,7 +821,7 @@ class SettingsServiceTest {
     private static final class RecordingLock implements WorkingRootLock {
 
         private final List<Path> claimed = new ArrayList<>();
-        private int releases;
+        private final List<Path> released = new ArrayList<>();
 
         @Override
         public void acquire(final Path workingRoot) {
@@ -774,8 +829,19 @@ class SettingsServiceTest {
         }
 
         @Override
-        public void release() {
-            this.releases++;
+        public void release(final Path workingRoot) {
+            this.released.add(workingRoot);
+        }
+
+        @Override
+        public void releaseAll() {
+            this.released.addAll(this.held());
+        }
+
+        private List<Path> held() {
+            final List<Path> held = new ArrayList<>(this.claimed);
+            held.removeAll(this.released);
+            return held;
         }
     }
 
@@ -787,48 +853,63 @@ class SettingsServiceTest {
         }
 
         @Override
-        public void release() {
+        public void release(final Path workingRoot) {
+        }
+
+        @Override
+        public void releaseAll() {
         }
     }
 
-    // Lets a save take the new root, then refuses both the take-back and giving the new one up.
-    // Every way of putting the claim right fails, which is what leaves two failures to report.
-    private static final class RefusingSecondClaimAndRelease implements WorkingRootLock {
+    // Stands in for the real lock's canonicalisation, which resolves symlinks and junctions where
+    // this service only normalises. Two configured paths reaching one folder therefore collapse to
+    // one claim here, counted by holders exactly as the adapter counts them. A fake rather than a
+    // real symlink, because creating one needs a privilege the Windows leg does not always have.
+    // This composition has to be checked on every platform.
+    private static final class AliasingLock implements WorkingRootLock {
 
-        private int claims;
+        private final Map<Path, Integer> holders = new HashMap<>();
+        private final Path collapsesTo;
 
-        @Override
-        public void acquire(final Path workingRoot) {
-            this.claims++;
-            if (this.claims > 1) {
-                throw new WorkingRootBusyException(workingRoot);
-            }
+        private AliasingLock(final Path collapsesTo) {
+            this.collapsesTo = collapsesTo;
         }
 
         @Override
-        public void release() {
+        public void acquire(final Path workingRoot) {
+            this.holders.merge(this.collapsesTo, 1, Integer::sum);
+        }
+
+        @Override
+        public void release(final Path workingRoot) {
+            this.holders.computeIfPresent(this.collapsesTo, (_, held) -> held == 1 ? null : held - 1);
+        }
+
+        @Override
+        public void releaseAll() {
+            this.holders.clear();
+        }
+
+        private int holdersOfTheFolder() {
+            return this.holders.getOrDefault(this.collapsesTo, 0);
+        }
+    }
+
+    // Takes every claim and refuses every release, so a save that has to give one up cannot.
+    private static final class ReleaseRefusingLock implements WorkingRootLock {
+
+        @Override
+        public void acquire(final Path workingRoot) {
+        }
+
+        @Override
+        public void release(final Path workingRoot) {
+            throw new WorkingRootBusyException(workingRoot);
+        }
+
+        @Override
+        public void releaseAll() {
             throw new WorkingRootBusyException(Path.of("unreleasable"));
-        }
-    }
-
-    // Lets the save take the new root, then refuses to give the old one back. That is the corner a
-    // second process reaching the old folder in between would produce.
-    private static final class RefusingSecondClaim implements WorkingRootLock {
-
-        private int claims;
-        private int releases;
-
-        @Override
-        public void acquire(final Path workingRoot) {
-            this.claims++;
-            if (this.claims > 1) {
-                throw new WorkingRootBusyException(workingRoot);
-            }
-        }
-
-        @Override
-        public void release() {
-            this.releases++;
         }
     }
 }

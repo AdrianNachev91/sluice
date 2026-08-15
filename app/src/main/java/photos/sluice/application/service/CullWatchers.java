@@ -167,8 +167,12 @@ final class CullWatchers {
      * <p>Each clause names its exact type, which is what tells them apart. All three are
      * IllegalStateException subtypes. A clause catching that supertype would read a refusal as
      * "runner busy, keep polling". It would then poll for the life of the process, over a condition
-     * no poll resolves. Naming the types also leaves anything else to propagate: an auto-resume
-     * that failed for a fourth reason is not a reason to keep asking.
+     * no poll resolves.
+     *
+     * <p>Anything else propagates to CullWatcher.poll's own broad catch, which logs it and polls on
+     * every tick. No fourth type reaches here today, so nothing does that yet. A refusal added to
+     * the resume path later needs a clause of its own here, or it becomes exactly the
+     * poll-for-ever loop the naming above exists to prevent.
      *
      * @param prepDir {@link Path} the prep dir to attempt to resume
      * @return boolean false only when a busy job runner makes it worth retrying

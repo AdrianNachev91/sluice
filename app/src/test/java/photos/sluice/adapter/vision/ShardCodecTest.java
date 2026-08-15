@@ -98,8 +98,13 @@ class ShardCodecTest {
     void readsAClassificationWhoseActionIsAUserDefinedCategory(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-002.json");
         Files.writeString(shardPath, """
-                { "montage": "montage-002",
-                  "decisions": [ { "file": "a.jpg", "action": "pets", "reason": "cat" } ] }""");
+                {
+                  "montage": "montage-002",
+                  "decisions": [
+                    { "file": "a.jpg", "action": "pets", "reason": "cat" }
+                  ]
+                }
+                """);
 
         final DecisionShard shard = this.codec.read(shardPath);
 
@@ -113,8 +118,13 @@ class ShardCodecTest {
     void rejectsUnknownFieldsWhenReading(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-003.json");
         Files.writeString(shardPath, """
-                { "montage": "montage-003",
-                  "decisions": [ { "file": "a.jpg", "action": "junk", "reason": "blurry", "confidence": 0.9 } ] }""");
+                {
+                  "montage": "montage-003",
+                  "decisions": [
+                    { "file": "a.jpg", "action": "junk", "reason": "blurry", "confidence": 0.9 }
+                  ]
+                }
+                """);
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -125,8 +135,13 @@ class ShardCodecTest {
     void leavesAbsentRequiredFieldsEmptyForTheValidatorToReject(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-004.json");
         Files.writeString(shardPath, """
-                { "montage": "montage-004",
-                  "decisions": [ { "action": "junk" } ] }""");
+                {
+                  "montage": "montage-004",
+                  "decisions": [
+                    { "action": "junk" }
+                  ]
+                }
+                """);
 
         final DecisionShard shard = this.codec.read(shardPath);
 
@@ -140,8 +155,13 @@ class ShardCodecTest {
     void leavesAbsentNearDupFieldsEmptyForTheValidatorToReject(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-009.json");
         Files.writeString(shardPath, """
-                { "montage": "montage-009",
-                  "decisions": [ { "file": "a.jpg", "action": "near-dup-chosen" } ] }""");
+                {
+                  "montage": "montage-009",
+                  "decisions": [
+                    { "file": "a.jpg", "action": "near-dup-chosen" }
+                  ]
+                }
+                """);
 
         final DecisionShard shard = this.codec.read(shardPath);
 
@@ -155,8 +175,12 @@ class ShardCodecTest {
     void rejectsAnUnknownTopLevelField(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-010.json");
         Files.writeString(shardPath, """
-                { "montage": "montage-010", "summary": "all good",
-                  "decisions": [] }""");
+                {
+                  "montage": "montage-010",
+                  "summary": "all good",
+                  "decisions": []
+                }
+                """);
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(MalformedPrepJsonException.class)
@@ -171,12 +195,37 @@ class ShardCodecTest {
     void readsAFileNameThisPlatformRejectsAsMalformedContent(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-011.json");
         Files.writeString(shardPath, """
-                { "montage": "montage-011",
-                  "decisions": [ { "file": "bad\\u0000name.jpg", "action": "junk", "reason": "blurry" } ] }""");
+                {
+                  "montage": "montage-011",
+                  "decisions": [
+                    { "file": "bad\\u0000name.jpg", "action": "junk", "reason": "blurry" }
+                  ]
+                }
+                """);
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("unusable file");
+    }
+
+    // The third way the field can be unusable, and the one that parses cleanly. A filesystem root
+    // has no file name at all, so every later step that asks for one gets null back. "/" is a root
+    // on every platform this ships to, which is why the fixture needs no escaping to reach one.
+    @Test
+    void readsAFileNamingAFilesystemRootAsMalformedContent(@TempDir final Path dir) throws IOException {
+        final Path shardPath = dir.resolve("decisions-012.json");
+        Files.writeString(shardPath, """
+                {
+                  "montage": "montage-012",
+                  "decisions": [
+                    { "file": "/", "action": "junk", "reason": "blurry" }
+                  ]
+                }
+                """);
+
+        assertThatThrownBy(() -> this.codec.read(shardPath))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("whole filesystem root");
     }
 
     @Test
@@ -202,8 +251,14 @@ class ShardCodecTest {
     void rejectsANullDecisionElement(@TempDir final Path dir) throws IOException {
         final Path shardPath = dir.resolve("decisions-007.json");
         Files.writeString(shardPath, """
-                { "montage": "montage-007",
-                  "decisions": [ null, { "file": "a.jpg", "action": "junk", "reason": "blurry" } ] }""");
+                {
+                  "montage": "montage-007",
+                  "decisions": [
+                    null,
+                    { "file": "a.jpg", "action": "junk", "reason": "blurry" }
+                  ]
+                }
+                """);
 
         assertThatThrownBy(() -> this.codec.read(shardPath))
                 .isInstanceOf(MalformedPrepJsonException.class)

@@ -188,20 +188,48 @@ class SidecarReaderTest {
     void failsLoudOnASrcThisPlatformCannotMakeAPathOutOf(@TempDir final Path dir) throws IOException {
         final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
-                { "photos": [ { "src": "bad\\u0000path.jpg", "name": "IMG_001.jpg",
-                  "time": "2019-06-20T15:00:00Z", "received": false } ] }""");
+                {
+                  "photos": [
+                    { "src": "bad\\u0000path.jpg", "name": "IMG_001.jpg", "time": "2019-06-20T15:00:00Z",
+                      "received": false }
+                  ]
+                }
+                """);
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(MalformedPrepJsonException.class)
                 .hasMessageContaining("unusable src");
     }
 
+    // The third way the field can be unusable, and the one that parses cleanly. A filesystem root
+    // has no file name at all, so every later step that asks for one gets null back. "/" is a root
+    // on every platform this ships to, which is why the fixture needs no escaping to reach one.
+    @Test
+    void failsLoudOnASrcNamingAFilesystemRoot(@TempDir final Path dir) throws IOException {
+        final Path sidecar = dir.resolve("montage-001.json");
+        Files.writeString(sidecar, """
+                {
+                  "photos": [
+                    { "src": "/", "name": "IMG_001.jpg", "time": "2019-06-20T15:00:00Z", "received": false }
+                  ]
+                }
+                """);
+
+        assertThatThrownBy(() -> this.reader.readEntries(sidecar))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("whole filesystem root");
+    }
+
     @Test
     void failsLoudOnAnUnparseableTime(@TempDir final Path dir) throws IOException {
         final Path sidecar = dir.resolve("montage-001.json");
         Files.writeString(sidecar, """
-                { "photos": [ { "src": "%s", "name": "IMG_001.jpg", "time": "20-06-2019 15:00",
-                  "received": false } ] }""".formatted(jsonEscaped(dir.resolve("IMG_001.jpg"))));
+                {
+                  "photos": [
+                    { "src": "%s", "name": "IMG_001.jpg", "time": "20-06-2019 15:00", "received": false }
+                  ]
+                }
+                """.formatted(jsonEscaped(dir.resolve("IMG_001.jpg"))));
 
         assertThatThrownBy(() -> this.reader.readEntries(sidecar))
                 .isInstanceOf(MalformedPrepJsonException.class)

@@ -60,20 +60,25 @@ public interface MediaReader {
     boolean exists(Path path);
 
     /**
-     * The real, symlink- and junction-free form of path, when a directory actually sits there.
-     * Empty when nothing does, or when what does is not a directory.
+     * The real, symlink- and junction-free form of path, when a directory can be confirmed there.
+     * Empty when none can be.
      *
      * <p>One call answers both halves of checking a configured folder root. Whether it is there at
      * all, and what it really is once the filesystem has followed every name. Two roots configured
      * under different names that reach one directory come back equal here, which is what lets a
      * caller compare them as plain paths.
      *
-     * <p>Empty means nothing is there. It never means the filesystem refused to answer. A directory
-     * that is there and cannot be resolved throws instead. So a caller weighing whether a folder is
-     * usable is never handed a "no" it would read as an empty folder.
+     * <p>Empty means no directory could be confirmed there. Usually nothing is there. It can also
+     * mean the filesystem would not say what is: a permission denial on the way down, or a share
+     * that has gone away, both answer the same way as an absence. A caller cannot tell those apart
+     * from here.
+     *
+     * <p>The throw covers the narrower case where a directory was confirmed and then could not be
+     * resolved. So a throw does mean the filesystem refused to answer, while empty does not rule
+     * that out.
      *
      * @param path {@link Path} the path to resolve
-     * @return an {@link Optional} of {@link Path}, the real directory, or empty if there is none
+     * @return an {@link Optional} of {@link Path}, the real directory, or empty if none was confirmed
      * @throws UncheckedIOException if a directory is there and resolving it failed
      */
     Optional<Path> realDirectory(Path path);

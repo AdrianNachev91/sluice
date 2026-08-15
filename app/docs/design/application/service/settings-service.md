@@ -17,9 +17,14 @@ flowchart TD
     E -- refused --> Z1(["PathsMisconfiguredException -<br/>nothing written, nothing claimed"])
     E -- usable --> F["jobRunner.runIfIdle(...)<br/>holds the job slot shut"]
     F -- " job already running,<br/>or the slot did not<br/>come free in time " --> Z2(["JobInProgressException"])
+    F -- " the app is closing " --> Z3(["ShuttingDownException"])
     F -- " slot free " --> G["moveRoots<br/>(see section 3)"]
     G --> H["announceFolderRootsChange<br/>(see section 4)"]
 ```
+
+Only a save that moves a folder root can meet `ShuttingDownException`, because only that save asks
+the job runner for anything. A save changing a category or a grid takes the `C -- yes` branch and
+still goes through while the app is closing. Nothing it touches outlives the process.
 
 `requireUsableRoots` runs before the job slot rather than inside it, because it reads directories. A
 folder root on a stalled mount would otherwise cost every concurrent `Pipeline` caller its own wait
@@ -61,37 +66,62 @@ flowchart TD
     A["moveRoots(settings, previous)"] --> B{"does the candidate<br/>working root equal<br/>the one in force?"}
     B -- yes --> C["writeAndApply only -<br/>the library or inbox moved,<br/>nothing to reclaim"]
     B -- no --> D{"does the candidate<br/>settings name a<br/>working root at all?"}
-    D -- yes --> E["acquire the claim<br/>on the new root first"]
+    D -- yes --> E["acquire the new root,<br/>keeping the old one"]
     D -- no --> F["nothing to acquire"]
-    E --> G["writeAndApply"]
+    E --> G["writeAndApply -<br/>both roots held"]
     F --> G
-    G -- succeeds --> H{"did the candidate<br/>settings name no<br/>working root?"}
-    H -- yes --> I["release the claim -<br/>an unnamed root held<br/>would lock out every<br/>other Sluice for good"]
-    H -- no --> J(["done - claim already<br/>sits on the new root"])
-    G -- throws --> K["restoreClaim<br/>(see below)"]
-    K --> L(["failure rethrown"])
+    G -- succeeds --> H{"did the settings<br/>being replaced name<br/>a working root?"}
+    H -- yes --> I["release that root by name -<br/>a root nothing works in<br/>would lock out every<br/>other Sluice for good"]
+    H -- no --> J(["done - nothing<br/>was held to give up"])
+    G -- throws --> K["release the root<br/>this save claimed"]
+    K --> L(["failure rethrown -<br/>the old root was<br/>never let go"])
 ```
 
-The claim moves before the write, not after. A write that then fails still leaves this process
-holding the new root. `restoreClaim` puts that right: it re-acquires whatever root the settings still
-in force actually name, or releases outright when that answer is "none". Whatever goes wrong while
-restoring is reported as a suppressed exception on the save failure already on its way out, never in
+Both roots are held across the write. The new one is claimed first, the old one is given up by name
+only once the write has succeeded. So there is no moment where this process has stopped holding the
+root its own settings still name.
+
+That is what makes a failed save cost nothing. Nothing has to be taken back, so nothing can be
+refused: the only claim to undo is the one this save itself took. Another process cannot slip into a
+gap and leave this one holding neither root, because there is no gap. A refusal to give up the new
+claim is reported as a suppressed exception on the save failure already on its way out, never in
 place of it.
 
-Re-acquiring is a fresh claim rather than a rollback, and it can be refused. `acquire` gives the old
-root up as soon as it has taken the new one, so the old root sits unheld for the whole of the write.
-Another process starting up, or saving into that same root, can take it in that gap. The restore is
-then refused, and this process ends up holding neither root. It keeps running, with the settings in
-force naming a folder whose claim it has given up. Nothing re-tries it and nothing says so.
+The release on the success path is the mirror of that, and it cannot fail the save either. The
+settings have reached disk and are in force by then. Reporting a failure would tell the caller
+something untrue and leave it no step to retry. It would also skip the listeners below, leaving
+watchers armed for a root the app has moved off. So a refusal there is logged and the save stands.
 
-Giving the claim up is the deliberate half. Holding the new root instead would lock a folder nothing
-names for the life of the process, which is worse. What the loss costs is bounded by what the claim
-is worth. `WorkingRootLock` documents itself as a convenience rather than a safety device, and a CLI
-process never takes a claim at all. So the app continues in the state the command line runs in by
-design.
+One case is knowingly outside all of this: renaming or deleting a claimed folder on disk while the
+claim is live. The lock recognises a root by the path it resolves to, so one moved out from under
+its claim stops matching it. That claim is then held until the process ends.
+`FileChannelWorkingRootLock` records the cost where it keeps those claims.
 
-Whether it should instead notice it holds nothing, say so, and offer to take the root back is open.
-Nothing does any of that today, and nobody has ruled on whether it should.
+The reverse case is handled rather than accepted. Two paths this service reads as different roots can
+be one folder to the lock, which resolves symlinks and junctions where this service only normalises.
+A save between two such spellings acquires and releases what it believes are two roots. The lock
+counts holders per folder, so a process that already held the root it is moving off still holds it
+afterwards.
+
+That balance depends on the process having a holder to start with. One acquire and one release over
+one claim net out, so a save from zero holders ends at zero, and this service alone cannot do
+otherwise. What supplies the holder is startup. `StartupSequence` claims the working root whenever
+that root itself is usable, gated on it alone rather than on all three. An install still choosing
+its library or inbox therefore holds the folder it stages in, and an aliased save from it keeps that
+hold.
+
+Two processes still reach the zero-holder case, and neither loses protection it had. A command line
+holds nothing on the way in, having no startup sequence to claim in: the save below is the first
+thing that claims anything. A desktop whose working root was unusable at boot never claimed one, and
+stays at zero across every save that leaves the working root alone. If that root becomes
+usable and a later save re-spells it to an alias while the process still holds nothing, that save
+ends with the folder unheld. The session was already running unclaimed, so nothing is taken away.
+Recorded rather than closed. Closing it would mean this service knowing which two paths are one
+folder, and that is the lock's job rather than something a caller can ask it.
+
+A third way to hold nothing does not reach here at all. A startup claim that was refused, or that
+failed opening its marker, leaves the desktop on its failure screen rather than its main window. No
+settings save follows it in that session.
 
 ## 4. Telling folder-roots listeners
 
@@ -110,21 +140,24 @@ left to forward an `Error` to here, so a log line is the whole remedy.
 
 ## Scenarios
 
-| Scenario                                                             | Outcome                                                                          |
-|----------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| Candidate paths equal the settings in force                          | `writeAndApply` only - no job-slot wait, no root check, no lock touched          |
-| A category or grid setting changes, every folder root stays the same | Same as above - only a root move reaches the checks below                        |
-| A candidate root is left unset                                       | Legal - `NotConfigured` does not refuse a save                                   |
-| A candidate root names a path that does not exist                    | `PathsMisconfiguredException`, nothing written or claimed                        |
-| Two candidate roots would overlap                                    | `PathsMisconfiguredException`, nothing written or claimed                        |
-| The roots are usable and a job is currently running                  | `JobInProgressException` once the job-slot wait runs out                         |
-| The roots are unusable and a job is currently running                | `PathsMisconfiguredException` - the path refusal is checked first and wins       |
-| The working root moves to a folder no other Sluice holds             | Claim acquired on the new root before the write, released nowhere                |
-| The working root moves and the write then fails                      | Claim restored onto whatever root the settings still in force name, or released  |
-| The write fails, and another process took the old root in the gap    | Restore refused; neither root is held, and the app keeps running unclaimed       |
-| The settings name no working root where the previous ones did        | Write succeeds, then the claim is released - nothing should hold that folder now |
-| Only the library or inbox root moves, the working root does not      | No claim work at all - `writeAndApply` runs directly inside `moveRoots`          |
-| A folder-roots listener throws after the save reached disk           | Logged as a warning; the save is still reported as successful                    |
+| Scenario                                                             | Outcome                                                                      |
+|----------------------------------------------------------------------|------------------------------------------------------------------------------|
+| Candidate paths equal the settings in force                          | `writeAndApply` only - no job-slot wait, no root check, no lock touched      |
+| A category or grid setting changes, every folder root stays the same | Same as above - only a root move reaches the checks below                    |
+| A candidate root is left unset                                       | Legal - `NotConfigured` does not refuse a save                               |
+| A candidate root names a path that does not exist                    | `PathsMisconfiguredException`, nothing written or claimed                    |
+| Two candidate roots would overlap                                    | `PathsMisconfiguredException`, nothing written or claimed                    |
+| The roots are usable and a job is currently running                  | `JobInProgressException` once the job-slot wait runs out                     |
+| A folder root moves while the app is closing                         | `ShuttingDownException` - nothing written, nothing claimed                   |
+| A category or grid changes while the app is closing                  | Saved - it never asks the job runner, so nothing refuses it                  |
+| The roots are unusable and a job is currently running                | `PathsMisconfiguredException` - the path refusal is checked first and wins   |
+| The working root moves to a folder no other Sluice holds             | Both roots held across the write, then the old one released by name          |
+| The working root moves and the write then fails                      | Only the claim this save took is released; the old root was never let go     |
+| The write fails, and the release of the new claim is refused too     | Reported as a suppressed exception on the save failure, never in place of it |
+| The settings name no working root where the previous ones did        | Write succeeds, then the old claim is released - nothing should hold it now  |
+| Releasing the old root is refused after the write succeeded          | Logged as a warning; the save stands and the listeners still run             |
+| Only the library or inbox root moves, the working root does not      | No claim work at all - `writeAndApply` runs directly inside `moveRoots`      |
+| A folder-roots listener throws after the save reached disk           | Logged as a warning; the save is still reported as successful                |
 
 ## Related
 

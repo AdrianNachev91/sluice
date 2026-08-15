@@ -11,6 +11,7 @@ import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
+import photos.sluice.domain.paths.PathViolation.Overlap;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -59,6 +60,30 @@ class StartupSequenceTest {
         verifyNoInteractions(this.pipeline);
     }
 
+    @Test
+    void anotherRootLeftUnsetStopsTheHousekeepingButNotTheClaim(@TempDir final Path root) {
+        final var lock = mock(WorkingRootLock.class);
+        final var sequence = new StartupSequence(lock, paths(root), this.pipeline,
+                violating(new NotConfigured(PathRole.LIBRARY_ROOT)));
+
+        sequence.run();
+
+        verify(lock).acquire(root);
+        verifyNoInteractions(this.pipeline);
+    }
+
+    @Test
+    void overlappingRootsStopTheHousekeepingButNotTheClaim(@TempDir final Path root) {
+        final var lock = mock(WorkingRootLock.class);
+        final var sequence = new StartupSequence(lock, paths(root), this.pipeline,
+                violating(new Overlap(PathRole.REPO_ROOT, PathRole.INBOX)));
+
+        sequence.run();
+
+        verify(lock).acquire(root);
+        verifyNoInteractions(this.pipeline);
+    }
+
     // The sweep deletes and an armed watcher can auto-resume into an apply. A run that could not
     // claim the root must therefore stop before either, not merely report the refusal afterwards.
     @Test
@@ -82,7 +107,7 @@ class StartupSequenceTest {
         final var order = inOrder(this.pipeline, lock);
         order.verify(this.pipeline).stopAllWatching();
         order.verify(this.pipeline).stopAcceptingJobs(any());
-        order.verify(lock).release();
+        order.verify(lock).releaseAll();
     }
 
     @Test
@@ -94,7 +119,7 @@ class StartupSequenceTest {
         sequence.shutdown();
 
         verify(this.pipeline).stopAllWatching();
-        verify(lock, never()).release();
+        verify(lock, never()).releaseAll();
     }
 
     private static PathsPort paths(final Path root) {
@@ -128,7 +153,11 @@ class StartupSequenceTest {
         }
 
         @Override
-        public void release() {
+        public void release(final Path workingRoot) {
+        }
+
+        @Override
+        public void releaseAll() {
         }
     }
 

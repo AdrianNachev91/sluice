@@ -372,7 +372,7 @@ class AnthropicCuller implements VisionCuller {
      * @param montage {@link String} the montage name
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated on acceptance
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
-     * @param categoryNames a {@link List} of {@link String}, configured cull category names
+     * @param categoryNames a {@link List} of {@link String}, the cull category names this run recorded
      * @return boolean true if the existing shard is valid and was accepted
      */
     private boolean resumesExistingShard(final Path shardPath, final String montage,
@@ -398,7 +398,7 @@ class AnthropicCuller implements VisionCuller {
      * @param response {@link Message} the model's response to validate
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
-     * @param categoryNames a {@link List} of {@link String}, configured cull category names
+     * @param categoryNames a {@link List} of {@link String}, the cull category names this run recorded
      * @return {@link AttemptOutcome} the resulting shard, or the problems found
      */
     private AttemptOutcome attempt(final String montage, final List<SidecarPhotoEntry> entries, final Message response,
@@ -436,7 +436,7 @@ class AnthropicCuller implements VisionCuller {
      * @param shard {@link DecisionShard} the candidate shard to validate
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated by this call
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
-     * @param categoryNames a {@link List} of {@link String}, configured cull category names
+     * @param categoryNames a {@link List} of {@link String}, the cull category names this run recorded
      * @return a {@link List} of {@link String}, validation problems found, empty if the shard was accepted
      */
     private List<String> acceptIfValid(final String montage, final DecisionShard shard,

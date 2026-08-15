@@ -145,13 +145,22 @@ public class TieredSecretStore implements SecretStore {
     }
 
     /**
-     * Clears every writable tier that outranks the one just written to, so an older value cannot
-     * outrank the fresh one on the next read.
+     * Asks every writable tier that outranks the one just written to give up what it holds. An
+     * older value cannot then outrank the fresh one on the next read.
      *
-     * <p>Reached only after {@code target}'s own write has already succeeded. A session with no
-     * D-Bus can save through the file tier while the keyring above it still holds an older
-     * credential from an earlier session. Nothing on the desktop tells the two tiers apart, so the
-     * keyring would keep answering first once it is reachable again.
+     * <p>Reached only after {@code target}'s own write has already succeeded.
+     *
+     * <p>Best effort, and it cannot reach the case that motivates it. A tier outranks the target
+     * only by having answered {@code available()} false, or it would have taken the write itself.
+     * Every keyring tier returns quietly from an erase against a store it cannot reach, which is a
+     * trade {@link #remove} documents and this inherits. Take the headline case: a session with no
+     * D-Bus saves through the file tier, under a keyring still holding an older credential. The
+     * clear does nothing, the save reports success, and the keyring answers the older value again
+     * once it is reachable.
+     *
+     * <p>What this does catch is a store that answered as unreachable when the target was chosen
+     * and is reachable by the time its erase runs, then refuses that erase. Narrow, and reported
+     * through {@link #staleValueNotCleared} when it happens.
      *
      * <p>Every outranking tier is attempted even after one refuses, the same reasoning
      * {@link #remove} follows. Stopping at the first failure would leave a tier below it still

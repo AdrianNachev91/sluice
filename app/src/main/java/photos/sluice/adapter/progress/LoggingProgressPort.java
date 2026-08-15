@@ -14,8 +14,10 @@ import photos.sluice.application.port.out.ProgressPort;
  *
  * <p>Which means a second implementation cannot simply be added beside this one. Two candidates
  * make {@code Pipeline}'s injection ambiguous and the context fails to start, for any process that
- * builds one. A new reporter is therefore profile-exclusive against this one, or primary over it.
- * {@code CliProfileStartupTest} counts the registered ports, and is what fails if neither is done.
+ * builds one. A new reporter is therefore profile-exclusive against this one.
+ * {@code CliProfileStartupTest} counts the ports registered under the cli profile and requires
+ * exactly one, so it fails if that is not done. It counts registrations rather than resolutions,
+ * which is why marking a second one primary does not satisfy it.
  */
 @Component
 public class LoggingProgressPort implements ProgressPort {

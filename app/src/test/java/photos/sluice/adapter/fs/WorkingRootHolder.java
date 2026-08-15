@@ -26,6 +26,6 @@ public final class WorkingRootHolder {
         // done. Reading rather than sleeping holds the root for exactly as long as the test needs.
         //noinspection StatementWithEmptyBody -- waiting for the close is the point; any bytes sent are discarded
         while (System.in.read() != -1) {}
-        lock.release();
+        lock.releaseAll();
     }
 }

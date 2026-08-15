@@ -138,17 +138,27 @@ class SidecarReader {
      * cannot make a path out of. That leaves no unchecked escape route out of a caller's read-failure
      * handling, the same as every other unusable field here.
      *
+     * <p>A path naming a filesystem root and nothing else is refused for the same reason. It parses
+     * cleanly and has no file name at all, so every later step that asks for one gets nothing back.
+     *
      * @param src {@link String} the entry's src string
      * @param sidecarPath {@link Path} the sidecar's path, used only for error messages
      * @return {@link Path} the entry's source path
      */
     private static Path srcOf(final String src, final Path sidecarPath) {
+        final Path source;
         try {
-            return Path.of(src);
+            source = Path.of(src);
         } catch (final InvalidPathException e) {
             throw new MalformedPrepJsonException("Sidecar " + sidecarPath + " has an unusable src: " + src,
                     new IOException(e));
         }
+        if (source.getFileName() == null) {
+            throw new MalformedPrepJsonException(
+                    "Sidecar " + sidecarPath + " has a src naming a whole filesystem root rather than a file: " + src,
+                    new IOException("no file name"));
+        }
+        return source;
     }
 
     /**

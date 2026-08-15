@@ -61,9 +61,10 @@ final class PlatformKeyring {
      * with it, and every release is a fresh string. Windows 10, Windows Server 2022 and anything
      * later all read the same way here.
      *
-     * <p>Matched on the full word rather than the "win" substring the other checks would suggest.
-     * "Darwin", the JVM's own name for macOS's kernel, contains "win" too, and "win" alone would have
-     * misclassified it as Windows.
+     * <p>Matched on the full word rather than on "win". A shorter substring is the trap here:
+     * "Darwin", the name macOS's own tools print for its kernel, carries "win" inside it. Nothing
+     * guarantees a JVM never reports an OS name containing it, and reading one as Windows would
+     * route a save at the wrong platform's credential store.
      *
      * @param osName {@link String} the raw OS name (e.g. system property os.name)
      * @return boolean true when the name is a Windows one

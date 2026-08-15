@@ -193,17 +193,28 @@ class ShardCodec {
      * only the agent that wrote it can fix, so it is malformed content rather than an
      * {@link InvalidPathException} escaping as a caller's unhandled crash.
      *
+     * <p>A path naming a filesystem root and nothing else is refused the same way. It parses
+     * cleanly and has no file name at all, so every later step that asks for one gets nothing back.
+     * Refusing it here is what keeps that from surfacing as an unhandled crash further downstream.
+     *
      * @param value {@link String} the decision's raw file string, possibly null
      * @param shardPath {@link Path} the shard's own path, used only for the error message
      * @return {@link Path} the decision's file path
      */
     private static Path decisionFile(final @Nullable String value, final Path shardPath) {
+        final Path file;
         try {
-            return Path.of(orEmpty(value));
+            file = Path.of(orEmpty(value));
         } catch (final InvalidPathException e) {
             throw new MalformedPrepJsonException("Shard " + shardPath + " names an unusable file: " + value,
                     new IOException(e));
         }
+        if (file.getFileName() == null) {
+            throw new MalformedPrepJsonException(
+                    "Shard " + shardPath + " names a whole filesystem root rather than a file: " + value,
+                    new IOException("no file name"));
+        }
+        return file;
     }
 
     /**

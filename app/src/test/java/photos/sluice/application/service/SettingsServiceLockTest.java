@@ -35,8 +35,8 @@ class SettingsServiceLockTest {
 
     @AfterEach
     void releaseClaims() {
-        this.lock.release();
-        this.otherProcess.release();
+        this.lock.releaseAll();
+        this.otherProcess.releaseAll();
     }
 
     @Test
@@ -93,16 +93,16 @@ class SettingsServiceLockTest {
         assertThat(service.settings().paths().libraryRoot()).isEqualTo(library.toString());
     }
 
-    // Counting releases proves one happened, not which folder it let go of. Against the real lock,
-    // what the next process can open is the answer.
+    // The fake in SettingsServiceTest proves the service asks for the right things in the right
+    // order. Only the real lock proves the folder is genuinely unavailable to anybody else for the
+    // whole of the write, which is the property the ordering exists to produce.
     @Test
-    void aSaveThatCannotTakeTheOldRootBackLeavesTheNewOneOpen(
+    void anotherProcessIsRefusedTheOldRootThroughoutAFailingSave(
             @TempDir final Path before, @TempDir final Path after) {
         final LiveSettings live = new SettingsHolder(settings(before));
         final SettingsStore store = _ -> {
-            // The old folder taken by somebody else while this save was mid-write, which is what
-            // makes taking it back impossible.
-            this.otherProcess.acquire(before);
+            assertThatThrownBy(() -> this.otherProcess.acquire(before))
+                    .isInstanceOf(WorkingRootBusyException.class);
             throw new IllegalStateException("disk full");
         };
         final var service = settingsService(live, store, this.lock);
@@ -110,6 +110,8 @@ class SettingsServiceLockTest {
 
         assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(IllegalStateException.class);
 
+        // Still ours afterwards, and the folder the save reached for is free again.
+        assertThatThrownBy(() -> this.otherProcess.acquire(before)).isInstanceOf(WorkingRootBusyException.class);
         assertThatCode(() -> new FileChannelWorkingRootLock().acquire(after)).doesNotThrowAnyException();
     }
 

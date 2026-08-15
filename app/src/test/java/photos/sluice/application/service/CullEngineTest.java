@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingCancellableCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingIncompleteCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
@@ -488,6 +489,35 @@ class CullEngineTest {
         assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
         assertThat(progress.events).noneMatch(event -> event.startsWith("started:Culling"));
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+    }
+
+    // A resume carries a prep dir its caller chose earlier, and the folder roots can move in
+    // between. The run here is complete and would otherwise apply, so the refusal is what stops it
+    // rather than anything missing from the prep dir. Nothing is read and nothing moves, so the run
+    // stays exactly as it was and pointing the working root back at it makes it resumable again.
+    @Test
+    void resumeRefusesARunOutsideTheWorkingRootInForce(@TempDir final Path root, @TempDir final Path movedTo)
+            throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var preparing = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) preparing.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        final var moved = cullPipeline(movedTo, new RecordingProgressPort());
+
+        final JobHandle<CullJobOutcome> refused = moved.resume(prepDir, false);
+
+        assertThatThrownBy(refused::join)
+                .isInstanceOf(CompletionException.class)
+                .cause()
+                // A surface needs the refused run to name it and offer a way back. Carrying it is
+                // what saves that surface parsing it back out of the message.
+                .asInstanceOf(type(Pipeline.RunOutsideWorkingRootException.class))
+                .extracting(Pipeline.RunOutsideWorkingRootException::prepDir)
+                .isEqualTo(prepDir);
+        assertThat(Files.exists(photo)).isTrue();
+        assertThat(prepDir.resolve("decisions.json")).doesNotExist();
     }
 
     // The one fresh cull that skips dispatch. A scope with nothing reviewable in it still writes a
