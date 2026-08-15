@@ -84,10 +84,14 @@ Another process starting up, or saving into that same root, can take it in that 
 then refused, and this process ends up holding neither root. It keeps running, with the settings in
 force naming a folder whose claim it has given up. Nothing re-tries it and nothing says so.
 
-That is deliberate rather than unnoticed. Holding the new root instead would lock a folder nothing
-names for the life of the process. What the loss costs is bounded by what the claim is worth.
-`WorkingRootLock` documents itself as a convenience rather than a safety device, and a CLI process
-never takes a claim at all. So the app continues in the state the command line runs in by design.
+Giving the claim up is the deliberate half. Holding the new root instead would lock a folder nothing
+names for the life of the process, which is worse. What the loss costs is bounded by what the claim
+is worth. `WorkingRootLock` documents itself as a convenience rather than a safety device, and a CLI
+process never takes a claim at all. So the app continues in the state the command line runs in by
+design.
+
+Whether it should instead notice it holds nothing, say so, and offer to take the root back is open.
+Nothing does any of that today, and nobody has ruled on whether it should.
 
 ## 4. Telling folder-roots listeners
 
