@@ -7,8 +7,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import photos.sluice.SluiceApplication;
-import photos.sluice.adapter.ui.StartupFailurePresenter;
 import photos.sluice.adapter.ui.StartupSequence;
+import photos.sluice.adapter.ui.UiBootstrap;
 
 /**
  * The desktop window's own lifecycle, wrapped around the Spring context it needs.
@@ -59,7 +59,7 @@ public class SluiceFxApplication extends Application {
         final Throwable startupFailure = this.failure;
         final Scene scene = startupFailure == null
                 ? MainWindow.scene()
-                : StartupFailureWindow.scene(new StartupFailurePresenter(startupFailure));
+                : StartupFailureWindow.scene(UiBootstrap.reportAndPresent(startupFailure));
         stage.setTitle("Sluice");
         stage.getIcons().setAll(BrandMark.icons());
         stage.setScene(scene);

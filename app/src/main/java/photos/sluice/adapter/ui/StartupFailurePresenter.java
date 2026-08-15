@@ -1,9 +1,13 @@
 package photos.sluice.adapter.ui;
 
+import photos.sluice.application.startup.StartupFailure;
+import photos.sluice.application.startup.StartupFailure.RejectedSetting;
+import photos.sluice.application.startup.StartupFailure.Unclassified;
+import photos.sluice.application.startup.StartupFailure.UnparsableConfigFile;
+import photos.sluice.application.startup.StartupFailure.WorkingRootBusy;
+
 /**
- * Turns a startup failure into the two strings the failure window shows. Bean wiring reports its
- * problems several layers deep, so the message worth reading is rarely the one thrown at the top.
- * Which layer it is takes a rule, and {@link #detail()} owns that rule.
+ * Turns a classified startup failure into the two strings the failure window shows.
  *
  * <p>A presenter rather than a view: deciding what to show is a decision, and a decision is
  * something a test can hold to account.
@@ -11,21 +15,19 @@ package photos.sluice.adapter.ui;
 public class StartupFailurePresenter {
 
     private static final String HEADLINE = "Sluice could not start.";
-    private static final String NO_DETAIL = "No further detail was reported.";
+    private static final String BUSY = "Another Sluice process is already running: close it and try again.";
+    private static final String REJECTED_SETTING = "Sluice could not use the setting ";
+    private static final String UNPARSABLE_CONFIG = "Sluice could not read your settings file.";
+    private static final String GENERIC = "Sluice hit a problem it has no explanation for.";
 
-    // Deep enough that a real wiring failure reaches its own end long first. A longer chain is read
-    // down to here and no further. That costs the tail of something already unreadable, and buys
-    // termination on a chain that loops.
-    private static final int MAX_CAUSE_DEPTH = 100;
-
-    private final Throwable failure;
+    private final StartupFailure failure;
 
     /**
      * Creates the presenter over the failure that stopped startup.
      *
-     * @param failure {@link Throwable} the failure raised while starting
+     * @param failure {@link StartupFailure} what stopped the app starting
      */
-    public StartupFailurePresenter(final Throwable failure) {
+    public StartupFailurePresenter(final StartupFailure failure) {
         this.failure = failure;
     }
 
@@ -39,37 +41,20 @@ public class StartupFailurePresenter {
     }
 
     /**
-     * What went wrong, taken from the deepest cause that actually says something. A configuration
-     * problem states itself in words a person can act on, while the wrappers above it only say
-     * which bean failed.
+     * What went wrong. Each failure says as much as this app actually knows about it, and the one
+     * it knows nothing about says that instead.
      *
-     * <p>Depth alone is the wrong rule. The innermost failure is often a technical one carrying no
-     * message at all, and taking it would throw away the sentence somebody wrote to be read.
-     *
-     * <p>Falls back to naming the failure's own type when nothing in the chain carries a message,
-     * so the window is never blank. The walk is bounded, so a chain that loops back on itself
-     * cannot hang the one window whose job is to explain why nothing else works.
+     * <p>Switched over every case rather than defaulted, so a failure added later cannot take the
+     * last sentence with nobody deciding it should.
      *
      * @return {@link String} the detail line
      */
     public String detail() {
-        String deepestMessage = null;
-        Throwable current = this.failure;
-        Throwable deepest = this.failure;
-        // Bounded rather than walked to the end. A cause chain that loops back on itself would
-        // otherwise hang the one window whose whole job is to explain why nothing else works.
-        int remaining = MAX_CAUSE_DEPTH;
-        while (current != null && remaining-- > 0) {
-            final String message = current.getMessage();
-            if (message != null && !message.isBlank()) {
-                deepestMessage = message;
-            }
-            deepest = current;
-            current = current.getCause();
-        }
-        if (deepestMessage == null) {
-            return deepest.getClass().getSimpleName() + ". " + NO_DETAIL;
-        }
-        return deepestMessage;
+        return switch (this.failure) {
+            case final WorkingRootBusy _ -> BUSY;
+            case final RejectedSetting rejected -> REJECTED_SETTING + rejected.property() + ".";
+            case final UnparsableConfigFile _ -> UNPARSABLE_CONFIG;
+            case final Unclassified _ -> GENERIC;
+        };
     }
 }

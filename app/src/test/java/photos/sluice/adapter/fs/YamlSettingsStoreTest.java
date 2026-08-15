@@ -69,12 +69,13 @@ class YamlSettingsStoreTest {
     @Test
     void everySaveWritesThroughATemporaryNameOfItsOwn(@TempDir final Path dir) {
         final Path file = dir.resolve("config.yml");
-        final var store = new RecordingTemporaryStore(file);
+        final var document = new RecordingTemporaryDocument(file);
+        final var store = new YamlSettingsStore(document);
 
         store.save(settings());
         store.save(settings());
 
-        assertThat(store.written).hasSize(2).doesNotHaveDuplicates().doesNotContain(file)
+        assertThat(document.written).hasSize(2).doesNotHaveDuplicates().doesNotContain(file)
                 .allSatisfy(temporary -> assertThat(temporary.getParent()).isEqualTo(dir));
     }
 
@@ -85,7 +86,7 @@ class YamlSettingsStoreTest {
         final String original = "sluice:\n  cull:\n    provider: manual\n";
         Files.writeString(file, original);
 
-        assertThatThrownBy(() -> new FailingWriteStore(file).save(settings()))
+        assertThatThrownBy(() -> new YamlSettingsStore(new FailingWriteDocument(file)).save(settings()))
                 .isInstanceOf(UncheckedIOException.class);
 
         assertThat(Files.readString(file)).isEqualTo(original);
@@ -297,33 +298,19 @@ class YamlSettingsStoreTest {
 
     // Names the file each save worked through. A successful save moves that file away, so nothing
     // left on disk afterwards can say which name was used.
-    private static final class RecordingTemporaryStore extends YamlSettingsStore {
+    private static final class RecordingTemporaryDocument extends YamlConfigFile {
 
         private final List<Path> written = new ArrayList<>();
 
-        private RecordingTemporaryStore(final Path configFile) {
+        private RecordingTemporaryDocument(final Path configFile) {
             super(configFile);
         }
 
         @Override
-        void dump(final Path file, final Map<String, Object> document) throws IOException {
-            this.written.add(file);
-            super.dump(file, document);
+        void dump(final Path target, final Map<String, Object> document) throws IOException {
+            this.written.add(target);
+            super.dump(target, document);
         }
     }
 
-    // Fails the write after the temporary file exists, so the cleanup runs against a real leftover
-    // rather than against nothing. Thrown as IOException, the type the cleanup is attached to.
-    private static final class FailingWriteStore extends YamlSettingsStore {
-
-        private FailingWriteStore(final Path configFile) {
-            super(configFile);
-        }
-
-        @Override
-        void dump(final Path file, final Map<String, Object> document) throws IOException {
-            super.dump(file, document);
-            throw new IOException("the volume stopped responding part-way through the write");
-        }
-    }
 }

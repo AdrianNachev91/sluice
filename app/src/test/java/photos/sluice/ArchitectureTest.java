@@ -139,6 +139,21 @@ class ArchitectureTest {
                     .should().dependOnClassesThat().belongToAnyOf(LiveSettings.class)
                     .as("adapters must not depend on LiveSettings; save through the settings use case instead");
 
+    // A view constructs controls, binds them to presenter state and forwards events. It decides
+    // nothing. Everywhere else in this codebase tests and review are two independent nets. In
+    // adapter/ui/view they fail together, since that package sits outside the coverage gate, so
+    // logic drifting there is untested and lightly reviewed at once. A view handed only
+    // display-ready strings and observable properties has nothing left to branch on, format, sort
+    // or round. This catches the half of that shaped like an import. A view sorting a list it was
+    // handed still needs a reader to spot it.
+    @ArchTest
+    static final ArchRule viewsDecideNothing =
+            noClasses().that().resideInAPackage("..adapter.ui.view..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "photos.sluice.domain..", "photos.sluice.application..")
+                    .as("adapter/ui/view must not depend on domain or application; a presenter hands it "
+                            + "display-ready values");
+
     @ArchTest
     static final ArchRule adapterSubpackagesDoNotReachIntoLooseAdapterClasses =
             noClasses().that().resideInAPackage("..adapter.*..")

@@ -9,12 +9,15 @@ import javafx.scene.paint.Color;
 import javafx.scene.paint.Paint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.jspecify.annotations.Nullable;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.fs.FileChannelWorkingRootLock;
+import photos.sluice.adapter.ui.UiBootstrap;
+import photos.sluice.config.UiLauncher;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -37,6 +40,19 @@ class SluiceFxApplicationTest {
     @BeforeAll
     static void registerPrimaryStage() throws Exception {
         FxToolkit.registerPrimaryStage();
+    }
+
+    // The toolkit builds the window class itself, so what the real launcher installs before calling
+    // it has to be installed here too. Without it the failure window falls back to saying nothing
+    // about which failure it met, so a test asserting the busy-root sentence could not fail.
+    @BeforeEach
+    void installWhatTheLauncherWould(@TempDir final Path configDir) {
+        UiLauncher.install(configDir.resolve("config.yml"));
+    }
+
+    @AfterEach
+    void forgetWhatWasInstalled() {
+        UiBootstrap.clear();
     }
 
     @AfterEach
