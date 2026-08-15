@@ -3,7 +3,9 @@ package photos.sluice.adapter.ui;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.Timeout.ThreadMode;
+import photos.sluice.application.port.out.WorkingRootBusyException;
 
+import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,12 +46,11 @@ class StartupFailurePresenterTest {
     // showing is on the outer failure, and the cause underneath it says nothing at all.
     @Test
     void detailKeepsAnAuthoredMessageOverADeeperCauseThatSaysNothing() {
-        final var wrapped = new IllegalStateException("Another Sluice process is already using D:\\Photos.",
-                new IllegalStateException());
+        final var wrapped = new WorkingRootBusyException(Path.of("any-root"), new IllegalStateException());
 
         final var presenter = new StartupFailurePresenter(wrapped);
 
-        assertThat(presenter.detail()).isEqualTo("Another Sluice process is already using D:\\Photos.");
+        assertThat(presenter.detail()).isEqualTo(wrapped.getMessage());
     }
 
     // A failure with no message would otherwise render an empty window, which says less than the

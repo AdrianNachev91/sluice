@@ -61,6 +61,7 @@ public class SluiceFxApplication extends Application {
                 ? MainWindow.scene()
                 : StartupFailureWindow.scene(new StartupFailurePresenter(startupFailure));
         stage.setTitle("Sluice");
+        stage.getIcons().setAll(BrandMark.icons());
         stage.setScene(scene);
         stage.show();
     }

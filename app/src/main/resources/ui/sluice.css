@@ -2,17 +2,46 @@
  * The base stylesheet every Sluice window inherits. Appearance lives here rather than in the Java.
  * A taste change is then an edit and a re-run, with nothing new to read in a view class.
  *
+ * The palette below is the website's, value for value. The app and the page it is downloaded from
+ * are the same product, and a visitor should not have to be told so.
+ *
  * One rule holds across every screen: nothing sizes to a fixed pixel width. Layouts size to their
  * content, and a control that holds text grows with the text in it. Text length is not a constant.
  * The same sentence runs roughly a third longer in German, and copy gets rewritten on taste alone.
  * A label sized to fit its English string breaks the first time either happens. Spacing, padding
- * and font sizes are fine to pin. Widths of things holding words are not.
+ * and font sizes are fine to pin. Widths of things holding words are not. A graphic is not a thing
+ * holding words, so the brand mark below is sized outright.
+ *
+ * A maximum width is the one exception, and it is not the thing the rule guards against. Longer
+ * text under a maximum wraps and the layout grows taller, which is what a reader wants. Prose run
+ * across a wide window is hard to read, and the website caps its own measure for that reason.
  */
 
+/* The colours. Named by the job each one does rather than by its value, which is what lets one set
+   of rules below serve both looks. A card is lighter than its ground in one and darker in the
+   other, and no rule below has to know that.
+
+   The first eight are the theme's, and the dark sheet redefines every one of them. The mark's two
+   are the brand's, and it redefines neither: the product mark holds the same green and the same
+   white wherever it is drawn, so that the one in a window matches the one on the taskbar and the
+   one on the website. The theme's accent is a separate colour that lightens for the dark ground,
+   and is what a control sitting on it would use. */
 .root {
+    -sluice-bg: #ffffff;
+    -sluice-surface: #ffffff;
+    -sluice-ground: #f4f5f7;
+    -sluice-text: #1a1d21;
+    -sluice-text-muted: #5a6270;
+    -sluice-border: #dfe2e7;
+    -sluice-accent: #2f6f4f;
+    -sluice-accent-fg: #ffffff;
+
+    -sluice-mark-bg: #2f6f4f;
+    -sluice-mark-glyph: #ffffff;
+
     -fx-font-family: "Segoe UI", "SF Pro Text", "Ubuntu", "Helvetica Neue", sans-serif;
     -fx-font-size: 13px;
-    -fx-background-color: #fbfbfd;
+    -fx-background-color: -sluice-bg;
 }
 
 /* Every screen's outer container. Padding only, so the screen fills whatever space it is given. */
@@ -20,18 +49,88 @@
     -fx-padding: 24px;
 }
 
-.failure-screen {
-    -fx-spacing: 12px;
+/* A panel of related content, raised off the screen behind it by its ground and its border only.
+   The website builds its sections the same way and reaches for no shadow either. */
+.card {
+    -fx-background-color: -sluice-surface;
+    -fx-background-radius: 8px;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-padding: 32px;
+    -fx-spacing: 10px;
+}
+
+/* The small uppercase label above a heading, naming what the heading is about. Carried over from
+   the website. The capitals are typed into the text, as no stylesheet property here can apply them.
+   The padding is what sets it apart from whatever sits above; the gap to its own heading stays the
+   layout's, because the two are one unit. */
+.eyebrow {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-padding: 10px 0 0 0;
+}
+
+/* The mark and the name, laid out as the website's own header lays them out. */
+.brand {
+    -fx-spacing: 9px;
     -fx-alignment: center-left;
 }
 
-.failure-headline {
-    -fx-font-size: 18px;
+/* The product mark as it sits inside a window. Its colours are the brand's, so this is the same
+   mark the taskbar and the website show. Only its proportions differ: the droplet is smaller in
+   its square here than the favicon draws it. */
+.brand-mark {
+    -fx-background-color: -sluice-mark-bg;
+    -fx-background-radius: 6px;
+    -fx-min-width: 26px;
+    -fx-min-height: 26px;
+    -fx-max-width: 26px;
+    -fx-max-height: 26px;
+}
+
+.brand-mark-glyph {
+    -fx-fill: -sluice-mark-glyph;
+}
+
+.brand-name {
+    -fx-font-size: 17px;
     -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+/* The failure screen sits on the alternate ground so its card reads as a card. Centered, because
+   there is nothing else on the screen to sit beside. */
+.failure-screen {
+    -fx-background-color: -sluice-ground;
+    -fx-alignment: center;
+    -fx-padding: 48px;
+}
+
+/* Held to a readable measure rather than run the width of the window. See the note at the top on
+   why a maximum is not the pinned width that note rules out. */
+.failure-card {
+    -fx-max-width: 620px;
+}
+
+.failure-headline {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
 }
 
 /* Wraps rather than truncates. The text is whatever the failure said, at whatever length. */
 .failure-detail {
-    -fx-text-fill: #4a4a55;
+    -fx-text-fill: -sluice-text-muted;
     -fx-wrap-text: true;
+    -fx-line-spacing: 3px;
+    -fx-padding: 4px 0 0 0;
+}
+
+/* The line between the brand row and what the card has to say. A separator draws through an inner
+   node, so the colour has to be set there. */
+.card-rule > .line {
+    -fx-border-color: -sluice-border;
+    -fx-border-width: 1px 0 0 0;
 }

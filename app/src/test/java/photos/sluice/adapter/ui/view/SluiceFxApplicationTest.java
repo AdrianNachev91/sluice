@@ -4,6 +4,9 @@ import javafx.application.Application;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
+import javafx.scene.layout.Region;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.Paint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -91,7 +94,15 @@ class SluiceFxApplicationTest {
             this.startApplication(repoRoot, libraryRoot, inbox);
 
             assertThat(styleClassesOfRoot()).contains("failure-screen");
-            assertThat(failureDetail()).contains("Another Sluice process is already using");
+            assertThat(failureDetail()).contains("Another Sluice process is already running");
+            // A node inside the separator draws the line, not the separator. A stylesheet rule
+            // naming only the separator parses and colours nothing, leaving the default look's own
+            // near-white line.
+            final Paint ruleColour = onFxThread(() -> {
+                final var line = (Region) scene().getRoot().lookup(".card-rule .line");
+                return line.getBorder().getStrokes().getFirst().getTopStroke();
+            });
+            assertThat(ruleColour).isEqualTo(Color.web("#dfe2e7"));
         } finally {
             holder.releaseAll();
         }
@@ -119,6 +130,19 @@ class SluiceFxApplicationTest {
 
         assertThat(onFxThread(() -> scene().getStylesheets()))
                 .anyMatch(sheet -> sheet.endsWith("/ui/sluice.css"));
+    }
+
+    // Loading the files and handing them to the window are separate steps, and only the second one
+    // is what a desktop reads. A platform given none of them shows its own default and reports
+    // nothing, so the window looks like any other program's.
+    @Test
+    void theWindowCarriesTheProductIcon(@TempDir final Path repoRoot, @TempDir final Path libraryRoot,
+                                        @TempDir final Path inbox) throws Exception {
+        this.startApplication(repoRoot, libraryRoot, inbox);
+
+        assertThat(onFxThread(() -> FxToolkit.toolkitContext().getRegisteredStage().getIcons()))
+                .isNotEmpty()
+                .allSatisfy(icon -> assertThat(icon.isError()).isFalse());
     }
 
     private void startApplication(final Path repoRoot, final Path libraryRoot, final Path inbox) throws Exception {
