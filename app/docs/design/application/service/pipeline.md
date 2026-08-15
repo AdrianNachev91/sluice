@@ -30,6 +30,20 @@ boundary in time. Nothing forces it to stop, and process exit is what ends one t
 Those two are the only entry points that run no root check. Neither resolves a path, and an install
 whose roots are unusable has to be able to close as cleanly as one whose roots are fine.
 
+Every other public method opens with the same call before it resolves a single path:
+`RootsGuard.requireUsable()`. That is `sort`, `commit`, `rescue`, `cull`, `curate`, `resume`,
+`cullRuns`, `startWatching`, `stopWatching`, `armWatchesForResumableRuns`,
+`sweepExpiredDisasterDrawers`, `troubleshoot`, `purgeCompleted`, and `discard` - fourteen in all.
+`RootsGuard` reads `PathValidationUseCase.violationsInForce()` and
+throws `PathsMisconfiguredException` (an `IllegalStateException`) the moment the list is non-empty:
+any of the three roots unset, unparsable, missing, unreadable, or overlapping another. A fresh
+install with
+nothing configured meets this on every one of those fourteen calls until its first run is set up.
+`CullEngine.resume` runs the identical check on its own, since a watcher's auto-resume reaches it
+without passing through `Pipeline` at all - see `cull-engine.md`. `SettingsService.save` runs a
+narrower version of the same question, admitting an unset root where these fourteen do not - see
+`settings-service.md`.
+
 ## How one call works
 
 ```mermaid
@@ -101,6 +115,10 @@ for the watcher it disarms.
 
 ## Related
 
+- `RootsGuard`'s check, `PathValidationUseCase`, and its implementation: `path-validation-service.md`
+  in this same design folder.
+- `SettingsService`, the other caller of that same use case, admitting an unset root where these
+  fourteen do not: `settings-service.md` in this same design folder.
 - `cull-engine.md`: `CullEngine` - `cull()`/`resume()`, scope occupancy, cancellation, and watch mode.
 - `prep-dir-doctor.md`: `PrepDirDoctor` - `runs()` behind `cullRuns()`, and `purgeCompleted()`.
 - `curate-engine.md`: `CurateEngine` - `curate()`, and the `Pipeline.CurateConflictException` type it throws.

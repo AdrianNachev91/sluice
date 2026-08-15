@@ -28,9 +28,12 @@ import java.util.Map;
  *
  * <p>The file sits under the logs directory of whichever working root is configured, and is
  * resolved on every call rather than once. This index is what authorizes deleting an Inbox file as
- * a copy that is already safe. A snapshot taken at startup would keep answering for the old library
- * after a user pointed Sluice at a different one. The file it vouched for would then never arrive
- * in the new one.
+ * a copy that is already safe. A snapshot taken at startup would keep answering for the old working
+ * root after a user pointed Sluice at a different one.
+ *
+ * <p>Per-call resolution only closes that half. The rows it holds still name paths under whichever
+ * library root was configured when each was written. A later library-root move leaves them pointing
+ * at the old location. Nothing here re-keys them; that is a future move-flow's job.
  */
 @Component
 public class CsvLibraryHashIndex implements HashIndexPort {
