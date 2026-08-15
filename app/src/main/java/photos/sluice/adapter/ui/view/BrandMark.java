@@ -15,8 +15,9 @@ import java.util.List;
  * white, which the stylesheet holds outside the two looks so that a dark desktop does not show one
  * version of the mark in the window and another on the taskbar.
  *
- * <p>The shape itself originates on the website, where the same path draws the favicon. Nothing
- * checks that the copies agree.
+ * <p>The shape itself originates on the website, where the same path draws both the favicon and the
+ * sharing image. Nothing checks that the three copies agree, and each side regenerates its own
+ * images with its own tool.
  */
 final class BrandMark {
 

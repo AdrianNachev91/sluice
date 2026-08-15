@@ -3,7 +3,8 @@
  * A taste change is then an edit and a re-run, with nothing new to read in a view class.
  *
  * The palette below is the website's, value for value. The app and the page it is downloaded from
- * are the same product, and a visitor should not have to be told so.
+ * are the same product, and a visitor should not have to be told so. The site's own sheet is where
+ * these originate, and nothing checks that the two still agree.
  *
  * One rule holds across every screen: nothing sizes to a fixed pixel width. Layouts size to their
  * content, and a control that holds text grows with the text in it. Text length is not a constant.
