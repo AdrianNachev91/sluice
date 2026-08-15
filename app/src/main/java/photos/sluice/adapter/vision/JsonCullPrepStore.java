@@ -101,7 +101,8 @@ public class JsonCullPrepStore implements CullPrepPort {
      * source is the directory the index was read from. The file's own claim about where it lives is
      * not that. An index written by an older build still carries the key, and it is ignored.
      */
-    private record RawIndex(String scope, @Nullable List<@Nullable RawCategory> categories, String basePath, int photos,
+    private record RawIndex(@Nullable String scope, @Nullable List<@Nullable RawCategory> categories,
+                            @Nullable String basePath, int photos,
                             @Nullable List<String> unreviewable, int montages,
                             @Nullable List<String> entries) {
     }
@@ -156,7 +157,7 @@ public class JsonCullPrepStore implements CullPrepPort {
         final List<String> entries = raw.entries() == null
                 ? List.of()
                 : montageIds(withoutNulls(raw.entries(), "entries", path), path);
-        return new PrepDir(raw.scope(), requiredCategories(raw.categories(), path),
+        return new PrepDir(requiredText(raw.scope(), "scope", path), requiredCategories(raw.categories(), path),
                 requiredPath(raw.basePath(), "basePath", path), raw.photos(),
                 unreviewable.stream().map(entry -> requiredPath(entry, "an unreviewable entry", path)).toList(),
                 raw.montages(), prepDir, entries);
@@ -365,6 +366,24 @@ public class JsonCullPrepStore implements CullPrepPort {
                     new IOException("null " + field + " entry"));
         }
         return values;
+    }
+
+    /**
+     * Requires a JSON string field to carry a value. Nothing downstream refuses a null one. It
+     * reaches log lines, a refusal message and an automated provider's prompt as the word
+     * {@code null}. The read is the only place left to call an absent value malformed.
+     *
+     * @param value {@link String} the raw field value, possibly null
+     * @param field {@link String} the field's name, used only for the error message
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return {@link String} the field's value
+     */
+    private static String requiredText(final @Nullable String value, final String field, final Path indexPath) {
+        if (value == null) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a null " + field,
+                    new IOException("null " + field));
+        }
+        return value;
     }
 
     /**

@@ -362,6 +362,25 @@ class JsonCullPrepStoreTest {
     }
 
     @Test
+    void readIndexOnANullScopeThrowsMalformedPrepJsonException(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                {
+                  "scope": null,
+                  "categories": [
+                    { "name": "junk", "description": "objectively worthless" }
+                  ],
+                  "basePath": "%s",
+                  "photos": 0,
+                  "montages": 0
+                }
+                """.formatted(jsonEscaped(dir.resolve("base"))));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("scope");
+    }
+
+    @Test
     void readIndexAnswersTheDirectoryItWasReadFromRatherThanTheOneTheFileNames(
             @TempDir final Path dir, @TempDir final Path elsewhere) throws IOException {
         Files.writeString(dir.resolve("index.json"), """
@@ -475,7 +494,7 @@ class JsonCullPrepStoreTest {
     }
 
     // readShardFile() is readShard()'s sibling for a stray shard, whose own filename names no real
-    // montage - so it reads by the file's own path directly, rather than a montage-derived name.
+    // montage. So it reads by the file's own path directly, rather than a montage-derived name.
     @Test
     void readShardFileReadsBackAShardByItsOwnPath(@TempDir final Path dir) {
         final var shard = new DecisionShard("montage-002", List.of(

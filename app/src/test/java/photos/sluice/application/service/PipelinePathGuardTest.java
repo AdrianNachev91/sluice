@@ -10,6 +10,7 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +47,18 @@ class PipelinePathGuardTest {
                 .isInstanceOfSatisfying(PathsMisconfiguredException.class, e ->
                         assertThat(e.violations())
                                 .containsExactly(new NotADirectory(PathRole.LIBRARY_ROOT, library)));
+    }
+
+    // The scenario PipelineSurfaceTest's root-check exemption is argued from. The refusal asserted
+    // first is the control: a fixture whose roots were fine would prove nothing about an exemption.
+    // Nothing is running here, so the answer below says only that the call was let through.
+    @Test
+    void theExitPathIsNotRefusedOnceAFolderRootHasGone(@TempDir final Path root) throws IOException {
+        final Pipeline pipeline = pipeline(root, this.progress);
+        Files.delete(root.resolve("Library"));
+        assertThatThrownBy(pipeline::cullRuns).isInstanceOf(PathsMisconfiguredException.class);
+
+        assertThat(pipeline.stopAcceptingJobs(Duration.ofSeconds(5))).isTrue();
     }
 
     // The check reads the roots on every call rather than at construction. That is what lets the app

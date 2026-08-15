@@ -17,12 +17,12 @@ class MalformedSettingsExceptionTest {
     }
 
     @Test
-    void itSitsOutsideTheRefusalFamily() {
+    void aMalformedSettingsFileIsNotAnIllegalStateException() {
         assertThat(new MalformedSettingsException(CONFIG, "broken")).isNotInstanceOf(IllegalStateException.class);
     }
 
     @Test
-    void itIsNotAnIoFailureEither() {
+    void aMalformedSettingsFileIsNotAnIoFailure() {
         assertThat(new MalformedSettingsException(CONFIG, "broken")).isNotInstanceOf(UncheckedIOException.class);
     }
 

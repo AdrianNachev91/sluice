@@ -14,12 +14,12 @@ class MissingCredentialExceptionTest {
     }
 
     @Test
-    void itJoinsTheRefusalFamily() {
+    void aMissingCredentialIsAnIllegalStateException() {
         assertThat(new MissingCredentialException(ID, "no key")).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
-    void itIsNotAStoreFailure() {
+    void aMissingCredentialIsNotAStoreFailure() {
         assertThat(new MissingCredentialException(ID, "no key")).isNotInstanceOf(SecretStoreException.class);
     }
 }

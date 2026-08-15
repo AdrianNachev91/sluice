@@ -64,6 +64,12 @@ class PathsMisconfiguredExceptionTest {
         assertThat(exception.getMessage()).contains("sluice.paths.repo-root", "sluice.paths.inbox");
     }
 
+    @Test
+    void anUnusableRootsRefusalIsAnIllegalStateException() {
+        assertThat(new PathsMisconfiguredException(List.of(new NotConfigured(PathRole.INBOX))))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     // The typed list is the contract a screen reads. The message is only what a log gets.
     @Test
     void theViolationsAreCarriedThroughAsValues() {

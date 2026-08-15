@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathSettings;
@@ -24,6 +25,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -538,6 +540,35 @@ class SettingsServiceTest {
         assertThat(live.current().provider()).isEqualTo("anthropic");
     }
 
+    @Test
+    void movingAFolderRootIsRefusedWhileTheAppIsClosing(@TempDir final Path before, @TempDir final Path after) {
+        final var live = new RecordingLive(settings(before));
+        final var store = new RecordingStore();
+        final var lock = lockHolding(before);
+        final var service = settingsService(live, store, lock, shutRunner());
+
+        assertThatThrownBy(() -> service.save(settings(after))).isInstanceOf(ShuttingDownException.class);
+
+        assertThat(store.saved).isEmpty();
+        assertThat(live.current()).isEqualTo(settings(before));
+        // The one claim this process started with, still held. A save that got past the refusal
+        // would have taken a second one before writing.
+        assertThat(lock.claimed).containsExactly(before.toAbsolutePath().normalize());
+        assertThat(lock.released).isEmpty();
+    }
+
+    @Test
+    void everySettingBesideTheFolderRootsIsStillSavedWhileTheAppIsClosing(@TempDir final Path root) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var service = settingsService(live, store, new RecordingLock(), shutRunner());
+
+        service.save(withProvider(settings(root), "anthropic"));
+
+        assertThat(store.saved).containsExactly(withProvider(settings(root), "anthropic"));
+        assertThat(live.current().provider()).isEqualTo("anthropic");
+    }
+
     // The gate has to hold the job slot shut, not read it and then act. A watcher polling a prep
     // dir starts jobs from its own thread. A save that only asked whether one was running could be
     // overtaken between the question and the answer landing.
@@ -708,6 +739,12 @@ class SettingsServiceTest {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
+    }
+
+    private static JobRunner shutRunner() {
+        final var jobRunner = new JobRunner();
+        jobRunner.shutdown(Duration.ZERO);
+        return jobRunner;
     }
 
     private static SettingsService settingsService(final LiveSettings live, final SettingsStore store,
