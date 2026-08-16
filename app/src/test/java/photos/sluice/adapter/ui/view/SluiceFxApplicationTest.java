@@ -4,6 +4,7 @@ import javafx.application.Application;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.Paint;
@@ -13,12 +14,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.jspecify.annotations.Nullable;
+import org.testfx.api.FxRobot;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.fs.FileChannelWorkingRootLock;
 import photos.sluice.adapter.ui.UiBootstrap;
 import photos.sluice.config.UiLauncher;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -36,6 +39,7 @@ class SluiceFxApplicationTest {
     private static final int TIMEOUT_SECONDS = 60;
 
     private @Nullable Application application;
+    private @Nullable Path configFile;
 
     @BeforeAll
     static void registerPrimaryStage() throws Exception {
@@ -47,7 +51,8 @@ class SluiceFxApplicationTest {
     // about which failure it met, so a test asserting the busy-root sentence could not fail.
     @BeforeEach
     void installWhatTheLauncherWould(@TempDir final Path configDir) {
-        UiLauncher.install(configDir.resolve("config.yml"));
+        this.configFile = configDir.resolve("config.yml");
+        UiLauncher.install(this.configFile);
     }
 
     @AfterEach
@@ -71,10 +76,42 @@ class SluiceFxApplicationTest {
                                           @TempDir final Path inbox) throws Exception {
         this.startApplication(repoRoot, libraryRoot, inbox);
 
-        assertThat(styleClassesOfRoot()).contains("screen").doesNotContain("failure-screen");
+        assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
         // Starting is also where the app takes the working root. Nothing else proves the real lock
         // runs on the real startup path rather than only in its own unit tests.
         assertThat(repoRoot.resolve(".sluice-lock")).exists();
+    }
+
+    @Test
+    void aConfiguredInstallShowsTheOrdinaryDashboardRatherThanTheWelcomeCard(
+            @TempDir final Path repoRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox)
+            throws Exception {
+        this.startApplication(repoRoot, libraryRoot, inbox);
+
+        assertThat(nodeExists(".welcome-card")).isFalse();
+        assertThat(paneHeadingText()).isEqualTo("Dashboard");
+    }
+
+    @Test
+    void clickingASidebarEntrySwitchesTheVisiblePane(@TempDir final Path repoRoot,
+                                                      @TempDir final Path libraryRoot,
+                                                      @TempDir final Path inbox) throws Exception {
+        this.startApplication(repoRoot, libraryRoot, inbox);
+
+        new FxRobot().clickOn("#nav-settings");
+
+        assertThat(paneHeadingText()).isEqualTo("Settings");
+    }
+
+    @Test
+    void clickingTheAlreadySelectedEntryLeavesItSelected(@TempDir final Path repoRoot,
+                                                          @TempDir final Path libraryRoot,
+                                                          @TempDir final Path inbox) throws Exception {
+        this.startApplication(repoRoot, libraryRoot, inbox);
+
+        new FxRobot().clickOn("#nav-dashboard");
+
+        assertThat(isSelected("#nav-dashboard")).isTrue();
     }
 
     // Closing the app has to hand the root back, or a restart would be refused by the copy that
@@ -124,6 +161,63 @@ class SluiceFxApplicationTest {
         }
     }
 
+    // Releasing the other holder before the click is what lets the button reach a real second
+    // attempt, rather than proving only that a redraw redraws.
+    @Test
+    void theBusyRootCardsRetryButtonSwapsToTheShellOnceTheOtherProcessLetsGo(
+            @TempDir final Path repoRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox)
+            throws Exception {
+        final var holder = new FileChannelWorkingRootLock();
+        holder.acquire(repoRoot);
+        this.startApplication(repoRoot, libraryRoot, inbox);
+        assertThat(styleClassesOfRoot()).contains("failure-screen");
+        holder.releaseAll();
+
+        new FxRobot().clickOn("#retry-button");
+
+        assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
+    }
+
+    // Nothing else is configured here. The welcome card is the fixture's own choice of outcome,
+    // not a given.
+    @Test
+    void theConfigCardsRemoveButtonDeletesTheBadKeyAndRetryingSucceeds() throws Exception {
+        Files.writeString(this.configFileOrFail(), """
+                sluice:
+                  montage:
+                    tile-size: many
+                """);
+
+        this.startApplication("--spring.config.import=optional:file:" + this.configFileOrFail());
+        assertThat(styleClassesOfRoot()).contains("failure-screen");
+        assertThat(nodeExists("#remove-setting-button")).isTrue();
+
+        new FxRobot().clickOn("#remove-setting-button");
+
+        assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
+        assertThat(nodeExists(".welcome-card")).isTrue();
+        assertThat(Files.readString(this.configFileOrFail())).doesNotContain("tile-size");
+    }
+
+    @Test
+    void theConfigCardsStartFreshButtonSetsTheFileAsideAndRetryingSucceeds() throws Exception {
+        Files.writeString(this.configFileOrFail(), """
+                sluice:
+                  montage:
+                    tile-size: [1, 2
+                """);
+
+        this.startApplication("--spring.config.import=optional:file:" + this.configFileOrFail());
+        assertThat(styleClassesOfRoot()).contains("failure-screen");
+        assertThat(nodeExists("#set-aside-button")).isTrue();
+
+        new FxRobot().clickOn("#set-aside-button");
+
+        assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
+        assertThat(nodeExists(".welcome-card")).isTrue();
+        assertThat(this.configFileOrFail()).doesNotExist();
+    }
+
     // A machine where nobody has chosen a folder yet is the ordinary first launch, not a failure.
     // The app comes up, and what it can do about it is the first-run flow rather than a stack trace.
     //
@@ -134,7 +228,8 @@ class SluiceFxApplicationTest {
     void anUnconfiguredInstallOpensItsWindowRatherThanAFailure() throws Exception {
         this.startApplication();
 
-        assertThat(styleClassesOfRoot()).contains("screen").doesNotContain("failure-screen");
+        assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
+        assertThat(nodeExists(".welcome-card")).isTrue();
     }
 
     // The stylesheet is loaded off the classpath, so it can be present in source and absent from
@@ -187,6 +282,32 @@ class SluiceFxApplicationTest {
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("no .failure-detail label in the window"));
         });
+    }
+
+    private static String paneHeadingText() throws Exception {
+        return onFxThread(() -> {
+            final Parent root = scene().getRoot();
+            return root.lookupAll(".pane-heading").stream()
+                    .map(node -> ((Label) node).getText())
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("no .pane-heading label in the window"));
+        });
+    }
+
+    private static boolean nodeExists(final String selector) throws Exception {
+        return onFxThread(() -> scene().getRoot().lookup(selector) != null);
+    }
+
+    private static boolean isSelected(final String selector) throws Exception {
+        return onFxThread(() -> ((ToggleButton) scene().getRoot().lookup(selector)).isSelected());
+    }
+
+    private Path configFileOrFail() {
+        final Path file = this.configFile;
+        if (file == null) {
+            throw new IllegalStateException("installWhatTheLauncherWould did not run");
+        }
+        return file;
     }
 
     private static <T> T onFxThread(final Callable<T> read) throws Exception {

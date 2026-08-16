@@ -7,6 +7,8 @@ import photos.sluice.application.port.out.ConfigFileRepairPort;
 import photos.sluice.application.startup.StartupFailure.Unclassified;
 import photos.sluice.application.startup.StartupFailureClassifier;
 
+import java.nio.file.Path;
+
 /**
  * What the desktop window needs before a Spring context exists, and cannot be handed on the way in.
  *
@@ -73,9 +75,38 @@ public final class UiBootstrap {
     }
 
     /**
+     * Takes one setting out of the user's config file, through whatever repair was installed.
+     *
+     * <p>Wraps {@link ConfigFileRepairPort} rather than handing it out, so the window that offers
+     * this button never has to name the port type itself.
+     *
+     * @param property {@link String} the setting, dotted as config binding names it
+     * @return boolean true when the file was rewritten, false when no repair was installed or the
+     *     file held no such setting
+     */
+    public static boolean removeSetting(final String property) {
+        final ConfigFileRepairPort installed = repair;
+        return installed != null && installed.removeSetting(property);
+    }
+
+    /**
+     * Renames the user's config file aside, through whatever repair was installed.
+     *
+     * @return {@link Path} where the file was moved to
+     * @throws IllegalStateException if no repair was installed
+     */
+    public static Path setAside() {
+        final ConfigFileRepairPort installed = repair;
+        if (installed == null) {
+            throw new IllegalStateException("No config file repair was installed");
+        }
+        return installed.setAside();
+    }
+
+    /**
      * Forgets what was installed. Here so a harness sharing one process can put this back as it
-     * found it. What is installed outlives the window it was installed for, so a test leaving its
-     * own classifier behind is what lets the next one pass without installing anything.
+     * found it. What is installed outlives the window it was installed for. A test leaving its own
+     * classifier behind is what lets the next one pass without installing anything.
      */
     public static void clear() {
         classifier = null;

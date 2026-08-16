@@ -56,7 +56,7 @@ class UiLauncherTest {
     void launchingInstallsWhatTheWindowNeedsIfStartupFails(@TempDir final Path dir) {
         UiLauncher.install(dir.resolve("config.yml"));
 
-        assertThat(UiBootstrap.reportAndPresent(new WorkingRootBusyException(dir)).detail())
+        assertThat(UiBootstrap.reportAndPresent(new WorkingRootBusyException(dir)).card().detail())
                 .contains("Another Sluice process is already running");
     }
 

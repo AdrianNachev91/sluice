@@ -22,11 +22,12 @@
    of rules below serve both looks. A card is lighter than its ground in one and darker in the
    other, and no rule below has to know that.
 
-   The first eight are the theme's, and the dark sheet redefines every one of them. The mark's two
+   The first seven are the theme's, and the dark sheet redefines every one of them. The mark's two
    are the brand's, and it redefines neither: the product mark holds the same green and the same
    white wherever it is drawn, so that the one in a window matches the one on the taskbar and the
-   one on the website. The theme's accent is a separate colour that lightens for the dark ground,
-   and is what a control sitting on it would use. */
+   one on the website. Buttons carry the mark's colours too, for the same reason. The theme's
+   accent is what a control sitting on the ground still needs to vary by look, and lightens for the
+   dark one. */
 .root {
     -sluice-bg: #ffffff;
     -sluice-surface: #ffffff;
@@ -35,7 +36,6 @@
     -sluice-text-muted: #5a6270;
     -sluice-border: #dfe2e7;
     -sluice-accent: #2f6f4f;
-    -sluice-accent-fg: #ffffff;
 
     -sluice-mark-bg: #2f6f4f;
     -sluice-mark-glyph: #ffffff;
@@ -129,9 +129,195 @@
     -fx-padding: 4px 0 0 0;
 }
 
+/* Everything a failure card says once it has named the problem: the spot, a snippet, a button,
+   the trace row. One VBox of its own inside the card, so it needs its own spacing. */
+.failure-body {
+    -fx-spacing: 10px;
+}
+
 /* The line between the brand row and what the card has to say. A separator draws through an inner
    node, so the colour has to be set there. */
 .card-rule > .line {
     -fx-border-color: -sluice-border;
     -fx-border-width: 1px 0 0 0;
+}
+
+/* A raised action, for whatever the current screen most wants pressed: retrying, repairing,
+   starting a job later on. Plain text otherwise, so a page of buttons does not read as a page of
+   equally loud shouting. Carries the mark's own fixed colour rather than the theme's accent, so a
+   button reads the same in both looks. */
+.button {
+    -fx-background-color: -sluice-mark-bg;
+    -fx-background-radius: 6px;
+    -fx-text-fill: -sluice-mark-glyph;
+    -fx-font-weight: bold;
+    -fx-padding: 8px 16px;
+    -fx-cursor: hand;
+}
+
+.button:hover {
+    -fx-opacity: 0.9;
+}
+
+/* The window's own outer container: sidebar and whatever screen is showing, edge to edge. Padding
+   belongs to the pieces inside it, not to this. */
+.shell {
+    -fx-background-color: -sluice-bg;
+}
+
+/* Where the current screen actually draws. Padded the same way .screen is, since this replaces it
+   as the outer container once a sidebar exists. */
+.shell-content {
+    -fx-padding: 24px;
+}
+
+/* The three destinations, stacked down the left edge. Its own ground sets it apart from the
+   content beside it, the way a card sets itself apart from the screen behind it. */
+.sidebar {
+    -fx-background-color: -sluice-ground;
+    -fx-border-color: -sluice-border;
+    -fx-border-width: 0 1px 0 0;
+    -fx-padding: 16px 8px;
+    -fx-spacing: 4px;
+    -fx-min-width: 180px;
+}
+
+/* One destination. Plain until selected, and left-aligned and full width, the way a nav entry
+   reads everywhere else. */
+.nav-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6px;
+    -fx-text-fill: -sluice-text;
+    -fx-font-weight: normal;
+    -fx-alignment: center-left;
+    -fx-padding: 10px 12px;
+    -fx-max-width: infinity;
+    -fx-cursor: hand;
+}
+
+.nav-item:hover {
+    -fx-background-color: -sluice-surface;
+}
+
+/* :selected is JavaFX's own pseudo-class, carried by ToggleButton among others, not a web one. The
+   IDE's CSS inspection does not know the JavaFX dialect. */
+/*noinspection CssInvalidPseudoSelector*/
+.nav-item:selected {
+    -fx-background-color: -sluice-surface;
+    -fx-text-fill: -sluice-accent;
+    -fx-font-weight: bold;
+}
+
+/* A heading and nothing else, whatever screen it belongs to. */
+.pane-heading {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+.placeholder-pane {
+    -fx-spacing: 10px;
+}
+
+/* The card a fresh install opens on. Same family as .card, so it reads as the same kind of thing
+   as the failure card, just carrying better news. */
+.welcome-card {
+    -fx-max-width: 620px;
+}
+
+.welcome-headline {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+    -fx-wrap-text: true;
+}
+
+/* The card's own eyebrow, in the brand's own fixed green rather than the muted grey every other
+   eyebrow uses, since this is the one card the app wants to read as an invitation rather than a
+   status line. */
+.welcome-eyebrow {
+    -fx-text-fill: -sluice-mark-bg;
+}
+
+/* A TextFlow rather than a Label, so one word within the sentence can carry its own colour. Only
+   the flow's own layout properties belong here; a Text run's colour is its own style class. */
+.welcome-detail {
+    -fx-line-spacing: 3px;
+}
+
+.welcome-detail-text {
+    -fx-fill: -sluice-text-muted;
+}
+
+/* Settings is the one word in this sentence that names a real destination, so it reads in the
+   brand's own green rather than blending into the muted sentence around it. */
+.welcome-detail-highlight {
+    -fx-fill: -sluice-mark-bg;
+    -fx-font-weight: bold;
+}
+
+/* Where a rejected or unparsable value sits: the file, and the line and column where either is
+   known. Set apart from the sentence above it by weight rather than colour, since it is still
+   something the user reads rather than a secondary note. */
+.failure-spot {
+    -fx-font-family: "Cascadia Mono", "Consolas", "Menlo", monospace;
+    -fx-text-fill: -sluice-text;
+    -fx-padding: 4px 0 0 0;
+}
+
+/* The parser's own sentence, for a file that will not parse at all. Quoted rather than styled as
+   this app's own copy, since it is not: it is what snakeyaml reported. */
+.failure-snippet {
+    -fx-font-family: "Cascadia Mono", "Consolas", "Menlo", monospace;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-padding: 4px 0 0 0;
+}
+
+/* The disclosure and Copy, side by side rather than one nested in the other, so Copy works without
+   opening the trace first. */
+.trace-row {
+    -fx-spacing: 8px;
+    -fx-alignment: top-left;
+    -fx-padding: 8px 0 0 0;
+}
+
+.trace-disclosure {
+    -fx-text-fill: -sluice-text-muted;
+}
+
+/* JavaFX's default control chrome is unthemed, so a plain TitledPane reads as a stray light
+   widget on the dark look. Both regions get the same treatment every other panel here does. */
+.trace-disclosure > .title {
+    -fx-background-color: -sluice-ground;
+    -fx-background-radius: 4px;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 4px;
+    -fx-border-width: 1px;
+}
+
+.trace-disclosure > .content {
+    -fx-background-color: -sluice-surface;
+    -fx-border-color: -sluice-border;
+    -fx-border-width: 0 1px 1px 1px;
+}
+
+/* The trace itself, once the disclosure is open. Monospace and read-only, so it renders the way a
+   stack trace is meant to be read and cannot be edited by an accidental keystroke. */
+.trace-text {
+    -fx-font-family: "Cascadia Mono", "Consolas", "Menlo", monospace;
+    -fx-font-size: 11px;
+    -fx-pref-height: 240px;
+    -fx-text-fill: -sluice-text;
+}
+
+.trace-text .content {
+    -fx-background-color: -sluice-surface;
+}
+
+.trace-text .scroll-bar:horizontal, .trace-text .scroll-bar:vertical {
+    -fx-background-color: -sluice-surface;
+}
+
+.trace-text .scroll-bar .thumb {
+    -fx-background-color: -sluice-border;
 }

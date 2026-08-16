@@ -5,13 +5,13 @@
  *
  * These are the website's dark values, the same way the base sheet carries its light ones.
  *
- * Two of them read oddly beside their light counterparts, and both are deliberate. A raised surface
- * is lighter than the ground it sits on here, where in the light sheet it is the ground that is the
- * darker of the two. And the accent foreground is near-black, because white on the lighter accent
- * this look uses does not clear the contrast bar that the darker one does.
+ * One reads oddly beside its light counterpart, and it is deliberate. A raised surface is lighter
+ * than the ground it sits on here, where in the light sheet it is the ground that is the darker of
+ * the two.
  *
  * The mark's two colours are absent on purpose. They are the brand's rather than the theme's, and
- * hold the same values in both looks.
+ * hold the same values in both looks. Buttons carry those same two colours now, so they are absent
+ * for the same reason.
  */
 
 .root {
@@ -22,5 +22,4 @@
     -sluice-text-muted: #a2a9b4;
     -sluice-border: #2c3038;
     -sluice-accent: #4fae7d;
-    -sluice-accent-fg: #14161a;
 }
