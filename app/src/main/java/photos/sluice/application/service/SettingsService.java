@@ -4,12 +4,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.PathSettings;
+import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
+import photos.sluice.application.port.out.SettingsSources;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
 import photos.sluice.application.port.out.WorkingRootLock;
@@ -72,6 +75,7 @@ public class SettingsService implements SettingsUseCase {
     private final WorkingRootLock workingRootLock;
     private final JobRunner jobRunner;
     private final PathValidationUseCase pathValidation;
+    private final SettingsSources settingsSources;
     private final List<FolderRootsChangeListener> folderRootsListeners;
 
     /**
@@ -83,18 +87,21 @@ public class SettingsService implements SettingsUseCase {
      * @param jobRunner {@link JobRunner} says whether a job is running
      * @param pathValidation {@link PathValidationUseCase} checks folder roots a save would put in
      *         force
+     * @param settingsSources {@link SettingsSources} says what outranks the user's config file
      * @param folderRootsListeners a {@link List} of {@link FolderRootsChangeListener} told once a
      *         save has moved any folder root, empty in a process that wants none
      */
     public SettingsService(final LiveSettings live, final SettingsStore store,
                            final WorkingRootLock workingRootLock, final JobRunner jobRunner,
                            final PathValidationUseCase pathValidation,
+                           final SettingsSources settingsSources,
                            final List<FolderRootsChangeListener> folderRootsListeners) {
         this.live = live;
         this.store = store;
         this.workingRootLock = workingRootLock;
         this.jobRunner = jobRunner;
         this.pathValidation = pathValidation;
+        this.settingsSources = settingsSources;
         this.folderRootsListeners = List.copyOf(folderRootsListeners);
     }
 
@@ -106,6 +113,17 @@ public class SettingsService implements SettingsUseCase {
     @Override
     public Settings settings() {
         return this.live.current();
+    }
+
+    /**
+     * What supplies the given setting from above the user's config file.
+     *
+     * @param property {@link String} the property name, as the app spells it in its own config file
+     * @return an {@link Optional} of {@link SettingOverride} what supplies it from above
+     */
+    @Override
+    public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+        return this.settingsSources.overriddenAboveTheConfigFile(property);
     }
 
     /**
@@ -122,6 +140,7 @@ public class SettingsService implements SettingsUseCase {
                 return;
             }
             this.requireUsableRoots(settings.paths());
+            requireTheLibraryRootStaysPut(settings, previous);
             final boolean workingRootMoved = !workingRoot(settings).equals(workingRoot(previous));
             if (!this.jobRunner.runIfIdle(() -> {
                 this.moveRoots(settings, previous);
@@ -131,6 +150,113 @@ public class SettingsService implements SettingsUseCase {
                         "Sluice is running a job. Finish the current run before changing where its folders are.");
             }
         }
+    }
+
+    /**
+     * Moves the library root, for a caller already holding the job slot.
+     *
+     * <p>Package-private, and the one way past the refusal above. What it leaves out is the job
+     * gate, because {@link LibraryRootMoveService} is running as the job. Asking for the slot again
+     * would be asking itself. Everything the gate protects is still true: no other job can start
+     * while that one runs.
+     *
+     * <p>Takes the folder rather than a whole settings value. That is what keeps a move honest
+     * across the time one takes. Everything else is read from the settings in force at this moment,
+     * so a category saved while a library was copying is still there afterwards.
+     *
+     * <p>No claim is taken or given up. The working root is whatever was already in force, so there
+     * is no root to move a claim between.
+     *
+     * @param newLibraryRoot {@link Path} the folder the library moves to
+     * @throws PathsMisconfiguredException if that folder cannot be worked in beside the other roots
+     */
+    void saveMovingTheLibraryRoot(final Path newLibraryRoot) {
+        synchronized (this.saves) {
+            final Settings moved = this.withLibraryRootAt(newLibraryRoot);
+            this.requireUsableRoots(moved.paths());
+            this.writeAndApply(moved);
+            // False by construction rather than computed: this cannot be the save that moves it.
+            this.announceFolderRootsChange(false);
+        }
+    }
+
+    /**
+     * Refuses a library root that cannot be worked in, without saving anything.
+     *
+     * <p>For a caller about to spend a long time preparing the move. It can be told now rather than
+     * after a library has been copied. The save above checks again against the settings in force at
+     * that moment, which is what actually guarantees it. This one is the courtesy.
+     *
+     * @param newLibraryRoot {@link Path} the folder the library would move to
+     * @throws PathsMisconfiguredException if that folder cannot be worked in beside the other roots
+     */
+    void requireLibraryRootIsUsable(final Path newLibraryRoot) {
+        this.requireUsableRoots(this.withLibraryRootAt(newLibraryRoot).paths());
+    }
+
+    /**
+     * The settings in force with the library root replaced, and every other value left as it is.
+     *
+     * <p>Built from the settings in force rather than from a value a caller passed earlier. A
+     * library copy takes as long as a library is big. Anything saved while it ran would otherwise
+     * be written back as it was before it started.
+     *
+     * @param newLibraryRoot {@link Path} the folder the library moves to
+     * @return {@link Settings} the settings this move would put in force
+     */
+    private Settings withLibraryRootAt(final Path newLibraryRoot) {
+        final Settings current = this.live.current();
+        final PathSettings paths = current.paths();
+        return new Settings(new PathSettings(paths.repoRoot(), newLibraryRoot.toString(), paths.inbox()),
+                current.provider(), current.providerSettings(), current.categories(),
+                current.externalAgent(), current.montage());
+    }
+
+    /**
+     * Refuses a plain save that would move the library root away from a folder already configured.
+     *
+     * <p>Moving it strands the hash index on the old library, and that index is what authorizes
+     * deleting an Inbox file as already safe. There is no answer to that a caller can be assumed to
+     * want, so the seam asks for one rather than choosing. Naming no folder at all is refused the
+     * same way. Otherwise a clear followed by a set would be two permitted saves adding up to the
+     * move this refuses.
+     *
+     * <p>An install that has never had a library root is not moving one. Nothing is stranded and
+     * the index is empty, so a first run saves through here like any other setting.
+     *
+     * <p>Runs after the roots are checked, on the same reasoning that puts that check ahead of the
+     * job gate. An unusable folder names a value the user can go and correct, and it is the same
+     * answer whatever else is also true. Which flow a usable move belongs in is the next question,
+     * not the first one.
+     *
+     * @param settings {@link Settings} the settings this save would put in force
+     * @param previous {@link Settings} the settings running now
+     * @throws LibraryRootMoveNeedsAResolutionException when a configured library root would change
+     */
+    private static void requireTheLibraryRootStaysPut(final Settings settings, final Settings previous) {
+        final Optional<Path> was = libraryRoot(previous);
+        if (was.isEmpty() || was.equals(libraryRoot(settings))) {
+            return;
+        }
+        throw new LibraryRootMoveNeedsAResolutionException(
+                "Moving the library away from " + was.get() + " leaves Sluice's record of what it holds behind."
+                        + " Say whether to copy the library across or start that record fresh.");
+    }
+
+    /**
+     * The library root the given settings name, as the folder a move is judged against.
+     *
+     * <p>Resolved rather than compared as text, the same way the working root is. Two spellings of
+     * one folder are not a move. Asking a user to state a resolution for one would be asking about
+     * a library that is not going anywhere.
+     *
+     * @param settings {@link Settings} the settings to read the library root from
+     * @return an {@link Optional} of {@link Path} the library root, empty when none is configured
+     */
+    private static Optional<Path> libraryRoot(final Settings settings) {
+        return Optional.ofNullable(settings.paths().libraryRoot())
+                .filter(libraryRoot -> !libraryRoot.isBlank())
+                .map(libraryRoot -> Path.of(libraryRoot).toAbsolutePath().normalize());
     }
 
     /**
@@ -196,8 +322,8 @@ public class SettingsService implements SettingsUseCase {
         final Optional<Path> movingTo = workingRoot(settings);
         final Optional<Path> heldUntilNow = workingRoot(previous);
         if (movingTo.equals(heldUntilNow)) {
-            // The library or the inbox moved and the working root stayed put, so there is no claim
-            // to move. The job gate still applied above, since a run reads all three.
+            // The inbox moved and the working root stayed put, so there is no claim to move. The job
+            // gate still applied above, since a run reads all three roots.
             this.writeAndApply(settings);
             return;
         }
@@ -217,10 +343,15 @@ public class SettingsService implements SettingsUseCase {
     /**
      * Tells every listener a folder root has moved.
      *
-     * <p>Runs with the job slot still held shut, which is what makes it worth the delay it costs
-     * every waiting {@code submit}. A listener re-arms watchers, and arming is skipped while a job
-     * runs. Announced after the slot was free, a watcher armed under the old root could take that
-     * slot in between. The re-arm would then silently do nothing for the life of the process.
+     * <p>Called from {@link #save} with the job slot still held shut, which is what makes it worth
+     * the delay it costs every waiting {@code submit}. A listener re-arms watchers, and arming is
+     * skipped while a job runs. Announced after the slot was free, a watcher armed under the old
+     * root could take that slot in between. The re-arm would then silently do nothing for the life
+     * of the process.
+     *
+     * <p>{@link #saveMovingTheLibraryRoot} is the opposite case and needs none of that. It runs as
+     * the job, so a listener's arming step self-skips. Nothing is owed: only the library root moved,
+     * every prep dir is where it was, and the watchers polling them were never stranded.
      *
      * <p>That delay is real and this is the widest {@link JobRunner#runIfIdle} gets stretched. A
      * listener surveys every run on disk. So folder roots on a slow or stalled network mount make a

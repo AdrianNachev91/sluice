@@ -35,10 +35,11 @@ interface SecretTier {
     boolean holds(SecretId id);
 
     /**
-     * How a settings screen names this tier once it has answered.
+     * How a settings screen names this tier, whether or not it holds anything. A screen listing
+     * every tier has to name one that answered nothing, and one that would not answer at all.
      *
-     * @param id {@link SecretId} the credential that was read, for tiers whose wording carries it
-     * @return {@link SecretStatus} this tier's status variant
+     * @param id {@link SecretId} the credential being reported on, for tiers whose wording carries it
+     * @return {@link SecretStatus.Location} this tier's place
      */
-    SecretStatus statusWhenAnswering(SecretId id);
+    SecretStatus.Location location(SecretId id);
 }

@@ -6,10 +6,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SecretStoreException;
+import photos.sluice.application.port.out.StaleSecretNotClearedException;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -20,6 +22,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assumptions.assumeThat;
+import static photos.sluice.application.port.out.SecretHolding.Holding.COULD_NOT_BE_ASKED;
+import static photos.sluice.application.port.out.SecretHolding.Holding.EMPTY;
+import static photos.sluice.application.port.out.SecretHolding.Holding.HOLDS;
 
 // The tiers are fakes rather than the real ones on purpose. This class decides which tier each
 // operation reaches, and a real file tier would answer that question with disk state instead.
@@ -173,7 +178,7 @@ class TieredSecretStoreTest {
             final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
 
             assertThatThrownBy(() -> store.save(ANTHROPIC, "fresh"))
-                    .isInstanceOf(SecretStoreException.class)
+                    .isInstanceOf(StaleSecretNotClearedException.class)
                     .hasMessageContaining("anthropic")
                     .satisfies(thrown -> assertThat(thrown.getSuppressed()).hasSize(1))
                     .satisfies(thrown -> assertThat(((SecretStoreException) thrown).tier())
@@ -226,11 +231,133 @@ class TieredSecretStoreTest {
 
             assertThatThrownBy(() -> store.save(ANTHROPIC, "fresh"))
                     .isInstanceOf(SecretStoreException.class)
-                    .hasMessageContaining("anthropic")
                     // No single tier failed here, and a surface wording the failure must not name
                     // one. The tier field is what it branches on, so the field is the claim.
                     .satisfies(thrown -> assertThat(((SecretStoreException) thrown).tier())
-                            .isEqualTo(SecretStoreException.Tier.STORE));
+                            .isEqualTo(SecretStoreException.Tier.STORE))
+                    // Both failures arrive as STORE, and the row has to say opposite things for
+                    // them: enter a key, against the key is saved. Only the type separates them.
+                    .isNotInstanceOf(StaleSecretNotClearedException.class)
+                    .hasMessageContaining("anthropic");
+        }
+    }
+
+    @Nested
+    class WhereASaveWouldStoreIt {
+
+        @Test
+        void namesTheKeyringWhenThisMachineOffersOne() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, true, null);
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
+
+            assertThat(store.whereASaveWouldStoreIt()).contains(new SecretStatus.InKeyring());
+        }
+
+        @Test
+        void namesTheFileWhenTheKeyringCannotBeUsedHere() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, false, null);
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
+
+            assertThat(store.whereASaveWouldStoreIt()).contains(new SecretStatus.InFile());
+        }
+
+        @Test
+        void namesNowhereWhenNoTierCanBeUsedHere() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, false, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring);
+
+            assertThat(store.whereASaveWouldStoreIt()).isEmpty();
+        }
+
+        // Restated rather than shared, the routing would be two copies of one rule. This is the
+        // assertion that fails when they drift.
+        @Test
+        void namesTheTierTheSaveThenWritesTo() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, false, null);
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
+
+            final SecretStatus promised = store.whereASaveWouldStoreIt().orElseThrow();
+            store.save(ANTHROPIC, "fresh");
+
+            assertThat(file.written).containsExactly("fresh");
+            assertThat(promised).isEqualTo(new SecretStatus.InFile());
+        }
+
+        @Test
+        void isUnchangedByAnEnvironmentVariableHoldingOne() {
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore overridden =
+                    tieredSecretStore(environmentTier("from-environment"), file);
+            final SecretStore plain = tieredSecretStore(environmentTier(null),
+                    writableTier(SecretTierKind.FILE, 0, true, null));
+
+            assertThat(overridden.whereASaveWouldStoreIt())
+                    .isEqualTo(plain.whereASaveWouldStoreIt())
+                    .contains(new SecretStatus.InFile());
+        }
+    }
+
+    @Nested
+    class Holdings {
+
+        @Test
+        void reportsEveryTierInReadOrder() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, true, "from-keyring");
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store =
+                    tieredSecretStore(environmentTier("from-environment"), keyring, file);
+
+            assertThat(store.holdings(ANTHROPIC)).containsExactly(
+                    new SecretHolding(new SecretStatus.InEnvironment("ANTHROPIC_API_KEY"), HOLDS),
+                    new SecretHolding(new SecretStatus.InKeyring(), HOLDS),
+                    new SecretHolding(new SecretStatus.InFile(), EMPTY));
+        }
+
+        // status() answers InKeyring and stops. Nothing else tells the user that the key they just
+        // saved loses every read to an older one above it.
+        @Test
+        void reportsATierAboveTheAnsweringOneAsAHolderToo() {
+            final var keyring = writableTier(SecretTierKind.KEYRING, 100, false, "older-key");
+            final var file = writableTier(SecretTierKind.FILE, 0, true, "fresh-key");
+            final SecretStore store = tieredSecretStore(environmentTier(null), keyring, file);
+
+            assertThat(store.holdings(ANTHROPIC)).contains(
+                    new SecretHolding(new SecretStatus.InKeyring(), HOLDS),
+                    new SecretHolding(new SecretStatus.InFile(), HOLDS));
+        }
+
+        @Test
+        void reportsATierThatRefusesTheQuestionWithoutLosingTheOthers() {
+            final var file = writableTier(SecretTierKind.FILE, 0, true, "fresh-key");
+            final SecretStore store =
+                    tieredSecretStore(environmentTier(null), unreadableTier(), file);
+
+            assertThat(store.holdings(ANTHROPIC)).containsExactly(
+                    new SecretHolding(new SecretStatus.InEnvironment("ANTHROPIC_API_KEY"), EMPTY),
+                    new SecretHolding(new SecretStatus.InKeyring(), COULD_NOT_BE_ASKED),
+                    new SecretHolding(new SecretStatus.InFile(), HOLDS));
+        }
+
+        @Test
+        void answersEvenWhereStatusItselfThrows() {
+            final SecretStore store = tieredSecretStore(environmentTier(null), unreadableTier());
+
+            assertThatThrownBy(() -> store.status(ANTHROPIC)).isInstanceOf(SecretStoreException.class);
+            assertThat(store.holdings(ANTHROPIC)).containsExactly(
+                    new SecretHolding(new SecretStatus.InEnvironment("ANTHROPIC_API_KEY"), EMPTY),
+                    new SecretHolding(new SecretStatus.InKeyring(), COULD_NOT_BE_ASKED));
+        }
+
+        @Test
+        void neverRetrievesACredentialToAnswer() {
+            final SecretStore store =
+                    tieredSecretStore(environmentTier(null), new RetrievalRefusingTier());
+
+            assertThat(store.holdings(ANTHROPIC))
+                    .contains(new SecretHolding(new SecretStatus.InKeyring(), HOLDS));
         }
     }
 
@@ -423,7 +550,7 @@ class TieredSecretStoreTest {
             }
 
             @Override
-            public SecretStatus statusWhenAnswering(final SecretId id) {
+            public SecretStatus.Location location(final SecretId id) {
                 return new SecretStatus.InEnvironment(id.environmentVariable());
             }
         };
@@ -482,7 +609,7 @@ class TieredSecretStoreTest {
         }
 
         @Override
-        public SecretStatus statusWhenAnswering(final SecretId id) {
+        public SecretStatus.StoredLocation storedLocation() {
             return this.kind == SecretTierKind.KEYRING
                     ? new SecretStatus.InKeyring()
                     : new SecretStatus.InFile();
@@ -526,7 +653,7 @@ class TieredSecretStoreTest {
         }
 
         @Override
-        public SecretStatus statusWhenAnswering(final SecretId id) {
+        public SecretStatus.StoredLocation storedLocation() {
             return new SecretStatus.InKeyring();
         }
 

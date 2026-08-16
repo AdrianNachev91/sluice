@@ -192,8 +192,8 @@ public class Pipeline {
      */
     public void sweepExpiredDisasterDrawers() {
         this.requireUsableRoots();
-        this.disasterDrawer.sweepExpired(this.cullPrepRoot());
-        this.disasterDrawer.sweepExpiredGraveyard(this.graveyardRoot());
+        this.disasterDrawer.sweepExpired(this.pathsPort.cullPrep());
+        this.disasterDrawer.sweepExpiredGraveyard(this.pathsPort.graveyard());
     }
 
     /**
@@ -286,7 +286,7 @@ public class Pipeline {
      */
     public List<CullRunSummary> cullRuns() {
         this.requireUsableRoots();
-        return this.prepDirDoctor.runs(this.cullPrepRoot());
+        return this.prepDirDoctor.runs(this.pathsPort.cullPrep());
     }
 
     /**
@@ -385,7 +385,7 @@ public class Pipeline {
      */
     public JobHandle<PurgeReport> purgeCompleted() {
         this.requireUsableRoots();
-        return this.jobRunner.submit(_ -> this.prepDirDoctor.purgeCompleted(this.cullPrepRoot()));
+        return this.jobRunner.submit(_ -> this.prepDirDoctor.purgeCompleted(this.pathsPort.cullPrep()));
     }
 
     /**
@@ -452,26 +452,6 @@ public class Pipeline {
      */
     private void requireUsableRoots() {
         this.rootsGuard.requireUsable();
-    }
-
-    /**
-     * Where cull runs are prepared, worked out on every call rather than held. A saved working root
-     * has to reach this class the same way it reaches every engine.
-     *
-     * @return {@link Path} the cull-prep root under the working root
-     */
-    private Path cullPrepRoot() {
-        return this.pathsPort.logs().resolve("cull-prep");
-    }
-
-    /**
-     * Where discarded runs are filed, worked out on every call for the same reason as
-     * {@link #cullPrepRoot()}.
-     *
-     * @return {@link Path} the disaster-drawer graveyard root under the working root
-     */
-    private Path graveyardRoot() {
-        return this.pathsPort.logs().resolve("disasters");
     }
 
     /**

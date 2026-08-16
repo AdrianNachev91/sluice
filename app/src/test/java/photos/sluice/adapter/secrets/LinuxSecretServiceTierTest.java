@@ -227,8 +227,8 @@ class LinuxSecretServiceTierTest {
         }
 
         @Test
-        void namesItselfTheKeyringWhenItAnswers() {
-            assertThat(tier(new FakeSecretService()).statusWhenAnswering(ANTHROPIC))
+        void namesItselfTheKeyring() {
+            assertThat(tier(new FakeSecretService()).storedLocation())
                     .isEqualTo(new SecretStatus.InKeyring());
         }
     }
@@ -357,7 +357,7 @@ class LinuxSecretServiceTierTest {
         }
 
         @Override
-        public SecretStatus statusWhenAnswering(final SecretId id) {
+        public SecretStatus.StoredLocation storedLocation() {
             return new SecretStatus.InFile();
         }
 

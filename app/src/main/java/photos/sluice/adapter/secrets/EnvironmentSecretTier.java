@@ -51,7 +51,7 @@ class EnvironmentSecretTier implements SecretTier {
     }
 
     @Override
-    public SecretStatus statusWhenAnswering(final SecretId id) {
+    public SecretStatus.Location location(final SecretId id) {
         return new SecretStatus.InEnvironment(id.environmentVariable());
     }
 }

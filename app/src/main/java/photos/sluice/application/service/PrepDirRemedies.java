@@ -291,7 +291,7 @@ public class PrepDirRemedies {
     public DiscardReport discard(final Path prepDirPath, final ProgressCallback progress) {
         final String scope = prepDirPath.getFileName().toString();
         final Path graveyard =
-                this.pathsPort.logs().resolve("disasters").resolve(scope + "-" + DisasterTimestamp.now());
+                this.pathsPort.graveyard().resolve(scope + "-" + DisasterTimestamp.now());
         this.mediaStore.ensureDirectory(graveyard);
         final List<Path> files = this.mediaStore.listFiles(prepDirPath);
         final int total = files.size();

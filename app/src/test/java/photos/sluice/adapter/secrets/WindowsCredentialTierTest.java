@@ -186,8 +186,8 @@ class WindowsCredentialTierTest {
         }
 
         @Test
-        void namesItselfTheKeyringWhenItAnswers() {
-            assertThat(tier(new FakeCredentialManager()).statusWhenAnswering(ANTHROPIC))
+        void namesItselfTheKeyring() {
+            assertThat(tier(new FakeCredentialManager()).storedLocation())
                     .isEqualTo(new SecretStatus.InKeyring());
         }
     }

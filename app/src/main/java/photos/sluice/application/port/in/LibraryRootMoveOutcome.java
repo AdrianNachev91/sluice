@@ -1,0 +1,50 @@
+package photos.sluice.application.port.in;
+
+import org.jspecify.annotations.Nullable;
+
+import java.nio.file.Path;
+
+/**
+ * How a library-root move ended.
+ *
+ * <p>A variant per ending rather than one record with fields nobody set. Each carries what its own
+ * message needs and nothing else. A cancelled copy is the one where the root did not move. It is a
+ * variant rather than a boolean, so a caller reporting success has to say which success it means.
+ */
+public sealed interface LibraryRootMoveOutcome {
+
+    /**
+     * The old library was copied into the new one and the root now names the new one. The old
+     * folder is untouched and still holds everything, which is what a caller tells the user before
+     * they delete anything by hand.
+     *
+     * <p>A destination that already held photos keeps them, and the arriving copies land beside
+     * them under a suffixed name. So moving into an occupied folder duplicates rather than
+     * overwrites. That is the accepted direction here, the same one the fresh-index resolution
+     * takes: a duplicate is something a later cull can resolve, and an overwrite is not.
+     *
+     * @param filesCopied int how many files were written into the new library
+     */
+    record CopiedAndMoved(int filesCopied) implements LibraryRootMoveOutcome {
+    }
+
+    /**
+     * The copy stopped because cancellation was asked for, so the root did not move. The settings
+     * still name the old library and the index is still true of it. What was copied is left where
+     * it landed, as inert files under the folder the user picked.
+     *
+     * @param filesCopied int how many files were written before it stopped
+     * @param filesFound int how many the old library held when the copy started
+     */
+    record CopyCancelled(int filesCopied, int filesFound) implements LibraryRootMoveOutcome {
+    }
+
+    /**
+     * The root moved and the hash index was filed aside, so duplicate detection starts over.
+     *
+     * @param previousIndexFiledAt {@link Path} where the old index went, null when there was none
+     *         to file
+     */
+    record MovedWithAFreshIndex(@Nullable Path previousIndexFiledAt) implements LibraryRootMoveOutcome {
+    }
+}

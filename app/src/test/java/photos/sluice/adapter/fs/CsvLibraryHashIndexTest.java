@@ -27,6 +27,29 @@ class CsvLibraryHashIndexTest {
         assertThat(index.load()).isEmpty();
     }
 
+    @Test
+    void setAsideMovesTheIndexAndLeavesTheNextReadEmpty(@TempDir final Path repoRoot,
+                                                        @TempDir final Path graveyard) {
+        final CsvLibraryHashIndex index = indexAt(repoRoot);
+        index.append(List.of(new IndexEntry("aaa", Path.of("holiday.jpg"))));
+        final Path filedAt = graveyard.resolve("kept").resolve("library-hashes-2026-08-16.csv");
+
+        assertThat(index.setAside(filedAt)).isTrue();
+
+        assertThat(filedAt).isRegularFile().content().contains("aaa");
+        assertThat(index.load()).isEmpty();
+        assertThat(index.contains("aaa")).isFalse();
+    }
+
+    @Test
+    void setAsideAnswersThatThereWasNoIndexToMove(@TempDir final Path repoRoot, @TempDir final Path graveyard) {
+        final Path filedAt = graveyard.resolve("library-hashes-2026-08-16.csv");
+
+        assertThat(indexAt(repoRoot).setAside(filedAt)).isFalse();
+
+        assertThat(filedAt).doesNotExist();
+    }
+
     // The index is what authorizes deleting an Inbox file as a copy already safe in the library. If
     // it kept answering out of the old working root after a save, it would vouch for a library the
     // user is no longer filing into.

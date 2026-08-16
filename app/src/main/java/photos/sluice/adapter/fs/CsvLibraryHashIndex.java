@@ -128,6 +128,27 @@ public class CsvLibraryHashIndex implements HashIndexPort {
     }
 
     /**
+     * Moves the index file to destination, so the next read finds nothing.
+     *
+     * @param destination {@link Path} where the index file is moved to
+     * @return boolean true when there was an index file to move
+     */
+    @Override
+    public boolean setAside(final Path destination) {
+        final Path indexFile = this.indexFile();
+        if (!Files.isRegularFile(indexFile)) {
+            return false;
+        }
+        try {
+            Files.createDirectories(destination.getParent());
+            Files.move(indexFile, destination);
+            return true;
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Could not file the hash index aside at " + destination, e);
+        }
+    }
+
+    /**
      * The index file under the configured logs directory.
      *
      * @return {@link Path} the CSV hash index file

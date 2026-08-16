@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathSettings;
+import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.WorkingRootBusyException;
@@ -39,6 +41,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SettingsServiceTest {
+
+    @TempDir
+    static Path sharedLibrary;
 
     @Test
     void aSavedSettingIsWrittenAndInForce(@TempDir final Path before, @TempDir final Path after) {
@@ -159,19 +164,107 @@ class SettingsServiceTest {
         assertThat(lock.released).containsExactly(root.toAbsolutePath().normalize());
     }
 
-    // The library moved and the working root did not, so there is no claim to move. A process
-    // holding no root can still make this change. That is a command-line one, run while the desktop
-    // app has the folder open, not being refused a folder it was never going to touch.
+    // This seam names no working root, so there is nothing it could claim. What the assertion still
+    // catches is a version that claimed the new library folder as though it were a root.
     @Test
-    void aSaveThatMovesOnlyTheLibraryRootClaimsNothing(@TempDir final Path root, @TempDir final Path library) {
+    void aLibraryRootMoveClaimsNothing(@TempDir final Path root, @TempDir final Path library) {
         final var live = new RecordingLive(settings(root));
         final var lock = new RecordingLock();
         final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
 
-        service.save(settingsWithLibrary(root, library));
+        service.saveMovingTheLibraryRoot(library);
 
         assertThat(lock.claimed).isEmpty();
         assertThat(live.current().paths().libraryRoot()).isEqualTo(library.toString());
+    }
+
+    @Test
+    void aLibraryRootMoveKeepsEverySettingItDoesNotName(@TempDir final Path root,
+                                                        @TempDir final Path library) {
+        final var live = new RecordingLive(settings(root));
+        final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner());
+        service.save(withProvider(settings(root), "anthropic"));
+
+        service.saveMovingTheLibraryRoot(library);
+
+        assertThat(live.current().provider()).isEqualTo("anthropic");
+        assertThat(live.current().paths().libraryRoot()).isEqualTo(library.toString());
+    }
+
+    // The property that makes a working-root guard unnecessary on this seam rather than merely
+    // absent. Nothing else asserts it, and a wrong version compiles and passes every other test.
+    @Test
+    void aLibraryRootMoveLeavesTheOtherTwoRootsExactlyWhereTheyWere(@TempDir final Path root,
+                                                                    @TempDir final Path library) {
+        final var live = new RecordingLive(settings(root));
+        final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner());
+        final PathSettings before = live.current().paths();
+
+        service.saveMovingTheLibraryRoot(library);
+
+        assertThat(live.current().paths().repoRoot()).isEqualTo(before.repoRoot());
+        assertThat(live.current().paths().inbox()).isEqualTo(before.inbox());
+    }
+
+    @Test
+    void aPlainSaveWillNotMoveAConfiguredLibraryRoot(@TempDir final Path root, @TempDir final Path library) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
+
+        assertThatThrownBy(() -> service.save(settingsWithLibrary(root, library)))
+                .isInstanceOf(LibraryRootMoveNeedsAResolutionException.class)
+                .hasMessageContaining(sharedLibrary.toString());
+
+        assertThat(store.saved).isEmpty();
+        assertThat(live.current().paths().libraryRoot()).isEqualTo(sharedLibrary.toString());
+    }
+
+    @Test
+    void aSaveRespellingTheLibraryRootAsTheSameFolderIsNotAMove(@TempDir final Path root) {
+        final var live = new RecordingLive(settings(root));
+        final var store = new RecordingStore();
+        final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
+        final Settings respelled = SettingsFixture.settings(new PathSettings(root.toString(),
+                sharedLibrary.resolve("..").resolve(sharedLibrary.getFileName()).toString(),
+                root.resolve("Inbox").toString()));
+
+        service.save(respelled);
+
+        assertThat(store.saved).containsExactly(respelled);
+    }
+
+    @Test
+    void aPlainSaveWillNotClearAConfiguredLibraryRootEither(@TempDir final Path root) {
+        final var live = new RecordingLive(settings(root));
+        final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner());
+
+        assertThatThrownBy(() -> service.save(unconfigured()))
+                .isInstanceOf(LibraryRootMoveNeedsAResolutionException.class);
+    }
+
+    @Test
+    void reportsWhatOutranksTheConfigFileForOneSetting(@TempDir final Path root) {
+        final var override = new SettingOverride.ByEnvironmentVariable("sluice.paths.library-root",
+                "SLUICE_PATHS_LIBRARY_ROOT");
+        final var live = new RecordingLive(settings(root));
+        final var service = new SettingsService(live, new RecordingStore(), new RecordingLock(),
+                new JobRunner(), new PathValidationService(new NioMediaStore(), live),
+                property -> "sluice.paths.library-root".equals(property) ? Optional.of(override) : Optional.empty(),
+                List.of());
+
+        assertThat(service.overriddenAboveTheConfigFile("sluice.paths.library-root")).contains(override);
+        assertThat(service.overriddenAboveTheConfigFile("sluice.paths.inbox")).isEmpty();
+    }
+
+    @Test
+    void aFirstRunSettingTheLibraryRootSavesLikeAnyOtherSetting(@TempDir final Path root) {
+        final var live = new RecordingLive(unconfigured());
+        final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner());
+
+        service.save(settings(root));
+
+        assertThat(live.current().paths().libraryRoot()).isEqualTo(sharedLibrary.toString());
     }
 
     // Held on, that folder would be locked against every other Sluice for the life of this process,
@@ -182,7 +275,7 @@ class SettingsServiceTest {
         final var lock = new RecordingLock();
         final var service = settingsService(live, new RecordingStore(), lock, new JobRunner());
 
-        service.save(unconfigured());
+        service.save(withoutTheWorkingRoot(settings(root)));
 
         assertThat(lock.claimed).isEmpty();
         assertThat(lock.released).containsExactly(root.toAbsolutePath().normalize());
@@ -224,9 +317,9 @@ class SettingsServiceTest {
         final var service = settingsService(live, new RecordingStore(), new ReleaseRefusingLock(),
                 new JobRunner(), List.of(listener));
 
-        service.save(unconfigured());
+        service.save(withoutTheWorkingRoot(settings(root)));
 
-        assertThat(live.current()).isEqualTo(unconfigured());
+        assertThat(live.current()).isEqualTo(withoutTheWorkingRoot(settings(root)));
         assertThat(listener.calls).isEqualTo(1);
     }
 
@@ -271,7 +364,7 @@ class SettingsServiceTest {
         final var service = settingsService(new RecordingLive(settings(root)), new RecordingStore(),
                 new RecordingLock(), new JobRunner(), List.of(listener));
 
-        service.save(settingsWithLibrary(root, library));
+        service.saveMovingTheLibraryRoot(library);
 
         assertThat(listener.calls).isEqualTo(1);
         assertThat(listener.lastWorkingRootMoved).isFalse();
@@ -422,10 +515,10 @@ class SettingsServiceTest {
         final var live = new RecordingLive(settings(root));
         final var store = new RecordingStore();
         final var lock = new RecordingLock();
-        final Path library = createDirectory(after.resolve("Library"));
+        final Path library = createDirectory(sharedLibrary);
         final Settings candidate = settings(after);
         final var service = new SettingsService(live, store, lock, new JobRunner(),
-                new PathValidationService(refusingToResolve(library), live), List.of());
+                new PathValidationService(refusingToResolve(library), live), _ -> Optional.empty(), List.of());
 
         assertThatThrownBy(() -> service.save(candidate))
                 .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
@@ -453,7 +546,7 @@ class SettingsServiceTest {
         final var live = new RecordingLive(settings(root));
         final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner());
         final Settings sameRootsNewProvider = withProvider(settings(root), "anthropic");
-        Files.delete(root.resolve("Library"));
+        Files.delete(root.resolve("Inbox"));
 
         service.save(sameRootsNewProvider);
 
@@ -756,7 +849,7 @@ class SettingsServiceTest {
                                                    final WorkingRootLock lock, final JobRunner jobRunner,
                                                    final List<FolderRootsChangeListener> listeners) {
         return new SettingsService(live, store, lock, jobRunner,
-                new PathValidationService(new NioMediaStore(), live), listeners);
+                new PathValidationService(new NioMediaStore(), live), _ -> Optional.empty(), listeners);
     }
 
     // The real store everywhere except the one call the failure is about. Every other root in the
@@ -790,6 +883,13 @@ class SettingsServiceTest {
         return SettingsFixture.settings(new PathSettings(null, null, null));
     }
 
+    // The library root is left exactly where it was. Clearing it is its own refusal, which a test
+    // about giving up a working-root claim would otherwise meet first.
+    private static Settings withoutTheWorkingRoot(final Settings settings) {
+        return SettingsFixture.settings(
+                new PathSettings(null, settings.paths().libraryRoot(), settings.paths().inbox()));
+    }
+
     // The library moves to a folder of its own, the working root and inbox stay put. Builds its own
     // inbox rather than relying on a settings() call earlier in the test having made one.
     private static Settings settingsWithLibrary(final Path root, final Path library) {
@@ -799,9 +899,14 @@ class SettingsServiceTest {
 
     // The two folders are made real, the way a real install's are. A fixture naming folders nobody
     // created is refused before it reaches the claim, the write or the listeners.
+    //
+    // The library root is one folder shared by every value this builds, rather than one under each
+    // working root. A save that moves a configured library root is refused here, and goes through
+    // the library-root move seam instead. A fixture moving all three at once could only ever reach
+    // that refusal.
     private static Settings settings(final Path root) {
         return SettingsFixture.settings(new PathSettings(root.toString(),
-                createDirectory(root.resolve("Library")).toString(),
+                createDirectory(sharedLibrary).toString(),
                 createDirectory(root.resolve("Inbox")).toString()));
     }
 

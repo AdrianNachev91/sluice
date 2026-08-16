@@ -89,11 +89,12 @@ class FolderRootsSaveCompositionTest {
         assertThat(this.pipeline.isWatchActive(prepDir)).isFalse();
     }
 
-    // Everything but the three folder roots is carried over from the settings in force, so the save
-    // under test moves roots and changes nothing else.
+    // Everything but the working root and the inbox is carried over from the settings in force, so
+    // the save under test moves roots and changes nothing else. The library root stays where it is,
+    // since moving that one is refused here and goes through the library-root move seam.
     private Settings movedTo(final Path root) {
         final Settings current = this.settings.settings();
-        return new Settings(new PathSettings(root.toString(), root.resolve("Library").toString(),
+        return new Settings(new PathSettings(root.toString(), current.paths().libraryRoot(),
                 root.resolve("Inbox").toString()),
                 current.provider(), current.providerSettings(), current.categories(), current.externalAgent(),
                 current.montage());

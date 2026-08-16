@@ -306,7 +306,7 @@ final class CullEngine {
      * @return {@link Path} the cull-prep root under the working root
      */
     private Path cullPrepRoot() {
-        return this.pathsPort.logs().resolve("cull-prep");
+        return this.pathsPort.cullPrep();
     }
 
     /**

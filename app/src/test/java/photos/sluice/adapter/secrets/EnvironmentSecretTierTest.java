@@ -86,9 +86,9 @@ class EnvironmentSecretTierTest {
     void namesTheVariableCarriedByTheIdItWasAskedAbout() {
         final var tier = tierOver(Map.of());
 
-        assertThat(tier.statusWhenAnswering(ANTHROPIC))
+        assertThat(tier.location(ANTHROPIC))
                 .isEqualTo(new SecretStatus.InEnvironment("ANTHROPIC_API_KEY"));
-        assertThat(tier.statusWhenAnswering(new SecretId("other", "OTHER_PROVIDER_API_KEY")))
+        assertThat(tier.location(new SecretId("other", "OTHER_PROVIDER_API_KEY")))
                 .isEqualTo(new SecretStatus.InEnvironment("OTHER_PROVIDER_API_KEY"));
     }
 

@@ -37,6 +37,19 @@ public interface HashIndexPort {
     void append(List<IndexEntry> entries);
 
     /**
+     * Moves the index to destination, leaving nothing in its place, so the next read starts from
+     * an empty one.
+     *
+     * <p>Moved rather than deleted. The index is the record of what the library already holds.
+     * Throwing it away is the one thing pointing Sluice back at a folder cannot undo. A caller
+     * picks somewhere it will be found again.
+     *
+     * @param destination {@link Path} where the index is moved to, its parents created as needed
+     * @return boolean true when there was an index to move
+     */
+    boolean setAside(Path destination);
+
+    /**
      * For a caller appending many entries over a long-running move loop (Commit/RescueEngine). One
      * session amortizes the header/leading-newline checks across the whole run instead of redoing
      * them on every entry. Each entry is still flushed as it's written, so a crash mid-run never

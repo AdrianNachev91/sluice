@@ -1,5 +1,6 @@
 package photos.sluice.application.port.out;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -36,6 +37,42 @@ public interface SecretStore {
     SecretStatus status(SecretId id);
 
     /**
+     * What every place holds for the given id, in the order a read consults them, carrying no
+     * credential.
+     *
+     * <p>{@link #status} answers which place wins. This answers all of them, which is what lets a
+     * screen say a fresh credential is shadowed by an older one somewhere above it. Reading it
+     * back and comparing is the only way to know they differ, and no surface here is ever handed a
+     * value to compare.
+     *
+     * <p>A place that refuses the question is reported as such rather than raised, because one
+     * broken place would otherwise hide every healthy one's answer. That is the machine this exists
+     * for, and it is why this can be called beside a {@link #status} that threw.
+     *
+     * <p>What it does not swallow is a place that cannot say what it is. Every entry names a real
+     * place, which is what lets a caller count an unaskable one rather than leave it out silently.
+     *
+     * @param id {@link SecretId} which credential to report on
+     * @return a {@link List} of {@link SecretHolding} one entry per place, in read order
+     */
+    List<SecretHolding> holdings(SecretId id);
+
+    /**
+     * Where {@link #save} would put a credential on this machine right now, or empty when no place
+     * can take one.
+     *
+     * <p>For the sentence shown beside an entry field, before anything is typed. {@link #status}
+     * cannot answer it: that reports where a credential already is, and says nothing about the
+     * keyring when the answer is {@link SecretStatus.Absent}.
+     *
+     * <p>Takes no id, because nothing about the routing depends on one. It is decided by which
+     * places this machine offers.
+     *
+     * @return an {@link Optional} of {@link SecretStatus.StoredLocation} where a save would land
+     */
+    Optional<SecretStatus.StoredLocation> whereASaveWouldStoreIt();
+
+    /**
      * Stores the given credential in the strongest tier this machine offers that can be written.
      * An environment variable already naming the same credential keeps winning every read, and the
      * caller learns that by asking {@link #status} afterwards.
@@ -62,9 +99,10 @@ public interface SecretStore {
      * @param id {@link SecretId} which credential to store
      * @param secret {@link String} the credential to store
      * @throws IllegalArgumentException when the credential is blank
-     * @throws SecretStoreException when no tier on this machine can store one, when the tier that
-     *         took it refused, or when the value was stored but a stale copy above it could not be
-     *         cleared
+     * @throws StaleSecretNotClearedException when the value was stored and a stale copy above it
+     *         could not be cleared, so that copy may still answer a read
+     * @throws SecretStoreException when no tier on this machine can store one, or when the tier
+     *         that took it refused
      */
     void save(SecretId id, String secret);
 

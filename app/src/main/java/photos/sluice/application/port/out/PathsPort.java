@@ -64,4 +64,23 @@ public interface PathsPort {
      * @return {@link Path} the logs directory
      */
     Path logs();
+
+    /**
+     * Where cull runs are prepared, one directory per run.
+     *
+     * @return {@link Path} the cull-prep directory
+     */
+    Path cullPrep();
+
+    /**
+     * Where artifacts nobody could salvage are filed instead of deleted.
+     *
+     * <p>What is swept from here and what stays is a property of each filed name rather than of the
+     * folder. The retention sweep parses a trailing timestamp, so a directory named for a discarded
+     * run expires and anything it cannot parse is kept. A caller filing something here decides which
+     * it wants by how it names it.
+     *
+     * @return {@link Path} the graveyard directory
+     */
+    Path graveyard();
 }

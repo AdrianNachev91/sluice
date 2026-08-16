@@ -1,10 +1,12 @@
 package photos.sluice.application.port.in;
 
 import photos.sluice.application.port.out.MalformedSettingsException;
+import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 
 import java.io.UncheckedIOException;
+import java.util.Optional;
 
 /**
  * Reading and changing the app's settings. The one entry point a settings screen, or a future
@@ -24,9 +26,25 @@ public interface SettingsUseCase {
     Settings settings();
 
     /**
+     * What supplies the given setting from above the user's config file, or empty when a saved
+     * value holds.
+     *
+     * <p>Here rather than on its own seam because a screen showing a setting has to say this beside
+     * it. A save writes the file and takes effect at once, and the next launch reads the higher
+     * source again. Nothing else in the app would explain that revert.
+     *
+     * @param property {@link String} the property name, as the app spells it in its own config file
+     * @return an {@link Optional} of {@link SettingOverride} what supplies it from above
+     */
+    Optional<SettingOverride> overriddenAboveTheConfigFile(String property);
+
+    /**
      * Persists the given settings and puts them in force.
      *
      * @param settings {@link Settings} the settings to save
+     * @throws LibraryRootMoveNeedsAResolutionException if these settings move a configured library
+     *         root. That goes through {@link LibraryRootUseCase#moveLibraryRoot}, which is where a
+     *         caller says what becomes of the hash index. Setting one for the first time saves here
      * @throws PathsMisconfiguredException if a folder root these settings move is set to somewhere
      *         that cannot be worked in. A root left unset saves, since that is what an install
      *         still choosing its folders looks like

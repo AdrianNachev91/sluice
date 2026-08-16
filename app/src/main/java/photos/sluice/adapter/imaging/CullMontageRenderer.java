@@ -172,7 +172,7 @@ public class CullMontageRenderer implements MontageRenderer {
         // survive alongside this run's smaller output, with nothing to indicate it's no longer
         // current.
         final String scopeTag = CullScope.tag(scope);
-        final Path prepDir = this.pathsPort.logs().resolve("cull-prep").resolve(scopeTag);
+        final Path prepDir = this.pathsPort.cullPrep().resolve(scopeTag);
         clearPrepDir(prepDir);
         this.mediaStore.ensureDirectory(prepDir);
 

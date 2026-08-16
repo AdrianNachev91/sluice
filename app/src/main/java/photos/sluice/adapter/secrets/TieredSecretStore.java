@@ -1,10 +1,12 @@
 package photos.sluice.adapter.secrets;
 
 import org.jspecify.annotations.Nullable;
+import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SecretStoreException;
+import photos.sluice.application.port.out.StaleSecretNotClearedException;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -86,8 +88,18 @@ public class TieredSecretStore implements SecretStore {
         return this.readOrder.stream()
                 .filter(tier -> tier.holds(id))
                 .findFirst()
-                .map(tier -> tier.statusWhenAnswering(id))
+                .map(tier -> (SecretStatus) tier.location(id))
                 .orElseGet(SecretStatus.Absent::new);
+    }
+
+    @Override
+    public List<SecretHolding> holdings(final SecretId id) {
+        return this.readOrder.stream().map(tier -> askOneTier(tier, id)).toList();
+    }
+
+    @Override
+    public Optional<SecretStatus.StoredLocation> whereASaveWouldStoreIt() {
+        return this.tierASaveWouldStoreItIn().map(WritableSecretTier::storedLocation);
     }
 
     @Override
@@ -100,9 +112,7 @@ public class TieredSecretStore implements SecretStore {
             throw new IllegalArgumentException(
                     "Refusing to store a blank credential for provider '" + id.provider() + "'");
         }
-        final WritableSecretTier target = this.writable.stream()
-                .filter(WritableSecretTier::available)
-                .findFirst()
+        final WritableSecretTier target = this.tierASaveWouldStoreItIn()
                 .orElseThrow(() -> new SecretStoreException(SecretStoreException.Tier.STORE,
                         "No tier on this machine can store the credential for provider '"
                                 + id.provider() + "'"));
@@ -125,6 +135,51 @@ public class TieredSecretStore implements SecretStore {
         }
         if (!failures.isEmpty()) {
             throw clearingFailed(id, failures);
+        }
+    }
+
+    /**
+     * The tier a save would write to on this machine right now.
+     *
+     * <p>Shared by {@link #save} and {@link #whereASaveWouldStoreIt}. Restated in either one, a
+     * sentence promising a tier could name one the save then misses.
+     *
+     * @return an {@link Optional} of {@link WritableSecretTier} the tier a save reaches, empty when
+     *         none can be used here
+     */
+    private Optional<WritableSecretTier> tierASaveWouldStoreItIn() {
+        return this.writable.stream().filter(WritableSecretTier::available).findFirst();
+    }
+
+    /**
+     * Asks one tier what it holds, turning a refusal into an answer.
+     *
+     * <p>A caller listing every tier wants each tier's own verdict, and one tier that cannot be
+     * asked must not take the others' answers with it. That is the machine the listing exists for:
+     * a credential store refusing one entry, or an unreadable credential file.
+     *
+     * <p>Naming the tier sits outside the guard on purpose, so this swallows a failure to answer
+     * and never a failure to exist. Every entry therefore names a real place, which is what lets a
+     * caller report an unaskable tier rather than quietly leave it out of the count. A tier that
+     * cannot say what kind of place it is would be a broken build rather than the broken machine
+     * this method is for.
+     *
+     * <p>{@link RuntimeException} rather than {@link SecretStoreException} alone, so a tier failing
+     * some way nobody typed is still one tier's problem. An {@link Error} is left to propagate, the
+     * same line every catch-all in the app draws.
+     *
+     * @param tier {@link SecretTier} the tier to ask
+     * @param id {@link SecretId} which credential to ask about
+     * @return {@link SecretHolding} that tier's place, and what it answered
+     */
+    private static SecretHolding askOneTier(final SecretTier tier, final SecretId id) {
+        final SecretStatus.Location location = tier.location(id);
+        try {
+            return new SecretHolding(location, tier.holds(id)
+                    ? SecretHolding.Holding.HOLDS
+                    : SecretHolding.Holding.EMPTY);
+        } catch (final RuntimeException e) {
+            return new SecretHolding(location, SecretHolding.Holding.COULD_NOT_BE_ASKED);
         }
     }
 
@@ -192,11 +247,11 @@ public class TieredSecretStore implements SecretStore {
      *
      * @param id {@link SecretId} the credential whose fresh write may still be shadowed
      * @param failures a {@link List} of {@link RuntimeException} what each refusing tier threw
-     * @return {@link SecretStoreException} the failure to report to the caller
+     * @return {@link StaleSecretNotClearedException} the failure to report to the caller
      */
-    private static SecretStoreException staleValueNotCleared(final SecretId id,
+    private static StaleSecretNotClearedException staleValueNotCleared(final SecretId id,
             final List<RuntimeException> failures) {
-        final var failure = new SecretStoreException(SecretStoreException.Tier.STORE,
+        final var failure = new StaleSecretNotClearedException(
                 "The credential for provider '" + id.provider()
                         + "' was stored, but an older value above it could not be cleared, so it"
                         + " may still answer a read");

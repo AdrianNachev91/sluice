@@ -203,5 +203,15 @@ class StartupSequenceTest {
         public Path logs() {
             return this.root.resolve("logs");
         }
+
+        @Override
+        public Path cullPrep() {
+            return this.logs().resolve("cull-prep");
+        }
+
+        @Override
+        public Path graveyard() {
+            return this.logs().resolve("disasters");
+        }
     }
 }

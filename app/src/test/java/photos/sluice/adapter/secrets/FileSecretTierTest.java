@@ -403,8 +403,8 @@ class FileSecretTierTest {
         // A restricted file is protected by permissions rather than encryption. A screen cannot
         // show it the sentence it shows for a machine's own credential store.
         @Test
-        void reportsItselfAsTheFileTierWhenItAnswers(@TempDir final Path secrets) {
-            assertThat(new FileSecretTier(secrets).statusWhenAnswering(ANTHROPIC))
+        void reportsItselfAsTheFileTier(@TempDir final Path secrets) {
+            assertThat(new FileSecretTier(secrets).storedLocation())
                     .isEqualTo(new SecretStatus.InFile());
         }
     }

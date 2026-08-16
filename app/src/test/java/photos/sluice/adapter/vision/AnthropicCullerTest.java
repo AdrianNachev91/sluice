@@ -22,6 +22,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStore;
@@ -921,6 +922,17 @@ class AnthropicCullerTest {
         @Override
         public SecretStatus status(final SecretId id) {
             return this.held == null ? new SecretStatus.Absent() : new SecretStatus.InFile();
+        }
+
+        @Override
+        public List<SecretHolding> holdings(final SecretId id) {
+            return List.of(new SecretHolding(new SecretStatus.InFile(),
+                    this.held == null ? SecretHolding.Holding.EMPTY : SecretHolding.Holding.HOLDS));
+        }
+
+        @Override
+        public Optional<SecretStatus.StoredLocation> whereASaveWouldStoreIt() {
+            return Optional.of(new SecretStatus.InFile());
         }
 
         @Override

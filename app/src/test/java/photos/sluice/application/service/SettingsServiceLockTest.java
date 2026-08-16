@@ -20,6 +20,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -29,6 +30,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 // what those calls do. This drives the real lock instead, so a working root that only half moves
 // shows up as a folder the next process can or cannot open.
 class SettingsServiceLockTest {
+
+    // One folder across every settings value here. A save that moves a configured library root is
+    // refused, and nothing in this class is about that refusal.
+    @TempDir
+    static Path sharedLibrary;
 
     private final FileChannelWorkingRootLock lock = new FileChannelWorkingRootLock();
     private final FileChannelWorkingRootLock otherProcess = new FileChannelWorkingRootLock();
@@ -74,21 +80,24 @@ class SettingsServiceLockTest {
         final var service = this.service(root, configDir);
         this.lock.acquire(root);
 
-        service.save(SettingsFixture.settings(new PathSettings(null, null, null)));
+        service.save(SettingsFixture.settings(
+                new PathSettings(null, sharedLibrary.toString(), root.resolve("Inbox").toString())));
 
         assertThatCode(() -> this.otherProcess.acquire(root)).doesNotThrowAnyException();
     }
 
-    // A process holding nothing, changing a root it never claims, while another has the working
-    // root open. Claiming on every save would refuse this outright.
+    // The real lock, and another process genuinely holding the folder. What that buys is the
+    // end-to-end fact rather than a counter's word for it. A library move goes through on a machine
+    // whose working root is already claimed elsewhere. A seam that asked for that root would be
+    // refused by the real lock and would pass against a fake.
     @Test
     void aLibraryRootMovesWhileAnotherProcessHoldsTheWorkingRoot(
             @TempDir final Path root, @TempDir final Path library, @TempDir final Path configDir) {
         final var service = this.service(root, configDir);
         this.otherProcess.acquire(root);
 
-        service.save(SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
-                createDirectory(root.resolve("Inbox")).toString())));
+        createDirectory(root.resolve("Inbox"));
+        service.saveMovingTheLibraryRoot(library);
 
         assertThat(service.settings().paths().libraryRoot()).isEqualTo(library.toString());
     }
@@ -123,14 +132,14 @@ class SettingsServiceLockTest {
     private static SettingsService settingsService(final LiveSettings live, final SettingsStore store,
                                                    final WorkingRootLock lock) {
         return new SettingsService(live, store, lock, new JobRunner(),
-                new PathValidationService(new NioMediaStore(), live), List.of());
+                new PathValidationService(new NioMediaStore(), live), _ -> Optional.empty(), List.of());
     }
 
     // The folder roots have to be there for the save's own check to pass, the same way a real
     // install's are.
     private static Settings settings(final Path root) {
         return SettingsFixture.settings(new PathSettings(root.toString(),
-                createDirectory(root.resolve("Library")).toString(),
+                createDirectory(sharedLibrary).toString(),
                 createDirectory(root.resolve("Inbox")).toString()));
     }
 

@@ -1,6 +1,7 @@
 package photos.sluice.adapter.secrets;
 
 import photos.sluice.application.port.out.SecretId;
+import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStoreException;
 
 /**
@@ -11,6 +12,26 @@ import photos.sluice.application.port.out.SecretStoreException;
  * the framework.
  */
 interface WritableSecretTier extends SecretTier {
+
+    /**
+     * How a settings screen names this tier. Takes no id, unlike {@link SecretTier#location},
+     * because a tier a credential is stored in is the same place whichever credential it is. Only
+     * the environment names itself per id, and nothing writes there.
+     *
+     * @return {@link SecretStatus.StoredLocation} this tier's place
+     */
+    SecretStatus.StoredLocation storedLocation();
+
+    /**
+     * Names this tier for a caller that does not know it can be written to.
+     *
+     * @param id {@link SecretId} the credential being reported on, unused here
+     * @return {@link SecretStatus.Location} this tier's place
+     */
+    @Override
+    default SecretStatus.Location location(final SecretId id) {
+        return this.storedLocation();
+    }
 
     /**
      * Whether this tier can be used on this machine right now. A credential store the platform does

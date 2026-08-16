@@ -87,7 +87,7 @@ class FileSecretTier implements WritableSecretTier {
     }
 
     @Override
-    public SecretStatus statusWhenAnswering(final SecretId id) {
+    public SecretStatus.StoredLocation storedLocation() {
         return new SecretStatus.InFile();
     }
 

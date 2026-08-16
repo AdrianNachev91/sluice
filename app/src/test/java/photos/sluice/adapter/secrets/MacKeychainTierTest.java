@@ -241,8 +241,8 @@ class MacKeychainTierTest {
         }
 
         @Test
-        void namesItselfTheKeyringWhenItAnswers() {
-            assertThat(tier(new FakeKeychain()).statusWhenAnswering(ANTHROPIC))
+        void namesItselfTheKeyring() {
+            assertThat(tier(new FakeKeychain()).storedLocation())
                     .isEqualTo(new SecretStatus.InKeyring());
         }
     }
@@ -378,7 +378,7 @@ class MacKeychainTierTest {
         }
 
         @Override
-        public SecretStatus statusWhenAnswering(final SecretId id) {
+        public SecretStatus.StoredLocation storedLocation() {
             return new SecretStatus.InFile();
         }
 

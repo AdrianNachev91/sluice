@@ -118,6 +118,26 @@ public class PathsConfig implements PathsPort {
     }
 
     /**
+     * Resolves the cull-prep directory under the logs directory.
+     *
+     * @return {@link Path} the cull-prep directory path
+     */
+    @Override
+    public Path cullPrep() {
+        return this.logs().resolve("cull-prep");
+    }
+
+    /**
+     * Resolves the graveyard directory under the logs directory.
+     *
+     * @return {@link Path} the graveyard directory path
+     */
+    @Override
+    public Path graveyard() {
+        return this.logs().resolve("disasters");
+    }
+
+    /**
      * The folder roots the settings currently in force name.
      *
      * @return {@link PathSettings} the configured folder roots
