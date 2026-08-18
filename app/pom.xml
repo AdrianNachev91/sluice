@@ -194,16 +194,16 @@
         <artifactId>jacoco-maven-plugin</artifactId>
         <version>0.8.15</version>
         <configuration>
+          <!-- Read by prepare-agent too, not only report/check: this list controls which classes
+               the javaagent instruments, not only which ones a rule counts. A class excluded here
+               carries no probes at all, so no check execution can ever measure it, whatever that
+               execution's own includes or excludes say. That is why the view package is not named
+               here even though the bundle-wide rule below excludes it from ITS OWN ratio - view
+               needs real instrumentation for check-view's own rule to have anything to read. -->
           <excludes>
             <!-- The application's bootstrap entry point: it locates the config file and hands the
                  launch on, with nothing to unit-test. Standard exclusion for this kind of class. -->
             <exclude>photos/sluice/SluiceApplication.class</exclude>
-            <!-- The JavaFX classes themselves. Logic lives in presenters one package up, which stay
-                 inside the gate; what is left here constructs controls and binds them. Driving all
-                 of that through the toolkit to 95% instruction coverage would buy a slower, more
-                 brittle suite and no more confidence. The package's own doc holds the line that
-                 makes this honest, and views still get driven end to end by their own tests. -->
-            <exclude>photos/sluice/adapter/ui/view/**</exclude>
             <!-- The native credential-store bindings, one per platform. A binding only runs on the
                  platform whose library it binds, so no single leg of the matrix can cover one and
                  the gate would measure the matrix rather than the tests. Excluded on the same terms
@@ -256,6 +256,16 @@
               <rules>
                 <rule>
                   <element>BUNDLE</element>
+                  <!-- The JavaFX classes themselves. Logic lives in presenters one package up,
+                       which stay inside this rule; what is left here constructs controls and binds
+                       them. Driving all of that through the toolkit to 95% instruction coverage
+                       would buy a slower, more brittle suite and no more confidence, and
+                       check-view holds its own, lower floor instead. A rule-level exclude rather
+                       than the plugin-level one above: the classes still need real instrumentation
+                       for that other rule to read. -->
+                  <excludes>
+                    <exclude>photos.sluice.adapter.ui.view.*</exclude>
+                  </excludes>
                   <limits>
                     <limit>
                       <counter>INSTRUCTION</counter>
@@ -277,7 +287,7 @@
               </rules>
             </configuration>
           </execution>
-          <!-- A regression floor for the views this bundle-level gate excludes, on the two
+          <!-- A regression floor for the views the rule above excludes, on the two
                numbers a pane cannot inflate for free. Instruction and line execute just by being
                constructed, whether or not a test ever drives what a control does. Branch coverage
                carries no minimum: the native DirectoryChooser dialog no headless harness can reach
@@ -292,18 +302,11 @@
               <goal>check</goal>
             </goals>
             <configuration>
-              <!-- Its own full exclude list, view/** left out, rather than an empty override. An
-                   execution-level excludes list replaces the plugin-level one for analysis, but an
-                   empty list measures zero classes rather than reading as "no excludes" - proved by
-                   watching an empty list here pass at an intentionally unreachable threshold, which
-                   only a truly empty measured set explains. -->
-              <excludes>
-                <exclude>photos/sluice/SluiceApplication.class</exclude>
-                <exclude>photos/sluice/adapter/secrets/Advapi32CredentialManager.class</exclude>
-                <exclude>photos/sluice/adapter/secrets/LibsecretService.class</exclude>
-                <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain.class</exclude>
-                <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain$*.class</exclude>
-              </excludes>
+              <!-- A BUNDLE-element rule ignores its own includes/excludes - those only apply to a
+                   PACKAGE or CLASS element - so scoping has to happen here instead, at the class
+                   file selection JaCoCo actually analyses. Confirmed by watching a rule-level
+                   include silently pass at an unreachable 0.99 threshold: the rule was evaluating
+                   the whole 317-class bundle, not the 13-class view package it named. -->
               <includes>
                 <include>photos/sluice/adapter/ui/view/**</include>
               </includes>
