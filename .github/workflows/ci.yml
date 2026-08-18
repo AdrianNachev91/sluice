@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    # Chunk branches run the same two legs a master push does, so a chunk's CI answer arrives
+    # before its diff is reviewed rather than after it lands. The macOS job below stays off this
+    # path, gated to dispatch and schedule, so a branch push costs exactly what a master push costs.
+    branches: [master, 'chunk/**']
     # CI only builds/tests the Java app (`mvn -f app/pom.xml test`), so run it only when the app or
     # this workflow itself changes. Docs, devlog, memory, plans, and PowerShell scripts skip CI - no
     # point burning the matrix on a docs-only commit. If a build-affecting file ever lands outside
