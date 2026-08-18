@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
@@ -66,6 +67,20 @@ import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 import static photos.sluice.application.service.PipelineTestSupport.writeShard;
 
 class CullEngineTest {
+
+    private final List<Pipeline> armed = new ArrayList<>();
+
+    // Retiring a watcher leaves a poll that is already mid-attempt to finish, resume included, so
+    // the run's last write can land after the test method returns. @TempDir deletion then meets an
+    // open handle. Draining the runner is what orders the two, and it is the app's own exit
+    // sequence rather than something this test invents.
+    @AfterEach
+    void stopEveryWatcherThisTestArmed() {
+        this.armed.forEach(pipeline -> {
+            pipeline.stopAllWatching();
+            assertThat(pipeline.stopAcceptingJobs(Duration.ofSeconds(10))).isTrue();
+        });
+    }
 
     // How long a test waits on a latch that should never trip, proving no apply started. Every use
     // is paired with a control trip inside the same window, so the number is checked by the test
@@ -257,6 +272,7 @@ class CullEngineTest {
                 watchCullSettings(), List.of(new ManualModeCuller()), Duration.ofSeconds(30), prepStore);
         prepStore.startFailing();
 
+        this.armed.add(watchPipeline);
         watchPipeline.armWatchesForResumableRuns();
 
         assertThat(watchPipeline.cullRuns()).singleElement()
@@ -722,6 +738,7 @@ class CullEngineTest {
         final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchSettings, List.of(),
                 Duration.ofMillis(20));
 
+        this.armed.add(watchPipeline);
         watchPipeline.armWatchesForResumableRuns();
 
         assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
@@ -871,6 +888,7 @@ class CullEngineTest {
 
         final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        this.armed.add(watchPipeline);
         watchPipeline.armWatchesForResumableRuns();
 
         waitUntil(Duration.ofSeconds(2), () -> !Files.exists(photo));
@@ -897,6 +915,7 @@ class CullEngineTest {
 
         final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        this.armed.add(watchPipeline);
         watchPipeline.armWatchesForResumableRuns();
 
         assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
