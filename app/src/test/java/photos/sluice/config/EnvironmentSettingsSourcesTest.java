@@ -28,7 +28,22 @@ class EnvironmentSettingsSourcesTest {
                     environmentWith(plain("commandLineArgs", LIBRARY_ROOT), configFile(LIBRARY_ROOT)));
 
             assertThat(sources.overriddenAboveTheConfigFile(LIBRARY_ROOT))
-                    .contains(new SettingOverride.ByAnotherSource(LIBRARY_ROOT, "commandLineArgs"));
+                    .contains(new SettingOverride.ByAnotherSource(LIBRARY_ROOT, "A command-line argument"));
+        }
+
+        @Test
+        void namesASourceInWordsRatherThanBySpringsIdentifier() {
+            assertThat(this.describing("systemProperties")).isEqualTo("A Java system property");
+            assertThat(this.describing("systemEnvironment")).isEqualTo("An environment variable");
+            assertThat(this.describing("Config resource 'class path resource [application.yml]'"))
+                    .isEqualTo("Something outside your settings file");
+        }
+
+        private String describing(final String sourceName) {
+            final var sources = new EnvironmentSettingsSources(
+                    environmentWith(plain(sourceName, LIBRARY_ROOT), configFile(LIBRARY_ROOT)));
+            return ((SettingOverride.ByAnotherSource) sources.overriddenAboveTheConfigFile(LIBRARY_ROOT)
+                    .orElseThrow()).source();
         }
 
         @Test
@@ -62,7 +77,7 @@ class EnvironmentSettingsSourcesTest {
                     configFile(LIBRARY_ROOT)));
 
             assertThat(sources.overriddenAboveTheConfigFile(LIBRARY_ROOT))
-                    .contains(new SettingOverride.ByAnotherSource(LIBRARY_ROOT, "commandLineArgs"));
+                    .contains(new SettingOverride.ByAnotherSource(LIBRARY_ROOT, "A command-line argument"));
         }
     }
 

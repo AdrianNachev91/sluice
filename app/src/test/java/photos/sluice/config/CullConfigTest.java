@@ -75,10 +75,10 @@ class CullConfigTest {
     }
 
     @Test
-    void externalAgentDefaultsToManualModeWhenAbsent() {
+    void externalAgentDefaultsToWatchModeWhenAbsent() {
         this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
-            assertThat(config.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
+            assertThat(config.externalAgent().mode()).isEqualTo(WatchMode.WATCH);
         });
     }
 

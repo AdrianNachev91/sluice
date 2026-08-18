@@ -97,7 +97,7 @@ class FolderRootsSaveCompositionTest {
         return new Settings(new PathSettings(root.toString(), current.paths().libraryRoot(),
                 root.resolve("Inbox").toString()),
                 current.provider(), current.providerSettings(), current.categories(), current.externalAgent(),
-                current.montage());
+                current.montage(), current.theme());
     }
 
     // The one bean this test redirects. Production reads the config file out of an OS-native

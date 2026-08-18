@@ -8,9 +8,13 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import photos.sluice.adapter.ui.FolderRootsHousekeeping;
+import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
+import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.VisionProviderDescriptor;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -47,5 +51,20 @@ class SmokeTest {
         assertThat(this.context.getBeanNamesForType(FolderRootsChangeListener.class)).hasSize(1);
         assertThat(this.context.getBeansOfType(FolderRootsChangeListener.class).values())
                 .hasOnlyElementsOfType(FolderRootsHousekeeping.class);
+    }
+
+    // The catalog's own tests hand it cullers directly, so wiring that collected nothing would pass
+    // all of them. An empty catalog draws an empty dropdown rather than failing.
+    @Test
+    void everyRegisteredCullerReachesTheProviderCatalog() {
+        final List<String> cullerIds = this.context.getBeansOfType(VisionCuller.class).values().stream()
+                .map(culler -> culler.describe().id())
+                .toList();
+        // Both sides being empty would satisfy the comparison below without proving anything.
+        assertThat(cullerIds).isNotEmpty();
+
+        assertThat(this.context.getBean(VisionProviderCatalog.class).providers())
+                .extracting(VisionProviderDescriptor::id)
+                .containsExactlyInAnyOrderElementsOf(cullerIds);
     }
 }

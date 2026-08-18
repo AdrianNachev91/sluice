@@ -5,6 +5,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
+import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.job.WatchMode;
@@ -54,6 +55,6 @@ public final class SettingsFixture {
                         new CullCategory("scenery", "scenery description"),
                         new CullCategory("food", "food description"),
                         new CullCategory("funny", "funny description")),
-                new ExternalAgentSettings(WatchMode.MANUAL), MontageConfig.defaults());
+                new ExternalAgentSettings(WatchMode.MANUAL), MontageConfig.defaults(), ThemeChoice.SYSTEM);
     }
 }

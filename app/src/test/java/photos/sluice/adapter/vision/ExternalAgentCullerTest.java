@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.DecisionShard;
@@ -26,7 +27,14 @@ class ExternalAgentCullerTest {
 
     @Test
     void idIsExternalAgent() {
-        assertThat(this.culler.id()).isEqualTo("external-agent");
+        assertThat(this.culler.describe().id()).isEqualTo("external-agent");
+    }
+
+    // What CullEngine reads to tell an ordinary pause from a failed run. Typed API instead, every
+    // wait for a shard this provider exists to do would reach the user as a run that failed.
+    @Test
+    void waitsForAPersonRatherThanCallingAModel() {
+        assertThat(this.culler.type()).isEqualTo(ProviderType.MANUAL);
     }
 
     @Test

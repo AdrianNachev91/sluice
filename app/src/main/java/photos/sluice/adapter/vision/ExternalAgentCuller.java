@@ -4,13 +4,17 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.ProviderSetting;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.ProgressCallback;
 
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Set;
 
 /**
  * The {@link VisionCuller} provider for a user whose vision judgement comes from an agent outside
@@ -39,14 +43,33 @@ import java.util.ArrayList;
 @Component
 class ExternalAgentCuller implements VisionCuller {
 
+    static final String PROVIDER_ID = "external-agent";
+
     /**
-     * Returns this provider's identifier.
+     * {@inheritDoc}
      *
-     * @return {@link String} the manual-mode provider id
+     * <p>The judging happens outside this app, so none of the model settings apply and there is
+     * nothing to authenticate. What it does need is what to do while it waits.
+     *
+     * <p>Named by what the agent has to be able to do rather than by where it runs. An agent hands
+     * its answers back by writing them into a folder. One that can only reply in a chat window
+     * cannot do this, wherever its model happens to live.
      */
     @Override
-    public String id() {
-        return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+    public VisionProviderDescriptor describe() {
+        return new VisionProviderDescriptor(PROVIDER_ID,
+                "External agent (an agent on this computer that can write files, like Claude Code)",
+                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null);
+    }
+
+    /**
+     * Says the judgements come from outside this app, so a caller reads a refusal as a pause.
+     *
+     * @return {@link ProviderType} always {@link ProviderType#MANUAL}
+     */
+    @Override
+    public ProviderType type() {
+        return ProviderType.MANUAL;
     }
 
     /**

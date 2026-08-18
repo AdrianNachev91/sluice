@@ -8,6 +8,7 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
+import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
@@ -253,7 +254,7 @@ class YamlSettingsStoreTest {
         return new Settings(new PathSettings("/photos/work", "/photos/library", "/photos/work/Inbox"),
                 "anthropic", new CullProviderSettings("claude-sonnet-5", "https://example.invalid", true, 4),
                 List.of(new CullCategory("junk", "objectively worthless shots")),
-                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7));
+                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK);
     }
 
     // Reads a saved file back the way config binding would, so a test compares settings values
@@ -264,6 +265,7 @@ class YamlSettingsStoreTest {
         final var paths = asMap(sluice.get("paths"));
         final var montage = asMap(sluice.get("montage"));
         final var cull = asMap(sluice.get("cull"));
+        final var ui = asMap(sluice.get("ui"));
         final var providerSettings = asMap(cull.get("provider-settings"));
         final List<CullCategory> categories = ((List<?>) cull.get("categories")).stream()
                 .map(YamlSettingsStoreTest::asMap)
@@ -279,7 +281,8 @@ class YamlSettingsStoreTest {
                 categories,
                 new ExternalAgentSettings(WatchMode.valueOf(
                         ((String) asMap(cull.get("external-agent")).get("mode")).toUpperCase(Locale.ROOT))),
-                new MontageConfig((Integer) montage.get("tile-size"), (Integer) montage.get("tiles-per-row")));
+                new MontageConfig((Integer) montage.get("tile-size"), (Integer) montage.get("tiles-per-row")),
+                ThemeChoice.valueOf(((String) ui.get("theme")).toUpperCase(Locale.ROOT)));
     }
 
     private static String read(final Path file) {

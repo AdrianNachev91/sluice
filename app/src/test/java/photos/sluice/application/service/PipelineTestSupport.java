@@ -26,7 +26,9 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
@@ -59,6 +61,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.BooleanSupplier;
 
@@ -66,6 +69,10 @@ import java.util.function.BooleanSupplier;
 // CurateEngineTest. Each of those three files pulls in what it needs through explicit static
 // imports, so a test body reads as though the helper were declared locally.
 final class PipelineTestSupport {
+
+    // Any id a manual-mode fake and the settings pointing at it can agree on. What CullEngine reads
+    // is the type, so no test here needs a real provider's id to reach the manual-mode paths.
+    static final String MANUAL_PROVIDER_ID = "a-manual-provider";
 
     private PipelineTestSupport() {
     }
@@ -460,13 +467,13 @@ final class PipelineTestSupport {
     }
 
     static CullSettings defaultCullSettings() {
-        return new FixedSettings(VisionCuller.MANUAL_MODE_PROVIDER_ID,
+        return new FixedSettings(MANUAL_PROVIDER_ID,
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
     static CullSettings watchCullSettings() {
-        return new FixedSettings(VisionCuller.MANUAL_MODE_PROVIDER_ID,
+        return new FixedSettings(MANUAL_PROVIDER_ID,
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.WATCH));
     }
@@ -1013,10 +1020,22 @@ final class PipelineTestSupport {
     // validation is ShardValidator/ApplyEngine's job, already covered by their own tests - and by
     // CullEngine's own tally (ShardTallyCalculator), which runs real ShardValidator logic
     // independently of this fake.
+    // Every double below needs a description because the port has one, and none of them is about
+    // what a settings screen would draw. Named settings and a credential would be fixture that
+    // no assertion here reads.
+    static VisionProviderDescriptor describing(final String id) {
+        return new VisionProviderDescriptor(id, id, Set.of(), Set.of(), null);
+    }
+
     static final class ManualModeCuller implements VisionCuller {
         @Override
-        public String id() {
-            return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+        public VisionProviderDescriptor describe() {
+            return describing(MANUAL_PROVIDER_ID);
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.MANUAL;
         }
 
         @Override
@@ -1045,8 +1064,13 @@ final class PipelineTestSupport {
     // that same exception for a genuinely incomplete shard set.
     record BlockingIncompleteCuller(CountDownLatch started, CountDownLatch release) implements VisionCuller {
         @Override
-        public String id() {
-            return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+        public VisionProviderDescriptor describe() {
+            return describing(MANUAL_PROVIDER_ID);
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.MANUAL;
         }
 
         @Override
@@ -1075,8 +1099,13 @@ final class PipelineTestSupport {
     // decision" rule, so every photo in scope is simply left in place, implicitly kept.
     static final class AutoApproveCuller implements VisionCuller {
         @Override
-        public String id() {
-            return "auto-approve";
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
         }
 
         @Override
@@ -1100,8 +1129,13 @@ final class PipelineTestSupport {
         private final CullPrepPort cullPrepPort = new JsonCullPrepStore();
 
         @Override
-        public String id() {
-            return "auto-approve";
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
         }
 
         @Override
@@ -1127,8 +1161,13 @@ final class PipelineTestSupport {
     // shape a run needs to reach Blocked without any culler-side failure along the way.
     static final class OutOfScopeCuller implements VisionCuller {
         @Override
-        public String id() {
-            return "auto-approve";
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
         }
 
         @Override
@@ -1145,9 +1184,19 @@ final class PipelineTestSupport {
         }
     }
 
-    // Stands in for an automated provider (Anthropic/OpenAI/Ollama) whose CullException means a
-    // genuine failure, never "waiting for more shards" - see VisionCuller.MANUAL_MODE_PROVIDER_ID.
+    // Stands in for a provider that calls a model, so its CullException means the model could not
+    // answer rather than that shards are still arriving.
     record ThrowingCuller(String id) implements VisionCuller {
+        @Override
+        public VisionProviderDescriptor describe() {
+            return describing(this.id);
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
+        }
+
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
             throw new CullException("the model could not produce a valid judgement");
@@ -1164,8 +1213,13 @@ final class PipelineTestSupport {
             implements VisionCuller {
 
         @Override
-        public String id() {
-            return "auto-approve";
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
         }
 
         @Override
@@ -1208,8 +1262,13 @@ final class PipelineTestSupport {
     // The other is a resume skipping dispatch entirely once every montage already has a shard.
     static final class NeverCalledCuller implements VisionCuller {
         @Override
-        public String id() {
-            return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+        public VisionProviderDescriptor describe() {
+            return describing(MANUAL_PROVIDER_ID);
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.MANUAL;
         }
 
         @Override

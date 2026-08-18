@@ -24,8 +24,10 @@ public sealed interface LibraryRootMoveOutcome {
      * takes: a duplicate is something a later cull can resolve, and an overwrite is not.
      *
      * @param filesCopied int how many files were written into the new library
+     * @param filesFound int how many the old library held; any above the copied count were already
+     *        in the new folder and were left as they were
      */
-    record CopiedAndMoved(int filesCopied) implements LibraryRootMoveOutcome {
+    record CopiedAndMoved(int filesCopied, int filesFound) implements LibraryRootMoveOutcome {
     }
 
     /**

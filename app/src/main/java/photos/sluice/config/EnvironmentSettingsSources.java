@@ -95,6 +95,26 @@ public class EnvironmentSettingsSources implements SettingsSources {
         if (OriginLookup.getOrigin(source, property) instanceof final SystemEnvironmentOrigin variable) {
             return new SettingOverride.ByEnvironmentVariable(property, variable.getProperty());
         }
-        return new SettingOverride.ByAnotherSource(property, source.getName());
+        return new SettingOverride.ByAnotherSource(property, whatThatSourceIs(source.getName()));
+    }
+
+    /**
+     * What to call a source in a sentence, given the name Spring files it under.
+     *
+     * <p>Those names are Spring's own identifiers, and a user has never seen one. Rendered as
+     * written they reach the screen as the first word of a sentence: "commandLineArgs outranks what
+     * is saved here." Anything this method does not recognise is described by where it stands
+     * rather than named, since an unrecognised name is exactly the one worth not printing.
+     *
+     * @param name {@link String} the property source's own name
+     * @return {@link String} what to call it, as a sentence starts
+     */
+    private static String whatThatSourceIs(final String name) {
+        return switch (name) {
+            case "commandLineArgs" -> "A command-line argument";
+            case "systemProperties" -> "A Java system property";
+            case "systemEnvironment" -> "An environment variable";
+            default -> "Something outside your settings file";
+        };
     }
 }

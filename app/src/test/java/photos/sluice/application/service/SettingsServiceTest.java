@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class SettingsServiceTest {
 
@@ -207,14 +208,18 @@ class SettingsServiceTest {
     }
 
     @Test
-    void aPlainSaveWillNotMoveAConfiguredLibraryRoot(@TempDir final Path root, @TempDir final Path library) {
+    void aPlainSaveWillNotMoveAConfiguredLibraryRoot(@TempDir final Path root, @TempDir final Path library)
+            throws IOException {
         final var live = new RecordingLive(settings(root));
         final var store = new RecordingStore();
         final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
 
-        assertThatThrownBy(() -> service.save(settingsWithLibrary(root, library)))
-                .isInstanceOf(LibraryRootMoveNeedsAResolutionException.class)
-                .hasMessageContaining(sharedLibrary.toString());
+        // The root is carried rather than only named in the message. That message is for a log, and
+        // a surface asking the user about this folder has to read it from somewhere.
+        final var refused = catchThrowableOfType(LibraryRootMoveNeedsAResolutionException.class,
+                () -> service.save(settingsWithLibrary(root, library)));
+        assertThat(refused).isNotNull();
+        assertThat(refused.previousLibraryRoot()).isEqualTo(sharedLibrary.toRealPath());
 
         assertThat(store.saved).isEmpty();
         assertThat(live.current().paths().libraryRoot()).isEqualTo(sharedLibrary.toString());
@@ -868,7 +873,7 @@ class SettingsServiceTest {
 
     private static Settings withProvider(final Settings settings, final String provider) {
         return new Settings(settings.paths(), provider, settings.providerSettings(), settings.categories(),
-                settings.externalAgent(), settings.montage());
+                settings.externalAgent(), settings.montage(), settings.theme());
     }
 
     // A running process holds the root its settings name, claimed when it started. A save that moves

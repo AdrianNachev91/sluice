@@ -5,6 +5,7 @@ import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
@@ -39,9 +40,10 @@ public class CullDispatcher {
      */
     public CullDispatcher(final List<VisionCuller> cullers, final CullSettings settings) {
         this.byId = cullers.stream().collect(Collectors.toMap(
-                VisionCuller::id, Function.identity(),
+                culler -> culler.describe().id(), Function.identity(),
                 (first, _) -> {
-                    throw new IllegalStateException("Two vision cullers share id '" + first.id() + "'");
+                    throw new IllegalStateException(
+                            "Two vision cullers share id '" + first.describe().id() + "'");
                 }));
         this.settings = settings;
     }
@@ -82,6 +84,27 @@ public class CullDispatcher {
                            final CancellationSignal cancellation)
             throws CullException {
         return this.select().cull(prep, options, progress, cancellation);
+    }
+
+    /**
+     * Whether the configured provider works the given way. Two callers ask: one deciding what a
+     * {@link CullException} means, one deciding whether a run is worth watching.
+     *
+     * <p>Asked of the culler that would run, rather than worked out from the configured id. The id
+     * is a string a user can type, and the provider it names is the only thing that knows how it
+     * works.
+     *
+     * <p>False when nothing is registered under the configured id, rather than a refusal. Every
+     * caller is asking in order to decide whether to do something extra, so an id this build cannot
+     * cull with answers no to all of them. The refusal for that belongs to a cull actually being
+     * attempted, which is what {@link #cull} does.
+     *
+     * @param type {@link ProviderType} the way of working to test for
+     * @return boolean true when a provider is registered for the configured id and works that way
+     */
+    public boolean configuredProviderIs(final ProviderType type) {
+        final VisionCuller culler = this.byId.get(this.settings.provider());
+        return culler != null && culler.type() == type;
     }
 
     /**

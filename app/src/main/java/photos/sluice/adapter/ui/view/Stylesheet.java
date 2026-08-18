@@ -1,11 +1,12 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.application.ColorScheme;
-import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.WeakChangeListener;
 import javafx.scene.Scene;
 import photos.sluice.adapter.ui.Theme;
+import photos.sluice.adapter.ui.ThemeSelection;
+
+import java.util.List;
 
 /**
  * The look every Sluice window starts from: the stylesheets it carries, and the size it opens at.
@@ -30,26 +31,38 @@ final class Stylesheet {
     }
 
     /**
-     * Dresses a scene in the desktop's current look, and keeps it there. The scheme arrives as a
-     * property rather than a value read once at startup. So a desktop switched between light and
-     * dark while the app is open restyles what is already on screen.
+     * Dresses a scene in the look in force, and keeps it there. Both sources arrive as properties
+     * rather than values read once at startup. So a desktop switched between light and dark, or a
+     * theme saved in Settings, restyles what is already on screen.
      *
      * @param scene {@link Scene} the scene to style
      * @return {@link Scene} that same scene, styled
      */
     static Scene applyTo(final Scene scene) {
-        final var colorScheme = Platform.getPreferences().colorSchemeProperty();
-        wear(scene, Theme.matching(colorScheme.get()));
+        final var look = ThemeSelection.effectiveTheme();
+        wear(scene, look.getValue());
 
-        final ChangeListener<ColorScheme> restyle = (_, _, current) -> wear(scene, Theme.matching(current));
-        // The desktop's preferences belong to the process and outlive every window in it. A listener
-        // registered straight onto them holds the scene it restyles, so each one ever dressed would
-        // be kept until the process ended. The strong reference lives on the scene instead, so the
-        // two are collectable together. The weak wrapper stays on the property until the next scheme
-        // change finds its referent gone, which costs a few words per scene ever dressed.
+        final ChangeListener<Theme> restyle = (_, _, current) -> wear(scene, current);
+        // The look in force belongs to the process and outlives every window in it. A listener
+        // registered straight onto it holds the scene it restyles, so each one ever dressed would be
+        // kept until the process ended. The strong reference lives on the scene instead, so the two
+        // are collectable together. The weak wrapper stays on the property until the next change
+        // finds its referent gone, which costs a few words per scene ever dressed.
         scene.getProperties().put(RESTYLE_LISTENER, restyle);
-        colorScheme.addListener(new WeakChangeListener<>(restyle));
+        look.addListener(new WeakChangeListener<>(restyle));
         return scene;
+    }
+
+    /**
+     * The stylesheet URLs of the look in force right now, for a container this class cannot dress.
+     *
+     * <p>A dialog owns its own scene and is gone in seconds, so it reads the look once instead of
+     * carrying the restyle listener a long-lived window needs.
+     *
+     * @return a {@link List} of {@link String} the sheets to wear, in layering order
+     */
+    static List<String> sheetsInForce() {
+        return ThemeSelection.effectiveTheme().getValue().sheets().stream().map(Stylesheet::url).toList();
     }
 
     /**

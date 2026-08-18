@@ -22,6 +22,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
@@ -71,7 +72,14 @@ class AnthropicCullerTest {
 
     @Test
     void reservesTheAnthropicProviderId() {
-        assertThat(this.culler().id()).isEqualTo("anthropic");
+        assertThat(this.culler().describe().id()).isEqualTo("anthropic");
+    }
+
+    // What CullEngine reads to tell an ordinary pause from a failed run. Typed MANUAL instead, a
+    // model that genuinely could not answer would be filed as a run still waiting for shards.
+    @Test
+    void callsAModelRatherThanWaitingForAPerson() {
+        assertThat(this.culler().type()).isEqualTo(ProviderType.API);
     }
 
     @Test
@@ -788,7 +796,7 @@ class AnthropicCullerTest {
     // being tied together.
     @Test
     void namesItsCredentialAfterTheProviderItRegistersAs() {
-        assertThat(AnthropicCuller.API_KEY.provider()).isEqualTo(this.culler().id());
+        assertThat(AnthropicCuller.API_KEY.provider()).isEqualTo(this.culler().describe().id());
     }
 
     private AnthropicCuller culler() {

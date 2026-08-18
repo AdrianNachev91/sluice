@@ -16,7 +16,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
-import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
@@ -105,7 +105,8 @@ final class CullEngine {
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
-        this.cullWatchers = new CullWatchers(cullSettings, this.shardTallyCalculator, watchPollInterval,
+        this.cullWatchers = new CullWatchers(cullSettings, cullDispatcher::configuredProviderIs,
+                this.shardTallyCalculator, watchPollInterval,
                 prepDir -> this.resume(prepDir, false));
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
@@ -454,12 +455,11 @@ final class CullEngine {
      * for it, and the disarmWatch() below has already retired any that was polling.
      *
      * <p>A CullException from the dispatch step means different things depending on the configured
-     * provider - see VisionCuller.MANUAL_MODE_PROVIDER_ID's own doc. For that provider it's the
-     * expected manual-mode pause: resolved into Waiting, run slot released. For any other (automated)
-     * provider it's a genuine failure and propagates - it never throws CullException to signal a
-     * cancellation. An automated provider's cull() still lands in Waiting on cancellation, but via
-     * the cancellation.isCancelled() check further down, after dispatch returns normally rather than
-     * through this catch block.
+     * provider's own ProviderType. From a MANUAL one it's the expected pause: resolved into Waiting,
+     * run slot released. From an API one it's a genuine failure and propagates - it never throws
+     * CullException to signal a cancellation. An API provider's cull() still lands in Waiting on
+     * cancellation, but via the cancellation.isCancelled() check further down, after dispatch
+     * returns normally rather than through this catch block.
      *
      * <p>disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
      * cull(), a user's manual resume(), or a watcher's own auto-resume. Whatever watcher was polling
@@ -489,7 +489,7 @@ final class CullEngine {
                         progress -> this.cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress,
                                 cancellation));
             } catch (final CullException e) {
-                if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
+                if (!this.cullDispatcher.configuredProviderIs(ProviderType.MANUAL)) {
                     throw e;
                 }
                 // The exception names which montages are still missing a shard. Nothing downstream

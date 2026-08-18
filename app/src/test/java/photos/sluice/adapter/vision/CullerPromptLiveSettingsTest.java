@@ -5,6 +5,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
+import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.config.SettingsHolder;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
@@ -57,6 +58,6 @@ class CullerPromptLiveSettingsTest {
 
     private static Settings settings(final List<CullCategory> categories, final MontageConfig montage) {
         return new Settings(PATHS, "anthropic", new CullProviderSettings(null, null, null, null), categories,
-                new ExternalAgentSettings(WatchMode.MANUAL), montage);
+                new ExternalAgentSettings(WatchMode.MANUAL), montage, ThemeChoice.SYSTEM);
     }
 }

@@ -24,9 +24,12 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.ProviderSetting;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
@@ -56,6 +59,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -96,9 +100,11 @@ import java.util.stream.Collectors;
 @Component
 class AnthropicCuller implements VisionCuller {
 
+    static final String PROVIDER_ID = "anthropic";
+
     // This provider names its own credential rather than reading it from a central registry. A
     // second API provider then adds its own id instead of editing a shared table.
-    static final SecretId API_KEY = new SecretId("anthropic", "ANTHROPIC_API_KEY");
+    static final SecretId API_KEY = new SecretId(PROVIDER_ID, "ANTHROPIC_API_KEY");
 
     // The response ceiling, which doubles as a per-call cost cap. Sizing: a verdict runs about
     // 70 tokens, so the largest list a sheet can produce is ~3.5k for a dense 7x7 grid. 8192
@@ -202,13 +208,30 @@ class AnthropicCuller implements VisionCuller {
     }
 
     /**
-     * Returns this provider's identifier.
+     * {@inheritDoc}
      *
-     * @return {@link String} the provider id, "anthropic"
+     * <p>This app calls the model itself, so it needs the model settings and a key. A model id is
+     * the one value it cannot be run without. Required here, it is caught while a user is still
+     * looking at the field, rather than at cull time against settings they last saw accepted.
      */
     @Override
-    public String id() {
-        return "anthropic";
+    public VisionProviderDescriptor describe() {
+        return new VisionProviderDescriptor(PROVIDER_ID,
+                "Anthropic (calls a vision model from inside Sluice)",
+                Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.THINKING,
+                        ProviderSetting.RETRIES, ProviderSetting.CREDENTIAL),
+                Set.of(ProviderSetting.MODEL),
+                API_KEY);
+    }
+
+    /**
+     * Says this provider calls a model itself, so a caller reads a refusal as a genuine failure.
+     *
+     * @return {@link ProviderType} always {@link ProviderType#API}
+     */
+    @Override
+    public ProviderType type() {
+        return ProviderType.API;
     }
 
     /**

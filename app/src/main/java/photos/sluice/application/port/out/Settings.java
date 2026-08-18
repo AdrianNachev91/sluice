@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  */
 public record Settings(PathSettings paths, String provider, CullProviderSettings providerSettings,
                        List<CullCategory> categories, ExternalAgentSettings externalAgent,
-                       MontageConfig montage) implements CullSettings {
+                       MontageConfig montage, ThemeChoice theme) implements CullSettings {
 
     /**
      * Copies the category list, and refuses one holding two cards under the same name. Two such
@@ -36,6 +36,7 @@ public record Settings(PathSettings paths, String provider, CullProviderSettings
      * @param categories a {@link List} of {@link CullCategory} the classification cards a cull routes to
      * @param externalAgent {@link ExternalAgentSettings} tuning for the external-agent provider
      * @param montage {@link MontageConfig} the contact-sheet grid a cull renders
+     * @param theme {@link ThemeChoice} the look the user asked for, or to follow the desktop
      */
     public Settings {
         categories = List.copyOf(categories);

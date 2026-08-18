@@ -209,7 +209,7 @@ public class SettingsService implements SettingsUseCase {
         final PathSettings paths = current.paths();
         return new Settings(new PathSettings(paths.repoRoot(), newLibraryRoot.toString(), paths.inbox()),
                 current.provider(), current.providerSettings(), current.categories(),
-                current.externalAgent(), current.montage());
+                current.externalAgent(), current.montage(), current.theme());
     }
 
     /**
@@ -238,9 +238,9 @@ public class SettingsService implements SettingsUseCase {
         if (was.isEmpty() || was.equals(libraryRoot(settings))) {
             return;
         }
-        throw new LibraryRootMoveNeedsAResolutionException(
-                "Moving the library away from " + was.get() + " leaves Sluice's record of what it holds behind."
-                        + " Say whether to copy the library across or start that record fresh.");
+        throw new LibraryRootMoveNeedsAResolutionException(was.get(),
+                "Refusing a save that would move the library root away from " + was.get()
+                        + " without a stated resolution for the hash index");
     }
 
     /**

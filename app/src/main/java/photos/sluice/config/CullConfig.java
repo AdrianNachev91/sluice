@@ -43,11 +43,11 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
             providerSettings = new CullProviderSettings(null, null, null, null);
         }
         // Same absent-node normalization as providerSettings above - a user who never touches
-        // sluice.cull.external-agent (every non-external-agent provider) gets the MANUAL default
+        // sluice.cull.external-agent (every non-external-agent provider) gets the WATCH default
         // via ExternalAgentSettings' own compact constructor.
         //noinspection ConstantValue
         if (externalAgent == null) {
-            externalAgent = new ExternalAgentSettings(WatchMode.MANUAL);
+            externalAgent = new ExternalAgentSettings(WatchMode.WATCH);
         }
     }
 }

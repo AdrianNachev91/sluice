@@ -36,10 +36,12 @@ public class SettingsHolder implements LiveSettings, CullSettings {
      * @param paths {@link PathsProperties} the bound folder roots
      * @param cull {@link CullConfig} the bound cull settings
      * @param montage {@link MontageProperties} the bound contact-sheet grid
+     * @param ui {@link UiProperties} the bound look
      */
     @Autowired
-    public SettingsHolder(final PathsProperties paths, final CullConfig cull, final MontageProperties montage) {
-        this(bound(paths, cull, montage));
+    public SettingsHolder(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
+                          final UiProperties ui) {
+        this(bound(paths, cull, montage, ui));
     }
 
     /**
@@ -58,13 +60,15 @@ public class SettingsHolder implements LiveSettings, CullSettings {
      * @param paths {@link PathsProperties} the bound folder roots
      * @param cull {@link CullConfig} the bound cull settings
      * @param montage {@link MontageProperties} the bound contact-sheet grid
+     * @param ui {@link UiProperties} the bound look
      * @return {@link Settings} the settings the app starts on
      */
-    static Settings bound(final PathsProperties paths, final CullConfig cull, final MontageProperties montage) {
+    static Settings bound(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
+                          final UiProperties ui) {
         return new Settings(
                 new PathSettings(paths.repoRoot(), paths.libraryRoot(), paths.inbox()),
                 cull.provider(), cull.providerSettings(), cull.categories(), cull.externalAgent(),
-                new MontageConfig(montage.tileSize(), montage.tilesPerRow()));
+                new MontageConfig(montage.tileSize(), montage.tilesPerRow()), ui.theme());
     }
 
     /**

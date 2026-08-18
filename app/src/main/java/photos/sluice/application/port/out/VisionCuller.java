@@ -11,27 +11,35 @@ import photos.sluice.domain.job.ProgressCallback;
  *
  * <p>In one mode the user's agent reads the montages and writes the shards out of band. In another
  * the app calls the user's configured vision model and writes the shards from its response. Either
- * way the work stays inside {@link #cull}, so callers invoke it uniformly regardless of provider -
- * a caller may still branch on the provider id itself for other reasons, such as how it resolves a
- * {@link CullException} thrown from {@link #cull} into a waiting state (see
- * {@link #MANUAL_MODE_PROVIDER_ID}'s own doc).
+ * way the work stays inside {@link #cull}, so callers invoke it uniformly regardless of provider.
+ * What a caller still has to tell apart is what a {@link CullException} out of {@link #cull} means,
+ * and {@link #type} is what answers that.
  */
 public interface VisionCuller {
 
-    // The id ExternalAgentCuller registers under. A CullException thrown by cull() while this is the
-    // configured provider always means "no complete, valid shard set yet" - the normal manual-mode
-    // pause, never a failure. A caller resolves it into a waiting state. From any other (automated)
-    // provider, a CullException means the model itself could not produce a valid judgement after its
-    // own retries - a genuine failure a caller should propagate.
-    String MANUAL_MODE_PROVIDER_ID = "external-agent";
+    /**
+     * How this provider presents itself to anything configuring it: its name, which settings it
+     * uses, which it cannot run without, and the credential it authenticates with.
+     *
+     * <p>Answered by the provider rather than assembled elsewhere, so a provider added later
+     * arrives complete. Nothing outside it has to be edited for it to appear.
+     *
+     * <p>The identifier a dispatcher matches the configured provider against lives here too.
+     *
+     * @return {@link VisionProviderDescriptor} this provider's own description
+     */
+    VisionProviderDescriptor describe();
 
     /**
-     * Stable identifier the dispatcher matches against the configured provider (for example
-     * "external-agent" or "anthropic"). Unique across all registered cullers.
+     * How this provider gets its judgements, which tells a caller what a {@link CullException} out
+     * of {@link #cull} means.
      *
-     * @return {@link String} the provider's stable identifier
+     * <p>No default. Guessing one would classify a provider that waits for a person as automated,
+     * and its ordinary pause would then reach a user as a failed run.
+     *
+     * @return {@link ProviderType} this provider's own type
      */
-    String id();
+    ProviderType type();
 
     /**
      * Obtains a decision shard for every montage in prep, by whatever means the implementation

@@ -7,7 +7,6 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
-import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullCategory;
@@ -369,7 +368,7 @@ class CullMontageRendererTest {
 
         @Override
         public String provider() {
-            return VisionCuller.MANUAL_MODE_PROVIDER_ID;
+            return "any-provider";
         }
 
         @Override

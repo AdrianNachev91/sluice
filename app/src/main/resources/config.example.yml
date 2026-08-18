@@ -1,0 +1,88 @@
+# Sluice's own settings file, fully commented, saying what each setting means and what values it
+# takes. This copy is never read by the app; it exists only so a value has somewhere to be
+# documented that nothing rewrites. The app's own config.yml carries no comments, because saving
+# from Settings parses it, edits keys and writes the whole document back, which drops anything
+# typed here by hand.
+#
+# Folder roots, before any single setting below. Three folders, and how they relate to each other:
+#   - The working root (sluice.paths.repo-root) is where Sluice stages everything: the inbox,
+#     sorted media waiting to be committed, and logs. Transient staging, so it should not ride a
+#     cloud sync - a folder under a OneDrive- or iCloud-synced Documents directory is a common way
+#     to get one by accident.
+#   - The library root (sluice.paths.library-root) is where committed keepers live for good.
+#     Moving it later is a real operation, not a config edit: it copies the whole library or files
+#     the hash index aside, and Settings is where that flow lives. Editing this file by hand while
+#     Sluice has any unfinished cull run on disk can leave that run unable to resume.
+#   - The inbox (sluice.paths.inbox) is where new media arrives to be sorted.
+#   - The library and the inbox must not contain each other, in either direction.
+#   - The inbox must not be, or contain, the working root. The working root containing the inbox
+#     is the documented layout and stays legal - the default inbox suggestion is a folder under the
+#     working root.
+#   - Every root is optional until a first run configures it. Sluice starts with nothing set and
+#     refuses jobs until all three are usable.
+
+sluice:
+  paths:
+    # The working root. See the folder-roots note above.
+    repo-root: /home/example/Sluice
+    # The library root. See the folder-roots note above.
+    library-root: /home/example/Pictures/Sluice
+    # The inbox. See the folder-roots note above.
+    inbox: /home/example/Sluice/Inbox
+
+  cull:
+    # Which vision provider judges photos: "anthropic" calls a vision model from inside the app,
+    # "external-agent" waits for an agent you run yourself to write decision shards. Shown at its
+    # default, which needs no API key of yours.
+    provider: external-agent
+
+    provider-settings:
+      # The model id to request. Required when provider is "anthropic"; ignored otherwise.
+      model: claude-opus-5
+      # An optional non-default API endpoint. Leave unset to use the provider's own default.
+      endpoint:
+      # Whether the model may reason before answering. Optional; falls back to the provider's own
+      # default when unset.
+      thinking: false
+      # How many times a failed transport call (a timeout, a 429, a 5xx) is retried. Optional;
+      # falls back to the provider's own default when unset.
+      max-retries: 2
+
+    # The classification category cards a cull routes photos to. Each needs a name and a
+    # description; the description is what an automated provider reads to judge a photo against
+    # it. "funny" is a built-in category the app disposes of specially, and can be disabled but
+    # not renamed or deleted.
+    categories:
+      - name: junk
+        description: Blurry, duplicate, or otherwise not worth keeping.
+      - name: scenery
+        description: Landscapes and scenery worth a second look before deciding.
+      - name: food
+        description: Food and meal photos, not kept by default.
+      - name: funny
+        description: Photos worth setting aside to laugh at later.
+
+    external-agent:
+      # How a waiting cull resumes once the external agent's shards land, when provider is
+      # "external-agent". "watch" (the default) polls the prep directory and resumes on its own
+      # once every montage has a shard. "manual" waits for an explicit resume.
+      mode: watch
+
+  montage:
+    # The pixel size of each square tile in a montage contact sheet.
+    tile-size: 224
+    # How many tiles form a row in a montage contact sheet.
+    tiles-per-row: 5
+
+  imaging:
+    # The external command line used to decode HEIF and HEIC images. Left at its default unless
+    # the decoder is installed somewhere this app cannot find on its own. The name varies by
+    # package: some distributions ship this command as heif-dec instead.
+    heif-decoder-command: heif-convert
+
+  ui:
+    # Which look the app wears: "system" follows the desktop's own light/dark setting and is the
+    # default, "light" and "dark" override it and hold. A startup failure that stopped Sluice
+    # before it could read this file is shown in the desktop's look, since your choice is one of
+    # the things it could not read.
+    theme: system

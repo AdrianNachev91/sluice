@@ -8,7 +8,9 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
@@ -40,6 +42,34 @@ class CullDispatcherTest {
         assertThat(target.receivedOptions).isSameAs(OPTIONS);
         assertThat(report).isSameAs(target.report);
         assertThat(other.receivedPrep).isNull();
+    }
+
+    // Two registered cullers whose types differ, so answering off the wrong one is a visible
+    // failure rather than a coincidence. CullEngine reads this to tell a manual pause from a
+    // failed run, and CullWatchers to decide whether a run is worth watching.
+    @Test
+    void answersTheTypeOfTheCullerTheConfiguredProviderNames() {
+        final List<VisionCuller> cullers = List.of(new RecordingCuller("waits-for-a-person", ProviderType.MANUAL),
+                new RecordingCuller("calls-a-model", ProviderType.API));
+
+        final var waiting = new CullDispatcher(cullers, settingsFor("waits-for-a-person"));
+        assertThat(waiting.configuredProviderIs(ProviderType.MANUAL)).isTrue();
+        assertThat(waiting.configuredProviderIs(ProviderType.API)).isFalse();
+
+        final var calling = new CullDispatcher(cullers, settingsFor("calls-a-model"));
+        assertThat(calling.configuredProviderIs(ProviderType.API)).isTrue();
+        assertThat(calling.configuredProviderIs(ProviderType.MANUAL)).isFalse();
+    }
+
+    // Both callers ask in order to decide whether to do something extra. An id this build cannot
+    // cull with is told no rather than refused, so a watcher declines to arm rather than failing.
+    @Test
+    void answersNoForAProviderNoRegisteredCullerClaims() {
+        final var dispatcher = new CullDispatcher(
+                List.of(new RecordingCuller("calls-a-model", ProviderType.API)), settingsFor("nothing-registered"));
+
+        assertThat(dispatcher.configuredProviderIs(ProviderType.API)).isFalse();
+        assertThat(dispatcher.configuredProviderIs(ProviderType.MANUAL)).isFalse();
     }
 
     @Test
@@ -146,18 +176,29 @@ class CullDispatcherTest {
     private static final class RecordingCuller implements VisionCuller {
 
         private final String id;
+        private final ProviderType type;
         private final CullReport report = new CullReport(0, 0, 0, 0);
         private @Nullable PrepDir receivedPrep;
         private @Nullable CullOptions receivedOptions;
         private @Nullable ProgressCallback receivedProgress;
 
         private RecordingCuller(final String id) {
+            this(id, ProviderType.API);
+        }
+
+        private RecordingCuller(final String id, final ProviderType type) {
             this.id = id;
+            this.type = type;
         }
 
         @Override
-        public String id() {
-            return this.id;
+        public VisionProviderDescriptor describe() {
+            return PipelineTestSupport.describing(this.id);
+        }
+
+        @Override
+        public ProviderType type() {
+            return this.type;
         }
 
         @Override
@@ -175,6 +216,16 @@ class CullDispatcherTest {
     }
 
     private record ThrowingCuller(String id) implements VisionCuller {
+
+        @Override
+        public VisionProviderDescriptor describe() {
+            return PipelineTestSupport.describing(this.id);
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
+        }
 
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {

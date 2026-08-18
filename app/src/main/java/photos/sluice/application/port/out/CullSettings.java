@@ -13,7 +13,8 @@ import java.util.List;
 public interface CullSettings {
 
     /**
-     * Id of the vision provider to route a cull through, matched against each VisionCuller.id().
+     * Id of the vision provider to route a cull through, matched against what each
+     * {@link VisionCuller} describes itself as.
      *
      * @return {@link String} the configured provider id
      */

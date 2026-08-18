@@ -7,7 +7,7 @@ import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.VisionCuller;
+import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Owns the watch lifecycle for waiting cull jobs: which prep dirs currently have a
@@ -28,6 +29,7 @@ final class CullWatchers {
     private static final Logger log = LoggerFactory.getLogger(CullWatchers.class);
 
     private final CullSettings cullSettings;
+    private final Predicate<ProviderType> configuredProviderIs;
     private final ShardTallyCalculator shardTallyCalculator;
     // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
     // unlike mode, this cadence isn't a documented user-facing knob, just an internal
@@ -42,14 +44,19 @@ final class CullWatchers {
      * Creates the watch lifecycle owner.
      *
      * @param cullSettings {@link CullSettings} configured provider and watch-mode settings
+     * @param configuredProviderIs a {@link Predicate} of {@link ProviderType} whether the configured
+     *         provider works that way, asked afresh each time because a user can change it between
+     *         runs
      * @param shardTallyCalculator {@link ShardTallyCalculator} the readiness check a watcher polls
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      * @param resume a {@link Function} of {@link Path} to {@link JobHandle} of {@link CullJobOutcome}
      *         the route back to {@link CullEngine#resume} a ready watcher's auto-resume attempt uses
      */
-    CullWatchers(final CullSettings cullSettings, final ShardTallyCalculator shardTallyCalculator,
+    CullWatchers(final CullSettings cullSettings, final Predicate<ProviderType> configuredProviderIs,
+                 final ShardTallyCalculator shardTallyCalculator,
                  final Duration watchPollInterval, final Function<Path, JobHandle<CullJobOutcome>> resume) {
         this.cullSettings = cullSettings;
+        this.configuredProviderIs = configuredProviderIs;
         this.shardTallyCalculator = shardTallyCalculator;
         this.watchPollInterval = watchPollInterval;
         this.resume = resume;
@@ -83,7 +90,7 @@ final class CullWatchers {
      * @param prepDir {@link Path} the prep dir to watch
      */
     void armWatch(final Path prepDir) {
-        if (!this.cullSettings.provider().equals(VisionCuller.MANUAL_MODE_PROVIDER_ID)) {
+        if (!this.configuredProviderIs.test(ProviderType.MANUAL)) {
             return;
         }
         this.activeWatches.compute(prepDir, (_, existing) -> {

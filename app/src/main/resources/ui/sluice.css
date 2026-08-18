@@ -34,11 +34,30 @@
     -sluice-ground: #f4f5f7;
     -sluice-text: #1a1d21;
     -sluice-text-muted: #5a6270;
+    /* A prompt is a suggestion, not a value, and has to lose that argument at a glance. Its own
+       token rather than the muted one, because how faint it can go depends on what it sits on, and
+       the two looks put it on very different grounds. */
+    -sluice-prompt: #8b93a1;
     -sluice-border: #dfe2e7;
     -sluice-accent: #2f6f4f;
+    -sluice-danger: #b3261e;
+    -sluice-banner-bg: #eaf3ee;
+    -sluice-caution: #b45309;
 
     -sluice-mark-bg: #2f6f4f;
     -sluice-mark-glyph: #ffffff;
+
+    /* Modena draws every control's own focus ring from these two: a thin ring in the first, and a
+       wider glow bleeding outward in the second. A text field's own :focused rule below replaces
+       the whole effect for that control, but a radio or checkbox draws its ring on an internal
+       region (its dot or its box) this stylesheet has no selector for. Making the glow transparent
+       removes the part that reads as thick everywhere it is still Modena's own drawing, leaving
+       only the thin ring, itself darkened so it does not read as loud as the accent does at
+       running-text strength. Both derive from the accent, so the ring still lightens the same way
+       the accent does in the dark look. */
+    /*noinspection CssInvalidFunction*/
+    -fx-focus-color: derive(-sluice-accent, -25%);
+    -fx-faint-focus-color: transparent;
 
     -fx-font-family: "Segoe UI", "SF Pro Text", "Ubuntu", "Helvetica Neue", sans-serif;
     -fx-font-size: 13px;
@@ -71,6 +90,16 @@
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text-muted;
     -fx-padding: 10px 0 0 0;
+}
+
+/* Names a whole group of settings, on a page that is nothing but stacked groups. In the muted
+   eyebrow colour it carries no more weight than the help text under a field, so a reader scrolling
+   for one setting has nothing to aim at. The brand colour is what the page has to mark a heading
+   with: the only other thing wearing it is the Save button, which is not a heading and cannot be
+   mistaken for one. Settings only. The startup-failure screen's eyebrow stays muted, because green
+   on a screen reporting a broken install reads as reassurance. */
+.settings-card-title {
+    -fx-text-fill: -sluice-accent;
 }
 
 /* The mark and the name, laid out as the website's own header lays them out. */
@@ -159,6 +188,68 @@
     -fx-opacity: 0.9;
 }
 
+/* Anything the pointer can act on says so under the pointer. Buttons, nav entries and the welcome
+   link carry it in their own rules; these are the controls JavaFX leaves with a plain arrow. The
+   label beside a radio or a checkbox is part of that control's own hit area, so it is covered by
+   naming the control rather than the text. */
+.radio-button,
+.check-box,
+.hyperlink,
+.combo-box,
+.combo-box-popup .list-cell,
+.titled-pane > .title,
+.spinner .increment-arrow-button,
+.spinner .decrement-arrow-button {
+    -fx-cursor: hand;
+}
+
+/* A control reacting under the pointer is what says it can be pressed, and the cursor is the weaker
+   half of that signal. These are the ones JavaFX leaves inert. Everything below tints rather than
+   moves: the room a tint needs is set here, so the control does not shift the moment a pointer
+   touches it. */
+.radio-button,
+.check-box {
+    -fx-padding: 3px 6px;
+    -fx-background-radius: 4px;
+}
+
+.radio-button:hover,
+.check-box:hover,
+.titled-pane > .title:hover,
+.spinner .increment-arrow-button:hover,
+.spinner .decrement-arrow-button:hover {
+    -fx-background-color: -sluice-banner-bg;
+}
+
+.welcome-link:hover {
+    -fx-opacity: 0.8;
+}
+
+/* An action that is on the screen because a field needs it, not because the screen wants it
+   pressed. A folder picker and a password reveal are both this. Filled, they compete with Save
+   and the fill stops meaning anything. */
+.button-quiet {
+    -fx-background-color: transparent;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-text;
+    -fx-font-weight: normal;
+}
+
+.button-quiet:hover {
+    -fx-background-color: -sluice-ground;
+    -fx-opacity: 1.0;
+}
+
+/* The reveal's eye, filled with the text colour so it reads as an icon rather than as artwork.
+   Scaled from the 24px the path is drawn at to the size a control's text sits at. */
+.reveal-glyph {
+    -fx-fill: -sluice-text;
+    -fx-scale-x: 0.7;
+    -fx-scale-y: 0.7;
+}
+
 /* The window's own outer container: sidebar and whatever screen is showing, edge to edge. Padding
    belongs to the pieces inside it, not to this. */
 .shell {
@@ -208,6 +299,7 @@
     -fx-font-weight: bold;
 }
 
+
 /* A heading and nothing else, whatever screen it belongs to. */
 .pane-heading {
     -fx-font-size: 20px;
@@ -232,11 +324,12 @@
     -fx-wrap-text: true;
 }
 
-/* The card's own eyebrow, in the brand's own fixed green rather than the muted grey every other
-   eyebrow uses, since this is the one card the app wants to read as an invitation rather than a
-   status line. */
+/* The card's own eyebrow, in the brand green rather than the muted grey a plain eyebrow uses, since
+   this is the one card the app wants to read as an invitation rather than a status line. The accent
+   and not the mark's ground: that one is painted behind a white glyph and stays dark in both looks,
+   so text wearing it disappears into a dark card. */
 .welcome-eyebrow {
-    -fx-text-fill: -sluice-mark-bg;
+    -fx-text-fill: -sluice-accent;
 }
 
 /* A TextFlow rather than a Label, so one word within the sentence can carry its own colour. Only
@@ -249,11 +342,23 @@
     -fx-fill: -sluice-text-muted;
 }
 
-/* Settings is the one word in this sentence that names a real destination, so it reads in the
-   brand's own green rather than blending into the muted sentence around it. */
-.welcome-detail-highlight {
-    -fx-fill: -sluice-mark-bg;
+/* Settings is the one word in this sentence that names a real destination, and it goes there. The
+   underline is what says so: in the brand green alone it read as emphasis, and a reader who tried
+   to click it was right to. A Hyperlink brings its own ground, padding and focus ring, all of which
+   would make a word in a sentence look like a button sitting in one. */
+.welcome-link {
+    -fx-text-fill: -sluice-accent;
     -fx-font-weight: bold;
+    -fx-underline: true;
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-cursor: hand;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.welcome-link:visited {
+    -fx-text-fill: -sluice-accent;
 }
 
 /* Where a rejected or unparsable value sits: the file, and the line and column where either is
@@ -320,4 +425,390 @@
 
 .trace-text .scroll-bar .thumb {
     -fx-background-color: -sluice-border;
+}
+
+/* The Settings screen scrolls: its content runs taller than the window, unlike every screen before
+   it. JavaFX's own ScrollPane chrome is opaque by default, which would draw a second, wrongly
+   coloured background behind the real one. Both layers are cleared so the screen's own ground
+   shows through. */
+.settings-scroll, .settings-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* The Settings screen's own container. Each of its sections is a plain .card, spaced apart from
+   its neighbours the way any stack of panels on a screen is.
+
+   The right-hand padding is the scrollbar's room. That bar sits inside the viewport, so without it
+   the bar rests against the cards' right edge with nothing between them. Padding on the content
+   rather than a margin on the bar, because the bar is only there while the screen overflows and
+   the spacing should not come and go with it. */
+.settings-pane {
+    -fx-spacing: 16px;
+    -fx-padding: 0 12px 0 0;
+}
+
+/* A field's own name, and the sentence naming where the API key is. Every label on the screens
+   before this one carries a class that sets its colour outright. A form has far more labels than
+   those screens do, so they share one class rather than each getting their own. */
+.settings-field-label {
+    -fx-text-fill: -sluice-text;
+}
+
+/* A run of fields sharing a card, spaced the way the card spaces its own children. A VBox nested
+   inside another inherits no spacing from it. */
+.settings-group {
+    -fx-spacing: 10px;
+}
+
+/* One field's label, control and any note under it. */
+.settings-row {
+    -fx-spacing: 4px;
+    -fx-padding: 8px 0 0 0;
+}
+
+/* The options of one choice, grouped so a note under the row sits below the whole set. Tighter
+   than the row's own spacing, which is what makes them read as one control rather than several.
+
+   The padding is what separates the set from the label above it. A radio button carries its own
+   vertical padding, so spacing alone left the label 22px off the first option and the options 20px
+   apart: the label read as a fourth item in the list rather than as the question the three answer. */
+.settings-choices {
+    -fx-spacing: 2px;
+    -fx-padding: 8px 0 0 0;
+}
+
+/* The same set where every option is a word or two, so they fit on one line beside their label.
+   A radio button carries its own horizontal padding, so what lands on screen between two of them is
+   well over this spacing. It stays under the gap the label gets below, or the row reads as separate
+   controls rather than one question with three answers. */
+.settings-choices-inline {
+    -fx-spacing: 2px;
+    -fx-alignment: center-left;
+}
+
+/* A label beside its control rather than above it. The gap is wider than the one between the
+   control's own options, which is what keeps the label reading as the question. */
+.settings-inline-row {
+    -fx-spacing: 30px;
+    -fx-alignment: center-left;
+}
+
+/* A control beside the buttons that act on it: a folder field and Browse, a key entry and its
+   Save/Remove row. */
+.settings-field-row {
+    -fx-spacing: 8px;
+    -fx-alignment: center-left;
+}
+
+/* What an empty field suggests, in both looks. JavaFX's own look derives this fill from the field's
+   background, and the dark sheet makes that background near-black, so the derived fill lands close
+   to it and the suggestion all but disappears. Named outright instead, so it resolves per look
+   against the same muted fill the help lines use. It is the empty folder fields that make this
+   load-bearing: on a fresh install they are the only thing telling a user where their photos go. */
+.text-field, .password-field {
+    -fx-prompt-text-fill: -sluice-prompt;
+}
+
+/* A field the screen has something to say about, marked where the eye already is rather than only
+   in the line beneath it. On a page this long the message and the control it names can be read far
+   enough apart that the message alone leaves the reader hunting. */
+/*noinspection CssInvalidPseudoSelector*/
+.text-field:refused,
+.password-field:refused {
+    -fx-border-color: -sluice-danger;
+    -fx-border-radius: 3px;
+    -fx-border-width: 1px;
+}
+
+/* Modena's own focus state draws a halo out of several stacked background layers, which reads as
+   thick on a wide rectangular field however the two lookup colours it derives from are set. This
+   replaces the whole effect with one border, the same shape a refusal already draws. A spinner's
+   editor carries the text-field class too, so its inner field takes this rule. Its outer frame does
+   not: a Spinner is not itself focus-traversable, so JavaFX gives the whole control a second, wider
+   version of the same halo under a different pseudo-class when a control inside it holds focus. */
+/*noinspection CssInvalidPseudoSelector*/
+.text-field:focused,
+.password-field:focused,
+.spinner:contains-focus {
+    -fx-background-insets: 0;
+    -fx-border-color: -sluice-accent;
+    -fx-border-radius: 3px;
+    -fx-border-width: 1px;
+}
+
+/* Without this, a spinner's editor draws its own border flush against the outer ring above, which
+   reads as one ring doubled rather than two controls. The outer one already says the whole spinner
+   has focus. */
+/*noinspection CssInvalidPseudoSelector*/
+.spinner .text-field:focused {
+    -fx-border-width: 0;
+}
+
+/* A dialog dressed in the app's sheets would otherwise draw every button raised, since .button is
+   the raised look here. In a dialog only the default action is the one the screen wants pressed;
+   the rest take the quiet shape the folder pickers use. */
+/* An edge against the window the dialog covers: same surface, same fonts, so without one it merges
+   into the page beneath. The accent at a single pixel, between the 2px frame that read as loud and
+   the neutral line that vanished. No top edge, because the title bar is the top edge: a border
+   starting again beneath the chrome read as a frame that failed to reach it. The shadow around a
+   decorated dialog is the desktop's own; a stylesheet effect draws inside the window's bounds and
+   cannot reach past them. */
+.dialog-pane {
+    -fx-background-color: -sluice-surface;
+    -fx-border-color: -sluice-accent;
+    -fx-border-width: 0 1px 1px 1px;
+}
+
+/* Room between the message and the buttons. Modena runs them nearly together, which reads as the
+   buttons belonging to the text's last line rather than to the whole question. */
+.dialog-pane > .content {
+    -fx-padding: 14px 12px 18px 12px;
+}
+
+.dialog-pane > .button-bar {
+    -fx-padding: 0 12px 12px 12px;
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: -sluice-surface;
+}
+
+.dialog-pane .header-panel .label {
+    -fx-text-fill: -sluice-text;
+    -fx-font-weight: bold;
+}
+
+.dialog-pane .content {
+    -fx-text-fill: -sluice-text;
+}
+
+/* Three roles, three looks. The default action is the raised green. The other real choices carry
+   the accent as an outline, so they read as Sluice's own options rather than stock chrome. Cancel
+   backs out and gets the ground fill instead: lifted off the surface enough to find, with no
+   colour saying it is one of the choices. */
+.dialog-pane .button {
+    -fx-background-color: transparent;
+    -fx-border-color: -sluice-accent;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-accent;
+    -fx-font-weight: normal;
+}
+
+.dialog-pane .button:default {
+    -fx-background-color: -sluice-mark-bg;
+    -fx-border-color: transparent;
+    -fx-text-fill: -sluice-mark-glyph;
+    -fx-font-weight: bold;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.dialog-pane .button:cancel {
+    -fx-background-color: -sluice-ground;
+    -fx-border-color: -sluice-border;
+    -fx-text-fill: -sluice-text;
+}
+
+/* A dropdown holding one setting's value, dressed like the fields holding the others. JavaFX draws
+   a stock one as a raised grey control, which beside flat bordered text fields reads as a different
+   kind of thing entirely. The inner-control background is the same lever the fields take their fill
+   from, so the two track each other in both looks rather than being matched by hand. */
+.combo-box {
+    -fx-background-color: -fx-control-inner-background;
+    -fx-background-radius: 6px;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.combo-box:hover,
+.combo-box:focused,
+.combo-box:showing {
+    -fx-border-color: -sluice-accent;
+}
+
+.combo-box > .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -sluice-text;
+    -fx-padding: 5px 8px;
+}
+
+.combo-box > .arrow-button {
+    -fx-background-color: transparent;
+}
+
+.combo-box > .arrow-button > .arrow {
+    -fx-background-color: -sluice-text-muted;
+}
+
+/* The list that drops below it, given the card's own edge rather than the platform's shadowed one,
+   so an open dropdown still looks like part of this screen. */
+.combo-box-popup > .list-view {
+    -fx-background-color: -fx-control-inner-background;
+    -fx-background-radius: 6px;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+}
+
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -sluice-text;
+    -fx-padding: 6px 10px;
+}
+
+/* The row under the pointer is a suggestion, so it gets a tint. The row already chosen is a fact,
+   so it gets the mark's own green and white, the same pair a button carries and for the same
+   reason: it holds those two values in both looks, which a tint derived from the theme cannot. */
+/*noinspection CssInvalidPseudoSelector*/
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:hover {
+    -fx-background-color: -sluice-banner-bg;
+    -fx-text-fill: -sluice-text;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected,
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected:hover {
+    -fx-background-color: -sluice-mark-bg;
+    -fx-text-fill: -sluice-mark-glyph;
+}
+
+/* Something that just worked, said next to the control it happened on. The accent rather than the
+   mark's fixed green, because this is a line of text on a card rather than a filled surface. */
+.settings-confirmation {
+    -fx-text-fill: -sluice-accent;
+    -fx-font-weight: bold;
+}
+
+/* What is wrong with a field right now, or a save this screen refused. Something was not accepted,
+   which is what separates it from a caution. */
+.settings-violation {
+    -fx-text-fill: -sluice-danger;
+    -fx-font-weight: bold;
+}
+
+/* A failure explained at length rather than named in a phrase. The danger colour still marks it as
+   a problem. The bold that suits a one-line message under a field turns a paragraph into shouting. */
+.settings-violation-detail {
+    -fx-text-fill: -sluice-danger;
+}
+
+/* Something configured that is not being used, where nothing was refused and nothing is lost. The
+   danger colour is for a value this app will not accept; this one it accepted and worked around. */
+.settings-caution-row {
+    -fx-spacing: 7px;
+    /* Beside the first line rather than centred on the paragraph. A message that wraps to three
+       lines would otherwise put its glyph next to the second one, pointing at nothing. */
+    -fx-alignment: top-left;
+    -fx-padding: 2px 0 0 0;
+}
+
+.settings-caution {
+    -fx-text-fill: -sluice-caution;
+    -fx-font-weight: bold;
+}
+
+/* A save rebuilds the page, so nothing on screen would otherwise say it worked. Its own ground
+   rather than a line of green text, because a page that has just redrawn needs something a reader
+   lands on rather than reads for. */
+.settings-banner {
+    -fx-background-color: -sluice-banner-bg;
+    -fx-background-radius: 6px;
+    -fx-border-color: -sluice-accent;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-padding: 10px 14px;
+    -fx-spacing: 10px;
+    -fx-alignment: center-left;
+}
+
+.settings-banner .label {
+    -fx-text-fill: -sluice-accent;
+    -fx-font-weight: bold;
+}
+
+/* Closes the banner before it leaves on its own. Quiet, because it is not the reason the banner is
+   there, and a filled button beside a confirmation would read as the thing being confirmed. */
+.settings-banner-dismiss {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: -sluice-accent;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 4px;
+    -fx-cursor: hand;
+}
+
+.settings-banner-dismiss:hover {
+    -fx-opacity: 0.7;
+}
+
+.caution-ring {
+    -fx-fill: transparent;
+    -fx-stroke: -sluice-caution;
+    /*noinspection CssNonIntegerLengthInPixels*/
+    -fx-stroke-width: 1.6px;
+}
+
+.caution-mark {
+    -fx-fill: -sluice-caution;
+}
+
+/* A value an environment variable or another source outranks. Muted, since it is information
+   rather than a problem: the field still saves, it just is not the one that wins at the next
+   launch. */
+.settings-override-note {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-size: 11px;
+}
+
+/* What a whole panel is for, under its name and above its first control. Sits at body size rather
+   than the smaller per-field size, because this is the sentence a reader who knows none of this
+   needs, and the one they read first. */
+.settings-card-intro {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-line-spacing: 2px;
+    -fx-padding: 2px 0 6px 0;
+    -fx-max-width: 640px;
+}
+
+/* A block within a card, such as the credential rows inside the provider panel. Its own top border
+   separates it from the rows above without the weight of a second card. */
+.settings-subsection {
+    -fx-spacing: 4px;
+    -fx-padding: 14px 0 0 0;
+    -fx-border-color: -sluice-border;
+    -fx-border-width: 1px 0 0 0;
+}
+
+.settings-subsection-heading {
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+    -fx-padding: 0 0 2px 0;
+}
+
+/* One line saying what a setting is for, between its label and its control. Muted and smaller than
+   the value it explains, so a reader who already knows the setting skims past it. */
+.settings-help {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-size: 11px;
+    -fx-padding: 0 0 2px 0;
+}
+
+/* The line under the API key entry, naming where a save would land before anything is typed. */
+.settings-reassurance {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-size: 11px;
+}
+
+.settings-save-status {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-padding: 4px 0 0 0;
+}
+
+/* A refused save keeps the status line's spacing and takes the warning colour. Named as both
+   classes together, since either one alone would otherwise win on where it sits in this file. */
+.settings-save-status.settings-violation {
+    -fx-text-fill: -sluice-danger;
 }

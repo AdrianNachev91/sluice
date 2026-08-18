@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import photos.sluice.SluiceApplication;
+import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.ShellPresenter;
 import photos.sluice.adapter.ui.StartupSequence;
 import photos.sluice.adapter.ui.UiBootstrap;
@@ -109,10 +110,19 @@ public class SluiceFxApplication extends Application {
      * @param stage {@link Stage} the stage to draw into
      */
     private void present(final Stage stage) {
+        // Before any scene is built, so a window opens already wearing the saved look rather than
+        // dressing itself in the desktop's and then correcting.
+        //
+        // Ahead of the failure branch, not inside the success one, because a context can exist on
+        // either. A busy working root is thrown by the startup sequence, which runs after the
+        // context is built, so that failure screen can honour a saved theme. One that killed the
+        // context has none to read and follows the desktop.
+        this.applySavedThemeIfSettingsAreReadable();
         final Throwable startupFailure = this.failure;
         if (startupFailure == null) {
             final var built = Objects.requireNonNull(this.context, "no failure means a context was built");
-            stage.setScene(MainWindow.scene(built.getBean(ShellPresenter.class)));
+            stage.setScene(MainWindow.scene(built.getBean(ShellPresenter.class),
+                    built.getBean(SettingsPresenter.class)));
             return;
         }
         final var presenter = UiBootstrap.reportAndPresent(startupFailure);
@@ -120,6 +130,20 @@ public class SluiceFxApplication extends Application {
                 () -> this.retryRun(stage),
                 property -> this.retryAfterRepair(stage, () -> UiBootstrap.removeSetting(property)),
                 () -> this.retryAfterRepair(stage, UiBootstrap::setAside))));
+    }
+
+    /**
+     * Puts the saved look in force when there is a context to read it from.
+     *
+     * <p>Silent when there is none, and that is the honest answer rather than a fallback. A context
+     * that never started has not read the user's config file. No saved choice exists to honour, so
+     * the desktop's own scheme is all there is.
+     */
+    private void applySavedThemeIfSettingsAreReadable() {
+        final ConfigurableApplicationContext built = this.context;
+        if (built != null) {
+            built.getBean(SettingsPresenter.class).applySavedTheme();
+        }
     }
 
     /**

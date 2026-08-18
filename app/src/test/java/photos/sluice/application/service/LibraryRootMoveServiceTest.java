@@ -6,11 +6,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.fs.NioMediaStore;
+import photos.sluice.adapter.fs.YamlSettingsStore;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome;
 import photos.sluice.application.port.in.LibraryRootResolution;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.UnfinishedRunsException;
 import photos.sluice.application.port.out.ProgressPort;
+import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.config.PathsConfig;
@@ -51,9 +53,25 @@ class LibraryRootMoveServiceTest {
 
             final LibraryRootMoveOutcome outcome = fixture.move(newLibrary, LibraryRootResolution.COPY_AND_KEEP_INDEX);
 
-            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.CopiedAndMoved(1));
+            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.CopiedAndMoved(1, 1));
             assertThat(newLibrary.resolve("2019/06/holiday.jpg")).hasContent("holiday");
             assertThat(fixture.libraryRootInForce()).isEqualTo(newLibrary.toString());
+        }
+
+        // The other tests prove the move against the settings in force. This one proves it against
+        // the file a restart reads, through the real YAML store. A move reaching only the in-memory
+        // settings is silently undone by the next launch.
+        @Test
+        void theMoveSurvivesToTheConfigFile(@TempDir final Path root, @TempDir final Path newLibrary)
+                throws IOException {
+            final Path configFile = root.resolve("config.yml");
+            final var fixture = new Fixture(root, new CopyEngine(new NioMediaStore()),
+                    new YamlSettingsStore(configFile));
+            write(fixture.library.resolve("holiday.jpg"), "holiday");
+
+            fixture.move(newLibrary, LibraryRootResolution.COPY_AND_KEEP_INDEX);
+
+            assertThat(Files.readString(configFile)).contains("library-root: " + newLibrary);
         }
 
         @Test
@@ -266,6 +284,11 @@ class LibraryRootMoveServiceTest {
         }
 
         private Fixture(final Path root, final CopyEngine copyEngine) {
+            this(root, copyEngine, _ -> {
+            });
+        }
+
+        private Fixture(final Path root, final CopyEngine copyEngine, final SettingsStore store) {
             this.library = createDirectory(root.resolve("Library"));
             createDirectory(root.resolve("Inbox"));
             this.live = SettingsFixture.holder(root, this.library, root.resolve("Inbox"));
@@ -274,8 +297,8 @@ class LibraryRootMoveServiceTest {
             final var jobRunner = new JobRunner();
             final var validation = new PathValidationService(mediaStore, this.live);
             this.hashIndex = new CsvLibraryHashIndex(paths);
-            final var settingsService = new SettingsService(this.live, _ -> {
-            }, new NoClaims(), jobRunner, validation, _ -> Optional.empty(), List.of());
+            final var settingsService = new SettingsService(this.live, store,
+                    new NoClaims(), jobRunner, validation, _ -> Optional.empty(), List.of());
             this.service = new LibraryRootMoveService(settingsService, jobRunner, copyEngine,
                     this.hashIndex, paths, CullPrepTestSupport.prepDirDoctor(root), validation, this.progress);
         }

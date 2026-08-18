@@ -119,7 +119,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
             return new LibraryRootMoveOutcome.CopyCancelled(copy.filesCopied(), copy.filesFound());
         }
         this.settings.saveMovingTheLibraryRoot(movingTo);
-        return new LibraryRootMoveOutcome.CopiedAndMoved(copy.filesCopied());
+        return new LibraryRootMoveOutcome.CopiedAndMoved(copy.filesCopied(), copy.filesFound());
     }
 
     /**

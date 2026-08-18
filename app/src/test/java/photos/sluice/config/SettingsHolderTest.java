@@ -10,6 +10,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
+import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.job.WatchMode;
@@ -28,7 +29,7 @@ class SettingsHolderTest {
     @Test
     void theBoundGridMapsFieldsByNameNotPosition() {
         final Settings settings = SettingsHolder.bound(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5));
+                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         assertThat(settings.montage().tileSize()).isEqualTo(224);
         assertThat(settings.montage().tilesPerRow()).isEqualTo(5);
@@ -37,7 +38,7 @@ class SettingsHolderTest {
     @Test
     void theBoundValuesAreWhatTheAppStartsOn() {
         final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5));
+                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         assertThat(holder.current().paths()).isEqualTo(PATHS);
         assertThat(holder.provider()).isEqualTo("external-agent");
@@ -49,11 +50,11 @@ class SettingsHolderTest {
     @Test
     void everyValueItServesComesFromTheLastSave() {
         final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
-                cullConfig(), new MontageProperties(224, 5));
+                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         holder.apply(new Settings(PATHS, "anthropic", new CullProviderSettings("claude-sonnet-5", null, null, null),
                 List.of(new CullCategory("food", "food description")),
-                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7)));
+                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK));
 
         assertThat(holder.provider()).isEqualTo("anthropic");
         assertThat(holder.providerSettings().model()).isEqualTo("claude-sonnet-5");
@@ -72,7 +73,7 @@ class SettingsHolderTest {
                 new ExternalAgentSettings(WatchMode.MANUAL));
 
         assertThatThrownBy(() -> SettingsHolder.bound(new PathsProperties("repo", "library", "inbox"),
-                cull, new MontageProperties(224, 5)))
+                cull, new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("receipts");
     }
@@ -90,7 +91,9 @@ class SettingsHolderTest {
                         "sluice.cull.categories[0].description=Paper receipts and invoices",
                         "sluice.cull.categories[1].name=receipts",
                         "sluice.cull.categories[1].description=Photos of till slips")
-                .run(context -> assertThat(context).hasFailed());
+                .run(context -> assertThat(context).getFailure()
+                        .rootCause()
+                        .hasMessageContaining("receipts"));
     }
 
     private static CullConfig cullConfig() {
@@ -98,8 +101,11 @@ class SettingsHolderTest {
                 List.of(new CullCategory("junk", "junk description")), new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
+    // Every properties class SettingsHolder takes. One missing makes the context fail to build, and
+    // a test asserting that it failed then passes without ever reaching what it meant to check.
     @Configuration
-    @EnableConfigurationProperties({PathsProperties.class, CullConfig.class, MontageProperties.class})
+    @EnableConfigurationProperties({PathsProperties.class, CullConfig.class, MontageProperties.class,
+            UiProperties.class})
     @Import(SettingsHolder.class)
     static class SettingsContext {
     }

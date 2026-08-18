@@ -78,9 +78,9 @@ public final class PathsMisconfiguredException extends IllegalStateException {
     }
 
     /**
-     * What a config file and an environment variable call this root. A switch rather than a field on
-     * the role itself, so how a root is spelled outside the app stays the caller's business rather
-     * than the rule's. Adding a fourth root fails to compile here until it is named.
+     * What a config file and an environment variable call this root. Kept here rather than on
+     * {@link PathRole}, so how a root is spelled outside the app stays the caller's business rather
+     * than the domain's. Adding a fourth root fails to compile here until it is named.
      *
      * @param role {@link PathRole} the root to name
      * @return {@link String} the configuration property that sets it

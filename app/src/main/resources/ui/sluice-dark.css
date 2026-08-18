@@ -20,6 +20,24 @@
     -sluice-ground: #14161a;
     -sluice-text: #e8eaed;
     -sluice-text-muted: #a2a9b4;
+    -sluice-prompt: #6b7480;
     -sluice-border: #2c3038;
     -sluice-accent: #4fae7d;
+    -sluice-danger: #e5484d;
+    -sluice-banner-bg: #1b2a22;
+    /* Its own value rather than the light sheet's. A caution colour has to carry against a dark
+       card without turning into a signal lamp, and the saturation that reads as serious on white
+       reads as neon here. */
+    -sluice-caution: #d9a066;
+
+    /* JavaFX's own default look derives every stock control's colour from these three. A text
+       field, spinner, check box or radio button is drawn by that look, not by the rules above, so
+       left alone it draws dark text on a dark card and a white box on a dark ground. The light
+       sheet sets none of them, because the default look is already a light one. */
+    -fx-base: #1c1f24;
+    -fx-background: #14161a;
+    /* Lighter than the card a field sits in, not equal to the page behind it. Matching the page
+       leaves a field with no edge of its own: it reads as a hole in the card rather than as
+       something to type into, and its prompt has no ground to be legible against. */
+    -fx-control-inner-background: #262b33;
 }
