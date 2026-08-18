@@ -208,8 +208,7 @@ class SettingsServiceTest {
     }
 
     @Test
-    void aPlainSaveWillNotMoveAConfiguredLibraryRoot(@TempDir final Path root, @TempDir final Path library)
-            throws IOException {
+    void aPlainSaveWillNotMoveAConfiguredLibraryRoot(@TempDir final Path root, @TempDir final Path library) {
         final var live = new RecordingLive(settings(root));
         final var store = new RecordingStore();
         final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
@@ -219,7 +218,7 @@ class SettingsServiceTest {
         final var refused = catchThrowableOfType(LibraryRootMoveNeedsAResolutionException.class,
                 () -> service.save(settingsWithLibrary(root, library)));
         assertThat(refused).isNotNull();
-        assertThat(refused.previousLibraryRoot()).isEqualTo(sharedLibrary.toRealPath());
+        assertThat(refused.previousLibraryRoot()).isEqualTo(sharedLibrary);
 
         assertThat(store.saved).isEmpty();
         assertThat(live.current().paths().libraryRoot()).isEqualTo(sharedLibrary.toString());
