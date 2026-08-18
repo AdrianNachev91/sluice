@@ -860,28 +860,48 @@ class SettingsServiceTest {
 
     // The real store everywhere except the one call the failure is about. Every other root in the
     // candidate still gets the verdict a real filesystem gives it.
-    // A spelling the tidying step cannot settle, which is what an 8.3 short name or a junction is.
-    // The reader is what tells the two apart, so it is injected rather than made on disk: creating a
-    // junction needs a privilege the runners do not all have.
+    // A spelling tidying cannot settle, which is what an 8.3 short name or a junction is. The reader
+    // is what tells the two apart, so it is injected: creating a junction needs a privilege the
+    // runners do not all have. Both spellings go through it, because a double answering for only one
+    // of them leaves the other resolving differently on a machine whose temp path has a short form.
     @Test
     void twoSpellingsOfOneLibraryFolderAreNotAMove(@TempDir final Path root) {
         final Path alias = sharedLibrary.resolveSibling("LIBRAR~1");
         final var live = new RecordingLive(settingsWithLibrary(root, sharedLibrary));
         final var store = new RecordingStore();
         final var service = new SettingsService(live, store, new RecordingLock(), new JobRunner(),
-                new PathValidationService(resolving(alias, sharedLibrary), live),
-                resolving(alias, sharedLibrary), _ -> Optional.empty(), List.of());
+                new PathValidationService(bothNaming(alias, sharedLibrary), live),
+                bothNaming(alias, sharedLibrary), _ -> Optional.empty(), List.of());
 
         service.save(settingsWithLibrary(root, alias));
 
         assertThat(store.saved).hasSize(1);
     }
 
-    private static MediaReader resolving(final Path alias, final Path to) {
+    // The claim is made in the terms the user configured, not the followed form. The lock follows
+    // its own argument, and a claim it reports back has to be readable against the settings file.
+    @Test
+    void respellingTheWorkingRootMovesNoClaimAndKeepsTheConfiguredForm(@TempDir final Path root) {
+        final Path alias = root.resolveSibling("ROOTAL~1");
+        final var live = new RecordingLive(settings(root));
+        final var lock = new RecordingLock();
+        final var service = new SettingsService(live, new RecordingStore(), lock, new JobRunner(),
+                new PathValidationService(bothNaming(alias, root), live), bothNaming(alias, root),
+                _ -> Optional.empty(), List.of());
+
+        service.save(settings(alias));
+
+        assertThat(lock.claimed).isEmpty();
+        assertThat(lock.released).isEmpty();
+    }
+
+    private static MediaReader bothNaming(final Path alias, final Path folder) {
         return new NioMediaStore() {
             @Override
             public Optional<Path> realDirectory(final Path path) {
-                return path.equals(alias) ? Optional.of(to) : super.realDirectory(path);
+                return path.equals(alias) || path.equals(folder)
+                        ? Optional.of(folder)
+                        : super.realDirectory(path);
             }
         };
     }
