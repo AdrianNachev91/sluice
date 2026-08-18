@@ -277,6 +277,55 @@
               </rules>
             </configuration>
           </execution>
+          <!-- A regression floor for the views this bundle-level gate excludes, on the two
+               numbers a pane cannot inflate for free. Instruction and line execute just by being
+               constructed, whether or not a test ever drives what a control does. Branch coverage
+               carries no minimum: the native DirectoryChooser dialog no headless harness can reach
+               drags that number down by a fixed, unmovable amount, so a threshold meant to mean
+               something would force testing what cannot be tested, and one loose enough to pass
+               would catch nothing. The limits below sit a few points under what the package
+               measured at when this gate was set, a floor rather than that number restated. -->
+          <execution>
+            <id>check-view</id>
+            <phase>test</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <!-- Its own full exclude list, view/** left out, rather than an empty override. An
+                   execution-level excludes list replaces the plugin-level one for analysis, but an
+                   empty list measures zero classes rather than reading as "no excludes" - proved by
+                   watching an empty list here pass at an intentionally unreachable threshold, which
+                   only a truly empty measured set explains. -->
+              <excludes>
+                <exclude>photos/sluice/SluiceApplication.class</exclude>
+                <exclude>photos/sluice/adapter/secrets/Advapi32CredentialManager.class</exclude>
+                <exclude>photos/sluice/adapter/secrets/LibsecretService.class</exclude>
+                <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain.class</exclude>
+                <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain$*.class</exclude>
+              </excludes>
+              <includes>
+                <include>photos/sluice/adapter/ui/view/**</include>
+              </includes>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>INSTRUCTION</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.90</minimum>
+                    </limit>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.90</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>
