@@ -132,7 +132,8 @@ class SettingsServiceLockTest {
     private static SettingsService settingsService(final LiveSettings live, final SettingsStore store,
                                                    final WorkingRootLock lock) {
         return new SettingsService(live, store, lock, new JobRunner(),
-                new PathValidationService(new NioMediaStore(), live), _ -> Optional.empty(), List.of());
+                new PathValidationService(new NioMediaStore(), live), new NioMediaStore(),
+                _ -> Optional.empty(), List.of());
     }
 
     // The folder roots have to be there for the save's own check to pass, the same way a real

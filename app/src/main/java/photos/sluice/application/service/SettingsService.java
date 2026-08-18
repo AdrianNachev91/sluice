@@ -9,6 +9,7 @@ import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.LiveSettings;
+import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
@@ -75,6 +76,7 @@ public class SettingsService implements SettingsUseCase {
     private final WorkingRootLock workingRootLock;
     private final JobRunner jobRunner;
     private final PathValidationUseCase pathValidation;
+    private final MediaReader media;
     private final SettingsSources settingsSources;
     private final List<FolderRootsChangeListener> folderRootsListeners;
 
@@ -87,6 +89,8 @@ public class SettingsService implements SettingsUseCase {
      * @param jobRunner {@link JobRunner} says whether a job is running
      * @param pathValidation {@link PathValidationUseCase} checks folder roots a save would put in
      *         force
+     * @param media {@link MediaReader} resolves a configured folder to the one folder on disk it
+     *         names
      * @param settingsSources {@link SettingsSources} says what outranks the user's config file
      * @param folderRootsListeners a {@link List} of {@link FolderRootsChangeListener} told once a
      *         save has moved any folder root, empty in a process that wants none
@@ -94,6 +98,7 @@ public class SettingsService implements SettingsUseCase {
     public SettingsService(final LiveSettings live, final SettingsStore store,
                            final WorkingRootLock workingRootLock, final JobRunner jobRunner,
                            final PathValidationUseCase pathValidation,
+                           final MediaReader media,
                            final SettingsSources settingsSources,
                            final List<FolderRootsChangeListener> folderRootsListeners) {
         this.live = live;
@@ -101,6 +106,7 @@ public class SettingsService implements SettingsUseCase {
         this.workingRootLock = workingRootLock;
         this.jobRunner = jobRunner;
         this.pathValidation = pathValidation;
+        this.media = media;
         this.settingsSources = settingsSources;
         this.folderRootsListeners = List.copyOf(folderRootsListeners);
     }
@@ -140,8 +146,8 @@ public class SettingsService implements SettingsUseCase {
                 return;
             }
             this.requireUsableRoots(settings.paths());
-            requireTheLibraryRootStaysPut(settings, previous);
-            final boolean workingRootMoved = !workingRoot(settings).equals(workingRoot(previous));
+            this.requireTheLibraryRootStaysPut(settings, previous);
+            final boolean workingRootMoved = !this.workingRoot(settings).equals(this.workingRoot(previous));
             if (!this.jobRunner.runIfIdle(() -> {
                 this.moveRoots(settings, previous);
                 this.announceFolderRootsChange(workingRootMoved);
@@ -233,9 +239,9 @@ public class SettingsService implements SettingsUseCase {
      * @param previous {@link Settings} the settings running now
      * @throws LibraryRootMoveNeedsAResolutionException when a configured library root would change
      */
-    private static void requireTheLibraryRootStaysPut(final Settings settings, final Settings previous) {
-        final Optional<Path> was = libraryRoot(previous);
-        if (was.isEmpty() || was.equals(libraryRoot(settings))) {
+    private void requireTheLibraryRootStaysPut(final Settings settings, final Settings previous) {
+        final Optional<Path> was = this.libraryRoot(previous);
+        if (was.isEmpty() || was.equals(this.libraryRoot(settings))) {
             return;
         }
         throw new LibraryRootMoveNeedsAResolutionException(was.get(),
@@ -253,10 +259,28 @@ public class SettingsService implements SettingsUseCase {
      * @param settings {@link Settings} the settings to read the library root from
      * @return an {@link Optional} of {@link Path} the library root, empty when none is configured
      */
-    private static Optional<Path> libraryRoot(final Settings settings) {
+    private Optional<Path> libraryRoot(final Settings settings) {
         return Optional.ofNullable(settings.paths().libraryRoot())
                 .filter(libraryRoot -> !libraryRoot.isBlank())
-                .map(libraryRoot -> Path.of(libraryRoot).toAbsolutePath().normalize());
+                .map(libraryRoot -> this.sameFolderWhateverItsSpelling(Path.of(libraryRoot)));
+    }
+
+    /**
+     * The one folder on disk a configured path names, whichever way it is spelled.
+     *
+     * <p>Tidy first, follow second. Tidying alone settles a dot segment, and leaves an 8.3 short
+     * name or a junction reading as a different folder from the one it points at. Following settles
+     * those, and needs a path that is really there, which tidying is what produces.
+     *
+     * <p>A folder that is not on disk has nothing to follow, so the tidied form is the best
+     * available. That is also the form an install with a root it has not created yet is compared by.
+     *
+     * @param configured {@link Path} the path as the user configured it
+     * @return {@link Path} the form a move decision compares by
+     */
+    private Path sameFolderWhateverItsSpelling(final Path configured) {
+        final Path tidied = configured.toAbsolutePath().normalize();
+        return this.media.realDirectory(tidied).orElse(tidied);
     }
 
     /**
@@ -319,8 +343,8 @@ public class SettingsService implements SettingsUseCase {
      * @param previous {@link Settings} the settings in force until this succeeds
      */
     private void moveRoots(final Settings settings, final Settings previous) {
-        final Optional<Path> movingTo = workingRoot(settings);
-        final Optional<Path> heldUntilNow = workingRoot(previous);
+        final Optional<Path> movingTo = this.workingRoot(settings);
+        final Optional<Path> heldUntilNow = this.workingRoot(previous);
         if (movingTo.equals(heldUntilNow)) {
             // The inbox moved and the working root stayed put, so there is no claim to move. The job
             // gate still applied above, since a run reads all three roots.
@@ -436,9 +460,9 @@ public class SettingsService implements SettingsUseCase {
      * @param settings {@link Settings} the settings to read the working root from
      * @return an {@link Optional} of {@link Path} the working root, empty when none is configured
      */
-    private static Optional<Path> workingRoot(final Settings settings) {
+    private Optional<Path> workingRoot(final Settings settings) {
         return Optional.ofNullable(settings.paths().repoRoot())
                 .filter(repoRoot -> !repoRoot.isBlank())
-                .map(repoRoot -> Path.of(repoRoot).toAbsolutePath().normalize());
+                .map(repoRoot -> this.sameFolderWhateverItsSpelling(Path.of(repoRoot)));
     }
 }

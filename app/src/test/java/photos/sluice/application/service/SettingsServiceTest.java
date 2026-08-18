@@ -253,7 +253,7 @@ class SettingsServiceTest {
                 "SLUICE_PATHS_LIBRARY_ROOT");
         final var live = new RecordingLive(settings(root));
         final var service = new SettingsService(live, new RecordingStore(), new RecordingLock(),
-                new JobRunner(), new PathValidationService(new NioMediaStore(), live),
+                new JobRunner(), new PathValidationService(new NioMediaStore(), live), new NioMediaStore(),
                 property -> "sluice.paths.library-root".equals(property) ? Optional.of(override) : Optional.empty(),
                 List.of());
 
@@ -522,7 +522,8 @@ class SettingsServiceTest {
         final Path library = createDirectory(sharedLibrary);
         final Settings candidate = settings(after);
         final var service = new SettingsService(live, store, lock, new JobRunner(),
-                new PathValidationService(refusingToResolve(library), live), _ -> Optional.empty(), List.of());
+                new PathValidationService(refusingToResolve(library), live), refusingToResolve(library),
+                _ -> Optional.empty(), List.of());
 
         assertThatThrownBy(() -> service.save(candidate))
                 .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
@@ -853,11 +854,38 @@ class SettingsServiceTest {
                                                    final WorkingRootLock lock, final JobRunner jobRunner,
                                                    final List<FolderRootsChangeListener> listeners) {
         return new SettingsService(live, store, lock, jobRunner,
-                new PathValidationService(new NioMediaStore(), live), _ -> Optional.empty(), listeners);
+                new PathValidationService(new NioMediaStore(), live), new NioMediaStore(),
+                _ -> Optional.empty(), listeners);
     }
 
     // The real store everywhere except the one call the failure is about. Every other root in the
     // candidate still gets the verdict a real filesystem gives it.
+    // A spelling the tidying step cannot settle, which is what an 8.3 short name or a junction is.
+    // The reader is what tells the two apart, so it is injected rather than made on disk: creating a
+    // junction needs a privilege the runners do not all have.
+    @Test
+    void twoSpellingsOfOneLibraryFolderAreNotAMove(@TempDir final Path root) {
+        final Path alias = sharedLibrary.resolveSibling("LIBRAR~1");
+        final var live = new RecordingLive(settingsWithLibrary(root, sharedLibrary));
+        final var store = new RecordingStore();
+        final var service = new SettingsService(live, store, new RecordingLock(), new JobRunner(),
+                new PathValidationService(resolving(alias, sharedLibrary), live),
+                resolving(alias, sharedLibrary), _ -> Optional.empty(), List.of());
+
+        service.save(settingsWithLibrary(root, alias));
+
+        assertThat(store.saved).hasSize(1);
+    }
+
+    private static MediaReader resolving(final Path alias, final Path to) {
+        return new NioMediaStore() {
+            @Override
+            public Optional<Path> realDirectory(final Path path) {
+                return path.equals(alias) ? Optional.of(to) : super.realDirectory(path);
+            }
+        };
+    }
+
     private static MediaReader refusingToResolve(final Path refused) {
         return new NioMediaStore() {
             @Override
