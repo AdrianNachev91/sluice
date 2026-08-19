@@ -8,6 +8,7 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
@@ -164,7 +165,12 @@ class CullDispatcherTest {
 
         @Override
         public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null, null, null);
+            return CullProviderSettings.unset();
+        }
+
+        @Override
+        public CullProviderSettings providerSettings(final String providerId) {
+            return CullProviderSettings.unset();
         }
 
         @Override
@@ -202,6 +208,11 @@ class CullDispatcherTest {
         }
 
         @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             this.receivedPrep = prep;
             this.receivedOptions = opts;
@@ -225,6 +236,11 @@ class CullDispatcherTest {
         @Override
         public ProviderType type() {
             return ProviderType.API;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
         }
 
         @Override

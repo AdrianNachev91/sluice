@@ -919,7 +919,7 @@ class SettingsServiceTest {
     }
 
     private static Settings withProvider(final Settings settings, final String provider) {
-        return new Settings(settings.paths(), provider, settings.providerSettings(), settings.categories(),
+        return new Settings(settings.paths(), provider, settings.providerSettingsById(), settings.categories(),
                 settings.externalAgent(), settings.montage(), settings.theme());
     }
 

@@ -1,7 +1,6 @@
 package photos.sluice.config;
 
 import org.jspecify.annotations.Nullable;
-import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
@@ -12,6 +11,7 @@ import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 // Settings values and a live PathsConfig over them, for tests that build a collaborator directly
 // instead of through Spring.
@@ -50,7 +50,7 @@ public final class SettingsFixture {
 
     // The given roots, on the cull defaults a fresh install starts with.
     public static Settings settings(final PathSettings paths) {
-        return new Settings(paths, "external-agent", new CullProviderSettings(null, null, null, null),
+        return new Settings(paths, "external-agent", Map.of(),
                 List.of(new CullCategory("junk", "junk description"),
                         new CullCategory("scenery", "scenery description"),
                         new CullCategory("food", "food description"),

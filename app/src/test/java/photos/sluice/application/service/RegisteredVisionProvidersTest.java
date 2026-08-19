@@ -3,7 +3,10 @@ package photos.sluice.application.service;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.ModelCatalog;
+import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.ProviderSetting;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
@@ -48,8 +51,28 @@ class RegisteredVisionProvidersTest {
         assertThat(catalog.byId("nothing-registered")).isEmpty();
     }
 
+    // The dropdown hands back an id, and what a Test button then reaches has to be the provider
+    // that id names rather than whichever culler was injected first.
+    @Test
+    void asksTheProviderTheIdNames() {
+        final var catalog = new RegisteredVisionProviders(cullers(WAITING, CALLING));
+
+        assertThat(catalog.check("calling")).isEqualTo(new ProviderCheck.Refused("calling"));
+    }
+
+    @Test
+    void checkingAnUnregisteredIdIsRefusedNamingWhatIsRegistered() {
+        final var catalog = new RegisteredVisionProviders(cullers(WAITING, CALLING));
+
+        assertThatThrownBy(() -> catalog.check("nothing-registered"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("nothing-registered")
+                .hasMessageContaining("waiting");
+    }
+
     private static VisionProviderDescriptor describing(final String id, final String label) {
-        return new VisionProviderDescriptor(id, label, Set.of(ProviderSetting.MODEL), Set.of(), null);
+        return new VisionProviderDescriptor(id, label, Set.of(ProviderSetting.MODEL), Set.of(), null,
+                new ModelCatalog(List.of(new ModelOption("a-model", "A model")), null));
     }
 
     private static List<VisionCuller> cullers(final VisionProviderDescriptor... descriptors) {
@@ -66,6 +89,12 @@ class RegisteredVisionProvidersTest {
             @Override
             public ProviderType type() {
                 return ProviderType.API;
+            }
+
+            // Answers with its own id, so a test can tell which culler the catalog reached.
+            @Override
+            public ProviderCheck check() {
+                return new ProviderCheck.Refused(descriptor.id());
             }
 
             @Override

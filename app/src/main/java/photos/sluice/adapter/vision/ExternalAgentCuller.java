@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
@@ -59,7 +60,7 @@ class ExternalAgentCuller implements VisionCuller {
     public VisionProviderDescriptor describe() {
         return new VisionProviderDescriptor(PROVIDER_ID,
                 "External agent (an agent on this computer that can write files, like Claude Code)",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null);
+                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null);
     }
 
     /**
@@ -70,6 +71,17 @@ class ExternalAgentCuller implements VisionCuller {
     @Override
     public ProviderType type() {
         return ProviderType.MANUAL;
+    }
+
+    /**
+     * Answers that there is nothing to check. The agent is a person's own tool, reached through a
+     * folder, so this app holds no credential for it and could not test one.
+     *
+     * @return {@link ProviderCheck} always {@link ProviderCheck.NotApplicable}
+     */
+    @Override
+    public ProviderCheck check() {
+        return new ProviderCheck.NotApplicable();
     }
 
     /**

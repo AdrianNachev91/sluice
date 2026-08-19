@@ -5,10 +5,12 @@ import org.springframework.boot.test.context.ConfigDataApplicationContextInitial
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.job.WatchMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 class CullConfigTest {
 
@@ -21,12 +23,7 @@ class CullConfigTest {
         this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.provider()).isEqualTo("external-agent");
-            // With sluice.cull.provider-settings.* absent, the settings object still exists (the
-            // port promises never-null) and each field reports unset as null.
-            assertThat(config.providerSettings().model()).isNull();
-            assertThat(config.providerSettings().endpoint()).isNull();
-            assertThat(config.providerSettings().thinking()).isNull();
-            assertThat(config.providerSettings().maxRetries()).isNull();
+            assertThat(config.providerSettings()).isEmpty();
         });
     }
 
@@ -86,17 +83,35 @@ class CullConfigTest {
     void providerSettingsBindWhenAllFieldsPresent() {
         this.runner.withPropertyValues(
                 "sluice.cull.provider=anthropic",
-                "sluice.cull.provider-settings.model=claude-sonnet-5",
-                "sluice.cull.provider-settings.endpoint=https://api.anthropic.com",
-                "sluice.cull.provider-settings.thinking=true",
-                "sluice.cull.provider-settings.max-retries=5"
+                "sluice.cull.provider-settings.anthropic.model=claude-sonnet-5",
+                "sluice.cull.provider-settings.anthropic.endpoint=https://api.anthropic.com",
+                "sluice.cull.provider-settings.anthropic.max-retries=5"
         ).run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
-            assertThat(config.providerSettings().model()).isEqualTo("claude-sonnet-5");
-            assertThat(config.providerSettings().endpoint()).isEqualTo("https://api.anthropic.com");
-            assertThat(config.providerSettings().thinking()).isTrue();
-            assertThat(config.providerSettings().maxRetries()).isEqualTo(5);
+            assertThat(config.providerSettings()).containsExactly(entry("anthropic",
+                    new CullProviderSettings("claude-sonnet-5", "https://api.anthropic.com", 5)));
         });
+    }
+
+    @Test
+    void aProviderWhoseOnlyValueIsBlankStillBindsAsItsOwnEntry() {
+        this.runner.withPropertyValues("sluice.cull.provider-settings.anthropic.model=")
+                .run(context -> {
+                    final CullConfig config = context.getBean(CullConfig.class);
+                    assertThat(config.providerSettings()).containsOnlyKeys("anthropic");
+                    assertThat(config.providerSettings().get("anthropic").endpoint()).isNull();
+                });
+    }
+
+    // Provider ids carry hyphens, and Spring's relaxed binding is what has to leave a map key
+    // alone rather than reading it as a word boundary.
+    @Test
+    void aHyphenatedProviderIdSurvivesAsItsOwnKey() {
+        this.runner.withPropertyValues("sluice.cull.provider-settings.external-agent.model=their-model")
+                .run(context -> {
+                    final CullConfig config = context.getBean(CullConfig.class);
+                    assertThat(config.providerSettings()).containsOnlyKeys("external-agent");
+                });
     }
 
     @Configuration

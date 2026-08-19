@@ -1,6 +1,12 @@
 package photos.sluice.adapter.vision;
 
 import com.anthropic.client.AnthropicClient;
+import com.anthropic.core.JsonValue;
+import com.anthropic.core.ObjectMappers;
+import com.anthropic.core.http.Headers;
+import com.anthropic.errors.AnthropicIoException;
+import com.anthropic.errors.PermissionDeniedException;
+import com.anthropic.errors.UnauthorizedException;
 import com.anthropic.models.messages.CacheCreation;
 import com.anthropic.models.messages.ContentBlock;
 import com.anthropic.models.messages.ContentBlockParam;
@@ -10,7 +16,13 @@ import com.anthropic.models.messages.MessageParam;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlock;
 import com.anthropic.models.messages.Usage;
+import com.anthropic.models.models.ModelInfo;
+import com.anthropic.models.models.ModelListPage;
+import com.anthropic.models.models.ModelListPageResponse;
+import com.anthropic.models.models.ModelListParams;
 import com.anthropic.services.blocking.MessageService;
+import com.anthropic.services.blocking.ModelService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -22,6 +34,9 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.ModelCatalog;
+import photos.sluice.application.port.out.ModelOption;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
@@ -44,9 +59,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -69,6 +87,7 @@ class AnthropicCullerTest {
 
     private final AnthropicClient client = mock();
     private final MessageService messages = mock();
+    private final ModelService modelService = mock();
 
     @Test
     void reservesTheAnthropicProviderId() {
@@ -581,8 +600,11 @@ class AnthropicCullerTest {
                 .hasMessageContaining("near-dup group 'beach' spans 2 shards");
     }
 
+    // Only thinking is asserted because only thinking can be set: anthropic-java 2.50.0's request
+    // builder exposes no effort parameter at all. Whichever one a later SDK adds, this test is
+    // where the decision to send neither is written down.
     @Test
-    void thinkingIsExplicitlyDisabledByDefault() throws Exception {
+    void theRequestAsksForNoParticularReasoning() throws Exception {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         this.respondWith(response("""
                 {
@@ -596,26 +618,7 @@ class AnthropicCullerTest {
 
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
         verify(this.messages).create(captor.capture());
-        assertThat(captor.getValue().thinking().orElseThrow().isDisabled()).isTrue();
-        assertThat(captor.getValue().maxTokens()).isEqualTo(8192);
-    }
-
-    @Test
-    void configuredThinkingSendsAdaptiveWithAHigherTokenCeiling() throws Exception {
-        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
-        this.respondWith(response("""
-                {
-                  "verdicts": [
-                    { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }
-                  ]
-                }
-                """, 100, 10));
-
-        this.culler(settingsWithThinking()).cull(prep, OPTIONS);
-
-        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
-        verify(this.messages).create(captor.capture());
-        assertThat(captor.getValue().thinking().orElseThrow().isAdaptive()).isTrue();
+        assertThat(captor.getValue().thinking()).isEmpty();
         assertThat(captor.getValue().maxTokens()).isEqualTo(16384);
     }
 
@@ -758,15 +761,12 @@ class AnthropicCullerTest {
     void failsLoudWhenTheModelIsNotConfigured() throws Exception {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         final var culler = new AnthropicCuller(cullerPrompt(settings(null)), new ShardCodec(),
-                new SidecarReader(), settings(null),
-                () -> {
-                    throw new AssertionError("client must not be built without a model");
-                });
+                new SidecarReader(), settings(null), noClient(), noClient());
 
         assertThatThrownBy(() -> culler.cull(prep, OPTIONS))
                 .isInstanceOf(IllegalStateException.class)
                 .isNotInstanceOf(MissingCredentialException.class)
-                .hasMessageContaining("sluice.cull.provider-settings.model");
+                .hasMessageContaining("sluice.cull.provider-settings.anthropic.model");
     }
 
     // Two routes lead to a stored key, and someone hitting this has taken neither. The message
@@ -776,7 +776,7 @@ class AnthropicCullerTest {
         final SecretStore empty = new FixedSecretStore(null);
 
         assertThatThrownBy(() -> AnthropicCuller.defaultClient(
-                settings("claude-sonnet-5").providerSettings(), empty))
+                settings("claude-sonnet-5").providerSettings("anthropic"), empty))
                 .isInstanceOfSatisfying(MissingCredentialException.class,
                         e -> assertThat(e.id()).isEqualTo(AnthropicCuller.API_KEY))
                 .hasMessageContaining("Settings")
@@ -787,7 +787,7 @@ class AnthropicCullerTest {
     // answer was carried through rather than dropped, since dropping it reaches the no-key refusal.
     @Test
     void buildsTheClientFromTheKeyTheStoreHolds() {
-        assertThatCode(() -> AnthropicCuller.defaultClient(settings("claude-sonnet-5").providerSettings(),
+        assertThatCode(() -> AnthropicCuller.defaultClient(settings("claude-sonnet-5").providerSettings("anthropic"),
                 new FixedSecretStore("sk-synthetic-0001"))).doesNotThrowAnyException();
     }
 
@@ -799,6 +799,174 @@ class AnthropicCullerTest {
         assertThat(AnthropicCuller.API_KEY.provider()).isEqualTo(this.culler().describe().id());
     }
 
+    @Test
+    void aCheckWithNoKeyStoredAnywhereIsAnsweredRatherThanThrown() {
+        final var culler = this.checkingCuller(() -> {
+            throw new MissingCredentialException(AnthropicCuller.API_KEY, "no key");
+        });
+
+        assertThat(culler.check()).isEqualTo(new ProviderCheck.NoCredential());
+    }
+
+    @Test
+    void anAcceptedKeyAnswersWithWhatTheAccountCanRun() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(outcome).isEqualTo(new ProviderCheck.Accepted(new ModelCatalog(
+                List.of(new ModelOption("claude-sonnet-5", "Claude Sonnet 5")), "claude-sonnet-5")));
+    }
+
+    // The list is what a wrong model id would otherwise be typed into, so a model that cannot read
+    // a photo or answer a schema has no business appearing in it.
+    @Test
+    void aModelThatCannotReadAPhotoIsNotOffered() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true),
+                model("text-only", "Text only", false, true),
+                model("no-schema", "No schema", true, false));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .containsExactly(new ModelOption("claude-sonnet-5", "Claude Sonnet 5"));
+    }
+
+    @Test
+    void aModelDescribedInAShapeThisAppCannotReadIsNotOffered() {
+        this.listsModels(modelWithoutCapabilities("mystery-model", "Mystery model"),
+                model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .containsExactly(new ModelOption("claude-sonnet-5", "Claude Sonnet 5"));
+    }
+
+    // A working key over an account with nothing usable is a real answer, and a catalog cannot
+    // carry it: one always holds at least one model.
+    @Test
+    void anAccountWithNothingUsableIsItsOwnAnswer() {
+        this.listsModels(model("text-only", "Text only", false, false));
+
+        assertThat(this.checkingCuller(() -> this.client).check())
+                .isEqualTo(new ProviderCheck.NoUsableModels());
+    }
+
+    @Test
+    void modelsThisProviderKnowsComeFirstInItsOwnOrderAndTheRestFollow() {
+        this.listsModels(model("something-new", "Something new", true, true),
+                model("claude-opus-5", "Claude Opus 5", true, true),
+                model("claude-haiku-4-5", "Claude Haiku 4.5", true, true));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .extracting(ModelOption::id)
+                .containsExactly("claude-haiku-4-5", "claude-opus-5", "something-new");
+    }
+
+    // Marking a model recommended that the account cannot select would default the picker onto a
+    // model the service refuses.
+    @Test
+    void aRecommendationTheAccountCannotRunIsDropped() {
+        this.listsModels(model("claude-opus-5", "Claude Opus 5", true, true));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().recommended()).isNull();
+    }
+
+    @Test
+    void aKeyTheServiceDoesNotKnowIsReportedAsRejected() {
+        this.listFails(UnauthorizedException.builder()
+                .headers(Headers.builder().build())
+                .body(JsonValue.from(Map.of("message", "invalid x-api-key")))
+                .build());
+
+        assertThat(this.checkingCuller(() -> this.client).check())
+                .isEqualTo(new ProviderCheck.Rejected());
+    }
+
+    @Test
+    void anAccountNotEntitledToThisCarriesWhatTheServiceSaid() {
+        this.listFails(PermissionDeniedException.builder()
+                .headers(Headers.builder().build())
+                .body(JsonValue.from(Map.of("message", "your credit balance is too low")))
+                .build());
+
+        assertThat(this.checkingCuller(() -> this.client).check())
+                .isInstanceOfSatisfying(ProviderCheck.Refused.class,
+                        refused -> assertThat(refused.detail()).contains("credit balance"));
+    }
+
+    @Test
+    void aTransportFailureCarriesWhatFailed() {
+        this.listFails(new AnthropicIoException("connect timed out", null));
+
+        assertThat(this.checkingCuller(() -> this.client).check())
+                .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
+                        unreachable -> assertThat(unreachable.detail()).contains("connect timed out"));
+    }
+
+    // An unparseable endpoint is a field a user typed, and the HTTP client rejects it with an
+    // exception from no family this class could enumerate. Escaping would reach a button handler,
+    // which has nowhere to put it.
+    @Test
+    void aFailureFromOutsideTheSdksOwnFamiliesStillBecomesAnAnswer() {
+        this.listFails(new IllegalArgumentException("Expected URL scheme 'http' or 'https'"));
+
+        assertThat(this.checkingCuller(() -> this.client).check())
+                .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
+                        unreachable -> assertThat(unreachable.detail()).contains("URL scheme"));
+    }
+
+    // A credential store that cannot answer is the other way a check fails before any request goes
+    // out, and it is not the same state as holding no key at all.
+    @Test
+    void aCredentialStoreThatRefusesToAnswerIsReportedRatherThanThrown() {
+        final var culler = this.checkingCuller(() -> {
+            throw new IllegalStateException("the credential store refused");
+        });
+
+        assertThat(culler.check())
+                .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
+                        unreachable -> assertThat(unreachable.detail()).contains("refused"));
+    }
+
+    @Test
+    void theCheckClosesTheClientItBuilt() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+
+        this.checkingCuller(() -> this.client).check();
+
+        verify(this.client).close();
+    }
+
+    @Test
+    void aFailedCheckStillClosesTheClientItBuilt() {
+        this.listFails(new AnthropicIoException("connect timed out", null));
+
+        this.checkingCuller(() -> this.client).check();
+
+        verify(this.client).close();
+    }
+
+    // A verdict list the ceiling cut short parses as broken JSON, and the two want different
+    // answers from whoever reads the failure.
+    @Test
+    void aResponseTheCeilingCutShortIsReportedAsThatRatherThanAsBrokenJson() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(
+                response("{ \"verdicts\": [ { \"index\": 1, \"name\"", 100, 16384, StopReason.MAX_TOKENS),
+                response("{ \"verdicts\": [ { \"index\": 1, \"name\"", 100, 16384, StopReason.MAX_TOKENS));
+
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
+                .isInstanceOf(CullException.class)
+                .hasMessageContaining("cut off at the 16384-token ceiling")
+                .hasMessageNotContaining("not valid verdict JSON");
+    }
+
     private AnthropicCuller culler() {
         return this.culler(settings("claude-sonnet-5"));
     }
@@ -806,7 +974,79 @@ class AnthropicCullerTest {
     private AnthropicCuller culler(final CullSettings settings) {
         when(this.client.messages()).thenReturn(this.messages);
         return new AnthropicCuller(cullerPrompt(settings), new ShardCodec(), new SidecarReader(),
-                settings, () -> this.client);
+                settings, () -> this.client, noClient());
+    }
+
+
+    private AnthropicCuller checkingCuller(final Supplier<AnthropicClient> checkClientFactory) {
+        final CullSettings settings = settings("claude-sonnet-5");
+        return new AnthropicCuller(cullerPrompt(settings), new ShardCodec(), new SidecarReader(),
+                settings, noClient(), checkClientFactory);
+    }
+
+    private void listsModels(final ModelInfo... models) {
+        when(this.client.models()).thenReturn(this.modelService);
+        when(this.modelService.list()).thenReturn(this.page(List.of(models)));
+    }
+
+    private void listFails(final RuntimeException failure) {
+        when(this.client.models()).thenReturn(this.modelService);
+        when(this.modelService.list()).thenThrow(failure);
+    }
+
+    // Parsed from the wire shape rather than assembled, so the accessors the culler calls read what
+    // the service would really have sent. A null last_id is what ends the paging.
+    private ModelListPage page(final List<ModelInfo> models) {
+        final String data = models.stream()
+                .map(AnthropicCullerTest::asJson)
+                .collect(Collectors.joining(","));
+        final ModelListPageResponse response = parsed(
+                "{\"data\":[" + data + "],\"first_id\":null,\"has_more\":false,\"last_id\":null}",
+                ModelListPageResponse.class);
+        return ModelListPage.builder()
+                .service(this.modelService)
+                .params(ModelListParams.none())
+                .response(response)
+                .build();
+    }
+
+    private static ModelInfo model(final String id, final String label, final boolean readsImages,
+                                   final boolean answersSchemas) {
+        return parsed(modelJson(id, label,
+                ",\"capabilities\":{\"image_input\":{\"supported\":" + readsImages
+                        + "},\"structured_outputs\":{\"supported\":" + answersSchemas + "}}"),
+                ModelInfo.class);
+    }
+
+    private static ModelInfo modelWithoutCapabilities(final String id, final String label) {
+        return parsed(modelJson(id, label, ",\"capabilities\":{}"), ModelInfo.class);
+    }
+
+    private static String asJson(final ModelInfo model) {
+        try {
+            return ObjectMappers.jsonMapper().writeValueAsString(model);
+        } catch (final JsonProcessingException e) {
+            throw new AssertionError("a model built here could not be written back out", e);
+        }
+    }
+
+    private static <T> T parsed(final String json, final Class<T> type) {
+        try {
+            return ObjectMappers.jsonMapper().readValue(json, type);
+        } catch (final JsonProcessingException e) {
+            throw new AssertionError("this fixture is not valid JSON: " + json, e);
+        }
+    }
+
+    private static String modelJson(final String id, final String label, final String capabilities) {
+        return "{\"type\":\"model\",\"id\":\"" + id + "\",\"display_name\":\"" + label
+                + "\",\"created_at\":\"2026-01-01T00:00:00Z\"" + capabilities + "}";
+    }
+
+    private static Supplier<AnthropicClient> noClient() {
+        return () -> {
+            throw new AssertionError("this test builds no client");
+        };
     }
 
     private void respondWith(final Message first, final Message... rest) {
@@ -814,10 +1054,15 @@ class AnthropicCullerTest {
     }
 
     private static Message response(final String json, final long inputTokens, final long outputTokens) {
+        return response(json, inputTokens, outputTokens, StopReason.END_TURN);
+    }
+
+    private static Message response(final String json, final long inputTokens, final long outputTokens,
+                                    final StopReason stopReason) {
         return Message.builder()
                 .id("msg_test")
                 .model("claude-sonnet-5")
-                .stopReason(StopReason.END_TURN)
+                .stopReason(stopReason)
                 .stopDetails(Optional.empty())
                 .stopSequence(Optional.empty())
                 .container(Optional.empty())
@@ -896,16 +1141,16 @@ class AnthropicCullerTest {
 
     private static CullSettings settings(final @Nullable String model) {
         return new FixedSettings("anthropic", CARDS,
-                new CullProviderSettings(model, null, null, null));
-    }
-
-    private static CullSettings settingsWithThinking() {
-        return new FixedSettings("anthropic", CARDS,
-                new CullProviderSettings("claude-sonnet-5", null, true, null));
+                new CullProviderSettings(model, null, null));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,
                                  CullProviderSettings providerSettings) implements CullSettings {
+
+        @Override
+        public CullProviderSettings providerSettings(final String providerId) {
+            return this.provider.equals(providerId) ? this.providerSettings : CullProviderSettings.unset();
+        }
 
         @Override
         public ExternalAgentSettings externalAgent() {

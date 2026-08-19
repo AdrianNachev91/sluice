@@ -36,6 +36,9 @@ import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
+import photos.sluice.application.port.out.ModelCatalog;
+import photos.sluice.application.port.out.ModelOption;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
@@ -55,6 +58,7 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -74,6 +78,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SettingsPaneTest {
 
     private static final SecretId ANTHROPIC_KEY = new SecretId("anthropic", "ANTHROPIC_API_KEY");
+
+    private static final ModelCatalog MODELS =
+            new ModelCatalog(List.of(new ModelOption("a-model", "A model")), "a-model");
     private static final SecretId OTHER_KEY = new SecretId("other-api", "OTHER_API_KEY");
     private static final String REFUSED_FOLDER = "D:\\moved-away";
     private static final PseudoClass REFUSED = PseudoClass.getPseudoClass("refused");
@@ -478,7 +485,7 @@ class SettingsPaneTest {
     // the resolution exception rather than succeed or refuse.
     private static SettingsPresenter presenterNeedingLibraryRootResolution(final LibraryRootUseCase libraryRoot) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", new CullProviderSettings("a-model", null, false, 2), List.of(),
+                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         final var useCase = new SettingsUseCase() {
             @Override
@@ -616,7 +623,7 @@ class SettingsPaneTest {
     // above needs, and it leaves nothing for a test reading a saved value to read.
     private static SettingsPresenter presenterSavingInto(final List<Settings> saved) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", new CullProviderSettings("a-model", null, false, 2), List.of(),
+                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.DARK);
         final var useCase = new SettingsUseCase() {
             @Override
@@ -640,7 +647,7 @@ class SettingsPaneTest {
 
     private static SettingsPresenter presenterOn(final String provider) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                provider, new CullProviderSettings("a-model", null, false, 2), List.of(),
+                provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return new SettingsPresenter(settingsUseCase(settings), refusingLibraryRootUseCase(), oneStoredKey(),
                 onlyRefusingOneFolder(), threeProviders());
@@ -727,14 +734,14 @@ class SettingsPaneTest {
 
     private static VisionProviderCatalog threeProviders() {
         final var apiSettings = Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT,
-                ProviderSetting.THINKING, ProviderSetting.RETRIES, ProviderSetting.CREDENTIAL);
+                ProviderSetting.RETRIES, ProviderSetting.CREDENTIAL);
         final List<VisionProviderDescriptor> all = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic", apiSettings,
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS),
                 new VisionProviderDescriptor("other-api", "Another model service", apiSettings,
-                        Set.of(ProviderSetting.MODEL), OTHER_KEY),
+                        Set.of(ProviderSetting.MODEL), OTHER_KEY, MODELS),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null));
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null));
         return new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {
@@ -744,6 +751,11 @@ class SettingsPaneTest {
             @Override
             public Optional<VisionProviderDescriptor> byId(final String id) {
                 return all.stream().filter(provider -> provider.id().equals(id)).findFirst();
+            }
+
+            @Override
+            public ProviderCheck check(final String id) {
+                throw new AssertionError("no test here presses a credential check");
             }
         };
     }

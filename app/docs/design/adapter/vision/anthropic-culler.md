@@ -12,7 +12,7 @@ contract.
 
 ```mermaid
 flowchart TD
-    A["cull(prep, opts)"] --> B["require sluice.cull.<br/>provider-settings.model"]
+    A["cull(prep, opts)"] --> B["require sluice.cull.provider-settings.<br/>anthropic.model"]
     B --> C["render the system prompt<br/>(CullerPrompt + the cards<br/>index.json recorded)"]
     C --> D["build the API client<br/>(API key via SecretStore, optional endpoint,<br/>transport max-retries)"]
     D --> W["read every sidecar up front<br/>(the whole scope's src list;<br/>an unreadable one contributes<br/>nothing and drops its montage)"]
@@ -67,20 +67,25 @@ schema is a flat verdict object (`index`, `name`, `action`, optional `reason`/`g
 `action`. `ShardValidator` reports per-action gaps with better messages than a schema violation
 would. No sampling parameters are sent - current Anthropic models reject them.
 
-Thinking is always sent explicitly, never left to the model generation's own default:
-`provider-settings.thinking` off (the default) sends disabled, on sends adaptive. The `max_tokens`
-ceiling is sized from the answer. A verdict runs about 70 tokens, so the largest list a sheet can
-produce is ~3.5k on a dense 7x7 grid. 8192 holds that worst case more than twice over. A thinking
-run doubles the ceiling to 16384. Reasoning shares the response budget, so the extra 8192 is a
-reasoning allowance (~300 tokens of deliberation per photo on the default 5x5 sheet). That keeps
-a long chain from squeezing out the verdict JSON. Either ceiling also bounds what one runaway
-call can cost.
+No thinking parameter and no effort parameter either, so each model reasons at whatever depth it
+reasons by default. Omitting both is the only shape every current model accepts. A parameter
+asking for a particular depth is refused by some model, or by some setting of one. Whether depth helps
+a model read a contact sheet is unmeasured. Comparing shard output across settings on the same
+montages is what would settle it. `theRequestAsksForNoParticularReasoning` pins the shape, so an
+answer arrives as a test to update rather than a line to notice.
+
+The `max_tokens` ceiling is 16384. A verdict runs about 70 tokens, so the longest list a sheet can
+produce is ~3.5k on a dense 7x7 grid. The remaining ~12k is a reasoning allowance, since a model
+that reasons by default spends from this same ceiling at whatever depth it chooses. The ceiling also
+bounds what one runaway call can cost.
 
 ## Response validation
 
 ```mermaid
 flowchart TD
-    A["API response"] --> B["join text blocks"]
+    A["API response"] --> A2{"stop_reason<br/>= max_tokens?"}
+    A2 -- yes --> X
+    A2 -- no --> B["join text blocks"]
     B -- blank --> X(["attempt fails with<br/>the full problem list"])
     B --> C["parse verdict JSON<br/>(unknown fields fail)"]
     C -- unparseable --> X
@@ -132,16 +137,57 @@ user turn asking for the complete corrected verdict list. The retry response goe
 same validation. Only a second failure throws, carrying both attempts' problems. The cap is
 deliberate - a model that fails the same montage twice stops burning tokens.
 
+## The credential check
+
+`check()` answers whether the stored key works and what it can run, in one request. Listing models
+authenticates without generating tokens, so asking costs nothing.
+
+```mermaid
+flowchart TD
+    A["check()"] --> B{"a key in<br/>any tier?"}
+    B -- no --> N(["NoCredential<br/>(no call made)"])
+    B -- yes --> C["build a client:<br/>no retries, bounded timeout"]
+    C --> D["models().list(),<br/>paged, bounded"]
+    D -- 401 --> R(["Rejected"])
+    D -- 403 --> F(["Refused, carrying<br/>what the service said"])
+    D -- anything else it raises --> U(["Unreachable, carrying<br/>what failed"])
+    D -- answered --> E["keep models reporting both<br/>image_input and structured_outputs"]
+    E -- none left --> Z(["NoUsableModels"])
+    E --> G["rank: models this class knows<br/>in its own order, then the rest"]
+    G --> H(["Accepted, carrying<br/>the account's own catalog"])
+```
+
+Three details carry weight.
+
+**Retries are off and the timeout is short.** A cull rides the retry count the user configured; a
+check does not. A check that silently backs off through a 5xx reads as a hung window to whoever
+asked for it.
+
+**A model that cannot read a photo or answer a schema is not offered.** A montage is an image and a
+verdict answers a JSON schema, and the Models API reports both as capability flags. That removes a
+wider class of wrong choice than a typo does: a real model id for a model that cannot do the work.
+A model the service describes in a shape this app cannot read is dropped the same way, leaving the
+rest of the account's list usable.
+
+**An account with nothing usable is its own answer.** `ModelCatalog` always holds at least one
+model, so an empty one cannot express it. `NoUsableModels` is the variant that does, and the
+compiler is then what stops an empty picker being drawn as success.
+
+The static list in the descriptor is what a fresh install opens on, before any key exists. It is
+ordered least capable first, so a surface with no recommendation to fall back on lands on the
+cheapest rather than the dearest model. A successful check replaces it with the account's own.
+
 ## Failure channels
 
-| Failure                                                                             | Who fixes it                 | How it surfaces                                                        |
-|-------------------------------------------------------------------------------------|------------------------------|------------------------------------------------------------------------|
-| `provider-settings.model` unset                                                     | User config                  | Unchecked `IllegalStateException` naming the property                  |
-| No API key in any credential tier                                                   | Settings, or the environment | Unchecked `IllegalStateException` naming both routes                   |
-| Montage image unreadable                                                            | Re-prep the scope            | Unchecked `UncheckedIOException` - the prep dir is broken app output   |
-| Sidecar unreadable                                                                  | Answer at the apply phase    | That montage is skipped; apply reports it as a corrupt sidecar         |
-| Response fails validation twice (attempt + corrective retry)                        | Re-run the cull              | Checked `CullException` naming the montage and both attempts' problems |
-| Transport trouble (429/5xx/timeout) beyond `provider-settings.max-retries` backoffs | Wait / raise the retry cap   | The SDK's own exception after its exponential backoff gives up         |
+| Failure                                                                             | Who fixes it                  | How it surfaces                                                                 |
+|-------------------------------------------------------------------------------------|-------------------------------|---------------------------------------------------------------------------------|
+| `provider-settings.anthropic.model` unset                                           | User config                   | Unchecked `IllegalStateException` naming the property                           |
+| No API key in any credential tier                                                   | Settings, or the environment  | Unchecked `IllegalStateException` naming both routes                            |
+| Montage image unreadable                                                            | Re-prep the scope             | Unchecked `UncheckedIOException` - the prep dir is broken app output            |
+| Sidecar unreadable                                                                  | Answer at the apply phase     | That montage is skipped; apply reports it as a corrupt sidecar                  |
+| Response fails validation twice (attempt + corrective retry)                        | Re-run the cull               | Checked `CullException` naming the montage and both attempts' problems          |
+| Response cut off at the token ceiling, twice                                        | Re-run, or use a smaller grid | Checked `CullException` saying the answer was cut off, not that it was bad JSON |
+| Transport trouble (429/5xx/timeout) beyond `provider-settings.max-retries` backoffs | Wait / raise the retry cap    | The SDK's own exception after its exponential backoff gives up                  |
 
 ## Scenarios
 
@@ -155,6 +201,7 @@ deliberate - a model that fails the same montage twice stops burning tokens.
 | Action is not `keep`, near-dup, or a recorded category, twice | `CullException` via `ShardValidator`                                                                              |
 | Two montages reuse one near-dup group id, twice               | `CullException` at the second montage; the first montage's shard stays on disk                                    |
 | Response is not the schema's JSON, twice                      | `CullException`                                                                                                   |
+| Response stops at `max_tokens`, twice                         | `CullException` naming the ceiling rather than the JSON                                                           |
 | Run fails at montage N                                        | Shards 1..N-1 remain; the run reports failure and nothing is applied (missing shards stay a hard gate downstream) |
 | Re-run after a failure or interruption                        | Montages with valid shards resume (skipped, no API call); the rest are culled                                     |
 | Existing shard unreadable or contract-breaking                | Re-culled; the fresh shard overwrites it                                                                          |

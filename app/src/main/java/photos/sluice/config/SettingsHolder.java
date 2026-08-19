@@ -112,13 +112,24 @@ public class SettingsHolder implements LiveSettings, CullSettings {
     }
 
     /**
-     * Connection settings for API-backed providers.
+     * Connection settings for the provider in force.
      *
-     * @return {@link CullProviderSettings} the provider connection settings
+     * @return {@link CullProviderSettings} that provider's connection settings
      */
     @Override
     public CullProviderSettings providerSettings() {
         return this.current.providerSettings();
+    }
+
+    /**
+     * Connection settings for one named provider.
+     *
+     * @param providerId {@link String} the provider whose settings to read
+     * @return {@link CullProviderSettings} that provider's connection settings
+     */
+    @Override
+    public CullProviderSettings providerSettings(final String providerId) {
+        return this.current.providerSettings(providerId);
     }
 
     /**

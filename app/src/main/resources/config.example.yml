@@ -36,17 +36,20 @@ sluice:
     # default, which needs no API key of yours.
     provider: external-agent
 
+    # Connection settings, one block per provider, keyed by the same id "provider" above takes.
+    # Each provider keeps its own, so switching provider and saving does not overwrite the model
+    # you configured for the one you left. A provider with no block here reads every setting as
+    # unset.
     provider-settings:
-      # The model id to request. Required when provider is "anthropic"; ignored otherwise.
-      model: claude-opus-5
-      # An optional non-default API endpoint. Leave unset to use the provider's own default.
-      endpoint:
-      # Whether the model may reason before answering. Optional; falls back to the provider's own
-      # default when unset.
-      thinking: false
-      # How many times a failed transport call (a timeout, a 429, a 5xx) is retried. Optional;
-      # falls back to the provider's own default when unset.
-      max-retries: 2
+      anthropic:
+        # The model id to request. Required when this provider is selected. Sluice offers a list
+        # of models to pick from, so this is normally written by Settings rather than by hand.
+        model: claude-sonnet-5
+        # An optional non-default API endpoint. Leave unset to use the provider's own default.
+        endpoint:
+        # How many times a failed transport call (a timeout, a 429, a 5xx) is retried. Optional;
+        # falls back to the provider's own default when unset.
+        max-retries: 2
 
     # The classification category cards a cull routes photos to. Each needs a name and a
     # description; the description is what an automated provider reads to judge a photo against

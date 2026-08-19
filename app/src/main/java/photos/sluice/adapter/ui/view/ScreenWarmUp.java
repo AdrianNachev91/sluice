@@ -4,7 +4,6 @@ import javafx.animation.AnimationTimer;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
@@ -55,7 +54,7 @@ final class ScreenWarmUp {
     static List<Node> nodes() {
         return List.of(
                 new BorderPane(), new Group(), new HBox(), new StackPane(), new VBox(),
-                new Button(), new CheckBox(), new ComboBox<String>(), new Hyperlink(),
+                new Button(), new ComboBox<String>(), new Hyperlink(),
                 new Label(), new PasswordField(), new RadioButton(), new ScrollPane(),
                 new Separator(), new Spinner<Integer>(), new TextArea(), new TextField(),
                 new TitledPane(), new ToggleButton(),

@@ -6,7 +6,8 @@ import java.util.Set;
 
 /**
  * What a vision provider tells a surface that configures it. What to call it, which settings it
- * uses, which of those it cannot run without, and the credential it authenticates with.
+ * uses, which of those it cannot run without, the credential it authenticates with, and the models
+ * it offers.
  *
  * <p>A culler answers with one of these from {@link VisionCuller#describe()}.
  *
@@ -16,9 +17,12 @@ import java.util.Set;
  * @param required a {@link Set} of {@link ProviderSetting} those it cannot run without, a subset of
  *     the above
  * @param credential the credential it authenticates with, or null when it takes none
+ * @param models {@link ModelCatalog} the models it offers without being asked, or null when it runs
+ *     no model of its own
  */
 public record VisionProviderDescriptor(String id, String label, Set<ProviderSetting> settingsUsed,
-                                       Set<ProviderSetting> required, @Nullable SecretId credential) {
+                                       Set<ProviderSetting> required, @Nullable SecretId credential,
+                                       @Nullable ModelCatalog models) {
 
     /**
      * Creates the descriptor, holding its own sets so a provider cannot hand one out and then
@@ -47,6 +51,13 @@ public record VisionProviderDescriptor(String id, String label, Set<ProviderSett
         if (credential != null && !credential.provider().equals(id)) {
             throw new IllegalArgumentException("Provider '" + id + "' names a credential belonging to '"
                     + credential.provider() + "'");
+        }
+        // Otherwise a screen draws a model picker with nothing to offer, or holds a catalog behind
+        // a control it never shows.
+        final boolean offersSome = models != null;
+        if (settingsUsed.contains(ProviderSetting.MODEL) != offersSome) {
+            throw new IllegalArgumentException("Provider '" + id
+                    + "' must offer a model catalog exactly when it uses a model setting");
         }
     }
 }

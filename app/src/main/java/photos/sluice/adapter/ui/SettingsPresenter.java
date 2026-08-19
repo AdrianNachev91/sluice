@@ -47,6 +47,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,25 +142,26 @@ public class SettingsPresenter {
     public SettingsView view() {
         final Settings settings = this.settingsUseCase.settings();
         final var paths = settings.paths();
-        final var providerSettings = settings.providerSettings();
+        // The settings of whichever provider this screen shows as selected. That is not the
+        // configured one when the configured id names a provider this install does not have.
+        final String shownProvider = this.resolvedProviderId(settings.provider());
+        final var providerSettings = settings.providerSettings(shownProvider);
         final var montage = settings.montage();
         final Map<PathRole, String> violations = this.violationsByRole(paths);
         return new SettingsView(
                 folderField(paths.repoRoot(), workingRootSuggestion(), violations.get(PathRole.REPO_ROOT)),
                 folderField(paths.libraryRoot(), librarySuggestion(), violations.get(PathRole.LIBRARY_ROOT)),
                 folderField(paths.inbox(), inboxSuggestion(paths.repoRoot()), violations.get(PathRole.INBOX)),
-                this.resolvedProviderId(settings.provider()), this.providerChoices(),
+                shownProvider, this.providerChoices(),
                 this.overrideNote("sluice.cull.provider"),
                 this.unrecognisedProviderNote(settings.provider()),
-                providerSettings.model(), this.overrideNote("sluice.cull.provider-settings.model"),
-                providerSettings.endpoint(), this.overrideNote("sluice.cull.provider-settings.endpoint"),
-                Boolean.TRUE.equals(providerSettings.thinking()),
-                this.overrideNote("sluice.cull.provider-settings.thinking"),
+                providerSettings.model(), this.overrideNote(providerProperty(shownProvider, "model")),
+                providerSettings.endpoint(), this.overrideNote(providerProperty(shownProvider, "endpoint")),
                 providerSettings.maxRetries(),
-                this.overrideNote("sluice.cull.provider-settings.max-retries"), MAX_RETRIES_LIMIT,
+                this.overrideNote(providerProperty(shownProvider, "max-retries")), MAX_RETRIES_LIMIT,
                 settings.externalAgent().mode() == WatchMode.WATCH,
                 this.overrideNote("sluice.cull.external-agent.mode"),
-                this.secretRow(this.resolvedProviderId(settings.provider())),
+                this.secretRow(shownProvider),
                 montage.tileSize(), TILE_SIZE_RANGE, this.overrideNote("sluice.montage.tile-size"),
                 montage.tilesPerRow(), TILES_PER_ROW_RANGE, this.overrideNote("sluice.montage.tiles-per-row"),
                 settings.theme().name(), THEMES, this.overrideNote("sluice.ui.theme"));
@@ -195,8 +197,9 @@ public class SettingsPresenter {
         final ThemeChoice theme = ThemeChoice.valueOf(themeId);
         ThemeSelection.set(theme);
         final Settings current = this.settingsUseCase.settings();
-        this.settingsUseCase.save(new Settings(current.paths(), current.provider(), current.providerSettings(),
-                current.categories(), current.externalAgent(), current.montage(), theme));
+        this.settingsUseCase.save(new Settings(current.paths(), current.provider(),
+                current.providerSettingsById(), current.categories(), current.externalAgent(),
+                current.montage(), theme));
     }
 
     /**
@@ -253,7 +256,6 @@ public class SettingsPresenter {
      * @param provider {@link String} the selected provider id
      * @param model {@link String} the model field's text, possibly blank
      * @param endpoint {@link String} the endpoint field's text, possibly blank
-     * @param thinking boolean whether adaptive thinking is on
      * @param maxRetries {@link Integer} the transport retry count, or null to leave it unset
      * @param watchAutomatically boolean whether a waiting cull should resume on its own once ready;
      *         false waits for an explicit resume
@@ -264,9 +266,8 @@ public class SettingsPresenter {
      */
     public SaveOutcome save(final String workingRoot, final String libraryRoot, final String inbox,
                             final String provider, final String model, final String endpoint,
-                            final boolean thinking, final @Nullable Integer maxRetries,
-                            final boolean watchAutomatically, final int tileSize, final int tilesPerRow,
-                            final String themeId) {
+                            final @Nullable Integer maxRetries, final boolean watchAutomatically,
+                            final int tileSize, final int tilesPerRow, final String themeId) {
         // Before anything touches the disk. What a provider needs is answerable from the field
         // values alone, so refusing on it leaves no folder behind.
         final String missing = this.whatThisProviderNeeds(provider, model);
@@ -285,7 +286,8 @@ public class SettingsPresenter {
             final var settings = new Settings(
                     new PathSettings(blankToNull(workingRoot), blankToNull(libraryRoot), blankToNull(inbox)),
                     provider,
-                    new CullProviderSettings(blankToNull(model), blankToNull(endpoint), thinking, maxRetries),
+                    this.providerSettingsWith(provider,
+                            new CullProviderSettings(blankToNull(model), blankToNull(endpoint), maxRetries)),
                     this.settingsUseCase.settings().categories(), new ExternalAgentSettings(watchMode),
                     new MontageConfig(tileSize, tilesPerRow), theme);
             this.settingsUseCase.save(settings);
@@ -504,6 +506,37 @@ public class SettingsPresenter {
     }
 
     /**
+     * The property name one provider's own setting is configured under. Each provider keeps its own
+     * block, so the note about an environment override has to name the block it belongs to.
+     *
+     * @param providerId {@link String} the provider whose block it sits in
+     * @param setting {@link String} the setting's own key within that block
+     * @return {@link String} the full property name
+     */
+    private static String providerProperty(final String providerId, final String setting) {
+        return "sluice.cull.provider-settings." + providerId + "." + setting;
+    }
+
+    /**
+     * The whole per-provider settings map with one provider's block replaced.
+     *
+     * <p>A save carries one provider's fields, because that is all a screen shows at a time.
+     * Writing only those would drop every other provider's, and a user swapping provider and saving
+     * would lose the model they had configured for the one they left.
+     *
+     * @param providerId {@link String} the provider being saved
+     * @param edited {@link CullProviderSettings} the values that provider is being saved with
+     * @return a {@link Map} of {@link String} to {@link CullProviderSettings} every provider's
+     *         settings, with this one's replaced
+     */
+    private Map<String, CullProviderSettings> providerSettingsWith(final String providerId,
+                                                                   final CullProviderSettings edited) {
+        final var merged = new LinkedHashMap<>(this.settingsUseCase.settings().providerSettingsById());
+        merged.put(providerId, edited);
+        return merged;
+    }
+
+    /**
      * What the chosen provider is missing, or null when it has everything it needs.
      *
      * <p>Required is per provider, not per field. A model id is what an API-backed provider cannot
@@ -687,7 +720,7 @@ public class SettingsPresenter {
     private static SettingsView.ProviderFields fieldsOf(final VisionProviderDescriptor provider) {
         final Set<ProviderSetting> used = provider.settingsUsed();
         return new SettingsView.ProviderFields(used.contains(ProviderSetting.MODEL),
-                used.contains(ProviderSetting.ENDPOINT), used.contains(ProviderSetting.THINKING),
+                used.contains(ProviderSetting.ENDPOINT),
                 used.contains(ProviderSetting.RETRIES), used.contains(ProviderSetting.WATCH_MODE),
                 used.contains(ProviderSetting.CREDENTIAL));
     }

@@ -22,6 +22,9 @@ import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
+import photos.sluice.application.port.out.ModelCatalog;
+import photos.sluice.application.port.out.ModelOption;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
@@ -39,6 +42,7 @@ import photos.sluice.domain.paths.PathViolation.NotConfigured;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -55,6 +59,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MainWindowTest {
 
     private static final SecretId ANTHROPIC_KEY = new SecretId("anthropic", "ANTHROPIC_API_KEY");
+
+    private static final ModelCatalog MODELS =
+            new ModelCatalog(List.of(new ModelOption("a-model", "A model")), "a-model");
 
     @BeforeAll
     static void startToolkit() throws Exception {
@@ -192,7 +199,7 @@ class MainWindowTest {
 
     private static SettingsPresenter settingsPresenter() {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", new CullProviderSettings("a-model", null, false, 2), List.of(),
+                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         final var useCase = new SettingsUseCase() {
             @Override
@@ -247,7 +254,7 @@ class MainWindowTest {
         final var apiSettings = Set.of(ProviderSetting.MODEL, ProviderSetting.CREDENTIAL);
         final List<VisionProviderDescriptor> providers = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic", apiSettings,
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY));
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS));
         final VisionProviderCatalog catalog = new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {
@@ -257,6 +264,11 @@ class MainWindowTest {
             @Override
             public Optional<VisionProviderDescriptor> byId(final String id) {
                 return providers.stream().filter(provider -> provider.id().equals(id)).findFirst();
+            }
+
+            @Override
+            public ProviderCheck check(final String id) {
+                throw new AssertionError("no test here presses a credential check");
             }
         };
         return new SettingsPresenter(useCase, libraryRootUseCase, secretStore, noViolations(), catalog);

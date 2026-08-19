@@ -373,7 +373,12 @@ class CullMontageRendererTest {
 
         @Override
         public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null, null, null);
+            return CullProviderSettings.unset();
+        }
+
+        @Override
+        public CullProviderSettings providerSettings(final String providerId) {
+            return CullProviderSettings.unset();
         }
 
         @Override

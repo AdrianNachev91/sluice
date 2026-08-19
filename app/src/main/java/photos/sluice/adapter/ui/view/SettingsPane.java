@@ -13,7 +13,6 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
@@ -301,7 +300,7 @@ final class SettingsPane {
      * as though something failed to draw.
      *
      * @param fields {@link SettingsView.ProviderFields} which settings the chosen provider uses
-     * @param providerFields {@link VBox} the model, endpoint, thinking and retries rows
+     * @param providerFields {@link VBox} the model, endpoint and retries rows
      * @param watchRow {@link VBox} the watch-mode row
      * @param secretCard {@link VBox} the credential card
      */
@@ -311,11 +310,10 @@ final class SettingsPane {
         final ProviderFieldControls controls = controlsOf(providerFields);
         showIf(fields.model(), controls.model().getParent());
         showIf(fields.endpoint(), controls.endpoint().getParent());
-        showIf(fields.thinking(), controls.thinking());
         showIf(fields.retries(), controls.maxRetries().getParent());
         showIf(fields.watchMode(), watchRow);
         showIf(fields.credential(), secretCard);
-        showIf(fields.model() || fields.endpoint() || fields.thinking() || fields.retries(), providerFields);
+        showIf(fields.model() || fields.endpoint() || fields.retries(), providerFields);
     }
 
     private static void showIf(final boolean wanted, final Node node) {
@@ -584,16 +582,14 @@ final class SettingsPane {
                 .getUserData();
     }
 
-    private record ProviderFieldControls(TextField model, TextField endpoint, CheckBox thinking,
-                                         TextField maxRetries, Label modelViolation) {
+    private record ProviderFieldControls(TextField model, TextField endpoint, TextField maxRetries,
+                                         Label modelViolation) {
     }
 
     private static VBox providerFields(final SettingsView view) {
         final var model = new TextField(view.model() == null ? "" : view.model());
         model.setId("settings-model");
         final var endpoint = new TextField(view.endpoint() == null ? "" : view.endpoint());
-        final var thinking = new CheckBox("Allow the model to reason before answering");
-        thinking.setSelected(view.thinking());
         final var maxRetries = new TextField(view.maxRetries() == null ? "" : view.maxRetries().toString());
         withinLimit(maxRetries, view.maxRetriesLimit());
 
@@ -612,14 +608,13 @@ final class SettingsPane {
                 explainedRow("Endpoint",
                         "Leave empty unless you are pointing Sluice at something other than the provider's own "
                                 + "service, such as a proxy on your network.", endpoint, view.endpointOverride()),
-                noted(thinking, view.thinkingOverride()),
                 explainedRow("Retries",
                         "How many times to try again when the connection fails, before Sluice gives up and tells "
                                 + "you. Nothing to do with a model refusing a photo.", maxRetries,
                         view.maxRetriesOverride()));
         box.getStyleClass().add("settings-group");
         box.getProperties().put("controls",
-                new ProviderFieldControls(model, endpoint, thinking, maxRetries, modelViolation));
+                new ProviderFieldControls(model, endpoint, maxRetries, modelViolation));
         return box;
     }
 
@@ -732,25 +727,6 @@ final class SettingsPane {
         if (overrideNote != null) {
             row.getChildren().add(overrideLabel(overrideNote));
         }
-        row.getStyleClass().add("settings-row");
-        return row;
-    }
-
-    /**
-     * A control that names itself, with whatever outranks it noted underneath.
-     *
-     * <p>For a checkbox, whose own text is its label, so a row that adds one above it would draw a
-     * name twice.
-     *
-     * @param control {@link Node} the control
-     * @param overrideNote a note about what outranks this value, or null
-     * @return {@link Node} the control, wrapped only when there is a note to carry
-     */
-    private static Node noted(final Node control, final @Nullable String overrideNote) {
-        if (overrideNote == null) {
-            return control;
-        }
-        final var row = new VBox(control, overrideLabel(overrideNote));
         row.getStyleClass().add("settings-row");
         return row;
     }
@@ -1052,7 +1028,7 @@ final class SettingsPane {
         final Integer maxRetries = valueOrUnset(controls.maxRetries().getText());
         final SaveOutcome outcome = presenter.save(workingRoot.field().getText(), libraryRoot.field().getText(),
                 inbox.field().getText(), provider.id(), controls.model().getText(), controls.endpoint().getText(),
-                controls.thinking().isSelected(), maxRetries, watchAutomatically, tileSize, tilesPerRow, themeId);
+                maxRetries, watchAutomatically, tileSize, tilesPerRow, themeId);
         switch (outcome) {
             case final SaveOutcome.Saved _ -> showBanner.accept(SAVED);
             case final SaveOutcome.Refused refused -> {

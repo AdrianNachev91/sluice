@@ -16,6 +16,7 @@ import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,7 +53,7 @@ class SettingsHolderTest {
         final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
                 cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
-        holder.apply(new Settings(PATHS, "anthropic", new CullProviderSettings("claude-sonnet-5", null, null, null),
+        holder.apply(new Settings(PATHS, "anthropic", Map.of("anthropic", new CullProviderSettings("claude-sonnet-5", null, null)),
                 List.of(new CullCategory("food", "food description")),
                 new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK));
 
@@ -67,7 +68,7 @@ class SettingsHolderTest {
     // is the step that reads it.
     @Test
     void refusesTwoCategoryCardsSharingAName() {
-        final var cull = new CullConfig("external-agent", new CullProviderSettings(null, null, null, null),
+        final var cull = new CullConfig("external-agent", Map.of(),
                 List.of(new CullCategory("receipts", "paper receipts"),
                         new CullCategory("receipts", "till slips")),
                 new ExternalAgentSettings(WatchMode.MANUAL));
@@ -97,7 +98,7 @@ class SettingsHolderTest {
     }
 
     private static CullConfig cullConfig() {
-        return new CullConfig("external-agent", new CullProviderSettings(null, null, null, null),
+        return new CullConfig("external-agent", Map.of(),
                 List.of(new CullCategory("junk", "junk description")), new ExternalAgentSettings(WatchMode.MANUAL));
     }
 

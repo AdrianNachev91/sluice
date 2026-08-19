@@ -1,5 +1,6 @@
 package photos.sluice.application.port.in;
 
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 
 import java.util.List;
@@ -27,4 +28,19 @@ public interface VisionProviderCatalog {
      *         nothing is registered under that id
      */
     Optional<VisionProviderDescriptor> byId(String id);
+
+    /**
+     * Asks one provider whether the credential stored for it is accepted, and what that credential
+     * can run.
+     *
+     * <p>The check lives here rather than on the provider itself. Handing out the provider would
+     * hand out its culling too, and a configuration surface has no business starting a run.
+     *
+     * <p>May take as long as a network call to a service outside this machine.
+     *
+     * @param id {@link String} the provider id to ask, as {@link #providers()} spells it
+     * @return {@link ProviderCheck} what that provider said
+     * @throws IllegalArgumentException if nothing is registered under that id
+     */
+    ProviderCheck check(String id);
 }

@@ -26,6 +26,7 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
@@ -1024,7 +1025,7 @@ final class PipelineTestSupport {
     // what a settings screen would draw. Named settings and a credential would be fixture that
     // no assertion here reads.
     static VisionProviderDescriptor describing(final String id) {
-        return new VisionProviderDescriptor(id, id, Set.of(), Set.of(), null);
+        return new VisionProviderDescriptor(id, id, Set.of(), Set.of(), null, null);
     }
 
     static final class ManualModeCuller implements VisionCuller {
@@ -1036,6 +1037,11 @@ final class PipelineTestSupport {
         @Override
         public ProviderType type() {
             return ProviderType.MANUAL;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
         }
 
         @Override
@@ -1074,6 +1080,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
             this.started.countDown();
             try {
@@ -1109,6 +1120,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             for (final String montage : prep.entries()) {
                 try {
@@ -1136,6 +1152,11 @@ final class PipelineTestSupport {
         @Override
         public ProviderType type() {
             return ProviderType.API;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
         }
 
         @Override
@@ -1171,6 +1192,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             for (final String montage : prep.entries()) {
                 try {
@@ -1198,6 +1224,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
             throw new CullException("the model could not produce a valid judgement");
         }
@@ -1220,6 +1251,11 @@ final class PipelineTestSupport {
         @Override
         public ProviderType type() {
             return ProviderType.API;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
         }
 
         @Override
@@ -1272,6 +1308,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             throw new AssertionError("dispatch must never run: neither after a post-PREPPING "
                     + "cancellation, nor when every montage already has a shard");
@@ -1282,7 +1323,12 @@ final class PipelineTestSupport {
             implements CullSettings {
         @Override
         public CullProviderSettings providerSettings() {
-            return new CullProviderSettings(null, null, null, null);
+            return CullProviderSettings.unset();
+        }
+
+        @Override
+        public CullProviderSettings providerSettings(final String providerId) {
+            return CullProviderSettings.unset();
         }
 
         // tilesPerRow=1 gives one photo per montage, so a test controls exactly which montage a

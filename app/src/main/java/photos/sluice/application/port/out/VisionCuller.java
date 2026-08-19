@@ -18,8 +18,9 @@ import photos.sluice.domain.job.ProgressCallback;
 public interface VisionCuller {
 
     /**
-     * How this provider presents itself to anything configuring it: its name, which settings it
-     * uses, which it cannot run without, and the credential it authenticates with.
+     * How this provider presents itself to anything configuring it. Its name, which settings it
+     * uses, and which of those it cannot run without. The credential it authenticates with, and
+     * the models it offers.
      *
      * <p>Answered by the provider rather than assembled elsewhere, so a provider added later
      * arrives complete. Nothing outside it has to be edited for it to appear.
@@ -40,6 +41,28 @@ public interface VisionCuller {
      * @return {@link ProviderType} this provider's own type
      */
     ProviderType type();
+
+    /**
+     * Asks whether the credential stored for this provider is accepted, and what that credential can
+     * run.
+     *
+     * <p>Answers rather than throws. Every way this can fail is a state a person can act on. So each
+     * one is a value to render, not an exception a caller has to classify.
+     *
+     * <p>It reads what is stored for this provider, not anything a screen is holding unsaved. So a
+     * surface offering this alongside editable fields is reporting on the last save.
+     *
+     * <p>May be called often and at no notice, whenever a surface decides what it shows is out of
+     * date. An implementation that can only answer by doing the provider's real work is the wrong
+     * shape for it.
+     *
+     * <p>No default. A provider with nothing to authenticate answers
+     * {@link ProviderCheck.NotApplicable} deliberately, rather than inheriting a claim it never
+     * made.
+     *
+     * @return {@link ProviderCheck} what the provider said
+     */
+    ProviderCheck check();
 
     /**
      * Obtains a decision shard for every montage in prep, by whatever means the implementation

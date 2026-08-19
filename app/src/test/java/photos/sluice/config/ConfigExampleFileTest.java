@@ -1,6 +1,13 @@
 package photos.sluice.config;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.PropertySource;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.env.MutablePropertySources;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
+import photos.sluice.application.port.out.CullProviderSettings;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,6 +16,7 @@ import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,15 +44,49 @@ class ConfigExampleFileTest {
         assertThat(missing).as("keys missing from config.example.yml").isEmpty();
     }
 
+    // The keyed provider blocks have no statically enumerable sub-keys, so the sweep above steps
+    // over them entirely. Binding the file for real is what checks them. Endpoint stays out of the
+    // assertion because the file documents it by leaving it blank, which is what unset looks like.
+    @Test
+    void documentsAWholeProviderSettingsBlock() {
+        final CullProviderSettings anthropic = boundCullConfig().providerSettings().get("anthropic");
+
+        assertThat(anthropic).as("the anthropic block in config.example.yml").isNotNull();
+        assertThat(anthropic.model()).isNotBlank();
+        assertThat(anthropic.maxRetries()).isNotNull();
+    }
+
+    /**
+     * Binds the example file the way this app binds a user's own config file.
+     *
+     * @return {@link CullConfig} the cull settings the example file carries
+     */
+    private static CullConfig boundCullConfig() {
+        final List<PropertySource<?>> sources;
+        try {
+            sources = new YamlPropertySourceLoader()
+                    .load("config.example.yml", new ClassPathResource("config.example.yml"));
+        } catch (final IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        final var propertySources = new MutablePropertySources();
+        sources.forEach(propertySources::addLast);
+        return new Binder(ConfigurationPropertySources.from(propertySources))
+                .bind("sluice.cull", CullConfig.class)
+                .orElseThrow(() -> new AssertionError("config.example.yml carries no sluice.cull block"));
+    }
+
     /**
      * The leaf kebab-case key names a record's own components bind to. Recurses into a nested
-     * record, so a property like {@code model} under {@code provider-settings} is found too.
+     * record, so a property like {@code tile-size} under {@code montage} is found too.
      *
      * <p>YAML nests rather than dots its keys, so what the file actually shows is the leaf name
      * alone.
      *
      * <p>A {@link List}-typed component (the cull categories) is skipped. It names a set of
      * user-typed cards rather than a fixed key, and the example file documents it in prose instead.
+     * A {@link Map}-typed one (the per-provider settings) is skipped for the same reason, and the
+     * test above is what covers it.
      *
      * @param type {@link Class} the record type to read components from
      * @return a {@link List} of {@link String} every leaf kebab-case key this record and its nested
@@ -53,6 +95,7 @@ class ConfigExampleFileTest {
     private static List<String> keysOf(final Class<?> type) {
         return Stream.of(type.getRecordComponents())
                 .filter(component -> !List.class.isAssignableFrom(component.getType()))
+                .filter(component -> !Map.class.isAssignableFrom(component.getType()))
                 .flatMap(ConfigExampleFileTest::keysOfComponent)
                 .toList();
     }

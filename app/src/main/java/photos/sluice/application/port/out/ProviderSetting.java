@@ -18,9 +18,6 @@ public enum ProviderSetting {
     /** A service address other than the provider's own. */
     ENDPOINT,
 
-    /** Whether the model may reason before answering. */
-    THINKING,
-
     /** How many times a failed connection is tried again. */
     RETRIES,
 

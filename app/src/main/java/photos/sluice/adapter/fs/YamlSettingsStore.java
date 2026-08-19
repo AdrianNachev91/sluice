@@ -74,12 +74,22 @@ public class YamlSettingsStore implements SettingsStore {
         YamlConfigFile.set(cull, "provider", settings.provider());
         YamlConfigFile.set(cull, "categories", categories(settings.categories()));
 
-        final CullProviderSettings provider = settings.providerSettings();
+        // One group per provider, merged into rather than replaced. A block belonging to a provider
+        // this install does not have then survives a save, the same way any unknown key does.
         final Map<String, Object> providerSettings = this.document.group(cull, "provider-settings");
-        YamlConfigFile.set(providerSettings, "model", provider.model());
-        YamlConfigFile.set(providerSettings, "endpoint", provider.endpoint());
-        YamlConfigFile.set(providerSettings, "thinking", provider.thinking());
-        YamlConfigFile.set(providerSettings, "max-retries", provider.maxRetries());
+        for (final Map.Entry<String, CullProviderSettings> entry : settings.providerSettingsById().entrySet()) {
+            final CullProviderSettings provider = entry.getValue();
+            final Map<String, Object> group = this.document.group(providerSettings, entry.getKey());
+            YamlConfigFile.set(group, "model", provider.model());
+            YamlConfigFile.set(group, "endpoint", provider.endpoint());
+            YamlConfigFile.set(group, "max-retries", provider.maxRetries());
+        }
+        // An install where nobody has configured a provider writes no block at all. A mapping with
+        // nothing under it reaches YAML as `provider-settings: {}`. That binds to a string rather
+        // than to a map of providers, so the next launch fails on the file this save just wrote.
+        if (providerSettings.isEmpty()) {
+            YamlConfigFile.remove(cull, "provider-settings");
+        }
 
         final Map<String, Object> externalAgent = this.document.group(cull, "external-agent");
         YamlConfigFile.set(externalAgent, "mode", settings.externalAgent().mode().name().toLowerCase(Locale.ROOT));

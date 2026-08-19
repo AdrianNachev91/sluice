@@ -214,7 +214,7 @@ public class SettingsService implements SettingsUseCase {
         final Settings current = this.live.current();
         final PathSettings paths = current.paths();
         return new Settings(new PathSettings(paths.repoRoot(), newLibraryRoot.toString(), paths.inbox()),
-                current.provider(), current.providerSettings(), current.categories(),
+                current.provider(), current.providerSettingsById(), current.categories(),
                 current.externalAgent(), current.montage(), current.theme());
     }
 

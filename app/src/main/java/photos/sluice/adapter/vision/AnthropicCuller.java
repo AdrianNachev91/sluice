@@ -3,6 +3,9 @@ package photos.sluice.adapter.vision;
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.core.JsonValue;
+import com.anthropic.errors.AnthropicInvalidDataException;
+import com.anthropic.errors.PermissionDeniedException;
+import com.anthropic.errors.UnauthorizedException;
 import com.anthropic.models.messages.Base64ImageSource;
 import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.ImageBlockParam;
@@ -10,10 +13,10 @@ import com.anthropic.models.messages.JsonOutputFormat;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
+import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlock;
 import com.anthropic.models.messages.TextBlockParam;
-import com.anthropic.models.messages.ThinkingConfigAdaptive;
-import com.anthropic.models.messages.ThinkingConfigDisabled;
+import com.anthropic.models.models.ModelInfo;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +27,9 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.ModelCatalog;
+import photos.sluice.application.port.out.ModelOption;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.SecretId;
@@ -52,8 +58,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -93,9 +101,9 @@ import java.util.stream.Collectors;
  * file naming no current montage is left untouched. {@link CullOptions} is not wired yet. Every
  * montage needs a shard regardless of allowPartial, and timeout is unhonored.
  *
- * <p>The API client is built lazily inside {@link #cull}, never at startup, so the app boots
- * without an API key for users on other providers. The factory seam exists for tests to inject a
- * mock client.
+ * <p>An API client is built lazily inside whichever call needs one, never at startup, so the app
+ * boots without an API key for users on other providers. The factory seams exist for tests to
+ * inject a mock client.
  */
 @Component
 class AnthropicCuller implements VisionCuller {
@@ -106,15 +114,34 @@ class AnthropicCuller implements VisionCuller {
     // second API provider then adds its own id instead of editing a shared table.
     static final SecretId API_KEY = new SecretId(PROVIDER_ID, "ANTHROPIC_API_KEY");
 
-    // The response ceiling, which doubles as a per-call cost cap. Sizing: a verdict runs about
-    // 70 tokens, so the largest list a sheet can produce is ~3.5k for a dense 7x7 grid. 8192
-    // holds that worst case more than twice over.
-    private static final long MAX_TOKENS = 8192;
-    // A thinking run adds a reasoning allowance equal to the whole answer ceiling. Reasoning
-    // shares the response budget. The extra 8192 (~300 tokens of deliberation per photo on a
-    // full default 5x5 sheet) keeps even a long chain from squeezing out the verdict JSON.
-    private static final long MAX_TOKENS_THINKING = 16384;
+    // The response ceiling, which doubles as a per-call cost cap. A verdict runs about 70 tokens,
+    // so the longest list a sheet can produce is ~3.5k for a dense 7x7 grid. The remaining ~12k is
+    // a reasoning allowance. A model that reasons before answering spends from this same ceiling,
+    // at whatever depth it chooses. Reasoning that squeezes out the verdict list arrives as
+    // truncated JSON.
+    private static final long MAX_TOKENS = 16384;
     private static final int DEFAULT_TRANSPORT_RETRIES = 2;
+    // A check always has someone waiting on its answer, so it fails rather than retries. The SDK's
+    // backoff would otherwise spend a minute on a service that is down, with the screen that asked
+    // reading as hung.
+    private static final int CHECK_RETRIES = 0;
+    private static final Duration CHECK_TIMEOUT = Duration.ofSeconds(20);
+    // A bound on a list that runs to tens of entries. The paging is driven by what the service
+    // says rather than by anything here, so it gets a ceiling.
+    private static final long CHECK_MODEL_CEILING = 500;
+    // The models offered before anything has been asked of the service. Listing what an account
+    // can really run needs a key and a network. So this is what a fresh install opens on, and a
+    // successful check replaces it with the account's own list.
+    //
+    // Each one has to read an image and answer against a JSON schema, which is what a montage and
+    // a verdict are. Least capable first, so a surface with no recommendation to fall back on
+    // lands on the cheapest rather than the dearest. Labels stay plain display names so the two
+    // lists read alike when one replaces the other.
+    private static final ModelCatalog MODELS = new ModelCatalog(List.of(
+            new ModelOption("claude-haiku-4-5", "Claude Haiku 4.5"),
+            new ModelOption("claude-sonnet-5", "Claude Sonnet 5"),
+            new ModelOption("claude-opus-5", "Claude Opus 5")),
+            "claude-sonnet-5");
     private static final String KEEP = "keep";
     private static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
     private static final String NEAR_DUP_REJECT = "near-dup-reject";
@@ -146,6 +173,7 @@ class AnthropicCuller implements VisionCuller {
     private final SidecarReader sidecarReader;
     private final CullSettings settings;
     private final Supplier<AnthropicClient> clientFactory;
+    private final Supplier<AnthropicClient> checkClientFactory;
     private final ShardValidator validator = new ShardValidator();
     private final JsonMapper mapper =
             JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
@@ -163,11 +191,16 @@ class AnthropicCuller implements VisionCuller {
     AnthropicCuller(final CullerPrompt prompt, final ShardCodec shardCodec, final SidecarReader sidecarReader,
                     final CullSettings settings, final SecretStore secretStore) {
         this(prompt, shardCodec, sidecarReader, settings,
-                () -> defaultClient(settings.providerSettings(), secretStore));
+                () -> defaultClient(settings.providerSettings(PROVIDER_ID), secretStore),
+                () -> checkClient(settings.providerSettings(PROVIDER_ID), secretStore));
     }
 
     /**
-     * Constructs the culler with an injectable client factory, for tests.
+     * Constructs the culler with injectable client factories, for tests.
+     *
+     * <p>Two factories rather than one, because a check and a cull want different clients. Culling
+     * rides the configured transport retries; a check refuses them. Only one of the two is ever
+     * asked for a client on any given call.
      *
      * @param prompt {@link CullerPrompt} the prompt builder
      * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
@@ -175,14 +208,18 @@ class AnthropicCuller implements VisionCuller {
      * @param settings {@link CullSettings} the cull settings
      * @param clientFactory a {@link Supplier} of {@link AnthropicClient}, builds the Anthropic client used to call
      * the model
+     * @param checkClientFactory a {@link Supplier} of {@link AnthropicClient}, builds the client used to check the
+     * stored credential
      */
     AnthropicCuller(final CullerPrompt prompt, final ShardCodec shardCodec, final SidecarReader sidecarReader,
-                    final CullSettings settings, final Supplier<AnthropicClient> clientFactory) {
+                    final CullSettings settings, final Supplier<AnthropicClient> clientFactory,
+                    final Supplier<AnthropicClient> checkClientFactory) {
         this.prompt = prompt;
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
         this.settings = settings;
         this.clientFactory = clientFactory;
+        this.checkClientFactory = checkClientFactory;
     }
 
     /**
@@ -218,10 +255,10 @@ class AnthropicCuller implements VisionCuller {
     public VisionProviderDescriptor describe() {
         return new VisionProviderDescriptor(PROVIDER_ID,
                 "Anthropic (calls a vision model from inside Sluice)",
-                Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.THINKING,
-                        ProviderSetting.RETRIES, ProviderSetting.CREDENTIAL),
+                Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.RETRIES,
+                        ProviderSetting.CREDENTIAL),
                 Set.of(ProviderSetting.MODEL),
-                API_KEY);
+                API_KEY, MODELS);
     }
 
     /**
@@ -232,6 +269,53 @@ class AnthropicCuller implements VisionCuller {
     @Override
     public ProviderType type() {
         return ProviderType.API;
+    }
+
+    /**
+     * Asks the service to list its models, which authenticates the stored key and answers what that
+     * key can run in the same round trip. Listing generates no tokens, so asking costs nothing.
+     *
+     * <p>Every outcome is a value. Two exception families separate a key the service does not know
+     * from an account not entitled to this. Everything else lands on unreachable, carrying whatever
+     * it said.
+     *
+     * <p>The catch-all is what makes that true rather than intended. An endpoint is a field a user
+     * types into. The HTTP client rejects an unparseable one with an exception of its own, from no
+     * family this class could enumerate. A credential store can refuse to answer the same way.
+     * Neither has anywhere to go from the surface that asked.
+     *
+     * @return {@link ProviderCheck} what the service said
+     */
+    @Override
+    public ProviderCheck check() {
+        final AnthropicClient client;
+        try {
+            client = this.checkClientFactory.get();
+        } catch (final MissingCredentialException e) {
+            return new ProviderCheck.NoCredential();
+        } catch (final RuntimeException e) {
+            return new ProviderCheck.Unreachable(said(e));
+        }
+        try {
+            final List<ModelOption> offerable = client.models().list().autoPager().stream()
+                    .limit(CHECK_MODEL_CEILING)
+                    .filter(AnthropicCuller::offerable)
+                    .map(model -> new ModelOption(model.id(), model.displayName()))
+                    .toList();
+            if (offerable.isEmpty()) {
+                return new ProviderCheck.NoUsableModels();
+            }
+            final List<ModelOption> ranked = ranked(offerable);
+            return new ProviderCheck.Accepted(new ModelCatalog(ranked, recommendedAmong(ranked)));
+        } catch (final UnauthorizedException e) {
+            return new ProviderCheck.Rejected();
+        } catch (final PermissionDeniedException e) {
+            return new ProviderCheck.Refused(said(e));
+        } catch (final RuntimeException e) {
+            return new ProviderCheck.Unreachable(said(e));
+        } finally {
+            client.close();
+        }
     }
 
     /**
@@ -277,7 +361,6 @@ class AnthropicCuller implements VisionCuller {
                            final CancellationSignal cancellation)
             throws CullException {
         final String model = this.requiredModel();
-        final boolean thinking = Boolean.TRUE.equals(this.settings.providerSettings().thinking());
         final String systemPrompt = this.prompt.systemPrompt(prep.categories());
         final List<String> categoryNames = prep.categoryNames();
         long inputTokens = 0;
@@ -319,7 +402,7 @@ class AnthropicCuller implements VisionCuller {
                         scopeSrcs, categoryNames)) {
                     skipped++;
                 } else {
-                    final MessageCreateParams request = request(model, thinking, systemPrompt,
+                    final MessageCreateParams request = request(model, systemPrompt,
                             this.prompt.userTurn(prep.scope(), montage, ordinal, total, entries),
                             montageImageBase64(prep.prepDir(), montage));
                     final Message response = client.messages().create(request);
@@ -370,19 +453,120 @@ class AnthropicCuller implements VisionCuller {
      */
     static AnthropicClient defaultClient(final CullProviderSettings providerSettings,
             final SecretStore secretStore) {
+        // Transport failures (429/5xx/timeouts) are the SDK's own retry family: exponential
+        // backoff honoring retry-after, separate from the one content retry above.
+        final Integer maxRetries = providerSettings.maxRetries();
+        return client(providerSettings, secretStore,
+                maxRetries == null ? DEFAULT_TRANSPORT_RETRIES : maxRetries, null);
+    }
+
+    /**
+     * The client a credential check runs on. Same key and endpoint as a cull. No retries, and a
+     * timeout short enough that a person keeps waiting.
+     *
+     * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
+     * @param secretStore {@link SecretStore} where this provider's API key is stored
+     * @return {@link AnthropicClient} the built Anthropic client
+     * @throws MissingCredentialException if no tier holds this provider's API key
+     */
+    private static AnthropicClient checkClient(final CullProviderSettings providerSettings,
+            final SecretStore secretStore) {
+        return client(providerSettings, secretStore, CHECK_RETRIES, CHECK_TIMEOUT);
+    }
+
+    /**
+     * Builds a client on this provider's stored key and configured endpoint. The refusal for a
+     * missing key is the one every route out of this class raises, so a user meets the same
+     * instructions whichever one they took.
+     *
+     * @param providerSettings {@link CullProviderSettings} the configured Anthropic provider settings
+     * @param secretStore {@link SecretStore} where this provider's API key is stored
+     * @param maxRetries int how many times a failed transport call is tried again
+     * @param timeout the ceiling on one call, or null to leave the SDK's own
+     * @return {@link AnthropicClient} the built Anthropic client
+     * @throws MissingCredentialException if no tier holds this provider's API key
+     */
+    private static AnthropicClient client(final CullProviderSettings providerSettings,
+            final SecretStore secretStore, final int maxRetries, final @Nullable Duration timeout) {
         final String apiKey = secretStore.secret(API_KEY).orElseThrow(() -> new MissingCredentialException(API_KEY,
-                "No API key is stored for the 'anthropic' vision provider; add one in Settings, "
+                "No API key is stored for the '" + PROVIDER_ID + "' vision provider; add one in Settings, "
                         + "or set the " + API_KEY.environmentVariable() + " environment variable"));
-        final var builder = AnthropicOkHttpClient.builder().apiKey(apiKey);
+        final var builder = AnthropicOkHttpClient.builder().apiKey(apiKey).maxRetries(maxRetries);
+        if (timeout != null) {
+            builder.timeout(timeout);
+        }
         final String endpoint = providerSettings.endpoint();
         if (endpoint != null && !endpoint.isBlank()) {
             builder.baseUrl(endpoint);
         }
-        // Transport failures (429/5xx/timeouts) are the SDK's own retry family: exponential
-        // backoff honoring retry-after, separate from the one content retry above.
-        final Integer maxRetries = providerSettings.maxRetries();
-        builder.maxRetries(maxRetries == null ? DEFAULT_TRANSPORT_RETRIES : maxRetries);
         return builder.build();
+    }
+
+    /**
+     * Whether one model out of the service's list can be offered as a choice here. It has to read
+     * an image and answer against a JSON schema, which is what a montage and a verdict are. A model
+     * reporting nothing about itself is not offered, since nothing says it can do either.
+     *
+     * @param model {@link ModelInfo} one model the service listed
+     * @return boolean true if this model can be offered
+     */
+    private static boolean offerable(final ModelInfo model) {
+        try {
+            return !model.id().isBlank() && !model.displayName().isBlank()
+                    && model.capabilities()
+                    .filter(capabilities -> capabilities.imageInput().supported()
+                            && capabilities.structuredOutputs().supported())
+                    .isPresent();
+        } catch (final AnthropicInvalidDataException e) {
+            // The service described this model in a shape this app cannot read. Dropping the one
+            // entry leaves the rest of the account's list offerable.
+            return false;
+        }
+    }
+
+    /**
+     * Orders the account's own models the way {@link #MODELS} orders the ones this class knows.
+     * Anything it does not know follows, in the order the service gave.
+     *
+     * <p>A surface with no recommendation to fall back on starts on the first entry. Sorting the
+     * known models ahead of the rest keeps an unknown one out of that position while any known
+     * model survives the filter. An account offering only unknown models has nothing better to
+     * start on.
+     *
+     * @param offerable a {@link List} of {@link ModelOption}, the models this account can be offered
+     * @return a {@link List} of {@link ModelOption} the same models, in the order to offer them
+     */
+    private static List<ModelOption> ranked(final List<ModelOption> offerable) {
+        final List<String> ladder = MODELS.options().stream().map(ModelOption::id).toList();
+        return offerable.stream()
+                .sorted(Comparator.comparingInt(option -> {
+                    final int rung = ladder.indexOf(option.id());
+                    return rung < 0 ? ladder.size() : rung;
+                }))
+                .toList();
+    }
+
+    /**
+     * This provider's own recommendation, but only when the account can actually run it. A
+     * recommendation nobody can select would default a picker to a model the service refuses.
+     *
+     * @param offerable a {@link List} of {@link ModelOption}, the models this account can be offered
+     * @return {@link String} the recommended model id, or null when it is not among them
+     */
+    private static @Nullable String recommendedAmong(final List<ModelOption> offerable) {
+        final String recommended = MODELS.recommended();
+        return offerable.stream().anyMatch(option -> option.id().equals(recommended)) ? recommended : null;
+    }
+
+    /**
+     * What a failure said, for an outcome that carries the service's own words.
+     *
+     * @param failure {@link RuntimeException} what was raised
+     * @return {@link String} the failure's message, or its type when it carried none
+     */
+    private static String said(final RuntimeException failure) {
+        final String message = failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
     }
 
     /**
@@ -582,11 +766,21 @@ class AnthropicCuller implements VisionCuller {
     /**
      * Parses the response text into a raw verdict list, recording a problem if it can't be parsed.
      *
+     * <p>A response the ceiling cut short is reported as that, before the parse. Its text is a
+     * verdict list that stops mid-token, so parsing it would blame the model's JSON for a budget
+     * that ran out. Whoever reads the failure needs those apart. One is a model that cannot follow
+     * a schema. The other is a sheet whose verdicts and reasoning together do not fit.
+     *
      * @param response {@link Message} the model's response to parse
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
      * @return {@link RawResponse} the parsed response, or null if it couldn't be parsed
      */
     private @Nullable RawResponse parse(final Message response, final List<String> problems) {
+        if (response.stopReason().filter(StopReason.MAX_TOKENS::equals).isPresent()) {
+            problems.add("response was cut off at the " + MAX_TOKENS
+                    + "-token ceiling, before the verdict list was complete");
+            return null;
+        }
         final String text = responseText(response);
         if (text.isBlank()) {
             problems.add("response carries no text content");
@@ -632,24 +826,27 @@ class AnthropicCuller implements VisionCuller {
      * Anthropic's vision guidance: models resolve references into an image better when the image
      * comes first. The schema rides along as a structured-output format, so the response text is
      * meant to be the verdict JSON itself rather than prose around it. A request for a format is not
-     * a guarantee of one, so {@link #parse} records a problem rather than throwing when the response
-     * is not - which is what drives the corrective retry. No sampling
-     * parameters - current Anthropic models reject them outright. Thinking is always sent
-     * explicitly, never left to the model generation's own default: disabled unless configured on,
-     * adaptive when it is.
+     * a guarantee of one. So {@link #parse} records a problem rather than throwing when the response
+     * is not one, and that problem is what drives the corrective retry. No sampling
+     * parameters - current Anthropic models reject them outright.
+     *
+     * <p>No thinking parameter and no effort parameter either, so each model reasons at whatever
+     * depth it reasons by default. Omitting both is the only shape every current model accepts. A
+     * parameter asking for a particular depth is refused by some model, or by some setting of one.
+     * Whether depth helps a model read a contact sheet is unmeasured, so this asks for as little as
+     * it can.
      *
      * @param model {@link String} the model id to request
-     * @param thinking boolean whether to enable adaptive thinking
      * @param systemPrompt {@link String} the shared system prompt
      * @param userTurn {@link String} the montage's user turn text
      * @param imageBase64 {@link String} the montage image, base64-encoded
      * @return {@link MessageCreateParams} the assembled request
      */
-    private static MessageCreateParams request(final String model, final boolean thinking, final String systemPrompt,
+    private static MessageCreateParams request(final String model, final String systemPrompt,
                                                final String userTurn, final String imageBase64) {
-        final var builder = MessageCreateParams.builder()
+        return MessageCreateParams.builder()
                 .model(model)
-                .maxTokens(thinking ? MAX_TOKENS_THINKING : MAX_TOKENS)
+                .maxTokens(MAX_TOKENS)
                 .system(systemPrompt)
                 .addUserMessageOfBlockParams(List.of(
                         ContentBlockParam.ofImage(ImageBlockParam.builder()
@@ -663,13 +860,8 @@ class AnthropicCuller implements VisionCuller {
                         .format(JsonOutputFormat.builder()
                                 .schema(RESPONSE_SCHEMA)
                                 .build())
-                        .build());
-        if (thinking) {
-            builder.thinking(ThinkingConfigAdaptive.builder().build());
-        } else {
-            builder.thinking(ThinkingConfigDisabled.builder().build());
-        }
-        return builder.build();
+                        .build())
+                .build();
     }
 
     /**
@@ -738,10 +930,11 @@ class AnthropicCuller implements VisionCuller {
      * @return {@link String} the configured model id
      */
     private String requiredModel() {
-        final String model = this.settings.providerSettings().model();
+        final String model = this.settings.providerSettings(PROVIDER_ID).model();
         if (model == null || model.isBlank()) {
-            throw new IllegalStateException("sluice.cull.provider-settings.model is not set; "
-                    + "the 'anthropic' vision provider needs the model id to request");
+            throw new IllegalStateException("sluice.cull.provider-settings." + PROVIDER_ID
+                    + ".model is not set; the '" + PROVIDER_ID
+                    + "' vision provider needs the model id to request");
         }
         return model;
     }

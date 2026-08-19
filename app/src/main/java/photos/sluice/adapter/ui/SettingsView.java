@@ -21,8 +21,6 @@ import java.util.List;
  * @param modelOverride an override note for the model field, or null
  * @param endpoint {@link String} the configured endpoint
  * @param endpointOverride an override note for the endpoint field, or null
- * @param thinking boolean whether adaptive thinking is on
- * @param thinkingOverride an override note for the reasoning toggle, or null
  * @param maxRetries {@link Integer} the configured transport retry count
  * @param maxRetriesOverride an override note for the retries field, or null
  * @param maxRetriesLimit int the largest transport retry count this app accepts
@@ -45,8 +43,8 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
                            @Nullable String providerOverride, @Nullable String providerUnrecognised,
                            @Nullable String model,
                            @Nullable String modelOverride, @Nullable String endpoint,
-                           @Nullable String endpointOverride, boolean thinking, @Nullable String thinkingOverride,
-                           @Nullable Integer maxRetries, @Nullable String maxRetriesOverride, int maxRetriesLimit,
+                           @Nullable String endpointOverride, @Nullable Integer maxRetries,
+                           @Nullable String maxRetriesOverride, int maxRetriesLimit,
                            boolean watchAutomatically, @Nullable String watchModeOverride, SecretRow secret, int tileSize,
                            NumberRange tileSizeRange, @Nullable String tileSizeOverride, int tilesPerRow,
                            NumberRange tilesPerRowRange, @Nullable String tilesPerRowOverride, String theme,
@@ -82,12 +80,11 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      *
      * @param model boolean whether a model id applies
      * @param endpoint boolean whether a non-default endpoint applies
-     * @param thinking boolean whether the reasoning toggle applies
      * @param retries boolean whether a transport retry count applies
      * @param watchMode boolean whether the waiting-cull watch mode applies
      * @param credential boolean whether a stored credential applies
      */
-    public record ProviderFields(boolean model, boolean endpoint, boolean thinking, boolean retries,
+    public record ProviderFields(boolean model, boolean endpoint, boolean retries,
                                  boolean watchMode, boolean credential) {
     }
 

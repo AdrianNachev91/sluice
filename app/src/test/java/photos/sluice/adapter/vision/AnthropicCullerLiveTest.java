@@ -54,7 +54,7 @@ import static org.mockito.Mockito.mock;
 // from spending API money just because a key happens to be set in the environment.
 //
 // One run proves the two things the mocked tests cannot. The live API accepts the montage request
-// shape: image block, photo table, JSON-schema structured output, explicit thinking config. And it
+// shape: image block, photo table, JSON-schema structured output, the structured-output schema. And it
 // accepts the corrective-retry conversation: assistant echo of the failed reply plus a correction
 // turn. A decorator forces the retry by flipping one filename in the first live response. The name
 // check then fails, and the genuine second request goes out. Verdict content is deliberately not
@@ -96,11 +96,14 @@ class AnthropicCullerLiveTest {
         // Wrapping the production-built client exercises the whole real path: the key read through
         // the machine's own credential tiers, the absent endpoint override, and the transport-retry
         // knob. The environment tier answers first, so the file tier's directory is never reached.
-        final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings(),
+        final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings("anthropic"),
                 TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
                         root.resolve("secrets")));
         final var culler = new AnthropicCuller(new CullerPrompt(settings),
-                new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real));
+                new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real),
+                () -> {
+                    throw new AssertionError("this test checks no credential");
+                });
 
         final CullReport report = culler.cull(prep, new CullOptions(false, null));
 
@@ -180,11 +183,16 @@ class AnthropicCullerLiveTest {
     }
 
     private static CullSettings settings() {
-        return new FixedSettings("anthropic", CARDS, new CullProviderSettings(MODEL, null, true, null));
+        return new FixedSettings("anthropic", CARDS, new CullProviderSettings(MODEL, null, null));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,
                                  CullProviderSettings providerSettings) implements CullSettings {
+
+        @Override
+        public CullProviderSettings providerSettings(final String providerId) {
+            return this.provider.equals(providerId) ? this.providerSettings : CullProviderSettings.unset();
+        }
 
         @Override
         public ExternalAgentSettings externalAgent() {

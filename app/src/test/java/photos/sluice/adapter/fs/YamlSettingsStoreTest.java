@@ -1,6 +1,13 @@
 package photos.sluice.adapter.fs;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.env.PropertySource;
+import org.springframework.core.io.FileSystemResource;
+import photos.sluice.config.CullConfig;
 import org.junit.jupiter.api.io.TempDir;
 import org.yaml.snakeyaml.Yaml;
 import photos.sluice.application.port.out.CullProviderSettings;
@@ -250,9 +257,68 @@ class YamlSettingsStoreTest {
         assertThat(reloaded(file).paths()).isEqualTo(settings().paths());
     }
 
+    // Each provider keeps its own block, and a save carries whichever ones the settings hold. A
+    // provider this install does not have is one of them, so its block has to come back untouched.
+    @Test
+    void aBlockBelongingToAnotherProviderSurvivesASave(@TempDir final Path dir) throws IOException {
+        final Path file = dir.resolve("config.yml");
+        Files.writeString(file, """
+                sluice:
+                  cull:
+                    provider-settings:
+                      some-other-provider:
+                        model: their-model
+                        endpoint: https://theirs.invalid
+                """);
+
+        new YamlSettingsStore(file).save(settings());
+
+        final var providerSettings = asMap(asMap(asMap(
+                new Yaml().<Map<String, Object>>load(read(file)).get("sluice")).get("cull")).get("provider-settings"));
+        assertThat(asMap(providerSettings.get("some-other-provider")))
+                .containsEntry("model", "their-model")
+                .containsEntry("endpoint", "https://theirs.invalid");
+        assertThat(asMap(providerSettings.get("anthropic"))).containsEntry("model", "claude-sonnet-5");
+    }
+
+    // The one shape no other test reaches: what this writer produces, read back by the binder that
+    // reads it at launch. An install where nobody has configured a provider saves an empty map, and
+    // a mapping with nothing under it is not a mapping the binder accepts.
+    @Test
+    void whatASaveWritesStillBindsWhenNoProviderIsConfigured(@TempDir final Path dir) {
+        final Path file = dir.resolve("config.yml");
+        final Settings noProviderConfigured = new Settings(settings().paths(), "external-agent", Map.of(),
+                settings().categories(), settings().externalAgent(), settings().montage(), settings().theme());
+
+        new YamlSettingsStore(file).save(noProviderConfigured);
+
+        assertThat(boundCull(file).providerSettings()).isEmpty();
+    }
+
+    /**
+     * Binds a saved file the way the app binds it at launch.
+     *
+     * @param file {@link Path} the config file to read
+     * @return {@link CullConfig} the cull settings it carries
+     */
+    private static CullConfig boundCull(final Path file) {
+        final List<PropertySource<?>> sources;
+        try {
+            sources = new YamlPropertySourceLoader().load("config.yml", new FileSystemResource(file));
+        } catch (final IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        final var propertySources = new MutablePropertySources();
+        sources.forEach(propertySources::addLast);
+        return new Binder(ConfigurationPropertySources.from(propertySources))
+                .bind("sluice.cull", CullConfig.class)
+                .orElseThrow(() -> new AssertionError("the saved file carries no sluice.cull block"));
+    }
+
     private static Settings settings() {
         return new Settings(new PathSettings("/photos/work", "/photos/library", "/photos/work/Inbox"),
-                "anthropic", new CullProviderSettings("claude-sonnet-5", "https://example.invalid", true, 4),
+                "anthropic", Map.of("anthropic",
+                        new CullProviderSettings("claude-sonnet-5", "https://example.invalid", 4)),
                 List.of(new CullCategory("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK);
     }
@@ -267,6 +333,7 @@ class YamlSettingsStoreTest {
         final var cull = asMap(sluice.get("cull"));
         final var ui = asMap(sluice.get("ui"));
         final var providerSettings = asMap(cull.get("provider-settings"));
+        final var anthropic = asMap(providerSettings.get("anthropic"));
         final List<CullCategory> categories = ((List<?>) cull.get("categories")).stream()
                 .map(YamlSettingsStoreTest::asMap)
                 .map(card -> new CullCategory((String) card.get("name"), (String) card.get("description")))
@@ -275,9 +342,8 @@ class YamlSettingsStoreTest {
                 new PathSettings((String) paths.get("repo-root"), (String) paths.get("library-root"),
                         (String) paths.get("inbox")),
                 (String) cull.get("provider"),
-                new CullProviderSettings((String) providerSettings.get("model"),
-                        (String) providerSettings.get("endpoint"), (Boolean) providerSettings.get("thinking"),
-                        (Integer) providerSettings.get("max-retries")),
+                Map.of("anthropic", new CullProviderSettings((String) anthropic.get("model"),
+                        (String) anthropic.get("endpoint"), (Integer) anthropic.get("max-retries"))),
                 categories,
                 new ExternalAgentSettings(WatchMode.valueOf(
                         ((String) asMap(cull.get("external-agent")).get("mode")).toUpperCase(Locale.ROOT))),

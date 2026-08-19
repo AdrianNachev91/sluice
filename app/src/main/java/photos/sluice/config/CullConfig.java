@@ -7,17 +7,19 @@ import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * Binds the {@code sluice.cull} settings: which provider drives the culler, that provider's own
- * settings, the classification categories it routes photos to, and the external-agent watch mode.
+ * Binds the {@code sluice.cull} settings. Which provider drives the culler, and the settings kept
+ * for each provider. The classification categories it routes photos to, and the external-agent
+ * watch mode.
  *
  * <p>These are the values the app starts on. {@link SettingsHolder} takes them from here once and
  * is what everything reads afterwards. So a save changes what a cull sees without a restart.
  */
 @ConfigurationProperties(prefix = "sluice.cull")
-public record CullConfig(String provider, CullProviderSettings providerSettings, List<CullCategory> categories,
-                         ExternalAgentSettings externalAgent) {
+public record CullConfig(String provider, Map<String, CullProviderSettings> providerSettings,
+                         List<CullCategory> categories, ExternalAgentSettings externalAgent) {
 
     /**
      * categories are the classification cards the culler routes to (junk/scenery/food/funny by
@@ -27,7 +29,8 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
      * immutable and null-safe.
      *
      * @param provider {@link String} the selected cull provider name
-     * @param providerSettings {@link CullProviderSettings} provider-specific settings
+     * @param providerSettings a {@link Map} of {@link String} to {@link CullProviderSettings}, the
+     *     connection settings configured for each provider, keyed by provider id
      * @param categories a {@link List} of {@link CullCategory} classification cards the culler routes to
      * @param externalAgent {@link ExternalAgentSettings} external-agent watch mode settings
      */
@@ -36,12 +39,10 @@ public record CullConfig(String provider, CullProviderSettings providerSettings,
         // can't model that reflective path, so it reads the guards as always-false.
         //noinspection ConstantValue
         categories = categories == null ? List.of() : List.copyOf(categories);
-        // The port requires a non-null settings object whose fields are null when unset, so an
-        // absent provider-settings node normalizes to that shape here.
+        // A provider with no block of its own reads every setting as unset, so an absent
+        // provider-settings node is the same thing as an empty one.
         //noinspection ConstantValue
-        if (providerSettings == null) {
-            providerSettings = new CullProviderSettings(null, null, null, null);
-        }
+        providerSettings = providerSettings == null ? Map.of() : Map.copyOf(providerSettings);
         // Same absent-node normalization as providerSettings above - a user who never touches
         // sluice.cull.external-agent (every non-external-agent provider) gets the WATCH default
         // via ExternalAgentSettings' own compact constructor.

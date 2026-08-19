@@ -96,7 +96,7 @@ class FolderRootsSaveCompositionTest {
         final Settings current = this.settings.settings();
         return new Settings(new PathSettings(root.toString(), current.paths().libraryRoot(),
                 root.resolve("Inbox").toString()),
-                current.provider(), current.providerSettings(), current.categories(), current.externalAgent(),
+                current.provider(), current.providerSettingsById(), current.categories(), current.externalAgent(),
                 current.montage(), current.theme());
     }
 

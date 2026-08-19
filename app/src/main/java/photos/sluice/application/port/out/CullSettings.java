@@ -30,13 +30,26 @@ public interface CullSettings {
     List<CullCategory> categories();
 
     /**
-     * Connection settings for API-backed providers. An implementation must return a non-null
-     * instance, substituting an all-null-fields instance for a missing configured block; its fields
-     * are null when unset.
+     * Connection settings for the provider {@link #provider()} names. For a surface reporting on
+     * what is configured right now.
      *
-     * @return {@link CullProviderSettings} the provider connection settings
+     * @return {@link CullProviderSettings} that provider's settings, every field null when nothing
+     *         is configured for it
      */
     CullProviderSettings providerSettings();
+
+    /**
+     * Connection settings for one named provider, whichever one is in force.
+     *
+     * <p>What a culler reads about itself. A screen can offer to test a selection the user has not
+     * saved yet. A provider asking for "the settings in force" would then read another provider's
+     * endpoint.
+     *
+     * @param providerId {@link String} the provider whose settings to read
+     * @return {@link CullProviderSettings} that provider's settings, every field null when nothing
+     *         is configured for it
+     */
+    CullProviderSettings providerSettings(String providerId);
 
     /**
      * Tuning for the external-agent provider only. An implementation must return a non-null
