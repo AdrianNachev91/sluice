@@ -61,6 +61,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -761,7 +762,7 @@ class AnthropicCullerTest {
     void failsLoudWhenTheModelIsNotConfigured() throws Exception {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         final var culler = new AnthropicCuller(cullerPrompt(settings(null)), new ShardCodec(),
-                new SidecarReader(), settings(null), noClient(), noClient());
+                new SidecarReader(), settings(null), noClient(), noCheckClient());
 
         assertThatThrownBy(() -> culler.cull(prep, OPTIONS))
                 .isInstanceOf(IllegalStateException.class)
@@ -801,7 +802,7 @@ class AnthropicCullerTest {
 
     @Test
     void aCheckWithNoKeyStoredAnywhereIsAnsweredRatherThanThrown() {
-        final var culler = this.checkingCuller(() -> {
+        final var culler = this.checkingCuller(_ -> {
             throw new MissingCredentialException(AnthropicCuller.API_KEY, "no key");
         });
 
@@ -812,7 +813,7 @@ class AnthropicCullerTest {
     void anAcceptedKeyAnswersWithWhatTheAccountCanRun() {
         this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(outcome).isEqualTo(new ProviderCheck.Accepted(new ModelCatalog(
                 List.of(new ModelOption("claude-sonnet-5", "Claude Sonnet 5")), "claude-sonnet-5")));
@@ -826,7 +827,7 @@ class AnthropicCullerTest {
                 model("text-only", "Text only", false, true),
                 model("no-schema", "No schema", true, false));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(((ProviderCheck.Accepted) outcome).models().options())
                 .containsExactly(new ModelOption("claude-sonnet-5", "Claude Sonnet 5"));
@@ -837,7 +838,7 @@ class AnthropicCullerTest {
         this.listsModels(modelWithoutCapabilities("mystery-model", "Mystery model"),
                 model("claude-sonnet-5", "Claude Sonnet 5", true, true));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(((ProviderCheck.Accepted) outcome).models().options())
                 .containsExactly(new ModelOption("claude-sonnet-5", "Claude Sonnet 5"));
@@ -849,7 +850,7 @@ class AnthropicCullerTest {
     void anAccountWithNothingUsableIsItsOwnAnswer() {
         this.listsModels(model("text-only", "Text only", false, false));
 
-        assertThat(this.checkingCuller(() -> this.client).check())
+        assertThat(this.checkingCuller(_ -> this.client).check())
                 .isEqualTo(new ProviderCheck.NoUsableModels());
     }
 
@@ -859,7 +860,7 @@ class AnthropicCullerTest {
                 model("claude-opus-5", "Claude Opus 5", true, true),
                 model("claude-haiku-4-5", "Claude Haiku 4.5", true, true));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(((ProviderCheck.Accepted) outcome).models().options())
                 .extracting(ModelOption::id)
@@ -872,7 +873,7 @@ class AnthropicCullerTest {
     void aRecommendationTheAccountCannotRunIsDropped() {
         this.listsModels(model("claude-opus-5", "Claude Opus 5", true, true));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(((ProviderCheck.Accepted) outcome).models().recommended()).isNull();
     }
@@ -882,7 +883,7 @@ class AnthropicCullerTest {
         this.listsModels(model("something-new", "Something new", true, true),
                 model("claude-haiku-4-5-20251001", "Claude Haiku 4.5", true, true));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(((ProviderCheck.Accepted) outcome).models().options())
                 .extracting(ModelOption::id)
@@ -893,7 +894,7 @@ class AnthropicCullerTest {
     void aRecommendationTheServiceNamesByADatedSnapshotAnswersWithTheOfferedId() {
         this.listsModels(model("claude-sonnet-5-20260101", "Claude Sonnet 5", true, true));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(((ProviderCheck.Accepted) outcome).models().recommended())
                 .isEqualTo("claude-sonnet-5-20260101");
@@ -903,7 +904,7 @@ class AnthropicCullerTest {
     void aLaterPointReleaseIsNotRecommendedInPlaceOfTheVersionItSucceeds() {
         this.listsModels(model("claude-sonnet-5-1", "Claude Sonnet 5.1", true, true));
 
-        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+        final ProviderCheck outcome = this.checkingCuller(_ -> this.client).check();
 
         assertThat(((ProviderCheck.Accepted) outcome).models().recommended()).isNull();
     }
@@ -915,7 +916,7 @@ class AnthropicCullerTest {
                 .body(JsonValue.from(Map.of("message", "invalid x-api-key")))
                 .build());
 
-        assertThat(this.checkingCuller(() -> this.client).check())
+        assertThat(this.checkingCuller(_ -> this.client).check())
                 .isEqualTo(new ProviderCheck.Rejected());
     }
 
@@ -926,7 +927,7 @@ class AnthropicCullerTest {
                 .body(JsonValue.from(Map.of("message", "your credit balance is too low")))
                 .build());
 
-        assertThat(this.checkingCuller(() -> this.client).check())
+        assertThat(this.checkingCuller(_ -> this.client).check())
                 .isInstanceOfSatisfying(ProviderCheck.Refused.class,
                         refused -> assertThat(refused.detail()).contains("credit balance"));
     }
@@ -935,7 +936,7 @@ class AnthropicCullerTest {
     void aTransportFailureCarriesWhatFailed() {
         this.listFails(new AnthropicIoException("connect timed out", null));
 
-        assertThat(this.checkingCuller(() -> this.client).check())
+        assertThat(this.checkingCuller(_ -> this.client).check())
                 .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
                         unreachable -> assertThat(unreachable.detail()).contains("connect timed out"));
     }
@@ -947,7 +948,7 @@ class AnthropicCullerTest {
     void aFailureFromOutsideTheSdksOwnFamiliesStillBecomesAnAnswer() {
         this.listFails(new IllegalArgumentException("Expected URL scheme 'http' or 'https'"));
 
-        assertThat(this.checkingCuller(() -> this.client).check())
+        assertThat(this.checkingCuller(_ -> this.client).check())
                 .isInstanceOfSatisfying(ProviderCheck.Unreachable.class,
                         unreachable -> assertThat(unreachable.detail()).contains("URL scheme"));
     }
@@ -956,7 +957,7 @@ class AnthropicCullerTest {
     // out, and it is not the same state as holding no key at all.
     @Test
     void aCredentialStoreThatRefusesToAnswerIsReportedRatherThanThrown() {
-        final var culler = this.checkingCuller(() -> {
+        final var culler = this.checkingCuller(_ -> {
             throw new IllegalStateException("the credential store refused");
         });
 
@@ -969,7 +970,7 @@ class AnthropicCullerTest {
     void theCheckClosesTheClientItBuilt() {
         this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
 
-        this.checkingCuller(() -> this.client).check();
+        this.checkingCuller(_ -> this.client).check();
 
         verify(this.client).close();
     }
@@ -978,9 +979,36 @@ class AnthropicCullerTest {
     void aFailedCheckStillClosesTheClientItBuilt() {
         this.listFails(new AnthropicIoException("connect timed out", null));
 
-        this.checkingCuller(() -> this.client).check();
+        this.checkingCuller(_ -> this.client).check();
 
         verify(this.client).close();
+    }
+
+    @Test
+    void aPlainCheckIsCheckedAgainstWhatIsStored() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+        final var received = new ArrayList<CullProviderSettings>();
+
+        this.checkingCuller(providerSettings -> {
+            received.add(providerSettings);
+            return this.client;
+        }).check();
+
+        assertThat(received).containsExactly(new CullProviderSettings("claude-sonnet-5", null, null));
+    }
+
+    @Test
+    void aCandidateCheckIsCheckedAgainstTheGivenSettingsRatherThanWhatIsStored() {
+        this.listsModels(model("claude-sonnet-5", "Claude Sonnet 5", true, true));
+        final var received = new ArrayList<CullProviderSettings>();
+        final var candidate = new CullProviderSettings(null, "https://example.test", null);
+
+        this.checkingCuller(providerSettings -> {
+            received.add(providerSettings);
+            return this.client;
+        }).check(candidate);
+
+        assertThat(received).containsExactly(candidate);
     }
 
     // A verdict list the ceiling cut short parses as broken JSON, and the two want different
@@ -1005,11 +1033,11 @@ class AnthropicCullerTest {
     private AnthropicCuller culler(final CullSettings settings) {
         when(this.client.messages()).thenReturn(this.messages);
         return new AnthropicCuller(cullerPrompt(settings), new ShardCodec(), new SidecarReader(),
-                settings, () -> this.client, noClient());
+                settings, () -> this.client, noCheckClient());
     }
 
 
-    private AnthropicCuller checkingCuller(final Supplier<AnthropicClient> checkClientFactory) {
+    private AnthropicCuller checkingCuller(final Function<CullProviderSettings, AnthropicClient> checkClientFactory) {
         final CullSettings settings = settings("claude-sonnet-5");
         return new AnthropicCuller(cullerPrompt(settings), new ShardCodec(), new SidecarReader(),
                 settings, noClient(), checkClientFactory);
@@ -1076,6 +1104,12 @@ class AnthropicCullerTest {
 
     private static Supplier<AnthropicClient> noClient() {
         return () -> {
+            throw new AssertionError("this test builds no client");
+        };
+    }
+
+    private static Function<CullProviderSettings, AnthropicClient> noCheckClient() {
+        return _ -> {
             throw new AssertionError("this test builds no client");
         };
     }

@@ -6,6 +6,7 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.TextBlock;
 import com.anthropic.services.blocking.MessageService;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,6 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -103,7 +105,7 @@ class AnthropicCullerLiveTest {
                         root.resolve("secrets")));
         final var culler = new AnthropicCuller(new CullerPrompt(settings),
                 new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real),
-                () -> {
+                _ -> {
                     throw new AssertionError("this test checks no credential");
                 });
 
@@ -213,6 +215,37 @@ class AnthropicCullerLiveTest {
             assertThat(option.id()).isNotBlank();
             assertThat(option.label()).isNotBlank();
         });
+    }
+
+    // Rejected is the outcome the Test button most often shows a user, through a typo'd or expired
+    // key. A mocked UnauthorizedException is the only thing that has proven it so far.
+    //
+    // The key itself never touches the real environment. TieredSecretStore's environment tier reads
+    // ANTHROPIC_API_KEY by that exact name, and the sibling live tests in this class need that name
+    // to hold a working key. Sourcing this one from a map of its own keeps the two from colliding.
+    @Test
+    void aRevokedKeyIsAnsweredAsRejected(@TempDir final Path root) throws IOException {
+        final String revokedKey = revokedKeyFixture();
+        final Function<String, @Nullable String> ownEnvironment =
+                name -> AnthropicCuller.API_KEY.environmentVariable().equals(name) ? revokedKey : null;
+        final CullSettings settings = settings();
+        final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
+                new SidecarReader(), settings,
+                TieredSecretStore.forMachine(ownEnvironment, System.getProperty("os.name"),
+                        root.resolve("secrets")));
+
+        final ProviderCheck outcome = culler.check();
+
+        //noinspection UseOfSystemOutOrSystemErr
+        System.out.printf("[live-check-rejected] %s%n", outcome);
+        assertThat(outcome).isEqualTo(new ProviderCheck.Rejected());
+    }
+
+    // Revoked the same day it was drawn from a real account, per the devlog. Reading it here costs
+    // no money and needs no fresh credential. A rejected key answers the same way whether it was
+    // ever valid or made up, as long as the service has never seen it accepted.
+    private static String revokedKeyFixture() throws IOException {
+        return Files.readString(Path.of("..", "tools", "anthropic-api-key.txt")).strip();
     }
 
     private static CullSettings settings() {

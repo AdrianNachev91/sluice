@@ -1,5 +1,6 @@
 package photos.sluice.application.port.in;
 
+import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 
@@ -43,4 +44,15 @@ public interface VisionProviderCatalog {
      * @throws IllegalArgumentException if nothing is registered under that id
      */
     ProviderCheck check(String id);
+
+    /**
+     * Sibling of {@link #check(String)}, checked against the given settings rather than what is
+     * stored. For a surface trying a connection setting before it is saved.
+     *
+     * @param id {@link String} the provider id to ask, as {@link #providers()} spells it
+     * @param candidate {@link CullProviderSettings} the connection settings to check
+     * @return {@link ProviderCheck} what that provider said
+     * @throws IllegalArgumentException if nothing is registered under that id
+     */
+    ProviderCheck check(String id, CullProviderSettings candidate);
 }

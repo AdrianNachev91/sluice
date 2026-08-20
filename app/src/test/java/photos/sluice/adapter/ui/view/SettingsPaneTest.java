@@ -757,6 +757,11 @@ class SettingsPaneTest {
             public ProviderCheck check(final String id) {
                 throw new AssertionError("no test here presses a credential check");
             }
+
+            @Override
+            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+                throw new AssertionError("no test here presses a credential check");
+            }
         };
     }
 

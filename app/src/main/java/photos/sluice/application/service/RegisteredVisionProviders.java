@@ -2,6 +2,7 @@ package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.VisionProviderCatalog;
+import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
@@ -83,6 +84,21 @@ public class RegisteredVisionProviders implements VisionProviderCatalog {
      */
     @Override
     public ProviderCheck check(final String id) {
+        return this.cullerFor(id).check();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Every id a surface can offer came out of {@link #providers()}, so the refusal below is for
+     * a caller that built an id instead of choosing one.
+     */
+    @Override
+    public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+        return this.cullerFor(id).check(candidate);
+    }
+
+    private VisionCuller cullerFor(final String id) {
         final VisionCuller culler = this.cullersById.get(id);
         if (culler == null) {
             throw new IllegalArgumentException("No vision provider is registered under '" + id
@@ -90,6 +106,6 @@ public class RegisteredVisionProviders implements VisionProviderCatalog {
                     .map(VisionProviderDescriptor::id)
                     .collect(Collectors.joining(", ")));
         }
-        return culler.check();
+        return culler;
     }
 }

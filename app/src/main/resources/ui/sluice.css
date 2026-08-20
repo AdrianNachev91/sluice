@@ -365,7 +365,7 @@
    known. Set apart from the sentence above it by weight rather than colour, since it is still
    something the user reads rather than a secondary note. */
 .failure-spot {
-    -fx-font-family: "Cascadia Mono", "Consolas", "Menlo", monospace;
+    -fx-font-family: "Monospaced";
     -fx-text-fill: -sluice-text;
     -fx-padding: 4px 0 0 0;
 }
@@ -373,7 +373,7 @@
 /* The parser's own sentence, for a file that will not parse at all. Quoted rather than styled as
    this app's own copy, since it is not: it is what snakeyaml reported. */
 .failure-snippet {
-    -fx-font-family: "Cascadia Mono", "Consolas", "Menlo", monospace;
+    -fx-font-family: "Monospaced";
     -fx-text-fill: -sluice-text-muted;
     -fx-padding: 4px 0 0 0;
 }
@@ -409,7 +409,7 @@
 /* The trace itself, once the disclosure is open. Monospace and read-only, so it renders the way a
    stack trace is meant to be read and cannot be edited by an accidental keystroke. */
 .trace-text {
-    -fx-font-family: "Cascadia Mono", "Consolas", "Menlo", monospace;
+    -fx-font-family: "Monospaced";
     -fx-font-size: 11px;
     -fx-pref-height: 240px;
     -fx-text-fill: -sluice-text;

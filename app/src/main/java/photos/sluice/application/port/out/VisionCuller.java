@@ -65,6 +65,20 @@ public interface VisionCuller {
     ProviderCheck check();
 
     /**
+     * Sibling of {@link #check()}, checked against the given settings rather than what is stored.
+     * For a surface trying a connection setting before it is saved.
+     *
+     * <p>Defaulted to ignore the candidate and answer {@link #check()}. A provider with nothing a
+     * screen could try out before saving is correct to do exactly that.
+     *
+     * @param candidate {@link CullProviderSettings} the connection settings to check
+     * @return {@link ProviderCheck} what the provider said
+     */
+    default ProviderCheck check(final CullProviderSettings candidate) {
+        return this.check();
+    }
+
+    /**
      * Obtains a decision shard for every montage in prep, by whatever means the implementation
      * gets its judgements. Returns a report of what the run did and spent, and throws
      * CullException when it cannot. The throw is the signal to whoever is culling to try again.

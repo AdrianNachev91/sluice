@@ -68,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -179,7 +180,7 @@ class AnthropicCuller implements VisionCuller {
     private final SidecarReader sidecarReader;
     private final CullSettings settings;
     private final Supplier<AnthropicClient> clientFactory;
-    private final Supplier<AnthropicClient> checkClientFactory;
+    private final Function<CullProviderSettings, AnthropicClient> checkClientFactory;
     private final ShardValidator validator = new ShardValidator();
     private final JsonMapper mapper =
             JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
@@ -198,7 +199,7 @@ class AnthropicCuller implements VisionCuller {
                     final CullSettings settings, final SecretStore secretStore) {
         this(prompt, shardCodec, sidecarReader, settings,
                 () -> defaultClient(settings.providerSettings(PROVIDER_ID), secretStore),
-                () -> checkClient(settings.providerSettings(PROVIDER_ID), secretStore));
+                providerSettings -> checkClient(providerSettings, secretStore));
     }
 
     /**
@@ -208,18 +209,23 @@ class AnthropicCuller implements VisionCuller {
      * rides the configured transport retries; a check refuses them. Only one of the two is ever
      * asked for a client on any given call.
      *
+     * <p>The check factory takes the provider settings to check, rather than closing over the
+     * stored ones. {@link #check()} passes what is stored; {@link #check(CullProviderSettings)}
+     * passes a candidate a screen is holding and has not saved. One factory serves both, so a
+     * candidate endpoint reaches the same client-building logic the stored one already does.
+     *
      * @param prompt {@link CullerPrompt} the prompt builder
      * @param shardCodec {@link ShardCodec} reads and writes per-montage shards
      * @param sidecarReader {@link SidecarReader} reads per-montage sidecars
      * @param settings {@link CullSettings} the cull settings
      * @param clientFactory a {@link Supplier} of {@link AnthropicClient}, builds the Anthropic client used to call
      * the model
-     * @param checkClientFactory a {@link Supplier} of {@link AnthropicClient}, builds the client used to check the
-     * stored credential
+     * @param checkClientFactory a {@link Function} from {@link CullProviderSettings} to {@link AnthropicClient},
+     * builds the client used to check the given provider settings
      */
     AnthropicCuller(final CullerPrompt prompt, final ShardCodec shardCodec, final SidecarReader sidecarReader,
                     final CullSettings settings, final Supplier<AnthropicClient> clientFactory,
-                    final Supplier<AnthropicClient> checkClientFactory) {
+                    final Function<CullProviderSettings, AnthropicClient> checkClientFactory) {
         this.prompt = prompt;
         this.shardCodec = shardCodec;
         this.sidecarReader = sidecarReader;
@@ -294,34 +300,21 @@ class AnthropicCuller implements VisionCuller {
      */
     @Override
     public ProviderCheck check() {
-        final AnthropicClient client;
-        try {
-            client = this.checkClientFactory.get();
-        } catch (final MissingCredentialException e) {
-            return new ProviderCheck.NoCredential();
-        } catch (final RuntimeException e) {
-            return new ProviderCheck.Unreachable(said(e));
-        }
-        try {
-            final List<ModelOption> offerable = client.models().list().autoPager().stream()
-                    .limit(CHECK_MODEL_CEILING)
-                    .filter(AnthropicCuller::offerable)
-                    .map(model -> new ModelOption(model.id(), model.displayName()))
-                    .toList();
-            if (offerable.isEmpty()) {
-                return new ProviderCheck.NoUsableModels();
-            }
-            final List<ModelOption> ranked = ranked(offerable);
-            return new ProviderCheck.Accepted(new ModelCatalog(ranked, recommendedAmong(ranked)));
-        } catch (final UnauthorizedException e) {
-            return new ProviderCheck.Rejected();
-        } catch (final PermissionDeniedException e) {
-            return new ProviderCheck.Refused(said(e));
-        } catch (final RuntimeException e) {
-            return new ProviderCheck.Unreachable(said(e));
-        } finally {
-            client.close();
-        }
+        return this.checkAgainst(this.settings.providerSettings(PROVIDER_ID));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Checked against the given settings rather than what is stored. A URL typed into the
+     * endpoint field and not yet saved can be tried before it is committed.
+     *
+     * @param candidate {@link CullProviderSettings} the connection settings to check
+     * @return {@link ProviderCheck} what the service said
+     */
+    @Override
+    public ProviderCheck check(final CullProviderSettings candidate) {
+        return this.checkAgainst(candidate);
     }
 
     /**
@@ -506,6 +499,44 @@ class AnthropicCuller implements VisionCuller {
             builder.baseUrl(endpoint);
         }
         return builder.build();
+    }
+
+    /**
+     * The shared body of {@link #check()} and {@link #check(CullProviderSettings)}, differing only
+     * in which provider settings the client is built against.
+     *
+     * @param providerSettings {@link CullProviderSettings} the connection settings to check
+     * @return {@link ProviderCheck} what the service said
+     */
+    private ProviderCheck checkAgainst(final CullProviderSettings providerSettings) {
+        final AnthropicClient client;
+        try {
+            client = this.checkClientFactory.apply(providerSettings);
+        } catch (final MissingCredentialException e) {
+            return new ProviderCheck.NoCredential();
+        } catch (final RuntimeException e) {
+            return new ProviderCheck.Unreachable(said(e));
+        }
+        try {
+            final List<ModelOption> offerable = client.models().list().autoPager().stream()
+                    .limit(CHECK_MODEL_CEILING)
+                    .filter(AnthropicCuller::offerable)
+                    .map(model -> new ModelOption(model.id(), model.displayName()))
+                    .toList();
+            if (offerable.isEmpty()) {
+                return new ProviderCheck.NoUsableModels();
+            }
+            final List<ModelOption> ranked = ranked(offerable);
+            return new ProviderCheck.Accepted(new ModelCatalog(ranked, recommendedAmong(ranked)));
+        } catch (final UnauthorizedException e) {
+            return new ProviderCheck.Rejected();
+        } catch (final PermissionDeniedException e) {
+            return new ProviderCheck.Refused(said(e));
+        } catch (final RuntimeException e) {
+            return new ProviderCheck.Unreachable(said(e));
+        } finally {
+            client.close();
+        }
     }
 
     /**
