@@ -305,17 +305,40 @@ class CullEngineTest {
     // The archive happens before montage rendering, so every later way a run can end is reachable
     // with a prior record already filed away. Cancelled is the one furthest from Applied, and the
     // branch a refactor drops most easily.
+    //
+    // The second run needs a photo the first one never saw. Reusing the first run's own single
+    // photo leaves nothing for the second run to render. It can then complete before cancellation
+    // is even requested, a race that surfaced as Applied on a loaded CI runner.
+    //
+    // cancelOnFirstTick is the same deterministic hook aCancelledRenderLeavesTheScopeFreeForAnotherCull
+    // uses. It fires once real rendering work is genuinely on disk, rather than guessing a moment by
+    // thread timing.
     @Test
     void aCancelledRunStillReportsWhereItArchivedThePriorRun(@TempDir final Path root) throws IOException {
-        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
-                ":00:00Z"));
-        final var pipeline = cullPipeline(root, new RecordingProgressPort());
-        final var first = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        writeShard(first.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
-        pipeline.resume(first.job().prepDir(), false).join();
+        final Path dir = sortedPhotosDir(root, "2019", "06");
+        final Path first = writePhoto(dir, "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var progress = new RecordingProgressPort();
+        final var pipeline = cullPipeline(root, progress);
+        final var firstRun = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(firstRun.job().prepDir(), "montage-001", classificationJson(first, "junk", "blurry"));
+        pipeline.resume(firstRun.job().prepDir(), false).join();
+        writePhoto(dir, "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+
+        final var handleReady = new CountDownLatch(1);
+        final var cancel = new AtomicReference<Runnable>(() -> {});
+        progress.cancelOnFirstTick(() -> {
+            try {
+                handleReady.await();
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            cancel.get().run();
+        });
 
         final var handle = pipeline.cull(new CullScope.Year(2019, null));
-        handle.requestCancellation();
+        cancel.set(handle::requestCancellation);
+        handleReady.countDown();
         final CullJobOutcome outcome = handle.join();
 
         // A cancellation landing after rendering finished resolves to Waiting instead of Cancelled.
