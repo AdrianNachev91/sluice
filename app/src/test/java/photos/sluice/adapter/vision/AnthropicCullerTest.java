@@ -878,6 +878,37 @@ class AnthropicCullerTest {
     }
 
     @Test
+    void aModelTheServiceNamesByADatedSnapshotTakesThePlaceOfItsPlainId() {
+        this.listsModels(model("something-new", "Something new", true, true),
+                model("claude-haiku-4-5-20251001", "Claude Haiku 4.5", true, true));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().options())
+                .extracting(ModelOption::id)
+                .containsExactly("claude-haiku-4-5-20251001", "something-new");
+    }
+
+    @Test
+    void aRecommendationTheServiceNamesByADatedSnapshotAnswersWithTheOfferedId() {
+        this.listsModels(model("claude-sonnet-5-20260101", "Claude Sonnet 5", true, true));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().recommended())
+                .isEqualTo("claude-sonnet-5-20260101");
+    }
+
+    @Test
+    void aLaterPointReleaseIsNotRecommendedInPlaceOfTheVersionItSucceeds() {
+        this.listsModels(model("claude-sonnet-5-1", "Claude Sonnet 5.1", true, true));
+
+        final ProviderCheck outcome = this.checkingCuller(() -> this.client).check();
+
+        assertThat(((ProviderCheck.Accepted) outcome).models().recommended()).isNull();
+    }
+
+    @Test
     void aKeyTheServiceDoesNotKnowIsReportedAsRejected() {
         this.listFails(UnauthorizedException.builder()
                 .headers(Headers.builder().build())

@@ -22,6 +22,8 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
+import photos.sluice.application.port.out.ModelCatalog;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullScope;
@@ -180,6 +182,37 @@ class AnthropicCullerLiveTest {
             }
         }
         return response;
+    }
+
+    // The second thing mocks cannot answer: whether the Models API really carries the capability
+    // flags offerable() filters on, and whether a real account's list survives that filter. Both
+    // are assumptions this adapter was built on and neither has met the service.
+    //
+    // Costs nothing. Listing models generates no tokens, which is why the credential check was
+    // built on it rather than on a one-token message.
+    @Test
+    void checksARealCredentialAndListsWhatTheAccountCanRun(@TempDir final Path root) {
+        final CullSettings settings = settings();
+        final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
+                new SidecarReader(), settings,
+                TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
+                        root.resolve("secrets")));
+
+        final ProviderCheck outcome = culler.check();
+
+        // Printed rather than only asserted. The point of this run is seeing what the service
+        // actually returns, and an assertion that passes says nothing about the shape.
+        //noinspection UseOfSystemOutOrSystemErr
+        System.out.printf("[live-check] %s%n", outcome);
+        assertThat(outcome)
+                .as("a working key over an account with usable models")
+                .isInstanceOf(ProviderCheck.Accepted.class);
+        final ModelCatalog models = ((ProviderCheck.Accepted) outcome).models();
+        assertThat(models.options()).isNotEmpty();
+        assertThat(models.options()).allSatisfy(option -> {
+            assertThat(option.id()).isNotBlank();
+            assertThat(option.label()).isNotBlank();
+        });
     }
 
     private static CullSettings settings() {

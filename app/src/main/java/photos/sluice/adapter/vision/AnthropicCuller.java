@@ -69,7 +69,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * The {@link VisionCuller} provider that calls the user's configured Anthropic vision model from
@@ -142,6 +144,10 @@ class AnthropicCuller implements VisionCuller {
             new ModelOption("claude-sonnet-5", "Claude Sonnet 5"),
             new ModelOption("claude-opus-5", "Claude Opus 5")),
             "claude-sonnet-5");
+    // What the service appends when it names a model by a dated snapshot rather than by the plain
+    // id above. Anchored on the date shape because a suffix rule that took anything would read a
+    // later point release as a snapshot of the version it succeeds.
+    private static final Pattern SNAPSHOT_SUFFIX = Pattern.compile("-\\d{8}");
     private static final String KEEP = "keep";
     private static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
     private static final String NEAR_DUP_REJECT = "near-dup-reject";
@@ -526,7 +532,8 @@ class AnthropicCuller implements VisionCuller {
 
     /**
      * Orders the account's own models the way {@link #MODELS} orders the ones this class knows.
-     * Anything it does not know follows, in the order the service gave.
+     * Anything it does not know follows, in the order the service gave. A model the service names
+     * by a dated snapshot takes the rung of the plain id that snapshot is of.
      *
      * <p>A surface with no recommendation to fall back on starts on the first entry. Sorting the
      * known models ahead of the rest keeps an unknown one out of that position while any known
@@ -539,23 +546,60 @@ class AnthropicCuller implements VisionCuller {
     private static List<ModelOption> ranked(final List<ModelOption> offerable) {
         final List<String> ladder = MODELS.options().stream().map(ModelOption::id).toList();
         return offerable.stream()
-                .sorted(Comparator.comparingInt(option -> {
-                    final int rung = ladder.indexOf(option.id());
-                    return rung < 0 ? ladder.size() : rung;
-                }))
+                .sorted(Comparator.comparingInt(option -> rungOf(ladder, option.id())))
                 .toList();
+    }
+
+    /**
+     * Where an offered model sits on the ladder, or one past its end when it sits on none.
+     *
+     * @param ladder a {@link List} of {@link String} model ids, in the order this class ranks them
+     * @param offeredId {@link String} id of a model the account can be offered
+     * @return int the ladder position to sort this model by
+     */
+    private static int rungOf(final List<String> ladder, final String offeredId) {
+        return IntStream.range(0, ladder.size())
+                .filter(rung -> namesTheSameModel(ladder.get(rung), offeredId))
+                .findFirst()
+                .orElse(ladder.size());
+    }
+
+    /**
+     * Whether an id this class carries and one the service offered name the same model, allowing
+     * for the service naming it by a dated snapshot.
+     *
+     * @param ladderId {@link String} a model id from {@link #MODELS}
+     * @param offeredId {@link String} id of a model the account can be offered
+     * @return boolean true when both name the same model
+     */
+    private static boolean namesTheSameModel(final String ladderId, final String offeredId) {
+        return offeredId.equals(ladderId)
+                || (offeredId.startsWith(ladderId)
+                && SNAPSHOT_SUFFIX.matcher(offeredId.substring(ladderId.length())).matches());
     }
 
     /**
      * This provider's own recommendation, but only when the account can actually run it. A
      * recommendation nobody can select would default a picker to a model the service refuses.
      *
+     * <p>The answer is the id the account was offered, which is the dated one where the service
+     * named a snapshot. Answering with this class's own id instead would name a model absent from
+     * the very list it is offered beside.
+     *
      * @param offerable a {@link List} of {@link ModelOption}, the models this account can be offered
-     * @return {@link String} the recommended model id, or null when it is not among them
+     * @return {@link String} the offered id of the recommended model, or null when it is not among
+     *     them
      */
     private static @Nullable String recommendedAmong(final List<ModelOption> offerable) {
         final String recommended = MODELS.recommended();
-        return offerable.stream().anyMatch(option -> option.id().equals(recommended)) ? recommended : null;
+        if (recommended == null) {
+            return null;
+        }
+        return offerable.stream()
+                .map(ModelOption::id)
+                .filter(offeredId -> namesTheSameModel(recommended, offeredId))
+                .findFirst()
+                .orElse(null);
     }
 
     /**
