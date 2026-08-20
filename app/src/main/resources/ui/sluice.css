@@ -43,6 +43,11 @@
     -sluice-danger: #b3261e;
     -sluice-banner-bg: #eaf3ee;
     -sluice-caution: #b45309;
+    -sluice-caution-bg: #fbeee0;
+    /* Its own hue rather than the caution's. A fact worth noticing is not the same claim as a
+       config choice this app worked around, and orange already carries that second meaning. */
+    -sluice-info: #1d6fa8;
+    -sluice-info-bg: #e8f1f8;
 
     -sluice-mark-bg: #2f6f4f;
     -sluice-mark-glyph: #ffffff;
@@ -621,6 +626,16 @@
     -fx-border-width: 1px;
 }
 
+/* A floor rather than a width: the picker still grows to whatever it holds, so no model label is
+   ever cut short. It is what an empty one needs. A check that failed leaves nothing to offer, and a
+   dropdown offering nothing shrinks to its own arrow. That is about a fifth of the width it had a
+   moment earlier, and reads as a control that failed to draw rather than one with nothing in it.
+   The number is a model label with its recommendation marker after it, so the picker also holds its
+   shape as the list it offers changes. */
+.settings-model-picker {
+    -fx-min-width: 240px;
+}
+
 /*noinspection CssInvalidPseudoSelector*/
 .combo-box:hover,
 .combo-box:focused,
@@ -672,6 +687,16 @@
 .combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected:hover {
     -fx-background-color: -sluice-mark-bg;
     -fx-text-fill: -sluice-mark-glyph;
+}
+
+/* What the model picker above it is offering: which list it holds, or, where the check failed, the
+   provider's own words and the Retry that asks again. A VBox nested in a row inherits no spacing
+   from it, so without this the message and the button under it touch.
+
+   The block still fills the row's width, because the message in it wraps. What must not stretch is
+   the Retry, and that is capped on the button itself. */
+.settings-model-info {
+    -fx-spacing: 6px;
 }
 
 /* Something that just worked, said next to the control it happened on. The accent rather than the
@@ -726,6 +751,36 @@
 .settings-banner .label {
     -fx-text-fill: -sluice-accent;
     -fx-font-weight: bold;
+}
+
+/* A fact worth a reader's own ground, not just its own colour, for something that stays on the
+   page rather than fading after a save. Alignment is top-left rather than the banner's centre: a
+   row that wraps to two lines would otherwise centre its icon on the whole paragraph, pointing at
+   neither line. */
+.settings-callout {
+    -fx-background-color: -sluice-info-bg;
+    -fx-background-radius: 6px;
+    -fx-border-color: -sluice-info;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-padding: 10px 14px;
+    -fx-spacing: 7px;
+    -fx-alignment: top-left;
+}
+
+.settings-callout .settings-caution {
+    -fx-text-fill: -sluice-info;
+}
+
+.info-ring {
+    -fx-fill: transparent;
+    -fx-stroke: -sluice-info;
+    /*noinspection CssNonIntegerLengthInPixels*/
+    -fx-stroke-width: 1.6px;
+}
+
+.info-mark {
+    -fx-fill: -sluice-info;
 }
 
 /* Closes the banner before it leaves on its own. Quiet, because it is not the reason the banner is

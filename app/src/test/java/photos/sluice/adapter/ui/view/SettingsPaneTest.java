@@ -62,8 +62,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -132,21 +136,129 @@ class SettingsPaneTest {
         assertThat(buttonsIn(pane.lookup("#settings-api-key"))).contains("Save").doesNotContain("Replace");
     }
 
-    // The provider's own controls are toggled rather than rebuilt, and this is why. A rebuild reads
-    // the saved settings back, replacing a model just typed with the one on disk. The model field
-    // is what the listener reaches; a folder field would survive any implementation.
+    // Unlike a text field, the model picker cannot carry an arbitrary unsaved value across a
+    // provider it does not belong to. "a-model" is external-agent's id for nothing at all.
+    //
+    // Switching provider and back therefore re-resolves the picker from that provider's own saved
+    // model, rather than preserving whatever the control last showed. This proves the round trip
+    // lands back on anthropic's own saved choice, not on empty or some stale carry-over.
+    // Two models rather than MODELS' single one, and the saved id is the one NOT recommended.
+    // With only one choice, "the saved model" and "the recommended model" are the same string.
+    // A round trip would then pass even if picked() ignored the saved model and always fell back
+    // to the recommendation.
     @Test
-    void switchingProviderAndBackKeepsAnUnsavedModel() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+    void switchingProviderAndBackReselectsThisProvidersSavedModel() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenterOnWithADistinctSavedModel()));
 
         runOnFxThread(() -> {
-            ((TextField) pane.lookup("#settings-model")).setText("a-model-not-yet-saved");
             select(pane, "external-agent");
             select(pane, "anthropic");
         });
 
-        assertThat(onFxThread(() -> ((TextField) pane.lookup("#settings-model")).getText()))
-                .isEqualTo("a-model-not-yet-saved");
+        assertThat(onFxThread(() -> selectedModelId(pane))).isEqualTo("other-model");
+    }
+
+    // Empty until pressed, which is what proves the label reads Test's own answer rather than
+    // something left over from building the row.
+    @Test
+    void pressingTestShowsWhatTheProviderSaidAboutTheTypedEndpoint() throws Exception {
+        final Parent pane = onFxThread(() -> built(
+                checkingPresenterOn("anthropic", _ -> new ProviderCheck.Rejected())));
+        runOnFxThread(() -> ((TextField) pane.lookup("#settings-endpoint")).setText("https://example.test"));
+
+        runOnFxThread(() -> ((Button) pane.lookup("#settings-test-connection")).fire());
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS,
+                () -> !onFxThread(() -> testResultText(pane)).equals("Checking..."));
+
+        assertThat(onFxThread(() -> testResultText(pane))).isEqualTo("This provider rejected the key.");
+    }
+
+    // The field is empty, so what a user reads there is only ever the prompt. Anthropic names a
+    // default in this fixture and other-api does not. That is what proves the text is read from
+    // the chosen provider, not a value every provider happens to share.
+    @Test
+    void anEmptyEndpointPromptsWithThisProvidersOwnDefault() throws Exception {
+        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> new ProviderCheck.Rejected())));
+        final var endpoint = (TextField) pane.lookup("#settings-endpoint");
+        assertThat(endpoint.getPromptText()).isEqualTo("https://api.anthropic.com");
+
+        runOnFxThread(() -> select(pane, "other-api"));
+
+        assertThat(endpoint.getPromptText()).isNull();
+    }
+
+    @Test
+    void theTestButtonIsEnabledWheneverThisProviderHasAStoredCredential() throws Exception {
+        final Parent pane = onFxThread(() -> built(
+                checkingPresenterOn("anthropic", _ -> new ProviderCheck.Rejected())));
+        final var test = (Button) pane.lookup("#settings-test-connection");
+
+        // Enabled with no endpoint typed at all: anthropic's key is stored, and an empty endpoint
+        // is a real thing to test, the provider's own default service.
+        assertThat(test.isDisabled()).isFalse();
+
+        runOnFxThread(() -> select(pane, "other-api"));
+
+        // other-api's key is never stored in this fixture, so there is nothing to test with.
+        assertThat(test.isDisabled()).isTrue();
+    }
+
+    // A check still in flight when the dropdown moves on belongs to the provider that was asked,
+    // not whichever one is showing when it finally answers.
+    @Test
+    void aTestResultArrivingAfterAProviderSwitchIsDiscarded() throws Exception {
+        final var checkStarted = new CountDownLatch(1);
+        final var releaseCheck = new CountDownLatch(1);
+        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+            checkStarted.countDown();
+            try {
+                if (!releaseCheck.await(10, TimeUnit.SECONDS)) {
+                    throw new AssertionError("test never released the check");
+                }
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            return new ProviderCheck.Rejected();
+        });
+        final Parent pane = onFxThread(() -> built(presenter));
+        runOnFxThread(() -> ((TextField) pane.lookup("#settings-endpoint")).setText("https://example.test"));
+
+        runOnFxThread(() -> ((Button) pane.lookup("#settings-test-connection")).fire());
+        if (!checkStarted.await(10, TimeUnit.SECONDS)) {
+            throw new AssertionError("check never started");
+        }
+        runOnFxThread(() -> select(pane, "external-agent"));
+        releaseCheck.countDown();
+        // The background check's FX callback lands the instant the latch opens. A bounded window
+        // proves it did not, the same shape a timed latch await gives when there is no latch to ask.
+        WaitForAsyncUtils.sleep(300, TimeUnit.MILLISECONDS);
+        WaitForAsyncUtils.waitForFxEvents();
+
+        assertThat(onFxThread(() -> testResultText(pane))).isEmpty();
+    }
+
+    // A failed check draws an empty, disabled picker with the provider's own words and a Retry.
+    // Pressing Retry against a now-working answer proves the row redraws rather than staying stuck.
+    @Test
+    void aFailedCheckDrawsAnUnavailablePickerAndRetrySucceeds() throws Exception {
+        final var succeeding = new AtomicBoolean(false);
+        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> succeeding.get()
+                ? new ProviderCheck.Accepted(MODELS) : new ProviderCheck.Unreachable("connect timed out"));
+        // Built after a check has already landed. The pane's own build reads the presenter's
+        // cache rather than checking anything itself. An unchecked presenter would open on the
+        // static floor regardless of what checkById answers.
+        presenter.refreshModels("anthropic");
+        final Parent pane = onFxThread(() -> built(presenter));
+
+        assertThat(modelBox(pane).isDisabled()).isTrue();
+        assertThat(textsOfClass(pane, "settings-violation")).anyMatch(text -> text.contains("connect timed out"));
+
+        succeeding.set(true);
+        runOnFxThread(() -> ((Button) pane.lookup("#settings-model-retry")).fire());
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> !onFxThread(() -> modelBox(pane).isDisabled()));
+
+        assertThat(onFxThread(() -> selectedModelId(pane))).isEqualTo("a-model");
     }
 
     // A theme button carries its option's id as user data, and a save reads it back off whichever
@@ -250,6 +362,42 @@ class SettingsPaneTest {
         assertThat(textsOfClass(pane, "settings-confirmation")).contains("API key removed.");
     }
 
+    // A stored key changes which models this account can actually run. A save has to ask the
+    // provider again, not leave the picker showing whatever an earlier or absent key gave.
+    // The count is what proves this: the pane's own build never checks on its own.
+    @Test
+    void savingAKeyAsksTheProviderAgainForWhatItCanRun() throws Exception {
+        final var checks = new AtomicInteger(0);
+        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> {
+            checks.incrementAndGet();
+            return new ProviderCheck.Accepted(MODELS);
+        })));
+
+        runOnFxThread(() -> {
+            ((PasswordField) pane.lookup("#settings-api-key-entry")).setText("a-key");
+            ((Button) pane.lookup("#settings-api-key-save")).fire();
+        });
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> checks.get() > 0);
+
+        assertThat(checks.get()).isEqualTo(1);
+    }
+
+    // Removing is the other half of the same gap. A key taken away can drop the picker back to
+    // nothing usable, and only a fresh check tells the picker that happened.
+    @Test
+    void removingAKeyAsksTheProviderAgainToo() throws Exception {
+        final var checks = new AtomicInteger(0);
+        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> {
+            checks.incrementAndGet();
+            return new ProviderCheck.NoCredential();
+        })));
+
+        runOnFxThread(() -> ((Button) pane.lookup("#settings-api-key-remove")).fire());
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> checks.get() > 0);
+
+        assertThat(checks.get()).isEqualTo(1);
+    }
+
     // An editable Spinner does not commit its editor's text on its own. A number typed and then left
     // behind would be discarded, in favour of whatever the spinner last held.
     @Test
@@ -308,10 +456,10 @@ class SettingsPaneTest {
     void changingProviderTakesTheLastRefusalOffTheScreen() throws Exception {
         final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
         runOnFxThread(() -> {
-            ((TextField) pane.lookup("#settings-model")).setText("");
+            clearModelSelection(pane);
             ((Button) pane.lookup("#settings-save-button")).fire();
         });
-        final var model = (TextField) pane.lookup("#settings-model");
+        final var model = modelBox(pane);
         assertThat(textsOfClass(pane, "settings-violation")).isNotEmpty();
         assertThat(textsOfClass(pane, "settings-save-status")).anyMatch(text -> !text.isEmpty());
         assertThat(model.getPseudoClassStates()).contains(REFUSED);
@@ -350,7 +498,7 @@ class SettingsPaneTest {
         assertThat(inView(pane, row)).isFalse();
 
         runOnFxThread(() -> {
-            ((TextField) pane.lookup("#settings-model")).setText("");
+            clearModelSelection(pane);
             ((Button) pane.lookup("#settings-save-button")).fire();
         });
         WaitForAsyncUtils.waitForFxEvents();
@@ -567,6 +715,27 @@ class SettingsPaneTest {
         pane.layout();
     }
 
+    private static String testResultText(final Parent pane) {
+        return ((Label) pane.lookup("#settings-test-result")).getText();
+    }
+
+    private static String selectedModelId(final Parent pane) {
+        final SettingsView.ModelChoice selected = modelBox(pane).getSelectionModel().getSelectedItem();
+        // The property's declared type is not nullable, so the IDE reads this guard as always
+        // false. clearModelSelection and an Unavailable picker both leave nothing selected.
+        //noinspection ConstantValue
+        return selected == null ? "" : selected.id();
+    }
+
+    private static void clearModelSelection(final Parent pane) {
+        modelBox(pane).getSelectionModel().clearSelection();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ComboBox<SettingsView.ModelChoice> modelBox(final Parent pane) {
+        return (ComboBox<SettingsView.ModelChoice>) pane.lookup("#settings-model");
+    }
+
     private static boolean shown(final Parent pane, final String id) {
         final Node node = pane.lookup(id);
         return node != null && node.isVisible() && node.isManaged();
@@ -653,6 +822,47 @@ class SettingsPaneTest {
                 onlyRefusingOneFolder(), threeProviders());
     }
 
+    // anthropic offers two models here, unlike threeProviders()'s single-option MODELS, and the
+    // saved one is not the recommendation. Only this shape can tell "the saved model survived"
+    // apart from "the recommendation always wins".
+    private static SettingsPresenter presenterOnWithADistinctSavedModel() {
+        final var richModels = new ModelCatalog(List.of(
+                new ModelOption("recommended-model", "Recommended model"),
+                new ModelOption("other-model", "Other model")), "recommended-model");
+        final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
+                "anthropic", Map.of("anthropic", new CullProviderSettings("other-model", null, 2)), List.of(),
+                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+        final List<VisionProviderDescriptor> all = List.of(
+                new VisionProviderDescriptor("anthropic", "Anthropic",
+                        Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, richModels, null),
+                new VisionProviderDescriptor("external-agent", "External agent",
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
+        final VisionProviderCatalog catalog = new VisionProviderCatalog() {
+            @Override
+            public List<VisionProviderDescriptor> providers() {
+                return all;
+            }
+
+            @Override
+            public Optional<VisionProviderDescriptor> byId(final String id) {
+                return all.stream().filter(provider -> provider.id().equals(id)).findFirst();
+            }
+
+            @Override
+            public ProviderCheck check(final String id) {
+                throw new AssertionError("no test here presses a credential check");
+            }
+
+            @Override
+            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+                throw new AssertionError("no test here presses a credential check");
+            }
+        };
+        return new SettingsPresenter(settingsUseCase(settings), refusingLibraryRootUseCase(), oneStoredKey(),
+                onlyRefusingOneFolder(), catalog);
+    }
+
     private static SettingsUseCase settingsUseCase(final Settings settings) {
         return new SettingsUseCase() {
             @Override
@@ -732,16 +942,53 @@ class SettingsPaneTest {
         };
     }
 
+    // presenterOn's own presenter over threeProviders(), whose check() and check(id, candidate)
+    // both throw. A test that presses Test or Retry needs a real answer instead, so it builds its
+    // presenter over this one rather than presenterOn.
+    private static SettingsPresenter checkingPresenterOn(final String provider,
+                                                          final Function<String, ProviderCheck> checkById) {
+        final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
+                provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
+                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+        return new SettingsPresenter(settingsUseCase(settings), refusingLibraryRootUseCase(), oneStoredKey(),
+                onlyRefusingOneFolder(), checkingThreeProviders(checkById));
+    }
+
+    private static VisionProviderCatalog checkingThreeProviders(final Function<String, ProviderCheck> checkById) {
+        final VisionProviderCatalog delegate = threeProviders();
+        return new VisionProviderCatalog() {
+            @Override
+            public List<VisionProviderDescriptor> providers() {
+                return delegate.providers();
+            }
+
+            @Override
+            public Optional<VisionProviderDescriptor> byId(final String id) {
+                return delegate.byId(id);
+            }
+
+            @Override
+            public ProviderCheck check(final String id) {
+                return checkById.apply(id);
+            }
+
+            @Override
+            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+                return checkById.apply(id);
+            }
+        };
+    }
+
     private static VisionProviderCatalog threeProviders() {
         final var apiSettings = Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT,
-                ProviderSetting.RETRIES, ProviderSetting.CREDENTIAL);
+                ProviderSetting.CREDENTIAL);
         final List<VisionProviderDescriptor> all = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic", apiSettings,
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, "https://api.anthropic.com"),
                 new VisionProviderDescriptor("other-api", "Another model service", apiSettings,
-                        Set.of(ProviderSetting.MODEL), OTHER_KEY, MODELS),
+                        Set.of(ProviderSetting.MODEL), OTHER_KEY, MODELS, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null));
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
         return new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {

@@ -52,6 +52,7 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.Overlap;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -208,7 +210,7 @@ class SettingsPresenterTest {
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", null, false, 224, 5, "SYSTEM");
+        presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", false, 224, 5, "SYSTEM");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
@@ -226,7 +228,7 @@ class SettingsPresenterTest {
                 ThemeChoice.SYSTEM));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "external-agent", "", "", null, true, 224, 5, "SYSTEM");
+        presenter.save("/repo", "", "", "external-agent", "", "", true, 224, 5, "SYSTEM");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
@@ -236,17 +238,21 @@ class SettingsPresenterTest {
 
     @Test
     void savingWritesTheEditedValuesUnderTheProviderBeingSaved() {
-        final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
+        final var configured = new Settings(new PathSettings(null, null, null), "anthropic",
+                Map.of("anthropic", new CullProviderSettings("claude-opus-5", null, 3)), List.of(),
+                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+        final var settingsUseCase = new FixedSettingsUseCase(configured);
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "anthropic", "claude-haiku-4-5", "https://mine.invalid", 1, false,
+        presenter.save("/repo", "", "", "anthropic", "claude-haiku-4-5", "https://mine.invalid", false,
                 224, 5, "SYSTEM");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
         assertThat(saved.providerSettingsById()).containsOnlyKeys("anthropic");
+        // The retry count carries through untouched: this screen never asks about it.
         assertThat(saved.providerSettings("anthropic"))
-                .isEqualTo(new CullProviderSettings("claude-haiku-4-5", "https://mine.invalid", 1));
+                .isEqualTo(new CullProviderSettings("claude-haiku-4-5", "https://mine.invalid", 3));
     }
 
     // The screen falls back to a provider this install has, so the fields under the dropdown have
@@ -262,6 +268,151 @@ class SettingsPresenterTest {
 
         assertThat(view.provider()).isEqualTo("external-agent");
         assertThat(view.model()).isNull();
+        assertThat(view.modelUnrecognised()).isNull();
+    }
+
+    @Test
+    void theModelPickerOpensOnTheProvidersOwnStaticFloorBeforeAnyCheck() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> {
+                    throw new AssertionError("no check requested by this test");
+                });
+
+        final SettingsView.ModelPicker picker = presenter.view().model();
+
+        assertThat(picker).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.sourceNote()).contains("before you connect to your provider"));
+    }
+
+    // Nothing has ever been saved for this provider, so the picker falls back to a recommendation
+    // nobody chose. That fallback must never read as a caution. The caution's own claim is that a
+    // cull will fail on what the user configured, and here nothing was configured at all.
+    @Test
+    void aProviderNeverConfiguredDrawsNoUnrecognisedCautionEvenThoughThePickerFellBackToARecommendation() {
+        final var settings = new Settings(new PathSettings(null, null, null), "anthropic",
+                Map.of(), List.of(), new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5),
+                ThemeChoice.SYSTEM);
+        final SettingsPresenter presenter = presenterChecking(settings,
+                _ -> {
+                    throw new AssertionError("no check requested by this test");
+                });
+
+        final SettingsView view = presenter.view();
+
+        assertThat(view.model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.selected()).isNotBlank());
+        assertThat(view.modelUnrecognised()).isNull();
+    }
+
+    @Test
+    void refreshingModelsAfterASuccessfulCheckShowsTheAccountsRealCatalog() {
+        // Two models, and the saved one (settings(null, null, null) saves claude-opus-5) is not
+        // real-model's own recommendation. A single-option catalog could not tell "the saved model
+        // survived the check" apart from "the recommendation always wins".
+        final ModelCatalog live = new ModelCatalog(List.of(new ModelOption("real-model", "Real model"),
+                new ModelOption("claude-opus-5", "Claude Opus 5")), "real-model");
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.Accepted(live));
+
+        presenter.refreshModels("anthropic");
+        final SettingsView view = presenter.view();
+
+        assertThat(view.model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class, options -> {
+            assertThat(options.choices()).extracting(SettingsView.ModelChoice::id)
+                    .containsExactlyInAnyOrder("real-model", "claude-opus-5");
+            assertThat(options.selected()).isEqualTo("claude-opus-5");
+            assertThat(options.sourceNote()).contains("your account can run");
+        });
+        assertThat(view.modelUnrecognised()).isNull();
+    }
+
+    @Test
+    void aRejectedCheckLeavesNothingToSelect() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.Rejected());
+
+        presenter.refreshModels("anthropic");
+        final SettingsView.ModelPicker picker = presenter.view().model();
+
+        assertThat(picker).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
+                unavailable -> assertThat(unavailable.violation()).isEqualTo("This provider rejected the key."));
+    }
+
+    @Test
+    void anAccountWithNoUsableModelDrawsItsOwnViolation() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.NoUsableModels());
+
+        presenter.refreshModels("anthropic");
+
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
+                unavailable -> assertThat(unavailable.violation())
+                        .isEqualTo("This key works, but this account cannot run any model Sluice needs."));
+    }
+
+    @Test
+    void aRefusalCarriesTheProvidersOwnWords() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.Refused("your credit balance is too low"));
+
+        presenter.refreshModels("anthropic");
+
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
+                unavailable -> assertThat(unavailable.violation()).contains("credit balance is too low"));
+    }
+
+    @Test
+    void anUnreachableProviderCarriesWhatFailed() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.Unreachable("connect timed out"));
+
+        presenter.refreshModels("anthropic");
+
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
+                unavailable -> assertThat(unavailable.violation()).contains("connect timed out"));
+    }
+
+    // The saved settings name a model MODELS does not offer; a-model is the only one it has.
+    // This exercises the caution note against the provider's own static floor, no check performed.
+    @Test
+    void aSavedModelTheProviderDoesNotOfferDrawsACaution() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> {
+                    throw new AssertionError("no check requested by this test");
+                });
+
+        final SettingsView view = presenter.view();
+
+        assertThat(view.modelUnrecognised()).contains("claude-opus-5").contains("does not offer");
+        assertThat(view.model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.selected()).isEqualTo("a-model"));
+    }
+
+    @Test
+    void testConnectionAsksTheCatalogAboutTheCandidateEndpointRatherThanWhatIsStored() {
+        final var received = new ArrayList<CullProviderSettings>();
+        final SettingsPresenter presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null,
+                null)), failingLibraryRootUseCase(), new FixedSecretStore(new InKeyring()), noViolations(),
+                candidateCapturingCatalog(received));
+
+        final SettingsPresenter.ConnectionCheckResult result =
+                presenter.testConnection("anthropic", "https://example.test");
+
+        assertThat(received).containsExactly(new CullProviderSettings(null, "https://example.test", null));
+        assertThat(result.message()).contains("This works");
+        assertThat(result.succeeded()).isTrue();
+    }
+
+    @Test
+    void testConnectionWordsARejectionTheSameWayThePickerDoes() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.Rejected());
+
+        final SettingsPresenter.ConnectionCheckResult result =
+                presenter.testConnection("anthropic", "https://example.test");
+
+        assertThat(result.message()).isEqualTo("This provider rejected the key.");
+        assertThat(result.succeeded()).isFalse();
     }
 
     @Test
@@ -269,7 +420,7 @@ class SettingsPresenterTest {
         final var fields = choiceFor("anthropic",
                 presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()))).fields();
 
-        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(true, true, true, false, true));
+        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(true, true, false, true));
     }
 
     @Test
@@ -277,7 +428,7 @@ class SettingsPresenterTest {
         final var fields = choiceFor("external-agent",
                 presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()))).fields();
 
-        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(false, false, false, true, false));
+        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(false, false, true, false));
     }
 
     @Test
@@ -332,7 +483,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save(UNUSABLE_PATH, "", "", "anthropic", "claude-opus-5", "", null, false, 224, 5,
+        presenter.save(UNUSABLE_PATH, "", "", "anthropic", "claude-opus-5", "", false, 224, 5,
                 "SYSTEM");
 
         assertThat(settingsUseCase.saved).isNotNull();
@@ -348,7 +499,7 @@ class SettingsPresenterTest {
                 violating(List.of(new NotADirectory(PathRole.LIBRARY_ROOT, Path.of("/gone")))));
 
         final var outcome = (SettingsPresenter.SaveOutcome.Refused) presenter.save("/repo", "/gone", "/inbox",
-                "anthropic", "claude-opus-5", "", null, false, 224, 5, "SYSTEM");
+                "anthropic", "claude-opus-5", "", false, 224, 5, "SYSTEM");
 
         assertThat(outcome.libraryRoot()).isNotNull();
         assertThat(outcome.workingRoot()).isNull();
@@ -365,7 +516,7 @@ class SettingsPresenterTest {
                 violating(List.of(new NotADirectory(PathRole.LIBRARY_ROOT, Path.of("/gone")))));
 
         final var outcome = (SettingsPresenter.SaveOutcome.Refused) presenter.save("/repo", "/gone", "/inbox",
-                "anthropic", "claude-opus-5", "", null, false, 224, 5, "SYSTEM");
+                "anthropic", "claude-opus-5", "", false, 224, 5, "SYSTEM");
 
         assertThat(outcome.message()).doesNotContain("sluice.paths");
         assertThat(outcome.libraryRoot()).doesNotContain("sluice.paths");
@@ -380,7 +531,7 @@ class SettingsPresenterTest {
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
         final var outcome = (SettingsPresenter.SaveOutcome.Refused) presenter.save("/repo", "/library", "/inbox",
-                "anthropic", "claude-opus-5", "", null, false, 224, 5, "SYSTEM");
+                "anthropic", "claude-opus-5", "", false, 224, 5, "SYSTEM");
 
         assertThat(outcome.message()).isEqualTo("Sluice is running a job. Finish it first.");
     }
@@ -394,7 +545,7 @@ class SettingsPresenterTest {
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
         final var outcome = (SettingsPresenter.SaveOutcome.Refused) presenter.save("/repo", "/library", "/inbox",
-                "anthropic", "claude-opus-5", "", null, false, 224, 5, "SYSTEM");
+                "anthropic", "claude-opus-5", "", false, 224, 5, "SYSTEM");
 
         assertThat(outcome.message())
                 .startsWith("These settings were not saved")
@@ -407,7 +558,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        final var outcome = presenter.save("/repo", "", "", "anthropic", "  ", "", null, false, 224, 5,
+        final var outcome = presenter.save("/repo", "", "", "anthropic", "  ", "", false, 224, 5,
                 "SYSTEM");
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Refused.class);
@@ -421,7 +572,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        final var outcome = presenter.save("/repo", "", "", "external-agent", "", "", null, false, 224, 5,
+        final var outcome = presenter.save("/repo", "", "", "external-agent", "", "", false, 224, 5,
                 "SYSTEM");
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Saved.class);
@@ -444,7 +595,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", null, false, 224, 5, "DARK");
+        presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", false, 224, 5, "DARK");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
@@ -459,7 +610,7 @@ class SettingsPresenterTest {
 
         assertThat(onFxThread(() -> {
             ThemeSelection.set(ThemeChoice.LIGHT);
-            presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", null, false, 224, 5, "DARK");
+            presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", false, 224, 5, "DARK");
             return ThemeSelection.effectiveTheme().getValue();
         })).isEqualTo(Theme.DARK);
     }
@@ -474,7 +625,7 @@ class SettingsPresenterTest {
 
         assertThat(onFxThread(() -> {
             ThemeSelection.set(ThemeChoice.LIGHT);
-            presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", null, false, 224, 5, "DARK");
+            presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", false, 224, 5, "DARK");
             return ThemeSelection.effectiveTheme().getValue();
         })).isEqualTo(Theme.LIGHT);
     }
@@ -508,7 +659,7 @@ class SettingsPresenterTest {
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
         final var outcome = presenter.save("/repo", "/library", "/inbox", "anthropic", "claude-opus-5", "",
-                null, false, 224, 5, "SYSTEM");
+                false, 224, 5, "SYSTEM");
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Saved.class);
         final Settings saved = settingsUseCase.saved;
@@ -525,7 +676,7 @@ class SettingsPresenterTest {
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
         final var outcome = presenter.save("/repo", "/new-library", "/inbox", "anthropic", "claude-opus-5", "",
-                null, false, 224, 5, "SYSTEM");
+                false, 224, 5, "SYSTEM");
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.NeedsLibraryRootResolution.class);
         final var resolution = (SettingsPresenter.SaveOutcome.NeedsLibraryRootResolution) outcome;
@@ -545,7 +696,7 @@ class SettingsPresenterTest {
         settingsUseCase.saveFailure = new JobInProgressException("Sluice is busy");
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        final var outcome = presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", null, false, 224, 5, "SYSTEM");
+        final var outcome = presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", false, 224, 5, "SYSTEM");
 
         assertThat(outcome).isEqualTo(new SettingsPresenter.SaveOutcome.Refused("Sluice is busy"));
     }
@@ -647,7 +798,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save(untouched.toString(), "", "", "anthropic", "claude-opus-5", "", null, false, 224, 5, "SYSTEM");
+        presenter.save(untouched.toString(), "", "", "anthropic", "claude-opus-5", "", false, 224, 5, "SYSTEM");
 
         assertThat(untouched).doesNotExist();
     }
@@ -659,13 +810,13 @@ class SettingsPresenterTest {
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
         final var refused = presenter.save(tempDir.toString(), "", inbox.toString(), "anthropic", "", "",
-                null, false, 224, 5, "SYSTEM");
+                false, 224, 5, "SYSTEM");
 
         assertThat(refused).isInstanceOf(SettingsPresenter.SaveOutcome.Refused.class);
         assertThat(inbox).doesNotExist();
 
         presenter.save(tempDir.toString(), "", inbox.toString(), "anthropic", "claude-opus-5", "",
-                null, false, 224, 5, "SYSTEM");
+                false, 224, 5, "SYSTEM");
 
         assertThat(inbox).exists();
     }
@@ -717,11 +868,80 @@ class SettingsPresenterTest {
     private static VisionProviderCatalog twoProviders() {
         return catalogOf(
                 new VisionProviderDescriptor("anthropic", "Anthropic",
-                        Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT,
-                                ProviderSetting.RETRIES, ProviderSetting.CREDENTIAL),
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS),
+                        Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null));
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
+    }
+
+    // A presenter over the same anthropic/external-agent pair twoProviders() offers, but with a
+    // real answer for a credential check.
+    //
+    // catalogOf's own fixture throws AssertionError there instead; refreshModels and
+    // testConnection are the only two callers that reach this one.
+    private static SettingsPresenter presenterChecking(final Settings settings,
+                                                        final Function<String, ProviderCheck> checkById) {
+        return new SettingsPresenter(new FixedSettingsUseCase(settings), failingLibraryRootUseCase(),
+                new FixedSecretStore(new InKeyring()), noViolations(), checkingCatalog(checkById));
+    }
+
+    private static VisionProviderCatalog checkingCatalog(final Function<String, ProviderCheck> checkById) {
+        final List<VisionProviderDescriptor> all = List.of(
+                new VisionProviderDescriptor("anthropic", "Anthropic",
+                        Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null),
+                new VisionProviderDescriptor("external-agent", "External agent",
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
+        return new VisionProviderCatalog() {
+            @Override
+            public List<VisionProviderDescriptor> providers() {
+                return all;
+            }
+
+            @Override
+            public Optional<VisionProviderDescriptor> byId(final String id) {
+                return all.stream().filter(provider -> provider.id().equals(id)).findFirst();
+            }
+
+            @Override
+            public ProviderCheck check(final String id) {
+                return checkById.apply(id);
+            }
+
+            @Override
+            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+                return checkById.apply(id);
+            }
+        };
+    }
+
+    // checkingCatalog ignores the candidate its own check(id, candidate) is given. This is the one
+    // fixture that reads it back, so a test can prove testConnection forwards the screen's typed
+    // endpoint rather than what is stored.
+    private static VisionProviderCatalog candidateCapturingCatalog(final List<CullProviderSettings> received) {
+        final VisionProviderCatalog delegate = checkingCatalog(_ -> new ProviderCheck.Rejected());
+        return new VisionProviderCatalog() {
+            @Override
+            public List<VisionProviderDescriptor> providers() {
+                return delegate.providers();
+            }
+
+            @Override
+            public Optional<VisionProviderDescriptor> byId(final String id) {
+                return delegate.byId(id);
+            }
+
+            @Override
+            public ProviderCheck check(final String id) {
+                throw new AssertionError("testConnection does not call the plain check");
+            }
+
+            @Override
+            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
+                received.add(candidate);
+                return new ProviderCheck.Accepted(MODELS);
+            }
+        };
     }
 
     private static VisionProviderCatalog catalogOf(final VisionProviderDescriptor... providers) {

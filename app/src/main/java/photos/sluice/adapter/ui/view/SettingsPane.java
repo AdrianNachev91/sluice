@@ -4,6 +4,7 @@ import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.concurrent.Task;
 import javafx.css.PseudoClass;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
@@ -15,6 +16,7 @@ import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
@@ -134,14 +136,14 @@ final class SettingsPane {
 
         final var providerBox = providerChoice(view);
         providerBox.setId("settings-provider");
-        final var providerFields = providerFields(view);
+        final var providerFields = providerFields(view, presenter, providerBox);
         providerFields.setId("settings-provider-fields");
         final var watchRow = watchModeRow(view);
         watchRow.setId("settings-watch-mode");
         final var secretCard = new VBox();
         secretCard.setId("settings-api-key");
         secretCard.getStyleClass().add("settings-subsection");
-        fillSecretCard(secretCard, presenter, providerBox, null);
+        fillSecretCard(secretCard, presenter, providerBox, providerFields, null);
         final var providerCard = card("VISION PROVIDER",
                 "What actually looks at your photos and decides what is junk, a duplicate, or worth "
                         + "keeping. Sluice has no judgement of its own. It either calls a model you pay for, "
@@ -166,9 +168,19 @@ final class SettingsPane {
             clearRefusal(status, workingRoot.violation(), libraryRoot.violation(), inbox.violation(),
                     controlsOf(providerFields).modelViolation());
             showOnlyWhatTheProviderUses(chosen.fields(), providerFields, watchRow, secretCard);
-            // The one part that is rebuilt rather than toggled. A credential belongs to the provider
-            // it authenticates, so what this block says and acts on has to change with the choice.
-            fillSecretCard(secretCard, presenter, providerBox, null);
+            // Both rebuilt rather than toggled. A credential and a model catalog each belong to the
+            // provider that owns them, so what these say and offer has to change with the choice.
+            //
+            // fillSecretCard leaves Test's own enabled state current as part of that. A credential
+            // is exactly what that state depends on.
+            fillSecretCard(secretCard, presenter, providerBox, providerFields, null);
+            selectModelPickerFor(controlsOf(providerFields).model(), controlsOf(providerFields).modelInfo(),
+                    presenter, chosen.id(), providerBox);
+            // A test answered for the provider that was chosen when it ran.
+            controlsOf(providerFields).testResult().setText("");
+            // The endpoint field is shared across every provider. A switch has to hand it the newly
+            // chosen provider's own default, not leave the old one's showing.
+            controlsOf(providerFields).endpoint().setPromptText(chosen.defaultEndpoint());
         });
 
         final var tileSize = numberField(view.tileSizeRange(), view.tileSize());
@@ -237,8 +249,7 @@ final class SettingsPane {
      * <p>Committing has to be safe before it can be automatic. The commit parses the editor's text,
      * and a spinner hands an empty or non-numeric editor straight to its converter, which throws.
      * That throw lands in a focus listener with nobody to catch it, and leaves the spinner holding
-     * null. So the formatter refuses what the converter cannot take, which is the reasoning
-     * {@link #withinLimit} applies to the retry field.
+     * null. So the formatter refuses what the converter cannot take.
      *
      * <p>Only the ceiling is enforced while typing. Every number passes through its own shorter
      * prefixes on the way to being typed, so refusing those would make anything above the floor
@@ -300,7 +311,7 @@ final class SettingsPane {
      * as though something failed to draw.
      *
      * @param fields {@link SettingsView.ProviderFields} which settings the chosen provider uses
-     * @param providerFields {@link VBox} the model, endpoint and retries rows
+     * @param providerFields {@link VBox} the model and endpoint rows
      * @param watchRow {@link VBox} the watch-mode row
      * @param secretCard {@link VBox} the credential card
      */
@@ -309,11 +320,10 @@ final class SettingsPane {
                                                     final VBox secretCard) {
         final ProviderFieldControls controls = controlsOf(providerFields);
         showIf(fields.model(), controls.model().getParent());
-        showIf(fields.endpoint(), controls.endpoint().getParent());
-        showIf(fields.retries(), controls.maxRetries().getParent());
+        showIf(fields.endpoint(), controls.endpointField().getParent());
         showIf(fields.watchMode(), watchRow);
         showIf(fields.credential(), secretCard);
-        showIf(fields.model() || fields.endpoint() || fields.retries(), providerFields);
+        showIf(fields.model() || fields.endpoint(), providerFields);
     }
 
     private static void showIf(final boolean wanted, final Node node) {
@@ -582,16 +592,68 @@ final class SettingsPane {
                 .getUserData();
     }
 
-    private record ProviderFieldControls(TextField model, TextField endpoint, TextField maxRetries,
-                                         Label modelViolation) {
+    // endpointField is the node the endpoint row was built around, and endpoint is the field inside
+    // it. Both are here because they answer different questions: the row is hidden and shown by its
+    // parent, and the field is what carries the text.
+    private record ProviderFieldControls(ComboBox<SettingsView.ModelChoice> model, VBox modelInfo,
+                                         TextField endpoint, HBox endpointField, Button testConnection,
+                                         Label testResult, Label modelViolation) {
     }
 
-    private static VBox providerFields(final SettingsView view) {
-        final var model = new TextField(view.model() == null ? "" : view.model());
+    private static VBox providerFields(final SettingsView view, final SettingsPresenter presenter,
+                                       final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        final var model = new ComboBox<SettingsView.ModelChoice>();
         model.setId("settings-model");
+        model.getStyleClass().add("settings-model-picker");
+        model.setCellFactory(_ -> new ModelChoiceCell());
+        model.setButtonCell(new ModelChoiceCell());
+        final var modelInfo = new VBox();
+        modelInfo.getStyleClass().add("settings-model-info");
+        selectModelPickerFor(model, modelInfo, presenter, providerChoiceOf(providerBox).id(), providerBox);
+
         final var endpoint = new TextField(view.endpoint() == null ? "" : view.endpoint());
-        final var maxRetries = new TextField(view.maxRetries() == null ? "" : view.maxRetries().toString());
-        withinLimit(maxRetries, view.maxRetriesLimit());
+        endpoint.setId("settings-endpoint");
+        endpoint.setPromptText(providerChoiceOf(providerBox).defaultEndpoint());
+        final var testConnection = new Button("Test");
+        testConnection.setId("settings-test-connection");
+        testConnection.getStyleClass().add("button-quiet");
+        final var testResult = new Label();
+        testResult.setId("settings-test-result");
+        testResult.setWrapText(true);
+        testResult.getStyleClass().add("settings-help");
+        // Nothing has been tested until the button is pressed, and a label holding no text still
+        // takes a line's height. Left alone it puts an empty gap below the Endpoint row.
+        testResult.managedProperty().bind(testResult.visibleProperty());
+        testResult.visibleProperty().bind(testResult.textProperty().isNotEmpty());
+        enableTestIfThereIsSomethingToTry(testConnection, presenter, providerBox);
+        testConnection.setOnAction(_ -> {
+            testResult.setText("Checking...");
+            testResult.getStyleClass().setAll("settings-help");
+            final String providerId = providerChoiceOf(providerBox).id();
+            final String typed = endpoint.getText();
+            final var task = new Task<SettingsPresenter.ConnectionCheckResult>() {
+                @Override
+                protected SettingsPresenter.ConnectionCheckResult call() {
+                    return presenter.testConnection(providerId, typed);
+                }
+            };
+            // Guarded the same way Retry is. The dropdown may have moved on to a different provider
+            // while this ran, and its answer belongs to the one it was asked about.
+            task.setOnSucceeded(_ -> {
+                if (providerChoiceOf(providerBox).id().equals(providerId)) {
+                    final SettingsPresenter.ConnectionCheckResult result = task.getValue();
+                    testResult.setText(result.message());
+                    testResult.getStyleClass().setAll(result.succeeded() ? "settings-help" : "settings-violation");
+                }
+            });
+            task.setOnFailed(_ -> {
+                if (providerChoiceOf(providerBox).id().equals(providerId)) {
+                    testResult.setText("Sluice could not check this connection.");
+                    testResult.getStyleClass().setAll("settings-violation");
+                }
+            });
+            Thread.ofVirtual().start(task);
+        });
 
         // Built whether or not there is anything to say, so a refused save can fill it without
         // rebuilding the row. It takes no space while empty.
@@ -601,46 +663,201 @@ final class SettingsPane {
         final var modelRow = explainedRow("Model",
                 "Which model reads your photos.",
                 model, view.modelOverride());
-        modelRow.getChildren().add(modelViolation);
+        modelRow.getChildren().addAll(modelInfo, modelViolation);
 
-        final var box = new VBox(
-                modelRow,
-                explainedRow("Endpoint",
-                        "Leave empty unless you are pointing Sluice at something other than the provider's own "
-                                + "service, such as a proxy on your network.", endpoint, view.endpointOverride()),
-                explainedRow("Retries",
-                        "How many times to try again when the connection fails, before Sluice gives up and tells "
-                                + "you. Nothing to do with a model refusing a photo.", maxRetries,
-                        view.maxRetriesOverride()));
+        // Beside the field rather than under it, the way Browse sits beside a folder root and the
+        // key buttons beside the key entry. A button under its own field reads as belonging to
+        // whatever comes next. What the press answers goes underneath, where every other row puts
+        // what it has to say.
+        final var endpointField = new HBox(endpoint, testConnection);
+        endpointField.getStyleClass().add("settings-field-row");
+        HBox.setHgrow(endpoint, Priority.ALWAYS);
+        final var endpointRow = explainedRow("Endpoint",
+                "Leave empty unless you are pointing Sluice at something other than the provider's own "
+                        + "service, such as a proxy on your network.", endpointField, view.endpointOverride());
+        endpointRow.getChildren().add(testResult);
+
+        final var box = new VBox(modelRow, endpointRow);
         box.getStyleClass().add("settings-group");
         box.getProperties().put("controls",
-                new ProviderFieldControls(model, endpoint, maxRetries, modelViolation));
+                new ProviderFieldControls(model, modelInfo, endpoint, endpointField, testConnection,
+                        testResult, modelViolation));
         return box;
     }
 
     /**
-     * Refuses anything the presenter's limit would not accept, keystroke by keystroke.
+     * Leaves Test pressable only where there is something to try: a credential for whichever
+     * provider is chosen. An empty endpoint still tries the provider's own default service, which
+     * is what the help text under the field tells a reader to leave it as.
      *
-     * <p>Which values are legal is the presenter's call and arrives as {@code limit}. This only
-     * enforces it at the one place a user can type. Filtering rather than reporting on save is what
-     * keeps a word from ever becoming a retry count downstream.
+     * <p>The provider is read from the dropdown each time rather than captured. One row serves every
+     * provider. So the credential this asks about is a fact about the current choice, never about
+     * the one on screen when the row was first drawn.
      *
-     * @param field {@link TextField} the field to constrain
-     * @param limit int the largest value this field accepts
+     * @param testConnection {@link Button} the Test button
+     * @param presenter {@link SettingsPresenter} answers whether a credential is stored
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
-    private static void withinLimit(final TextField field, final int limit) {
-        final int digits = String.valueOf(limit).length();
-        field.setTextFormatter(new TextFormatter<>(change -> {
-            final String proposed = change.getControlNewText();
-            if (!proposed.matches("\\d{0," + digits + "}")) {
+    private static void enableTestIfThereIsSomethingToTry(final Button testConnection,
+                                                          final SettingsPresenter presenter,
+                                                          final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        testConnection.setDisable(!presenter.secretRow(providerChoiceOf(providerBox).id()).hasStoredValue());
+    }
+
+    // A named class rather than an anonymous one, and package-visible rather than private.
+    // ScreenWarmUp can then construct the exact type ScreenWarmUpTest finds this file building,
+    // instead of an anonymous class only this one method could ever build again.
+    static final class ModelChoiceCell extends ListCell<SettingsView.ModelChoice> {
+        @Override
+        protected void updateItem(final SettingsView.ModelChoice item, final boolean empty) {
+            super.updateItem(item, empty);
+            // ListCell's own type carries no nullness annotation, so the IDE reads item as never
+            // null here. Cell.updateItem's own Javadoc gives "empty || item == null" as the correct
+            // guard, matched exactly.
+            //noinspection ConstantValue
+            this.setText(empty || item == null ? null
+                    : item.recommended() ? item.label() + " (recommended)" : item.label());
+        }
+    }
+
+    /**
+     * Reads what the presenter currently has to say about one provider's models, cached rather than
+     * freshly checked, and draws it.
+     *
+     * <p>Called both when the model row is first built and whenever the provider dropdown changes.
+     * Never checks the service on its own: a dropdown a user is only browsing must not spend a
+     * network call every time it changes.
+     *
+     * @param model {@link ComboBox} the model picker
+     * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
+     * @param presenter {@link SettingsPresenter} answers what to draw
+     * @param providerId {@link String} the provider to draw a picker for
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider,
+     *         read again once a check completes in case the choice moved on while it ran
+     */
+    private static void selectModelPickerFor(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
+                                             final SettingsPresenter presenter, final String providerId,
+                                             final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        final SettingsPresenter.ModelPickerResult result = presenter.modelPickerFor(providerId);
+        showModelPicker(model, modelInfo, result, presenter, providerId, providerBox);
+    }
+
+    /**
+     * Draws one already-resolved {@link SettingsPresenter.ModelPickerResult}: a list to choose from,
+     * or nothing to choose from and a Retry that checks again.
+     *
+     * @param model {@link ComboBox} the model picker
+     * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
+     * @param result {@link SettingsPresenter.ModelPickerResult} what to draw
+     * @param presenter {@link SettingsPresenter} Retry checks through this
+     * @param providerId {@link String} the provider this picker belongs to
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
+     */
+    private static void showModelPicker(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
+                                        final SettingsPresenter.ModelPickerResult result,
+                                        final SettingsPresenter presenter, final String providerId,
+                                        final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        modelInfo.getChildren().clear();
+        switch (result.picker()) {
+            // Reached only for a provider this row's own showOnlyWhatTheProviderUses call already
+            // hides. Cleared rather than left showing whatever the last provider offered.
+            case null -> {
+                model.setDisable(true);
+                model.getItems().clear();
+                model.getSelectionModel().clearSelection();
+            }
+            case final SettingsView.ModelPicker.Options options -> {
+                model.setDisable(false);
+                model.setPromptText(null);
+                model.getItems().setAll(options.choices());
+                // SettingsPresenter.picked() only ever answers a selected() among choices(); a miss
+                // here is that promise broken rather than a state this screen has to tolerate.
+                model.getSelectionModel().select(options.choices().stream()
+                        .filter(choice -> choice.id().equals(options.selected()))
+                        .findFirst()
+                        .orElseThrow());
+                final var source = new Label(options.sourceNote());
+                source.setWrapText(true);
+                source.getStyleClass().add("settings-help");
+                modelInfo.getChildren().add(source);
+            }
+            case final SettingsView.ModelPicker.Unavailable unavailable -> {
+                model.setDisable(true);
+                model.getItems().clear();
+                model.getSelectionModel().clearSelection();
+                // A closed ComboBox with nothing selected draws its own promptText. It never asks
+                // a custom cell factory to draw the empty case. Confirmed by rendering: the cell's
+                // own text for a null item never appeared on screen.
+                model.setPromptText("Nothing to choose from");
+                final var violation = new Label(unavailable.violation());
+                violation.setWrapText(true);
+                violation.getStyleClass().add("settings-violation");
+                final var retry = new Button("Retry");
+                retry.setId("settings-model-retry");
+                retry.getStyleClass().add("button-quiet");
+                // The block it sits in has to fill the row, because the message above it wraps. A
+                // button left to fill with it would run the width of the card.
+                retry.setMaxWidth(Region.USE_PREF_SIZE);
+                retry.setOnAction(_ -> refreshModelPicker(model, modelInfo, presenter, providerId, providerBox));
+                modelInfo.getChildren().addAll(violation, retry);
+            }
+        }
+        if (result.unrecognisedNote() != null) {
+            modelInfo.getChildren().add(cautionRow(result.unrecognisedNote()));
+        }
+    }
+
+    /**
+     * Checks a provider's stored credential against the real service, off the FX thread, and redraws
+     * the picker with what came back.
+     *
+     * <p>Two callers reach this: Retry, and a credential save that just changed what this account
+     * can run. Both want the same thing - forget the last answer, ask again, draw what comes back.
+     *
+     * @param model {@link ComboBox} the model picker
+     * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
+     * @param presenter {@link SettingsPresenter} runs the check and keeps its answer
+     * @param providerId {@link String} the provider to check
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
+     */
+    private static void refreshModelPicker(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
+                                           final SettingsPresenter presenter, final String providerId,
+                                           final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        final var task = new Task<Void>() {
+            @Override
+            protected Void call() {
+                presenter.refreshModels(providerId);
                 return null;
             }
-            return proposed.isEmpty() || Integer.parseInt(proposed) <= limit ? change : null;
-        }));
+        };
+        // Guarded: the dropdown may have moved on to a different provider while this ran, and its
+        // answer belongs to the one it was asked about.
+        task.setOnSucceeded(_ -> {
+            if (providerChoiceOf(providerBox).id().equals(providerId)) {
+                selectModelPickerFor(model, modelInfo, presenter, providerId, providerBox);
+            }
+        });
+        Thread.ofVirtual().start(task);
     }
 
     private static ProviderFieldControls controlsOf(final VBox providerFields) {
         return (ProviderFieldControls) providerFields.getProperties().get("controls");
+    }
+
+    /**
+     * The id of whichever model is selected, or empty when nothing is. Either the picker is
+     * disabled, or a provider with no model setting never showed one at all.
+     *
+     * @param model {@link ComboBox} the model picker
+     * @return {@link String} the selected model's id, or empty
+     */
+    private static String selectedModelId(final ComboBox<SettingsView.ModelChoice> model) {
+        final SettingsView.ModelChoice selected = model.getSelectionModel().getSelectedItem();
+        // The property's declared type is not nullable, so the IDE reads this guard as always
+        // false. A disabled Unavailable picker, or a provider with no model setting, leaves this
+        // genuinely unselected.
+        //noinspection ConstantValue
+        return selected == null ? "" : selected.id();
     }
 
     private static VBox watchModeRow(final SettingsView view) {
@@ -827,6 +1044,30 @@ final class SettingsPane {
     }
 
     /**
+     * A lower-case i in a ring, drawn from shapes, the same way {@link #cautionGlyph} is.
+     *
+     * <p>A fact worth noticing is not a caution. The exclamation shape already carries that second
+     * meaning on this screen, so a fact reusing it would read as a problem that is not one.
+     *
+     * @return {@link StackPane} the glyph
+     */
+    private static StackPane infoGlyph() {
+        final var ring = new Circle(7.5);
+        ring.getStyleClass().add("info-ring");
+        final var dot = new Circle(1);
+        dot.setTranslateY(-4.5);
+        dot.getStyleClass().add("info-mark");
+        final var stem = new Rectangle(2, 6);
+        stem.setTranslateY(1.5);
+        stem.getStyleClass().add("info-mark");
+        final var glyph = new StackPane(ring, dot, stem);
+        glyph.setMinSize(16, 16);
+        glyph.setPrefSize(16, 16);
+        glyph.setMaxSize(16, 16);
+        return glyph;
+    }
+
+    /**
      * The strip that says a save landed, above the screen it saved.
      *
      * <p>At the top rather than beside the button, because a save rebuilds the page and returns the
@@ -918,14 +1159,18 @@ final class SettingsPane {
      * @param card {@link VBox} the block to fill, whatever it held before
      * @param presenter {@link SettingsPresenter} reads and writes that credential
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
+     * @param providerFields {@link VBox} the model and endpoint rows, whose Test button a
+     *         credential change leaves enabled or not, and whose model picker a save or remove can
+     *         change the very choices in
      * @param said what just happened to the key, or null when nothing has
      */
     private static void fillSecretCard(final VBox card, final SettingsPresenter presenter,
                                        final ComboBox<SettingsView.ProviderChoice> providerBox,
-                                       final @Nullable String said) {
+                                       final VBox providerFields, final @Nullable String said) {
         final String providerId = providerChoiceOf(providerBox).id();
         card.getChildren().setAll(secretCardContents(presenter, presenter.secretRow(providerId), providerId,
-                said, message -> fillSecretCard(card, presenter, providerBox, message)));
+                said, message -> fillSecretCard(card, presenter, providerBox, providerFields, message),
+                providerFields, providerBox));
         // The button that was pressed leaves the scene along with the rest of this block. Focus goes
         // to whatever the window finds next, and a scrolling pane travels to wherever focus lands.
         // A key saved half way down the page then shows the top of it. Putting focus back on the
@@ -934,12 +1179,17 @@ final class SettingsPane {
         if (said != null && pressedAgain != null) {
             pressedAgain.requestFocus();
         }
+        // A save or a remove is exactly what Test's own enabled state depends on.
+        final ProviderFieldControls controls = controlsOf(providerFields);
+        enableTestIfThereIsSomethingToTry(controls.testConnection(), presenter, providerBox);
     }
 
     private static List<Node> secretCardContents(final SettingsPresenter presenter,
                                                  final SettingsView.SecretRow secret,
                                                  final String providerId, final @Nullable String said,
-                                                 final Consumer<String> onChanged) {
+                                                 final Consumer<String> onChanged,
+                                                 final VBox providerFields,
+                                                 final ComboBox<SettingsView.ProviderChoice> providerBox) {
         final var entry = new PasswordField();
         entry.setId("settings-api-key-entry");
         entry.setPromptText("Paste a new key to save or replace it");
@@ -956,6 +1206,7 @@ final class SettingsPane {
         saveButton.setId("settings-api-key-save");
         final var result = new Label();
         result.setWrapText(true);
+        final ProviderFieldControls controls = controlsOf(providerFields);
         saveButton.setOnAction(_ -> {
             final String error = presenter.saveSecret(providerId, entry.getText());
             if (error != null) {
@@ -963,6 +1214,7 @@ final class SettingsPane {
                 result.getStyleClass().setAll("settings-violation");
             } else {
                 onChanged.accept("API key saved.");
+                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
             }
         });
 
@@ -976,6 +1228,7 @@ final class SettingsPane {
                 result.getStyleClass().setAll("settings-violation");
             } else {
                 onChanged.accept("API key removed.");
+                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
             }
         });
 
@@ -998,6 +1251,21 @@ final class SettingsPane {
         reassurance.setWrapText(true);
         reassurance.getStyleClass().add("settings-reassurance");
 
+        // Said here, at the moment someone opts into paying, rather than buried in a licence file.
+        // This card only ever shows for a provider that calls a model with this key, so the spend
+        // is real every time it does. Its own bordered ground, not just a line of text, since a
+        // spend is worth noticing rather than reading past.
+        final var billingText = new Label("Every cull spends against your own account with this provider. "
+                + "Checking your key or its models costs nothing.");
+        billingText.setWrapText(true);
+        billingText.getStyleClass().add("settings-caution");
+        HBox.setHgrow(billingText, Priority.ALWAYS);
+        final var billing = new HBox(infoGlyph(), billingText);
+        billing.getStyleClass().add("settings-callout");
+        // The card's own spacing reads as ordinary line-to-line gap. A bordered box wants more air
+        // above it than a line of text does, so it carries the extra distance itself.
+        VBox.setMargin(billing, new Insets(8, 0, 0, 0));
+
         final var children = new ArrayList<Node>(List.of(subsectionHeading("API key")));
         // Above the entry rather than in place of it. A store that will not say what it holds can
         // still be written to. Taking the field away leaves a user who cannot read their key with
@@ -1008,7 +1276,7 @@ final class SettingsPane {
             error.getStyleClass().add("settings-violation-detail");
             children.add(error);
         }
-        children.addAll(List.of(entryRow, reassurance));
+        children.addAll(List.of(entryRow, reassurance, billing));
         if (secret.environmentOverride() != null) {
             children.add(overrideLabel(secret.environmentOverride()));
         }
@@ -1025,12 +1293,31 @@ final class SettingsPane {
                                final boolean watchAutomatically, final int tileSize, final int tilesPerRow,
                                final String themeId, final Label status, final Consumer<String> showBanner) {
         final ProviderFieldControls controls = controlsOf(providerFields);
-        final Integer maxRetries = valueOrUnset(controls.maxRetries().getText());
         final SaveOutcome outcome = presenter.save(workingRoot.field().getText(), libraryRoot.field().getText(),
-                inbox.field().getText(), provider.id(), controls.model().getText(), controls.endpoint().getText(),
-                maxRetries, watchAutomatically, tileSize, tilesPerRow, themeId);
+                inbox.field().getText(), provider.id(), selectedModelId(controls.model()), controls.endpoint().getText(),
+                watchAutomatically, tileSize, tilesPerRow, themeId);
         switch (outcome) {
-            case final SaveOutcome.Saved _ -> showBanner.accept(SAVED);
+            case final SaveOutcome.Saved _ -> {
+                // Behind the status line rather than a blocking dialog. The save itself has already
+                // landed, so what the user is waiting on is only this account's real model list.
+                //
+                // Said only where there is a key to check. A provider that takes none, and one with
+                // nothing saved yet, would otherwise be told Sluice is checking something it has
+                // not got. The line still clears either way, so a refusal from a previous press
+                // cannot sit under a save that worked.
+                status.setText(presenter.secretRow(provider.id()).hasStoredValue() ? "Checking your key..." : "");
+                status.getStyleClass().setAll("settings-save-status");
+                final var task = new Task<Void>() {
+                    @Override
+                    protected Void call() {
+                        presenter.refreshModels(provider.id());
+                        return null;
+                    }
+                };
+                task.setOnSucceeded(_ -> showBanner.accept(SAVED));
+                task.setOnFailed(_ -> showBanner.accept(SAVED));
+                Thread.ofVirtual().start(task);
+            }
             case final SaveOutcome.Refused refused -> {
                 say(workingRoot.violation(), refused.workingRoot());
                 say(libraryRoot.violation(), refused.libraryRoot());
@@ -1225,18 +1512,5 @@ final class SettingsPane {
                 .map(Node::getParent)
                 .min(Comparator.comparingDouble(row -> row.localToScene(row.getBoundsInLocal()).getMinY()))
                 .map(Node.class::cast);
-    }
-
-    /**
-     * Reads a field {@link #withinLimit} constrains, where empty means the setting is unset.
-     *
-     * <p>No parse failure to handle. That formatter refuses every keystroke leaving anything but
-     * digits within the limit, so this reads a field holding one of those or nothing.
-     *
-     * @param text {@link String} the field's current text
-     * @return {@link Integer} the value, or null when the field is empty
-     */
-    private static @Nullable Integer valueOrUnset(final String text) {
-        return text.isEmpty() ? null : Integer.valueOf(text);
     }
 }

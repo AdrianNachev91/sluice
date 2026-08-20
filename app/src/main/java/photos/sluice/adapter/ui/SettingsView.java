@@ -17,13 +17,13 @@ import java.util.List;
  * @param providerOverride an override note for {@code sluice.cull.provider}, or null
  * @param providerUnrecognised a note that the configured provider is not one this install has, or
  *     null when it is
- * @param model {@link String} the configured model id
+ * @param model {@link ModelPicker} what the model picker offers and shows selected, or null for a
+ *     provider with no model setting
  * @param modelOverride an override note for the model field, or null
+ * @param modelUnrecognised a note that the configured model is not one the shown catalog offers, or
+ *     null when it is, or when nothing is configured
  * @param endpoint {@link String} the configured endpoint
  * @param endpointOverride an override note for the endpoint field, or null
- * @param maxRetries {@link Integer} the configured transport retry count
- * @param maxRetriesOverride an override note for the retries field, or null
- * @param maxRetriesLimit int the largest transport retry count this app accepts
  * @param watchAutomatically boolean whether a waiting cull resumes on its own once ready; false
  *     means it waits for an explicit resume
  * @param watchModeOverride an override note for the watch-mode field, or null
@@ -41,10 +41,10 @@ import java.util.List;
 public record SettingsView(FolderField workingRoot, FolderField libraryRoot, FolderField inbox, String provider,
                            List<ProviderChoice> providers,
                            @Nullable String providerOverride, @Nullable String providerUnrecognised,
-                           @Nullable String model,
-                           @Nullable String modelOverride, @Nullable String endpoint,
-                           @Nullable String endpointOverride, @Nullable Integer maxRetries,
-                           @Nullable String maxRetriesOverride, int maxRetriesLimit,
+                           @Nullable ModelPicker model,
+                           @Nullable String modelOverride, @Nullable String modelUnrecognised,
+                           @Nullable String endpoint,
+                           @Nullable String endpointOverride,
                            boolean watchAutomatically, @Nullable String watchModeOverride, SecretRow secret, int tileSize,
                            NumberRange tileSizeRange, @Nullable String tileSizeOverride, int tilesPerRow,
                            NumberRange tilesPerRowRange, @Nullable String tilesPerRowOverride, String theme,
@@ -71,6 +71,48 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
     }
 
     /**
+     * What the model picker draws: a choice to make, or nothing to choose from and why.
+     *
+     * <p>A provider's own static list before any key has been checked, and the account's real list
+     * after a successful check, both draw as {@link Options}. They differ only in which models are
+     * offered and in {@link Options#sourceNote}, which says which list the reader is looking at.
+     * Every other outcome draws as {@link Unavailable}, with nothing to select. The key was
+     * rejected, the account can run nothing Sluice needs, or the service could not be reached.
+     */
+    public sealed interface ModelPicker {
+
+        /**
+         * A list to choose from.
+         *
+         * @param choices a {@link List} of {@link ModelChoice} every model offered
+         * @param selected {@link String} id of the choice to show selected, one of {@code choices}
+         * @param sourceNote {@link String} which list this is: the provider's own guess, or the
+         *     account's real one
+         */
+        record Options(List<ModelChoice> choices, String selected, String sourceNote) implements ModelPicker {
+        }
+
+        /**
+         * Nothing to choose from.
+         *
+         * @param violation {@link String} what went wrong, in the provider's own words where it has
+         *     them
+         */
+        record Unavailable(String violation) implements ModelPicker {
+        }
+    }
+
+    /**
+     * One model a picker can offer.
+     *
+     * @param id {@link String} the model id, as a saved setting spells it
+     * @param label {@link String} the name a screen shows for it
+     * @param recommended boolean whether this is the provider's own recommendation
+     */
+    public record ModelChoice(String id, String label, boolean recommended) {
+    }
+
+    /**
      * Which settings the selected provider actually uses.
      *
      * <p>A provider that calls a model from inside the app needs a model id, an endpoint and a
@@ -80,12 +122,10 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      *
      * @param model boolean whether a model id applies
      * @param endpoint boolean whether a non-default endpoint applies
-     * @param retries boolean whether a transport retry count applies
      * @param watchMode boolean whether the waiting-cull watch mode applies
      * @param credential boolean whether a stored credential applies
      */
-    public record ProviderFields(boolean model, boolean endpoint, boolean retries,
-                                 boolean watchMode, boolean credential) {
+    public record ProviderFields(boolean model, boolean endpoint, boolean watchMode, boolean credential) {
     }
 
     /**
@@ -97,8 +137,11 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      * @param id {@link String} the provider id, as {@code sluice.cull.provider} spells it
      * @param label {@link String} the name a screen shows for it
      * @param fields {@link ProviderFields} which settings this provider uses
+     * @param defaultEndpoint {@link String} what an empty endpoint field actually reaches, or null
+     *     when either this provider takes no endpoint or it has none worth naming
      */
-    public record ProviderChoice(String id, String label, ProviderFields fields) {
+    public record ProviderChoice(String id, String label, ProviderFields fields,
+                                 @Nullable String defaultEndpoint) {
     }
 
     /**

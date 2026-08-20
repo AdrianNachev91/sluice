@@ -72,7 +72,7 @@ class RegisteredVisionProvidersTest {
 
     private static VisionProviderDescriptor describing(final String id, final String label) {
         return new VisionProviderDescriptor(id, label, Set.of(ProviderSetting.MODEL), Set.of(), null,
-                new ModelCatalog(List.of(new ModelOption("a-model", "A model")), null));
+                new ModelCatalog(List.of(new ModelOption("a-model", "A model")), null), null);
     }
 
     private static List<VisionCuller> cullers(final VisionProviderDescriptor... descriptors) {

@@ -29,6 +29,9 @@
        card without turning into a signal lamp, and the saturation that reads as serious on white
        reads as neon here. */
     -sluice-caution: #d9a066;
+    -sluice-caution-bg: #2e2416;
+    -sluice-info: #6cb6e8;
+    -sluice-info-bg: #16232e;
 
     /* JavaFX's own default look derives every stock control's colour from these three. A text
        field, spinner, check box or radio button is drawn by that look, not by the rules above, so

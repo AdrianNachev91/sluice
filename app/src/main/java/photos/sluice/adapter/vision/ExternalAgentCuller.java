@@ -60,7 +60,7 @@ class ExternalAgentCuller implements VisionCuller {
     public VisionProviderDescriptor describe() {
         return new VisionProviderDescriptor(PROVIDER_ID,
                 "External agent (an agent on this computer that can write files, like Claude Code)",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null);
+                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null);
     }
 
     /**

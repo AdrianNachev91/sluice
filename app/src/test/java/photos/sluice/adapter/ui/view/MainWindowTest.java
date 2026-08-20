@@ -254,7 +254,7 @@ class MainWindowTest {
         final var apiSettings = Set.of(ProviderSetting.MODEL, ProviderSetting.CREDENTIAL);
         final List<VisionProviderDescriptor> providers = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic", apiSettings,
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS));
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null));
         final VisionProviderCatalog catalog = new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {

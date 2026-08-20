@@ -7,6 +7,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
@@ -58,7 +59,8 @@ final class ScreenWarmUp {
                 new Label(), new PasswordField(), new RadioButton(), new ScrollPane(),
                 new Separator(), new Spinner<Integer>(), new TextArea(), new TextField(),
                 new TitledPane(), new ToggleButton(),
-                new Circle(), new Rectangle(), new SVGPath(), new Text(), new TextFlow());
+                new Circle(), new Rectangle(), new SVGPath(), new Text(), new TextFlow(),
+                new ListCell<String>(), new SettingsPane.ModelChoiceCell());
     }
 
     /**

@@ -56,6 +56,12 @@ public interface VisionCuller {
      * date. An implementation that can only answer by doing the provider's real work is the wrong
      * shape for it.
      *
+     * <p>Settings tells the user this costs nothing, distinct from a cull. Verify that claim holds
+     * for this provider's own account before shipping it. If it genuinely cannot - the provider has
+     * no free way to check a credential - that is a decision to make explicitly and say out loud,
+     * updating both this claim and the Settings copy that states it as free, not something to leave
+     * for whoever reads this method next to discover.
+     *
      * <p>No default. A provider with nothing to authenticate answers
      * {@link ProviderCheck.NotApplicable} deliberately, rather than inheriting a claim it never
      * made.

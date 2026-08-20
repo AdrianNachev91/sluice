@@ -1025,7 +1025,7 @@ final class PipelineTestSupport {
     // what a settings screen would draw. Named settings and a credential would be fixture that
     // no assertion here reads.
     static VisionProviderDescriptor describing(final String id) {
-        return new VisionProviderDescriptor(id, id, Set.of(), Set.of(), null, null);
+        return new VisionProviderDescriptor(id, id, Set.of(), Set.of(), null, null, null);
     }
 
     static final class ManualModeCuller implements VisionCuller {

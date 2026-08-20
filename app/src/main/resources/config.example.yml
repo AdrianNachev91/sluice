@@ -48,7 +48,8 @@ sluice:
         # An optional non-default API endpoint. Leave unset to use the provider's own default.
         endpoint:
         # How many times a failed transport call (a timeout, a 429, a 5xx) is retried. Optional;
-        # falls back to the provider's own default when unset.
+        # falls back to the provider's own default when unset. Settings never draws a control for
+        # this - it is a transport question, not one a user has a basis to tune. Set it here by hand.
         max-retries: 2
 
     # The classification category cards a cull routes photos to. Each needs a name and a

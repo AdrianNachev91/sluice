@@ -13,7 +13,9 @@ import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.PathSettings;
+import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretHolding.Holding;
@@ -53,6 +55,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Decides what the Settings screen shows and carries out what a user does on it.
@@ -69,14 +72,8 @@ public class SettingsPresenter {
             .map(choice -> new SettingsView.ThemeOption(choice.name(), themeLabel(choice)))
             .toList();
 
-    // What a transport retry count is allowed to be, decided here rather than by whichever control
-    // happens to render it. The number is a product judgement rather than a type limit. The SDK
-    // retries with exponential backoff, so a call failing this many times running is one the user
-    // wants told about rather than retried further.
-    private static final int MAX_RETRIES_LIMIT = 10;
-
-    // These four numbers are plausible rather than measured, unlike the retry limit above. Nobody
-    // has derived them. Whoever next holds real cost data for a sheet replaces them and says why.
+    // These four numbers are plausible rather than measured. Nobody has derived them. Whoever next
+    // holds real cost data for a sheet replaces them and says why.
     private static final SettingsView.NumberRange TILE_SIZE_RANGE = new SettingsView.NumberRange(16, 1024, 16);
     private static final SettingsView.NumberRange TILES_PER_ROW_RANGE = new SettingsView.NumberRange(1, 12, 1);
 
@@ -110,6 +107,12 @@ public class SettingsPresenter {
     private final SecretStore secretStore;
     private final PathValidationUseCase pathValidation;
     private final VisionProviderCatalog providers;
+
+    // What the last live check said, per provider. A picker cannot draw a list nobody asked for, so
+    // this is what tells view() whether to show a provider's static floor or its account's real one.
+    // Written by refreshModels, off the FX thread; read by view(), which may run concurrently with a
+    // refresh in flight. A provider with no entry here has never been checked this session.
+    private final Map<String, ProviderCheck> lastCheck = new ConcurrentHashMap<>();
 
     /**
      * Creates the presenter over the use cases the screen reads and writes through.
@@ -148,6 +151,7 @@ public class SettingsPresenter {
         final var providerSettings = settings.providerSettings(shownProvider);
         final var montage = settings.montage();
         final Map<PathRole, String> violations = this.violationsByRole(paths);
+        final ModelPickerResult modelPicker = this.modelPickerFor(shownProvider, providerSettings.model());
         return new SettingsView(
                 folderField(paths.repoRoot(), workingRootSuggestion(), violations.get(PathRole.REPO_ROOT)),
                 folderField(paths.libraryRoot(), librarySuggestion(), violations.get(PathRole.LIBRARY_ROOT)),
@@ -155,10 +159,9 @@ public class SettingsPresenter {
                 shownProvider, this.providerChoices(),
                 this.overrideNote("sluice.cull.provider"),
                 this.unrecognisedProviderNote(settings.provider()),
-                providerSettings.model(), this.overrideNote(providerProperty(shownProvider, "model")),
+                modelPicker.picker(), this.overrideNote(providerProperty(shownProvider, "model")),
+                modelPicker.unrecognisedNote(),
                 providerSettings.endpoint(), this.overrideNote(providerProperty(shownProvider, "endpoint")),
-                providerSettings.maxRetries(),
-                this.overrideNote(providerProperty(shownProvider, "max-retries")), MAX_RETRIES_LIMIT,
                 settings.externalAgent().mode() == WatchMode.WATCH,
                 this.overrideNote("sluice.cull.external-agent.mode"),
                 this.secretRow(shownProvider),
@@ -256,7 +259,6 @@ public class SettingsPresenter {
      * @param provider {@link String} the selected provider id
      * @param model {@link String} the model field's text, possibly blank
      * @param endpoint {@link String} the endpoint field's text, possibly blank
-     * @param maxRetries {@link Integer} the transport retry count, or null to leave it unset
      * @param watchAutomatically boolean whether a waiting cull should resume on its own once ready;
      *         false waits for an explicit resume
      * @param tileSize int the montage tile size
@@ -266,7 +268,7 @@ public class SettingsPresenter {
      */
     public SaveOutcome save(final String workingRoot, final String libraryRoot, final String inbox,
                             final String provider, final String model, final String endpoint,
-                            final @Nullable Integer maxRetries, final boolean watchAutomatically,
+                            final boolean watchAutomatically,
                             final int tileSize, final int tilesPerRow, final String themeId) {
         // Before anything touches the disk. What a provider needs is answerable from the field
         // values alone, so refusing on it leaves no folder behind.
@@ -283,6 +285,9 @@ public class SettingsPresenter {
             // the list it handed the screen is a refusal to report. Not an exception to escape into
             // a button handler.
             final ThemeChoice theme = ThemeChoice.valueOf(themeId);
+            // This screen never asks about the retry count. A save carries forward whatever is
+            // already configured for this provider rather than losing it, the same as categories.
+            final Integer maxRetries = this.settingsUseCase.settings().providerSettings(provider).maxRetries();
             final var settings = new Settings(
                     new PathSettings(blankToNull(workingRoot), blankToNull(libraryRoot), blankToNull(inbox)),
                     provider,
@@ -450,6 +455,54 @@ public class SettingsPresenter {
     }
 
     /**
+     * Checks one provider's stored credential against the real service and keeps the answer. The
+     * next {@link #view()} then draws the account's real model list instead of the provider's
+     * static floor.
+     *
+     * <p>Blocking, on the order of a network call, so a caller runs this off the FX thread. Called
+     * after a successful save. The plan locks a second call at app start too, for whichever
+     * provider is configured; that boot wiring is not built yet, so an unchecked provider stays on
+     * its static floor until Settings is saved or Retry is pressed.
+     *
+     * <p>Does nothing for a provider that offers no model catalog, since there is no picker for a
+     * check to feed.
+     *
+     * @param providerId {@link String} the provider to check
+     */
+    public void refreshModels(final String providerId) {
+        this.providers.byId(providerId)
+                .filter(provider -> provider.models() != null)
+                .ifPresent(_ -> this.lastCheck.put(providerId, this.providers.check(providerId)));
+    }
+
+    /**
+     * Tries a connection setting a screen is holding and has not saved, against the real service.
+     *
+     * <p>Reads the stored credential, same as {@link #refreshModels}, but checks the given endpoint
+     * rather than what is stored. Does not touch what {@link #refreshModels} keeps: the picker
+     * reflects the last saved configuration, never a value this screen is only trying out.
+     *
+     * @param providerId {@link String} the provider to check
+     * @param endpoint {@link String} the endpoint field's text, possibly blank for the provider's own
+     * @return {@link ConnectionCheckResult} what to say, and whether it succeeded
+     */
+    public ConnectionCheckResult testConnection(final String providerId, final String endpoint) {
+        final ProviderCheck outcome = this.providers.check(providerId,
+                new CullProviderSettings(null, blankToNull(endpoint), null));
+        return new ConnectionCheckResult(wordCheckOutcome(outcome), outcome instanceof ProviderCheck.Accepted);
+    }
+
+    /**
+     * What a connection check found, worded for a screen, and whether that was a working answer.
+     *
+     * @param message {@link String} what to tell the user
+     * @param succeeded boolean whether the provider accepted the credential and answered with what
+     *     it can run
+     */
+    public record ConnectionCheckResult(String message, boolean succeeded) {
+    }
+
+    /**
      * The credential identity one provider authenticates with.
      *
      * <p>Asked of the provider rather than mapped here. Which environment variable overrides a key,
@@ -537,6 +590,112 @@ public class SettingsPresenter {
     }
 
     /**
+     * What the model picker should draw for one provider, and whether its saved model needs a
+     * caution.
+     *
+     * <p>A provider with no model catalog draws nothing, so an empty violation is never read.
+     *
+     * <p>A provider never checked this session, or last answered {@link ProviderCheck.NoCredential},
+     * is shown its own static floor. A fresh install has no key to check yet, and a failed check
+     * must never fall back to a list wearing the clothes of a working one. Every other outcome
+     * answers for itself.
+     *
+     * @param providerId {@link String} the provider to draw a picker for
+     * @return {@link ModelPickerResult} what to draw, and the caution note beside it
+     */
+    public ModelPickerResult modelPickerFor(final String providerId) {
+        final CullProviderSettings saved = this.settingsUseCase.settings().providerSettingsById()
+                .getOrDefault(providerId, CullProviderSettings.unset());
+        return this.modelPickerFor(providerId, saved.model());
+    }
+
+    /**
+     * What the model picker should draw for one provider, given the model saved for it.
+     *
+     * @param providerId {@link String} the provider to draw a picker for
+     * @param savedModel {@link String} the model id saved for this provider, possibly null or blank
+     * @return {@link ModelPickerResult} what to draw, and the caution note beside it
+     */
+    private ModelPickerResult modelPickerFor(final String providerId, final @Nullable String savedModel) {
+        final Optional<VisionProviderDescriptor> descriptor = this.providers.byId(providerId);
+        if (descriptor.isEmpty() || descriptor.get().models() == null) {
+            return new ModelPickerResult(null, null);
+        }
+        final ModelCatalog staticFloor = descriptor.get().models();
+        final ProviderCheck last = this.lastCheck.get(providerId);
+        if (last == null || last instanceof ProviderCheck.NoCredential) {
+            return this.picked(staticFloor, savedModel,
+                    "Assumed list before you connect to your provider for the first time.");
+        }
+        if (last instanceof ProviderCheck.Accepted(final ModelCatalog live)) {
+            return this.picked(live, savedModel, "What your account can run, from the last connection or test.");
+        }
+        // NoCredential is handled above; reaching here it is one of the four failure outcomes.
+        return new ModelPickerResult(new SettingsView.ModelPicker.Unavailable(wordCheckOutcome(last)), null);
+    }
+
+    /**
+     * A picker offering the given catalog, with the saved model selected when the catalog offers it.
+     *
+     * @param catalog {@link ModelCatalog} the models to offer
+     * @param savedModel {@link String} the model id saved for this provider, possibly null or blank
+     * @param sourceNote {@link String} which list this is, for {@link SettingsView.ModelPicker.Options#sourceNote()}
+     * @return {@link ModelPickerResult} the picker, and a caution when the saved model is not offered
+     */
+    private ModelPickerResult picked(final ModelCatalog catalog, final @Nullable String savedModel,
+                                     final String sourceNote) {
+        final boolean offered = savedModel != null
+                && catalog.options().stream().anyMatch(option -> option.id().equals(savedModel));
+        final String selected = offered ? savedModel
+                : catalog.recommended() != null ? catalog.recommended() : catalog.options().getFirst().id();
+        final List<SettingsView.ModelChoice> choices = catalog.options().stream()
+                .map(option -> new SettingsView.ModelChoice(option.id(), option.label(),
+                        option.id().equals(catalog.recommended())))
+                .toList();
+        // What the picker shows is not what a cull would run. The saved value is what the provider
+        // is asked for, right up until a save replaces it. A note claiming the substitute is
+        // already in force would send a user off to cull against a model that fails.
+        final String caution = savedModel == null || savedModel.isBlank() || offered ? null
+                : "Your configuration asks for a model called '" + savedModel + "', which this provider does "
+                        + "not offer. Save to replace it with the one picked above. Until you do, a cull "
+                        + "fails on the model you configured.";
+        return new ModelPickerResult(new SettingsView.ModelPicker.Options(choices, selected, sourceNote), caution);
+    }
+
+    /**
+     * A sentence describing what a provider said to a credential check, for the Test button's own
+     * result and for a picker with nothing to offer.
+     *
+     * @param outcome {@link ProviderCheck} what the provider said
+     * @return {@link String} the sentence
+     */
+    private static String wordCheckOutcome(final ProviderCheck outcome) {
+        return switch (outcome) {
+            case ProviderCheck.Accepted(final ModelCatalog models) ->
+                    "This works. This account can run " + models.options().size() + " model(s).";
+            case final ProviderCheck.NoUsableModels _ -> "This key works, but this account cannot run any "
+                    + "model Sluice needs.";
+            case final ProviderCheck.NoCredential _ -> "Nothing is saved to check yet.";
+            case final ProviderCheck.Rejected _ -> "This provider rejected the key.";
+            case ProviderCheck.Refused(final String detail) ->
+                    "This key is recognised, but this account is not allowed to do this: " + detail;
+            case ProviderCheck.Unreachable(final String detail) ->
+                    "Sluice could not reach this provider: " + detail;
+            case final ProviderCheck.NotApplicable _ -> "This provider takes no key to check.";
+        };
+    }
+
+    /**
+     * What {@link #modelPickerFor} draws, and the caution note beside it.
+     *
+     * @param picker {@link SettingsView.ModelPicker} what the picker draws, or null for a provider
+     *     with no model setting to draw one for
+     * @param unrecognisedNote a note that the saved model is not one the drawn catalog offers, or null
+     */
+    public record ModelPickerResult(SettingsView.@Nullable ModelPicker picker, @Nullable String unrecognisedNote) {
+    }
+
+    /**
      * What the chosen provider is missing, or null when it has everything it needs.
      *
      * <p>Required is per provider, not per field. A model id is what an API-backed provider cannot
@@ -546,8 +705,14 @@ public class SettingsPresenter {
      * <p>Caught here rather than at cull time, which is where the provider itself would raise it.
      * That is a run the user has already started, against settings they last saw accepted.
      *
+     * <p>What to say about a missing model is worded for the one state that can produce one. A
+     * picker offering anything always has something selected. So a blank arrives only from a picker
+     * with nothing in it, which is a check of this provider that failed. Telling that reader to fill
+     * the model in names a control they cannot type into, and why the list is empty is already said
+     * in the line this message lands under.
+     *
      * @param providerId {@link String} the provider being saved
-     * @param model {@link String} the model field's text, possibly blank
+     * @param model {@link String} the selected model id, blank when the picker has nothing to offer
      * @return {@link String} what to tell the user, or null when nothing is missing
      */
     private @Nullable String whatThisProviderNeeds(final String providerId, final String model) {
@@ -556,8 +721,8 @@ public class SettingsPresenter {
                 .orElseGet(Set::of)
                 .contains(ProviderSetting.MODEL);
         if (modelIsRequired && model.isBlank()) {
-            return "This provider needs a model id before it can read any photos. "
-                    + "Fill in Model, or choose a provider that does not call a model.";
+            return "No model is chosen, and this provider needs one. Use Retry above, or choose a "
+                    + "provider that does not call a model.";
         }
         return null;
     }
@@ -703,7 +868,7 @@ public class SettingsPresenter {
     private List<SettingsView.ProviderChoice> providerChoices() {
         return this.providers.providers().stream()
                 .map(provider -> new SettingsView.ProviderChoice(
-                        provider.id(), provider.label(), fieldsOf(provider)))
+                        provider.id(), provider.label(), fieldsOf(provider), provider.defaultEndpoint()))
                 .toList();
     }
 
@@ -720,8 +885,7 @@ public class SettingsPresenter {
     private static SettingsView.ProviderFields fieldsOf(final VisionProviderDescriptor provider) {
         final Set<ProviderSetting> used = provider.settingsUsed();
         return new SettingsView.ProviderFields(used.contains(ProviderSetting.MODEL),
-                used.contains(ProviderSetting.ENDPOINT),
-                used.contains(ProviderSetting.RETRIES), used.contains(ProviderSetting.WATCH_MODE),
+                used.contains(ProviderSetting.ENDPOINT), used.contains(ProviderSetting.WATCH_MODE),
                 used.contains(ProviderSetting.CREDENTIAL));
     }
 

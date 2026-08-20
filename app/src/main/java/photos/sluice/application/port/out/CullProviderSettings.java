@@ -16,7 +16,10 @@ import org.jspecify.annotations.Nullable;
  * @param endpoint {@link String} a service address other than the provider's own, or null for the
  *     provider's default
  * @param maxRetries {@link Integer} how many times a failed transport call is tried again, or null
- *     for the provider's default
+ *     for the provider's default. Set by hand in the config file; the Settings screen never asks
+ *     for it, since a good count is a transport question a user has no basis to judge, not a
+ *     product one. Kept as a seam an advanced surface could still bind to, rather than reworked
+ *     into one.
  */
 public record CullProviderSettings(@Nullable String model, @Nullable String endpoint,
                                    @Nullable Integer maxRetries) {

@@ -19,10 +19,12 @@ import java.util.Set;
  * @param credential the credential it authenticates with, or null when it takes none
  * @param models {@link ModelCatalog} the models it offers without being asked, or null when it runs
  *     no model of its own
+ * @param defaultEndpoint {@link String} the address an empty endpoint field actually reaches, or
+ *     null when either the provider takes no endpoint or it has none worth naming
  */
 public record VisionProviderDescriptor(String id, String label, Set<ProviderSetting> settingsUsed,
                                        Set<ProviderSetting> required, @Nullable SecretId credential,
-                                       @Nullable ModelCatalog models) {
+                                       @Nullable ModelCatalog models, @Nullable String defaultEndpoint) {
 
     /**
      * Creates the descriptor, holding its own sets so a provider cannot hand one out and then
@@ -58,6 +60,11 @@ public record VisionProviderDescriptor(String id, String label, Set<ProviderSett
         if (settingsUsed.contains(ProviderSetting.MODEL) != offersSome) {
             throw new IllegalArgumentException("Provider '" + id
                     + "' must offer a model catalog exactly when it uses a model setting");
+        }
+        // Otherwise a screen prompts an empty field with an address the provider never takes.
+        if (defaultEndpoint != null && !settingsUsed.contains(ProviderSetting.ENDPOINT)) {
+            throw new IllegalArgumentException("Provider '" + id
+                    + "' names a default endpoint but does not use an endpoint setting");
         }
     }
 }

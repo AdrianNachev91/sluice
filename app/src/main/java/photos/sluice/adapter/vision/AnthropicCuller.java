@@ -112,6 +112,8 @@ import java.util.stream.IntStream;
 class AnthropicCuller implements VisionCuller {
 
     static final String PROVIDER_ID = "anthropic";
+    // What the SDK client reaches when the endpoint field is left blank, per Anthropic's own docs.
+    private static final String DEFAULT_ENDPOINT = "https://api.anthropic.com";
 
     // This provider names its own credential rather than reading it from a central registry. A
     // second API provider then adds its own id instead of editing a shared table.
@@ -267,10 +269,9 @@ class AnthropicCuller implements VisionCuller {
     public VisionProviderDescriptor describe() {
         return new VisionProviderDescriptor(PROVIDER_ID,
                 "Anthropic (calls a vision model from inside Sluice)",
-                Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.RETRIES,
-                        ProviderSetting.CREDENTIAL),
+                Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
                 Set.of(ProviderSetting.MODEL),
-                API_KEY, MODELS);
+                API_KEY, MODELS, DEFAULT_ENDPOINT);
     }
 
     /**

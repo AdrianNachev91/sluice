@@ -18,9 +18,6 @@ public enum ProviderSetting {
     /** A service address other than the provider's own. */
     ENDPOINT,
 
-    /** How many times a failed connection is tried again. */
-    RETRIES,
-
     /** Whether a waiting cull resumes on its own once every montage is ready. */
     WATCH_MODE,
 
