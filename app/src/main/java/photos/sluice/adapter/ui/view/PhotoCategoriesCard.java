@@ -27,7 +27,7 @@ final class PhotoCategoriesCard {
         open.setOnAction(_ -> onOpen.run());
         return SettingsRows.card("PHOTO CATEGORIES",
                 "This is where you specify your criteria for the categories into which the vision "
-                        + "model organises your photos.",
+                        + "model sifts your photos.",
                 open);
     }
 }

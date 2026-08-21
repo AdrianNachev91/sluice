@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * The Photo categories screen: the categories photos are organised into, and what each one is for.
+ * The Photo categories screen: the categories photos are sifted into, and what each one is for.
  *
  * <p>Every value it shows and every sentence on it comes from {@link PhotoCategoriesPresenter}. This
  * class lays those out and hands back what was typed. It never decides what a card means or whether
