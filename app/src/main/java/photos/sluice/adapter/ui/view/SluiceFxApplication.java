@@ -57,6 +57,9 @@ public class SluiceFxApplication extends Application {
     public void start(final Stage stage) {
         stage.setTitle("Sluice");
         stage.getIcons().setAll(BrandMark.icons());
+        // Set here because this class is the only one holding the services that can open one. What
+        // a screen does with an address is then the screen's, and how it reaches a browser is not.
+        ExternalBrowser.openWith(this.getHostServices()::showDocument);
         this.present(stage);
         stage.show();
     }
@@ -75,6 +78,7 @@ public class SluiceFxApplication extends Application {
      */
     @Override
     public void stop() {
+        ExternalBrowser.clear();
         final StartupSequence runningStartup = this.startup;
         try (final ConfigurableApplicationContext _ = this.context) {
             if (runningStartup != null) {

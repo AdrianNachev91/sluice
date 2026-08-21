@@ -76,8 +76,9 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      * <p>A provider's own static list before any key has been checked, and the account's real list
      * after a successful check, both draw as {@link Options}. They differ only in which models are
      * offered and in {@link Options#sourceNote}, which says which list the reader is looking at.
-     * Every other outcome draws as {@link Unavailable}, with nothing to select. The key was
-     * rejected, the account can run nothing Sluice needs, or the service could not be reached.
+     * The check made as the app opens draws as {@link Pending} until it settles. Every other outcome
+     * draws as {@link Unavailable}, with nothing to select. The key was rejected, the account can
+     * run nothing Sluice needs, or the service could not be reached.
      */
     public sealed interface ModelPicker {
 
@@ -99,6 +100,19 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
          *     them
          */
         record Unavailable(String violation) implements ModelPicker {
+        }
+
+        /**
+         * Nothing to show yet, because nothing has answered.
+         *
+         * <p>Separate from {@link Unavailable} because nothing has gone wrong. There is no
+         * violation to word and nothing for a reader to retry, only an answer on its way. A screen
+         * drawing this owes the reader whatever replaces it, since the wait is what it promised.
+         *
+         * @param message {@link String} what is happening, drawn in the picker itself rather than
+         *     beside it. A line under the control is read by nobody in the seconds it is up
+         */
+        record Pending(String message) implements ModelPicker {
         }
     }
 
@@ -139,9 +153,11 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      * @param fields {@link ProviderFields} which settings this provider uses
      * @param defaultEndpoint {@link String} what an empty endpoint field actually reaches, or null
      *     when either this provider takes no endpoint or it has none worth naming
+     * @param setupGuide {@link String} where somebody with no credential yet goes to get one, or
+     *     null when this provider takes none or has nowhere to send them
      */
     public record ProviderChoice(String id, String label, ProviderFields fields,
-                                 @Nullable String defaultEndpoint) {
+                                 @Nullable String defaultEndpoint, @Nullable String setupGuide) {
     }
 
     /**

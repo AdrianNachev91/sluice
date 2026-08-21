@@ -8,6 +8,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DialogPane;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.RadioButton;
@@ -16,6 +17,7 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
+import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import org.junit.jupiter.api.AfterEach;
@@ -68,6 +70,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -86,6 +89,7 @@ class SettingsPaneTest {
     private static final ModelCatalog MODELS =
             new ModelCatalog(List.of(new ModelOption("a-model", "A model")), "a-model");
     private static final SecretId OTHER_KEY = new SecretId("other-api", "OTHER_API_KEY");
+    private static final String SETUP_GUIDE = "Get a key at https://console.example.test.";
     private static final String REFUSED_FOLDER = "D:\\moved-away";
     private static final PseudoClass REFUSED = PseudoClass.getPseudoClass("refused");
 
@@ -211,14 +215,7 @@ class SettingsPaneTest {
         final var releaseCheck = new CountDownLatch(1);
         final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
             checkStarted.countDown();
-            try {
-                if (!releaseCheck.await(10, TimeUnit.SECONDS)) {
-                    throw new AssertionError("test never released the check");
-                }
-            } catch (final InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new AssertionError(e);
-            }
+            awaitRelease(releaseCheck);
             return new ProviderCheck.Rejected();
         });
         final Parent pane = onFxThread(() -> built(presenter));
@@ -261,6 +258,114 @@ class SettingsPaneTest {
         assertThat(onFxThread(() -> selectedModelId(pane))).isEqualTo("a-model");
     }
 
+    // The check answering is the one thing that changes this row without a user touching anything,
+    // so a screen that only reads the picker when it is built would say it was checking for good.
+    @Test
+    void aPickerWaitingOnTheStartUpCheckRedrawsItselfOnceTheAnswerLands() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+            checking.countDown();
+            awaitRelease(answering);
+            return new ProviderCheck.Accepted(MODELS);
+        });
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+        final Parent pane = onFxThread(() -> built(presenter));
+
+        answering.countDown();
+        startUp.join();
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> !onFxThread(() -> modelBox(pane).isDisabled()));
+
+        assertThat(onFxThread(() -> selectedModelId(pane))).isEqualTo("a-model");
+    }
+
+    // A provider that has stopped answering is the one this button gets pressed against, and saying
+    // so takes the full interactive timeout. A press that changes nothing on screen reads as one the
+    // app did not receive.
+    @Test
+    void pressingRetryAnswersTheReaderBeforeTheCheckDoes() throws Exception {
+        final var calls = new AtomicInteger();
+        final var pressed = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+            if (calls.getAndIncrement() > 0) {
+                pressed.countDown();
+                awaitRelease(release);
+            }
+            return new ProviderCheck.Rejected();
+        });
+        presenter.refreshModels("anthropic");
+        final Parent pane = onFxThread(() -> built(presenter));
+        final var retry = (Button) pane.lookup("#settings-model-retry");
+
+        runOnFxThread(retry::fire);
+        assertThat(pressed.await(10, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(onFxThread(retry::isDisabled)).isTrue();
+        assertThat(onFxThread(retry::getText)).isEqualTo("Connecting...");
+        release.countDown();
+    }
+
+    // Retry disables itself on the press, so a check that ends without redrawing the row leaves that
+    // button dead for the life of the screen. A provider is asked to answer rather than throw, and
+    // one that throws anyway is exactly the case the reader needs a way back from.
+    @Test
+    void aRetryWhoseCheckThrowsStillLeavesAWayBack() throws Exception {
+        final var calls = new AtomicInteger();
+        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+            if (calls.getAndIncrement() > 0) {
+                throw new IllegalStateException("the provider fell over");
+            }
+            return new ProviderCheck.Rejected();
+        });
+        presenter.refreshModels("anthropic");
+        final Parent pane = onFxThread(() -> built(presenter));
+
+        runOnFxThread(((Button) pane.lookup("#settings-model-retry"))::fire);
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS,
+                () -> onFxThread(() -> pane.lookup("#settings-model-retry") != null
+                        && !((Button) pane.lookup("#settings-model-retry")).isDisabled()));
+
+        assertThat(onFxThread(() -> ((Button) pane.lookup("#settings-model-retry")).getText()))
+                .isEqualTo("Retry");
+    }
+
+    // Anthropic names where to get a key in this fixture and other-api does not. That is what proves
+    // the line is read off the chosen provider rather than shown for every one of them.
+    @Test
+    void theCredentialCardSaysWhereThisProvidersKeyComesFrom() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+
+        assertThat(sentenceOf(pane.lookup("#settings-api-key-setup-guide"))).isEqualTo(SETUP_GUIDE);
+
+        runOnFxThread(() -> select(pane, "other-api"));
+
+        assertThat(pane.lookup("#settings-api-key-setup-guide")).isNull();
+    }
+
+    @Test
+    void aPickerWaitingOnTheStartUpCheckOffersNothingAndBlamesNothing() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+            checking.countDown();
+            awaitRelease(answering);
+            return new ProviderCheck.Accepted(MODELS);
+        });
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+
+        final Parent pane = onFxThread(() -> built(presenter));
+
+        assertThat(modelBox(pane).isDisabled()).isTrue();
+        assertThat(modelBox(pane).getPromptText()).isEqualTo("Loading...");
+        assertThat(pane.lookup("#settings-model-retry")).isNull();
+        assertThat(textsOfClass(pane, "settings-violation")).isEmpty();
+        answering.countDown();
+        startUp.join();
+    }
+
     // A theme button carries its option's id as user data, and a save reads it back off whichever
     // is selected. Nothing else in the suite reaches that pair of casts, and neither one fails
     // loudly: a wrong id would save a theme the user did not pick.
@@ -289,6 +394,20 @@ class SettingsPaneTest {
         runOnFxThread(() -> themeButton(pane, "LIGHT").setSelected(true));
 
         assertThat(saved).singleElement().extracting(Settings::theme).isEqualTo(ThemeChoice.LIGHT);
+    }
+
+    @Test
+    void theInfoGlyphsMarkSitsCentredInItsRing() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+
+        assertThat(onFxThread(() -> markOffsetWithinRing(pane, "info"))).isZero();
+    }
+
+    @Test
+    void theCautionGlyphsMarkSitsCentredInItsRing() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenterOn("a-provider-this-build-lacks")));
+
+        assertThat(onFxThread(() -> markOffsetWithinRing(pane, "caution"))).isZero();
     }
 
     // Nothing was refused here, so the empty-violations assertion is half of what the name claims.
@@ -835,9 +954,9 @@ class SettingsPaneTest {
         final List<VisionProviderDescriptor> all = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic",
                         Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, richModels, null),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, richModels, null, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
         final VisionProviderCatalog catalog = new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {
@@ -942,6 +1061,37 @@ class SettingsPaneTest {
         };
     }
 
+    // The words as a reader sees them, whether they were drawn as plain text or as a link. Reading
+    // only the Text nodes would silently drop every address out of the sentence.
+    private static String sentenceOf(final Node flow) {
+        return ((Parent) flow).getChildrenUnmodifiable().stream()
+                .map(part -> part instanceof final Hyperlink link ? link.getText() : ((Text) part).getText())
+                .collect(Collectors.joining());
+    }
+
+    // How far the mark's centre sits from the ring's, in the pane both are laid out in. Measured
+    // off the built scene rather than off the numbers, so a change to either shape is caught.
+    private static double markOffsetWithinRing(final Parent pane, final String glyph) {
+        final Node ring = pane.lookup("." + glyph + "-ring");
+        final List<Node> mark = List.copyOf(pane.lookupAll("." + glyph + "-mark"));
+        assertThat(ring).isNotNull();
+        assertThat(mark).hasSize(2);
+        final double top = mark.stream().mapToDouble(part -> part.getBoundsInParent().getMinY()).min().orElseThrow();
+        final double bottom = mark.stream().mapToDouble(part -> part.getBoundsInParent().getMaxY()).max().orElseThrow();
+        return (top + bottom) / 2 - ring.getBoundsInParent().getCenterY();
+    }
+
+    private static void awaitRelease(final CountDownLatch answering) {
+        try {
+            if (!answering.await(10, TimeUnit.SECONDS)) {
+                throw new AssertionError("the test never released this check");
+            }
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
+    }
+
     // presenterOn's own presenter over threeProviders(), whose check() and check(id, candidate)
     // both throw. A test that presses Test or Retry needs a real answer instead, so it builds its
     // presenter over this one rather than presenterOn.
@@ -984,11 +1134,12 @@ class SettingsPaneTest {
                 ProviderSetting.CREDENTIAL);
         final List<VisionProviderDescriptor> all = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic", apiSettings,
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, "https://api.anthropic.com"),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, "https://api.anthropic.com",
+                        SETUP_GUIDE),
                 new VisionProviderDescriptor("other-api", "Another model service", apiSettings,
-                        Set.of(ProviderSetting.MODEL), OTHER_KEY, MODELS, null),
+                        Set.of(ProviderSetting.MODEL), OTHER_KEY, MODELS, null, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
         return new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {

@@ -11,6 +11,12 @@ import java.util.Set;
  *
  * <p>A culler answers with one of these from {@link VisionCuller#describe()}.
  *
+ * <p>A surface may draw a web address inside {@code setupGuide} as a link somebody can press. So
+ * that sentence is a place this app takes a reader to, not only words it shows them. A provider
+ * added to this repository is reviewed on that footing. {@code SmokeTest} records every address a
+ * provider wired into the app offers, so one cannot be added or moved unnoticed. A module loaded
+ * through the SPI is outside that record, and outside this repository's review.
+ *
  * @param id {@link String} the provider id a configured setting names to select this provider
  * @param label {@link String} what a surface calls it, in the user's own terms
  * @param settingsUsed a {@link Set} of {@link ProviderSetting} every setting that applies to it
@@ -21,16 +27,19 @@ import java.util.Set;
  *     no model of its own
  * @param defaultEndpoint {@link String} the address an empty endpoint field actually reaches, or
  *     null when either the provider takes no endpoint or it has none worth naming
+ * @param setupGuide {@link String} one short sentence saying where somebody with no credential yet
+ *     goes to get one. Null when this provider takes none, or has nowhere to send them
  */
 public record VisionProviderDescriptor(String id, String label, Set<ProviderSetting> settingsUsed,
                                        Set<ProviderSetting> required, @Nullable SecretId credential,
-                                       @Nullable ModelCatalog models, @Nullable String defaultEndpoint) {
+                                       @Nullable ModelCatalog models, @Nullable String defaultEndpoint,
+                                       @Nullable String setupGuide) {
 
     /**
      * Creates the descriptor, holding its own sets so a provider cannot hand one out and then
      * change what it said.
      *
-     * <p>The three refusals here are what a provider would otherwise get wrong quietly. Each
+     * <p>The refusals here are what a provider would otherwise get wrong quietly. Each
      * produces a working screen that does the wrong thing, which is why none of them is left to a
      * convention somebody reads.
      */
@@ -65,6 +74,12 @@ public record VisionProviderDescriptor(String id, String label, Set<ProviderSett
         if (defaultEndpoint != null && !settingsUsed.contains(ProviderSetting.ENDPOINT)) {
             throw new IllegalArgumentException("Provider '" + id
                     + "' names a default endpoint but does not use an endpoint setting");
+        }
+        // Otherwise a screen tells somebody where to get a credential this provider would never ask
+        // them for.
+        if (setupGuide != null && !settingsUsed.contains(ProviderSetting.CREDENTIAL)) {
+            throw new IllegalArgumentException("Provider '" + id
+                    + "' names a setup guide but does not use a credential");
         }
     }
 }

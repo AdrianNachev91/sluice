@@ -1,5 +1,6 @@
 package photos.sluice.adapter.ui.view;
 
+import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -45,8 +46,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -135,6 +138,25 @@ class MainWindowTest {
         assertThat(((ToggleButton) root.lookup("#nav-settings")).isSelected()).isTrue();
     }
 
+    @Test
+    void openingTheShellAsksTheConfiguredProviderWhatThisAccountCanRun() throws Exception {
+        final var checked = new ArrayBlockingQueue<String>(1);
+
+        onFxThread(() -> built(shellPresenter(false), settingsPresenter(checked::offer)));
+
+        assertThat(checked.poll(10, TimeUnit.SECONDS)).isEqualTo("anthropic");
+    }
+
+    @Test
+    void theStartUpCheckRunsOffTheThreadThatDrawsTheWindow() throws Exception {
+        final var ranOnTheFxThread = new ArrayBlockingQueue<Boolean>(1);
+
+        onFxThread(() -> built(shellPresenter(false),
+                settingsPresenter(_ -> ranOnTheFxThread.offer(Platform.isFxApplicationThread()))));
+
+        assertThat(ranOnTheFxThread.poll(10, TimeUnit.SECONDS)).isFalse();
+    }
+
     // A freshly drawn screen needs its own applyCss/layout pass before a lookup can reach inside it.
     // SettingsPaneTest's own built() runs one for that reason too. MainWindow.show swaps the content
     // in without running one, so a screen switched to here needs it done by hand.
@@ -156,7 +178,11 @@ class MainWindowTest {
     }
 
     private static BorderPane built(final ShellPresenter presenter) {
-        final Scene scene = MainWindow.scene(presenter, settingsPresenter());
+        return built(presenter, settingsPresenter());
+    }
+
+    private static BorderPane built(final ShellPresenter presenter, final SettingsPresenter settingsPresenter) {
+        final Scene scene = MainWindow.scene(presenter, settingsPresenter);
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();
@@ -198,6 +224,10 @@ class MainWindowTest {
     }
 
     private static SettingsPresenter settingsPresenter() {
+        return settingsPresenter(_ -> {});
+    }
+
+    private static SettingsPresenter settingsPresenter(final Consumer<String> onCheck) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
@@ -254,7 +284,7 @@ class MainWindowTest {
         final var apiSettings = Set.of(ProviderSetting.MODEL, ProviderSetting.CREDENTIAL);
         final List<VisionProviderDescriptor> providers = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic", apiSettings,
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null));
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null, null));
         final VisionProviderCatalog catalog = new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {
@@ -268,12 +298,13 @@ class MainWindowTest {
 
             @Override
             public ProviderCheck check(final String id) {
-                throw new AssertionError("no test here presses a credential check");
+                onCheck.accept(id);
+                return new ProviderCheck.Accepted(MODELS);
             }
 
             @Override
             public ProviderCheck check(final String id, final CullProviderSettings candidate) {
-                throw new AssertionError("no test here presses a credential check");
+                throw new AssertionError("no test here tries an endpoint the screen has not saved");
             }
         };
         return new SettingsPresenter(useCase, libraryRootUseCase, secretStore, noViolations(), catalog);

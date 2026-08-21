@@ -15,6 +15,9 @@ import photos.sluice.application.port.out.VisionProviderDescriptor;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -51,6 +54,19 @@ class SmokeTest {
         assertThat(this.context.getBeanNamesForType(FolderRootsChangeListener.class)).hasSize(1);
         assertThat(this.context.getBeansOfType(FolderRootsChangeListener.class).values())
                 .hasOnlyElementsOfType(FolderRootsHousekeeping.class);
+    }
+
+    @Test
+    void everyAddressAProviderWouldSendAReaderToIsRecordedHere() {
+        assertThat(this.setupGuides()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "anthropic", "Create an API key in the Anthropic Console at https://console.anthropic.com."));
+    }
+
+    private Map<String, String> setupGuides() {
+        return this.context.getBean(VisionProviderCatalog.class).providers().stream()
+                .filter(provider -> provider.setupGuide() != null)
+                .collect(Collectors.toMap(VisionProviderDescriptor::id,
+                        provider -> Objects.requireNonNull(provider.setupGuide())));
     }
 
     // The catalog's own tests hand it cullers directly, so wiring that collected nothing would pass

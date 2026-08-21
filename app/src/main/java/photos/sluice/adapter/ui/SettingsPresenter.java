@@ -47,6 +47,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -54,8 +55,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Decides what the Settings screen shows and carries out what a user does on it.
@@ -78,6 +84,13 @@ public class SettingsPresenter {
     private static final SettingsView.NumberRange TILES_PER_ROW_RANGE = new SettingsView.NumberRange(1, 12, 1);
 
     private static final String NO_CREDENTIAL_TO_KEEP = "This provider takes no key.";
+
+    // How long the start-up check is waited on. Nobody pressed anything to start it, but somebody
+    // can be watching it: a Settings screen opened at launch shows the picker as loading until this
+    // runs out. So this is the ceiling on how long that screen is unusable, not a guess at the
+    // service. Five seconds is several times what listing models takes on a working connection, and
+    // a connection slower than that cannot carry a cull either.
+    private static final Duration BOOT_CHECK_BUDGET = Duration.ofSeconds(5);
 
     // A store's own refusal is written for a log. It names the entry Sluice asked for and whatever
     // code the platform handed back, and a user typed neither. It is still the only thing telling
@@ -113,6 +126,14 @@ public class SettingsPresenter {
     // Written by refreshModels, off the FX thread; read by view(), which may run concurrently with a
     // refresh in flight. A provider with no entry here has never been checked this session.
     private final Map<String, ProviderCheck> lastCheck = new ConcurrentHashMap<>();
+
+    // Providers whose start-up check has been started and not yet given up on. A picker for one of
+    // these has nothing honest to draw: the answer deciding what it offers is still on its way.
+    // Written off the FX thread and read by view(), the same as lastCheck above.
+    //
+    // The value completes when the wait ends, however it ends. A screen already showing a picker
+    // when the check started has no other way to learn that it is now out of date.
+    private final Map<String, CountDownLatch> checksInFlight = new ConcurrentHashMap<>();
 
     /**
      * Creates the presenter over the use cases the screen reads and writes through.
@@ -460,9 +481,8 @@ public class SettingsPresenter {
      * static floor.
      *
      * <p>Blocking, on the order of a network call, so a caller runs this off the FX thread. Called
-     * after a successful save. The plan locks a second call at app start too, for whichever
-     * provider is configured; that boot wiring is not built yet, so an unchecked provider stays on
-     * its static floor until Settings is saved or Retry is pressed.
+     * after a successful save, and by Retry. {@link #refreshModelsAtStartup} is the sibling that
+     * runs once as the app opens.
      *
      * <p>Does nothing for a provider that offers no model catalog, since there is no picker for a
      * check to feed.
@@ -470,9 +490,102 @@ public class SettingsPresenter {
      * @param providerId {@link String} the provider to check
      */
     public void refreshModels(final String providerId) {
-        this.providers.byId(providerId)
-                .filter(provider -> provider.models() != null)
-                .ifPresent(_ -> this.lastCheck.put(providerId, this.providers.check(providerId)));
+        if (this.offersAModelCatalog(providerId)) {
+            this.lastCheck.put(providerId, this.providers.check(providerId));
+        }
+    }
+
+    /**
+     * Checks the configured provider once, as the app opens, and keeps the answer the same way
+     * {@link #refreshModels} does.
+     *
+     * <p>Without it a provider that already holds a key is described by the provider's own guess at
+     * what it offers, which is wrong rather than merely stale. Until the answer lands, that
+     * provider's picker draws {@link SettingsView.ModelPicker.Pending} instead of a list. A list
+     * drawn before the answer arrives would be a guess wearing the answer's clothes.
+     *
+     * <p>Blocking, so a caller runs this off the FX thread. Bounded too: it stops waiting after
+     * {@code BOOT_CHECK_BUDGET}, and a check that outlasts it is recorded as one that could not be
+     * reached. Falling back to the provider's own static list would put a list nobody confirmed
+     * under a line saying nothing had been asked yet. That is the one thing this screen must not do.
+     * An answer arriving after the budget is dropped rather than kept. It can then never land on top
+     * of a newer one a save or Retry has since stored.
+     *
+     * <p>Whichever provider Settings would show is the one checked. So a configured id naming no
+     * provider this install has is answered for by the substitute that screen selects instead.
+     *
+     * <p>Does nothing for a provider that offers no model catalog, since there is no picker for a
+     * check to feed.
+     */
+    public void refreshModelsAtStartup() {
+        this.refreshModelsAtStartup(BOOT_CHECK_BUDGET);
+    }
+
+    /**
+     * The same start-up check, over a stated budget.
+     *
+     * <p>Package-private for the test of what happens once that budget runs out. On the real one
+     * that test would sit there for five seconds.
+     *
+     * @param budget {@link Duration} how long to wait for the answer before giving up on it
+     */
+    void refreshModelsAtStartup(final Duration budget) {
+        final String providerId = this.resolvedProviderId(this.settingsUseCase.settings().provider());
+        if (!this.offersAModelCatalog(providerId)) {
+            return;
+        }
+        final var settled = new CountDownLatch(1);
+        this.checksInFlight.put(providerId, settled);
+        // Everything after the put is inside the try, so no failure can leave a provider marked as
+        // being checked. One that stayed marked would leave its picker waiting for good.
+        try {
+            final var answer = CompletableFuture.supplyAsync(() -> this.providers.check(providerId),
+                    work -> Thread.ofVirtual().start(work));
+            // Never over an answer already there. A save or a Retry made while this was in flight
+            // asked the same provider more recently. Overwriting would put back what that newer
+            // answer replaced.
+            this.lastCheck.putIfAbsent(providerId, answer.get(budget.toMillis(), TimeUnit.MILLISECONDS));
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (final TimeoutException e) {
+            this.lastCheck.putIfAbsent(providerId, new ProviderCheck.Unreachable("it timed out"));
+        } catch (final ExecutionException e) {
+            // A provider that throws rather than answering has broken what the port asks of it. It
+            // is still this screen's job to say so, since the reader is the one left without a list.
+            this.lastCheck.putIfAbsent(providerId, new ProviderCheck.Unreachable(String.valueOf(e.getCause())));
+        } finally {
+            // Keyed on this run's own value, so a second start-up check cannot have its entry
+            // removed by the first one finishing. Cleared before the wait is released, so nothing
+            // woken by it can read this provider as still being checked.
+            this.checksInFlight.remove(providerId, settled);
+            settled.countDown();
+        }
+    }
+
+    /**
+     * Waits for one provider's start-up check to settle, and returns at once when none is out.
+     *
+     * <p>What a screen showing {@link SettingsView.ModelPicker.Pending} calls to learn when it has
+     * something better to draw. Without it that screen would keep saying it is checking long after
+     * the answer arrived, since nothing else redraws a picker already on display.
+     *
+     * <p>Settling is the wait ending, not the provider answering. A check that outlasts its budget
+     * settles when the budget does, which is the moment the picker stops being right.
+     *
+     * <p>Blocking, so a caller runs this off the FX thread.
+     *
+     * @param providerId {@link String} the provider whose check to wait for
+     */
+    public void awaitStartUpCheck(final String providerId) {
+        final CountDownLatch settled = this.checksInFlight.get(providerId);
+        if (settled == null) {
+            return;
+        }
+        try {
+            settled.await();
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -595,6 +708,8 @@ public class SettingsPresenter {
      *
      * <p>A provider with no model catalog draws nothing, so an empty violation is never read.
      *
+     * <p>A provider whose start-up check has not answered yet draws nothing at all.
+     *
      * <p>A provider never checked this session, or last answered {@link ProviderCheck.NoCredential},
      * is shown its own static floor. A fresh install has no key to check yet, and a failed check
      * must never fall back to a list wearing the clothes of a working one. Every other outcome
@@ -623,6 +738,11 @@ public class SettingsPresenter {
         }
         final ModelCatalog staticFloor = descriptor.get().models();
         final ProviderCheck last = this.lastCheck.get(providerId);
+        // Only while nothing has answered. A save made during the start-up check has an answer of
+        // its own, and drawing this over it would replace something known with a wait.
+        if (last == null && this.checksInFlight.containsKey(providerId)) {
+            return new ModelPickerResult(new SettingsView.ModelPicker.Pending("Loading..."), null);
+        }
         if (last == null || last instanceof ProviderCheck.NoCredential) {
             return this.picked(staticFloor, savedModel,
                     "Assumed list before you connect to your provider for the first time.");
@@ -705,11 +825,11 @@ public class SettingsPresenter {
      * <p>Caught here rather than at cull time, which is where the provider itself would raise it.
      * That is a run the user has already started, against settings they last saw accepted.
      *
-     * <p>What to say about a missing model is worded for the one state that can produce one. A
-     * picker offering anything always has something selected. So a blank arrives only from a picker
-     * with nothing in it, which is a check of this provider that failed. Telling that reader to fill
-     * the model in names a control they cannot type into, and why the list is empty is already said
-     * in the line this message lands under.
+     * <p>Two states produce a blank model, and each gets its own words. A picker offering anything
+     * always has something selected, so a blank means the picker had nothing in it. Either a check
+     * of this provider failed, which leaves a Retry beside the reason, or one is still running,
+     * which leaves neither. Naming a Retry that is not on screen would send that second reader
+     * looking for a control this app is not drawing.
      *
      * @param providerId {@link String} the provider being saved
      * @param model {@link String} the selected model id, blank when the picker has nothing to offer
@@ -720,11 +840,15 @@ public class SettingsPresenter {
                 .map(VisionProviderDescriptor::required)
                 .orElseGet(Set::of)
                 .contains(ProviderSetting.MODEL);
-        if (modelIsRequired && model.isBlank()) {
-            return "No model is chosen, and this provider needs one. Use Retry above, or choose a "
-                    + "provider that does not call a model.";
+        if (!modelIsRequired || !model.isBlank()) {
+            return null;
         }
-        return null;
+        if (this.checksInFlight.containsKey(providerId)) {
+            return "Sluice is still asking this provider what your account can run. Try saving again "
+                    + "in a moment.";
+        }
+        return "No model is chosen, and this provider needs one. Use Retry above, or choose a "
+                + "provider that does not call a model.";
     }
 
     /**
@@ -867,8 +991,8 @@ public class SettingsPresenter {
      */
     private List<SettingsView.ProviderChoice> providerChoices() {
         return this.providers.providers().stream()
-                .map(provider -> new SettingsView.ProviderChoice(
-                        provider.id(), provider.label(), fieldsOf(provider), provider.defaultEndpoint()))
+                .map(provider -> new SettingsView.ProviderChoice(provider.id(), provider.label(),
+                        fieldsOf(provider), provider.defaultEndpoint(), provider.setupGuide()))
                 .toList();
     }
 
@@ -986,6 +1110,16 @@ public class SettingsPresenter {
 
     private static Path home() {
         return Path.of(System.getProperty("user.home"));
+    }
+
+    /**
+     * Whether a provider has a model catalog, and so a picker for a check to feed.
+     *
+     * @param providerId {@link String} the provider to ask about
+     * @return boolean true when it offers one
+     */
+    private boolean offersAModelCatalog(final String providerId) {
+        return this.providers.byId(providerId).filter(provider -> provider.models() != null).isPresent();
     }
 
     /**

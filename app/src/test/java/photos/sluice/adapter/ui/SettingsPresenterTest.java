@@ -52,6 +52,7 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.Overlap;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,7 +60,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +73,8 @@ class SettingsPresenterTest {
 
     private static final ModelCatalog MODELS =
             new ModelCatalog(List.of(new ModelOption("a-model", "A model")), "a-model");
+
+    private static final String SETUP_GUIDE = "Get a key at https://console.example.test.";
 
     // A NUL character, which every filesystem in the matrix refuses. One only Windows refuses would
     // leave the tests using this proving nothing on the other two runners.
@@ -326,6 +331,226 @@ class SettingsPresenterTest {
         assertThat(view.modelUnrecognised()).isNull();
     }
 
+    // The agent provider takes no key, and so has nowhere to send anybody.
+    @Test
+    void eachProviderChoiceCarriesWhereItsOwnCredentialComesFrom() {
+        final var presenter = presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()));
+
+        final List<SettingsView.ProviderChoice> choices = presenter.view().providers();
+
+        assertThat(choices).filteredOn(choice -> choice.id().equals("anthropic"))
+                .singleElement()
+                .extracting(SettingsView.ProviderChoice::setupGuide)
+                .isEqualTo(SETUP_GUIDE);
+        assertThat(choices).filteredOn(choice -> choice.id().equals("external-agent"))
+                .singleElement()
+                .extracting(SettingsView.ProviderChoice::setupGuide)
+                .isNull();
+    }
+
+    @Test
+    void theModelPickerHasNothingToShowWhileTheStartUpCheckIsStillRunning() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
+
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+        final SettingsView.ModelPicker whileChecking = presenter.view().model();
+        answering.countDown();
+        startUp.join();
+
+        assertThat(whileChecking).isInstanceOf(SettingsView.ModelPicker.Pending.class);
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.sourceNote()).contains("your account can run"));
+    }
+
+    @Test
+    void aStartUpCheckLeavesEveryOtherProvidersPickerAlone() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final SettingsPresenter presenter = new SettingsPresenter(
+                new FixedSettingsUseCase(settings(null, null, null)), failingLibraryRootUseCase(),
+                new FixedSecretStore(new InKeyring()), noViolations(),
+                checkingCatalog(twoApiProvidersAndAnAgent(),
+                        _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS))));
+
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+        final SettingsView.ModelPicker unchecked = presenter.modelPickerFor("other-api").picker();
+        answering.countDown();
+        startUp.join();
+
+        assertThat(unchecked).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.sourceNote()).contains("before you connect"));
+    }
+
+    @Test
+    void awaitingAStartUpCheckReturnsOnceItHasSettled() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
+
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+        final var waiter = Thread.ofVirtual().start(() -> presenter.awaitStartUpCheck("anthropic"));
+        assertThat(waiter.join(Duration.ofMillis(200))).isFalse();
+        answering.countDown();
+        waiter.join();
+        startUp.join();
+
+        assertThat(presenter.view().model()).isInstanceOf(SettingsView.ModelPicker.Options.class);
+    }
+
+    @Test
+    void awaitingAStartUpCheckThatIsNotRunningReturnsAtOnce() throws Exception {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.Accepted(MODELS));
+
+        final var waiter = Thread.ofVirtual().start(() -> presenter.awaitStartUpCheck("anthropic"));
+
+        assertThat(waiter.join(Duration.ofSeconds(10))).isTrue();
+    }
+
+    // The provider's own static list would be the comfortable answer here and the wrong one. It
+    // sits under a note saying nothing has been asked yet, and by this point something has been
+    // asked and did not come back.
+    @Test
+    void aStartUpCheckThatOutlastsItsBudgetSaysSoRatherThanFallingBackToAGuess() {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
+
+        presenter.refreshModelsAtStartup(Duration.ofMillis(50));
+
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
+                unavailable -> assertThat(unavailable.violation()).contains("could not reach").contains("timed out"));
+        answering.countDown();
+    }
+
+    // Answering that there is nothing to check is not a failed check. Drawing it as one would open
+    // every fresh install on an error the user has not caused and cannot clear.
+    @Test
+    void aStartUpCheckOnAnInstallWithNoKeyOpensOnTheStaticListRatherThanAFailure() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.NoCredential());
+
+        presenter.refreshModelsAtStartup();
+
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.sourceNote()).contains("before you connect"));
+    }
+
+    // A provider is asked to answer rather than throw. One that throws anyway leaves the same reader
+    // with the same empty picker, so it is reported the same way.
+    @Test
+    void aStartUpCheckThatThrowsSaysSoRatherThanFallingBackToAGuess() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null), _ -> {
+            throw new IllegalStateException("the provider fell over");
+        });
+
+        presenter.refreshModelsAtStartup();
+
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
+                unavailable -> assertThat(unavailable.violation()).contains("the provider fell over"));
+    }
+
+    @Test
+    void anAnswerStoredWhileTheStartUpCheckIsStillOutIsWhatThePickerDraws() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final ModelCatalog retried = new ModelCatalog(List.of(new ModelOption("retried-model", "Retried model")),
+                "retried-model");
+        final var calls = new AtomicInteger();
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> calls.getAndIncrement() == 0
+                        ? answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS))
+                        : new ProviderCheck.Accepted(retried));
+
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+        presenter.refreshModels("anthropic");
+        final SettingsView.ModelPicker stillChecking = presenter.view().model();
+        answering.countDown();
+        startUp.join();
+
+        assertThat(stillChecking).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.choices()).extracting(SettingsView.ModelChoice::id)
+                        .containsExactly("retried-model"));
+    }
+
+    // The Retry answer here offers a model the start-up answer does not, so the two cannot be
+    // confused for each other.
+    @Test
+    void aStartUpCheckLandingLateDoesNotReplaceAnAnswerSomethingElseHasSinceStored() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final ModelCatalog retried = new ModelCatalog(List.of(new ModelOption("retried-model", "Retried model")),
+                "retried-model");
+        final var calls = new AtomicInteger();
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> calls.getAndIncrement() == 0
+                        ? answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS))
+                        : new ProviderCheck.Accepted(retried));
+
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+        presenter.refreshModels("anthropic");
+        answering.countDown();
+        startUp.join();
+
+        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
+                options -> assertThat(options.choices()).extracting(SettingsView.ModelChoice::id)
+                        .containsExactly("retried-model"));
+    }
+
+    // Counted rather than guarded by a throwing stub. The start-up check runs its provider call
+    // through a future, and that future wraps an AssertionError into the same failure the presenter
+    // deliberately swallows. A stub that threw here would prove nothing.
+    @Test
+    void noStartUpCheckIsMadeForAProviderThatOffersNoModels() {
+        final var settings = new Settings(new PathSettings(null, null, null), "external-agent", Map.of(),
+                List.of(), new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5),
+                ThemeChoice.SYSTEM);
+        final var checks = new AtomicInteger();
+        final SettingsPresenter presenter = presenterChecking(settings, _ -> {
+            checks.incrementAndGet();
+            return new ProviderCheck.Rejected();
+        });
+
+        presenter.refreshModelsAtStartup();
+
+        assertThat(checks).hasValue(0);
+        assertThat(presenter.view().model()).isNull();
+    }
+
+    // Every provider in this fixture offers models, so a check made against the configured id
+    // instead would find no catalog and ask nothing. That is what tells the two apart.
+    @Test
+    void theStartUpCheckFollowsTheProviderTheDropdownFellBackTo() {
+        final var settings = new Settings(new PathSettings(null, null, null), "gone-provider", Map.of(),
+                List.of(), new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5),
+                ThemeChoice.SYSTEM);
+        final List<String> checked = new ArrayList<>();
+        final List<VisionProviderDescriptor> apiProvidersOnly = twoApiProvidersAndAnAgent().stream()
+                .filter(provider -> provider.models() != null)
+                .toList();
+        final SettingsPresenter presenter = new SettingsPresenter(
+                new FixedSettingsUseCase(settings), failingLibraryRootUseCase(),
+                new FixedSecretStore(new InKeyring()), noViolations(),
+                checkingCatalog(apiProvidersOnly, id -> {
+                    checked.add(id);
+                    return new ProviderCheck.Accepted(MODELS);
+                }));
+
+        presenter.refreshModelsAtStartup();
+
+        assertThat(checked).containsExactly(presenter.view().provider());
+    }
+
     @Test
     void aRejectedCheckLeavesNothingToSelect() {
         final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
@@ -563,6 +788,37 @@ class SettingsPresenterTest {
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Refused.class);
         assertThat(settingsUseCase.saved).isNull();
+    }
+
+    @Test
+    void aRefusalWhileTheStartUpCheckIsOutNamesNoRetry() throws Exception {
+        final var checking = new CountDownLatch(1);
+        final var answering = new CountDownLatch(1);
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
+
+        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
+        final SettingsPresenter.SaveOutcome outcome = presenter.save("", "", "", "anthropic", "", "",
+                false, 224, 5, "SYSTEM");
+        answering.countDown();
+        startUp.join();
+
+        assertThat(outcome).isInstanceOfSatisfying(SettingsPresenter.SaveOutcome.Refused.class,
+                refused -> assertThat(refused.model()).doesNotContain("Retry").contains("still asking"));
+    }
+
+    @Test
+    void aRefusalAfterAFailedCheckSendsTheReaderToRetry() {
+        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+                _ -> new ProviderCheck.Rejected());
+        presenter.refreshModels("anthropic");
+
+        final SettingsPresenter.SaveOutcome outcome = presenter.save("", "", "", "anthropic", "", "",
+                false, 224, 5, "SYSTEM");
+
+        assertThat(outcome).isInstanceOfSatisfying(SettingsPresenter.SaveOutcome.Refused.class,
+                refused -> assertThat(refused.model()).contains("Retry"));
     }
 
     // The same blank field, and the other provider saves on it. That is the whole point of asking
@@ -869,9 +1125,9 @@ class SettingsPresenterTest {
         return catalogOf(
                 new VisionProviderDescriptor("anthropic", "Anthropic",
                         Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null, SETUP_GUIDE),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
     }
 
     // A presenter over the same anthropic/external-agent pair twoProviders() offers, but with a
@@ -886,12 +1142,16 @@ class SettingsPresenterTest {
     }
 
     private static VisionProviderCatalog checkingCatalog(final Function<String, ProviderCheck> checkById) {
-        final List<VisionProviderDescriptor> all = List.of(
+        return checkingCatalog(List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic",
                         Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
-                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null),
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null));
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null)), checkById);
+    }
+
+    private static VisionProviderCatalog checkingCatalog(final List<VisionProviderDescriptor> all,
+                                                         final Function<String, ProviderCheck> checkById) {
         return new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {
@@ -913,6 +1173,36 @@ class SettingsPresenterTest {
                 return checkById.apply(id);
             }
         };
+    }
+
+    // A second provider that also offers models, so a picker for one nobody asked about can be told
+    // apart from the one being checked.
+    private static List<VisionProviderDescriptor> twoApiProvidersAndAnAgent() {
+        final var apiSettings = Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT,
+                ProviderSetting.CREDENTIAL);
+        return List.of(
+                new VisionProviderDescriptor("anthropic", "Anthropic", apiSettings,
+                        Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null, null),
+                new VisionProviderDescriptor("other-api", "Another model service", apiSettings,
+                        Set.of(ProviderSetting.MODEL), new SecretId("other-api", "OTHER_API_KEY"), MODELS, null, null),
+                new VisionProviderDescriptor("external-agent", "External agent",
+                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
+    }
+
+    // A check that says it has started, then hangs until the test releases it. That is what makes
+    // the in-flight state something to assert against rather than a window to race.
+    private static ProviderCheck answerOnceReleased(final CountDownLatch checking, final CountDownLatch answering,
+                                                    final ProviderCheck answer) {
+        checking.countDown();
+        try {
+            if (!answering.await(10, TimeUnit.SECONDS)) {
+                throw new AssertionError("the test never released this check");
+            }
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
+        return answer;
     }
 
     // checkingCatalog ignores the candidate its own check(id, candidate) is given. This is the one

@@ -114,6 +114,10 @@ class AnthropicCuller implements VisionCuller {
     static final String PROVIDER_ID = "anthropic";
     // What the SDK client reaches when the endpoint field is left blank, per Anthropic's own docs.
     private static final String DEFAULT_ENDPOINT = "https://api.anthropic.com";
+    // The console's front door rather than the keys page itself. A deep link into somebody else's
+    // web app is the part that moves, and a screen draws this one as a link somebody presses.
+    private static final String SETUP_GUIDE =
+            "Create an API key in the Anthropic Console at https://console.anthropic.com.";
 
     // This provider names its own credential rather than reading it from a central registry. A
     // second API provider then adds its own id instead of editing a shared table.
@@ -130,7 +134,10 @@ class AnthropicCuller implements VisionCuller {
     // backoff would otherwise spend a minute on a service that is down, with the screen that asked
     // reading as hung.
     private static final int CHECK_RETRIES = 0;
-    private static final Duration CHECK_TIMEOUT = Duration.ofSeconds(20);
+    // What a person is willing to sit in front of after pressing something. The screen says it is
+    // connecting for the whole of it, so this is the length of a wait somebody is watching rather
+    // than the length the service might take.
+    private static final Duration CHECK_TIMEOUT = Duration.ofSeconds(10);
     // A bound on a list that runs to tens of entries. The paging is driven by what the service
     // says rather than by anything here, so it gets a ceiling.
     private static final long CHECK_MODEL_CEILING = 500;
@@ -271,7 +278,7 @@ class AnthropicCuller implements VisionCuller {
                 "Anthropic (calls a vision model from inside Sluice)",
                 Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
                 Set.of(ProviderSetting.MODEL),
-                API_KEY, MODELS, DEFAULT_ENDPOINT);
+                API_KEY, MODELS, DEFAULT_ENDPOINT, SETUP_GUIDE);
     }
 
     /**

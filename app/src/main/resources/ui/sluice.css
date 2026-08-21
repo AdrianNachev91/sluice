@@ -636,6 +636,29 @@
     -fx-min-width: 240px;
 }
 
+/* A disabled picker still has a sentence to say. While a check has yet to answer, that sentence is
+   the only thing on the row. JavaFX dims a disabled control whole, which takes text at prompt
+   strength almost to the ground it sits on. So unpressable is drawn here as a flatter ground and a
+   quieter arrow instead. The words stay at the fill every help line on this screen uses. */
+/*noinspection CssInvalidPseudoSelector*/
+.combo-box.settings-model-picker:disabled {
+    -fx-opacity: 1;
+    -fx-background-color: -sluice-ground;
+}
+
+/* The cell drawing that prompt is dimmed a second time, under the control's own dimming. Undoing
+   only the control leaves the words as faint as before. */
+/*noinspection CssInvalidPseudoSelector*/
+.combo-box.settings-model-picker:disabled > .list-cell {
+    -fx-opacity: 1;
+    -fx-text-fill: -sluice-text-muted;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.combo-box.settings-model-picker:disabled > .arrow-button > .arrow {
+    -fx-background-color: -sluice-prompt;
+}
+
 /*noinspection CssInvalidPseudoSelector*/
 .combo-box:hover,
 .combo-box:focused,
@@ -849,6 +872,35 @@
     -fx-text-fill: -sluice-text-muted;
     -fx-font-size: 11px;
     -fx-padding: 0 0 2px 0;
+}
+
+/* A sentence with an address in it. A Text takes its colour from -fx-fill where a Label takes
+   -fx-text-fill, so the muted fill the surrounding help lines use has to be said again here or the
+   words come out at the default black. Font size is inherited and does not. */
+.linked-text-word {
+    -fx-fill: -sluice-text-muted;
+}
+
+/* Underlined standing rather than on hover, so the address reads as clickable before the pointer
+   reaches it. Padding and the raised-looking background a Hyperlink carries by default are both
+   taken off, since this one sits inside a line of prose rather than beside a control. */
+.linked-text-link {
+    -fx-underline: true;
+    -fx-text-fill: -sluice-accent;
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-border-width: 0;
+    -fx-graphic-text-gap: 3px;
+}
+
+.linked-text-link:visited {
+    -fx-text-fill: -sluice-accent;
+}
+
+/* The mark saying the address leaves this app. It takes the same token the link's own words take,
+   since an SVGPath cannot inherit a text fill. Recolouring one means recolouring both. */
+.linked-text-mark {
+    -fx-fill: -sluice-accent;
 }
 
 /* The line under the API key entry, naming where a save would land before anything is typed. */

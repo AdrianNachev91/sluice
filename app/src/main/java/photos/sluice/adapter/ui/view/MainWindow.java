@@ -36,6 +36,9 @@ final class MainWindow {
     /**
      * Builds the shell: the sidebar on the left, Dashboard showing on the right.
      *
+     * <p>Building the shell also starts the check below, so a caller that only wants a scene is
+     * still spending a call to whichever provider is configured.
+     *
      * @param presenter {@link ShellPresenter} says whether the dashboard opens on the welcome card
      * @param settingsPresenter {@link SettingsPresenter} supplies and drives the Settings pane
      * @return {@link Scene} the shell scene, styled by the base stylesheet
@@ -78,7 +81,26 @@ final class MainWindow {
         final Scene scene = Stylesheet.applyTo(
                 new Scene(root, Stylesheet.INITIAL_WIDTH, Stylesheet.INITIAL_HEIGHT));
         ScreenWarmUp.afterFirstFrame(root);
+        checkTheConfiguredProviderOncePainted(settingsPresenter);
         return scene;
+    }
+
+    /**
+     * Asks the configured provider what this account can run, once the window is up.
+     *
+     * <p>The thread of its own is what keeps the network call off the paint. The wait for the first
+     * frame is a second guard rather than the working one. Nothing here touches the scene today, so
+     * taking it away would change nothing. Anything added here later that does touch the scene
+     * would hold the opening paint back, and this is what stops it. Kept deliberately, so it does
+     * not read as a wait nobody needed.
+     *
+     * <p>Without it, a provider already holding a key is described on the Settings screen by that
+     * provider's own guess at what it offers.
+     *
+     * @param settingsPresenter {@link SettingsPresenter} runs the check and keeps its answer
+     */
+    private static void checkTheConfiguredProviderOncePainted(final SettingsPresenter settingsPresenter) {
+        AfterFirstFrame.run(() -> Thread.ofVirtual().start(settingsPresenter::refreshModelsAtStartup));
     }
 
     /**

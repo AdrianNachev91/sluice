@@ -81,6 +81,12 @@ final class SettingsPane {
     // pupil rather than across a corner.
     private static final String CROSSED_OUT = "M2.6 4.4l1.8-1.8 17 17-1.8 1.8z";
 
+    // Where the two parts of a ring glyph's mark sit, measured from the ring's centre. A dot of
+    // radius 1 and a stem 6 tall, two apart, span ten. So the far edge of each sits five out, and
+    // the pair is centred. The caution and info glyphs are mirror images and share both numbers.
+    private static final double DOT_FROM_CENTRE = 4;
+    private static final double STEM_FROM_CENTRE = 2;
+
     /**
      * Prevents instantiation of this static factory class.
      */
@@ -637,8 +643,8 @@ final class SettingsPane {
                     return presenter.testConnection(providerId, typed);
                 }
             };
-            // Guarded the same way Retry is. The dropdown may have moved on to a different provider
-            // while this ran, and its answer belongs to the one it was asked about.
+            // Guarded on the provider. The dropdown may have moved on while this ran, and its
+            // answer belongs to the one it was asked about.
             task.setOnSucceeded(_ -> {
                 if (providerChoiceOf(providerBox).id().equals(providerId)) {
                     final SettingsPresenter.ConnectionCheckResult result = task.getValue();
@@ -761,14 +767,9 @@ final class SettingsPane {
         switch (result.picker()) {
             // Reached only for a provider this row's own showOnlyWhatTheProviderUses call already
             // hides. Cleared rather than left showing whatever the last provider offered.
-            case null -> {
-                model.setDisable(true);
-                model.getItems().clear();
-                model.getSelectionModel().clearSelection();
-            }
+            case null -> emptyAndDisabled(model);
             case final SettingsView.ModelPicker.Options options -> {
                 model.setDisable(false);
-                model.setPromptText(null);
                 model.getItems().setAll(options.choices());
                 // SettingsPresenter.picked() only ever answers a selected() among choices(); a miss
                 // here is that promise broken rather than a state this screen has to tolerate.
@@ -776,15 +777,20 @@ final class SettingsPane {
                         .filter(choice -> choice.id().equals(options.selected()))
                         .findFirst()
                         .orElseThrow());
-                final var source = new Label(options.sourceNote());
-                source.setWrapText(true);
-                source.getStyleClass().add("settings-help");
-                modelInfo.getChildren().add(source);
+                modelInfo.getChildren().add(helpLine(options.sourceNote()));
+            }
+            case SettingsView.ModelPicker.Pending(final String message) -> {
+                emptyAndDisabled(model);
+                model.setPromptText(message);
+                // Holds one line's height, so the rows below do not jump when the answer arrives
+                // and fills this slot. An empty instance of the same styled line rather than a
+                // number, which would be a second place to keep the font size in step. One line is
+                // what the answer usually brings; a wrapped violation is taller and still moves.
+                modelInfo.getChildren().add(helpLine(""));
+                redrawWhenTheStartUpCheckSettles(model, modelInfo, presenter, providerId, providerBox);
             }
             case final SettingsView.ModelPicker.Unavailable unavailable -> {
-                model.setDisable(true);
-                model.getItems().clear();
-                model.getSelectionModel().clearSelection();
+                emptyAndDisabled(model);
                 // A closed ComboBox with nothing selected draws its own promptText. It never asks
                 // a custom cell factory to draw the empty case. Confirmed by rendering: the cell's
                 // own text for a null item never appeared on screen.
@@ -798,13 +804,81 @@ final class SettingsPane {
                 // The block it sits in has to fill the row, because the message above it wraps. A
                 // button left to fill with it would run the width of the card.
                 retry.setMaxWidth(Region.USE_PREF_SIZE);
-                retry.setOnAction(_ -> refreshModelPicker(model, modelInfo, presenter, providerId, providerBox));
+                // Answered on the press rather than only when the answer lands. A provider that has
+                // stopped responding is exactly the one a reader presses this against, and it takes
+                // the interactive timeout to say so. Left as it was, the press reads as ignored.
+                //
+                // Worded here, unlike the picker's own waiting text, which the presenter supplies.
+                // Every button on this screen names itself; every line about the models comes from
+                // the presenter. This is a button saying what it is doing.
+                retry.setOnAction(_ -> {
+                    retry.setDisable(true);
+                    retry.setText("Connecting...");
+                    refreshModelPicker(model, modelInfo, presenter, providerId, providerBox);
+                });
                 modelInfo.getChildren().addAll(violation, retry);
             }
         }
         if (result.unrecognisedNote() != null) {
             modelInfo.getChildren().add(cautionRow(result.unrecognisedNote()));
         }
+    }
+
+    /**
+     * Leaves the picker with nothing in it and nothing selected, for every state that offers no
+     * choice. Whatever the last provider offered would otherwise still be sitting there.
+     *
+     * @param model {@link ComboBox} the model picker
+     */
+    private static void emptyAndDisabled(final ComboBox<SettingsView.ModelChoice> model) {
+        model.setDisable(true);
+        model.getItems().clear();
+        model.getSelectionModel().clearSelection();
+        // Whichever state follows says what it wants said. A prompt left standing would be the
+        // previous state still talking.
+        model.setPromptText(null);
+    }
+
+    /**
+     * One line of quiet explanation under a control.
+     *
+     * @param text {@link String} what it says
+     * @return {@link Label} the line, wrapping at the row's width
+     */
+    private static Label helpLine(final String text) {
+        final var line = new Label(text);
+        line.setWrapText(true);
+        line.getStyleClass().add("settings-help");
+        return line;
+    }
+
+    /**
+     * Draws the picker again once the check made as the app opened has settled.
+     *
+     * <p>This screen reads the picker when it is built, and the three things that redraw it are all
+     * things a user does. The check answering is not one of them. Without this, a screen opened
+     * during it would say it was checking for as long as it stayed open.
+     *
+     * @param model {@link ComboBox} the model picker
+     * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
+     * @param presenter {@link SettingsPresenter} holds the wait and the answer
+     * @param providerId {@link String} the provider being waited on
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider,
+     *         read again once the wait ends in case the choice moved on while it ran
+     */
+    private static void redrawWhenTheStartUpCheckSettles(final ComboBox<SettingsView.ModelChoice> model,
+                                                         final VBox modelInfo,
+                                                         final SettingsPresenter presenter,
+                                                         final String providerId,
+                                                         final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        final var task = new Task<Void>() {
+            @Override
+            protected Void call() {
+                presenter.awaitStartUpCheck(providerId);
+                return null;
+            }
+        };
+        redrawWhicheverWayItEnds(task, model, modelInfo, presenter, providerId, providerBox);
     }
 
     /**
@@ -830,13 +904,39 @@ final class SettingsPane {
                 return null;
             }
         };
-        // Guarded: the dropdown may have moved on to a different provider while this ran, and its
-        // answer belongs to the one it was asked about.
-        task.setOnSucceeded(_ -> {
+        redrawWhicheverWayItEnds(task, model, modelInfo, presenter, providerId, providerBox);
+    }
+
+    /**
+     * Runs a picker task and redraws the row when it ends, however it ends.
+     *
+     * <p>On failure as well as success, because the row it leaves behind is the reader's only way
+     * back. Retry disables itself on the press, so a task that ends without a redraw leaves that
+     * button dead for the life of the screen.
+     *
+     * <p>Guarded on the provider. The dropdown may have moved on while this ran, and the answer
+     * belongs to the one it was asked about.
+     *
+     * @param task {@link Task} the check to run
+     * @param model {@link ComboBox} the model picker
+     * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
+     * @param presenter {@link SettingsPresenter} answers what to draw
+     * @param providerId {@link String} the provider this task asked about
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
+     */
+    private static void redrawWhicheverWayItEnds(final Task<Void> task,
+                                                 final ComboBox<SettingsView.ModelChoice> model,
+                                                 final VBox modelInfo,
+                                                 final SettingsPresenter presenter,
+                                                 final String providerId,
+                                                 final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        final Runnable redraw = () -> {
             if (providerChoiceOf(providerBox).id().equals(providerId)) {
                 selectModelPickerFor(model, modelInfo, presenter, providerId, providerBox);
             }
-        });
+        };
+        task.setOnSucceeded(_ -> redraw.run());
+        task.setOnFailed(_ -> redraw.run());
         Thread.ofVirtual().start(task);
     }
 
@@ -1031,16 +1131,12 @@ final class SettingsPane {
         final var ring = new Circle(7.5);
         ring.getStyleClass().add("caution-ring");
         final var stem = new Rectangle(2, 6);
-        stem.setTranslateY(-1.5);
+        stem.setTranslateY(-STEM_FROM_CENTRE);
         stem.getStyleClass().add("caution-mark");
         final var dot = new Circle(1);
-        dot.setTranslateY(4.5);
+        dot.setTranslateY(DOT_FROM_CENTRE);
         dot.getStyleClass().add("caution-mark");
-        final var glyph = new StackPane(ring, stem, dot);
-        glyph.setMinSize(16, 16);
-        glyph.setPrefSize(16, 16);
-        glyph.setMaxSize(16, 16);
-        return glyph;
+        return sized(new StackPane(ring, stem, dot));
     }
 
     /**
@@ -1055,12 +1151,29 @@ final class SettingsPane {
         final var ring = new Circle(7.5);
         ring.getStyleClass().add("info-ring");
         final var dot = new Circle(1);
-        dot.setTranslateY(-4.5);
+        dot.setTranslateY(-DOT_FROM_CENTRE);
         dot.getStyleClass().add("info-mark");
         final var stem = new Rectangle(2, 6);
-        stem.setTranslateY(1.5);
+        stem.setTranslateY(STEM_FROM_CENTRE);
         stem.getStyleClass().add("info-mark");
-        final var glyph = new StackPane(ring, dot, stem);
+        return sized(new StackPane(ring, dot, stem));
+    }
+
+    /**
+     * Fixes a glyph at the size the text beside it is drawn for, and lets its shapes sit off the
+     * pixel grid.
+     *
+     * <p>A {@link StackPane} rounds where it puts each child. The ring is fifteen across inside a
+     * box of sixteen, so rounding pushes it a whole pixel down while the mark, an even ten tall,
+     * lands centred. That leaves the mark half a pixel high in its ring, which is what a reader
+     * sees at this size. Nothing here is drawn on the grid anyway, since every edge of a circle is
+     * already smoothed.
+     *
+     * @param glyph {@link StackPane} the ring and its mark
+     * @return {@link StackPane} that same glyph
+     */
+    private static StackPane sized(final StackPane glyph) {
+        glyph.setSnapToPixel(false);
         glyph.setMinSize(16, 16);
         glyph.setPrefSize(16, 16);
         glyph.setMaxSize(16, 16);
@@ -1251,6 +1364,8 @@ final class SettingsPane {
         reassurance.setWrapText(true);
         reassurance.getStyleClass().add("settings-reassurance");
 
+        final String setupGuide = providerChoiceOf(providerBox).setupGuide();
+
         // Said here, at the moment someone opts into paying, rather than buried in a licence file.
         // This card only ever shows for a provider that calls a model with this key, so the spend
         // is real every time it does. Its own bordered ground, not just a line of text, since a
@@ -1276,7 +1391,17 @@ final class SettingsPane {
             error.getStyleClass().add("settings-violation-detail");
             children.add(error);
         }
-        children.addAll(List.of(entryRow, reassurance, billing));
+        children.add(entryRow);
+        // Under the field it fills, and above where the key ends up. That is the order somebody
+        // with no key yet needs them in: they cannot act on where a key is stored until they have
+        // one.
+        if (setupGuide != null) {
+            final var whereToGetOne = LinkedText.of(setupGuide);
+            whereToGetOne.setId("settings-api-key-setup-guide");
+            whereToGetOne.getStyleClass().add("settings-help");
+            children.add(whereToGetOne);
+        }
+        children.addAll(List.of(reassurance, billing));
         if (secret.environmentOverride() != null) {
             children.add(overrideLabel(secret.environmentOverride()));
         }

@@ -1,6 +1,5 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.animation.AnimationTimer;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -66,25 +65,10 @@ final class ScreenWarmUp {
     /**
      * Warms every node type once the window has been painted.
      *
-     * <p>The wait is a frame rather than a duration. Warming during the pulse that first paints
-     * the window would hold that paint back. That trades a slow screen for a slow launch.
-     *
      * @param host {@link Pane} a pane in the live scene, borrowed and left as it was found
      */
     static void afterFirstFrame(final Pane host) {
-        new AnimationTimer() {
-
-            private int pulses;
-
-            @Override
-            public void handle(final long now) {
-                this.pulses++;
-                if (this.pulses > 1) {
-                    this.stop();
-                    warm(host);
-                }
-            }
-        }.start();
+        AfterFirstFrame.run(() -> warm(host));
     }
 
     /**
