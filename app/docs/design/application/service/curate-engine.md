@@ -78,7 +78,7 @@ flowchart TD
 | Scenario                                                                    | Outcome                                                                                                                                  |
 |-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
 | `scope` is `Year` or `OldestN`, already occupied by an unfinished run       | `ScopeOccupiedException` thrown synchronously, before the sort ever starts                                                               |
-| `scope` is `OldestYear` and its sort routes nothing into Sorted             | `cullOutcome` is `null` - no year was resolved, so a cull-prep dir is never even written                                                 |
+| `scope` is `OldestYear` and its sort routes nothing into Sorted             | `cullOutcome` is `null` - no year was resolved, so a sift-prep dir is never even written                                                 |
 | `scope` is `Year` or `OldestN` and this run sorted nothing new under it     | The cull stage still runs over that same scope - files already sitting there from an earlier, uncommitted run get culled                 |
 | `scope` is `OldestN` and the sort spans more than one year                  | Sort lands files in every year they resolve to, unrestricted; cull still runs `CullScope.OldestN` with the same `n`, by raw mtime        |
 | Cancellation requested between the sort and cull stages                     | The sort still completes in full; `cullOutcome` is `null` - the cull stage never starts                                                  |

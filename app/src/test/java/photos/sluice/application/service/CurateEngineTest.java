@@ -64,7 +64,7 @@ class CurateEngineTest {
         assertThat(progress.events).containsExactly(
                 "started:Sorting...", "tick:Sorting...:1/1", "finished:Sorting...",
                 "started:Building montages...", "tick:Building montages...:1/1", "finished:Building montages...",
-                "started:Culling...", "finished:Culling...",
+                "started:Sifting...", "finished:Sifting...",
                 "started:Applying decisions...", "finished:Applying decisions...");
     }
 
@@ -96,12 +96,12 @@ class CurateEngineTest {
 
         assertThat(outcome.sortSummary().yearsSorted()).containsExactly(2019);
         assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
-        assertThat(Files.exists(root.resolve("logs/cull-prep/2019/index.json"))).isTrue();
+        assertThat(Files.exists(root.resolve("logs/sift-prep/2019/index.json"))).isTrue();
     }
 
     // An OldestYear scope's target year only exists once the sort resolves it. An empty (or
     // fully-empty-after-routing) Inbox never resolves one, so there is nothing for the cull stage to
-    // even target. Proven by the absence of a cull-prep dir at all, not just a null cullOutcome.
+    // even target. Proven by the absence of a sift-prep dir at all, not just a null cullOutcome.
     // That shows the cull stage never ran, rather than running over some empty default scope.
     @Test
     void curateSkipsCullWhenAnOldestYearSortFindsNothingToSort(@TempDir final Path root) throws IOException {
@@ -112,7 +112,7 @@ class CurateEngineTest {
 
         assertThat(outcome.sortSummary().processed()).isZero();
         assertThat(outcome.cullOutcome()).isNull();
-        assertThat(Files.exists(root.resolve("logs/cull-prep"))).isFalse();
+        assertThat(Files.exists(root.resolve("logs/sift-prep"))).isFalse();
     }
 
     // Sort is never restricted to fit cull's one-scope shape. An OldestN sort still runs its normal,
@@ -132,7 +132,7 @@ class CurateEngineTest {
         assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
         final var applied = (CullJobOutcome.Applied) Objects.requireNonNull(outcome.cullOutcome());
         assertThat(applied.applyReport().reviewed()).isEqualTo(2);
-        assertThat(Files.exists(root.resolve("logs/cull-prep/oldest-2/index.json"))).isTrue();
+        assertThat(Files.exists(root.resolve("logs/sift-prep/oldest-2/index.json"))).isTrue();
     }
 
     // Mirrors curateRefusesAnExplicitYearScopeAlreadyWaitingOnShards below, for the other scope shape
@@ -166,7 +166,7 @@ class CurateEngineTest {
         // August is out of the requested month range, so it's still sitting in Inbox, unsorted.
         assertThat(Files.exists(root.resolve("Inbox/20190815_august.jpg"))).isTrue();
         assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
-        assertThat(Files.exists(root.resolve("logs/cull-prep/2019-06/index.json"))).isTrue();
+        assertThat(Files.exists(root.resolve("logs/sift-prep/2019-06/index.json"))).isTrue();
     }
 
     // An explicit Year scope names its target unconditionally. curate() culls it once sorted
@@ -204,8 +204,8 @@ class CurateEngineTest {
 
         assertThat(outcome.sortSummary().processed()).isZero();
         assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
-        assertThat(progress.events).contains("started:Culling...");
-        assertThat(Files.exists(root.resolve("logs/cull-prep/oldest-1/index.json"))).isTrue();
+        assertThat(progress.events).contains("started:Sifting...");
+        assertThat(Files.exists(root.resolve("logs/sift-prep/oldest-1/index.json"))).isTrue();
     }
 
     // Mirrors cull()'s own "refuses to rebuild a scope with an unresolved WaitingCullJob" contract.
@@ -272,7 +272,7 @@ class CurateEngineTest {
 
         assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
         assertThat(outcome.cullOutcome()).isNull();
-        assertThat(Files.exists(root.resolve("logs/cull-prep"))).isFalse();
+        assertThat(Files.exists(root.resolve("logs/sift-prep"))).isFalse();
     }
 
     // Reaches CullJobOutcome.Cancelled through curate()'s own buildFreshAndDispatch() call, not
@@ -296,6 +296,6 @@ class CurateEngineTest {
 
         assertThat(outcome.sortSummary().photosSorted()).isEqualTo(1);
         assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Cancelled.class);
-        assertThat(Files.exists(root.resolve("logs/cull-prep/2019"))).isFalse();
+        assertThat(Files.exists(root.resolve("logs/sift-prep/2019"))).isFalse();
     }
 }

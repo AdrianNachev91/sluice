@@ -304,12 +304,13 @@
     -fx-font-weight: bold;
 }
 
-
-/* A heading and nothing else, whatever screen it belongs to. */
+/* A heading and nothing else, whatever screen it belongs to. In the brand colour, the same as the
+   eyebrow naming a card below it, so a page and its parts read as one product rather than two
+   palettes. Every screen's heading carries this, the two placeholder panes included. */
 .pane-heading {
     -fx-font-size: 20px;
     -fx-font-weight: bold;
-    -fx-text-fill: -sluice-text;
+    -fx-text-fill: -sluice-accent;
 }
 
 .placeholder-pane {
@@ -519,7 +520,8 @@
    enough apart that the message alone leaves the reader hunting. */
 /*noinspection CssInvalidPseudoSelector*/
 .text-field:refused,
-.password-field:refused {
+.password-field:refused,
+.text-area:refused {
     -fx-border-color: -sluice-danger;
     -fx-border-radius: 3px;
     -fx-border-width: 1px;
@@ -918,4 +920,136 @@
    classes together, since either one alone would otherwise win on where it sits in this file. */
 .settings-save-status.settings-violation {
     -fx-text-fill: -sluice-danger;
+}
+
+/* The Photo categories screen. One card per category, spaced the way the settings cards are, since a
+   reader arriving from Settings should not find a differently-built page. */
+.category-cards {
+    -fx-spacing: 16px;
+}
+
+/* A category card sits on the same ground as a settings card and needs no look of its own. Named
+   anyway, so the rules below have something to hang on that .card must not inherit. */
+.category-card {
+    -fx-spacing: 4px;
+}
+
+/* The card's last line, holding its switch and its Delete. Separated from the fields above it,
+   because it acts on the whole card rather than on the field it sits under. */
+.category-header {
+    -fx-spacing: 10px;
+    -fx-padding: 0 0 12px 0;
+}
+
+/* A field showing a value that cannot be typed over. It keeps a field's shape, so the card reads
+   as one form, and takes the page's own ground rather than the one every field a reader can type
+   into carries. Named outright rather than left transparent: the card behind it is the same white
+   a light-look field already is, so showing the card through says nothing in that look. */
+.field-fixed {
+    -fx-background-color: -sluice-ground;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 4px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-text-muted;
+    /* A field's skin brings the text cursor with it, which offers an edit that is refused. The
+       pointer says nothing instead, while the value stays selectable so it can still be copied. */
+    -fx-cursor: default;
+}
+
+/* Focus reaches this field, because selecting the value to copy it needs focus. What it must not do
+   is draw the ring every editable field draws, which promises an edit that is refused. Sits below
+   the .text-field:focused rule it overrides, which is what settles two selectors of equal weight. */
+/*noinspection CssInvalidPseudoSelector*/
+.field-fixed:focused {
+    -fx-border-color: -sluice-border;
+}
+
+/* The way back, drawn as a band turning through 180 degrees. Filled with the button's own text
+   colour so it reads as part of the label rather than as artwork beside it. Scaled from the 16
+   units the path is drawn at down to the size a button's text sits at. */
+.u-turn-glyph {
+    -fx-fill: -sluice-text;
+    -fx-scale-x: 0.85;
+    -fx-scale-y: 0.85;
+    /* Drawn with the head down, turned a quarter so it points the way the button goes. Rotating
+       the finished shape keeps the path itself readable as the plain U it is. */
+    -fx-rotate: 90;
+}
+
+/* The whole page: a header that stays put, and everything else scrolling under it. The scrolling
+   half takes the leftover height, so the header keeps only what it needs. */
+.photo-categories-page {
+    -fx-background-color: -sluice-bg;
+    /* The gap the body's own spacing used to put under the header, now that the two sit in
+       different containers. */
+    -fx-spacing: 16px;
+}
+
+/* A screen reached from another one rather than from the sidebar: the way back, then the heading.
+   The gap under the button is the heading's own, so the two do not read as one block. Padded here
+   rather than by the page below it, since the two no longer share a container. */
+.pane-header {
+    -fx-spacing: 6px;
+    -fx-padding: 0 0 4px 0;
+}
+
+/* A page's own actions, at its foot. Add sits left where a reader's eye lands after the last card,
+   and Save right, where the page's one committing action is on every other screen. */
+.settings-actions {
+    -fx-spacing: 10px;
+    -fx-padding: 8px 0 0 0;
+}
+/* The category switch reads as a box that fills rather than a box that gets a tick. On or off is
+   the only thing it says, and a filled square says it at a glance down a column of cards, which a
+   tick at this size does not. Modena's own mark is taken away rather than recoloured: it draws a
+   tick path, and a path cannot be turned into a fill. */
+.category-card .check-box > .box {
+    -fx-background-color: -sluice-surface;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 3px;
+    -fx-background-radius: 3px;
+    -fx-border-width: 1px;
+    -fx-padding: 5px;
+}
+
+.category-card .check-box > .box > .mark {
+    -fx-background-color: transparent;
+    -fx-shape: null;
+    -fx-padding: 0;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.category-card .check-box:selected > .box {
+    -fx-background-color: -sluice-accent;
+    -fx-border-color: -sluice-accent;
+}
+
+/* The one control on the card that takes something away, so it is a mark rather than a word: a word
+   sits at the same weight as the switch beside it, and these two are not the same size of action.
+   Drawn from shapes like every other glyph here, never a font character. */
+.category-delete {
+    -fx-background-color: transparent;
+    -fx-padding: 4px 6px;
+    -fx-background-radius: 4px;
+}
+
+/* The same tint every other hoverable control on this screen takes. What the control does is
+   already said by the mark's own colour, so the ground only has to say it is reachable. */
+.category-delete:hover {
+    -fx-background-color: -sluice-banner-bg;
+}
+
+/* Red while it can be pressed, the convention every other product a user has met follows for a
+   destructive control. Not only under the pointer: a mark that turns red on hover tells them what
+   it does after they have already reached for it. */
+.category-delete .bin-glyph {
+    -fx-fill: -sluice-danger;
+}
+
+/* The card holding the set above the floor cannot be deleted, and the glyph says so rather than the
+   button silently doing nothing. Muted rather than left to JavaFX's own dimming, which fades a
+   control whole and loses a mark this small into the card. */
+/*noinspection CssInvalidPseudoSelector*/
+.category-delete:disabled .bin-glyph {
+    -fx-fill: -sluice-text-muted;
 }

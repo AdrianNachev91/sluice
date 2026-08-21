@@ -23,6 +23,22 @@ public record Settings(PathSettings paths, String provider,
                        List<CullCategory> categories, ExternalAgentSettings externalAgent,
                        MontageConfig montage, ThemeChoice theme) implements CullSettings {
 
+    // Bounded here for the reason the duplicate-name check is: this is the one value every category
+    // set the app runs on arrives as. Each card is a folder and a section of every culling prompt,
+    // so an unbounded list is an unbounded prompt. The app ships four, and twenty is far past any
+    // set a person would keep.
+    private static final int MAX_CATEGORIES = 20;
+
+    /**
+     * The most photo categories one install may hold. For a screen that has to refuse a set before
+     * building one of these, and say the number.
+     *
+     * @return int the ceiling
+     */
+    public static int maxCategories() {
+        return MAX_CATEGORIES;
+    }
+
     /**
      * Copies the category list and the settings map, and refuses categories holding two cards under
      * the same name. Two such cards would silently alias one category.
@@ -43,6 +59,10 @@ public record Settings(PathSettings paths, String provider,
     public Settings {
         providerSettingsById = Map.copyOf(providerSettingsById);
         categories = List.copyOf(categories);
+        if (categories.size() > MAX_CATEGORIES) {
+            throw new IllegalArgumentException("More than the " + MAX_CATEGORIES
+                    + " photo categories one install may hold: " + categories.size());
+        }
         final List<String> duplicates = categories.stream()
                 .collect(Collectors.groupingBy(CullCategory::name, Collectors.counting()))
                 .entrySet().stream()
@@ -52,7 +72,7 @@ public record Settings(PathSettings paths, String provider,
                 .toList();
         if (!duplicates.isEmpty()) {
             throw new IllegalArgumentException(
-                    "Cull categories contain duplicate name(s): " + String.join(", ", duplicates));
+                    "Photo categories contain duplicate name(s): " + String.join(", ", duplicates));
         }
     }
 

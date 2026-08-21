@@ -51,6 +51,15 @@ final class VisionProviderCard {
 
     private VisionProviderCard() {}
 
+    /**
+     * The built card, and the four nodes a caller has to reach again once a provider changes.
+     *
+     * @param card {@link VBox} the card itself, for the page to lay out
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the provider dropdown
+     * @param providerFields {@link VBox} the model and endpoint rows
+     * @param watchRow {@link VBox} the watch-mode row
+     * @param secretCard {@link VBox} the credential card nested inside
+     */
     record Result(VBox card, ComboBox<SettingsView.ProviderChoice> providerBox, VBox providerFields,
                   VBox watchRow, VBox secretCard) {
     }
@@ -65,7 +74,7 @@ final class VisionProviderCard {
         final var secretCard = new VBox();
         secretCard.setId("settings-api-key");
         secretCard.getStyleClass().add("settings-subsection");
-        fillSecretCard(secretCard, presenter, providerBox, providerFields, null);
+        fillSecretCard(secretCard, presenter, providerBox, providerFields, null, view.keyLimit());
         final var card = SettingsRows.card("VISION PROVIDER",
                 "What actually looks at your photos and decides what is junk, a duplicate, or worth "
                         + "keeping. Sluice has no judgement of its own. It either calls a model you pay for, "
@@ -81,6 +90,302 @@ final class VisionProviderCard {
         showOnlyWhatTheProviderUses(providerChoiceOf(providerBox).fields(), providerFields, watchRow, secretCard);
 
         return new Result(card, providerBox, providerFields, watchRow, secretCard);
+    }
+
+    static SettingsView.ProviderChoice providerChoiceOf(final ComboBox<SettingsView.ProviderChoice> box) {
+        return box.getSelectionModel().getSelectedItem();
+    }
+
+    /**
+     * Hides every control the chosen provider has no use for.
+     *
+     * <p>Which those are is the chosen {@link SettingsView.ProviderChoice}'s own answer; this only
+     * applies it. A hidden control is unmanaged too, or the layout keeps its gap and the card reads
+     * as though something failed to draw.
+     *
+     * @param fields {@link SettingsView.ProviderFields} which settings the chosen provider uses
+     * @param providerFields {@link VBox} the model and endpoint rows
+     * @param watchRow {@link VBox} the watch-mode row
+     * @param secretCard {@link VBox} the credential card
+     */
+    static void showOnlyWhatTheProviderUses(final SettingsView.ProviderFields fields,
+                                            final VBox providerFields, final VBox watchRow,
+                                            final VBox secretCard) {
+        final ProviderFieldControls controls = controlsOf(providerFields);
+        showIf(fields.model(), controls.model().getParent());
+        showIf(fields.endpoint(), controls.endpointField().getParent());
+        showIf(fields.watchMode(), watchRow);
+        showIf(fields.credential(), secretCard);
+        showIf(fields.model() || fields.endpoint(), providerFields);
+    }
+
+    /**
+     * The controls inside the provider block, for whoever has to reach one of them again.
+     *
+     * <p>{@code endpointField} is the node the endpoint row was built around and {@code endpoint} is
+     * the field inside it. Both are here because they answer different questions. The row is hidden
+     * and shown by its parent; the field is what carries the text.
+     *
+     * @param model {@link ComboBox} of {@link SettingsView.ModelChoice} the model picker
+     * @param modelInfo {@link VBox} the note drawn under the picker
+     * @param endpoint {@link TextField} the endpoint value
+     * @param endpointField {@link HBox} the row the endpoint sits in, hidden and shown as a whole
+     * @param testConnection {@link Button} runs a live check against the provider
+     * @param testResult {@link Label} what that check answered
+     * @param modelViolation {@link Label} what a refused save says about the model
+     */
+    record ProviderFieldControls(ComboBox<SettingsView.ModelChoice> model, VBox modelInfo,
+                                 TextField endpoint, HBox endpointField, Button testConnection,
+                                 Label testResult, Label modelViolation) {
+    }
+
+    /**
+     * How one model reads in the picker's dropdown, with the recommended one saying so.
+     *
+     * <p>A named class rather than an anonymous one, and package-visible rather than private.
+     * {@code ScreenWarmUp} can then construct the exact type this file builds, instead of an
+     * anonymous class only this one method could ever build again.
+     */
+    static final class ModelChoiceCell extends ListCell<SettingsView.ModelChoice> {
+        @Override
+        protected void updateItem(final SettingsView.ModelChoice item, final boolean empty) {
+            super.updateItem(item, empty);
+            // ListCell's own type carries no nullness annotation, so the IDE reads item as never
+            // null here. Cell.updateItem's own Javadoc gives "empty || item == null" as the correct
+            // guard, matched exactly.
+            //noinspection ConstantValue
+            this.setText(empty || item == null ? null
+                    : item.recommended() ? item.label() + " (recommended)" : item.label());
+        }
+    }
+
+    /**
+     * Reads what the presenter currently has to say about one provider's models, cached rather than
+     * freshly checked, and draws it.
+     *
+     * <p>Called both when the model row is first built and whenever the provider dropdown changes.
+     * Never checks the service on its own: a dropdown a user is only browsing must not spend a
+     * network call every time it changes.
+     *
+     * @param model {@link ComboBox} the model picker
+     * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
+     * @param presenter {@link SettingsPresenter} answers what to draw
+     * @param providerId {@link String} the provider to draw a picker for
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider,
+     *         read again once a check completes in case the choice moved on while it ran
+     */
+    static void selectModelPickerFor(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
+                                     final SettingsPresenter presenter, final String providerId,
+                                     final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        final SettingsPresenter.ModelPickerResult result = presenter.modelPickerFor(providerId);
+        showModelPicker(model, modelInfo, result, presenter, providerId, providerBox);
+    }
+
+    static ProviderFieldControls controlsOf(final VBox providerFields) {
+        return (ProviderFieldControls) providerFields.getProperties().get("controls");
+    }
+
+    /**
+     * The id of whichever model is selected, or empty when nothing is. Either the picker is
+     * disabled, or a provider with no model setting never showed one at all.
+     *
+     * @param model {@link ComboBox} the model picker
+     * @return {@link String} the selected model's id, or empty
+     */
+    static String selectedModelId(final ComboBox<SettingsView.ModelChoice> model) {
+        final SettingsView.ModelChoice selected = model.getSelectionModel().getSelectedItem();
+        // The property's declared type is not nullable, so the IDE reads this guard as always
+        // false. A disabled Unavailable picker, or a provider with no model setting, leaves this
+        // genuinely unselected.
+        //noinspection ConstantValue
+        return selected == null ? "" : selected.id();
+    }
+
+    static boolean watchAutomaticallyOf(final VBox watchRow) {
+        final var watchToggle = (RadioButton) watchRow.getProperties().get("watchToggle");
+        return watchToggle.isSelected();
+    }
+
+    /**
+     * Fills the credential block with what the chosen provider's credential looks like right now.
+     *
+     * <p>A key is stored the moment its own button is pressed, so only this block has anything to
+     * redraw afterwards. Redrawing the page instead would read every other field back from what is
+     * saved, throwing away a provider picked but not yet saved along with anything typed.
+     *
+     * <p>Which provider it is comes from the dropdown rather than from a caller. A stored key then
+     * cannot land under a provider other than the one on screen.
+     *
+     * @param card {@link VBox} the block to fill, whatever it held before
+     * @param presenter {@link SettingsPresenter} reads and writes that credential
+     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
+     * @param providerFields {@link VBox} the model and endpoint rows, whose Test button a
+     *         credential change leaves enabled or not, and whose model picker a save or remove can
+     *         change the very choices in
+     * @param said what just happened to the key, or null when nothing has
+     * @param keyLimit int the most the entry field may hold
+     */
+    static void fillSecretCard(final VBox card, final SettingsPresenter presenter,
+                               final ComboBox<SettingsView.ProviderChoice> providerBox,
+                               final VBox providerFields, final @Nullable String said,
+                               final int keyLimit) {
+        final String providerId = providerChoiceOf(providerBox).id();
+        card.getChildren().setAll(secretCardContents(presenter, presenter.secretRow(providerId), providerId,
+                said, message -> fillSecretCard(card, presenter, providerBox, providerFields, message, keyLimit),
+                providerFields, providerBox, keyLimit));
+        // The button that was pressed leaves the scene along with the rest of this block. Focus goes
+        // to whatever the window finds next, and a scrolling pane travels to wherever focus lands.
+        // A key saved half way down the page then shows the top of it. Putting focus back on the
+        // button that replaced it keeps the reader where they were standing.
+        final Node pressedAgain = card.lookup("#settings-api-key-save");
+        if (said != null && pressedAgain != null) {
+            pressedAgain.requestFocus();
+        }
+        // A save or a remove is exactly what Test's own enabled state depends on.
+        final ProviderFieldControls controls = controlsOf(providerFields);
+        enableTestIfThereIsSomethingToTry(controls.testConnection(), presenter, providerBox);
+    }
+
+    private static List<Node> secretCardContents(final SettingsPresenter presenter,
+                                                 final SettingsView.SecretRow secret,
+                                                 final String providerId, final @Nullable String said,
+                                                 final Consumer<String> onChanged,
+                                                 final VBox providerFields,
+                                                 final ComboBox<SettingsView.ProviderChoice> providerBox,
+                                                 final int keyLimit) {
+        final var entry = new PasswordField();
+        entry.setId("settings-api-key-entry");
+        entry.setPromptText("Paste a new key to save or replace it");
+        final var reveal = new TextField();
+        reveal.setPromptText(entry.getPromptText());
+        // Both halves of the same value, so both take the same ceiling. The store refuses past it
+        // too, and this is the half that stops it being typed.
+        SettingsRows.holdTo(entry, keyLimit);
+        SettingsRows.holdTo(reveal, keyLimit);
+        reveal.managedProperty().bind(reveal.visibleProperty());
+        entry.managedProperty().bind(entry.visibleProperty());
+        reveal.setVisible(false);
+        reveal.textProperty().bindBidirectional(entry.textProperty());
+
+        final var eye = revealButton(entry, reveal);
+
+        final var saveButton = new Button(secret.hasStoredValue() ? "Replace" : "Save");
+        saveButton.setId("settings-api-key-save");
+        final var result = new Label();
+        result.setWrapText(true);
+        final ProviderFieldControls controls = controlsOf(providerFields);
+        saveButton.setOnAction(_ -> {
+            final String error = presenter.saveSecret(providerId, entry.getText());
+            if (error != null) {
+                result.setText(error);
+                result.getStyleClass().setAll("settings-violation");
+            } else {
+                onChanged.accept("API key saved.");
+                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
+            }
+        });
+
+        final var removeButton = new Button("Remove");
+        removeButton.setId("settings-api-key-remove");
+        removeButton.setDisable(!secret.hasStoredValue());
+        removeButton.setOnAction(_ -> {
+            final String error = presenter.removeSecret(providerId);
+            if (error != null) {
+                result.setText(error);
+                result.getStyleClass().setAll("settings-violation");
+            } else {
+                onChanged.accept("API key removed.");
+                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
+            }
+        });
+
+        // Beside the row it happened on rather than at the top of the page, which is not where the
+        // reader is standing. Taken away again on its own, the way the page's own banner is.
+        if (said != null) {
+            result.setText(said);
+            result.getStyleClass().setAll("settings-confirmation");
+            takeAwayAfterFourSeconds(result);
+        }
+
+        final var entryRow = new HBox(entry, reveal, eye, saveButton, removeButton);
+        entryRow.getStyleClass().add("settings-field-row");
+        // Whichever of the two entries is showing takes the width the buttons leave. Both are told,
+        // since which one is visible flips every time Show is pressed.
+        HBox.setHgrow(entry, Priority.ALWAYS);
+        HBox.setHgrow(reveal, Priority.ALWAYS);
+
+        final var reassurance = new Label(secret.reassurance());
+        reassurance.setWrapText(true);
+        reassurance.getStyleClass().add("settings-reassurance");
+
+        final String setupGuide = providerChoiceOf(providerBox).setupGuide();
+
+        // Said here, at the moment someone opts into paying, rather than buried in a licence file.
+        // This card only ever shows for a provider that calls a model with this key, so the spend
+        // is real every time it does. Its own bordered ground, not just a line of text, since a
+        // spend is worth noticing rather than reading past.
+        final var billingText = new Label("Every run spends against your own account with this provider. "
+                + "Checking your key or its models costs nothing.");
+        billingText.setWrapText(true);
+        billingText.getStyleClass().add("settings-caution");
+        HBox.setHgrow(billingText, Priority.ALWAYS);
+        final var billing = new HBox(SettingsRows.infoGlyph(), billingText);
+        billing.getStyleClass().add("settings-callout");
+        // The card's own spacing reads as ordinary line-to-line gap. A bordered box wants more air
+        // above it than a line of text does, so it carries the extra distance itself.
+        VBox.setMargin(billing, new Insets(8, 0, 0, 0));
+
+        final var children = new ArrayList<Node>(List.of(SettingsRows.subsectionHeading("API key")));
+        // Above the entry rather than in place of it. A store that will not say what it holds can
+        // still be written to. Taking the field away leaves a user who cannot read their key with
+        // no way to set another one.
+        if (secret.errorMessage() != null) {
+            final var error = new Label(secret.errorMessage());
+            error.setWrapText(true);
+            error.getStyleClass().add("settings-violation-detail");
+            children.add(error);
+        }
+        children.add(entryRow);
+        // Under the field it fills, and above where the key ends up. That is the order somebody
+        // with no key yet needs them in: they cannot act on where a key is stored until they have
+        // one.
+        if (setupGuide != null) {
+            final var whereToGetOne = LinkedText.of(setupGuide);
+            whereToGetOne.setId("settings-api-key-setup-guide");
+            whereToGetOne.getStyleClass().add("settings-help");
+            children.add(whereToGetOne);
+        }
+        children.addAll(List.of(reassurance, billing));
+        if (secret.environmentOverride() != null) {
+            children.add(SettingsRows.overrideLabel(secret.environmentOverride()));
+        }
+        if (secret.multiHolder() != null) {
+            children.add(SettingsRows.overrideLabel(secret.multiHolder()));
+        }
+        children.add(result);
+        return children;
+    }
+
+    /**
+     * Fades a line out and empties it, four seconds after it appeared.
+     *
+     * <p>Emptied rather than left invisible, since the label stays in the card and is written to
+     * again the next time something happens to the key. Its opacity is put back for the same
+     * reason.
+     *
+     * @param line {@link Label} the line to take away
+     */
+    private static void takeAwayAfterFourSeconds(final Label line) {
+        final var fade = new FadeTransition(Duration.millis(400), line);
+        fade.setFromValue(1);
+        fade.setToValue(0);
+        fade.setOnFinished(_ -> {
+            line.setText("");
+            line.setOpacity(1);
+        });
+        final var wait = new PauseTransition(Duration.seconds(4));
+        wait.setOnFinished(_ -> fade.play());
+        wait.play();
     }
 
     private static ComboBox<SettingsView.ProviderChoice> providerChoice(final SettingsView view) {
@@ -102,10 +407,6 @@ final class VisionProviderCard {
         box.getSelectionModel().select(view.providers().stream()
                 .filter(choice -> choice.id().equals(view.provider())).findFirst().orElseThrow());
         return box;
-    }
-
-    static SettingsView.ProviderChoice providerChoiceOf(final ComboBox<SettingsView.ProviderChoice> box) {
-        return box.getSelectionModel().getSelectedItem();
     }
 
     /**
@@ -136,40 +437,9 @@ final class VisionProviderCard {
         return row;
     }
 
-    /**
-     * Hides every control the chosen provider has no use for.
-     *
-     * <p>Which those are is the chosen {@link SettingsView.ProviderChoice}'s own answer; this only
-     * applies it. A hidden control is unmanaged too, or the layout keeps its gap and the card reads
-     * as though something failed to draw.
-     *
-     * @param fields {@link SettingsView.ProviderFields} which settings the chosen provider uses
-     * @param providerFields {@link VBox} the model and endpoint rows
-     * @param watchRow {@link VBox} the watch-mode row
-     * @param secretCard {@link VBox} the credential card
-     */
-    static void showOnlyWhatTheProviderUses(final SettingsView.ProviderFields fields,
-                                            final VBox providerFields, final VBox watchRow,
-                                            final VBox secretCard) {
-        final ProviderFieldControls controls = controlsOf(providerFields);
-        showIf(fields.model(), controls.model().getParent());
-        showIf(fields.endpoint(), controls.endpointField().getParent());
-        showIf(fields.watchMode(), watchRow);
-        showIf(fields.credential(), secretCard);
-        showIf(fields.model() || fields.endpoint(), providerFields);
-    }
-
     private static void showIf(final boolean wanted, final Node node) {
         node.setVisible(wanted);
         node.setManaged(wanted);
-    }
-
-    // endpointField is the node the endpoint row was built around, and endpoint is the field inside
-    // it. Both are here because they answer different questions: the row is hidden and shown by its
-    // parent, and the field is what carries the text.
-    record ProviderFieldControls(ComboBox<SettingsView.ModelChoice> model, VBox modelInfo,
-                                 TextField endpoint, HBox endpointField, Button testConnection,
-                                 Label testResult, Label modelViolation) {
     }
 
     private static VBox providerFields(final SettingsView view, final SettingsPresenter presenter,
@@ -185,6 +455,7 @@ final class VisionProviderCard {
 
         final var endpoint = new TextField(view.endpoint() == null ? "" : view.endpoint());
         endpoint.setId("settings-endpoint");
+        SettingsRows.holdTo(endpoint, view.endpointLimit());
         endpoint.setPromptText(providerChoiceOf(providerBox).defaultEndpoint());
         final var testConnection = new Button("Test");
         testConnection.setId("settings-test-connection");
@@ -274,44 +545,6 @@ final class VisionProviderCard {
                                                           final SettingsPresenter presenter,
                                                           final ComboBox<SettingsView.ProviderChoice> providerBox) {
         testConnection.setDisable(!presenter.secretRow(providerChoiceOf(providerBox).id()).hasStoredValue());
-    }
-
-    // A named class rather than an anonymous one, and package-visible rather than private.
-    // ScreenWarmUp can then construct the exact type ScreenWarmUpTest finds this file building,
-    // instead of an anonymous class only this one method could ever build again.
-    static final class ModelChoiceCell extends ListCell<SettingsView.ModelChoice> {
-        @Override
-        protected void updateItem(final SettingsView.ModelChoice item, final boolean empty) {
-            super.updateItem(item, empty);
-            // ListCell's own type carries no nullness annotation, so the IDE reads item as never
-            // null here. Cell.updateItem's own Javadoc gives "empty || item == null" as the correct
-            // guard, matched exactly.
-            //noinspection ConstantValue
-            this.setText(empty || item == null ? null
-                    : item.recommended() ? item.label() + " (recommended)" : item.label());
-        }
-    }
-
-    /**
-     * Reads what the presenter currently has to say about one provider's models, cached rather than
-     * freshly checked, and draws it.
-     *
-     * <p>Called both when the model row is first built and whenever the provider dropdown changes.
-     * Never checks the service on its own: a dropdown a user is only browsing must not spend a
-     * network call every time it changes.
-     *
-     * @param model {@link ComboBox} the model picker
-     * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
-     * @param presenter {@link SettingsPresenter} answers what to draw
-     * @param providerId {@link String} the provider to draw a picker for
-     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider,
-     *         read again once a check completes in case the choice moved on while it ran
-     */
-    static void selectModelPickerFor(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
-                                     final SettingsPresenter presenter, final String providerId,
-                                     final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        final SettingsPresenter.ModelPickerResult result = presenter.modelPickerFor(providerId);
-        showModelPicker(model, modelInfo, result, presenter, providerId, providerBox);
     }
 
     /**
@@ -493,26 +726,6 @@ final class VisionProviderCard {
         Thread.ofVirtual().start(task);
     }
 
-    static ProviderFieldControls controlsOf(final VBox providerFields) {
-        return (ProviderFieldControls) providerFields.getProperties().get("controls");
-    }
-
-    /**
-     * The id of whichever model is selected, or empty when nothing is. Either the picker is
-     * disabled, or a provider with no model setting never showed one at all.
-     *
-     * @param model {@link ComboBox} the model picker
-     * @return {@link String} the selected model's id, or empty
-     */
-    static String selectedModelId(final ComboBox<SettingsView.ModelChoice> model) {
-        final SettingsView.ModelChoice selected = model.getSelectionModel().getSelectedItem();
-        // The property's declared type is not nullable, so the IDE reads this guard as always
-        // false. A disabled Unavailable picker, or a provider with no model setting, leaves this
-        // genuinely unselected.
-        //noinspection ConstantValue
-        return selected == null ? "" : selected.id();
-    }
-
     private static VBox watchModeRow(final SettingsView view) {
         final var group = new ToggleGroup();
         final var manual = new RadioButton("Wait for me before moving any photos");
@@ -524,11 +737,11 @@ final class VisionProviderCard {
         // against the last option. At one spacing they read as a remark about that option alone.
         final var choices = new VBox(watch, manual);
         choices.getStyleClass().add("settings-choices");
-        final var help = new Label("Culling only writes decisions down. Moving the photos happens "
+        final var help = new Label("Sifting only writes decisions down. Moving your photos happens "
                 + "afterwards, and this is whether Sluice waits for you before it starts.");
         help.setWrapText(true);
         help.getStyleClass().add("settings-help");
-        final var box = new VBox(SettingsRows.fieldLabel("When an external agent has finished culling"), help,
+        final var box = new VBox(SettingsRows.fieldLabel("When an external agent has finished sifting"), help,
                 choices);
         box.getStyleClass().add("settings-row");
         if (view.watchModeOverride() != null) {
@@ -536,11 +749,6 @@ final class VisionProviderCard {
         }
         box.getProperties().put("watchToggle", watch);
         return box;
-    }
-
-    static boolean watchAutomaticallyOf(final VBox watchRow) {
-        final var watchToggle = (RadioButton) watchRow.getProperties().get("watchToggle");
-        return watchToggle.isSelected();
     }
 
     /**
@@ -576,180 +784,5 @@ final class VisionProviderCard {
             button.setAccessibleText(wasShowing ? "Show the key" : "Hide the key");
         });
         return button;
-    }
-
-    /**
-     * Fills the credential block with what the chosen provider's credential looks like right now.
-     *
-     * <p>A key is stored the moment its own button is pressed, so only this block has anything to
-     * redraw afterwards. Redrawing the page instead would read every other field back from what is
-     * saved, throwing away a provider picked but not yet saved along with anything typed.
-     *
-     * <p>Which provider it is comes from the dropdown rather than from a caller. A stored key then
-     * cannot land under a provider other than the one on screen.
-     *
-     * @param card {@link VBox} the block to fill, whatever it held before
-     * @param presenter {@link SettingsPresenter} reads and writes that credential
-     * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
-     * @param providerFields {@link VBox} the model and endpoint rows, whose Test button a
-     *         credential change leaves enabled or not, and whose model picker a save or remove can
-     *         change the very choices in
-     * @param said what just happened to the key, or null when nothing has
-     */
-    static void fillSecretCard(final VBox card, final SettingsPresenter presenter,
-                               final ComboBox<SettingsView.ProviderChoice> providerBox,
-                               final VBox providerFields, final @Nullable String said) {
-        final String providerId = providerChoiceOf(providerBox).id();
-        card.getChildren().setAll(secretCardContents(presenter, presenter.secretRow(providerId), providerId,
-                said, message -> fillSecretCard(card, presenter, providerBox, providerFields, message),
-                providerFields, providerBox));
-        // The button that was pressed leaves the scene along with the rest of this block. Focus goes
-        // to whatever the window finds next, and a scrolling pane travels to wherever focus lands.
-        // A key saved half way down the page then shows the top of it. Putting focus back on the
-        // button that replaced it keeps the reader where they were standing.
-        final Node pressedAgain = card.lookup("#settings-api-key-save");
-        if (said != null && pressedAgain != null) {
-            pressedAgain.requestFocus();
-        }
-        // A save or a remove is exactly what Test's own enabled state depends on.
-        final ProviderFieldControls controls = controlsOf(providerFields);
-        enableTestIfThereIsSomethingToTry(controls.testConnection(), presenter, providerBox);
-    }
-
-    private static List<Node> secretCardContents(final SettingsPresenter presenter,
-                                                 final SettingsView.SecretRow secret,
-                                                 final String providerId, final @Nullable String said,
-                                                 final Consumer<String> onChanged,
-                                                 final VBox providerFields,
-                                                 final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        final var entry = new PasswordField();
-        entry.setId("settings-api-key-entry");
-        entry.setPromptText("Paste a new key to save or replace it");
-        final var reveal = new TextField();
-        reveal.setPromptText(entry.getPromptText());
-        reveal.managedProperty().bind(reveal.visibleProperty());
-        entry.managedProperty().bind(entry.visibleProperty());
-        reveal.setVisible(false);
-        reveal.textProperty().bindBidirectional(entry.textProperty());
-
-        final var eye = revealButton(entry, reveal);
-
-        final var saveButton = new Button(secret.hasStoredValue() ? "Replace" : "Save");
-        saveButton.setId("settings-api-key-save");
-        final var result = new Label();
-        result.setWrapText(true);
-        final ProviderFieldControls controls = controlsOf(providerFields);
-        saveButton.setOnAction(_ -> {
-            final String error = presenter.saveSecret(providerId, entry.getText());
-            if (error != null) {
-                result.setText(error);
-                result.getStyleClass().setAll("settings-violation");
-            } else {
-                onChanged.accept("API key saved.");
-                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
-            }
-        });
-
-        final var removeButton = new Button("Remove");
-        removeButton.setId("settings-api-key-remove");
-        removeButton.setDisable(!secret.hasStoredValue());
-        removeButton.setOnAction(_ -> {
-            final String error = presenter.removeSecret(providerId);
-            if (error != null) {
-                result.setText(error);
-                result.getStyleClass().setAll("settings-violation");
-            } else {
-                onChanged.accept("API key removed.");
-                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
-            }
-        });
-
-        // Beside the row it happened on rather than at the top of the page, which is not where the
-        // reader is standing. Taken away again on its own, the way the page's own banner is.
-        if (said != null) {
-            result.setText(said);
-            result.getStyleClass().setAll("settings-confirmation");
-            takeAwayAfterFourSeconds(result);
-        }
-
-        final var entryRow = new HBox(entry, reveal, eye, saveButton, removeButton);
-        entryRow.getStyleClass().add("settings-field-row");
-        // Whichever of the two entries is showing takes the width the buttons leave. Both are told,
-        // since which one is visible flips every time Show is pressed.
-        HBox.setHgrow(entry, Priority.ALWAYS);
-        HBox.setHgrow(reveal, Priority.ALWAYS);
-
-        final var reassurance = new Label(secret.reassurance());
-        reassurance.setWrapText(true);
-        reassurance.getStyleClass().add("settings-reassurance");
-
-        final String setupGuide = providerChoiceOf(providerBox).setupGuide();
-
-        // Said here, at the moment someone opts into paying, rather than buried in a licence file.
-        // This card only ever shows for a provider that calls a model with this key, so the spend
-        // is real every time it does. Its own bordered ground, not just a line of text, since a
-        // spend is worth noticing rather than reading past.
-        final var billingText = new Label("Every cull spends against your own account with this provider. "
-                + "Checking your key or its models costs nothing.");
-        billingText.setWrapText(true);
-        billingText.getStyleClass().add("settings-caution");
-        HBox.setHgrow(billingText, Priority.ALWAYS);
-        final var billing = new HBox(SettingsRows.infoGlyph(), billingText);
-        billing.getStyleClass().add("settings-callout");
-        // The card's own spacing reads as ordinary line-to-line gap. A bordered box wants more air
-        // above it than a line of text does, so it carries the extra distance itself.
-        VBox.setMargin(billing, new Insets(8, 0, 0, 0));
-
-        final var children = new ArrayList<Node>(List.of(SettingsRows.subsectionHeading("API key")));
-        // Above the entry rather than in place of it. A store that will not say what it holds can
-        // still be written to. Taking the field away leaves a user who cannot read their key with
-        // no way to set another one.
-        if (secret.errorMessage() != null) {
-            final var error = new Label(secret.errorMessage());
-            error.setWrapText(true);
-            error.getStyleClass().add("settings-violation-detail");
-            children.add(error);
-        }
-        children.add(entryRow);
-        // Under the field it fills, and above where the key ends up. That is the order somebody
-        // with no key yet needs them in: they cannot act on where a key is stored until they have
-        // one.
-        if (setupGuide != null) {
-            final var whereToGetOne = LinkedText.of(setupGuide);
-            whereToGetOne.setId("settings-api-key-setup-guide");
-            whereToGetOne.getStyleClass().add("settings-help");
-            children.add(whereToGetOne);
-        }
-        children.addAll(List.of(reassurance, billing));
-        if (secret.environmentOverride() != null) {
-            children.add(SettingsRows.overrideLabel(secret.environmentOverride()));
-        }
-        if (secret.multiHolder() != null) {
-            children.add(SettingsRows.overrideLabel(secret.multiHolder()));
-        }
-        children.add(result);
-        return children;
-    }
-
-    /**
-     * Fades a line out and empties it, four seconds after it appeared.
-     *
-     * <p>Emptied rather than left invisible, since the label stays in the card and is written to
-     * again the next time something happens to the key. Its opacity is put back for the same
-     * reason.
-     *
-     * @param line {@link Label} the line to take away
-     */
-    private static void takeAwayAfterFourSeconds(final Label line) {
-        final var fade = new FadeTransition(Duration.millis(400), line);
-        fade.setFromValue(1);
-        fade.setToValue(0);
-        fade.setOnFinished(_ -> {
-            line.setText("");
-            line.setOpacity(1);
-        });
-        final var wait = new PauseTransition(Duration.seconds(4));
-        wait.setOnFinished(_ -> fade.play());
-        wait.play();
     }
 }

@@ -209,7 +209,7 @@ class SettingsPresenterTest {
 
     @Test
     void saveKeepsTheCategoriesAlreadyConfiguredSinceThisScreenDoesNotEditThem() {
-        final var category = new CullCategory("junk", "not worth keeping");
+        final var category = CullCategory.of("junk", "not worth keeping");
         final var settingsUseCase = new FixedSettingsUseCase(new Settings(new PathSettings(null, null, null),
                 "anthropic", Map.of(), List.of(category),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM));

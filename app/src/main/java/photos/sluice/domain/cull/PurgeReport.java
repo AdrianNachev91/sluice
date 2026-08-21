@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code PrepDirDoctor.purgeCompleted()}'s outcome for one sweep of the cull-prep root. purged
+ * {@code PrepDirDoctor.purgeCompleted()}'s outcome for one sweep of the sift-prep root. purged
  * names every scope (the prep dir's own folder name) whose completed run was hard-deleted this
  * sweep. skipped names every other scope the sweep looked at, mapped to the state that kept it -
  * a completed run is the only state this manual, one-button purge ever touches. unreadable names a

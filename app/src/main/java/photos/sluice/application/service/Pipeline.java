@@ -52,7 +52,7 @@ import java.util.List;
 public class Pipeline {
 
     private static final String SORTING = "Sorting...";
-    private static final String COMMITTING = "Committing...";
+    private static final String COMMITTING = "Moving to library...";
     private static final String RESCUING = "Rescuing...";
     private static final String DISCARDING = "Discarding...";
 
@@ -270,7 +270,7 @@ public class Pipeline {
      * Every cull run currently on disk, diagnosed. This is the one source the run-card dashboard and
      * the unresolved-run banner are both meant to render from.
      *
-     * <p>Derived by enumerating the cull-prep root and diagnosing each dir, never from a persisted
+     * <p>Derived by enumerating the sift-prep root and diagnosing each dir, never from a persisted
      * list. Enumerating is what keeps a damaged run visible, which is exactly when it most needs to
      * be. Diagnosis is side-effect-free and never throws, whatever state a dir is in, so one dir
      * nobody can read reports DAMAGED and the rest still render.
@@ -318,7 +318,7 @@ public class Pipeline {
      * Retires every poller this process has armed. No run is started, stopped or altered by it.
      *
      * <p>Two callers need it. One has just moved the working root. Every armed watcher polls a prep
-     * dir under {@code logs/cull-prep}, which hangs off that root. So for that one move, "armed
+     * dir under {@code logs/sift-prep}, which hangs off that root. So for that one move, "armed
      * under the old root" and "armed at all" name the same set. A watcher left behind would poll a folder
      * outside the working root in force, for as long as the process lives. A library or inbox move
      * strands nothing and must not come here, since this would also retire a watch a user turned on
@@ -406,7 +406,7 @@ public class Pipeline {
         return this.jobRunner.submit(_ -> {
             if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new IllegalStateException("Prep dir " + prepDir
-                        + " has already completed - discard refuses a finished run; purge it instead.");
+                        + " has already completed - discard refuses a finished sift; purge it instead.");
             }
             this.cullEngine.disarmWatch(prepDir);
             return this.runPhase(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
@@ -484,8 +484,8 @@ public class Pipeline {
          * @param occupant {@link CullRunSummary} the run already occupying the scope
          */
         ScopeOccupiedException(final CullRunSummary occupant) {
-            super("A cull of scope '" + occupant.scope() + "' already occupies " + occupant.prepDir() + ", and is "
-                    + occupant.health().state() + " - resume, troubleshoot or discard it before starting a new cull"
+            super("A sift for '" + occupant.scope() + "' already occupies " + occupant.prepDir() + ", and is "
+                    + occupant.health().state() + " - resume, troubleshoot or discard it before starting another"
                     + " for the same scope.");
             this.occupant = occupant;
         }
@@ -597,9 +597,9 @@ public class Pipeline {
          * @param prepDir {@link Path} the prep dir that could not be resumed
          */
         RunOutsideWorkingRootException(final Path prepDir) {
-            super("The run at " + prepDir + " is not inside the working root Sluice is set up with now, "
+            super("The sift at " + prepDir + " is not inside the working root Sluice is set up with now, "
                     + "so it was not resumed - point the working root back at the folder holding it, "
-                    + "or discard the run.");
+                    + "or discard the sift.");
             this.prepDir = prepDir;
         }
 

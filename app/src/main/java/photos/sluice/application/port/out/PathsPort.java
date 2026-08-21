@@ -68,7 +68,7 @@ public interface PathsPort {
     /**
      * Where cull runs are prepared, one directory per run.
      *
-     * @return {@link Path} the cull-prep directory
+     * @return {@link Path} the sift-prep directory
      */
     Path cullPrep();
 

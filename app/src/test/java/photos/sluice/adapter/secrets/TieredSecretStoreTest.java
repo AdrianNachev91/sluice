@@ -225,6 +225,28 @@ class TieredSecretStoreTest {
         }
 
         @Test
+        void refusesACredentialLongerThanTheCeilingBeforeAnyTierIsTouched() {
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), file);
+
+            assertThatThrownBy(() -> store.save(ANTHROPIC, "s".repeat(SecretStore.MAX_SECRET + 1)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("anthropic");
+            assertThat(file.written).isEmpty();
+        }
+
+        @Test
+        void measuresTheCeilingAgainstTheStrippedCredential() {
+            final var file = writableTier(SecretTierKind.FILE, 0, true, null);
+            final SecretStore store = tieredSecretStore(environmentTier(null), file);
+            final String atTheCeiling = "s".repeat(SecretStore.MAX_SECRET);
+
+            store.save(ANTHROPIC, "  " + atTheCeiling + "\n");
+
+            assertThat(file.written).containsExactly(atTheCeiling);
+        }
+
+        @Test
         void failsLoudWhenNoTierOnThisMachineCanStoreOne() {
             final var keyring = writableTier(SecretTierKind.KEYRING, 100, false, null);
             final SecretStore store = tieredSecretStore(environmentTier(null), keyring);

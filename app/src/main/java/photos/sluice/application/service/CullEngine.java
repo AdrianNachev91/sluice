@@ -49,7 +49,7 @@ final class CullEngine {
     private static final Logger log = LoggerFactory.getLogger(CullEngine.class);
 
     private static final String PREPPING = "Building montages...";
-    private static final String CULLING = "Culling...";
+    private static final String CULLING = "Sifting...";
     private static final String APPLYING = "Applying decisions...";
 
     private final MontageRenderer montageRenderer;
@@ -304,14 +304,14 @@ final class CullEngine {
      * would pin this engine to the folder the app happened to start in. A saved working root would
      * then reach every other engine and not this one.
      *
-     * @return {@link Path} the cull-prep root under the working root
+     * @return {@link Path} the sift-prep root under the working root
      */
     private Path cullPrepRoot() {
         return this.pathsPort.cullPrep();
     }
 
     /**
-     * Refuses a resume whose prep dir does not sit under the cull-prep root in force.
+     * Refuses a resume whose prep dir does not sit under the sift-prep root in force.
      *
      * <p>Both callers can reach this. A watcher parked on the job slot behind a root-moving save is
      * admitted the moment that save releases it. It then carries a prep dir under the root that
@@ -319,7 +319,7 @@ final class CullEngine {
      * before the same save.
      *
      * <p>The roots are re-checked first, and not only for symmetry with the caller's own check. A
-     * save that cleared the working root leaves nothing to resolve a cull-prep root from. Asking
+     * save that cleared the working root leaves nothing to resolve a sift-prep root from. Asking
      * where the prep dir sits has no answer at all until that case is ruled out.
      *
      * <p>Refusing costs the run nothing. Nothing has been read or moved at this point, and the run
@@ -328,7 +328,7 @@ final class CullEngine {
      *
      * @param prepDir {@link Path} the prep dir this resume was asked for
      * @throws PathsMisconfiguredException if the folder roots stopped being usable during the wait
-     * @throws Pipeline.RunOutsideWorkingRootException if it sits outside the cull-prep root in force
+     * @throws Pipeline.RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      */
     private void refuseRunOutsideTheWorkingRoot(final Path prepDir) {
         this.rootsGuard.requireUsable();

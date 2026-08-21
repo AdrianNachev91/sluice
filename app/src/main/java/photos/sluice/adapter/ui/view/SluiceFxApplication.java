@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import photos.sluice.SluiceApplication;
+import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.ShellPresenter;
 import photos.sluice.adapter.ui.StartupSequence;
@@ -126,7 +127,8 @@ public class SluiceFxApplication extends Application {
         if (startupFailure == null) {
             final var built = Objects.requireNonNull(this.context, "no failure means a context was built");
             stage.setScene(MainWindow.scene(built.getBean(ShellPresenter.class),
-                    built.getBean(SettingsPresenter.class)));
+                    built.getBean(SettingsPresenter.class),
+                    built.getBean(PhotoCategoriesPresenter.class)));
             return;
         }
         final var presenter = UiBootstrap.reportAndPresent(startupFailure);

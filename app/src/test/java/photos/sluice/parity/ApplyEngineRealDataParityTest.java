@@ -41,11 +41,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 // The Phase 11 apply parity gate. It runs the reference apply-cull.ps1 and ApplyEngine on two
-// identical, path-rewritten copies of the same real, completed-but-not-yet-applied cull-prep
+// identical, path-rewritten copies of the same real, completed-but-not-yet-applied sift-prep
 // directory (every montage's decisions-NNN.json shard present, nothing applied yet). It then
 // asserts MoveDiffer sees no difference in the resulting Review/Duplicates/Library trees, and that
 // both runs appended the same set of content hashes to their index. Opt-in only - never runs on
-// CI, and requires real cull-prep output on disk that this test only ever copies from, never
+// CI, and requires real sift-prep output on disk that this test only ever copies from, never
 // writes to.
 //
 // Unlike the sort/commit/rescue parity gates, a plain directory copy isn't enough here. Every path
@@ -60,7 +60,7 @@ import static org.assertj.core.api.Assertions.fail;
 // Local invocation:
 //   mvn -f app/pom.xml test -Dtest=ApplyEngineRealDataParityTest ^
 //     -Dsluice.parity.realData=true ^
-//     -Dsluice.parity.sourceDir="D:\path\to\logs\cull-prep\<scope>"
+//     -Dsluice.parity.sourceDir="D:\path\to\logs\sift-prep\<scope>"
 @EnabledIfSystemProperty(named = "sluice.parity.realData", matches = "true")
 class ApplyEngineRealDataParityTest {
 
@@ -69,16 +69,16 @@ class ApplyEngineRealDataParityTest {
             throws IOException, InterruptedException, ApplyException {
         final String sourceDirProperty = System.getProperty("sluice.parity.sourceDir");
         Assumptions.assumeTrue(sourceDirProperty != null && !sourceDirProperty.isBlank(),
-                "sluice.parity.sourceDir must be set to a completed cull-prep directory when sluice.parity" +
+                "sluice.parity.sourceDir must be set to a completed sift-prep directory when sluice.parity" +
                         ".realData=true");
         final Path sourceDir = Path.of(sourceDirProperty);
         Assumptions.assumeTrue(Files.isDirectory(sourceDir), "sluice.parity.sourceDir does not exist: " + sourceDir);
         final String leaf = sourceDir.getFileName().toString();
-        // sourceDir is <repoRoot>/logs/cull-prep/<leaf> - the fixed layout CLAUDE.md documents.
+        // sourceDir is <repoRoot>/logs/sift-prep/<leaf> - the fixed layout CLAUDE.md documents.
         final Path sourceRepoRoot = sourceDir.getParent().getParent().getParent();
 
-        final Path prepDirA = rootA.resolve("logs/cull-prep").resolve(leaf);
-        final Path prepDirB = rootB.resolve("logs/cull-prep").resolve(leaf);
+        final Path prepDirA = rootA.resolve("logs/sift-prep").resolve(leaf);
+        final Path prepDirB = rootB.resolve("logs/sift-prep").resolve(leaf);
         copyPrepDirJson(sourceDir, prepDirA, sourceRepoRoot, rootA);
         copyPrepDirJson(sourceDir, prepDirB, sourceRepoRoot, rootB);
 
@@ -221,10 +221,10 @@ class ApplyEngineRealDataParityTest {
 
     private static CullSettings fixedSettings() {
         return new FixedSettings("external-agent", List.of(
-                new CullCategory("junk", "junk description"),
-                new CullCategory("scenery", "scenery description"),
-                new CullCategory("food", "food description"),
-                new CullCategory("funny", "funny description")));
+                CullCategory.of("junk", "junk description"),
+                CullCategory.of("scenery", "scenery description"),
+                CullCategory.of("food", "food description"),
+                CullCategory.of("funny", "funny description")));
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories) implements CullSettings {

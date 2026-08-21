@@ -33,8 +33,10 @@ import java.util.Map;
 public class CullDestinations {
 
     // The one category with a fixed destination: the library's flat Funny/ folder. It is kept, not
-    // set aside for review, so it is hashed into the library index and gets no reason note.
-    static final String FUNNY_CATEGORY = "funny";
+    // set aside for review, so it is hashed into the library index and gets no reason note. The
+    // name itself is domain's, because a settings screen has to refuse renaming that card and
+    // cannot name anything in this package.
+    static final String FUNNY_CATEGORY = CategoryName.LIBRARY_CATEGORY;
 
     private static final String UNDATED = "0000-00";
 

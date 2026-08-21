@@ -1,12 +1,22 @@
 package photos.sluice.adapter.ui.view;
 
+import javafx.animation.FadeTransition;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.PauseTransition;
+import javafx.animation.Timeline;
 import javafx.css.PseudoClass;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -14,12 +24,16 @@ import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.DirectoryChooser;
+import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.SettingsView;
 
 import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Optional;
 
 /**
  * The row and card vocabulary every Settings card is built from. Cards, labelled rows, help and
@@ -33,6 +47,14 @@ final class SettingsRows {
     // A field the screen has something to say about. A pseudo-class rather than a style class,
     // because it is a state the control is in rather than a kind of control it is.
     private static final PseudoClass REFUSED = PseudoClass.getPseudoClass("refused");
+
+    // Marks the scrolling body on the body itself, so a refusal raised deep in a page can find what
+    // scrolls it without every layer in between having to pass it down.
+    private static final String SCROLL = "scroll";
+
+    // Long enough to read as travel rather than a jump, short enough that a reader adding several
+    // cards is never waiting on it.
+    private static final Duration SCROLL_TRAVEL = Duration.millis(180);
 
     // Where the two parts of a ring glyph's mark sit, measured from the ring's centre. A dot of
     // radius 1 and a stem 6 tall, two apart, span ten. So the far edge of each sits five out, and
@@ -68,6 +90,176 @@ final class SettingsRows {
     }
 
     /**
+     * A page's body in the pane that scrolls it. Both settings pages are built this way, so the
+     * one that is reached from the other does not arrive with different chrome.
+     *
+     * @param body {@link VBox} the page's own contents
+     * @return {@link ScrollPane} the pane to hand the shell
+     */
+    static ScrollPane scrolling(final VBox body) {
+        final var scroll = new ScrollPane(body);
+        scroll.getStyleClass().add("settings-scroll");
+        scroll.setFitToWidth(true);
+        // Left on the body so a refusal can reach it. A refusal is raised from a button deep in the
+        // page, which knows the body it sits in and nothing about what scrolls it.
+        body.getProperties().put(SCROLL, scroll);
+        return scroll;
+    }
+
+    /**
+     * Puts a page back at its top, for a save that has just rebuilt it.
+     *
+     * <p>Instant rather than travelled. The banner saying the save took is already drawn up there,
+     * and a reader who pressed Save at the foot should find it waiting rather than watch the page
+     * arrive. Asked for outright, because a rebuild only happens to reset the scroll position.
+     *
+     * @param body {@link VBox} the page's own scrolling body
+     */
+    static void backToTop(final VBox body) {
+        if (body.getProperties().get(SCROLL) instanceof final ScrollPane scroll) {
+            scroll.setVvalue(0);
+        }
+    }
+
+    /**
+     * Brings a node the page has just added into view.
+     *
+     * <p>A page long enough to scroll puts a new card below the fold, so the button that added it
+     * appears to have done nothing. Travelled rather than jumped: a jump lands the new card where
+     * the old one was, which reads as the card being looked at having been replaced.
+     *
+     * <p>Scrolled to rather than focused. Focus would take the caret into a field the reader has not
+     * chosen to type in yet.
+     *
+     * @param node {@link Node} the thing just added
+     */
+    static void bringIntoView(final Node node) {
+        scrollTo(node, node, true);
+    }
+
+    /**
+     * Puts the topmost thing this refusal marked at the top of the view, or the summary when it
+     * marked nothing.
+     *
+     * <p>A refused save does not rebuild the screen, so nothing moves on its own. Save sits at the
+     * foot, so the reader is already at the bottom when they press it, and the field the refusal is
+     * about is usually somewhere above. Left alone, a refusal marks a row nobody is looking at.
+     *
+     * <p>The summary is the destination only when nothing else is, because it says what needs
+     * fixing is marked under the fields. Sending someone down to read that, when there is a mark
+     * above, points them the wrong way.
+     *
+     * <p>Jumped rather than travelled. This is a correction, not an arrival, and it has to be there
+     * the moment the reader looks up.
+     *
+     * @param summary {@link Label} the page-level message, and the last resort to scroll to
+     * @param marks the field marks this refusal set
+     */
+    static void takeTheReaderToTheFault(final Label summary, final Label... marks) {
+        scrollTo(summary, topmostMarkedRow(marks).orElse(summary), false);
+    }
+
+    /**
+     * Scrolls the body holding one node until another sits at the top of the view.
+     *
+     * @param inBody {@link Node} anything inside the scrolling body, used to find what scrolls
+     * @param target {@link Node} what to bring to the top
+     * @param travelled boolean whether to move there over time rather than arrive at once
+     */
+    private static void scrollTo(final Node inBody, final Node target, final boolean travelled) {
+        final Parent body = bodyOf(inBody);
+        if (body == null || !(body.getProperties().get(SCROLL) instanceof final ScrollPane scroll)) {
+            return;
+        }
+        // A mark's own row has no height until the mark is measured, and a page that has just grown
+        // is taller than the layout every position below the new node was read off.
+        scroll.applyCss();
+        scroll.layout();
+        final double scrollable =
+                body.getBoundsInLocal().getHeight() - scroll.getViewportBounds().getHeight();
+        if (scrollable <= 0) {
+            return;
+        }
+        final double top = body.sceneToLocal(target.localToScene(target.getBoundsInLocal())).getMinY();
+        final double at = Math.clamp(top / scrollable, 0, 1) * scroll.getVmax();
+        if (travelled) {
+            new Timeline(new KeyFrame(SCROLL_TRAVEL,
+                    new KeyValue(scroll.vvalueProperty(), at, Interpolator.EASE_BOTH))).play();
+        } else {
+            scroll.setVvalue(at);
+        }
+    }
+
+    /**
+     * The scrolling body the summary sits in, however deeply it is nested.
+     *
+     * <p>Settings puts the summary straight on the body; the categories page puts it below a row of
+     * buttons. Walking up until the scroll marker turns up covers both without either page having
+     * to say how deep it built.
+     *
+     * @param from {@link Node} where to start walking up
+     * @return {@link Parent} the body carrying the scroll marker, or null when there is none
+     */
+    private static @Nullable Parent bodyOf(final Node from) {
+        for (Parent at = from.getParent(); at != null; at = at.getParent()) {
+            if (at.getProperties().get(SCROLL) instanceof ScrollPane) {
+                return at;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The highest row on the page carrying one of these marks.
+     *
+     * <p>Ordered by where each one ended up rather than by the order they were checked in. A row
+     * moving on the page then cannot leave this pointing at the wrong one. A mark with nothing to
+     * say is invisible, which is what keeps a cleared row out of the answer.
+     *
+     * <p>Only the marks handed in are candidates. Other things on a screen say what is wrong in the
+     * same words and the same red. A stale one of those is not where a refused save should send
+     * anybody.
+     *
+     * @param marks the field marks this refusal set
+     * @return {@link Optional} of {@link Node} the row to scroll to, empty where none is marked
+     */
+    private static Optional<Node> topmostMarkedRow(final Label... marks) {
+        return Arrays.stream(marks)
+                .filter(Node::isVisible)
+                .map(Node::getParent)
+                .min(Comparator.comparingDouble(row -> row.localToScene(row.getBoundsInLocal()).getMinY()))
+                .map(Node.class::cast);
+    }
+
+    /**
+     * Stops a control taking more characters than the value behind it will accept.
+     *
+     * <p>The field refuses the keystroke, so the reader cannot reach a value a save would then
+     * refuse. It is the other half of a bound the value type also holds, not a replacement for it:
+     * a config file reaches that type without passing any control.
+     *
+     * <p>A paste that would cross the ceiling is truncated to what fits rather than dropped whole.
+     * Losing the tail of a long paste is a visible outcome the reader can act on. Losing the paste
+     * is one they read as the app ignoring them.
+     *
+     * @param field {@link TextInputControl} the field to bound
+     * @param characters int the most it may hold
+     */
+    static void holdTo(final TextInputControl field, final int characters) {
+        field.setTextFormatter(new TextFormatter<>(change -> {
+            if (!change.isContentChange() || change.getControlNewText().length() <= characters) {
+                return change;
+            }
+            final int room = characters - (change.getControlText().length() - change.getSelection().getLength());
+            if (room <= 0) {
+                return null;
+            }
+            change.setText(change.getText().substring(0, Math.min(room, change.getText().length())));
+            return change;
+        }));
+    }
+
+    /**
      * A heading for a block sitting inside a card, below that card's own name.
      *
      * <p>Quieter than an eyebrow, because an eyebrow announces a panel and this announces a part of
@@ -80,12 +272,6 @@ final class SettingsRows {
     static Label subsectionHeading(final String text) {
         final var label = new Label(text);
         label.getStyleClass().add("settings-subsection-heading");
-        return label;
-    }
-
-    private static Label sectionEyebrow(final String text) {
-        final var label = new Label(text);
-        label.getStyleClass().addAll("eyebrow", "settings-card-title");
         return label;
     }
 
@@ -102,11 +288,20 @@ final class SettingsRows {
         return label;
     }
 
+    /**
+     * One folder row: what it draws, what carries its value, and where a refusal marks it.
+     *
+     * @param row {@link VBox} the row itself, label and field and violation together
+     * @param field {@link TextField} the path as typed
+     * @param violation {@link Label} what a refused save says about this root, blank when it passed
+     */
     record FolderRow(VBox row, TextField field, Label violation) {
     }
 
-    static FolderRow folderRow(final String label, final String id, final SettingsView.FolderField field) {
+    static FolderRow folderRow(final String label, final String id, final SettingsView.FolderField field,
+                               final int limit) {
         final var text = new TextField(field.value());
+        holdTo(text, limit);
         text.setId(id);
         text.setPromptText(field.suggestion());
 
@@ -154,64 +349,6 @@ final class SettingsRows {
     }
 
     /**
-     * A button that opens a folder picker and writes what was picked back into the field.
-     *
-     * <p>Opens on the folder the field already names, or on the suggestion when it is empty. Where
-     * neither is a folder yet, the picker opens wherever the platform puts it.
-     *
-     * @param text {@link TextField} the field the picked folder is written into
-     * @param suggestion {@link String} where to open when the field is empty
-     * @return {@link Button} the browse button
-     */
-    private static Button browseButton(final TextField text, final String suggestion) {
-        final var browse = new Button("Browse...");
-        browse.getStyleClass().add("button-quiet");
-        browse.setOnAction(_ -> {
-            final var chooser = new DirectoryChooser();
-            final File initial = nearestExistingFolder(text.getText().isBlank() ? suggestion : text.getText());
-            if (initial != null) {
-                chooser.setInitialDirectory(initial);
-            }
-            final File chosen = chooser.showDialog(text.getScene().getWindow());
-            if (chosen != null) {
-                text.setText(chosen.getAbsolutePath());
-            }
-        });
-        return browse;
-    }
-
-    /**
-     * The folder a picker should open on, given the path a field holds or suggests.
-     *
-     * <p>The nearest one that exists, rather than that one or nothing. A suggestion names where
-     * Sluice would put a folder, so on a fresh install it is precisely the folder that is missing.
-     * Answering null there opens the picker on the list of drives, and its parent is a great deal
-     * closer to the answer than that.
-     *
-     * <p>The text is whatever is in the field, so it does not have to name a path this system could
-     * ever have. Refusing outright would make Browse do nothing at all, on exactly the value a user
-     * opened the picker to replace.
-     *
-     * @param text {@link String} the path to open on, which need not exist
-     * @return {@link File} the nearest existing folder at or above it, or null when none of it does
-     */
-    private static @Nullable File nearestExistingFolder(final String text) {
-        final Path named;
-        try {
-            named = Path.of(text).toAbsolutePath();
-        } catch (final InvalidPathException e) {
-            return null;
-        }
-        for (Path candidate = named; candidate != null; candidate = candidate.getParent()) {
-            final File folder = candidate.toFile();
-            if (folder.isDirectory()) {
-                return folder;
-            }
-        }
-        return null;
-    }
-
-    /**
      * A labelled row carrying one line saying what the setting is for, under the label and above the
      * control.
      *
@@ -228,15 +365,6 @@ final class SettingsRows {
                              final @Nullable String overrideNote) {
         final var row = labeledRow(label, field, overrideNote);
         row.getChildren().add(1, helpLine(explanation));
-        return row;
-    }
-
-    private static VBox labeledRow(final String label, final Node field, final @Nullable String overrideNote) {
-        final var row = new VBox(fieldLabel(label), field);
-        if (overrideNote != null) {
-            row.getChildren().add(overrideLabel(overrideNote));
-        }
-        row.getStyleClass().add("settings-row");
         return row;
     }
 
@@ -278,6 +406,55 @@ final class SettingsRows {
     }
 
     /**
+     * The banner a screen puts at its top to say what just happened, and the way to close it early.
+     *
+     * <p>The stylesheet dresses the label inside the row, not the row itself. So the banner is the
+     * row, and the message is a label within it.
+     *
+     * <p>A short confirmation fades on its own. One left standing is still there the next time
+     * something is refused, where it reads as a claim about that. A report carrying counts, a path
+     * or a consequence stays instead, since four seconds is not long enough to take one in.
+     *
+     * @param container {@link VBox} the pane's body, which the banner removes itself from
+     * @param id {@link String} the node id a test finds the banner by
+     * @param text {@link String} what to say
+     * @param fades boolean whether it leaves on its own after a few seconds
+     * @return {@link HBox} the banner
+     */
+    static HBox banner(final VBox container, final String id, final String text, final boolean fades) {
+        final var said = new Label(text);
+        said.setWrapText(true);
+        // Hgrow offers a node the spare room; a maximum width is what lets it take any. A label
+        // stops at the width of its own text, leaving the dismiss button against the last word
+        // rather than at the end of the banner.
+        said.setMaxWidth(Double.MAX_VALUE);
+        said.setAlignment(Pos.CENTER);
+        HBox.setHgrow(said, Priority.ALWAYS);
+
+        final var dismiss = new Button("×");
+        dismiss.getStyleClass().add("settings-banner-dismiss");
+
+        final var banner = new HBox(said, dismiss);
+        banner.setId(id);
+        banner.setMaxWidth(Double.MAX_VALUE);
+        banner.getStyleClass().add("settings-banner");
+
+        final Runnable remove = () -> container.getChildren().remove(banner);
+        dismiss.setOnAction(_ -> remove.run());
+
+        if (fades) {
+            final var fade = new FadeTransition(Duration.millis(400), banner);
+            fade.setFromValue(1);
+            fade.setToValue(0);
+            fade.setOnFinished(_ -> remove.run());
+            final var wait = new PauseTransition(Duration.seconds(4));
+            wait.setOnFinished(_ -> fade.play());
+            wait.play();
+        }
+        return banner;
+    }
+
+    /**
      * A caution: something the user configured is not being used, and the screen carries on anyway.
      *
      * <p>Not a violation. Nothing here refuses to save and no value is lost, so the red a broken
@@ -294,28 +471,6 @@ final class SettingsRows {
         final var row = new HBox(cautionGlyph(), label);
         row.getStyleClass().add("settings-caution-row");
         return row;
-    }
-
-    /**
-     * An exclamation mark in a ring, drawn from shapes.
-     *
-     * <p>No character that renders as one can be relied on across the three desktops this app runs
-     * on, and a font without it draws a box instead. Shapes cannot go missing. Three of them rather
-     * than one path: an SVGPath is filled, so a ring drawn as one depends on two circles
-     * cancelling by winding. A stroked {@link Circle} states the ring outright.
-     *
-     * @return {@link StackPane} the glyph
-     */
-    private static StackPane cautionGlyph() {
-        final var ring = new Circle(7.5);
-        ring.getStyleClass().add("caution-ring");
-        final var stem = new Rectangle(2, 6);
-        stem.setTranslateY(-STEM_FROM_CENTRE);
-        stem.getStyleClass().add("caution-mark");
-        final var dot = new Circle(1);
-        dot.setTranslateY(DOT_FROM_CENTRE);
-        dot.getStyleClass().add("caution-mark");
-        return sized(new StackPane(ring, stem, dot));
     }
 
     /**
@@ -336,27 +491,6 @@ final class SettingsRows {
         stem.setTranslateY(STEM_FROM_CENTRE);
         stem.getStyleClass().add("info-mark");
         return sized(new StackPane(ring, dot, stem));
-    }
-
-    /**
-     * Fixes a glyph at the size the text beside it is drawn for, and lets its shapes sit off the
-     * pixel grid.
-     *
-     * <p>A {@link StackPane} rounds where it puts each child. The ring is fifteen across inside a
-     * box of sixteen, so rounding pushes it a whole pixel down while the mark, an even ten tall,
-     * lands centred. That leaves the mark half a pixel high in its ring, which is what a reader
-     * sees at this size. Nothing here is drawn on the grid anyway, since every edge of a circle is
-     * already smoothed.
-     *
-     * @param glyph {@link StackPane} the ring and its mark
-     * @return {@link StackPane} that same glyph
-     */
-    private static StackPane sized(final StackPane glyph) {
-        glyph.setSnapToPixel(false);
-        glyph.setMinSize(16, 16);
-        glyph.setPrefSize(16, 16);
-        glyph.setMaxSize(16, 16);
-        return glyph;
     }
 
     static Label overrideLabel(final String text) {
@@ -456,5 +590,121 @@ final class SettingsRows {
      */
     static String anythingFrom(final SettingsView.NumberRange range) {
         return "Anything from " + range.least() + " to " + range.most() + ".";
+    }
+
+    private static Label sectionEyebrow(final String text) {
+        final var label = new Label(text);
+        label.getStyleClass().addAll("eyebrow", "settings-card-title");
+        return label;
+    }
+
+    /**
+     * A button that opens a folder picker and writes what was picked back into the field.
+     *
+     * <p>Opens on the folder the field already names, or on the suggestion when it is empty. Where
+     * neither is a folder yet, the picker opens wherever the platform puts it.
+     *
+     * @param text {@link TextField} the field the picked folder is written into
+     * @param suggestion {@link String} where to open when the field is empty
+     * @return {@link Button} the browse button
+     */
+    private static Button browseButton(final TextField text, final String suggestion) {
+        final var browse = new Button("Browse...");
+        browse.getStyleClass().add("button-quiet");
+        browse.setOnAction(_ -> {
+            final var chooser = new DirectoryChooser();
+            final File initial = nearestExistingFolder(text.getText().isBlank() ? suggestion : text.getText());
+            if (initial != null) {
+                chooser.setInitialDirectory(initial);
+            }
+            final File chosen = chooser.showDialog(text.getScene().getWindow());
+            if (chosen != null) {
+                text.setText(chosen.getAbsolutePath());
+            }
+        });
+        return browse;
+    }
+
+    /**
+     * The folder a picker should open on, given the path a field holds or suggests.
+     *
+     * <p>The nearest one that exists, rather than that one or nothing. A suggestion names where
+     * Sluice would put a folder, so on a fresh install it is precisely the folder that is missing.
+     * Answering null there opens the picker on the list of drives, and its parent is a great deal
+     * closer to the answer than that.
+     *
+     * <p>The text is whatever is in the field, so it does not have to name a path this system could
+     * ever have. Refusing outright would make Browse do nothing at all, on exactly the value a user
+     * opened the picker to replace.
+     *
+     * @param text {@link String} the path to open on, which need not exist
+     * @return {@link File} the nearest existing folder at or above it, or null when none of it does
+     */
+    private static @Nullable File nearestExistingFolder(final String text) {
+        final Path named;
+        try {
+            named = Path.of(text).toAbsolutePath();
+        } catch (final InvalidPathException e) {
+            return null;
+        }
+        for (Path candidate = named; candidate != null; candidate = candidate.getParent()) {
+            final File folder = candidate.toFile();
+            if (folder.isDirectory()) {
+                return folder;
+            }
+        }
+        return null;
+    }
+
+    private static VBox labeledRow(final String label, final Node field, final @Nullable String overrideNote) {
+        final var row = new VBox(fieldLabel(label), field);
+        if (overrideNote != null) {
+            row.getChildren().add(overrideLabel(overrideNote));
+        }
+        row.getStyleClass().add("settings-row");
+        return row;
+    }
+
+    /**
+     * An exclamation mark in a ring, drawn from shapes.
+     *
+     * <p>No character that renders as one can be relied on across the three desktops this app runs
+     * on, and a font without it draws a box instead. Shapes cannot go missing. Three of them rather
+     * than one path: an SVGPath is filled, so a ring drawn as one depends on two circles
+     * cancelling by winding. A stroked {@link Circle} states the ring outright.
+     *
+     * @return {@link StackPane} the glyph
+     */
+    private static StackPane cautionGlyph() {
+        final var ring = new Circle(7.5);
+        ring.getStyleClass().add("caution-ring");
+        final var stem = new Rectangle(2, 6);
+        stem.setTranslateY(-STEM_FROM_CENTRE);
+        stem.getStyleClass().add("caution-mark");
+        final var dot = new Circle(1);
+        dot.setTranslateY(DOT_FROM_CENTRE);
+        dot.getStyleClass().add("caution-mark");
+        return sized(new StackPane(ring, stem, dot));
+    }
+
+    /**
+     * Fixes a glyph at the size the text beside it is drawn for, and lets its shapes sit off the
+     * pixel grid.
+     *
+     * <p>A {@link StackPane} rounds where it puts each child. The ring is fifteen across inside a
+     * box of sixteen, so rounding pushes it a whole pixel down while the mark, an even ten tall,
+     * lands centred. That leaves the mark half a pixel high in its ring, which is what a reader
+     * sees at this size. Nothing here is drawn on the grid anyway, since every edge of a circle is
+     * already smoothed.
+     *
+     * @param glyph {@link StackPane} the ring and its mark
+     * @return {@link StackPane} that same glyph
+     */
+    private static StackPane sized(final StackPane glyph) {
+        glyph.setSnapToPixel(false);
+        glyph.setMinSize(16, 16);
+        glyph.setPrefSize(16, 16);
+        glyph.setMaxSize(16, 16);
+        return glyph;
     }
 }

@@ -23,10 +23,24 @@ import static org.mockito.Mockito.mock;
 
 class PrepIndexWriterTest {
 
-    private static final CullCategory JUNK = new CullCategory("junk", "objectively worthless");
-    private static final CullCategory SCENERY = new CullCategory("scenery", "landscapes with nobody in them");
+    private static final CullCategory JUNK = CullCategory.of("junk", "objectively worthless");
+    private static final CullCategory SCENERY = CullCategory.of("scenery", "landscapes with nobody in them");
 
     private final PrepIndexWriter writer = new PrepIndexWriter();
+
+    @Test
+    void aCardsExamplesAreRecordedAndACardWithoutThemWritesNoKey(@TempDir final Path dir) throws IOException {
+        final Path indexPath = dir.resolve("index.json");
+        final var food = new CullCategory("food", "meals", List.of("plates", "menus"), Boolean.TRUE);
+        final var prep = new PrepDir("2023", List.of(food, JUNK), dir, 1, List.of(), 1, dir,
+                List.of("montage-001"));
+
+        this.writer.write(indexPath, prep);
+
+        final String json = Files.readString(indexPath, StandardCharsets.UTF_8);
+        assertThat(json).contains("\"examples\":[\"plates\",\"menus\"]")
+                .contains("{\"name\":\"junk\",\"description\":\"objectively worthless\"}");
+    }
 
     @Test
     void writesIndexJsonMatchingTheExactContractShape(@TempDir final Path dir) throws IOException {

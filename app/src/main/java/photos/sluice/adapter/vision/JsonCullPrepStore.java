@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -108,11 +109,18 @@ public class JsonCullPrepStore implements CullPrepPort {
     }
 
     /**
-     * The JSON shape of one recorded category card. Both fields are nullable here and checked in
-     * {@link #requiredCategories}. A card missing either one is then reported as a damaged index,
-     * instead of crashing {@link CullCategory}'s own constructor.
+     * The JSON shape of one recorded category card. Name and description are nullable here and
+     * checked in {@link #requiredCategories}. A card missing either one is then reported as a
+     * damaged index, instead of crashing {@link CullCategory}'s own constructor.
+     *
+     * <p>An absent examples list is ordinary rather than damaged, and a null or blank entry inside
+     * one is dropped rather than refused. What is checked is how many there are and how long each
+     * runs, for the same reason the description's length is. Writing omits the key entirely when a
+     * card offers none, so such a card produces the file it did before the field existed.
      */
-    private record RawCategory(@Nullable String name, @Nullable String description) {
+    private record RawCategory(@Nullable String name, @Nullable String description,
+                               @JsonInclude(JsonInclude.Include.NON_EMPTY)
+                               @Nullable List<@Nullable String> examples) {
     }
 
     /**
@@ -177,7 +185,8 @@ public class JsonCullPrepStore implements CullPrepPort {
     public void writeIndex(final Path prepDir, final PrepDir index) {
         final var document = new RawIndexOut(
                 index.scope(),
-                index.categories().stream().map(card -> new RawCategory(card.name(), card.description())).toList(),
+                index.categories().stream()
+                        .map(card -> new RawCategory(card.name(), card.description(), card.examples())).toList(),
                 index.basePath().toString(),
                 index.photos(),
                 index.unreviewable().stream().map(Path::toString).toList(),
@@ -281,9 +290,11 @@ public class JsonCullPrepStore implements CullPrepPort {
      * one name alias a single category.
      *
      * <p>A description is required and non-blank, the rule {@link CullCategory} enforces on the
-     * config side. A blank one renders a hollow prompt section and quietly costs cull recall. Its
-     * length is deliberately unbounded. It is prose a user writes, and config accepts it unbounded,
-     * so a cap here would refuse an index the app itself could have produced.
+     * config side. A blank one renders a hollow prompt section and quietly costs cull recall.
+     *
+     * <p>Its length is held to the same ceiling, and so are the examples beside it. Every ceiling
+     * here is {@link CullCategory}'s own, read off it rather than repeated, so no file this app
+     * wrote can be refused by a number that drifted from the one that wrote it.
      *
      * <p>Every field is checked before any card is built, so {@link CullCategory}'s own
      * {@link IllegalArgumentException} is unreachable from here. That exception would otherwise be
@@ -306,28 +317,97 @@ public class JsonCullPrepStore implements CullPrepPort {
                 throw new MalformedPrepJsonException("Prep index " + indexPath + " has a null entry in categories",
                         new IOException("null categories entry"));
             }
-            final String name = raw.name();
-            if (name == null) {
-                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category with no name",
-                        new IOException("null category name"));
-            }
-            final String problem = CategoryName.problemWith(name);
-            if (problem != null) {
-                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
-                        + "' that " + problem, new IOException("unusable category name"));
-            }
+            final String name = usableName(raw, indexPath);
             if (!seen.add(name)) {
                 throw new MalformedPrepJsonException("Prep index " + indexPath + " repeats the category '" + name
                         + "'", new IOException("duplicate category"));
             }
-            final String description = raw.description();
-            if (description == null || description.isBlank()) {
-                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
-                        + "' with no description", new IOException("blank category description"));
-            }
-            cards.add(new CullCategory(name, description));
+            cards.add(cardUnder(name, raw, indexPath));
         }
         return cards;
+    }
+
+    /**
+     * The recorded name, once it is present and could be a folder.
+     *
+     * @param raw {@link RawCategory} one recorded card
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return {@link String} the name
+     */
+    private static String usableName(final RawCategory raw, final Path indexPath) {
+        final String name = raw.name();
+        if (name == null) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category with no name",
+                    new IOException("null category name"));
+        }
+        final String problem = CategoryName.problemWith(name);
+        if (problem != null) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
+                    + "' that " + problem, new IOException("unusable category name"));
+        }
+        return name;
+    }
+
+    /**
+     * One recorded card, with its description and examples held to the same ceilings the domain
+     * applies. Checked here rather than left to the record, so a damaged index raises the type every
+     * caller's read-failure handling already expects.
+     *
+     * @param name {@link String} the card's already-validated name
+     * @param raw {@link RawCategory} one recorded card
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return {@link CullCategory} the card
+     */
+    private static CullCategory cardUnder(final String name, final RawCategory raw, final Path indexPath) {
+        final String description = raw.description();
+        if (description == null || description.isBlank()) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
+                    + "' with no description", new IOException("blank category description"));
+        }
+        if (description.length() > CullCategory.maxDescription()) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
+                    + "' whose description is longer than " + CullCategory.maxDescription()
+                    + " characters", new IOException("over-long category description"));
+        }
+        return new CullCategory(name, description, boundedExamples(name, raw, indexPath), Boolean.TRUE);
+    }
+
+    /**
+     * The recorded examples, held to the count and the per-example length the domain applies.
+     *
+     * @param name {@link String} the card's name, for the error message
+     * @param raw {@link RawCategory} one recorded card
+     * @param indexPath {@link Path} index.json's own path, used only for the error message
+     * @return a {@link List} of {@link String} the examples, empty when the card offers none
+     */
+    private static List<String> boundedExamples(final String name, final RawCategory raw, final Path indexPath) {
+        final List<String> examples = examplesOf(raw);
+        if (examples.size() > CullCategory.maxExamples()) {
+            throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
+                    + "' offering more than " + CullCategory.maxExamples() + " examples",
+                    new IOException("too many category examples"));
+        }
+        for (final String example : examples) {
+            if (example.length() > CullCategory.maxExample()) {
+                throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '"
+                        + name + "' with an example longer than " + CullCategory.maxExample()
+                        + " characters", new IOException("over-long category example"));
+            }
+        }
+        return examples;
+    }
+
+    /**
+     * One card's examples, as a list {@link CullCategory} can take. Every recorded card is enabled
+     * by construction, since a disabled one never reaches the set a run records, so nothing here
+     * reads a switch off disk.
+     *
+     * @param raw {@link RawCategory} the parsed card
+     * @return a {@link List} of {@link String} its examples, empty when the field is absent
+     */
+    private static List<String> examplesOf(final RawCategory raw) {
+        final List<@Nullable String> examples = raw.examples();
+        return examples == null ? List.of() : examples.stream().filter(Objects::nonNull).toList();
     }
 
     /**

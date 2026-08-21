@@ -896,7 +896,7 @@ class AnthropicCuller implements VisionCuller {
     private static CullException retryFailedException(final String scope, final String montage,
                                                       final List<String> firstProblems,
                                                       final List<String> retryProblems) {
-        return new CullException("Cull for " + scope + " failed at " + montage
+        return new CullException("The sifting for " + scope + " failed at sheet " + montage
                 + " and a corrective retry did not fix it."
                 + "\nFirst attempt (" + firstProblems.size() + " problem(s)):\n - "
                 + String.join("\n - ", firstProblems)

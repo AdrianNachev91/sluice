@@ -43,9 +43,26 @@ class SettingsHolderTest {
 
         assertThat(holder.current().paths()).isEqualTo(PATHS);
         assertThat(holder.provider()).isEqualTo("external-agent");
-        assertThat(holder.categories()).containsExactly(new CullCategory("junk", "junk description"));
+        assertThat(holder.categories()).containsExactly(CullCategory.of("junk", "junk description"));
         assertThat(holder.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
         assertThat(holder.providerSettings().model()).isNull();
+    }
+
+    @Test
+    void theActiveSetLeavesOutTheCardsSwitchedOffAndTheWholeSetKeepsThem() {
+        final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
+                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
+
+        holder.apply(new Settings(PATHS, "anthropic", Map.of(),
+                List.of(CullCategory.of("junk", "junk description"),
+                        new CullCategory("food", "food description", List.of(), Boolean.FALSE),
+                        CullCategory.of("funny", "funny description")),
+                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(224, 5), ThemeChoice.SYSTEM));
+
+        assertThat(holder.activeCategories()).extracting(CullCategory::name)
+                .containsExactly("junk", "funny");
+        assertThat(holder.categories()).extracting(CullCategory::name)
+                .containsExactly("junk", "food", "funny");
     }
 
     @Test
@@ -54,12 +71,12 @@ class SettingsHolderTest {
                 cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         holder.apply(new Settings(PATHS, "anthropic", Map.of("anthropic", new CullProviderSettings("claude-sonnet-5", null, null)),
-                List.of(new CullCategory("food", "food description")),
+                List.of(CullCategory.of("food", "food description")),
                 new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK));
 
         assertThat(holder.provider()).isEqualTo("anthropic");
         assertThat(holder.providerSettings().model()).isEqualTo("claude-sonnet-5");
-        assertThat(holder.categories()).containsExactly(new CullCategory("food", "food description"));
+        assertThat(holder.categories()).containsExactly(CullCategory.of("food", "food description"));
         assertThat(holder.externalAgent().mode()).isEqualTo(WatchMode.WATCH);
         assertThat(holder.montage()).isEqualTo(new MontageConfig(96, 7));
     }
@@ -69,8 +86,8 @@ class SettingsHolderTest {
     @Test
     void refusesTwoCategoryCardsSharingAName() {
         final var cull = new CullConfig("external-agent", Map.of(),
-                List.of(new CullCategory("receipts", "paper receipts"),
-                        new CullCategory("receipts", "till slips")),
+                List.of(CullCategory.of("receipts", "paper receipts"),
+                        CullCategory.of("receipts", "till slips")),
                 new ExternalAgentSettings(WatchMode.MANUAL));
 
         assertThatThrownBy(() -> SettingsHolder.bound(new PathsProperties("repo", "library", "inbox"),
@@ -99,7 +116,7 @@ class SettingsHolderTest {
 
     private static CullConfig cullConfig() {
         return new CullConfig("external-agent", Map.of(),
-                List.of(new CullCategory("junk", "junk description")), new ExternalAgentSettings(WatchMode.MANUAL));
+                List.of(CullCategory.of("junk", "junk description")), new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
     // Every properties class SettingsHolder takes. One missing makes the context fail to build, and

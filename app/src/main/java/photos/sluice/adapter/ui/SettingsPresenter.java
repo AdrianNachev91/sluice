@@ -188,7 +188,8 @@ public class SettingsPresenter {
                 this.secretRow(shownProvider),
                 montage.tileSize(), TILE_SIZE_RANGE, this.overrideNote("sluice.montage.tile-size"),
                 montage.tilesPerRow(), TILES_PER_ROW_RANGE, this.overrideNote("sluice.montage.tiles-per-row"),
-                settings.theme().name(), THEMES, this.overrideNote("sluice.ui.theme"));
+                settings.theme().name(), THEMES, this.overrideNote("sluice.ui.theme"),
+                CullProviderSettings.maxEndpoint(), PathSettings.maxRoot(), SecretStore.maxSecret());
     }
 
     /**
@@ -328,30 +329,6 @@ public class SettingsPresenter {
             return this.refusalMarkingItsFields(e, new PathSettings(blankToNull(workingRoot),
                     blankToNull(libraryRoot), blankToNull(inbox)));
         }
-    }
-
-    /**
-     * Words a refusal, and marks whichever folder rows the refused values put at fault.
-     *
-     * <p>Judged against the values being saved rather than the ones in force. Those are what the
-     * user is looking at, and a refused save leaves the ones in force untouched, so marking against
-     * them would mark nothing at all.
-     *
-     * <p>The rows are marked whatever refused the save. A busy job and an unusable folder can both
-     * be true, and the one reported is not always the one a field can show.
-     *
-     * @param refusal {@link RuntimeException} what the save seam threw
-     * @param candidate {@link PathSettings} the roots this save was trying to put in force
-     * @return {@link SaveOutcome.Refused} the refusal, with a message per row at fault
-     */
-    private SaveOutcome.Refused refusalMarkingItsFields(final RuntimeException refusal,
-                                                        final PathSettings candidate) {
-        final Map<PathRole, String> byRole = this.violationsByRole(candidate);
-        // Once the rows say what is wrong in this screen's own words, the summary only has to send
-        // the reader to them.
-        final String summary = byRole.isEmpty() ? wordedForAUser(refusal) : FIELDS_ARE_MARKED;
-        return new SaveOutcome.Refused(summary, byRole.get(PathRole.REPO_ROOT),
-                byRole.get(PathRole.LIBRARY_ROOT), byRole.get(PathRole.INBOX), null);
     }
 
     /**
@@ -616,93 +593,6 @@ public class SettingsPresenter {
     }
 
     /**
-     * The credential identity one provider authenticates with.
-     *
-     * <p>Asked of the provider rather than mapped here. Which environment variable overrides a key,
-     * and the name it is stored under, are the authenticating provider's own business.
-     *
-     * @param providerId {@link String} the provider to ask about
-     * @return an {@link Optional} of {@link SecretId} its credential, empty when it takes none
-     */
-    private Optional<SecretId> credentialOf(final String providerId) {
-        return this.providers.byId(providerId).map(VisionProviderDescriptor::credential);
-    }
-
-    /**
-     * Whether any writable tier actually holds a credential, for {@code Remove}'s enabled state and
-     * the Save-versus-Replace label.
-     *
-     * <p>Not the same question {@link #secretRow}'s status sentence answers. {@link SecretStatus}
-     * names the tier a read would win from, and an environment variable can win a read while nothing
-     * is stored underneath it. Asking that question here would leave {@code Remove} enabled, and
-     * labelled as if there were something to replace, on a machine where it does nothing.
-     *
-     * @param id {@link SecretId} the credential to ask about
-     * @return boolean true when a stored tier holds a value
-     */
-    private boolean hasAStoredValue(final SecretId id) {
-        return this.secretStore.holdings(id).stream()
-                .anyMatch(holding -> holding.location() instanceof StoredLocation && holding.holding() == Holding.HOLDS);
-    }
-
-    private String reassuranceLine() {
-        final Optional<StoredLocation> whereASaveWouldLand = this.secretStore.whereASaveWouldStoreIt();
-        final String base = whereASaveWouldLand.isPresent() && whereASaveWouldLand.get() instanceof InKeyring
-                ? "Saved to this computer's own credential store."
-                : "Saved to a protected file on this computer.";
-        return base + " Never shown to any AI agent, only ever sent to that provider's own API.";
-    }
-
-    private @Nullable String multiHolderNote(final SecretId id) {
-        final List<SecretHolding> holdings = this.secretStore.holdings(id);
-        final long holders = holdings.stream().filter(h -> h.holding() == Holding.HOLDS).count();
-        if (holders < 2) {
-            return null;
-        }
-        final boolean anyUnaskable = holdings.stream().anyMatch(h -> h.holding() == Holding.COULD_NOT_BE_ASKED);
-        return "More than one place on this computer holds a key for this provider. Remove clears "
-                + "every one Sluice can reach."
-                + (anyUnaskable ? " One place did not answer, so there may be another beyond these." : "");
-    }
-
-    private @Nullable String overrideNote(final String property) {
-        return this.settingsUseCase.overriddenAboveTheConfigFile(property)
-                .map(SettingsPresenter::wordOverride)
-                .orElse(null);
-    }
-
-    /**
-     * The property name one provider's own setting is configured under. Each provider keeps its own
-     * block, so the note about an environment override has to name the block it belongs to.
-     *
-     * @param providerId {@link String} the provider whose block it sits in
-     * @param setting {@link String} the setting's own key within that block
-     * @return {@link String} the full property name
-     */
-    private static String providerProperty(final String providerId, final String setting) {
-        return "sluice.cull.provider-settings." + providerId + "." + setting;
-    }
-
-    /**
-     * The whole per-provider settings map with one provider's block replaced.
-     *
-     * <p>A save carries one provider's fields, because that is all a screen shows at a time.
-     * Writing only those would drop every other provider's, and a user swapping provider and saving
-     * would lose the model they had configured for the one they left.
-     *
-     * @param providerId {@link String} the provider being saved
-     * @param edited {@link CullProviderSettings} the values that provider is being saved with
-     * @return a {@link Map} of {@link String} to {@link CullProviderSettings} every provider's
-     *         settings, with this one's replaced
-     */
-    private Map<String, CullProviderSettings> providerSettingsWith(final String providerId,
-                                                                   final CullProviderSettings edited) {
-        final var merged = new LinkedHashMap<>(this.settingsUseCase.settings().providerSettingsById());
-        merged.put(providerId, edited);
-        return merged;
-    }
-
-    /**
      * What the model picker should draw for one provider, and whether its saved model needs a
      * caution.
      *
@@ -777,7 +667,7 @@ public class SettingsPresenter {
         // already in force would send a user off to cull against a model that fails.
         final String caution = savedModel == null || savedModel.isBlank() || offered ? null
                 : "Your configuration asks for a model called '" + savedModel + "', which this provider does "
-                        + "not offer. Save to replace it with the one picked above. Until you do, a cull "
+                        + "not offer. Save to replace it with the one picked above. Until you do, a run "
                         + "fails on the model you configured.";
         return new ModelPickerResult(new SettingsView.ModelPicker.Options(choices, selected, sourceNote), caution);
     }
@@ -1184,5 +1074,116 @@ public class SettingsPresenter {
                 return new Refused(FIELDS_ARE_MARKED, null, null, null, message);
             }
         }
+    }
+
+    /**
+     * Words a refusal, and marks whichever folder rows the refused values put at fault.
+     *
+     * <p>Judged against the values being saved rather than the ones in force. Those are what the
+     * user is looking at, and a refused save leaves the ones in force untouched, so marking against
+     * them would mark nothing at all.
+     *
+     * <p>The rows are marked whatever refused the save. A busy job and an unusable folder can both
+     * be true, and the one reported is not always the one a field can show.
+     *
+     * @param refusal {@link RuntimeException} what the save seam threw
+     * @param candidate {@link PathSettings} the roots this save was trying to put in force
+     * @return {@link SaveOutcome.Refused} the refusal, with a message per row at fault
+     */
+    private SaveOutcome.Refused refusalMarkingItsFields(final RuntimeException refusal,
+                                                        final PathSettings candidate) {
+        final Map<PathRole, String> byRole = this.violationsByRole(candidate);
+        // Once the rows say what is wrong in this screen's own words, the summary only has to send
+        // the reader to them.
+        final String summary = byRole.isEmpty() ? wordedForAUser(refusal) : FIELDS_ARE_MARKED;
+        return new SaveOutcome.Refused(summary, byRole.get(PathRole.REPO_ROOT),
+                byRole.get(PathRole.LIBRARY_ROOT), byRole.get(PathRole.INBOX), null);
+    }
+
+    /**
+     * The credential identity one provider authenticates with.
+     *
+     * <p>Asked of the provider rather than mapped here. Which environment variable overrides a key,
+     * and the name it is stored under, are the authenticating provider's own business.
+     *
+     * @param providerId {@link String} the provider to ask about
+     * @return an {@link Optional} of {@link SecretId} its credential, empty when it takes none
+     */
+    private Optional<SecretId> credentialOf(final String providerId) {
+        return this.providers.byId(providerId).map(VisionProviderDescriptor::credential);
+    }
+
+    /**
+     * Whether any writable tier actually holds a credential, for {@code Remove}'s enabled state and
+     * the Save-versus-Replace label.
+     *
+     * <p>Not the same question {@link #secretRow}'s status sentence answers. {@link SecretStatus}
+     * names the tier a read would win from, and an environment variable can win a read while nothing
+     * is stored underneath it. Asking that question here would leave {@code Remove} enabled, and
+     * labelled as if there were something to replace, on a machine where it does nothing.
+     *
+     * @param id {@link SecretId} the credential to ask about
+     * @return boolean true when a stored tier holds a value
+     */
+    private boolean hasAStoredValue(final SecretId id) {
+        return this.secretStore.holdings(id).stream()
+                .anyMatch(holding -> holding.location() instanceof StoredLocation && holding.holding() == Holding.HOLDS);
+    }
+
+    private String reassuranceLine() {
+        final Optional<StoredLocation> whereASaveWouldLand = this.secretStore.whereASaveWouldStoreIt();
+        final String base = whereASaveWouldLand.isPresent() && whereASaveWouldLand.get() instanceof InKeyring
+                ? "Saved to this computer's own credential store."
+                : "Saved to a protected file on this computer.";
+        return base + " Never shown to any AI agent, only ever sent to that provider's own API.";
+    }
+
+    private @Nullable String multiHolderNote(final SecretId id) {
+        final List<SecretHolding> holdings = this.secretStore.holdings(id);
+        final long holders = holdings.stream().filter(h -> h.holding() == Holding.HOLDS).count();
+        if (holders < 2) {
+            return null;
+        }
+        final boolean anyUnaskable = holdings.stream().anyMatch(h -> h.holding() == Holding.COULD_NOT_BE_ASKED);
+        return "More than one place on this computer holds a key for this provider. Remove clears "
+                + "every one Sluice can reach."
+                + (anyUnaskable ? " One place did not answer, so there may be another beyond these." : "");
+    }
+
+    private @Nullable String overrideNote(final String property) {
+        return this.settingsUseCase.overriddenAboveTheConfigFile(property)
+                .map(SettingsPresenter::wordOverride)
+                .orElse(null);
+    }
+
+    /**
+     * The property name one provider's own setting is configured under. Each provider keeps its own
+     * block, so the note about an environment override has to name the block it belongs to.
+     *
+     * @param providerId {@link String} the provider whose block it sits in
+     * @param setting {@link String} the setting's own key within that block
+     * @return {@link String} the full property name
+     */
+    private static String providerProperty(final String providerId, final String setting) {
+        return "sluice.cull.provider-settings." + providerId + "." + setting;
+    }
+
+    /**
+     * The whole per-provider settings map with one provider's block replaced.
+     *
+     * <p>A save carries one provider's fields, because that is all a screen shows at a time.
+     * Writing only those would drop every other provider's, and a user swapping provider and saving
+     * would lose the model they had configured for the one they left.
+     *
+     * @param providerId {@link String} the provider being saved
+     * @param edited {@link CullProviderSettings} the values that provider is being saved with
+     * @return a {@link Map} of {@link String} to {@link CullProviderSettings} every provider's
+     *         settings, with this one's replaced
+     */
+    private Map<String, CullProviderSettings> providerSettingsWith(final String providerId,
+                                                                   final CullProviderSettings edited) {
+        final var merged = new LinkedHashMap<>(this.settingsUseCase.settings().providerSettingsById());
+        merged.put(providerId, edited);
+        return merged;
     }
 }

@@ -92,7 +92,7 @@ itself uses.
   port method itself - what's worth diagramming is each engine's own scope/branching logic, not
   `listFiles`. Only `rescue-engine.md` cleared that bar, for `RescueEngine`'s own logic.
   `listChildDirectories` is used by `PrepDirDoctor`, covered in `prep-dir-doctor.md`, to shallow-list
-  the cull-prep root so one candidate's own read failing cannot cost every other one. `copy`,
+  the sift-prep root so one candidate's own read failing cannot cost every other one. `copy`,
   `resolveDestination`, `moveTo`, and `write` are used by `apply-engine.md`'s `ApplyEngine` for
   near-dup handling and crash-safe resume.
 - `removeEmptyDirectories` is invoked as the second step of `SortEngine`'s post-run sweep; the

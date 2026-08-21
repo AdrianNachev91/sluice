@@ -29,7 +29,7 @@ import java.util.List;
  * Health checks for a prep dir, plus the purge that clears completed runs. diagnose() is
  * side-effect-free and safe to call any time. It never throws, whatever state the dir is in, so one
  * unreadable run cannot take down a caller reading every other one. runs() diagnoses every prep dir
- * under the cull-prep root. Startup arming reads it today. The run-card dashboard and the
+ * under the sift-prep root. Startup arming reads it today. The run-card dashboard and the
  * unresolved-run banner are the consumers it was shaped for.
  *
  * <p>Totality is not the same as cheapness. One diagnosis reads every sidecar twice, every shard
@@ -131,7 +131,7 @@ public class PrepDirDoctor {
      *
      * <p>Ordered by scope so a dashboard's rows hold still between refreshes.
      *
-     * @param cullPrepRoot {@link Path} the cull-prep root directory to enumerate
+     * @param cullPrepRoot {@link Path} the sift-prep root directory to enumerate
      * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
      */
     public List<CullRunSummary> runs(final Path cullPrepRoot) {
@@ -181,7 +181,7 @@ public class PrepDirDoctor {
      * on the way WAITING or BLOCKED are. {@link #purgeDir} guards its own failure, so the sweep
      * continues on to the rest regardless.
      *
-     * @param cullPrepRoot {@link Path} the cull-prep root directory to sweep
+     * @param cullPrepRoot {@link Path} the sift-prep root directory to sweep
      * @return {@link PurgeReport} every scope purged, skipped with its state, or left unreadable, this sweep
      */
     public PurgeReport purgeCompleted(final Path cullPrepRoot) {
@@ -334,7 +334,7 @@ public class PrepDirDoctor {
      * separately by every caller of this method - usually lands on DAMAGED. Only the root-level
      * read itself failing yields no runs at all, logged rather than swallowed.
      *
-     * @param cullPrepRoot {@link Path} the cull-prep root directory to enumerate
+     * @param cullPrepRoot {@link Path} the sift-prep root directory to enumerate
      * @return a {@link List} of {@link Path} every prep dir found, ordered by name
      */
     private List<Path> prepDirsUnder(final Path cullPrepRoot) {

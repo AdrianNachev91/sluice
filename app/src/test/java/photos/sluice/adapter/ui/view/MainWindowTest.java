@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.ShellPresenter;
+import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
@@ -35,6 +36,7 @@ import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
+import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.paths.PathRole;
@@ -182,7 +184,7 @@ class MainWindowTest {
     }
 
     private static BorderPane built(final ShellPresenter presenter, final SettingsPresenter settingsPresenter) {
-        final Scene scene = MainWindow.scene(presenter, settingsPresenter);
+        final Scene scene = MainWindow.scene(presenter, settingsPresenter, photoCategoriesPresenter());
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();
@@ -225,6 +227,30 @@ class MainWindowTest {
 
     private static SettingsPresenter settingsPresenter() {
         return settingsPresenter(_ -> {});
+    }
+
+    // One card is enough. What this test needs is a real pane to exist, not any particular thing
+    // drawn inside it.
+    private static PhotoCategoriesPresenter photoCategoriesPresenter() {
+        final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
+                "anthropic", Map.of(), List.of(CullCategory.of("junk", "Not worth keeping")),
+                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+        return new PhotoCategoriesPresenter(new SettingsUseCase() {
+            @Override
+            public Settings settings() {
+                return settings;
+            }
+
+            @Override
+            public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+                return Optional.empty();
+            }
+
+            @Override
+            public void save(final Settings toSave) {
+                throw new AssertionError("no test here saves photo categories");
+            }
+        });
     }
 
     private static SettingsPresenter settingsPresenter(final Consumer<String> onCheck) {

@@ -114,6 +114,23 @@ class YamlSettingsStoreTest {
         assertThat(reloaded(file)).isEqualTo(settings());
     }
 
+    // YAML can name a value once and point at it wherever it repeats, and the writer does that for
+    // any two fields holding the same instance. Every card offering no examples holds the one empty
+    // list Java hands out. Nobody hand-editing this file should meet an anchor, and deleting the
+    // line carrying one would break every line pointing at it.
+    @Test
+    void cardsWithoutExamplesEachWriteTheirOwnEmptyListRatherThanAnAnchor(@TempDir final Path dir)
+            throws IOException {
+        final Path file = dir.resolve("config.yml");
+        new YamlSettingsStore(file).save(settings());
+
+        final String written = Files.readString(file);
+
+        assertThat(written).doesNotContain("&id").doesNotContain("*id");
+        assertThat(written.lines().filter(line -> line.contains("examples:")).count())
+                .isEqualTo(settings().categories().size());
+    }
+
     // Every group on the way down is merged into, not replaced, so depth is what this checks. The
     // shallow case alone would pass against a writer that rebuilds the leaf groups from scratch.
     @Test
@@ -319,8 +336,17 @@ class YamlSettingsStoreTest {
         return new Settings(new PathSettings("/photos/work", "/photos/library", "/photos/work/Inbox"),
                 "anthropic", Map.of("anthropic",
                         new CullProviderSettings("claude-sonnet-5", "https://example.invalid", 4)),
-                List.of(new CullCategory("junk", "objectively worthless shots")),
+                List.of(CullCategory.of("junk", "objectively worthless shots"),
+                        new CullCategory("food", "meals and menus", List.of("plates", "menus"), Boolean.TRUE),
+                        new CullCategory("scenery", "landscapes", List.of(), Boolean.FALSE)),
                 new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK);
+    }
+
+    // The null is reachable and the IDE reads it as dead. A card offering no examples writes no key
+    // at all, so the map lookup feeding this answers null. The `scenery` card above is that case.
+    @SuppressWarnings({"unchecked", "ConstantValue"})
+    private static List<String> exampleLines(final Object raw) {
+        return raw == null ? List.of() : List.copyOf((List<String>) raw);
     }
 
     // Reads a saved file back the way config binding would, so a test compares settings values
@@ -336,7 +362,8 @@ class YamlSettingsStoreTest {
         final var anthropic = asMap(providerSettings.get("anthropic"));
         final List<CullCategory> categories = ((List<?>) cull.get("categories")).stream()
                 .map(YamlSettingsStoreTest::asMap)
-                .map(card -> new CullCategory((String) card.get("name"), (String) card.get("description")))
+                .map(card -> new CullCategory((String) card.get("name"), (String) card.get("description"),
+                        exampleLines(card.get("examples")), (Boolean) card.get("enabled")))
                 .toList();
         return new Settings(
                 new PathSettings((String) paths.get("repo-root"), (String) paths.get("library-root"),

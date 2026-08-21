@@ -61,7 +61,9 @@ final class SettingsPaneTestSupport {
     private SettingsPaneTestSupport() {}
 
     private static Parent built(final SettingsPresenter presenter, final int windowHeight) {
-        final Parent pane = (Parent) SettingsPane.pane(presenter);
+        // A destination that does nothing is enough here. The button only has to go somewhere, so
+        // the card renders and Settings lays out as it really does.
+        final Parent pane = (Parent) SettingsPane.pane(presenter, () -> { });
         // In a scene and laid out before anything is looked up. A ScrollPane holds its content
         // through a skin, and the skin is built when CSS is applied, so a lookup before that finds
         // nothing inside it.

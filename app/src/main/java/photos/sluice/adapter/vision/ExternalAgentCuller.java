@@ -120,7 +120,7 @@ class ExternalAgentCuller implements VisionCuller {
             progress.tick(++current, total);
         }
         if (!opts.allowPartial() && !missing.isEmpty()) {
-            throw new CullException("Cull for " + prep.scope() + " is incomplete ("
+            throw new CullException("The sifting for " + prep.scope() + " is incomplete ("
                     + missing.size() + " montage(s) still without a shard):\n - "
                     + String.join("\n - ", missing));
         }

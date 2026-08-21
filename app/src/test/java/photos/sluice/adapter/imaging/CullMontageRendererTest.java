@@ -45,8 +45,8 @@ class CullMontageRendererTest {
     private static final int PHOTO_HEIGHT = 600;
 
     private static final List<CullCategory> CATEGORIES = List.of(
-            new CullCategory("junk", "objectively worthless shots"),
-            new CullCategory("scenery", "landscapes with nobody in them"));
+            CullCategory.of("junk", "objectively worthless shots"),
+            CullCategory.of("scenery", "landscapes with nobody in them"));
 
     @Test
     void buildBatchesIntoMultipleMontagesComputesReceivedFlagsAndDropsUnreviewableFiles(@TempDir final Path root)
@@ -272,7 +272,7 @@ class CullMontageRendererTest {
                 ProgressCallback.NO_OP, () -> true);
 
         assertThat(result).isNull();
-        assertThat(Files.exists(pathsConfig.logs().resolve("cull-prep").resolve("2019"))).isFalse();
+        assertThat(Files.exists(pathsConfig.logs().resolve("sift-prep").resolve("2019"))).isFalse();
     }
 
     @Test
@@ -293,7 +293,7 @@ class CullMontageRendererTest {
                 ProgressCallback.NO_OP, cancelBeforeSecondCandidate);
 
         assertThat(result).isNull();
-        assertThat(Files.exists(pathsConfig.logs().resolve("cull-prep").resolve("2019"))).isFalse();
+        assertThat(Files.exists(pathsConfig.logs().resolve("sift-prep").resolve("2019"))).isFalse();
     }
 
     // A scope is occupied by any prep dir holding files. A half-rendered one left lying around
@@ -323,7 +323,7 @@ class CullMontageRendererTest {
 
         assertThat(result).isNull();
         assertThat(montagesWritten.get()).isEqualTo(1);
-        assertThat(pathsConfig.logs().resolve("cull-prep").resolve("2019")).doesNotExist();
+        assertThat(pathsConfig.logs().resolve("sift-prep").resolve("2019")).doesNotExist();
     }
 
     // The category set is captured at prep time and travels with the run. Proved against a set that
@@ -335,8 +335,8 @@ class CullMontageRendererTest {
         final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "IMG_20190601_100000.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final List<CullCategory> configured = List.of(
-                new CullCategory("blurry", "out of focus"),
-                new CullCategory("receipts", "photographed paperwork"));
+                CullCategory.of("blurry", "out of focus"),
+                CullCategory.of("receipts", "photographed paperwork"));
 
         final PrepDir result = renderer(pathsConfig, configured)
                 .build(new CullScope.Year(2019, null), new MontageConfig(64, 2));

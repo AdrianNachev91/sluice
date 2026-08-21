@@ -18,7 +18,7 @@ class DisasterDrawerTest {
 
     @Test
     void filesASourceIntoThePrepDirsDisastersFolderEmbeddingTheGivenWhatAndExtension(@TempDir final Path root) throws IOException {
-        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        final Path prepDir = root.resolve("logs/sift-prep/2019-06");
         final Path source = writeFile(root.resolve("move-records.log"), "stale content");
 
         final Path filed = drawer().file(prepDir, source, "move-records-log");
@@ -33,7 +33,7 @@ class DisasterDrawerTest {
     @Test
     void filingTwoEventsUnderTheSameWhatGetsTheSecondANumericSuffixInsteadOfOverwritingTheFirst(@TempDir final Path root)
             throws IOException {
-        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        final Path prepDir = root.resolve("logs/sift-prep/2019-06");
         final DisasterDrawer drawer = drawer();
         final Path firstSource = writeFile(root.resolve("first.log"), "first");
         final Path secondSource = writeFile(root.resolve("second.log"), "second");
@@ -48,7 +48,7 @@ class DisasterDrawerTest {
 
     @Test
     void writesContentAsANewTimestampedDrawerEntry(@TempDir final Path root) throws IOException {
-        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        final Path prepDir = root.resolve("logs/sift-prep/2019-06");
 
         final Path written = drawer().write(prepDir, "troubleshoot-report", "line one\nline two");
 
@@ -60,7 +60,7 @@ class DisasterDrawerTest {
 
     @Test
     void writingTwoReportsGetsTheSecondANumericSuffixInsteadOfOverwritingTheFirst(@TempDir final Path root) {
-        final Path prepDir = root.resolve("logs/cull-prep/2019-06");
+        final Path prepDir = root.resolve("logs/sift-prep/2019-06");
         final DisasterDrawer drawer = drawer();
 
         final Path first = drawer.write(prepDir, "troubleshoot-report", "first");
@@ -71,7 +71,7 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredDeletesOnlyDrawerEntriesOlderThanThirtyDays(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        final Path cullPrepRoot = root.resolve("logs/sift-prep");
         final Path drawer1 = cullPrepRoot.resolve("2019-06/disasters");
         final Path oldEntry = writeFile(drawer1.resolve("2019-01-01_00-00-00-move-records-log.log"), "old");
         final Path freshEntry = writeFile(drawer1.resolve(recentStampedName()), "fresh");
@@ -89,7 +89,7 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredLeavesAnUnparseableFilenameAloneRatherThanGuessing(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        final Path cullPrepRoot = root.resolve("logs/sift-prep");
         final Path unparseable = writeFile(cullPrepRoot.resolve("2019-06/disasters/not-a-timestamped-name.log"), "?");
 
         final int deleted = drawer().sweepExpired(cullPrepRoot);
@@ -100,7 +100,7 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredOnAMissingRootReturnsZeroWithoutThrowing(@TempDir final Path root) {
-        final int deleted = drawer().sweepExpired(root.resolve("logs/cull-prep"));
+        final int deleted = drawer().sweepExpired(root.resolve("logs/sift-prep"));
 
         assertThat(deleted).isZero();
     }

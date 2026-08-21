@@ -1,5 +1,6 @@
 package photos.sluice.adapter.imaging;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.stereotype.Component;
 import photos.sluice.domain.cull.PrepDir;
 import tools.jackson.core.JacksonException;
@@ -53,9 +54,14 @@ public class PrepIndexWriter {
 
     /**
      * The on-disk shape of one recorded category card. Written as an object rather than the bare
-     * name, so a run carries the prose its culling prompt was rendered from.
+     * name, so a run carries the prose its culling prompt was rendered from. Examples are part of
+     * that prose. Whether a card is enabled is not recorded: a disabled one never reaches this list.
+     *
+     * <p>A card offering no examples writes no key rather than an empty array, so a prep dir whose
+     * cards all offer none holds no trace of the field.
      */
-    private record Category(String name, String description) {
+    private record Category(String name, String description,
+                            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> examples) {
     }
 
     /**
@@ -68,7 +74,8 @@ public class PrepIndexWriter {
     public void write(final Path indexPath, final PrepDir prepDir) {
         final var document = new Index(
                 prepDir.scope(),
-                prepDir.categories().stream().map(card -> new Category(card.name(), card.description())).toList(),
+                prepDir.categories().stream()
+                        .map(card -> new Category(card.name(), card.description(), card.examples())).toList(),
                 prepDir.basePath().toString(),
                 prepDir.photos(),
                 prepDir.unreviewable().stream().map(Path::toString).toList(),

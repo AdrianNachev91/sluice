@@ -3,6 +3,7 @@ package photos.sluice.adapter.ui.view;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
@@ -19,9 +20,11 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
 import javafx.scene.text.Text;
@@ -53,12 +56,12 @@ final class ScreenWarmUp {
      */
     static List<Node> nodes() {
         return List.of(
-                new BorderPane(), new Group(), new HBox(), new StackPane(), new VBox(),
-                new Button(), new ComboBox<String>(), new Hyperlink(),
+                new BorderPane(), new Group(), new HBox(), new Region(), new StackPane(), new VBox(),
+                new Button(), new CheckBox(), new ComboBox<String>(), new Hyperlink(),
                 new Label(), new PasswordField(), new RadioButton(), new ScrollPane(),
                 new Separator(), new Spinner<Integer>(), new TextArea(), new TextField(),
                 new TitledPane(), new ToggleButton(),
-                new Circle(), new Rectangle(), new SVGPath(), new Text(), new TextFlow(),
+                new Circle(), new Polygon(), new Rectangle(), new SVGPath(), new Text(), new TextFlow(),
                 new ListCell<String>(), new VisionProviderCard.ModelChoiceCell());
     }
 

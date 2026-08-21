@@ -19,8 +19,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CullerPromptTest {
 
     private static final List<CullCategory> CARDS = List.of(
-            new CullCategory("junk", "Objectively worthless photos."),
-            new CullCategory("food", "Meal photos, not kept by default."));
+            CullCategory.of("junk", "Objectively worthless photos."),
+            CullCategory.of("food", "Meal photos, not kept by default."));
 
     @Test
     void systemPromptRendersEveryCategoryCardIntoTheTemplate() {
@@ -30,6 +30,45 @@ class CullerPromptTest {
                 .contains("### `junk`\n\nObjectively worthless photos.")
                 .contains("### `food`\n\nMeal photos, not kept by default.")
                 .doesNotContain(CullerPrompt.CATEGORIES_PLACEHOLDER);
+    }
+
+    @Test
+    void systemPromptListsACardsExamplesUnderItsDescription() {
+        final var withExamples = new CullCategory("food", "Meal photos, not kept by default.",
+                List.of("restaurant plates", "home dinners"), Boolean.TRUE);
+
+        final String prompt = cullerPrompt().systemPrompt(List.of(withExamples));
+
+        assertThat(prompt).contains("""
+                ### `food`
+
+                Meal photos, not kept by default.
+
+                Examples:
+                - restaurant plates
+                - home dinners""");
+    }
+
+    @Test
+    void aDescriptionKeepsWhateverWhitespaceItEndsOn() {
+        final var trailing = new CullCategory("junk", "Worthless shots.\n", List.of(), Boolean.TRUE);
+        final var alsoExamples = new CullCategory("food", "Meals.\n", List.of("plates"), Boolean.TRUE);
+
+        assertThat(cullerPrompt().systemPrompt(List.of(trailing)))
+                .contains("### `junk`\n\nWorthless shots.\n");
+        assertThat(cullerPrompt().systemPrompt(List.of(alsoExamples)))
+                .contains("### `food`\n\nMeals.\n\n\nExamples:\n- plates");
+    }
+
+    // The two are adjacent in the rendered template, so a card offering examples must not run into
+    // the next card's heading, and one offering none must not leave a gap where the list would be.
+    @Test
+    void aCardWithNoExamplesRendersExactlyWhatItDidBeforeTheFieldExisted() {
+        final String prompt = cullerPrompt().systemPrompt(CARDS);
+
+        assertThat(prompt)
+                .contains("### `junk`\n\nObjectively worthless photos.\n\n### `food`")
+                .doesNotContain("Examples:");
     }
 
     @Test
@@ -48,7 +87,7 @@ class CullerPromptTest {
 
         assertThatThrownBy(() -> prompt.systemPrompt(List.of()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("recorded no categories");
+                .hasMessageContaining("recorded no photo categories");
     }
 
     @Test

@@ -28,6 +28,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,8 +40,8 @@ import static org.mockito.Mockito.when;
 
 class JsonCullPrepStoreTest {
 
-    private static final CullCategory JUNK = new CullCategory("junk", "objectively worthless");
-    private static final CullCategory FOOD = new CullCategory("food", "meals and menus");
+    private static final CullCategory JUNK = CullCategory.of("junk", "objectively worthless");
+    private static final CullCategory FOOD = CullCategory.of("food", "meals and menus");
 
     private final JsonCullPrepStore store = new JsonCullPrepStore(new ShardCodec(), new SidecarReader());
 
@@ -61,6 +63,91 @@ class JsonCullPrepStoreTest {
         new PrepIndexWriter().write(dir.resolve("index.json"), prepDir);
 
         assertThat(this.store.readIndex(dir)).isEqualTo(prepDir);
+    }
+
+    @Test
+    void writesAndReadsBackACardsExamplesInOrder(@TempDir final Path dir) {
+        final var food = new CullCategory("food", "meals and menus",
+                List.of("restaurant plates", "home dinners"), Boolean.TRUE);
+        final var prepDir = new PrepDir("2019-06", List.of(food), dir.resolve("base"), 3,
+                List.of(), 1, dir, List.of("montage-001"));
+
+        this.store.writeIndex(dir, prepDir);
+
+        assertThat(this.store.readIndex(dir).categories()).containsExactly(food);
+    }
+
+    // A card that offers none writes no key, so what a reader meets is an absent field rather than
+    // an empty array. It has to answer the same as one carrying an empty list.
+    @Test
+    void aCardThatOffersNoExamplesWritesNoKeyAndReadsBackWithNone(@TempDir final Path dir) throws IOException {
+        final var prepDir = new PrepDir("2019-06", List.of(JUNK), dir.resolve("base"), 3,
+                List.of(), 1, dir, List.of("montage-001"));
+
+        this.store.writeIndex(dir, prepDir);
+
+        assertThat(Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8))
+                .doesNotContain("examples");
+        assertThat(this.store.readIndex(dir).categories().getFirst().examples()).isEmpty();
+    }
+
+    @Test
+    void readIndexDropsBlankAndNullExamplesRatherThanRefusingTheIndex(@TempDir final Path dir) throws IOException {
+        Files.writeString(dir.resolve("index.json"), """
+                {
+                  "scope": "2019-06",
+                  "categories": [
+                    { "name": "junk", "description": "objectively worthless",
+                      "examples": ["  pocket shots ", "   ", null, "lens caps"] }
+                  ],
+                  "basePath": "%s",
+                  "photos": 0,
+                  "montages": 0,
+                  "entries": []
+                }
+                """.formatted(jsonEscaped(dir.resolve("base"))));
+
+        assertThat(this.store.readIndex(dir).categories().getFirst().examples())
+                .containsExactly("pocket shots", "lens caps");
+    }
+
+    // The read path raises the type every caller's read-failure handling expects, rather than the
+    // IllegalArgumentException the domain throws on the same value.
+    @Test
+    void readIndexOnADescriptionPastItsCeilingThrowsMalformedPrepJsonException(@TempDir final Path dir)
+            throws IOException {
+        Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
+                "\"description\": \"" + "x".repeat(CullCategory.maxDescription() + 1) + "\""));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("description is longer than");
+    }
+
+    @Test
+    void readIndexOnAnExamplePastItsCeilingThrowsMalformedPrepJsonException(@TempDir final Path dir)
+            throws IOException {
+        Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
+                "\"description\": \"worthless\", \"examples\": [\""
+                        + "x".repeat(CullCategory.maxExample() + 1) + "\"]"));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("example longer than");
+    }
+
+    @Test
+    void readIndexOnMoreExamplesThanACardMayCarryThrowsMalformedPrepJsonException(@TempDir final Path dir)
+            throws IOException {
+        final String tooMany = IntStream.rangeClosed(0, CullCategory.maxExamples())
+                .mapToObj(i -> "\"e" + i + "\"")
+                .collect(Collectors.joining(", "));
+        Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
+                "\"description\": \"worthless\", \"examples\": [" + tooMany + "]"));
+
+        assertThatThrownBy(() -> this.store.readIndex(dir))
+                .isInstanceOf(MalformedPrepJsonException.class)
+                .hasMessageContaining("offering more than");
     }
 
     @Test
@@ -648,6 +735,21 @@ class JsonCullPrepStoreTest {
                 .isInstanceOf(UncheckedIOException.class)
                 .hasCauseInstanceOf(IOException.class)
                 .cause().hasCauseInstanceOf(JacksonException.class);
+    }
+
+    private static String oneCardIndex(final Path dir, final String cardFieldsAfterTheName) {
+        return """
+                {
+                  "scope": "2019-06",
+                  "categories": [
+                    { "name": "junk", %s }
+                  ],
+                  "basePath": "%s",
+                  "photos": 0,
+                  "montages": 0,
+                  "entries": []
+                }
+                """.formatted(cardFieldsAfterTheName, jsonEscaped(dir.resolve("base")));
     }
 
     private static String jsonEscaped(final Path path) {

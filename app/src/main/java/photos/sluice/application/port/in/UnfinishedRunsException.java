@@ -12,7 +12,7 @@ import java.util.List;
  *
  * <p>It is a refusal rather than a guarantee, and the one gap left is worth knowing. A prep dir that
  * cannot be read is still counted, deliberately, so a run nobody can inspect still blocks a move.
- * What is not covered is the cull-prep root itself failing to list: that answers no runs rather than
+ * What is not covered is the sift-prep root itself failing to list: that answers no runs rather than
  * failing, and a move then goes ahead on a machine whose runs nobody could see. Every reader of that
  * directory degrades the same way, so closing it means the count being able to say it does not know.
  *

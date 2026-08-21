@@ -18,7 +18,7 @@ class MontageRendererTest {
 
     @Test
     void progressAndCancellationAwareOverloadsDefaultToThePlainBuildMethod() {
-        final var prepDir = new PrepDir("2020", List.of(new CullCategory("junk", "objectively worthless")),
+        final var prepDir = new PrepDir("2020", List.of(CullCategory.of("junk", "objectively worthless")),
                 Path.of("base"), 5, List.of(), 1, Path.of("prep"), List.of());
         final var calls = new ArrayList<String>();
         final MontageRenderer renderer = (_, _) -> {

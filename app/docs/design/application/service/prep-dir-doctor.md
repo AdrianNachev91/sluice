@@ -1,7 +1,7 @@
 # PrepDirDoctor
 
 How `application/service/PrepDirDoctor` diagnoses a prep dir's health and, separately, purges
-completed runs across the whole cull-prep root
+completed runs across the whole sift-prep root
 (`app/src/main/java/photos/sluice/application/service/PrepDirDoctor.java`).
 
 `diagnose(prepDir)` - the read-only health check every other recovery flow builds on - is
@@ -13,7 +13,7 @@ dir: `runs()`, which diagnoses the whole root, and `purgeCompleted()`, which swe
 ## 1. What counts as a prep dir
 
 Both methods below enumerate the same way, and the rule is deliberately loose. **A prep dir is any
-immediate child of the cull-prep root holding at least one file, anywhere in its own subtree.**
+immediate child of the sift-prep root holding at least one file, anywhere in its own subtree.**
 Never "a directory containing an `index.json`".
 
 That matters most for the dirs least able to speak for themselves. A run whose index has been lost

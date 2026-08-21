@@ -34,8 +34,8 @@ class FindingTest {
     void describeRendersTheExactProseForEachRemainingFindingShape() {
         final var file = Path.of("Sorted", "Photos", "2019", "06", "a.jpg");
         final var sortedRoot = Path.of("Sorted");
-        final var indexPath = Path.of("cull-prep", "2019-06", "index.json");
-        final var moveLog = Path.of("cull-prep", "2019-06", "move-records.log");
+        final var indexPath = Path.of("sift-prep", "2019-06", "index.json");
+        final var moveLog = Path.of("sift-prep", "2019-06", "move-records.log");
 
         assertThat(new MissingMontageField("montage-001").describe())
                 .isEqualTo("montage-001: missing 'montage'");
@@ -51,7 +51,7 @@ class FindingTest {
                 .isEqualTo(indexPath + ": corrupt or unreadable index.json");
         assertThat(new MissingSource(file, moveLog).describe())
                 .isEqualTo("file not found, and its move could not be verified: " + file
-                        + " - if an earlier, crashed run already applied it, the automatic check that would confirm"
+                        + " - if an earlier, crashed sift already applied it, the automatic check that would confirm"
                         + " that (a move record matching this file, whose recorded destination still hash-verifies)"
                         + " found none. This needs manual investigation before re-running; see " + moveLog + ".");
         assertThat(new MissingGroup("montage-001", 1).describe())
@@ -68,7 +68,7 @@ class FindingTest {
         assertThat(new DuplicateFileReference("a.jpg", 3).describe())
                 .isEqualTo("file listed 3 times across shards/unreviewable: a.jpg");
         assertThat(new SourceOutsideSorted(file, sortedRoot).describe())
-                .isEqualTo("file outside " + sortedRoot + ", the only place a cull may take files from: " + file);
+                .isEqualTo("file outside " + sortedRoot + ", the only place photos may be taken from: " + file);
     }
 
     @Test
@@ -108,7 +108,7 @@ class FindingTest {
     // The expected path is built from the input, since its rendering differs across platforms.
     @Test
     void unreadablePrepDirNamesTheDirAndOffersNoRemedy() {
-        final var prepDir = Path.of("cull-prep", "2019");
+        final var prepDir = Path.of("sift-prep", "2019");
         final var finding = new UnreadablePrepDir(prepDir);
 
         assertThat(finding.describe())

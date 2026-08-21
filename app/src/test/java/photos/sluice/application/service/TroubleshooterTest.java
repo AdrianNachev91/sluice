@@ -315,7 +315,7 @@ class TroubleshooterTest {
     }
 
     private static Path prepDir(final Path root) throws IOException {
-        final Path dir = root.resolve("logs/cull-prep/scope1");
+        final Path dir = root.resolve("logs/sift-prep/scope1");
         Files.createDirectories(dir);
         return dir;
     }

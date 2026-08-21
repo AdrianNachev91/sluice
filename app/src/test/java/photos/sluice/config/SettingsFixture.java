@@ -51,10 +51,10 @@ public final class SettingsFixture {
     // The given roots, on the cull defaults a fresh install starts with.
     public static Settings settings(final PathSettings paths) {
         return new Settings(paths, "external-agent", Map.of(),
-                List.of(new CullCategory("junk", "junk description"),
-                        new CullCategory("scenery", "scenery description"),
-                        new CullCategory("food", "food description"),
-                        new CullCategory("funny", "funny description")),
+                List.of(CullCategory.of("junk", "junk description"),
+                        CullCategory.of("scenery", "scenery description"),
+                        CullCategory.of("food", "food description"),
+                        CullCategory.of("funny", "funny description")),
                 new ExternalAgentSettings(WatchMode.MANUAL), MontageConfig.defaults(), ThemeChoice.SYSTEM);
     }
 }

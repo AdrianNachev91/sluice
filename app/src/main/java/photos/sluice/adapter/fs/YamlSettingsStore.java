@@ -112,6 +112,18 @@ public class YamlSettingsStore implements SettingsStore {
             final Map<String, Object> card = new LinkedHashMap<>();
             card.put("name", category.name());
             card.put("description", category.description());
+            // Both are written every time, even at their defaults. A card is written whole, so a
+            // key left out here is a key gone from the file. A reader of a hand-editable file
+            // learns a setting exists by seeing it.
+            //
+            // A copy rather than the list itself. YAML can name a value once and point at it
+            // wherever it repeats, and the writer does that for any two fields holding the same
+            // instance. Every card offering no examples holds the one empty list Java hands out,
+            // so the file came back with an anchor on the first card and a reference on the rest.
+            // Nobody hand-editing this file should meet one, and deleting the anchor line would
+            // break every line pointing at it.
+            card.put("examples", new ArrayList<>(category.examples()));
+            card.put("enabled", category.enabled());
             cards.add(card);
         }
         return cards;

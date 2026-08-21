@@ -6,7 +6,7 @@ import java.time.Instant;
 /**
  * A cull run still waiting on an external agent to drop the rest of its decision shards.
  *
- * <p>There is no persistent job store. This is derived live by scanning the cull-prep log tree for
+ * <p>There is no persistent job store. This is derived live by scanning the sift-prep log tree for
  * a prep dir with an {@code index.json} but no merged {@code decisions.json} yet.
  *
  * <p>{@code prepDir} is therefore the job's own identity, passed back to

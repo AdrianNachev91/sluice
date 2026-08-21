@@ -116,7 +116,7 @@ class PipelineTest {
         pipeline(root, progress).commit(new CommitScope.All()).join();
 
         assertThat(progress.events).containsExactly(
-                "started:Committing...", "tick:Committing...:1/2", "tick:Committing...:2/2", "finished:Committing...");
+                "started:Moving to library...", "tick:Moving to library...:1/2", "tick:Moving to library...:2/2", "finished:Moving to library...");
     }
 
     @Test
@@ -205,7 +205,7 @@ class PipelineTest {
 
     @Test
     void sweepExpiredDisasterDrawersDeletesOnlyRetentionExpiredEntries(@TempDir final Path root) throws IOException {
-        final Path drawer = root.resolve("logs/cull-prep/2019-06/disasters");
+        final Path drawer = root.resolve("logs/sift-prep/2019-06/disasters");
         final Path oldEntry = drawer.resolve("2019-01-01_00-00-00-move-records-log.log");
         writeFile(oldEntry, "old");
         final Path freshEntry = drawer.resolve("2099-01-01_00-00-00-move-records-log.log");

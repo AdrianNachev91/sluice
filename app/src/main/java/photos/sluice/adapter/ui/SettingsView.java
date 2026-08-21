@@ -37,6 +37,9 @@ import java.util.List;
  * @param theme {@link String} id of the look the user asked for, matching a {@link ThemeOption}
  * @param themes a {@link List} of {@link ThemeOption} every look a user can pick
  * @param themeOverride an override note for the theme field, or null
+ * @param endpointLimit int the most the endpoint field may hold
+ * @param rootLimit int the most a folder-root field may hold
+ * @param keyLimit int the most the credential field may hold
  */
 public record SettingsView(FolderField workingRoot, FolderField libraryRoot, FolderField inbox, String provider,
                            List<ProviderChoice> providers,
@@ -48,7 +51,8 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
                            boolean watchAutomatically, @Nullable String watchModeOverride, SecretRow secret, int tileSize,
                            NumberRange tileSizeRange, @Nullable String tileSizeOverride, int tilesPerRow,
                            NumberRange tilesPerRowRange, @Nullable String tilesPerRowOverride, String theme,
-                           List<ThemeOption> themes, @Nullable String themeOverride) {
+                           List<ThemeOption> themes, @Nullable String themeOverride,
+                           int endpointLimit, int rootLimit, int keyLimit) {
 
     /**
      * What a number field accepts, decided where the other limits are rather than by whichever

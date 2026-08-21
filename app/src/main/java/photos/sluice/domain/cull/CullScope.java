@@ -43,7 +43,7 @@ public sealed interface CullScope {
     }
 
     /**
-     * The on-disk tag identifying this scope's prep dir (logs/cull-prep/<tag>/). Also PrepDir.scope()
+     * The on-disk tag identifying this scope's prep dir (logs/sift-prep/<tag>/). Also PrepDir.scope()
      * and a WaitingCullJob's own scope() - both carry this same string. Lives here, not in the
      * adapter that names the directory, so the application layer can compute it too: Pipeline uses
      * it to recognize an existing waiting job for the same scope before rebuilding its prep dir.

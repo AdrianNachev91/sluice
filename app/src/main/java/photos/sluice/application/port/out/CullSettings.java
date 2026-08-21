@@ -30,6 +30,25 @@ public interface CullSettings {
     List<CullCategory> categories();
 
     /**
+     * The configured cards a cull actually routes to, which is every card the user has not switched
+     * off. Read at prep time, where the set is recorded into the run's own prep directory.
+     *
+     * <p>Prep time is the only place this is asked for. That is what makes the switch mean "leave
+     * it out of runs from now on" rather than "retract it". The prompt and the validator both read
+     * the recorded set rather than live configuration. So a card switched off after a run was
+     * prepped stays valid for that run, and one switched on does not join it.
+     *
+     * <p>A repair reads {@link #categories()} instead, deliberately. It is reconstructing a lost
+     * index for work already done, and filtering there would invalidate a decision written under a
+     * card the user has since switched off.
+     *
+     * @return a {@link List} of {@link CullCategory} the enabled cards, in configured order
+     */
+    default List<CullCategory> activeCategories() {
+        return this.categories().stream().filter(CullCategory::enabled).toList();
+    }
+
+    /**
      * Connection settings for the provider {@link #provider()} names. For a surface reporting on
      * what is configured right now.
      *

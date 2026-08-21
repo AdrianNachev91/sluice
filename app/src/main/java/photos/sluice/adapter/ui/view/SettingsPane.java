@@ -1,32 +1,22 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.animation.FadeTransition;
-import javafx.animation.PauseTransition;
 import javafx.concurrent.Task;
-import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter.SaveOutcome;
 import photos.sluice.adapter.ui.SettingsView;
 
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -36,15 +26,13 @@ import java.util.function.Consumer;
  * class lays those out and forwards a click or an edit back to the presenter. It never decides on
  * its own what a field means or whether it is valid.
  *
- * <p>Assembles the four cards ({@link FoldersCard}, {@link VisionProviderCard},
- * {@link PhotoSheetsCard}, {@link AppearanceCard}) and wires Save, off the shared row vocabulary
- * in {@link SettingsRows}.
+ * <p>Assembles the cards ({@link FoldersCard}, {@link VisionProviderCard},
+ * {@link PhotoCategoriesCard}, {@link PhotoSheetsCard}, {@link AppearanceCard}) and wires Save, off
+ * the shared row vocabulary in {@link SettingsRows}.
  */
 final class SettingsPane {
 
     private static final String SAVED = "Settings saved.";
-    private static final String SCROLL = "scroll";
-
     /**
      * Prevents instantiation of this static factory class.
      */
@@ -56,20 +44,15 @@ final class SettingsPane {
      * every save or credential action, so what is on screen always reflects a fresh read.
      *
      * @param presenter {@link SettingsPresenter} supplies what to show and carries out what is done
+     * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
      * @return {@link Node} the settings pane
      */
-    static Node pane(final SettingsPresenter presenter) {
+    static Node pane(final SettingsPresenter presenter, final Runnable onOpenPhotoCategories) {
         final var container = new VBox();
         container.getStyleClass().add("settings-pane");
-        refresh(container, presenter, null);
+        refresh(container, presenter, onOpenPhotoCategories, null);
 
-        final var scroll = new ScrollPane(container);
-        scroll.getStyleClass().add("settings-scroll");
-        scroll.setFitToWidth(true);
-        // Left on the body so a refusal can reach it. The refusal is raised from a button deep in
-        // the page, which knows the body it sits in and nothing about what scrolls it.
-        container.getProperties().put(SCROLL, scroll);
-        return scroll;
+        return SettingsRows.scrolling(container);
     }
 
     /**
@@ -80,9 +63,11 @@ final class SettingsPane {
      *
      * @param container {@link VBox} the pane's own body
      * @param presenter {@link SettingsPresenter} supplies the state and takes the actions
+     * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
      * @param banner what to say above the screen about what just happened, or null for nothing
      */
     private static void refresh(final VBox container, final SettingsPresenter presenter,
+                                final Runnable onOpenPhotoCategories,
                                 final @Nullable String banner) {
         final SettingsView view = presenter.view();
         final var heading = new Label("Settings");
@@ -112,7 +97,7 @@ final class SettingsPane {
             // fillSecretCard leaves Test's own enabled state current as part of that. A credential
             // is exactly what that state depends on.
             VisionProviderCard.fillSecretCard(provider.secretCard(), presenter, provider.providerBox(),
-                    provider.providerFields(), null);
+                    provider.providerFields(), null, view.keyLimit());
             VisionProviderCard.selectModelPickerFor(VisionProviderCard.controlsOf(provider.providerFields()).model(),
                     VisionProviderCard.controlsOf(provider.providerFields()).modelInfo(), presenter, chosen.id(),
                     provider.providerBox());
@@ -130,11 +115,12 @@ final class SettingsPane {
                 VisionProviderCard.providerChoiceOf(provider.providerBox()), provider.providerFields(),
                 VisionProviderCard.watchAutomaticallyOf(provider.watchRow()), montage.tileSize().getValue(),
                 montage.tilesPerRow().getValue(), AppearanceCard.themeChoiceOf(appearance.themeBox()), status,
-                said -> refresh(container, presenter, said)));
+                said -> refresh(container, presenter, onOpenPhotoCategories, said)));
 
         // The secret card belongs to the provider card, not here. A node named in two parents lands
         // in whichever claimed it last, so adding it would quietly lift it out of the provider card.
-        container.getChildren().setAll(heading, folders.card(), provider.card(), montage.card(),
+        container.getChildren().setAll(heading, folders.card(), provider.card(),
+                PhotoCategoriesCard.build(onOpenPhotoCategories), montage.card(),
                 appearance.card(), save, status);
         if (banner != null) {
             container.getChildren().add(1, savedBanner(container, banner));
@@ -159,36 +145,7 @@ final class SettingsPane {
      * @return {@link HBox} the banner
      */
     private static HBox savedBanner(final VBox container, final String text) {
-        final var said = new Label(text);
-        said.setWrapText(true);
-        // Hgrow offers a node the spare room; a maximum width is what lets it take any. A label
-        // stops at the width of its own text, leaving the dismiss button against the last word
-        // rather than at the end of the banner.
-        said.setMaxWidth(Double.MAX_VALUE);
-        said.setAlignment(Pos.CENTER);
-        HBox.setHgrow(said, Priority.ALWAYS);
-
-        final var dismiss = new Button("×");
-        dismiss.getStyleClass().add("settings-banner-dismiss");
-
-        final var banner = new HBox(said, dismiss);
-        banner.setId("settings-saved-banner");
-        banner.setMaxWidth(Double.MAX_VALUE);
-        banner.getStyleClass().add("settings-banner");
-
-        final Runnable remove = () -> container.getChildren().remove(banner);
-        dismiss.setOnAction(_ -> remove.run());
-
-        if (SAVED.equals(text)) {
-            final var fade = new FadeTransition(Duration.millis(400), banner);
-            fade.setFromValue(1);
-            fade.setToValue(0);
-            fade.setOnFinished(_ -> remove.run());
-            final var wait = new PauseTransition(Duration.seconds(4));
-            wait.setOnFinished(_ -> fade.play());
-            wait.play();
-        }
-        return banner;
+        return SettingsRows.banner(container, "settings-saved-banner", text, SAVED.equals(text));
     }
 
     private static void onSave(final SettingsPresenter presenter, final SettingsRows.FolderRow workingRoot,
@@ -346,7 +303,7 @@ final class SettingsPane {
                                     final Label... marks) {
         status.setText(message == null ? "" : message);
         status.getStyleClass().setAll("settings-save-status", "settings-violation");
-        takeTheReaderToTheFault(status, marks);
+        SettingsRows.takeTheReaderToTheFault(status, marks);
     }
 
     /**
@@ -363,58 +320,4 @@ final class SettingsPane {
         }
     }
 
-    /**
-     * Scrolls to the topmost marked row, or to the summary where no row is at fault.
-     *
-     * <p>A refused save does not rebuild the screen, so nothing moves on its own. Save sits at the
-     * foot, so the reader is already at the bottom when they press it. The field the refusal is
-     * about is usually somewhere above. Left alone, a refusal marks a row nobody is looking at.
-     *
-     * <p>The summary is the destination only when nothing else is, because it says what needs
-     * fixing is marked under the fields. Sending someone down to read that, when there is a mark
-     * above, points them the wrong way.
-     *
-     * @param status {@link Label} the line under Save, and the last resort to scroll to
-     * @param marks the field marks this refusal set
-     */
-    private static void takeTheReaderToTheFault(final Label status, final Label... marks) {
-        final Parent body = status.getParent();
-        if (body == null || !(body.getProperties().get(SCROLL) instanceof final ScrollPane scroll)) {
-            return;
-        }
-        // A mark's own row has no height until the mark is measured, so every position below it
-        // would be read off a page about to grow.
-        scroll.applyCss();
-        scroll.layout();
-        final double scrollable =
-                body.getBoundsInLocal().getHeight() - scroll.getViewportBounds().getHeight();
-        if (scrollable <= 0) {
-            return;
-        }
-        final Node target = topmostMarkedRow(marks).orElse(status);
-        final double top = body.sceneToLocal(target.localToScene(target.getBoundsInLocal())).getMinY();
-        scroll.setVvalue(Math.clamp(top / scrollable, 0, 1) * scroll.getVmax());
-    }
-
-    /**
-     * The highest row on the page carrying one of these marks.
-     *
-     * <p>Ordered by where each one ended up rather than by the order they were checked in. A row
-     * moving on the page then cannot leave this pointing at the wrong one. A mark with nothing to
-     * say is invisible, which is what keeps a cleared row out of the answer.
-     *
-     * <p>Only the marks handed in are candidates. Other things on this screen say what is wrong in
-     * the same words and the same red. A stale one of those is not where a refused save should send
-     * anybody.
-     *
-     * @param marks the field marks this refusal set
-     * @return {@link Optional} of {@link Node} the row to scroll to, empty where none is marked
-     */
-    private static Optional<Node> topmostMarkedRow(final Label... marks) {
-        return Arrays.stream(marks)
-                .filter(Node::isVisible)
-                .map(Node::getParent)
-                .min(Comparator.comparingDouble(row -> row.localToScene(row.getBoundsInLocal()).getMinY()))
-                .map(Node.class::cast);
-    }
 }

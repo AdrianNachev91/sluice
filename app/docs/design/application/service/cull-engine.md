@@ -177,7 +177,7 @@ a move recreates any missing ancestor of its destination. So a resume against ro
 already refused would put a folder back that the user had removed.
 
 Listing what is on disk is not this class's job at all. `PrepDirDoctor.runs()` enumerates the
-cull-prep root and diagnoses each dir, and `Pipeline.cullRuns()` exposes it - see
+sift-prep root and diagnoses each dir, and `Pipeline.cullRuns()` exposes it - see
 `prep-dir-doctor.md`. `CullEngine` reads it for two things only: the startup watch scan, and the
 one-dir occupancy question above.
 
@@ -416,7 +416,7 @@ and no file moves. Watch mode never arms for an automated provider, so nothing s
 | Watch mode, a shard is present but never parses                     | The watcher polls on, submitting nothing; the card's tally stays short of total                       |
 | Watch mode, every shard arrives but the batch is invalid            | The watcher fires once; that resume lands `Blocked` with the findings, and nothing re-arms            |
 | Watch mode, a poll tick throws                                      | Logged and treated as "not ready this tick"; the watch survives and retries                           |
-| Watch mode, app restarts while a run is still waiting               | `armWatchesForResumableRuns()` re-arms a watcher for it, from diagnosing the cull-prep root           |
+| Watch mode, app restarts while a run is still waiting               | `armWatchesForResumableRuns()` re-arms a watcher for it, from diagnosing the sift-prep root           |
 | Watch mode, app restarts after the agent finished while it was shut | Same scan finds the run `READY` and arms it; the first poll resumes on the spot                       |
 | Watch mode, app restarts while a run sits `BLOCKED` or `DAMAGED`    | Left unarmed - neither can resolve itself, so a watcher would only re-block or poll forever           |
 | Manual mode, the user turns one run's toggle on                     | `startWatching()` arms that prep dir alone; every other run still needs an explicit Resume            |

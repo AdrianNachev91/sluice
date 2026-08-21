@@ -12,7 +12,7 @@ import java.time.Instant;
  * have got. A dashboard renders one card per summary, and the unresolved-run banner names the ones
  * that still need somebody.
  *
- * <p>There is no persistent job store. The whole list is derived by enumerating the cull-prep root
+ * <p>There is no persistent job store. The whole list is derived by enumerating the sift-prep root
  * and diagnosing each prep dir in it. Enumerating is what makes a damaged run visible. A run whose
  * index cannot be read is the one most in need of attention. Any derivation starting from that
  * index would drop exactly that run.

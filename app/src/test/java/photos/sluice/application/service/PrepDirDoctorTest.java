@@ -218,7 +218,7 @@ class PrepDirDoctorTest {
         writeIndex(damaged, 1, List.of("montage-001"));
 
         final List<CullRunSummary> runs =
-                doctor(root, new FailingIndexReadOf(damaged)).runs(root.resolve("logs/cull-prep"));
+                doctor(root, new FailingIndexReadOf(damaged)).runs(root.resolve("logs/sift-prep"));
 
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
@@ -425,7 +425,7 @@ class PrepDirDoctorTest {
         final Path waiting = prepDir(root, "waiting1");
         writeIndex(waiting, 1, List.of("montage-001")); // no shard yet - still culling
 
-        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
+        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).containsExactly("complete1");
         assertThat(report.skipped()).containsExactly(entry("waiting1", State.WAITING));
@@ -446,7 +446,7 @@ class PrepDirDoctorTest {
         final Path indexless = prepDir(root, "indexless1");
         writeShard(indexless, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
+        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).isEmpty();
         assertThat(report.skipped()).containsExactly(entry("indexless1", State.BLOCKED));
@@ -459,7 +459,7 @@ class PrepDirDoctorTest {
     // spurious extra entry if either rule were dropped.
     @Test
     void runsCountsNeitherALooseRootFileNorASubdirectoryAsItsOwnRun(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        final Path cullPrepRoot = root.resolve("logs/sift-prep");
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
         writeFile(photo, "x");
         final Path real = prepDir(root, "2019");
@@ -476,7 +476,7 @@ class PrepDirDoctorTest {
 
     @Test
     void purgeCompletedOnAMissingCullPrepRootReturnsAnEmptyReport(@TempDir final Path root) {
-        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/cull-prep"));
+        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).isEmpty();
         assertThat(report.skipped()).isEmpty();
@@ -499,7 +499,7 @@ class PrepDirDoctorTest {
         final var store = new FailingListingOf(unreadable);
 
         final PurgeReport report =
-                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/cull-prep"));
+                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).containsExactly("complete1");
         assertThat(report.skipped()).isEmpty();
@@ -531,7 +531,7 @@ class PrepDirDoctorTest {
         final var store = new FailingDeleteUnder(first);
 
         final PurgeReport report =
-                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/cull-prep"));
+                CullPrepTestSupport.prepDirDoctor(root, store).purgeCompleted(root.resolve("logs/sift-prep"));
 
         assertThat(report.purged()).containsExactly("complete2");
         assertThat(report.skipped()).isEmpty();
@@ -564,7 +564,7 @@ class PrepDirDoctorTest {
     // nothing in it, and would pass with no guard in the code at all.
     @Test
     void runsReportsNoRunsWhenTheRootListingFailsRatherThanThrowing(@TempDir final Path root) throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        final Path cullPrepRoot = root.resolve("logs/sift-prep");
         writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
         assertThat(doctor(root).runs(cullPrepRoot)).hasSize(1);
 
@@ -588,7 +588,7 @@ class PrepDirDoctorTest {
     }
 
     private static Path prepDir(final Path root, final String scope) throws IOException {
-        final Path dir = root.resolve("logs/cull-prep").resolve(scope);
+        final Path dir = root.resolve("logs/sift-prep").resolve(scope);
         Files.createDirectories(dir);
         return dir;
     }
@@ -629,7 +629,7 @@ class PrepDirDoctorTest {
     @Test
     void runsReportsNoRunsWhenTheRootExistenceCheckFailsRatherThanThrowing(@TempDir final Path root)
             throws IOException {
-        final Path cullPrepRoot = root.resolve("logs/cull-prep");
+        final Path cullPrepRoot = root.resolve("logs/sift-prep");
         writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
         assertThat(doctor(root).runs(cullPrepRoot)).hasSize(1);
 
@@ -652,7 +652,7 @@ class PrepDirDoctorTest {
         writeIndex(unreadable, 1, List.of("montage-001"));
         final var store = new FailingListingOf(unreadable);
 
-        final List<CullRunSummary> runs = CullPrepTestSupport.prepDirDoctor(root, store).runs(root.resolve("logs/cull-prep"));
+        final List<CullRunSummary> runs = CullPrepTestSupport.prepDirDoctor(root, store).runs(root.resolve("logs/sift-prep"));
 
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getFirst().health().state()).isEqualTo(State.READY);

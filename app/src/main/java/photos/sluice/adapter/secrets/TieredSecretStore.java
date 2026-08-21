@@ -104,14 +104,7 @@ public class TieredSecretStore implements SecretStore {
 
     @Override
     public void save(final SecretId id, final String secret) {
-        // Stored stripped, because a credential pasted out of a browser or a terminal carries
-        // whatever whitespace came with it. A trailing newline reaches the provider as part of the
-        // key and fails a call for a reason nothing on screen would explain.
-        final String stored = secret.strip();
-        if (stored.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Refusing to store a blank credential for provider '" + id.provider() + "'");
-        }
+        final String stored = vetted(id, secret);
         final WritableSecretTier target = this.tierASaveWouldStoreItIn()
                 .orElseThrow(() -> new SecretStoreException(SecretStoreException.Tier.STORE,
                         "No tier on this machine can store the credential for provider '"
@@ -136,6 +129,36 @@ public class TieredSecretStore implements SecretStore {
         if (!failures.isEmpty()) {
             throw clearingFailed(id, failures);
         }
+    }
+
+    /**
+     * The credential a tier is asked to hold: stripped, and refused when nothing useful is left or
+     * when it runs past the ceiling.
+     *
+     * <p>Stripped because a credential pasted out of a browser or a terminal carries whatever
+     * whitespace came with it. A trailing newline reaches the provider as part of the key and fails
+     * a call for a reason nothing on screen would explain.
+     *
+     * <p>Both refusals are measured on the stripped value, since that is what would be stored. A
+     * blank one would replace a working credential with something no provider accepts. An
+     * over-long one would surface as whatever the platform store says when it runs out of room.
+     *
+     * @param id {@link SecretId} which credential this is, for the refusal to name
+     * @param secret {@link String} the credential as the caller passed it
+     * @return {@link String} the stripped credential, safe to hand a tier
+     */
+    private static String vetted(final SecretId id, final String secret) {
+        final String stored = secret.strip();
+        if (stored.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Refusing to store a blank credential for provider '" + id.provider() + "'");
+        }
+        if (stored.length() > SecretStore.MAX_SECRET) {
+            throw new IllegalArgumentException("The credential for provider '" + id.provider()
+                    + "' is longer than the " + SecretStore.MAX_SECRET
+                    + " characters one may take: " + stored.length());
+        }
+        return stored;
     }
 
     /**

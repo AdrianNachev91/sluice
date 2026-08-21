@@ -84,9 +84,9 @@ class AnthropicCullerLiveTest {
             "IMG_20190601_100000.jpg", "IMG_20190602_100000.jpg",
             "IMG_20190603_100000.jpg", "IMG_20190604_100000.jpg");
     private static final List<CullCategory> CARDS = List.of(
-            new CullCategory("junk", "Objectively worthless photos: blurry, accidental shots, "
+            CullCategory.of("junk", "Objectively worthless photos: blurry, accidental shots, "
                     + "screenshots, documents, photos of a screen."),
-            new CullCategory("scenery", "Unremarkable scenery with no people and weak composition."));
+            CullCategory.of("scenery", "Unremarkable scenery with no people and weak composition."));
 
     // cull() is strictly sequential, so plain fields suffice for the decorator's bookkeeping.
     private int liveCalls;

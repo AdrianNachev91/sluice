@@ -12,7 +12,7 @@
 #   - The library root (sluice.paths.library-root) is where committed keepers live for good.
 #     Moving it later is a real operation, not a config edit: it copies the whole library or files
 #     the hash index aside, and Settings is where that flow lives. Editing this file by hand while
-#     Sluice has any unfinished cull run on disk can leave that run unable to resume.
+#     Sluice has any unfinished sift on disk can leave that sift unable to resume.
 #   - The inbox (sluice.paths.inbox) is where new media arrives to be sorted.
 #   - The library and the inbox must not contain each other, in either direction.
 #   - The inbox must not be, or contain, the working root. The working root containing the inbox
@@ -31,7 +31,7 @@ sluice:
     inbox: /home/example/Sluice/Inbox
 
   cull:
-    # Which vision provider judges photos: "anthropic" calls a vision model from inside the app,
+    # Which vision provider looks at your photos: "anthropic" calls a vision model from inside the app,
     # "external-agent" waits for an agent you run yourself to write decision shards. Shown at its
     # default, which needs no API key of yours.
     provider: external-agent
@@ -52,24 +52,43 @@ sluice:
         # this - it is a transport question, not one a user has a basis to tune. Set it here by hand.
         max-retries: 2
 
-    # The classification category cards a cull routes photos to. Each needs a name and a
-    # description; the description is what an automated provider reads to judge a photo against
-    # it. "funny" is a built-in category the app disposes of specially, and can be disabled but
-    # not renamed or deleted.
+    # The photo categories Sluice sifts your photos into. Each needs a name and a description; the
+    # description is what the vision provider doing the sifting reads to judge a photo against it.
+    # "funny" is the one category moved straight to your library rather than set aside. Settings
+    # will not let you rename or delete that card. Nothing stops you doing it here by hand, and if
+    # you do, what would have been kept goes to Review instead.
+    #
+    # A name becomes a folder name, so it takes lower-case letters and digits only, joined by
+    # hyphens, up to 24 characters. A few words reserved by the operating system are refused too.
+    # examples are optional sample subjects, rendered under the description in the same prompt.
+    # enabled: false leaves a card out of a sift altogether, and a card with no enabled key is on.
+    # Both are normally written by Settings rather than by hand.
+    #
+    # Switching a card off, editing it or deleting it applies to sifts prepped afterwards. Every
+    # sift already started records the cards it was prepped under, so it keeps judging by those.
+    # A sift whose index has to be rebuilt after damage is the exception: nothing on disk remembers
+    # its set, so the configured cards are substituted.
     categories:
       - name: junk
+        enabled: true
         description: Blurry, duplicate, or otherwise not worth keeping.
       - name: scenery
+        enabled: true
         description: Landscapes and scenery worth a second look before deciding.
       - name: food
+        enabled: true
         description: Food and meal photos, not kept by default.
+        examples:
+          - restaurant plates
+          - home dinners
       - name: funny
+        enabled: true
         description: Photos worth setting aside to laugh at later.
 
     external-agent:
-      # How a waiting cull resumes once the external agent's shards land, when provider is
-      # "external-agent". "watch" (the default) polls the prep directory and resumes on its own
-      # once every montage has a shard. "manual" waits for an explicit resume.
+      # How a waiting sift resumes once the external agent's answers land, when provider is
+      # "external-agent". "watch" (the default) polls the working folder and resumes on its own
+      # once every sheet has been answered. "manual" waits for an explicit resume.
       mode: watch
 
   montage:

@@ -224,7 +224,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
         if (!unfinished.isEmpty()) {
             throw new UnfinishedRunsException(
                     "Sluice cannot move the library while " + unfinished.size()
-                            + " cull run(s) are unfinished. Apply or discard them first.", unfinished);
+                            + " sift(s) are unfinished. Apply or discard them first.", unfinished);
         }
     }
 }

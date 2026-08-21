@@ -20,6 +20,17 @@ import java.util.regex.Pattern;
  */
 public final class CategoryName {
 
+    /**
+     * The one category name with a destination of its own: the library's flat Funny/ folder, rather
+     * than a folder under the Review root like every other card.
+     *
+     * <p>Here so the two places that have to agree on it read one definition. The class resolving a
+     * destination branches on it, and an editing surface has to know which card it must not let be
+     * renamed. Renaming it routes library keepers into Review instead, silently, since nothing else
+     * in the app decides a card's destination.
+     */
+    public static final String LIBRARY_CATEGORY = "funny";
+
     private static final Pattern SHAPE = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
 
     // The same ceiling ShardValidator puts on a near-dup group id, for the same reason. Both become
@@ -31,6 +42,16 @@ public final class CategoryName {
      * Prevents instantiation of this static utility class.
      */
     private CategoryName() {
+    }
+
+    /**
+     * The longest a name may be. For a surface stating the rule to a user, so its sentence cannot
+     * promise a length this class would then refuse.
+     *
+     * @return int the character ceiling
+     */
+    public static int maxLength() {
+        return MAX_LENGTH;
     }
 
     /**
@@ -48,8 +69,11 @@ public final class CategoryName {
         if (name.length() > MAX_LENGTH) {
             return "is longer than the " + MAX_LENGTH + " characters a folder name may take here";
         }
+        // Only Windows reserves these names, and ReservedDeviceNames says why they are refused
+        // everywhere anyway. So this clause names no platform. A Mac reader is getting the refusal
+        // too, and would be reading about a machine they are not on.
         if (ReservedDeviceNames.isReserved(name)) {
-            return "is a reserved device name on Windows and cannot become a folder there";
+            return "is reserved by the operating system and cannot become a folder";
         }
         return null;
     }

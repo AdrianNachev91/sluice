@@ -13,6 +13,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
+import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.ShellPresenter;
 
@@ -26,6 +27,7 @@ final class MainWindow {
     private static final String DASHBOARD = "Dashboard";
     private static final String SETTINGS = "Settings";
     private static final String REVIEW = "Review";
+    private static final String PHOTO_CATEGORIES = "Photo categories";
 
     /**
      * Prevents instantiation of this static factory class.
@@ -41,9 +43,11 @@ final class MainWindow {
      *
      * @param presenter {@link ShellPresenter} says whether the dashboard opens on the welcome card
      * @param settingsPresenter {@link SettingsPresenter} supplies and drives the Settings pane
+     * @param photoCategoriesPresenter {@link PhotoCategoriesPresenter} supplies and drives the photo categories pane
      * @return {@link Scene} the shell scene, styled by the base stylesheet
      */
-    static Scene scene(final ShellPresenter presenter, final SettingsPresenter settingsPresenter) {
+    static Scene scene(final ShellPresenter presenter, final SettingsPresenter settingsPresenter,
+                       final PhotoCategoriesPresenter photoCategoriesPresenter) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
         final var settings = navEntry(group, "nav-settings", SETTINGS);
@@ -68,8 +72,12 @@ final class MainWindow {
         dashboard.setSelected(true);
 
         dashboard.setOnAction(_ -> show(content, DASHBOARD, () -> dashboardPane(presenter, openSettings)));
+        // A screen without a sidebar entry. Settings stays the destination it was reached from and
+        // stays marked as current, and Back is what leaves it.
+        final Runnable openPhotoCategories = () -> show(content, PHOTO_CATEGORIES,
+                () -> filling(PhotoCategoriesPane.pane(photoCategoriesPresenter, openSettings)));
         settings.setOnAction(_ -> show(content, SETTINGS,
-                () -> filling(SettingsPane.pane(settingsPresenter))));
+                () -> filling(SettingsPane.pane(settingsPresenter, openPhotoCategories))));
         review.setOnAction(_ -> show(content, REVIEW, () -> headingPane(REVIEW)));
 
         final var sidebar = new VBox(dashboard, settings, review);

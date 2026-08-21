@@ -175,7 +175,7 @@ final class PipelineTestSupport {
     }
 
     static CullSettings autoApproveCullSettings() {
-        return new FixedSettings("auto-approve", List.of(new CullCategory("junk", "objectively worthless shots")),
+        return new FixedSettings("auto-approve", List.of(CullCategory.of("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
@@ -469,13 +469,13 @@ final class PipelineTestSupport {
 
     static CullSettings defaultCullSettings() {
         return new FixedSettings(MANUAL_PROVIDER_ID,
-                List.of(new CullCategory("junk", "objectively worthless shots")),
+                List.of(CullCategory.of("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
     static CullSettings watchCullSettings() {
         return new FixedSettings(MANUAL_PROVIDER_ID,
-                List.of(new CullCategory("junk", "objectively worthless shots")),
+                List.of(CullCategory.of("junk", "objectively worthless shots")),
                 new ExternalAgentSettings(WatchMode.WATCH));
     }
 

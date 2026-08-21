@@ -15,9 +15,13 @@ sluice:
     external-agent:
       mode: watch
     # Category cards. name is the action id decisions carry. description is the "what belongs
-    # here" prose an automated vision provider renders into its culling prompt.
+    # here" prose an automated vision provider renders into its culling prompt. examples are
+    # sample subjects rendered under it, and are optional - the cards below name their cases
+    # inside the description itself, so none of them adds any. enabled: false leaves a card out
+    # of a run entirely, and a card with no enabled key is on.
     categories:
       - name: junk
+        enabled: true
         description: >-
           Objectively worthless photos. Blurry, out of focus, or motion-smeared. Accidental
           shots: pocket, floor, or ceiling shots, a finger over the lens, framing of nothing.
@@ -32,17 +36,20 @@ sluice:
           forms, product and packaging shots. Received images and memes that are clearly not
           the owner's own photos.
       - name: scenery
+        enabled: true
         description: >-
           Unremarkable scenery set aside for a second look, only when ALL of these hold: no
           posing people (random passers-by do not count), not a recognizable landmark, no
           striking light or sky, weak composition. Any doubt: keep.
       - name: food
+        enabled: true
         description: >-
           Food and meal photos, not kept by default: plates, dishes, drinks, restaurant and
           menu shots. Keep only when the dish is genuinely appetizing and well-shot, elaborate
           or special, or a clear special occasion such as a cake or a feast. People first: if
           posing people are the real subject and food is incidental, keep as a normal photo.
       - name: funny
+        enabled: true
         description: >-
           Memes and genuinely funny screenshots, including received ones.
   imaging:

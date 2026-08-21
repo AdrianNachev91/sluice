@@ -250,7 +250,7 @@ public sealed interface Finding {
         public String describe() {
             return this.file.equals(this.sortedRoot)
                     ? "the Sorted root itself is named as a file to act on: " + this.file
-                    : "file outside " + this.sortedRoot + ", the only place a cull may take files from: " + this.file;
+                    : "file outside " + this.sortedRoot + ", the only place photos may be taken from: " + this.file;
         }
     }
 
@@ -385,7 +385,7 @@ public sealed interface Finding {
         @Override
         public String describe() {
             return "file not found, and its move could not be verified: " + this.file
-                    + " - if an earlier, crashed run already applied it, the automatic check that would confirm that"
+                    + " - if an earlier, crashed sift already applied it, the automatic check that would confirm that"
                     + " (a move record matching this file, whose recorded destination still hash-verifies) found"
                     + " none. This needs manual investigation before re-running; see " + this.moveRecordLog + ".";
         }

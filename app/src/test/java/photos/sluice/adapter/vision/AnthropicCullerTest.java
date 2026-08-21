@@ -79,8 +79,8 @@ import static org.mockito.Mockito.when;
 class AnthropicCullerTest {
 
     private static final List<CullCategory> CARDS = List.of(
-            new CullCategory("junk", "Objectively worthless photos."),
-            new CullCategory("scenery", "Unremarkable scenery."));
+            CullCategory.of("junk", "Objectively worthless photos."),
+            CullCategory.of("scenery", "Unremarkable scenery."));
     private static final CullOptions OPTIONS = new CullOptions(false, null);
 
     @TempDir
@@ -626,7 +626,7 @@ class AnthropicCullerTest {
     @Test
     void rendersTheSystemPromptFromTheCardsTheRunRecordedRatherThanLiveConfig() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg");
-        final var recorded = new CullCategory("receipts", "Photographed paperwork and invoices.");
+        final var recorded = CullCategory.of("receipts", "Photographed paperwork and invoices.");
         this.respondWith(response("""
                 {
                   "verdicts": [
@@ -648,7 +648,7 @@ class AnthropicCullerTest {
     @Test
     void acceptsAVerdictNamingARecordedCategoryThatLiveConfigDoesNotCarry() throws Exception {
         this.writeMontage("montage-001", "IMG_0001.jpg");
-        final var recorded = new CullCategory("receipts", "Photographed paperwork and invoices.");
+        final var recorded = CullCategory.of("receipts", "Photographed paperwork and invoices.");
         this.respondWith(response("""
                 {
                   "verdicts": [

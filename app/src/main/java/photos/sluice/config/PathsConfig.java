@@ -118,13 +118,13 @@ public class PathsConfig implements PathsPort {
     }
 
     /**
-     * Resolves the cull-prep directory under the logs directory.
+     * Resolves the sift-prep directory under the logs directory.
      *
-     * @return {@link Path} the cull-prep directory path
+     * @return {@link Path} the sift-prep directory path
      */
     @Override
     public Path cullPrep() {
-        return this.logs().resolve("cull-prep");
+        return this.logs().resolve("sift-prep");
     }
 
     /**

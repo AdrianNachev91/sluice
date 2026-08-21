@@ -51,7 +51,7 @@ final class CullPrepTestSupport {
     }
 
     static Path prepDir(final Path root) throws IOException {
-        final Path dir = root.resolve("logs/cull-prep/scope1");
+        final Path dir = root.resolve("logs/sift-prep/scope1");
         Files.createDirectories(dir);
         return dir;
     }
@@ -85,7 +85,7 @@ final class CullPrepTestSupport {
     // For a test whose subject is which names a run recorded. The description is filled in so the
     // card is well-formed, never because its text matters to the assertion.
     static List<CullCategory> cards(final String... names) {
-        return Arrays.stream(names).map(name -> new CullCategory(name, name + " description")).toList();
+        return Arrays.stream(names).map(name -> CullCategory.of(name, name + " description")).toList();
     }
 
     static void writeSidecar(final Path prepDir, final String montage, final SidecarPhotoEntry... photos) {
@@ -148,10 +148,10 @@ final class CullPrepTestSupport {
 
     static CullSettings fixedSettings() {
         return new FixedSettings("external-agent", List.of(
-                new CullCategory("junk", "junk description"),
-                new CullCategory("scenery", "scenery description"),
-                new CullCategory("food", "food description"),
-                new CullCategory("funny", "funny description")));
+                CullCategory.of("junk", "junk description"),
+                CullCategory.of("scenery", "scenery description"),
+                CullCategory.of("food", "food description"),
+                CullCategory.of("funny", "funny description")));
     }
 
     static ApplyEngine applyEngine(final Path repoRoot, final Path libraryRoot) {

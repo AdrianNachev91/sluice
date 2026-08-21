@@ -166,7 +166,7 @@ public class CullMontageRenderer implements MontageRenderer {
                 .map(candidate -> candidate.candidate().path())
                 .toList();
 
-        // logs/cull-prep/<scopeTag> is cleared before writing, not appended to. A prior run of the
+        // logs/sift-prep/<scopeTag> is cleared before writing, not appended to. A prior run of the
         // same scope may have produced more montages than this run does, if fewer photos are
         // reviewable this time around. A stale montage-002.* from that prior run would otherwise
         // survive alongside this run's smaller output, with nothing to indicate it's no longer
@@ -204,10 +204,11 @@ public class CullMontageRenderer implements MontageRenderer {
         // disagree with what a caller can actually see on disk.
         //
         // The category set is read once, here, and travels with the run from now on. This is the
-        // last moment it is a live value rather than a recorded one.
+        // last moment it is a live value rather than a recorded one, and the only place a card
+        // switched off in settings is dropped.
         final var result = new PrepDir(
                 scopeTag,
-                this.cullSettings.categories(),
+                this.cullSettings.activeCategories(),
                 this.cullScopeSelector.basePath(photosRoot, scope),
                 reviewable.size(),
                 unreviewable,
@@ -293,7 +294,7 @@ public class CullMontageRenderer implements MontageRenderer {
     }
 
     /**
-     * {@code logs/cull-prep/<scopeTag>} is a directory this feature exclusively generates and
+     * {@code logs/sift-prep/<scopeTag>} is a directory this feature exclusively generates and
      * owns. That's different from Inbox/Sorted/Review/Duplicates, which the project's
      * media-safety invariant protects from bulk deletes. Wiping and regenerating it is safe, so a
      * rerun with fewer photos doesn't leave stale montage files behind from a prior larger run.

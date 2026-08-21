@@ -18,6 +18,22 @@ import java.util.Optional;
  */
 public interface SecretStore {
 
+    // A key is a token a provider issues, not prose. The longest any of them mints runs to a few
+    // hundred characters, and every credential store this app writes to takes far less than a
+    // thousand. Held on the port rather than on a value type because a credential never becomes
+    // one. It goes from an entry field to a tier, and nothing in between models it.
+    int MAX_SECRET = 1024;
+
+    /**
+     * The longest a credential may be, measured after surrounding whitespace is stripped. For a
+     * control that stops a reader typing past it.
+     *
+     * @return int the character ceiling
+     */
+    static int maxSecret() {
+        return MAX_SECRET;
+    }
+
     /**
      * The credential in force for the given id, from whichever tier answers first.
      *
@@ -85,6 +101,11 @@ public interface SecretStore {
      * reads it back gets that rather than what it passed. A key pasted out of a browser or a
      * terminal carries whatever came with it, and a provider counts that as part of the key.
      *
+     * <p>A credential longer than {@link #maxSecret} is refused, measured on the stripped value,
+     * since that is what a tier is asked to hold. An entry field stops one being typed. This is
+     * what stops a caller with no field supplying one, and what keeps the refusal a sentence of
+     * this app's rather than whatever the platform store says when it runs out of room.
+     *
      * <p>Nothing is cleared until the write succeeds, so a failed save can never lose a credential
      * already stored. Once it does, every writable tier that outranks the one just written to is
      * asked to clear what it holds. An environment variable is never touched by a save, matching
@@ -98,7 +119,8 @@ public interface SecretStore {
      *
      * @param id {@link SecretId} which credential to store
      * @param secret {@link String} the credential to store
-     * @throws IllegalArgumentException when the credential is blank
+     * @throws IllegalArgumentException when the credential is blank, or longer than
+     *         {@link #maxSecret} once stripped
      * @throws StaleSecretNotClearedException when the value was stored and a stale copy above it
      *         could not be cleared, so that copy may still answer a read
      * @throws SecretStoreException when no tier on this machine can store one, or when the tier

@@ -24,7 +24,7 @@ public interface CullUseCase {
 
     /**
      * Every cull run currently on disk, across this and prior app runs, each one diagnosed. Read
-     * live by enumerating the cull-prep root, never from a persisted list. A run whose own index
+     * live by enumerating the sift-prep root, never from a persisted list. A run whose own index
      * cannot be read is listed too, since that is the one a caller most needs to show.
      *
      * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope

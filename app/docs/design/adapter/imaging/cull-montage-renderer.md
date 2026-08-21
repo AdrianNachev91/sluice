@@ -81,11 +81,11 @@ filename, not by `SidecarWriter` - that class only serializes whatever entries i
 
 ## Clearing the prep directory
 
-`logs/cull-prep/<scopeTag>` is wiped and recreated on every `build()` call, before any montage is
+`logs/sift-prep/<scopeTag>` is wiped and recreated on every `build()` call, before any montage is
 written. A prior run of the same scope may have produced more montages than this run does, if
 fewer photos are reviewable this time around. Without clearing first, a stale `montage-002.*` from
 that prior run would survive alongside this run's smaller output, with nothing to indicate it's no
-longer current. This is safe specifically because `logs/cull-prep/<tag>` is a directory this
+longer current. This is safe specifically because `logs/sift-prep/<tag>` is a directory this
 feature exclusively generates and owns - unlike `Inbox`/`Sorted`/`Review`/`Duplicates`, which the
 project's media-safety invariant protects from bulk deletes.
 

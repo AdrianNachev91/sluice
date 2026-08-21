@@ -56,10 +56,10 @@ class CategoryNameTest {
 
     @Test
     void refusesAWindowsDeviceNameInAnyCase() {
-        assertThat(CategoryName.problemWith("con")).contains("reserved device name");
-        assertThat(CategoryName.problemWith("nul")).contains("reserved device name");
-        assertThat(CategoryName.problemWith("com1")).contains("reserved device name");
-        assertThat(CategoryName.problemWith("lpt9")).contains("reserved device name");
+        assertThat(CategoryName.problemWith("con")).contains("reserved by the operating system");
+        assertThat(CategoryName.problemWith("nul")).contains("reserved by the operating system");
+        assertThat(CategoryName.problemWith("com1")).contains("reserved by the operating system");
+        assertThat(CategoryName.problemWith("lpt9")).contains("reserved by the operating system");
     }
 
     @Test

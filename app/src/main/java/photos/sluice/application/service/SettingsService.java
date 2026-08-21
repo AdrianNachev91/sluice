@@ -153,7 +153,7 @@ public class SettingsService implements SettingsUseCase {
                 this.announceFolderRootsChange(workingRootMoved);
             })) {
                 throw new JobInProgressException(
-                        "Sluice is running a job. Finish the current run before changing where its folders are.");
+                        "Sluice is running a job. Finish it before changing where its folders are.");
             }
         }
     }

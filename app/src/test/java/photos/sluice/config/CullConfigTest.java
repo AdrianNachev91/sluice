@@ -66,8 +66,54 @@ class CullConfigTest {
         ).run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories()).containsExactly(
-                    new CullCategory("receipts", "Paper receipts and invoices"),
-                    new CullCategory("pets", "Photos of the family dog"));
+                    CullCategory.of("receipts", "Paper receipts and invoices"),
+                    CullCategory.of("pets", "Photos of the family dog"));
+        });
+    }
+
+    @Test
+    void everyBundledCardShipsSwitchedOn() {
+        this.runner.run(context -> {
+            final CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.categories()).allMatch(CullCategory::enabled);
+        });
+    }
+
+    @Test
+    void aCardCanBeSwitchedOffFromTheConfigFile() {
+        this.runner.withPropertyValues(
+                "sluice.cull.categories[0].name=pets",
+                "sluice.cull.categories[0].description=Photos of the family dog",
+                "sluice.cull.categories[0].enabled=false"
+        ).run(context -> {
+            final CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.categories().getFirst().enabled()).isFalse();
+        });
+    }
+
+    @Test
+    void aCardWithNoEnabledKeyIsOn() {
+        this.runner.withPropertyValues(
+                "sluice.cull.categories[0].name=pets",
+                "sluice.cull.categories[0].description=Photos of the family dog"
+        ).run(context -> {
+            final CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.categories().getFirst().enabled()).isTrue();
+        });
+    }
+
+    @Test
+    void aCardsExamplesBindAsWrittenAndDropTheBlankOnes() {
+        this.runner.withPropertyValues(
+                "sluice.cull.categories[0].name=food",
+                "sluice.cull.categories[0].description=Food and meal photos",
+                "sluice.cull.categories[0].examples[0]=restaurant plates",
+                "sluice.cull.categories[0].examples[1]=   ",
+                "sluice.cull.categories[0].examples[2]=home dinners"
+        ).run(context -> {
+            final CullConfig config = context.getBean(CullConfig.class);
+            assertThat(config.categories().getFirst().examples())
+                    .containsExactly("restaurant plates", "home dinners");
         });
     }
 

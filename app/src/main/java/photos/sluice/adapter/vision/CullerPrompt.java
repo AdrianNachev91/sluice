@@ -54,8 +54,8 @@ class CullerPrompt {
      */
     String systemPrompt(final List<CullCategory> categories) {
         if (categories.isEmpty()) {
-            throw new IllegalStateException("This cull run recorded no categories, and an automated cull "
-                    + "needs at least one");
+            throw new IllegalStateException("This run recorded no photo categories, and there is nothing "
+                    + "to sort photos into without them");
         }
         return rendered(this.template, categories);
     }
@@ -134,9 +134,32 @@ class CullerPrompt {
                     + " lacks the " + CATEGORIES_PLACEHOLDER + " placeholder");
         }
         final String cards = categories.stream()
-                .map(card -> "### `" + card.name() + "`\n\n" + card.description())
+                .map(CullerPrompt::card)
                 .collect(Collectors.joining("\n\n"));
         return template.replace(CATEGORIES_PLACEHOLDER, cards);
+    }
+
+    /**
+     * One card's prompt section: its name as a heading, its description, and its examples as a list
+     * under it.
+     *
+     * <p>A card offering none appends nothing at all, so nothing downstream has to be trimmed back
+     * off. A description can arrive carrying its own trailing newline, from a plain {@code >} or
+     * {@code |} block in the config file, and that whitespace is the author's to keep.
+     *
+     * @param card {@link CullCategory} the category card to render
+     * @return {@link String} the card's markdown section
+     */
+    private static String card(final CullCategory card) {
+        final var section = new StringBuilder("### `").append(card.name()).append("`\n\n")
+                .append(card.description());
+        if (!card.examples().isEmpty()) {
+            section.append("\n\nExamples:");
+            for (final String example : card.examples()) {
+                section.append("\n- ").append(example);
+            }
+        }
+        return section.toString();
     }
 
     /**

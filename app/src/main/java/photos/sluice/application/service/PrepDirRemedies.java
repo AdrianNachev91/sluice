@@ -201,11 +201,16 @@ public class PrepDirRemedies {
      *
      * <p>The category set is unrecoverable the same way, and it does not degrade as harmlessly. A
      * sidecar carries only {@code src}, {@code name}, {@code time} and {@code received}, so nothing
-     * on disk remembers what this run was culled under. The currently configured set is substituted
-     * instead. That means a run repaired after a category edit is judged against today's rules,
-     * which is how every run behaved before the set was recorded at all. So the repair path is no
-     * worse than what it replaces, while the happy path stops drifting. This is the one place the
-     * substitution is made, and it is made deliberately rather than inherited.
+     * on disk remembers what this run was culled under. The configured set is substituted instead.
+     * That means a run repaired after a category edit is judged against today's rules, which is how
+     * every run behaved before the set was recorded at all. So the repair path is no worse than what
+     * it replaces, while the happy path stops drifting. This is the one place the substitution is
+     * made, and it is made deliberately rather than inherited.
+     *
+     * <p>Every configured card, including one switched off. Switching a card off stops new runs
+     * being prepped under it. It does not retract a decision an agent already wrote, and filtering
+     * here would do exactly that. The shard naming that card would fail validation, and its photo
+     * would surface as a finding rather than a move. Prep time is where the switch is read.
      *
      * <p>The scope is read straight off the prep dir's own folder name, which is the on-disk
      * convention every real index.json already mirrors. The basePath is reconstructed as the
