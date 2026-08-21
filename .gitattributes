@@ -1,0 +1,24 @@
+# Text is stored with LF and checked out in whatever the platform uses. Without this, a file's
+# stored line endings are decided by whichever tool last wrote it, and the two do not have to agree.
+# A file stored with CRLF that a script rewrites as LF then reads as every line changed, which turns
+# a small edit into a whole-file diff and buries the real change in a review.
+#
+# That is not hypothetical here. Two plan docs were stored with CRLF, and the larger of them turned
+# 268 edited lines into 13,000 twice in one chunk.
+#
+# Binary content is detected and left alone by the same rule, since auto only converts what has no
+# NUL bytes in it.
+* text=auto
+
+# Named rather than left to the detection, because a photo fixture that lost its CRs would stop
+# being the bytes the test was written against. This repository's test data is real camera output.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.avif binary
+*.heic binary
+*.webp binary
+*.arw binary
+*.cr2 binary
+*.nef binary
+*.ico binary
