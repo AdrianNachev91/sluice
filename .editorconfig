@@ -1,0 +1,31 @@
+# What editors write, so it matches what git stores.
+#
+# .gitattributes already settles what git keeps and hands back: LF, on every platform. That governs
+# files git has touched. It says nothing to the editor creating the next one, and IntelliJ's own
+# default for a new file is the platform's separator, which is CRLF on Windows. Without this file
+# the mismatch returns one new file at a time.
+#
+# IntelliJ, VS Code and most editors read this without a plugin.
+
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+
+# Tabs are not this project's indentation anywhere, so the width is only what an editor shows for a
+# tab that slipped in.
+[*.{java,css,js,ts,astro}]
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+indent_style = space
+indent_size = 2
+# A markdown line ending in two spaces is a hard line break, so trimming them changes what renders.
+trim_trailing_whitespace = false

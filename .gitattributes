@@ -1,4 +1,4 @@
-# Text is stored with LF and checked out in whatever the platform uses. Without this, a file's
+# Text is stored with LF and checked out with LF, on every platform. Without this, a file's
 # stored line endings are decided by whichever tool last wrote it, and the two do not have to agree.
 # A file stored with CRLF that a script rewrites as LF then reads as every line changed, which turns
 # a small edit into a whole-file diff and buries the real change in a review.
@@ -8,7 +8,12 @@
 #
 # Binary content is detected and left alone by the same rule, since auto only converts what has no
 # NUL bytes in it.
-* text=auto
+# eol=lf rather than leaving checkout to the platform (added 2026-08-21). Storing LF while checking
+# out CRLF on Windows means every file a script or an editor wrote as LF disagrees with what git
+# would hand back, and git says so on each command that touches one. That was firing on 504 files
+# here. Nothing tracked needs CRLF: no batch or cmd files are tracked, and PowerShell, Java and
+# Maven all read LF.
+* text=auto eol=lf
 
 # Named rather than left to the detection, because a photo fixture that lost its CRs would stop
 # being the bytes the test was written against. This repository's test data is real camera output.
