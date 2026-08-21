@@ -59,7 +59,7 @@ final class ScreenWarmUp {
                 new Separator(), new Spinner<Integer>(), new TextArea(), new TextField(),
                 new TitledPane(), new ToggleButton(),
                 new Circle(), new Rectangle(), new SVGPath(), new Text(), new TextFlow(),
-                new ListCell<String>(), new SettingsPane.ModelChoiceCell());
+                new ListCell<String>(), new VisionProviderCard.ModelChoiceCell());
     }
 
     /**
