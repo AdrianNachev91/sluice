@@ -116,6 +116,9 @@ class CullerPromptTest {
                 1. IMG_001.jpg | taken 2019-06-20T13:00:10Z
                 2. IMG-20190620-WA0003.jpg | taken 2019-06-20T13:00:12Z | received
                 3. IMG_002.jpg | taken 2019-06-20T13:00:14Z
+                Return exactly 3 verdicts, one for each numbered photo above. \
+                Use indexes 1 to 3 only, and do not add a verdict for any \
+                index or name not in this list.
                 """);
     }
 

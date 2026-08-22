@@ -93,6 +93,15 @@ class CullerPrompt {
             }
             text.append('\n');
         }
+        // The system prompt asks for a verdict per numbered photo. Every other rule it states
+        // exactly governs a single verdict. This one quantifies over a set the model has to
+        // count for itself. Restating it beside the list it governs, with the count already in
+        // hand, is what the corrective retry turn does and the first request does not.
+        text.append("Return exactly ").append(entries.size())
+                .append(" verdicts, one for each numbered photo above. Use indexes 1 to ")
+                .append(entries.size())
+                .append(" only, and do not add a verdict for any index or name not in this ")
+                .append("list.\n");
         return text.toString();
     }
 

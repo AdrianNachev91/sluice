@@ -165,6 +165,19 @@ class AnthropicCuller implements VisionCuller {
     // ignores it whatever it holds.
     private static final Map<String, Object> NON_BLANK = Map.of("type", "string", "minLength", 1);
 
+    // Anchored, because a JSON Schema pattern searches where ShardValidator's own matcher demands
+    // the whole value. Reusing that validator's expression verbatim would accept "FOO-bar", which it
+    // then refuses.
+    //
+    // No maxLength beside it, though the validator caps a slug at 24. A length ceiling is applied by
+    // shaping the answer rather than refusing it, so it truncates. Two truncated-alike groups share
+    // a Duplicates folder whenever their keepers fall in the same year-month, which is what
+    // CullDestinations keys that folder on. The validator catches that only when both groups
+    // contributed a chosen keeper, since the merged id then carries two and WrongChosenCount fires.
+    // A merge where one side brought only rejects passes validation and lands silently.
+    private static final Map<String, Object> GROUP_SLUG =
+            Map.of("type", "string", "minLength", 1, "pattern", "^[a-z0-9]+(-[a-z0-9]+)*$");
+
     private final CullerPrompt prompt;
     private final ShardCodec shardCodec;
     private final SidecarReader sidecarReader;
@@ -976,12 +989,18 @@ class AnthropicCuller implements VisionCuller {
      * paid corrective retry. {@link ShardValidator} stays the single authority either way. Its
      * cross-verdict and cross-shard rules have no expression in a schema describing one verdict.
      *
-     * <p>A string constraint here shapes the answer rather than refusing it, which is why the group
-     * slug's own rule is left to the validator. A {@code maxLength} would quietly cut a long slug to
-     * fit, and two groups on one sheet cut to the same slug merge into one folder with nothing
-     * reporting it. A refusal costs one retry; that costs the user photos in a folder they never
-     * chose. The {@code minLength} below is the safe direction of the same mechanism: measured as a
-     * floor rather than a target, so an ordinary reason is untouched and only an empty one is
+     * <p>A string constraint here shapes the answer rather than refusing it, so its direction
+     * decides whether it is safe. A floor only steers an empty value away. That is what
+     * {@code minLength} does for a reason, and what the slug's character rule does for a shape.
+     *
+     * <p>A ceiling is the unsafe direction, so the slug's 24-character cap stays with the validator.
+     * A {@code maxLength} would cut a long slug to fit rather than refuse it. Two truncated-alike
+     * groups then share a Duplicates folder whenever their keepers fall in the same year-month.
+     * The validator catches that only when both groups brought a chosen keeper, since the merged id
+     * carries two and {@code WrongChosenCount} fires. A merge where one side brought only rejects
+     * passes and lands silently. A refusal costs one retry; that costs the user photos in a folder
+     * they never chose. The {@code minLength} below is a floor rather than a target, so an
+     * ordinary reason is untouched and only an empty one is
      * steered away from.
      *
      * @param categories a {@link List} of {@link String}, the run's recorded category names
@@ -1039,7 +1058,7 @@ class AnthropicCuller implements VisionCuller {
                         "name", Map.of("type", "string"),
                         "action", action,
                         "reason", NON_BLANK,
-                        "group", NON_BLANK,
+                        "group", GROUP_SLUG,
                         "chosen_reason", NON_BLANK),
                 "required", List.copyOf(required),
                 "additionalProperties", false);
