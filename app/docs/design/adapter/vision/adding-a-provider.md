@@ -1,0 +1,93 @@
+# Adding a vision provider
+
+What a new `VisionCuller` implementation has to satisfy, and the two rules that are not obvious from
+reading an existing one. Written for somebody forking Sluice or building their own provider, which
+the license already permits without asking.
+
+The mechanics are small. `CullDispatcher` discovers providers by list injection, so a new one is a
+single `@Component` class implementing `VisionCuller` and nothing else to wire. The rules below are
+the part that costs money to learn the hard way.
+
+## A provider must constrain its output, or be able to iterate for free
+
+`ProviderType` splits providers by how they arrive at a judgement, and the split decides what a
+refusal costs.
+
+Under `API` the app calls a model and writes shards from the answer. A `CullException` is a genuine
+failure, and the call that produced it has already been paid for. Under `MANUAL` something outside
+the app writes the shards. The same exception is an ordinary pause, it costs nothing, and whatever
+is doing the work can try again.
+
+`ShardValidator` is the single authority on a well-formed cull, and it was written for the second
+kind. Its own documentation says it reports every problem at once "so the vision agent gets its whole
+to-fix list in one pass instead of one error per re-run". That is a different mechanism from a
+schema rather than a weaker one: a schema constrains generation, a validator explains a rejection to
+something that can act on the explanation.
+
+**So a provider gets one of two things: the ability to constrain its output, or the ability to
+iterate against the validator's findings for free.** A candidate with neither is a `MANUAL` provider,
+or it is not a provider. Nothing enforces this. It is a rule for whoever reviews the code, including
+you reviewing your own.
+
+## A schema looser than the validator is paid for one gap at a time
+
+If your provider constrains its output with a schema, **the schema has to be at least as strict as
+`ShardValidator` on every clause a per-verdict schema can express.** Any gap between them is a shape
+the model can legally produce and the validator will refuse, and each occurrence costs a retry that
+bills.
+
+This is not hypothetical. Sluice's own Anthropic provider had this defect: its schema required
+`index`, `name` and `action`, while the validator demands a non-blank `reason` on every
+classification and a category drawn from the run's own set. A real-data probe in August 2026 put four
+production-shaped sheets through it and three were refused after their corrective retry.
+
+Three of the validator's clauses are closeable in a schema and five are not, because they are
+cross-verdict or cross-shard rules that no per-item schema reaches:
+
+| Clause | Schema-closeable |
+|--------------------------------------------------------------|-----|
+| A classification carries a non-blank `reason` | Yes |
+| A near-dup keeper carries `chosen_reason` | Yes |
+| A classification's category is one the run declared | Yes |
+| A group id is a lowercase slug, at most 24 characters | No |
+| A near-dup group has exactly one keeper and one or more rejects | No |
+| A group id is not reused across shards | No |
+| A decision's file is one the montages actually showed | No |
+| No file is acted on twice | No |
+
+So some refusals reach any provider however strict its schema. **An `API` provider therefore also
+needs a genuinely corrective retry**, one that tells the model what was wrong rather than simply
+asking again. That is a separate quality from schema support, and no vendor advertises it.
+
+Because the category clause depends on the run's own configured categories, a schema that closes it
+cannot be a static constant. Build it per run from the categories the prep directory declares, which
+is the same set the validator judges against, or the two drift apart the first time a user edits a
+category.
+
+## Do not paper over a refusal
+
+The cheap fix for a missing `reason` is to fill one in and never fail validation again. Do not. It is
+silent coercion at an input boundary, and it converts a loud failure you have paid for into a quiet
+wrong answer in somebody's photo library. A refusal that reaches a person is the design working.
+
+## Two mechanical traps
+
+**`SecretId.provider` is a second id namespace and nothing polices it.** It becomes the credential's
+filename and its entry name in the OS keyring. The dispatcher's duplicate-id check covers only the id
+a culler describes itself with. Two providers whose culler ids differ but whose `SecretId.provider`
+both read `anthropic` would silently share one credential, where saving either key overwrites the
+other. Keep a provider's `SecretId.provider` equal to the id in its own description.
+
+**A provider describes itself.** `describe()` answers with the provider's name, its settings, which
+of them are required, its credential and the models it offers, so a provider added later arrives
+complete and nothing outside it needs editing for it to appear. Anything that would require a central
+registry to be edited belongs in the provider instead.
+
+## Copying the Anthropic culler
+
+`AnthropicCuller` is the structural template: its wiring, its credential lookup through the
+`SecretStore` port, its per-montage loop and its one-retry cap. Copy that shape.
+
+Check its response schema against `ShardValidator` before copying it rather than trusting it. The
+defect described above is the reason this page exists, and a copy made without that check inherits
+it.
