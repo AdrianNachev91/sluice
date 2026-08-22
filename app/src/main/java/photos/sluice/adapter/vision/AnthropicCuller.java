@@ -190,6 +190,10 @@ class AnthropicCuller implements VisionCuller {
     private final ShardCodec shardCodec;
     private final SidecarReader sidecarReader;
     private final CullSettings settings;
+    // Built per call rather than cached, so a run that forecasts before it culls constructs two.
+    // A cached client would have to notice a credential the user changed in Settings, and no signal
+    // for that reaches this class. Fresh construction has no stale state to get wrong, and each
+    // caller closes what it opened.
     private final Supplier<AnthropicClient> clientFactory;
     private final Function<CullProviderSettings, AnthropicClient> checkClientFactory;
     private final ShardValidator validator = new ShardValidator();
