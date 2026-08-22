@@ -112,16 +112,18 @@ flowchart TD
     WA --> P
     P["prep: MontageRenderer.build<br/>-> PrepDir (or null - see<br/>Cancellation)"]
     P -- "null" --> PZ(["CullJobOutcome.Cancelled"])
-    P -- "PrepDir" --> S{"every montage<br/>already has a shard?"}
-    S -- "yes" --> AP["apply: ApplyEngine.apply<br/>-> ApplyReport (or null -<br/>see Cancellation)"]
-    S -- "no" --> D["dispatch: CullDispatcher.cull<br/>(allowPartial=false on a fresh cull,<br/>caller-supplied on resume)"]
+    P -- "PrepDir" --> S{"any montage<br/>still owing a shard?"}
+    S -- "no" --> AP["apply: ApplyEngine.apply<br/>-> ApplyReport (or null -<br/>see Cancellation)"]
+    S -- "yes" --> D["dispatch: CullDispatcher.cull<br/>(allowPartial=false on a fresh cull,<br/>caller-supplied on resume)"]
+    D -- "stopped at its spend ceiling" --> CE(["CullJobOutcome.Waiting<br/>- reason CEILING_REACHED,<br/>apply is not reached"])
     D -- "success" --> AP
     AP -- "ApplyReport" --> APP(["CullJobOutcome.Applied"])
     AP -- "null" --> APZ(["CullJobOutcome.Waiting"])
     AP -- "ApplyException" --> APB(["CullJobOutcome.Blocked<br/>- carries the findings,<br/>watch stays disarmed"])
+    AP -- "RuntimeException" --> APR(["propagates -<br/>recorded as FAILED first"])
     D -- "CullException" --> M{"configured provider ==<br/>MANUAL_MODE_PROVIDER_ID?"}
     M -- "yes" --> WT(["CullJobOutcome.Waiting<br/>- slot released, not a failure"])
-    M -- "no" --> RT(["propagates -<br/>JobHandle.join() throws"])
+    M -- "no" --> RT(["propagates -<br/>recorded as FAILED first"])
 ```
 
 ### Waiting and Blocked
@@ -221,13 +223,13 @@ shard as its own scope. Neither affects what actually happens - readiness never 
 
 | CullEngine method               | What runs                                                           | Phase label(s)                                                         |
 |---------------------------------|---------------------------------------------------------------------|------------------------------------------------------------------------|
-| `cull(CullScope)`               | prep -> (dispatch unless the scope is empty) -> apply               | `"Building montages..."`, `"Culling..."`, `"Applying decisions..."`    |
-| `resume(Path prepDir, boolean)` | (dispatch only if a shard is missing) -> apply, on the existing dir | `"Culling..."` only when dispatch runs, then `"Applying decisions..."` |
+| `cull(CullScope)`               | prep -> (dispatch unless the scope is empty) -> apply               | `"Building montages..."`, `"Sifting..."`, `"Applying decisions..."`    |
+| `resume(Path prepDir, boolean)` | (dispatch only if a shard is missing) -> apply, on the existing dir | `"Sifting..."` only when dispatch runs, then `"Applying decisions..."` |
 
 A fresh `cull()` over a scope with any montages in it always dispatches. Prep rebuilds the dir and
 clears whatever was in it, so no montage can already hold a shard. The one fresh-cull case that
 skips is a scope that produced no montages at all, where there is nothing for a culler to judge.
-Then no `"Culling..."` bracket is reported and no provider client is built.
+Then no `"Sifting..."` bracket is reported and no provider client is built.
 
 ### Scenarios
 
@@ -237,11 +239,13 @@ Then no `"Culling..."` bracket is reported and no provider client is built.
 | `cull()` called again while that scope's run is unresolved              | `ScopeOccupiedException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched      |
 | `cull()` on a scope whose own prep dir cannot be listed at all          | `ScopeUnreadableException` thrown synchronously, naming the prep dir and the read failure - nothing rebuilt, no run fabricated to blame                    |
 | `cull()` called again once that scope's run has applied                 | The old record is archived to the graveyard, named by `archivedPriorRun`, and the fresh run proceeds with no confirm                                       |
-| `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved. No culler is entered, so no `"Culling..."` phase is bracketed                                                       |
+| `resume()` once every shard is present and valid                        | `CullJobOutcome.Applied`, files moved. No culler is entered, so no `"Sifting..."` phase is bracketed                                                       |
 | `resume()` while a shard is still missing                               | Dispatch runs again; `CullJobOutcome.Waiting`, with a freshly recomputed tally                                                                             |
 | `resume()` with every shard present but apply's validation refusing     | `CullJobOutcome.Blocked` carrying the findings; nothing moved, `decisions.json` never written, no watcher armed                                            |
 | `resume(prepDir, allowPartial=true)` with a shard still missing         | Applies what it has; the missing montage's photos are left in place, untouched                                                                             |
 | A genuine `CullException` from an automated (non-manual-mode) provider  | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`. A cancellation is a separate path (see Cancellation below) and never reaches this one |
+| The run stops at its own spend ceiling                                  | `CullJobOutcome.Waiting` with reason `CEILING_REACHED`. Apply is not reached, so the shards already written stay unapplied and Continue picks them up.     |
+| Apply fails on the filesystem rather than on validation                 | Propagates. The vision pass has already been billed, so what it consumed is recorded as `FAILED` before the exception leaves.                              |
 
 ### Cancellation
 
@@ -258,8 +262,10 @@ flowchart TD
     P -- "PrepDir" --> C1{"cancellation<br/>requested?"}
     C1 -- "yes" --> W1(["Waiting - 0/N tally,<br/>dispatch never runs"])
     C1 -- "no" --> D["dispatch: CullDispatcher.cull<br/>(signal passed through)"]
-    D -- "montage loop stops<br/>early on cancellation" --> C2{"cancellation<br/>requested?"}
-    D -- "finishes normally" --> C2
+    D -- "montage loop stops<br/>early on cancellation" --> C0{"stopped at<br/>its ceiling?"}
+    D -- "finishes normally" --> C0
+    C0 -- "yes" --> WCE(["Waiting - CEILING_REACHED,<br/>even if a cancel also landed"])
+    C0 -- "no" --> C2{"cancellation<br/>requested?"}
     C2 -- "yes" --> W2(["Waiting - tally reflects<br/>whatever shards landed"])
     C2 -- "no" --> AP["apply: ApplyEngine.apply<br/>(checks cancellation internally -<br/>see apply-engine.md)"]
     AP -- "null - cancelled mid-apply" --> W3(["Waiting - decisions.json<br/>never written"])
@@ -292,6 +298,7 @@ cancel would defy the cancel.
 | Cancellation requested mid-dispatch (an automated provider's montage loop)     | `Waiting` with a tally reflecting however many shards the loop wrote before stopping   |
 | Cancellation requested mid-apply (either of `ApplyEngine`'s two status loops)  | `Waiting` - `decisions.json` was never written, so the prep dir still reads as waiting |
 | Cancellation requested racing a manual-mode pause's `CullException`            | `Waiting`, same as an uncancelled pause, but no watcher is armed even if `mode=WATCH`  |
+| Cancellation requested after the run had already stopped at its spend ceiling  | `Waiting` with `CEILING_REACHED`, not the cancellation - the ceiling is asked first    |
 | `mode=WATCH` configured with an automated (non-manual-mode) provider           | Never arms a watcher, cancelled or not - watch mode is an external-agent-only feature  |
 
 ## Watch mode
@@ -385,7 +392,7 @@ map is in-memory and per-process, so it takes two actors inside one process raci
 dir. That is a UI shape, a background watcher against a person, rather than a CLI one. And a second
 click works.
 
-Identity-aware removal would close it, at the cost of `dispatchAndApply()` having to know whether a
+Identity-aware removal would close it. The cost is `dispatchAndApply()` having to know whether a
 watcher or a person entered it, threaded through `resume()` and the job submission. The blind retire
 is genuinely correct for the manual path, so it cannot simply be made conditional. Not worth that
 for this window. A caller should instead bind any watch indicator to `isWatchActive()` rather than

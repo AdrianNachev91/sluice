@@ -11,8 +11,10 @@ import com.anthropic.models.messages.CacheCreation;
 import com.anthropic.models.messages.ContentBlock;
 import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.Message;
+import com.anthropic.models.messages.MessageCountTokensParams;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.MessageParam;
+import com.anthropic.models.messages.MessageTokensCount;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlock;
 import com.anthropic.models.messages.Usage;
@@ -45,6 +47,9 @@ import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStore;
+import photos.sluice.application.port.out.SpendCeiling;
+import photos.sluice.application.port.out.SpendForecast;
+import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
@@ -85,7 +90,8 @@ class AnthropicCullerTest {
     private static final List<CullCategory> CARDS = List.of(
             CullCategory.of("junk", "Objectively worthless photos."),
             CullCategory.of("scenery", "Unremarkable scenery."));
-    private static final CullOptions OPTIONS = new CullOptions(false, null);
+    private static final CullOptions OPTIONS = CullOptions.unbounded(false);
+    private static final String MODEL = "claude-sonnet-5";
 
     @TempDir
     Path prepDir;
@@ -130,7 +136,7 @@ class AnthropicCullerTest {
                 new Classification(this.src("IMG_0002.jpg"), "junk", "photo of a screen"),
                 new NearDupChosen(this.src("IMG_0003.jpg"), "beach", "sharpest of the burst"),
                 new NearDupReject(this.src("IMG_0004.jpg"), "beach", "blurrier than IMG_0003.jpg"));
-        assertThat(report).isEqualTo(new CullReport(1, 0, 1200, 340));
+        assertThat(report).isEqualTo(report(1, 0, 1, 1200, 340));
     }
 
     @Test
@@ -175,8 +181,188 @@ class AnthropicCullerTest {
 
         assertThat(this.prepDir.resolve("decisions-001.json")).exists();
         assertThat(this.prepDir.resolve("decisions-002.json")).exists();
-        assertThat(report).isEqualTo(new CullReport(2, 0, 2100, 140));
+        assertThat(report).isEqualTo(report(2, 0, 2, 2100, 140));
         verify(this.client).close();
+    }
+
+    @Test
+    void forecastCountsTheRequestItWouldHaveSentWithoutSendingIt() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenReturn(MessageTokensCount.builder().inputTokens(5_790).build());
+
+        assertThat(this.culler().forecast(prep)).isEqualTo(new SpendForecast.Counted(5_790));
+
+        verify(this.messages, never()).create(any(MessageCreateParams.class));
+    }
+
+    @Test
+    void theCountedRequestCarriesTheSchemaAndSystemPromptTheRealCallWould() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenReturn(MessageTokensCount.builder().inputTokens(1).build());
+
+        this.culler().forecast(prep);
+
+        final var captor = ArgumentCaptor.forClass(MessageCountTokensParams.class);
+        verify(this.messages).countTokens(captor.capture());
+        assertThat(captor.getValue().outputConfig()).isPresent();
+        assertThat(captor.getValue().system().orElseThrow().asString()).contains("junk");
+    }
+
+    @Test
+    void forecastAnswersThatItCouldNotCountRatherThanRaisingWhatStoppedIt() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenThrow(new AnthropicIoException("connect timed out", null));
+
+        assertThat(this.culler().forecast(prep))
+                .isEqualTo(new SpendForecast.Unknown("connect timed out"));
+    }
+
+    @Test
+    void forecastAnswersThatItCouldNotCountWhenTheMontagesSidecarIsUnreadable() throws IOException {
+        Files.writeString(this.prepDir.resolve("montage-001.json"), "{ not json");
+
+        assertThat(this.culler().forecast(this.prep("montage-001")))
+                .isInstanceOf(SpendForecast.Unknown.class);
+    }
+
+    @Test
+    void forecastCountsNothingForAPrepDirectoryWithNoMontages() {
+        assertThat(this.culler().forecast(this.prep())).isEqualTo(new SpendForecast.Counted(0));
+    }
+
+    @Test
+    void forecastClosesTheClientItBuilt() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        when(this.messages.countTokens(any(MessageCountTokensParams.class)))
+                .thenReturn(MessageTokensCount.builder().inputTokens(1).build());
+
+        this.culler().forecast(prep);
+
+        verify(this.client).close();
+    }
+
+    @Test
+    void aRunStopsOnceItHasSpentPastWhatTheMontagesItJudgedAllow() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 1_000, 100), keeping("IMG_0002.jpg", 10, 1));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"),
+                bounded(new SpendCeiling(10, 100, 1)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+    }
+
+    @Test
+    void anExpensiveFirstMontageDoesNotStopARunWhileTheBoundIsStillWarmingUp() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 1_000, 100), keeping("IMG_0002.jpg", 10, 1));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"),
+                bounded(new SpendCeiling(10, 100, 3)));
+
+        assertThat(report.stoppedAtCeiling()).isFalse();
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
+    }
+
+    @Test
+    void theCallBoundStopsTheRunBeforeAMontagesFirstCallRatherThanOnlyBeforeItsRetry() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 10, 1), keeping("IMG_0002.jpg", 10, 1));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"),
+                bounded(new SpendCeiling(1, 1_000_000, 0)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+    }
+
+    @Test
+    void aRunWhereEveryMontageNeedsItsCorrectionStillDoesNotReachTheCallBound() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        this.respondWith(misnamed(100, 10), keeping("IMG_0001.jpg", 100, 10),
+                misnamed(100, 10), keeping("IMG_0002.jpg", 100, 10),
+                misnamed(100, 10), keeping("IMG_0003.jpg", 100, 10));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002", "montage-003"),
+                bounded(new SpendCeiling(6, Long.MAX_VALUE / 2, 0)));
+
+        assertThat(report.stoppedAtCeiling()).isFalse();
+        assertThat(report.apiCalls()).isEqualTo(6);
+        assertThat(report.montagesCulled()).isEqualTo(3);
+        assertThat(this.prepDir.resolve("decisions-003.json")).exists();
+    }
+
+    // Needs the third montage. The token arm is asked before a montage spends, so over two it reads
+    // zero tokens and cannot tell the two counts apart.
+    @Test
+    void aMontageResumedFromItsShardDoesNotCountTowardTheBoundsWarmUp() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        new ShardCodec().write(this.prepDir.resolve("decisions-001.json"),
+                new DecisionShard("montage-001", List.of()));
+        this.respondWith(keeping("IMG_0002.jpg", 100, 50), keeping("IMG_0003.jpg", 10, 10));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002", "montage-003"),
+                bounded(new SpendCeiling(10, 100, 1)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(report.montagesSkipped()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-002.json")).exists();
+        assertThat(this.prepDir.resolve("decisions-003.json")).doesNotExist();
+    }
+
+    @Test
+    void aMontageSkippedForAnUnreadableSidecarBuysTheRunNoAllowance() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        Files.delete(this.prepDir.resolve("montage-001.json"));
+        this.respondWith(keeping("IMG_0002.jpg", 100, 50), keeping("IMG_0003.jpg", 10, 10));
+
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002", "montage-003"),
+                bounded(new SpendCeiling(10, 100, 1)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.montagesSkipped()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-003.json")).doesNotExist();
+    }
+
+    @Test
+    void aRunInsideItsCeilingIsNotReportedAsStopped() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(keeping("IMG_0001.jpg", 10, 1));
+
+        assertThat(this.culler().cull(prep, bounded(new SpendCeiling(10, 1_000_000, 0))).stoppedAtCeiling())
+                .isFalse();
+    }
+
+    @Test
+    void aCorrectionPastTheCallBoundIsRefusedAndEndsTheRun() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(keeping("WRONG.jpg", 100, 10));
+
+        final CullReport report = this.culler().cull(prep, bounded(new SpendCeiling(1, 1_000_000, 0)));
+
+        assertThat(report.stoppedAtCeiling()).isTrue();
+        assertThat(report.apiCalls()).isEqualTo(1);
+        assertThat(report.montagesCulled()).isZero();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(1)).create(any(MessageCreateParams.class));
     }
 
     @Test
@@ -227,7 +413,7 @@ class AnthropicCullerTest {
         final CullReport report = this.culler().cull(
                 this.prep("montage-001", "montage-002", "montage-003"), OPTIONS, cancelAfterFirstTick, cancelled::get);
 
-        assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
+        assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
         assertThat(this.prepDir.resolve("decisions-001.json")).exists();
         assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
         assertThat(this.prepDir.resolve("decisions-003.json")).doesNotExist();
@@ -257,7 +443,7 @@ class AnthropicCullerTest {
         final CullReport report = this.culler().cull(prep, OPTIONS, ProgressCallback.NO_OP, cancelBeforeRetry);
 
         // The failed first attempt's tokens still count - that call already cost real money.
-        assertThat(report).isEqualTo(new CullReport(0, 0, 100, 10));
+        assertThat(report).isEqualTo(report(0, 0, 1, 100, 10));
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
         verify(this.messages, times(1)).create(any(MessageCreateParams.class));
     }
@@ -319,7 +505,7 @@ class AnthropicCullerTest {
         final CullReport report =
                 this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS);
 
-        assertThat(report).isEqualTo(new CullReport(1, 0, 1000, 100));
+        assertThat(report).isEqualTo(report(1, 0, 1, 1000, 100));
         assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
                 .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
         // One call, so the overlap never even reached the corrective retry.
@@ -339,7 +525,7 @@ class AnthropicCullerTest {
         final CullReport report =
                 this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS);
 
-        assertThat(report).isEqualTo(new CullReport(0, 1, 0, 0));
+        assertThat(report).isEqualTo(report(0, 1, 0, 0, 0));
         verify(this.messages, times(0)).create(any(MessageCreateParams.class));
     }
 
@@ -361,7 +547,7 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
 
-        assertThat(report).isEqualTo(new CullReport(1, 1, 500, 50));
+        assertThat(report).isEqualTo(report(1, 1, 1, 500, 50));
         assertThat(this.prepDir.resolve("decisions-002.json")).exists();
         // Never culled, so no shard is invented for it - and no model call was spent trying.
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
@@ -380,7 +566,7 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(this.prep("montage-001"), OPTIONS);
 
-        assertThat(report).isEqualTo(new CullReport(0, 1, 0, 0));
+        assertThat(report).isEqualTo(report(0, 1, 0, 0, 0));
         assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
                 .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "the user's own answer"));
         verify(this.messages, times(0)).create(any(MessageCreateParams.class));
@@ -411,7 +597,7 @@ class AnthropicCullerTest {
         assertThat(shard.decisions()).containsExactly(
                 new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
         // Both attempts' tokens count: the failed first call cost real money too.
-        assertThat(report).isEqualTo(new CullReport(1, 0, 220, 40));
+        assertThat(report).isEqualTo(report(1, 0, 2, 220, 40));
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
         verify(this.messages, times(2)).create(captor.capture());
         final MessageCreateParams retry = captor.getAllValues().getLast();
@@ -449,6 +635,17 @@ class AnthropicCullerTest {
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 
+    @Test
+    void givingUpOnAMontageCarriesOutWhatTheRunHadAlreadySpent() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        this.respondWith(keeping("WRONG.jpg", 100, 10), keeping("ALSO_WRONG.jpg", 120, 30));
+
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
+                .isInstanceOf(CullException.class)
+                .extracting(failure -> ((CullException) failure).report())
+                .isEqualTo(report(0, 0, 2, 220, 40));
+    }
+
     // A failed attempt must roll its tentative shard back out of the accepted set. Poisoned
     // leftovers would surface as phantom problems when a later montage is validated.
     @Test
@@ -484,7 +681,7 @@ class AnthropicCullerTest {
                 .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "blurry"));
         assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-002.json")).decisions())
                 .containsExactly(new Classification(this.src("IMG_0002.jpg"), "junk", "screenshot"));
-        assertThat(report).isEqualTo(new CullReport(2, 0, 420, 60));
+        assertThat(report).isEqualTo(report(2, 0, 3, 420, 60));
     }
 
     // The API rejects empty text blocks, so a blank reply cannot be echoed verbatim on retry.
@@ -504,7 +701,7 @@ class AnthropicCullerTest {
         final CullReport report = this.culler().cull(prep, OPTIONS);
 
         assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions()).isEmpty();
-        assertThat(report).isEqualTo(new CullReport(1, 0, 220, 40));
+        assertThat(report).isEqualTo(report(1, 0, 2, 220, 40));
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
         verify(this.messages, times(2)).create(captor.capture());
         final MessageCreateParams retry = captor.getAllValues().getLast();
@@ -529,7 +726,7 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
 
-        assertThat(report).isEqualTo(new CullReport(1, 1, 500, 50));
+        assertThat(report).isEqualTo(report(1, 1, 1, 500, 50));
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
         verify(this.messages).create(captor.capture());
         // The one request that went out is montage-002's, still numbered 2 of 2: a skip does not
@@ -552,7 +749,7 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(prep, OPTIONS);
 
-        assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
+        assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
         final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.decisions()).containsExactly(
                 new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
@@ -574,7 +771,7 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(prep, OPTIONS);
 
-        assertThat(report).isEqualTo(new CullReport(1, 0, 100, 10));
+        assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
         final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.decisions()).containsExactly(
                 new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
@@ -1133,6 +1330,36 @@ class AnthropicCullerTest {
                 .isInstanceOf(CullException.class)
                 .hasMessageContaining("cut off at the 16384-token ceiling")
                 .hasMessageNotContaining("not valid verdict JSON");
+    }
+
+    private static CullOptions bounded(final SpendCeiling ceiling) {
+        return new CullOptions(false, null, ceiling);
+    }
+
+    private static Message keeping(final String name, final long inputTokens, final long outputTokens) {
+        return response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "%s", "action": "keep" }
+                  ]
+                }
+                """.formatted(name), inputTokens, outputTokens);
+    }
+
+    private static Message misnamed(final long inputTokens, final long outputTokens) {
+        return response("""
+                {
+                  "verdicts": [
+                    { "index": 1, "name": "WRONG.jpg", "action": "keep" }
+                  ]
+                }
+                """, inputTokens, outputTokens);
+    }
+
+    private static CullReport report(final int culled, final int skipped, final int calls,
+                                     final long inputTokens, final long outputTokens) {
+        return new CullReport(culled, skipped, calls,
+                new TokenSpend(inputTokens, outputTokens, "anthropic", MODEL), false);
     }
 
     private AnthropicCuller culler() {

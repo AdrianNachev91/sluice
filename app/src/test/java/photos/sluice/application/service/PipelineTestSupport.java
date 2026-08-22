@@ -2,6 +2,7 @@ package photos.sluice.application.service;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.fs.CsvLibraryHashIndex;
+import photos.sluice.adapter.fs.CsvSpendLedger;
 import photos.sluice.adapter.fs.InboxScanner;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
@@ -28,6 +29,10 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SpendCeiling;
+import photos.sluice.application.port.out.SpendForecast;
+import photos.sluice.application.port.out.SpendLedgerPort;
+import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.config.PathsConfig;
@@ -172,6 +177,10 @@ final class PipelineTestSupport {
 
     static Pipeline curatePipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore) {
         return pipeline(root, progress, mediaStore, autoApproveCullSettings(), List.of(new AutoApproveCuller()));
+    }
+
+    static SpendLedgerPort spendLedgerOf(final Path root) {
+        return new CsvSpendLedger(SettingsFixture.workingRoot(root));
     }
 
     static CullSettings autoApproveCullSettings() {
@@ -407,6 +416,7 @@ final class PipelineTestSupport {
         final var pathsConfig = new PathsConfig(settings);
         final var pathValidation = new PathValidationService(mediaStore, settings);
         final var hashIndex = new CsvLibraryHashIndex(pathsConfig);
+        final var spendLedger = new CsvSpendLedger(pathsConfig);
         final var sha256Port = new Sha256Hasher();
 
         final var dateResolver =
@@ -437,12 +447,12 @@ final class PipelineTestSupport {
             return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                     prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig,
                     new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner,
-                    moveLedger, pathValidation);
+                    moveLedger, pathValidation, spendLedger);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
                 prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, new JobRunner(),
                 progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pathValidation,
-                pollInterval);
+                spendLedger, pollInterval);
     }
 
     // The folder roots have to be there for the pipeline's own path check to pass, the same way a
@@ -1045,6 +1055,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
             final List<String> missing = new ArrayList<>();
             int done = 0;
@@ -1060,7 +1075,8 @@ final class PipelineTestSupport {
             if (!missing.isEmpty()) {
                 throw new CullException("missing shard(s) for: " + missing);
             }
-            return new CullReport(done, prep.entries().size() - done, 0, 0);
+            return new CullReport(done, prep.entries().size() - done, 0,
+                    TokenSpend.none(MANUAL_PROVIDER_ID), false);
         }
     }
 
@@ -1082,6 +1098,11 @@ final class PipelineTestSupport {
         @Override
         public ProviderCheck check() {
             return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
         }
 
         @Override
@@ -1109,6 +1130,8 @@ final class PipelineTestSupport {
     // An empty decisions array is still a valid shard. ShardValidator has no "every photo needs a
     // decision" rule, so every photo in scope is simply left in place, implicitly kept.
     static final class AutoApproveCuller implements VisionCuller {
+        @Nullable CullOptions receivedOptions;
+
         @Override
         public VisionProviderDescriptor describe() {
             return describing("auto-approve");
@@ -1125,6 +1148,47 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
+        }
+
+        @Override
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+            this.receivedOptions = opts;
+            for (final String montage : prep.entries()) {
+                try {
+                    writeShard(prep.prepDir(), montage);
+                } catch (final IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+            return new CullReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
+        }
+    }
+
+    // Nothing validates CullReport, so a provider can hand back counts SpendLedgerEntry refuses.
+    static final class ImpossibleCountCuller implements VisionCuller {
+        @Override
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             for (final String montage : prep.entries()) {
                 try {
@@ -1133,7 +1197,116 @@ final class PipelineTestSupport {
                     throw new UncheckedIOException(e);
                 }
             }
-            return new CullReport(prep.entries().size(), 0, 0, 0);
+            return new CullReport(prep.entries().size(), -1, 0, TokenSpend.none(this.describe().id()), false);
+        }
+    }
+
+    // An automated provider that spends and then gives up, the way the real one does when a montage
+    // fails its corrective retry.
+    static final class SpendingThenFailingCuller implements VisionCuller {
+        @Override
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.Counted(1_000);
+        }
+
+        @Override
+        public CullReport cull(final PrepDir prep, final CullOptions opts) throws CullException {
+            throw new CullException("gave up on a sheet", new CullReport(1, 0, 3,
+                    new TokenSpend(4_000, 800, "auto-approve", "a-model"), false));
+        }
+    }
+
+    // CeilingStoppedCuller with a gap held open in the middle. A test lands a cancellation in that
+    // gap, so both it and the ceiling stop are true when the engine picks which one to report.
+    record BlockingCeilingStoppedCuller(CountDownLatch started, CountDownLatch release) implements VisionCuller {
+        @Override
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.Counted(1_000);
+        }
+
+        @Override
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+            try {
+                writeShard(prep.prepDir(), prep.entries().getFirst());
+            } catch (final IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            this.started.countDown();
+            try {
+                this.release.await();
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            return new CullReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"), true);
+        }
+    }
+
+    // An automated provider that judges the first montage and then reports that its ceiling ended
+    // the run. It forecasts a real per-call figure, so the engine has something to build a ceiling
+    // from.
+    static final class CeilingStoppedCuller implements VisionCuller {
+        @Nullable SpendCeiling receivedCeiling;
+
+        @Override
+        public VisionProviderDescriptor describe() {
+            return describing("auto-approve");
+        }
+
+        @Override
+        public ProviderType type() {
+            return ProviderType.API;
+        }
+
+        @Override
+        public ProviderCheck check() {
+            return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.Counted(1_000);
+        }
+
+        @Override
+        public CullReport cull(final PrepDir prep, final CullOptions opts) {
+            this.receivedCeiling = opts.ceiling();
+            try {
+                writeShard(prep.prepDir(), prep.entries().getFirst());
+            } catch (final IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            return new CullReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"), true);
         }
     }
 
@@ -1160,6 +1333,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             for (final String montage : prep.entries()) {
                 final List<SidecarPhotoEntry> photos = this.cullPrepPort.readSidecar(prep.prepDir(), montage);
@@ -1172,7 +1350,7 @@ final class PipelineTestSupport {
                     throw new UncheckedIOException(e);
                 }
             }
-            return new CullReport(prep.entries().size(), 0, 0, 0);
+            return new CullReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
@@ -1197,6 +1375,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             for (final String montage : prep.entries()) {
                 try {
@@ -1206,7 +1389,7 @@ final class PipelineTestSupport {
                     throw new UncheckedIOException(e);
                 }
             }
-            return new CullReport(prep.entries().size(), 0, 0, 0);
+            return new CullReport(prep.entries().size(), 0, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
@@ -1226,6 +1409,11 @@ final class PipelineTestSupport {
         @Override
         public ProviderCheck check() {
             return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
         }
 
         @Override
@@ -1259,6 +1447,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
+        }
+
+        @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             return this.cull(prep, opts, ProgressCallback.NO_OP, CancellationSignal.NEVER);
         }
@@ -1289,7 +1482,7 @@ final class PipelineTestSupport {
                     }
                 }
             }
-            return new CullReport(culled, total - culled, 0, 0);
+            return new CullReport(culled, total - culled, 0, TokenSpend.none(this.describe().id()), false);
         }
     }
 
@@ -1310,6 +1503,11 @@ final class PipelineTestSupport {
         @Override
         public ProviderCheck check() {
             return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
         }
 
         @Override

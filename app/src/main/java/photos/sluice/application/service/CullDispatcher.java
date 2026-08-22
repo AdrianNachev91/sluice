@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
@@ -84,6 +85,16 @@ public class CullDispatcher {
                            final CancellationSignal cancellation)
             throws CullException {
         return this.select().cull(prep, options, progress, cancellation);
+    }
+
+    /**
+     * Asks the configured provider what one call over prep would carry on the way in.
+     *
+     * @param prep {@link PrepDir} the prep directory a run would be made over
+     * @return {@link SpendForecast} what one call would carry, or why that is not known
+     */
+    public SpendForecast forecast(final PrepDir prep) {
+        return this.select().forecast(prep);
     }
 
     /**

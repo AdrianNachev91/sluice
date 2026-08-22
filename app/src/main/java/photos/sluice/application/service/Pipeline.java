@@ -13,6 +13,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
+import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullRunSummary;
@@ -101,6 +102,7 @@ public class Pipeline {
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
+     * @param spendLedger {@link SpendLedgerPort} records what each cull run consumed
      */
     @Autowired
     public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -113,11 +115,11 @@ public class Pipeline {
                     final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
                     final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
                     final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
-                    final PathValidationUseCase pathValidation) {
+                    final PathValidationUseCase pathValidation, final SpendLedgerPort spendLedger) {
         this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
                 cullPrepPort, cullSettings, mediaStore, pathsPort, jobRunner, progressPort,
                 disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader, pathValidation,
-                DEFAULT_WATCH_POLL_INTERVAL);
+                spendLedger, DEFAULT_WATCH_POLL_INTERVAL);
     }
 
     /**
@@ -145,6 +147,7 @@ public class Pipeline {
      * @param applyPlanner {@link ApplyPlanner} the gate a watcher's readiness check runs
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
+     * @param spendLedger {@link SpendLedgerPort} records what each cull run consumed
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -155,7 +158,8 @@ public class Pipeline {
              final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
              final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
              final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
-             final PathValidationUseCase pathValidation, final Duration watchPollInterval) {
+             final PathValidationUseCase pathValidation, final SpendLedgerPort spendLedger,
+             final Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
@@ -164,7 +168,7 @@ public class Pipeline {
         this.rootsGuard = new RootsGuard(pathValidation);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
-                prepDirDoctor, prepDirRemedies, this.rootsGuard, watchPollInterval);
+                prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, watchPollInterval);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, this.cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;

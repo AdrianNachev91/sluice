@@ -32,6 +32,11 @@ import java.util.List;
  * {@link Applied} because the archive happens before montage rendering. So every later way the run
  * can end, cancellation included, is reachable with the archive already done. A result card that
  * did not mention it would leave the user's previous record looking like it vanished.
+ *
+ * <p>Every case carries {@code cullReport} for the same reason, one axis over. Three of the four
+ * are reachable after the vision pass has already called a model, so a spend attaches to them.
+ * {@link Cancelled} is reached only before anything is dispatched, so its report is a zero one.
+ * It answers the question rather than being excused from it.
  */
 public sealed interface CullJobOutcome {
 
@@ -42,6 +47,13 @@ public sealed interface CullJobOutcome {
      * @return {@link Path} the graveyard directory, or null
      */
     @Nullable Path archivedPriorRun();
+
+    /**
+     * What the vision pass judged and consumed before the run ended this way.
+     *
+     * @return {@link CullReport} the run's own cull report
+     */
+    CullReport cullReport();
 
     /**
      * A cull run that completed: a usable shard set came back and apply moved the resulting
@@ -59,9 +71,12 @@ public sealed interface CullJobOutcome {
      * A cull run that paused rather than finished.
      *
      * @param job {@link WaitingCullJob} the paused job's resumable state
+     * @param reason {@link WaitingReason} why it paused
+     * @param cullReport {@link CullReport} what the vision pass decided and consumed before pausing
      * @param archivedPriorRun {@link Path} the graveyard directory a prior completed run was archived into, or null
      */
-    record Waiting(WaitingCullJob job, @Nullable Path archivedPriorRun) implements CullJobOutcome {
+    record Waiting(WaitingCullJob job, WaitingReason reason, CullReport cullReport,
+                   @Nullable Path archivedPriorRun) implements CullJobOutcome {
     }
 
     /**
@@ -73,9 +88,10 @@ public sealed interface CullJobOutcome {
      *
      * @param job {@link WaitingCullJob} the blocked job's own scope, prep dir and shard tally
      * @param findings a {@link List} of {@link Finding} every problem apply's validation refused on
+     * @param cullReport {@link CullReport} what the vision pass decided and consumed before apply refused
      * @param archivedPriorRun {@link Path} the graveyard directory a prior completed run was archived into, or null
      */
-    record Blocked(WaitingCullJob job, List<Finding> findings,
+    record Blocked(WaitingCullJob job, List<Finding> findings, CullReport cullReport,
                    @Nullable Path archivedPriorRun) implements CullJobOutcome {
 
         /**
@@ -83,6 +99,7 @@ public sealed interface CullJobOutcome {
          *
          * @param job {@link WaitingCullJob} the blocked job's own scope, prep dir and shard tally
          * @param findings a {@link List} of {@link Finding} every problem apply's validation refused on
+         * @param cullReport {@link CullReport} what the vision pass decided and consumed before apply refused
          * @param archivedPriorRun {@link Path} the graveyard directory a prior completed run was archived into, or null
          */
         public Blocked {
@@ -94,8 +111,9 @@ public sealed interface CullJobOutcome {
      * A cull run that was cancelled before montage rendering finished, leaving nothing on disk
      * to resume.
      *
+     * @param cullReport {@link CullReport} the report for a run that reached no model
      * @param archivedPriorRun {@link Path} the graveyard directory a prior completed run was archived into, or null
      */
-    record Cancelled(@Nullable Path archivedPriorRun) implements CullJobOutcome {
+    record Cancelled(CullReport cullReport, @Nullable Path archivedPriorRun) implements CullJobOutcome {
     }
 }

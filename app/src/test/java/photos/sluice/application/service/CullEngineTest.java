@@ -5,6 +5,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.WaitingReason;
+import photos.sluice.application.port.out.CullOptions;
+import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.RunEnding;
+import photos.sluice.application.port.out.SpendCeiling;
+import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
@@ -35,7 +41,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
+import static photos.sluice.application.service.PipelineTestSupport.AutoApproveCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingCancellableCuller;
+import static photos.sluice.application.service.PipelineTestSupport.BlockingCeilingStoppedCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingIncompleteCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoveTo;
@@ -43,13 +51,17 @@ import static photos.sluice.application.service.PipelineTestSupport.BlockingMove
 import static photos.sluice.application.service.PipelineTestSupport.FailableIndexReads;
 import static photos.sluice.application.service.PipelineTestSupport.FailingListingOfPrepDir;
 import static photos.sluice.application.service.PipelineTestSupport.FixedSettings;
+import static photos.sluice.application.service.PipelineTestSupport.ImpossibleCountCuller;
 import static photos.sluice.application.service.PipelineTestSupport.JunkEverythingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.NeverCalledCuller;
 import static photos.sluice.application.service.PipelineTestSupport.PlantOnFirstExists;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
+import static photos.sluice.application.service.PipelineTestSupport.SpendingThenFailingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.ThrowingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.assertHoldsFor;
+import static photos.sluice.application.service.PipelineTestSupport.CeilingStoppedCuller;
+import static photos.sluice.application.service.PipelineTestSupport.autoApproveCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.defaultCullSettings;
@@ -58,6 +70,7 @@ import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.prepDirRemedies;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
+import static photos.sluice.application.service.PipelineTestSupport.spendLedgerOf;
 import static photos.sluice.application.service.PipelineTestSupport.waitForJobToFinish;
 import static photos.sluice.application.service.PipelineTestSupport.waitUntil;
 import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
@@ -99,6 +112,224 @@ class CullEngineTest {
         assertThat(job.scope()).isEqualTo("2019");
         assertThat(job.shards()).isEqualTo(new ShardTally(0, 0, 1));
         assertThat(Files.exists(job.prepDir().resolve("index.json"))).isTrue();
+    }
+
+    @Test
+    void aRunWaitingOnAnAgentsShardsSaysThatIsWhyItPaused(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort())
+                .cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(((CullJobOutcome.Waiting) outcome).reason()).isEqualTo(WaitingReason.SHARDS_OUTSTANDING);
+    }
+
+    @Test
+    void aRunStoppedByItsSpendCeilingSaysThatIsWhyItPaused(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var culler = new CeilingStoppedCuller();
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort(),
+                autoApproveCullSettings(), List.of(culler)).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(((CullJobOutcome.Waiting) outcome).reason()).isEqualTo(WaitingReason.CEILING_REACHED);
+        assertThat(outcome.cullReport().spend().inputTokens()).isEqualTo(9_000);
+    }
+
+    @Test
+    void anAutomatedRunIsHandedACeilingItMayNotSpendPast(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var culler = new CeilingStoppedCuller();
+
+        cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(), List.of(culler))
+                .cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(culler.receivedCeiling).isNotNull()
+                .extracting(SpendCeiling::maxCalls).isEqualTo(4);
+    }
+
+    @Test
+    void theCallArmCoversEveryMontageInScopeRatherThanTheOnesStillOwingAShard(@TempDir final Path root)
+            throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var waiting = (CullJobOutcome.Waiting) cullPipeline(root, new RecordingProgressPort())
+                .cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001");
+        final var culler = new CeilingStoppedCuller();
+
+        cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(), List.of(culler))
+                .resume(waiting.job().prepDir(), false).join();
+
+        assertThat(culler.receivedCeiling).isNotNull()
+                .extracting(SpendCeiling::maxCalls).isEqualTo(4);
+    }
+
+    @Test
+    void aRunThroughAProviderThatSpendsNothingIsHandedNoCeiling(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var culler = new AutoApproveCuller();
+
+        cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(), List.of(culler))
+                .cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(culler.receivedOptions).isNotNull()
+                .extracting(CullOptions::ceiling).isNull();
+    }
+
+    @Test
+    void aFinishedRunIsRecordedInTheSpendLedger(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+
+        cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(spendLedgerOf(root).read()).singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.scope()).isEqualTo("2019");
+                    assertThat(entry.ending()).isEqualTo(RunEnding.APPLIED);
+                    assertThat(entry.montagesCulled()).isEqualTo(1);
+                });
+    }
+
+    @Test
+    void aRunStoppedByItsCeilingIsRecordedAsSuchWithWhatItSpent(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+
+        cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new CeilingStoppedCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(spendLedgerOf(root).read()).singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.ending()).isEqualTo(RunEnding.CEILING_REACHED);
+                    assertThat(entry.apiCalls()).isEqualTo(2);
+                    assertThat(entry.inputTokens()).isEqualTo(9_000);
+                    assertThat(entry.outputTokens()).isEqualTo(3_000);
+                    assertThat(entry.modelId()).isEqualTo("a-model");
+                });
+    }
+
+    @Test
+    void aRunAbandonedMidDispatchIsRecordedWithWhatItHadAlreadySpent(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+
+        assertThatThrownBy(() -> cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new SpendingThenFailingCuller())).cull(new CullScope.Year(2019, null)).join())
+                .hasRootCauseInstanceOf(CullException.class);
+
+        assertThat(spendLedgerOf(root).read()).singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.ending()).isEqualTo(RunEnding.FAILED);
+                    assertThat(entry.inputTokens()).isEqualTo(4_000);
+                    assertThat(entry.outputTokens()).isEqualTo(800);
+                });
+    }
+
+    @Test
+    void aResumeIsRecordedAsItsOwnRunRatherThanFoldedIntoTheFirst(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001");
+
+        pipeline.resume(waiting.job().prepDir(), false).join();
+
+        assertThat(spendLedgerOf(root).read()).extracting(SpendLedgerEntry::ending)
+                .containsExactly(RunEnding.SHARDS_OUTSTANDING, RunEnding.APPLIED);
+    }
+
+    @Test
+    void aCeilingStopIsReportedAsSuchEvenWhenACancellationLandsOnTopOfIt(@TempDir final Path root)
+            throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var stoppedAtCeiling = new CountDownLatch(1);
+        final var releaseCull = new CountDownLatch(1);
+        final var pipeline = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new BlockingCeilingStoppedCuller(stoppedAtCeiling, releaseCull)));
+
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        stoppedAtCeiling.await();
+        handle.requestCancellation();
+        releaseCull.countDown();
+        final CullJobOutcome outcome = handle.join();
+
+        assertThat(((CullJobOutcome.Waiting) outcome).reason()).isEqualTo(WaitingReason.CEILING_REACHED);
+        assertThat(spendLedgerOf(root).read()).extracting(SpendLedgerEntry::ending)
+                .containsExactly(RunEnding.CEILING_REACHED);
+    }
+
+    @Test
+    void aRunWhoseApplyIsRefusedIsRecordedAsBlocked(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001",
+                classificationJson(root.resolve("never-in-scope.jpg"), "junk", "blurry"));
+
+        pipeline.resume(waiting.job().prepDir(), false).join();
+
+        assertThat(spendLedgerOf(root).read()).extracting(SpendLedgerEntry::ending)
+                .containsExactly(RunEnding.SHARDS_OUTSTANDING, RunEnding.BLOCKED);
+    }
+
+    @Test
+    void aRunCancelledBeforeAnyPrepDirExistedIsStillRecorded(@TempDir final Path root) throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var listStarted = new CountDownLatch(1);
+        final var releaseList = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort(),
+                new BlockingListFiles(listStarted, releaseList), defaultCullSettings(),
+                List.of(new NeverCalledCuller()));
+
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        listStarted.await();
+        handle.requestCancellation();
+        releaseList.countDown();
+        handle.join();
+
+        assertThat(spendLedgerOf(root).read()).extracting(SpendLedgerEntry::ending)
+                .containsExactly(RunEnding.CANCELLED);
+    }
+
+    @Test
+    void aRunWhoseApplyFailsOnTheFilesystemIsStillRecorded(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001");
+        Files.createDirectories(waiting.job().prepDir().resolve("decisions.json"));
+
+        assertThatThrownBy(() -> pipeline.resume(waiting.job().prepDir(), false).join())
+                .hasRootCauseInstanceOf(IOException.class);
+
+        assertThat(spendLedgerOf(root).read()).extracting(SpendLedgerEntry::ending)
+                .containsExactly(RunEnding.SHARDS_OUTSTANDING, RunEnding.FAILED);
+    }
+
+    @Test
+    void aLedgerThatCannotBeWrittenDoesNotCostTheUserTheirRun(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        Files.createDirectories(root.resolve("logs").resolve("spend-ledger.csv"));
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
+    }
+
+    @Test
+    void aReportTheLedgerRefusesCostsTheRecordRatherThanTheRun(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new ImpossibleCountCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Applied.class);
+        assertThat(spendLedgerOf(root).read()).isEmpty();
     }
 
     @Test
@@ -581,7 +812,8 @@ class CullEngineTest {
                 "decisions-001.json")));
         final var job = new WaitingCullJob("2019", Path.of("prep"), new ShardTally(1, 1, 1), Instant.EPOCH);
 
-        final var blocked = new CullJobOutcome.Blocked(job, mutable, null);
+        final var blocked = new CullJobOutcome.Blocked(job, mutable,
+                CullReport.nothingSpent("a-provider", 0), null);
         mutable.clear();
 
         assertThat(blocked.findings()).containsExactly(new Finding.CorruptShard("montage-001", "decisions-001.json"));

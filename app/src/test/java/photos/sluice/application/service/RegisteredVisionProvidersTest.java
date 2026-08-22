@@ -8,6 +8,7 @@ import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.PrepDir;
@@ -95,6 +96,11 @@ class RegisteredVisionProvidersTest {
             @Override
             public ProviderCheck check() {
                 return new ProviderCheck.Refused(descriptor.id());
+            }
+
+            @Override
+            public SpendForecast forecast(final PrepDir prep) {
+                return new SpendForecast.NoSpend();
             }
 
             @Override

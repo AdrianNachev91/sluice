@@ -11,6 +11,7 @@ import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.ImageBlockParam;
 import com.anthropic.models.messages.JsonOutputFormat;
 import com.anthropic.models.messages.Message;
+import com.anthropic.models.messages.MessageCountTokensParams;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
@@ -19,6 +20,8 @@ import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.models.ModelInfo;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullException;
@@ -34,6 +37,9 @@ import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStore;
+import photos.sluice.application.port.out.SpendCeiling;
+import photos.sluice.application.port.out.SpendForecast;
+import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.Decision;
@@ -111,6 +117,8 @@ import java.util.stream.IntStream;
  */
 @Component
 class AnthropicCuller implements VisionCuller {
+
+    private static final Logger log = LoggerFactory.getLogger(AnthropicCuller.class);
 
     static final String PROVIDER_ID = "anthropic";
     // What the SDK client reaches when the endpoint field is left blank, per Anthropic's own docs.
@@ -365,10 +373,17 @@ class AnthropicCuller implements VisionCuller {
         final String systemPrompt = this.prompt.systemPrompt(prep.categories());
         final List<String> categoryNames = prep.categoryNames();
         final JsonOutputFormat.Schema schema = responseSchema(categoryNames);
+        final SpendCeiling ceiling = opts.ceiling();
         long inputTokens = 0;
         long outputTokens = 0;
         int culled = 0;
         int skipped = 0;
+        int apiCalls = 0;
+        // Montages this run actually dispatched for, which is what the token bound is measured
+        // against. A montage resumed from an existing shard cost nothing, so counting it would hand
+        // the run an allowance it never earned.
+        int montagesAttempted = 0;
+        boolean stoppedAtCeiling = false;
         final int total = prep.entries().size();
         int ordinal = 0;
         // Every readable sidecar is read up front, so validation sees as much of the scope as
@@ -395,7 +410,7 @@ class AnthropicCuller implements VisionCuller {
             // worst-case cancel latency, at the cost of discarding a paid-for first-attempt
             // response when a cancel lands between it and the retry. Either way, an interrupted
             // montage writes no shard and the loop ends without throwing.
-            while (ordinal < total && !cancellation.isCancelled()) {
+            while (ordinal < total && !cancellation.isCancelled() && !stoppedAtCeiling) {
                 final String montage = prep.entries().get(ordinal);
                 ordinal++;
                 final List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
@@ -403,33 +418,51 @@ class AnthropicCuller implements VisionCuller {
                 if (entries == null || this.resumesExistingShard(shardPath, montage, acceptedShards,
                         scopeSrcs, categoryNames)) {
                     skipped++;
+                } else if (exhausted(ceiling, apiCalls, montagesAttempted, inputTokens + outputTokens)) {
+                    // Checked before this montage's first call rather than only after the last one,
+                    // so the run stops owing nothing further. This montage and every one after it
+                    // keep their place: they have no shard, so a resume dispatches for them.
+                    stoppedAtCeiling = true;
                 } else {
+                    montagesAttempted++;
                     final MessageCreateParams request = request(model, systemPrompt,
                             this.prompt.userTurn(prep.scope(), montage, ordinal, total, entries),
                             montageImageBase64(prep.prepDir(), montage), schema);
                     final Message response = client.messages().create(request);
+                    apiCalls++;
                     inputTokens += response.usage().inputTokens();
                     outputTokens += response.usage().outputTokens();
                     AttemptOutcome outcome = this.attempt(montage, entries, response, acceptedShards,
                             scopeSrcs, categoryNames);
                     if (outcome.shard() == null && !cancellation.isCancelled()) {
-                        final Message retryResponse = client.messages().create(retryRequest(request,
-                                responseText(response), this.prompt.correctionTurn(outcome.problems())));
-                        inputTokens += retryResponse.usage().inputTokens();
-                        outputTokens += retryResponse.usage().outputTokens();
-                        final AttemptOutcome retried = this.attempt(montage, entries, retryResponse,
-                                acceptedShards, scopeSrcs, categoryNames);
-                        if (retried.shard() == null) {
-                            // A cancellation requested while the retry call itself was in flight
-                            // reaches here too. Thrown only when uncancelled, so a cancel never
-                            // surfaces as a retry-failure CullException, matching the montage-loop
-                            // check above.
-                            if (!cancellation.isCancelled()) {
-                                throw retryFailedException(prep.scope(), montage, outcome.problems(),
-                                        retried.problems());
-                            }
+                        if (callsExhausted(ceiling, apiCalls)) {
+                            // The correction this montage needs would be the call past the bound.
+                            // Refusing it is what the bound is for, so the run ends here rather than
+                            // leaving one montage quietly unjudged.
+                            stoppedAtCeiling = true;
                         } else {
-                            outcome = retried;
+                            final Message retryResponse = client.messages().create(retryRequest(request,
+                                    responseText(response), this.prompt.correctionTurn(outcome.problems())));
+                            apiCalls++;
+                            inputTokens += retryResponse.usage().inputTokens();
+                            outputTokens += retryResponse.usage().outputTokens();
+                            final AttemptOutcome retried = this.attempt(montage, entries, retryResponse,
+                                    acceptedShards, scopeSrcs, categoryNames);
+                            if (retried.shard() == null) {
+                                // A cancellation requested while the retry call itself was in flight
+                                // reaches here too. Thrown only when uncancelled, so a cancel never
+                                // surfaces as a retry-failure CullException, matching the montage-loop
+                                // check above.
+                                if (!cancellation.isCancelled()) {
+                                    throw retryFailedException(prep.scope(), montage, outcome.problems(),
+                                            retried.problems(),
+                                            new CullReport(culled, skipped, apiCalls,
+                                                    new TokenSpend(inputTokens, outputTokens, PROVIDER_ID, model),
+                                                    false));
+                                }
+                            } else {
+                                outcome = retried;
+                            }
                         }
                     }
                     if (outcome.shard() != null) {
@@ -442,7 +475,57 @@ class AnthropicCuller implements VisionCuller {
         } finally {
             client.close();
         }
-        return new CullReport(culled, skipped, inputTokens, outputTokens);
+        if (stoppedAtCeiling) {
+            log.info("The sift of {} stopped at its spend ceiling after {} call(s) and {} token(s)",
+                    prep.scope(), apiCalls, inputTokens + outputTokens);
+        }
+        return new CullReport(culled, skipped, apiCalls,
+                new TokenSpend(inputTokens, outputTokens, PROVIDER_ID, model), stoppedAtCeiling);
+    }
+
+    /**
+     * Counts what one call over prep's first montage would carry, without sending it.
+     *
+     * <p>The count route generates nothing, and Anthropic does not bill it. What it is given is
+     * built by the same builder the paid call uses, so the schema and system prompt are counted too
+     * rather than being left out of the figure.
+     *
+     * <p>One montage priced rather than all of them. The system prompt and the schema are the same
+     * for every montage in a run, so what varies is the photo table. A run's last sheet can also be
+     * shorter than a full one, which makes this an over-estimate for a scope the grid does not
+     * divide evenly, and the ceiling built on it correspondingly looser.
+     *
+     * <p>Every way this can fail answers {@link SpendForecast.Unknown}. An estimate that cannot be
+     * built must not be what stops a run from starting.
+     *
+     * @param prep {@link PrepDir} the prep directory a run would be made over
+     * @return {@link SpendForecast} what one call would carry, or why that is not known
+     */
+    @Override
+    public SpendForecast forecast(final PrepDir prep) {
+        if (prep.entries().isEmpty()) {
+            return new SpendForecast.Counted(0);
+        }
+        final String montage = prep.entries().getFirst();
+        try {
+            final List<SidecarPhotoEntry> entries =
+                    this.readEntries(prep.prepDir().resolve(montage + ".json"))
+                            .orElseThrow(() -> new IllegalStateException("no readable sidecar for " + montage));
+            final MessageCreateParams request = request(this.requiredModel(),
+                    this.prompt.systemPrompt(prep.categories()),
+                    this.prompt.userTurn(prep.scope(), montage, 1, prep.entries().size(), entries),
+                    montageImageBase64(prep.prepDir(), montage),
+                    responseSchema(prep.categoryNames()));
+            final AnthropicClient client = this.clientFactory.get();
+            try {
+                return new SpendForecast.Counted(client.messages().countTokens(counting(request)).inputTokens());
+            } finally {
+                client.close();
+            }
+        } catch (final RuntimeException e) {
+            log.info("Could not count what a sift of {} would send", prep.scope(), e);
+            return new SpendForecast.Unknown(said(e));
+        }
     }
 
     /**
@@ -502,6 +585,54 @@ class AnthropicCuller implements VisionCuller {
             builder.baseUrl(endpoint);
         }
         return builder.build();
+    }
+
+    /**
+     * Whether either arm of the ceiling has been reached, asked before a montage's first call.
+     *
+     * @param ceiling {@link SpendCeiling} the run's ceiling, or null when the run is unbounded
+     * @param apiCalls how many calls the run has made
+     * @param montagesAttempted how many montages the run has dispatched for
+     * @param tokensConsumed how many tokens the run has consumed
+     * @return boolean true when the run may not start another montage
+     */
+    private static boolean exhausted(final @Nullable SpendCeiling ceiling, final int apiCalls,
+                                     final int montagesAttempted, final long tokensConsumed) {
+        return callsExhausted(ceiling, apiCalls)
+                || (ceiling != null && ceiling.tokensExhausted(montagesAttempted, tokensConsumed));
+    }
+
+    /**
+     * Whether the run has made every call it is allowed.
+     *
+     * <p>The bound is whatever the caller handed over, and the one the app builds cannot be reached
+     * by correct code: it allows two calls for every montage this run has to judge, and the loop
+     * walks that same list taking at most two each. What it catches is a defect that has stopped
+     * following the list.
+     *
+     * @param ceiling {@link SpendCeiling} the run's ceiling, or null when the run is unbounded
+     * @param apiCalls how many calls the run has made
+     * @return boolean true when the run may not make another call
+     */
+    private static boolean callsExhausted(final @Nullable SpendCeiling ceiling, final int apiCalls) {
+        return ceiling != null && apiCalls >= ceiling.maxCalls();
+    }
+
+    /**
+     * Restates a request as a count of the same body.
+     *
+     * @param sending {@link MessageCreateParams} the request that would be sent
+     * @return {@link MessageCountTokensParams} the same body, addressed to the counting route
+     */
+    private static MessageCountTokensParams counting(final MessageCreateParams sending) {
+        final MessageCountTokensParams.Builder counting = MessageCountTokensParams.builder()
+                .model(sending.model())
+                .messages(sending.messages());
+        sending.system()
+                .map(system -> MessageCountTokensParams.System.ofString(system.asString()))
+                .ifPresent(counting::system);
+        sending.outputConfig().ifPresent(counting::outputConfig);
+        return counting.build();
     }
 
     /**
@@ -886,17 +1017,19 @@ class AnthropicCuller implements VisionCuller {
      * @param montage {@link String} the montage that failed
      * @param firstProblems a {@link List} of {@link String}, problems from the first attempt
      * @param retryProblems a {@link List} of {@link String}, problems from the retry attempt
+     * @param report {@link CullReport} what the run had judged and consumed before giving up on this montage
      * @return {@link CullException} the exception naming both attempts' problems
      */
     private static CullException retryFailedException(final String scope, final String montage,
                                                       final List<String> firstProblems,
-                                                      final List<String> retryProblems) {
+                                                      final List<String> retryProblems,
+                                                      final CullReport report) {
         return new CullException("The sifting for " + scope + " failed at sheet " + montage
                 + " and a corrective retry did not fix it."
                 + "\nFirst attempt (" + firstProblems.size() + " problem(s)):\n - "
                 + String.join("\n - ", firstProblems)
                 + "\nRetry (" + retryProblems.size() + " problem(s)):\n - "
-                + String.join("\n - ", retryProblems));
+                + String.join("\n - ", retryProblems), report);
     }
 
     /**

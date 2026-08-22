@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.DecisionShard;
@@ -46,7 +47,7 @@ class ExternalAgentCullerTest {
         this.codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
         assertThat(this.culler.cull(prep(dir, "montage-001", "montage-002"), options()))
-                .isEqualTo(new CullReport(2, 0, 0, 0));
+                .isEqualTo(report(2, 0));
     }
 
     @Test
@@ -64,7 +65,7 @@ class ExternalAgentCullerTest {
                 List.of(new Classification(junk, "junk", "blurry document"))));
 
         assertThat(this.culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial()))
-                .isEqualTo(new CullReport(1, 1, 0, 0));
+                .isEqualTo(report(1, 1));
     }
 
     // Shard content is apply's gate to judge, so one the codec cannot parse still counts as present
@@ -75,7 +76,7 @@ class ExternalAgentCullerTest {
         Files.writeString(dir.resolve("decisions-001.json"), "{ not json");
 
         assertThat(this.culler.cull(prep(dir, "montage-001"), options()))
-                .isEqualTo(new CullReport(1, 0, 0, 0));
+                .isEqualTo(report(1, 0));
     }
 
     // Apply's gate reports a decisions file naming no current montage as a StrayShard finding, with
@@ -89,7 +90,7 @@ class ExternalAgentCullerTest {
         this.codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
         assertThat(this.culler.cull(prep(dir, "montage-001"), options()))
-                .isEqualTo(new CullReport(1, 0, 0, 0));
+                .isEqualTo(report(1, 0));
     }
 
     // Sidecar state is not an input to this class at all. It matters because a montage can hold a
@@ -102,13 +103,13 @@ class ExternalAgentCullerTest {
         this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001", List.of()));
 
         assertThat(this.culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial()))
-                .isEqualTo(new CullReport(1, 1, 0, 0));
+                .isEqualTo(report(1, 1));
     }
 
     @Test
     void returnsAnEmptyReportWhenThePrepDirHasNoMontages(@TempDir final Path dir) throws CullException {
         assertThat(this.culler.cull(prep(dir), options()))
-                .isEqualTo(new CullReport(0, 0, 0, 0));
+                .isEqualTo(report(0, 0));
     }
 
     @Test
@@ -119,19 +120,23 @@ class ExternalAgentCullerTest {
                 List.of(new Classification(junk, "junk", "photo of a monitor"))));
 
         final List<String> ticks = new ArrayList<>();
-        final CullReport report = this.culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial(),
+        final CullReport cullReport = this.culler.cull(prep(dir, "montage-001", "montage-002"), allowPartial(),
                 (current, total) -> ticks.add(current + "/" + total));
 
-        assertThat(report).isEqualTo(new CullReport(1, 1, 0, 0));
+        assertThat(cullReport).isEqualTo(report(1, 1));
         assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
     private static CullOptions options() {
-        return new CullOptions(false, null);
+        return CullOptions.unbounded(false);
     }
 
     private static CullOptions allowPartial() {
-        return new CullOptions(true, null);
+        return CullOptions.unbounded(true);
+    }
+
+    private static CullReport report(final int culled, final int skipped) {
+        return new CullReport(culled, skipped, 0, TokenSpend.none("external-agent"), false);
     }
 
     private static PrepDir prep(final Path prepDir, final String... entries) {

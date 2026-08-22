@@ -71,7 +71,7 @@ flowchart TD
 
 | CurateEngine method | What runs                                                 | Phase label(s)                                                                      |
 |---------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------|
-| `curate(SortScope)` | sort -> (cancellation check) -> prep -> dispatch -> apply | `"Sorting..."`, `"Building montages..."`, `"Culling..."`, `"Applying decisions..."` |
+| `curate(SortScope)` | sort -> (cancellation check) -> prep -> dispatch -> apply | `"Sorting..."`, `"Building montages..."`, `"Sifting..."`, `"Applying decisions..."` |
 
 ### Scenarios
 

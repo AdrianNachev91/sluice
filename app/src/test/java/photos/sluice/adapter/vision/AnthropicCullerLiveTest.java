@@ -9,7 +9,6 @@ import com.anthropic.services.blocking.MessageService;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.imaging.CullMontageRenderer;
@@ -26,6 +25,7 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ProviderCheck;
+import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullScope;
@@ -54,10 +54,15 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
-// Live verify against the real Anthropic API. Skipped unless both gates hold: SLUICE_LIVE_CULL=true
-// opts in explicitly, and a key is reachable. Only the first guards spending: nobody sets
-// SLUICE_LIVE_CULL by accident. The second exists so a machine with no key skips rather than going
-// red, and it asks the same question this test's own client asks.
+// Live verify against the real Anthropic API. Skipped unless both gates hold: the run opts in
+// explicitly, and a key is reachable. Only the first guards spending: nobody opts in by accident.
+// The second exists so a machine with no key skips rather than going red, and it asks the same
+// question this test's own client asks.
+//
+// Opting in takes either SLUICE_LIVE_CULL=true in the environment or -Dsluice.live.cull=true on the
+// command line. The property is there because an environment variable cannot be set for a single
+// Maven invocation on every shell this project is run from. Pair it with -Dtest= to reach one test:
+// the forecast and credential checks below cost nothing, and only the montage cull spends.
 //
 // One run proves the two things the mocked tests cannot. The live API accepts the montage request
 // shape: image block, photo table, JSON-schema structured output, the structured-output schema. And it
@@ -70,8 +75,7 @@ import static org.mockito.Mockito.mock;
 //
 // The montage is real: four distinct synthetic photos run through the full imaging pipeline, so the
 // API sees exactly what a production cull sends. Cost per run is a fraction of a cent.
-@EnabledIfEnvironmentVariable(named = "SLUICE_LIVE_CULL", matches = "true")
-@EnabledIf("aKeyIsReachable")
+@EnabledIf("liveRunIsPossible")
 class AnthropicCullerLiveTest {
 
     private static final String MODEL = "claude-sonnet-5";
@@ -85,24 +89,6 @@ class AnthropicCullerLiveTest {
             CullCategory.of("junk", "Objectively worthless photos: blurry, accidental shots, "
                     + "screenshots, documents, photos of a screen."),
             CullCategory.of("scenery", "Unremarkable scenery with no people and weak composition."));
-
-    // Asks the same three tiers the test's own client reads: environment, then this machine's
-    // keyring, then a file. The old gate named the environment variable alone, so a machine holding
-    // its key where Settings puts it skipped however deliberately the run was opted into.
-    //
-    // Answers false for anything that goes wrong rather than propagating. A condition method that
-    // throws fails the class instead of skipping it, and this one touches a platform keyring on
-    // whatever runner it lands on. A missing Secret Service is a reason to skip, never a red build.
-    static boolean aKeyIsReachable() {
-        try {
-            return TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
-                    Path.of(System.getProperty("java.io.tmpdir"), "sluice-live-gate"))
-                    .secret(AnthropicCuller.API_KEY)
-                    .isPresent();
-        } catch (final RuntimeException | LinkageError unreachable) {
-            return false;
-        }
-    }
 
     // cull() is strictly sequential, so plain fields suffice for the decorator's bookkeeping.
     private int liveCalls;
@@ -125,16 +111,107 @@ class AnthropicCullerLiveTest {
                     throw new AssertionError("this test checks no credential");
                 });
 
-        final CullReport report = culler.cull(prep, new CullOptions(false, null));
+        final CullReport report = culler.cull(prep, CullOptions.unbounded(false));
 
         assertThat(this.liveCalls).isEqualTo(2);
         assertThat(this.tampered).isTrue();
         assertThat(report.montagesCulled()).isEqualTo(1);
         assertThat(report.montagesSkipped()).isZero();
-        assertThat(report.inputTokens()).isPositive();
-        assertThat(report.outputTokens()).isPositive();
+        assertThat(report.apiCalls()).isEqualTo(2);
+        assertThat(report.spend().inputTokens()).isPositive();
+        assertThat(report.spend().outputTokens()).isPositive();
         final DecisionShard shard = new ShardCodec().read(prep.prepDir().resolve("decisions-001.json"));
         assertThat(shard.montage()).isEqualTo("montage-001");
+    }
+
+    // The whole spend ceiling rests on the counting route accepting a body with an outputConfig on
+    // it. A mocked test can only prove the params object carries one. If the real route refuses it,
+    // forecast() answers Unknown, every ceiling silently falls back to the shipped seed, and one
+    // log line is the only trace.
+    //
+    // Costs nothing. Anthropic does not bill the counting route, and it generates no tokens.
+    @Test
+    void countsWhatARealMontageWouldSendWithoutSendingIt(@TempDir final Path root) throws Exception {
+        final PrepDir prep = renderRealMontage(root);
+        final CullSettings settings = settings();
+        final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
+                new SidecarReader(), settings,
+                () -> AnthropicCuller.defaultClient(settings.providerSettings("anthropic"),
+                        TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
+                                root.resolve("secrets"))),
+                _ -> {
+                    throw new AssertionError("this test checks no credential");
+                });
+
+        final long startedAt = System.nanoTime();
+        final SpendForecast forecast = culler.forecast(prep);
+        final long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000;
+
+        // The wall clock is printed because it is the cost this call is judged on. It buys the
+        // ceiling, and it is paid once per run against a vision pass of many calls.
+        //noinspection UseOfSystemOutOrSystemErr
+        System.out.printf("[live-forecast] %s in %dms%n", forecast, elapsedMillis);
+        assertThat(forecast)
+                .as("the counting route accepted a request carrying a structured-output schema")
+                .isInstanceOf(SpendForecast.Counted.class);
+        // A sheet plus its photo table plus the schema. A figure near zero would mean the count
+        // route accepted a body stripped of the parts the paid call is actually charged for.
+        assertThat(((SpendForecast.Counted) forecast).inputTokensPerCall()).isGreaterThan(1_000);
+    }
+
+    // The second thing mocks cannot answer: whether the Models API really carries the capability
+    // flags offerable() filters on, and whether a real account's list survives that filter. Both
+    // are assumptions this adapter was built on and neither has met the service.
+    //
+    // Costs nothing. Listing models generates no tokens, which is why the credential check was
+    // built on it rather than on a one-token message.
+    @Test
+    void checksARealCredentialAndListsWhatTheAccountCanRun(@TempDir final Path root) {
+        final CullSettings settings = settings();
+        final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
+                new SidecarReader(), settings,
+                TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
+                        root.resolve("secrets")));
+
+        final ProviderCheck outcome = culler.check();
+
+        // Printed rather than only asserted. The point of this run is seeing what the service
+        // actually returns, and an assertion that passes says nothing about the shape.
+        //noinspection UseOfSystemOutOrSystemErr
+        System.out.printf("[live-check] %s%n", outcome);
+        assertThat(outcome)
+                .as("a working key over an account with usable models")
+                .isInstanceOf(ProviderCheck.Accepted.class);
+        final ModelCatalog models = ((ProviderCheck.Accepted) outcome).models();
+        assertThat(models.options()).isNotEmpty();
+        assertThat(models.options()).allSatisfy(option -> {
+            assertThat(option.id()).isNotBlank();
+            assertThat(option.label()).isNotBlank();
+        });
+    }
+
+    // Rejected is the outcome the Test button most often shows a user, through a typo'd or expired
+    // key. A mocked UnauthorizedException is the only thing that has proven it so far.
+    //
+    // The key itself never touches the real environment. TieredSecretStore's environment tier reads
+    // ANTHROPIC_API_KEY by that exact name, and the sibling live tests in this class need that name
+    // to hold a working key. Sourcing this one from a map of its own keeps the two from colliding.
+    @Test
+    void aRevokedKeyIsAnsweredAsRejected(@TempDir final Path root) throws IOException {
+        final String revokedKey = revokedKeyFixture();
+        final Function<String, @Nullable String> ownEnvironment =
+                name -> AnthropicCuller.API_KEY.environmentVariable().equals(name) ? revokedKey : null;
+        final CullSettings settings = settings();
+        final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
+                new SidecarReader(), settings,
+                TieredSecretStore.forMachine(ownEnvironment, System.getProperty("os.name"),
+                        root.resolve("secrets")));
+
+        final ProviderCheck outcome = culler.check();
+
+        //noinspection UseOfSystemOutOrSystemErr
+        System.out.printf("[live-check-rejected] %s%n", outcome);
+        assertThat(outcome).isEqualTo(new ProviderCheck.Rejected());
     }
 
     // Four distinct-colored photos through the real pipeline: one 2x2 sheet at production tile size.
@@ -202,61 +279,6 @@ class AnthropicCullerLiveTest {
         return response;
     }
 
-    // The second thing mocks cannot answer: whether the Models API really carries the capability
-    // flags offerable() filters on, and whether a real account's list survives that filter. Both
-    // are assumptions this adapter was built on and neither has met the service.
-    //
-    // Costs nothing. Listing models generates no tokens, which is why the credential check was
-    // built on it rather than on a one-token message.
-    @Test
-    void checksARealCredentialAndListsWhatTheAccountCanRun(@TempDir final Path root) {
-        final CullSettings settings = settings();
-        final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
-                new SidecarReader(), settings,
-                TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
-                        root.resolve("secrets")));
-
-        final ProviderCheck outcome = culler.check();
-
-        // Printed rather than only asserted. The point of this run is seeing what the service
-        // actually returns, and an assertion that passes says nothing about the shape.
-        //noinspection UseOfSystemOutOrSystemErr
-        System.out.printf("[live-check] %s%n", outcome);
-        assertThat(outcome)
-                .as("a working key over an account with usable models")
-                .isInstanceOf(ProviderCheck.Accepted.class);
-        final ModelCatalog models = ((ProviderCheck.Accepted) outcome).models();
-        assertThat(models.options()).isNotEmpty();
-        assertThat(models.options()).allSatisfy(option -> {
-            assertThat(option.id()).isNotBlank();
-            assertThat(option.label()).isNotBlank();
-        });
-    }
-
-    // Rejected is the outcome the Test button most often shows a user, through a typo'd or expired
-    // key. A mocked UnauthorizedException is the only thing that has proven it so far.
-    //
-    // The key itself never touches the real environment. TieredSecretStore's environment tier reads
-    // ANTHROPIC_API_KEY by that exact name, and the sibling live tests in this class need that name
-    // to hold a working key. Sourcing this one from a map of its own keeps the two from colliding.
-    @Test
-    void aRevokedKeyIsAnsweredAsRejected(@TempDir final Path root) throws IOException {
-        final String revokedKey = revokedKeyFixture();
-        final Function<String, @Nullable String> ownEnvironment =
-                name -> AnthropicCuller.API_KEY.environmentVariable().equals(name) ? revokedKey : null;
-        final CullSettings settings = settings();
-        final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
-                new SidecarReader(), settings,
-                TieredSecretStore.forMachine(ownEnvironment, System.getProperty("os.name"),
-                        root.resolve("secrets")));
-
-        final ProviderCheck outcome = culler.check();
-
-        //noinspection UseOfSystemOutOrSystemErr
-        System.out.printf("[live-check-rejected] %s%n", outcome);
-        assertThat(outcome).isEqualTo(new ProviderCheck.Rejected());
-    }
-
     // Revoked the same day it was drawn from a real account, per the devlog. Reading it here costs
     // no money and needs no fresh credential. A rejected key answers the same way whether it was
     // ever valid or made up, as long as the service has never seen it accepted.
@@ -266,6 +288,36 @@ class AnthropicCullerLiveTest {
 
     private static CullSettings settings() {
         return new FixedSettings("anthropic", CARDS, new CullProviderSettings(MODEL, null, null));
+    }
+
+    // Both gates, as one condition because @EnabledIf does not repeat.
+    static boolean liveRunIsPossible() {
+        return liveRunRequested() && aKeyIsReachable();
+    }
+
+    // Either route opts in. Two rather than one because a single Maven invocation can carry a
+    // property but not an environment variable, and CI carries the variable but no command line.
+    private static boolean liveRunRequested() {
+        return "true".equals(System.getenv("SLUICE_LIVE_CULL"))
+                || Boolean.getBoolean("sluice.live.cull");
+    }
+
+    // Asks the same three tiers the test's own client reads: environment, then this machine's
+    // keyring, then a file. A gate naming the environment variable alone would skip a machine
+    // holding its key where Settings puts it, however deliberately the run was opted into.
+    //
+    // Answers false for anything that goes wrong rather than propagating. A condition method that
+    // throws fails the class instead of skipping it, and this one touches a platform keyring on
+    // whatever runner it lands on. A missing Secret Service is a reason to skip, never a red build.
+    private static boolean aKeyIsReachable() {
+        try {
+            return TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
+                    Path.of(System.getProperty("java.io.tmpdir"), "sluice-live-gate"))
+                    .secret(AnthropicCuller.API_KEY)
+                    .isPresent();
+        } catch (final RuntimeException | LinkageError unreachable) {
+            return false;
+        }
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,

@@ -5,6 +5,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.SpendEstimate;
+import photos.sluice.application.port.in.WaitingReason;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullException;
@@ -17,9 +19,14 @@ import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.RunEnding;
+import photos.sluice.application.port.out.SpendCeiling;
+import photos.sluice.application.port.out.SpendLedgerEntry;
+import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.CancellationSignal;
@@ -66,6 +73,8 @@ final class CullEngine {
     private final PrepDirRemedies prepDirRemedies;
     private final PathsPort pathsPort;
     private final RootsGuard rootsGuard;
+    private final SpendLedgerPort spendLedger;
+    private final SpendEstimator spendEstimator;
 
     /**
      * Wires together every collaborator this engine dispatches cull jobs through.
@@ -84,6 +93,7 @@ final class CullEngine {
      * @param prepDirDoctor {@link PrepDirDoctor} diagnoses whatever already occupies a scope
      * @param prepDirRemedies {@link PrepDirRemedies} archives a completed run out of the way
      * @param rootsGuard {@link RootsGuard} refuses a resume whose folder roots are not usable
+     * @param spendLedger {@link SpendLedgerPort} records what each run consumed
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      */
     CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
@@ -93,8 +103,10 @@ final class CullEngine {
                final JobRunner jobRunner, final ProgressPort progressPort,
                final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
                final PrepDirDoctor prepDirDoctor, final PrepDirRemedies prepDirRemedies,
-               final RootsGuard rootsGuard,
+               final RootsGuard rootsGuard, final SpendLedgerPort spendLedger,
                final Duration watchPollInterval) {
+        this.spendLedger = spendLedger;
+        this.spendEstimator = new SpendEstimator(spendLedger);
         this.rootsGuard = rootsGuard;
         this.montageRenderer = montageRenderer;
         this.cullDispatcher = cullDispatcher;
@@ -124,13 +136,13 @@ final class CullEngine {
      * ordinary shape of a restart where the agent finished while the app was closed.
      *
      * <p>BLOCKED and DAMAGED are left alone. A blocked run would resume and block again on the same
-     * findings, spending a job slot at every launch to reach a verdict only the user can change. A
-     * damaged run never reads as ready, so its watcher would poll for good.
+     * findings. That spends a job slot at every launch to reach a verdict only the user can change.
+     * A damaged run never reads as ready, so its watcher would poll for good.
      *
      * <p>Also a no-op while a job is running. A prep dir mid-job never diagnoses COMPLETE, since
      * decisions.json is written only near the end of a successful apply. So it can still look like
      * something to arm. JobRunner runs one job at a time, so a busy runner means that job is this
-     * dir's own, and arming it would leave a phantom watcher for a job about to resolve by itself.
+     * dir's own. Arming it would leave a phantom watcher for a job about to resolve by itself.
      * Anything genuinely waiting is picked up on the next run once the app is idle. Not the only
      * path that arms a watcher - see dispatchAndApply()'s own note.
      */
@@ -182,7 +194,7 @@ final class CullEngine {
      * <p>Taking the job slot can mean waiting, and the roots can move during that wait. So where
      * the prep dir sits is asked again inside the job, once this call is certain to be the next one
      * to run. Asking only before the wait would answer about roots that a settings save then
-     * replaces, admitting a run belonging to a folder the app has since moved off.
+     * replaces. That admits a run belonging to a folder the app has since moved off.
      *
      * @param prepDir {@link Path} the existing prep dir to resume
      * @param allowPartial boolean whether a partial shard set is acceptable
@@ -288,13 +300,18 @@ final class CullEngine {
         // leaving no prep dir at all - nothing resumable exists. The renderer is the completion
         // authority here: this branches purely on its return value, never on re-checking disk state.
         if (prep.isEmpty()) {
-            return new CullJobOutcome.Cancelled(archivedPriorRun);
+            final var cancelled = new CullJobOutcome.Cancelled(this.nothingSpent(0), archivedPriorRun);
+            this.recordSpend(CullScope.tag(scope), cancelled.cullReport(), RunEnding.CANCELLED);
+            return cancelled;
         }
         // Prep just finished and wrote index.json, so a cancellation seen right here resolves
         // cleanly to Waiting too - a 0/N tally, nothing dispatched yet. No watcher is armed: an
         // auto-resume moments after a cancel would defy it.
         if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep.get()), archivedPriorRun);
+            final var waiting = new CullJobOutcome.Waiting(this.buildWaitingJob(prep.get()),
+                    WaitingReason.CANCELLED, this.nothingSpent(prep.get().entries().size()), archivedPriorRun);
+            this.recordSpend(prep.get().scope(), waiting.cullReport(), RunEnding.CANCELLED);
+            return waiting;
         }
         return this.dispatchAndApply(prep.get(), false, cancellation, archivedPriorRun);
     }
@@ -481,15 +498,19 @@ final class CullEngine {
             throws Exception {
         this.disarmWatch(prep.prepDir());
         final CullReport cullReport;
-        if (this.everyMontageHasAShard(prep)) {
-            cullReport = new CullReport(0, prep.entries().size(), 0, 0);
+        final int montagesToDispatchFor = this.montagesWithoutAShard(prep);
+        if (montagesToDispatchFor == 0) {
+            cullReport = this.nothingSpent(prep.entries().size());
         } else {
+            final CullOptions options =
+                    new CullOptions(allowPartial, null, this.ceilingFor(prep, montagesToDispatchFor));
             try {
                 cullReport = this.phaseRunner.run(CULLING,
-                        progress -> this.cullDispatcher.cull(prep, new CullOptions(allowPartial, null), progress,
-                                cancellation));
+                        progress -> this.cullDispatcher.cull(prep, options, progress, cancellation));
             } catch (final CullException e) {
                 if (!this.cullDispatcher.configuredProviderIs(ProviderType.MANUAL)) {
+                    this.recordSpend(prep.scope(), this.abandonedSpend(e, prep.entries().size()),
+                            RunEnding.FAILED);
                     throw e;
                 }
                 // The exception names which montages are still missing a shard. Nothing downstream
@@ -504,8 +525,16 @@ final class CullEngine {
                 if (!cancellation.isCancelled()) {
                     this.cullWatchers.armWatchIfConfigured(job.prepDir());
                 }
-                return new CullJobOutcome.Waiting(job, archivedPriorRun);
+                return this.recorded(prep, new CullJobOutcome.Waiting(job, WaitingReason.SHARDS_OUTSTANDING,
+                        this.abandonedSpend(e, prep.entries().size()), archivedPriorRun));
             }
+        }
+        // Asked before the cancellation check below, because the two can both be true and only one
+        // of them is about money. A run told to stop after it had already hit its ceiling still hit
+        // its ceiling, and that is the half the user needs to see.
+        if (cullReport.stoppedAtCeiling()) {
+            return this.recorded(prep, new CullJobOutcome.Waiting(this.buildWaitingJob(prep),
+                    WaitingReason.CEILING_REACHED, cullReport, archivedPriorRun));
         }
         // The one boundary check this method has for an automated provider: dispatch just
         // returned, either because it finished or because it stopped early on a cancellation. This
@@ -513,7 +542,8 @@ final class CullEngine {
         // never sees a cancellation mid-call, but a cancellation requested right after it still
         // lands here before apply moves anything.
         if (cancellation.isCancelled()) {
-            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep), archivedPriorRun);
+            return this.recorded(prep, new CullJobOutcome.Waiting(this.buildWaitingJob(prep),
+                    WaitingReason.CANCELLED, cullReport, archivedPriorRun));
         }
         final Optional<ApplyReport> applyReport;
         try {
@@ -522,32 +552,62 @@ final class CullEngine {
                             this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress,
                                     cancellation)));
         } catch (final ApplyException e) {
-            return new CullJobOutcome.Blocked(this.buildWaitingJob(prep), e.findings(), archivedPriorRun);
+            return this.recorded(prep, new CullJobOutcome.Blocked(this.buildWaitingJob(prep), e.findings(),
+                    cullReport, archivedPriorRun));
+        } catch (final RuntimeException e) {
+            // Apply moves files, so it can fail on the filesystem at any point, and by here the
+            // vision pass has already been billed for. Its report is right there in cullReport, so
+            // the one thing that must not happen is losing it on the way out.
+            this.recordSpend(prep.scope(), cullReport, RunEnding.FAILED);
+            throw e;
         }
         // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
         // decisions.json was never written. The prep dir still reads as a waiting job, the same
         // authority rule the renderer's own empty return follows above. No watcher is armed here
         // either, for the same reason the pre-APPLYING check above doesn't: an auto-resume
         // moments after a cancel would defy it.
-        if (applyReport.isEmpty()) {
-            return new CullJobOutcome.Waiting(this.buildWaitingJob(prep), archivedPriorRun);
-        }
-        return new CullJobOutcome.Applied(cullReport, applyReport.get(), archivedPriorRun);
+        return this.recorded(prep, applyReport
+                .<CullJobOutcome>map(applied -> new CullJobOutcome.Applied(cullReport, applied, archivedPriorRun))
+                .orElseGet(() -> new CullJobOutcome.Waiting(this.buildWaitingJob(prep),
+                        WaitingReason.CANCELLED, cullReport, archivedPriorRun)));
     }
 
     /**
-     * Whether every montage in prep already has a shard file on disk. A plain existence check per
-     * montage, never a parse. Whether those shards are any good is apply's own gate to decide. A
-     * shard that turns out unreadable is a finding there, not a reason to re-dispatch.
+     * Records what the run consumed and hands the outcome straight back.
      *
-     * <p>A scope with no montages at all counts as fully sharded. There is nothing for a culler to
-     * judge, so dispatching would only produce an empty report.
+     * <p>Every way this method can end with an outcome goes through here. The two that leave by
+     * throwing record on their own way out, since there is no outcome to read a report from.
+     * Wrapping the caller instead would put the recording somewhere the report is out of scope,
+     * which is how the counts get lost.
+     *
+     * @param prep {@link PrepDir} the run's prep directory
+     * @param outcome {@link CullJobOutcome} the outcome to record and return
+     * @return {@link CullJobOutcome} that same outcome
+     */
+    private CullJobOutcome recorded(final PrepDir prep, final CullJobOutcome outcome) {
+        this.recordSpend(prep.scope(), outcome.cullReport(), endingOf(outcome));
+        return outcome;
+    }
+
+    /**
+     * How many montages in prep have no shard file on disk. A plain existence check per montage,
+     * never a parse. Whether those shards are any good is apply's own gate to decide. A shard that
+     * turns out unreadable is a finding there, not a reason to re-dispatch.
+     *
+     * <p>Zero means there is nothing for a culler to judge, so dispatching would only produce an
+     * empty report. A scope with no montages at all answers zero for the same reason.
+     *
+     * <p>Anything above zero is what the spend ceiling is sized against. It bounds the work this
+     * call will pay for rather than matching it. A montage whose sidecar cannot be read has no
+     * shard, and is skipped rather than dispatched for.
      *
      * @param prep {@link PrepDir} the prep dir to check
-     * @return boolean true if no montage is missing its shard
+     * @return the number of montages still needing judgement
      */
-    private boolean everyMontageHasAShard(final PrepDir prep) {
-        return prep.entries().stream().allMatch(montage -> this.cullPrepPort.hasShard(prep.prepDir(), montage));
+    private int montagesWithoutAShard(final PrepDir prep) {
+        return (int) prep.entries().stream()
+                .filter(montage -> !this.cullPrepPort.hasShard(prep.prepDir(), montage))
+                .count();
     }
 
     /**
@@ -560,6 +620,109 @@ final class CullEngine {
         return new WaitingCullJob(
                 prep.scope(), prep.prepDir(), this.shardTallyCalculator.tally(prep),
                 this.lastModifiedOrEpoch(prep.prepDir()));
+    }
+
+    /**
+     * A report for a stage of a run that reached no model at all.
+     *
+     * @param montagesSkipped how many montages went unjudged
+     * @return {@link CullReport} a zero report against the configured provider
+     */
+    private CullReport nothingSpent(final int montagesSkipped) {
+        return CullReport.nothingSpent(this.cullSettings.provider(), montagesSkipped);
+    }
+
+    /**
+     * A report for a dispatch that threw, which is the provider's own where it built one.
+     *
+     * <p>A provider that counts nothing throws without a report, and its run is recorded as having
+     * judged nothing. A provider that counts hands over what it had reached. The line then says how
+     * many montages it judged, and what those cost, before it gave up.
+     *
+     * @param failure {@link CullException} what the dispatch threw
+     * @param montages how many montages the run held, for the case where nothing was counted
+     * @return {@link CullReport} the abandoned run's own report
+     */
+    private CullReport abandonedSpend(final CullException failure, final int montages) {
+        final CullReport report = failure.report();
+        return report == null ? this.nothingSpent(montages) : report;
+    }
+
+    /**
+     * The ceiling this run may not spend past, or null when its provider spends nothing.
+     *
+     * <p>Worked out here rather than by the provider, because the half that cannot be counted comes
+     * from what runs on this install have cost. The provider knows only its own request.
+     *
+     * <p>The two arms are sized on different counts, and the difference is the point.
+     *
+     * <p>The token arm charges per montage attempted. Its budget divides the estimate by the count
+     * the estimate was built over, which reduces it to one montage's expected cost. So the two
+     * counts have to be the same number. A wider estimate over a narrower divisor would loosen the
+     * budget in proportion.
+     *
+     * <p>The call arm is a backstop against a defect, so it is sized on the whole index. Its only
+     * property is that a correct run cannot reach it, and the montages still owing a shard cannot
+     * carry that property. A shard file present but unreadable counts as done here, and is
+     * dispatched for anyway. The culler judges a shard by reading it, while this counts by
+     * existence. A bound covering the whole index cannot be crossed by a loop that walks it.
+     *
+     * @param prep {@link PrepDir} the prepared run
+     * @param montagesToDispatchFor how many of its montages still owe a shard file, and the count
+     *        the estimate must be built over
+     * @return {@link SpendCeiling} the run's ceiling, or null
+     */
+    private @Nullable SpendCeiling ceilingFor(final PrepDir prep, final int montagesToDispatchFor) {
+        final SpendEstimate estimate = this.spendEstimator.estimate(montagesToDispatchFor,
+                this.cullDispatcher.forecast(prep), this.cullSettings.providerSettings().model(),
+                this.cullSettings.montage());
+        return this.spendEstimator.ceilingFor(prep.entries().size(), montagesToDispatchFor, estimate);
+    }
+
+    /**
+     * Records a run that ended with an outcome, reporting a failure rather than raising one.
+     *
+     * <p>The ledger is a record of the run, never part of doing it. Everything it describes has
+     * already happened by the time this is called, so a failure here can only lose the record. A
+     * user who cannot be told what a sift cost is better off than one whose sift died telling them.
+     *
+     * <p>Building the entry sits inside that guard as well as writing it. A provider is free to
+     * answer a report the ledger's own boundary check refuses, and refusing it has to cost the
+     * record rather than the run.
+     *
+     * @param scope {@link String} the run's scope tag
+     * @param report {@link CullReport} what the run judged and consumed
+     * @param ending {@link RunEnding} how it ended
+     */
+    private void recordSpend(final String scope, final CullReport report, final RunEnding ending) {
+        try {
+            final MontageConfig grid = this.cullSettings.montage();
+            this.spendLedger.append(new SpendLedgerEntry(Instant.now(), scope, report.spend().providerId(),
+                    report.spend().modelId(), grid.tileSize(), grid.tilesPerRow(), report.montagesCulled(),
+                    report.montagesSkipped(), report.apiCalls(), report.spend().inputTokens(),
+                    report.spend().outputTokens(), ending));
+        } catch (final RuntimeException e) {
+            log.warn("Could not record what the sift of {} spent", scope, e);
+        }
+    }
+
+    /**
+     * How the ledger names the way an outcome ended.
+     *
+     * @param outcome {@link CullJobOutcome} the outcome to classify
+     * @return {@link RunEnding} the ledger's own name for it
+     */
+    private static RunEnding endingOf(final CullJobOutcome outcome) {
+        return switch (outcome) {
+            case final CullJobOutcome.Applied ignored -> RunEnding.APPLIED;
+            case final CullJobOutcome.Blocked ignored -> RunEnding.BLOCKED;
+            case final CullJobOutcome.Cancelled ignored -> RunEnding.CANCELLED;
+            case CullJobOutcome.Waiting(_, final WaitingReason reason, _, _) -> switch (reason) {
+                case CANCELLED -> RunEnding.CANCELLED;
+                case SHARDS_OUTSTANDING -> RunEnding.SHARDS_OUTSTANDING;
+                case CEILING_REACHED -> RunEnding.CEILING_REACHED;
+            };
+        };
     }
 
     /**

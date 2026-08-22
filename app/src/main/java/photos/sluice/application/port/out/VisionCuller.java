@@ -57,10 +57,9 @@ public interface VisionCuller {
      * shape for it.
      *
      * <p>Settings tells the user this costs nothing, distinct from a cull. Verify that claim holds
-     * for this provider's own account before shipping it. If it genuinely cannot - the provider has
-     * no free way to check a credential - that is a decision to make explicitly and say out loud,
-     * updating both this claim and the Settings copy that states it as free, not something to leave
-     * for whoever reads this method next to discover.
+     * for this provider's own account before shipping it. A provider with no free way to check a
+     * credential breaks the claim. That is a decision to make out loud, amending both this and the
+     * Settings copy stating it as free.
      *
      * <p>No default. A provider with nothing to authenticate answers
      * {@link ProviderCheck.NotApplicable} deliberately, rather than inheriting a claim it never
@@ -83,6 +82,23 @@ public interface VisionCuller {
     default ProviderCheck check(final CullProviderSettings candidate) {
         return this.check();
     }
+
+    /**
+     * Counts what one call against prep would carry on the way in, without making it.
+     *
+     * <p>What the pre-run estimate is built from, and through it the spend ceiling. Callers ask it
+     * before deciding whether to start a run, so it is asked on a path that has spent nothing yet.
+     * {@link SpendForecast.Unknown} is the answer for a provider that cannot say without doing the
+     * real work.
+     *
+     * <p>No default. A missing answer read as zero would leave the ceiling disarmed for exactly the
+     * provider that needed it, and nothing would say so. A provider that consumes nothing says
+     * {@link SpendForecast.NoSpend} deliberately.
+     *
+     * @param prep {@link PrepDir} the prep directory a run would be made over
+     * @return {@link SpendForecast} what one call would carry, or why that is not known
+     */
+    SpendForecast forecast(PrepDir prep);
 
     /**
      * Obtains a decision shard for every montage in prep, by whatever means the implementation

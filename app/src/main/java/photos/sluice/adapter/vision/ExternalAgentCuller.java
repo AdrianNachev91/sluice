@@ -7,6 +7,8 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SpendForecast;
+import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.MontageNaming;
@@ -85,6 +87,18 @@ class ExternalAgentCuller implements VisionCuller {
     }
 
     /**
+     * Answers that a run through this provider consumes nothing. The judging happens outside this
+     * app, on whatever the user's own agent is billed for.
+     *
+     * @param prep {@link PrepDir} the prep directory a run would be made over
+     * @return {@link SpendForecast} always {@link SpendForecast.NoSpend}
+     */
+    @Override
+    public SpendForecast forecast(final PrepDir prep) {
+        return new SpendForecast.NoSpend();
+    }
+
+    /**
      * Checks the prep directory's shards with no progress reporting.
      *
      * @param prep {@link PrepDir} the prep directory to check
@@ -124,6 +138,6 @@ class ExternalAgentCuller implements VisionCuller {
                     + missing.size() + " montage(s) still without a shard):\n - "
                     + String.join("\n - ", missing));
         }
-        return new CullReport(total - missing.size(), missing.size(), 0, 0);
+        return new CullReport(total - missing.size(), missing.size(), 0, TokenSpend.none(PROVIDER_ID), false);
     }
 }

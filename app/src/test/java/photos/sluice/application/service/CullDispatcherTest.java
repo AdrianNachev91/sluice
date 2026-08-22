@@ -10,6 +10,7 @@ import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.CullCategory;
@@ -29,7 +30,7 @@ class CullDispatcherTest {
     private static final PrepDir PREP =
             new PrepDir("2019", List.of(CullCategory.of("junk", "objectively worthless")), Path.of("base"), 0,
                     List.of(), 0, Path.of("prep"), List.of());
-    private static final CullOptions OPTIONS = new CullOptions(false, null);
+    private static final CullOptions OPTIONS = CullOptions.unbounded(false);
 
     @Test
     void routesToTheCullerMatchingTheConfiguredProvider() throws CullException {
@@ -183,7 +184,7 @@ class CullDispatcherTest {
 
         private final String id;
         private final ProviderType type;
-        private final CullReport report = new CullReport(0, 0, 0, 0);
+        private final CullReport report = CullReport.nothingSpent("anthropic", 0);
         private @Nullable PrepDir receivedPrep;
         private @Nullable CullOptions receivedOptions;
         private @Nullable ProgressCallback receivedProgress;
@@ -210,6 +211,11 @@ class CullDispatcherTest {
         @Override
         public ProviderCheck check() {
             return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.Counted(7);
         }
 
         @Override
@@ -241,6 +247,11 @@ class CullDispatcherTest {
         @Override
         public ProviderCheck check() {
             return new ProviderCheck.NotApplicable();
+        }
+
+        @Override
+        public SpendForecast forecast(final PrepDir prep) {
+            return new SpendForecast.NoSpend();
         }
 
         @Override
