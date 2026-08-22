@@ -742,6 +742,22 @@ class AnthropicCullerTest {
     }
 
     @Test
+    void theSentSchemaRefusesABlankReasonAsWellAsAMissingOne() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "group": "beach",
+                  "chosen_reason": "" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "group": "",
+                  "reason": "softer than beach-1" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "a" }""")).isEmpty();
+    }
+
+    @Test
     void theSentSchemaRefusesAnActionNamingACategoryTheRunNeverRecorded() throws Exception {
         final String schema = this.schemaSentFor(CARDS);
 

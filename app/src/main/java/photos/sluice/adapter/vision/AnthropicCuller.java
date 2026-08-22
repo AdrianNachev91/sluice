@@ -160,6 +160,11 @@ class AnthropicCuller implements VisionCuller {
     // later point release as a snapshot of the version it succeeds.
     private static final Pattern SNAPSHOT_SUFFIX = Pattern.compile("-\\d{8}");
 
+    // A field the validator reads and refuses when blank. Carried on every branch, including the
+    // ones where the field is optional, where it costs nothing: an action that ignores the field
+    // ignores it whatever it holds.
+    private static final Map<String, Object> NON_BLANK = Map.of("type", "string", "minLength", 1);
+
     private final CullerPrompt prompt;
     private final ShardCodec shardCodec;
     private final SidecarReader sidecarReader;
@@ -969,11 +974,15 @@ class AnthropicCuller implements VisionCuller {
      * <p>Naming the required fields per action puts them in the contract the model is sent, instead
      * of leaving the model to discover them by being refused. Each gap discovered that way costs a
      * paid corrective retry. {@link ShardValidator} stays the single authority either way. Its
-     * cross-verdict and cross-shard rules have no expression in a schema describing one verdict,
-     * and its string-shape rules none in the keyword set structured outputs support.
+     * cross-verdict and cross-shard rules have no expression in a schema describing one verdict.
      *
-     * <p>Required means present, not non-blank. Structured outputs support no string-length
-     * constraint, so a verdict carrying an empty reason still reaches the validator.
+     * <p>A string constraint here shapes the answer rather than refusing it, which is why the group
+     * slug's own rule is left to the validator. A {@code maxLength} would quietly cut a long slug to
+     * fit, and two groups on one sheet cut to the same slug merge into one folder with nothing
+     * reporting it. A refusal costs one retry; that costs the user photos in a folder they never
+     * chose. The {@code minLength} below is the safe direction of the same mechanism: measured as a
+     * floor rather than a target, so an ordinary reason is untouched and only an empty one is
+     * steered away from.
      *
      * @param categories a {@link List} of {@link String}, the run's recorded category names
      * @return {@link JsonOutputFormat.Schema} the schema to send with every montage in this run
@@ -1029,9 +1038,9 @@ class AnthropicCuller implements VisionCuller {
                         "index", Map.of("type", "integer"),
                         "name", Map.of("type", "string"),
                         "action", action,
-                        "reason", Map.of("type", "string"),
-                        "group", Map.of("type", "string"),
-                        "chosen_reason", Map.of("type", "string")),
+                        "reason", NON_BLANK,
+                        "group", NON_BLANK,
+                        "chosen_reason", NON_BLANK),
                 "required", List.copyOf(required),
                 "additionalProperties", false);
     }
