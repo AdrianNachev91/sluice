@@ -69,6 +69,20 @@ class CategoryNameTest {
         assertThat(CategoryName.problemWith("com0")).isNull();
     }
 
+    @Test
+    void refusesANameAVerdictAlreadyUses() {
+        assertThat(CategoryName.problemWith("keep")).contains("Sluice's own photo decisions");
+        assertThat(CategoryName.problemWith("near-dup-chosen")).contains("Sluice's own photo decisions");
+        assertThat(CategoryName.problemWith("near-dup-reject")).contains("Sluice's own photo decisions");
+    }
+
+    @Test
+    void acceptsANameThatOnlyResemblesAVerdict() {
+        assertThat(CategoryName.problemWith("keepers")).isNull();
+        assertThat(CategoryName.problemWith("near-dup-candidates")).isNull();
+        assertThat(CategoryName.problemWith("near-dup")).isNull();
+    }
+
     // Compared rather than substring-matched. A negative quoting the shape refusal's own wording
     // would stop proving anything the moment that sentence is reworded, and would go on passing.
     // Both are asserted non-null so a rule that stopped refusing at all cannot pass as "distinct".

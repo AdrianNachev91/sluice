@@ -23,6 +23,9 @@ import com.anthropic.models.models.ModelListParams;
 import com.anthropic.services.blocking.MessageService;
 import com.anthropic.services.blocking.ModelService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.networknt.schema.InputFormat;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,6 +75,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -419,6 +423,7 @@ class AnthropicCullerTest {
                 .contains("failed validation")
                 .contains("verdict 1 names 'WRONG.jpg' but photo 1 is 'IMG_0001.jpg'")
                 .contains("complete corrected verdict list");
+        assertThat(retry.outputConfig()).isPresent();
     }
 
     // The retry budget is a hard cap of one corrective attempt: a model that fails the same
@@ -694,6 +699,94 @@ class AnthropicCullerTest {
                 .contains("Scope: 2019-06")
                 .contains("1. IMG_0001.jpg");
         assertThat(request.outputConfig()).isPresent();
+    }
+
+    @Test
+    void theSentSchemaRefusesACategoryVerdictUntilItCarriesAReason() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk" }""")).isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "a screenshot" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaRefusesANearDupKeeperUntilItCarriesAGroupAndAChosenReason() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "chosen_reason": "sharpest" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "group": "beach" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-chosen", "group": "beach",
+                  "chosen_reason": "sharpest" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaRefusesANearDupRejectUntilItCarriesAGroupAndAReason() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "reason": "softer than beach-1" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "group": "beach" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "near-dup-reject", "group": "beach",
+                  "reason": "softer than beach-1" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaRefusesAnActionNamingACategoryTheRunNeverRecorded() throws Exception {
+        final String schema = this.schemaSentFor(CARDS);
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "receipts", "reason": "a scanned invoice" }"""))
+                .isNotEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "scenery", "reason": "flat light" }""")).isEmpty();
+    }
+
+    // Keep is the majority verdict on a real sheet. A branch that demanded a reason for it would
+    // buy one per tile per montage, at the output rate, and every other test here would still pass.
+    @Test
+    void theSentSchemaAcceptsAKeepCarryingNothingButTheCommonThree() throws Exception {
+        assertThat(refusals(this.schemaSentFor(CARDS), """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "keep" }""")).isEmpty();
+    }
+
+    @Test
+    void theSentSchemaAcceptsAKeepThatVolunteersAReason() throws Exception {
+        assertThat(refusals(this.schemaSentFor(CARDS), """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "keep", "reason": "a clear photo of people" }"""))
+                .isEmpty();
+    }
+
+    @Test
+    void refusesToCullARunThatRecordedNoCategories() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        final PrepDir prep = this.prep(List.of(), List.of(), "montage-001");
+
+        assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no photo categories");
+        verify(this.messages, never()).create(any(MessageCreateParams.class));
+    }
+
+    @Test
+    void theSentSchemaNamesTheRunsOwnRecordedCategoriesRatherThanAFixedSet() throws Exception {
+        final String schema = this.schemaSentFor(List.of(CullCategory.of("receipts", "Scans of invoices.")));
+
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "receipts", "reason": "a scanned invoice" }"""))
+                .isEmpty();
+        assertThat(refusals(schema, """
+                { "index": 1, "name": "IMG_0001.jpg", "action": "junk", "reason": "a screenshot" }""")).isNotEmpty();
     }
 
     @Test
@@ -1150,6 +1243,29 @@ class AnthropicCullerTest {
                         .outputTokensDetails(Optional.empty())
                         .build())
                 .build();
+    }
+
+    // Taken off a captured request rather than rebuilt here, so what is judged is what would have
+    // left the machine.
+    private String schemaSentFor(final List<CullCategory> cards) throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.respondWith(response("""
+                { "verdicts": [ { "index": 1, "name": "IMG_0001.jpg", "action": "keep" } ] }
+                """, 10, 1));
+        this.culler().cull(this.prep(cards, List.of(), "montage-001"), OPTIONS);
+        final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
+        verify(this.messages).create(captor.capture());
+        return ObjectMappers.jsonMapper().writeValueAsString(captor.getValue()
+                .outputConfig().orElseThrow().format().orElseThrow().schema()._additionalProperties());
+    }
+
+    private static List<String> refusals(final String schema, final String verdict) {
+        return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12)
+                .getSchema(schema, InputFormat.JSON)
+                .validate("{ \"verdicts\": [ " + verdict + " ] }", InputFormat.JSON)
+                .stream()
+                .map(Object::toString)
+                .toList();
     }
 
     private PrepDir prepWithOneMontage(final String... names) throws IOException {

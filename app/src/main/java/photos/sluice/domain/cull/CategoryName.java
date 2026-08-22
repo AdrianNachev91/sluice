@@ -75,6 +75,9 @@ public final class CategoryName {
         if (ReservedDeviceNames.isReserved(name)) {
             return "is reserved by the operating system and cannot become a folder";
         }
+        if (VerdictAction.isVerdictWord(name)) {
+            return "is already one of Sluice's own photo decisions";
+        }
         return null;
     }
 }

@@ -30,6 +30,7 @@
   <properties>
     <java.version>26</java.version>
     <javafx.version>26.0.1</javafx.version>
+    <testfx.version>4.0.18</testfx.version>
     <twelvemonkeys.version>3.14.0</twelvemonkeys.version>
   </properties>
 
@@ -133,13 +134,23 @@
       <version>1.4.2</version>
       <scope>test</scope>
     </dependency>
+    <!-- Evaluates a JSON document against a JSON Schema, so a test can put a malformed response
+         through the contract a vision request carries and watch it bounce. Asserting the schema's
+         own fields instead would only prove it was written as intended, never that its branches
+         compose to mean that. Test scope: nothing ships this. -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>3.0.6</version>
+      <scope>test</scope>
+    </dependency>
     <!-- Drives the real window in a test: starts the toolkit, runs work on the FX thread, and
          clicks controls. The OSGi jar it carries is only wanted when running as a bundle, and
          nothing manages its version, so it is excluded rather than left on the test classpath. -->
     <dependency>
       <groupId>org.testfx</groupId>
       <artifactId>testfx-core</artifactId>
-      <version>4.0.18</version>
+      <version>${testfx.version}</version>
       <scope>test</scope>
       <exclusions>
         <exclusion>
@@ -151,7 +162,7 @@
     <dependency>
       <groupId>org.testfx</groupId>
       <artifactId>testfx-junit5</artifactId>
-      <version>4.0.18</version>
+      <version>${testfx.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

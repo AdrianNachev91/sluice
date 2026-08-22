@@ -59,7 +59,8 @@ sluice:
     # you do, what would have been kept goes to Review instead.
     #
     # A name becomes a folder name, so it takes lower-case letters and digits only, joined by
-    # hyphens, up to 24 characters. A few words reserved by the operating system are refused too.
+    # hyphens, up to 24 characters. A few words are refused too, some reserved by the operating
+    # system and some Sluice uses for its own photo decisions.
     # examples are optional sample subjects, rendered under the description in the same prompt.
     # enabled: false leaves a card out of a sift altogether, and a card with no enabled key is on.
     # Both are normally written by Settings rather than by hand.

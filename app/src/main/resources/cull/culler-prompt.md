@@ -9,7 +9,7 @@ one is a real loss.
 Return a verdict for EVERY numbered photo, exactly once each:
 
 - `keep` - the default. Any clear, in-focus, well-exposed photo of people or events is always keep.
-- The name of a set-aside category below - the photo is routed to that category.
+- The name of a set-aside category below - the photo is routed to that category, with a `reason`.
 - `near-dup-chosen` / `near-dup-reject` - best-of-burst resolution (rules below).
 
 When unsure, keep. Do not judge sentimental value.

@@ -48,6 +48,7 @@ import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.cull.VerdictAction;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import tools.jackson.core.JacksonException;
@@ -158,31 +159,6 @@ class AnthropicCuller implements VisionCuller {
     // id above. Anchored on the date shape because a suffix rule that took anything would read a
     // later point release as a snapshot of the version it succeeds.
     private static final Pattern SNAPSHOT_SUFFIX = Pattern.compile("-\\d{8}");
-    private static final String KEEP = "keep";
-    private static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
-    private static final String NEAR_DUP_REJECT = "near-dup-reject";
-
-    // Deliberately flat rather than a discriminated union on action. The verdict fields are simple
-    // enough that ShardValidator catches per-action gaps (a missing reason, say) with better
-    // messages than a schema violation would produce.
-    private static final JsonOutputFormat.Schema RESPONSE_SCHEMA = schemaOf(Map.of(
-            "type", "object",
-            "properties", Map.of(
-                    "verdicts", Map.of(
-                            "type", "array",
-                            "items", Map.of(
-                                    "type", "object",
-                                    "properties", Map.of(
-                                            "index", Map.of("type", "integer"),
-                                            "name", Map.of("type", "string"),
-                                            "action", Map.of("type", "string"),
-                                            "reason", Map.of("type", "string"),
-                                            "group", Map.of("type", "string"),
-                                            "chosen_reason", Map.of("type", "string")),
-                                    "required", List.of("index", "name", "action"),
-                                    "additionalProperties", false))),
-            "required", List.of("verdicts"),
-            "additionalProperties", false));
 
     private final CullerPrompt prompt;
     private final ShardCodec shardCodec;
@@ -370,6 +346,7 @@ class AnthropicCuller implements VisionCuller {
         final String model = this.requiredModel();
         final String systemPrompt = this.prompt.systemPrompt(prep.categories());
         final List<String> categoryNames = prep.categoryNames();
+        final JsonOutputFormat.Schema schema = responseSchema(categoryNames);
         long inputTokens = 0;
         long outputTokens = 0;
         int culled = 0;
@@ -411,7 +388,7 @@ class AnthropicCuller implements VisionCuller {
                 } else {
                     final MessageCreateParams request = request(model, systemPrompt,
                             this.prompt.userTurn(prep.scope(), montage, ordinal, total, entries),
-                            montageImageBase64(prep.prepDir(), montage));
+                            montageImageBase64(prep.prepDir(), montage), schema);
                     final Message response = client.messages().create(request);
                     inputTokens += response.usage().inputTokens();
                     outputTokens += response.usage().outputTokens();
@@ -810,13 +787,13 @@ class AnthropicCuller implements VisionCuller {
             return;
         }
         final String action = orEmpty(verdict.action());
-        if (action.equals(KEEP)) {
+        if (action.equals(VerdictAction.KEEP)) {
             return;
         }
         decisions.add(switch (action) {
-            case NEAR_DUP_CHOSEN -> new NearDupChosen(entry.src(), orEmpty(verdict.group()),
+            case VerdictAction.NEAR_DUP_CHOSEN -> new NearDupChosen(entry.src(), orEmpty(verdict.group()),
                     orEmpty(verdict.chosenReason()));
-            case NEAR_DUP_REJECT -> new NearDupReject(entry.src(), orEmpty(verdict.group()),
+            case VerdictAction.NEAR_DUP_REJECT -> new NearDupReject(entry.src(), orEmpty(verdict.group()),
                     orEmpty(verdict.reason()));
             default -> new Classification(entry.src(), action, orEmpty(verdict.reason()));
         });
@@ -923,10 +900,12 @@ class AnthropicCuller implements VisionCuller {
      * @param systemPrompt {@link String} the shared system prompt
      * @param userTurn {@link String} the montage's user turn text
      * @param imageBase64 {@link String} the montage image, base64-encoded
+     * @param schema {@link JsonOutputFormat.Schema} this run's structured-output contract
      * @return {@link MessageCreateParams} the assembled request
      */
     private static MessageCreateParams request(final String model, final String systemPrompt,
-                                               final String userTurn, final String imageBase64) {
+                                               final String userTurn, final String imageBase64,
+                                               final JsonOutputFormat.Schema schema) {
         return MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(MAX_TOKENS)
@@ -941,7 +920,7 @@ class AnthropicCuller implements VisionCuller {
                         ContentBlockParam.ofText(TextBlockParam.builder().text(userTurn).build())))
                 .outputConfig(OutputConfig.builder()
                         .format(JsonOutputFormat.builder()
-                                .schema(RESPONSE_SCHEMA)
+                                .schema(schema)
                                 .build())
                         .build())
                 .build();
@@ -976,6 +955,85 @@ class AnthropicCuller implements VisionCuller {
                 .flatMap(block -> block.text().stream())
                 .map(TextBlock::text)
                 .collect(Collectors.joining());
+    }
+
+    /**
+     * The structured-output contract one run's requests carry: a verdict list whose entries are a
+     * discriminated union on action.
+     *
+     * <p>Built per run rather than held as a constant. The classification branch enumerates the
+     * run's own recorded category names, the same set {@link ShardValidator} judges the responses
+     * against. A static one would go out of step with the validator the first time someone edited
+     * a card.
+     *
+     * <p>Naming the required fields per action puts them in the contract the model is sent, instead
+     * of leaving the model to discover them by being refused. Each gap discovered that way costs a
+     * paid corrective retry. {@link ShardValidator} stays the single authority either way. Its
+     * cross-verdict and cross-shard rules have no expression in a schema describing one verdict,
+     * and its string-shape rules none in the keyword set structured outputs support.
+     *
+     * <p>Required means present, not non-blank. Structured outputs support no string-length
+     * constraint, so a verdict carrying an empty reason still reaches the validator.
+     *
+     * @param categories a {@link List} of {@link String}, the run's recorded category names
+     * @return {@link JsonOutputFormat.Schema} the schema to send with every montage in this run
+     * @throws IllegalStateException if the run recorded no categories
+     */
+    private static JsonOutputFormat.Schema responseSchema(final List<String> categories) {
+        // An empty list would build a branch matching no string at all, and a request nobody has
+        // put through the service. Refusing here rather than trusting the caller's ordering, since
+        // what stands between the two is which of these lines runs first.
+        if (categories.isEmpty()) {
+            throw new IllegalStateException("This run recorded no photo categories, and there is "
+                    + "nothing to ask a model to sort photos into without them");
+        }
+        return schemaOf(Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "verdicts", Map.of(
+                                "type", "array",
+                                "items", Map.of("anyOf", List.of(
+                                        verdictBranch(Map.of("type", "string", "const", VerdictAction.KEEP),
+                                                List.of()),
+                                        verdictBranch(Map.of("type", "string", "const", VerdictAction.NEAR_DUP_CHOSEN),
+                                                List.of("group", "chosen_reason")),
+                                        verdictBranch(Map.of("type", "string", "const", VerdictAction.NEAR_DUP_REJECT),
+                                                List.of("group", "reason")),
+                                        verdictBranch(Map.of("type", "string", "enum", categories),
+                                                List.of("reason")))))),
+                "required", List.of("verdicts"),
+                "additionalProperties", false));
+    }
+
+    /**
+     * One action kind's branch of the verdict union.
+     *
+     * <p>Every branch declares every field a verdict may carry, and the branches differ only in
+     * what they pin action to and what they demand. Narrowing a branch to the fields its own action
+     * needs would refuse a keep that volunteered a reason. Nothing downstream objects to that one:
+     * {@link #collectDecision} returns on a keep without reading reason, group or chosen_reason.
+     * The point here is to stop paying for refusals, so a branch that invented one would work
+     * against it.
+     *
+     * @param action a {@link Map} of {@link String} to {@link Object}, the sub-schema pinning this branch's action
+     * @param alsoRequired a {@link List} of {@link String}, the fields this action needs beyond the common three
+     * @return a {@link Map} of {@link String} to {@link Object}, the branch, as a plain nested map
+     */
+    private static Map<String, Object> verdictBranch(final Map<String, Object> action,
+                                                     final List<String> alsoRequired) {
+        final var required = new ArrayList<>(List.of("index", "name", "action"));
+        required.addAll(alsoRequired);
+        return Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "index", Map.of("type", "integer"),
+                        "name", Map.of("type", "string"),
+                        "action", action,
+                        "reason", Map.of("type", "string"),
+                        "group", Map.of("type", "string"),
+                        "chosen_reason", Map.of("type", "string")),
+                "required", List.copyOf(required),
+                "additionalProperties", false);
     }
 
     /**

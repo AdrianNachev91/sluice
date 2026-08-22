@@ -327,7 +327,8 @@ public class PhotoCategoriesPresenter {
     private static String nameRule() {
         return "A category's name becomes a folder name, so it takes lower-case letters and digits "
                 + "only, joined by hyphens, up to " + CategoryName.maxLength() + " characters. A "
-                + "few words reserved by the operating system are refused too.";
+                + "few words are refused too, some reserved by the operating system and some "
+                + "Sluice uses for its own photo decisions.";
     }
 
 }
