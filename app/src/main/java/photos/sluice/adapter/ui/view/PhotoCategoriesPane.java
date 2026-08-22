@@ -4,10 +4,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.SVGPath;
 import org.jspecify.annotations.Nullable;
@@ -20,7 +17,6 @@ import photos.sluice.adapter.ui.PhotoCategoriesView.SaveOutcome;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 
 /**
  * The Photo categories screen: the categories photos are sifted into, and what each one is for.
@@ -48,15 +44,13 @@ final class PhotoCategoriesPane {
     static Node pane(final PhotoCategoriesPresenter presenter, final Runnable onBack) {
         final var container = new VBox();
         container.getStyleClass().add("settings-pane");
-        refresh(container, presenter, onBack, null);
-
-        // The header sits outside what scrolls, so the way back stays reachable from anywhere on a
-        // page that is taller than the window. It also survives a save, which rebuilds the body.
-        final ScrollPane scroll = SettingsRows.scrolling(container);
-        VBox.setVgrow(scroll, Priority.ALWAYS);
-        final var page = new VBox(header(onBack), scroll);
-        page.getStyleClass().add("photo-categories-page");
-        return page;
+        // The header sits outside what scrolls, so the way back and Save both stay reachable from
+        // anywhere on a page that is taller than the window. It also survives a save, which rebuilds
+        // the body.
+        final PageHeader.Result header =
+                PageHeader.build("Photo categories", "photo-categories-save", backButton(onBack));
+        refresh(container, header, presenter, onBack);
+        return PageHeader.pinnedOver(header, container);
     }
 
     /**
@@ -69,16 +63,14 @@ final class PhotoCategoriesPane {
      * @param container {@link VBox} the pane's own body
      * @param presenter {@link PhotoCategoriesPresenter} supplies the state and takes the actions
      * @param onBack {@link Runnable} returns to the screen this was opened from
-     * @param banner what to say above the screen about what just happened, or null for nothing
      */
-    private static void refresh(final VBox container, final PhotoCategoriesPresenter presenter,
-                                final Runnable onBack, final @Nullable String banner) {
+    private static void refresh(final VBox container, final PageHeader.Result header,
+                                final PhotoCategoriesPresenter presenter,
+                                final Runnable onBack) {
         final PhotoCategoriesView view = presenter.view();
+        header.clearStatus();
         container.getChildren().clear();
-        if (banner != null) {
-            container.getChildren().add(savedBanner(container, banner));
-        }
-        final var summary = SettingsRows.violationLabel();
+        final Label summary = header.status();
         summary.setId("photo-categories-summary");
 
         final var intro = SettingsRows.helpLine(view.disposition());
@@ -99,10 +91,10 @@ final class PhotoCategoriesPane {
             add(presenter, cards, built, presenter.blankCard(), view.limits(), add);
             SettingsRows.bringIntoView(built.getLast().card());
         });
-        // The summary sits under the buttons, where the Settings screen puts its own. A refused save
-        // then reads the same way on both, and a reader who pressed Save is looking at that spot.
-        container.getChildren().addAll(cards,
-                actions(presenter, container, onBack, built, summary, add), summary);
+        // The summary lives in the pinned header beside Save, where the Settings screen puts its own.
+        // A refused save reads the same way on both, and it is next to the button that produced it.
+        header.save().setOnAction(_ -> onSave(presenter, container, header, onBack, built, summary));
+        container.getChildren().addAll(cards, actions(add));
     }
 
     /**
@@ -169,27 +161,13 @@ final class PhotoCategoriesPane {
     }
 
     /**
-     * The page's own actions: add a card, and save the lot.
+     * The page's own action: add a card. Save is in the pinned header above.
      *
-     * @param presenter {@link PhotoCategoriesPresenter} carries out the save
-     * @param container {@link VBox} the pane's own body, redrawn after a save takes
-     * @param onBack {@link Runnable} returns to the screen this was opened from
-     * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @param summary {@link Label} what a refusal says above the buttons
      * @param add {@link Button} the Add control, already wired and already knowing whether it fits
      * @return {@link HBox} the action row
      */
-    private static HBox actions(final PhotoCategoriesPresenter presenter, final VBox container,
-                                final Runnable onBack, final List<CategoryCard.Result> built,
-                                final Label summary, final Button add) {
-        final var save = new Button("Save");
-        save.setId("photo-categories-save");
-        save.setDefaultButton(true);
-        save.setOnAction(_ -> onSave(presenter, container, onBack, built, summary));
-
-        final var spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        final var row = new HBox(add, spacer, save);
+    private static HBox actions(final Button add) {
+        final var row = new HBox(add);
         row.setAlignment(Pos.CENTER_LEFT);
         row.getStyleClass().add("settings-actions");
         return row;
@@ -202,9 +180,10 @@ final class PhotoCategoriesPane {
      * @param container {@link VBox} the pane's own body, redrawn once a save takes
      * @param onBack {@link Runnable} returns to the screen this was opened from
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @param summary {@link Label} what a refusal says above the buttons
+     * @param summary {@link Label} the bar's own line, where a refusal lands
      */
     private static void onSave(final PhotoCategoriesPresenter presenter, final VBox container,
+                               final PageHeader.Result header,
                                final Runnable onBack, final List<CategoryCard.Result> built,
                                final Label summary) {
         final List<CategoryEdit> edits = built.stream()
@@ -214,76 +193,47 @@ final class PhotoCategoriesPane {
         clearRefusal(built, summary);
         switch (presenter.save(edits)) {
             case SaveOutcome.Saved _ -> {
-                refresh(container, presenter, onBack, SAVED);
-                SettingsRows.backToTop(container);
+                refresh(container, header, presenter, onBack);
+                SettingsRows.report(container, null, SAVED, true);
+                // Save is this page's default button, so Enter fires it with the caret still in a
+                // card. The rebuild takes that field out of the scene, focus goes to whatever the
+                // window finds next, and a scrolling pane travels to wherever it lands. Handing it
+                // to Save instead keeps focus outside what scrolls, so the only movement is the one
+                // below.
+                header.save().requestFocus();
+                SettingsRows.travelToTop(container);
             }
-            case final SaveOutcome.Refused refused -> showRefusal(built, summary, refused);
+            case final SaveOutcome.Refused refused -> showRefusal(container, built, summary, refused);
         }
     }
 
     /**
-     * Marks every card the save found something wrong with, and sends the reader to the topmost one.
+     * Marks every card the save found something wrong with.
      *
      * <p>The refusal list runs parallel to what was submitted, which is what makes marking by
      * position right rather than convenient. A name is one of the things a save can refuse.
      * Matching a message back to its card by name would fail on exactly the cards that need it.
      *
-     * <p>The reader lands on the field that is actually at fault, not on the card's first field.
-     * A description refused on the built-in card would otherwise put the cursor in a name nobody
-     * can type into. That sits two rows above the box that needs the edit.
+     * <p>The page is not moved and the cursor is not taken anywhere. Save is pinned, so the reader
+     * is already looking at the summary this fills. Focusing the field at fault would scroll the
+     * page to it, since a scrolling pane travels to whatever holds focus.
      *
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
      * @param summary {@link Label} the page-level message
      * @param refused {@link SaveOutcome.Refused} what came back
      */
-    private static void showRefusal(final List<CategoryCard.Result> built, final Label summary,
-                                    final SaveOutcome.Refused refused) {
-        SettingsRows.say(summary, refused.summary());
-        Node takeTheReaderThere = null;
+    private static void showRefusal(final VBox container, final List<CategoryCard.Result> built,
+                                    final Label summary, final SaveOutcome.Refused refused) {
+        summary.setText("");
+        summary.getStyleClass().setAll("settings-save-status");
+        SettingsRows.report(container, "settings-banner-violation", refused.summary(), false);
         for (int i = 0; i < built.size() && i < refused.cards().size(); i++) {
             final CardRefusal refusal = refused.cards().get(i);
             final CategoryCard.Result card = built.get(i);
             SettingsRows.say(card.nameViolation(), refusal.name());
             SettingsRows.say(card.descriptionViolation(), refusal.description());
             SettingsRows.say(card.examplesViolation(), refusal.examples());
-            if (takeTheReaderThere == null && refusal.isAtFault()) {
-                takeTheReaderThere = firstAtFault(refusal, card);
-            }
         }
-        if (takeTheReaderThere != null) {
-            takeTheReaderThere.requestFocus();
-        }
-        SettingsRows.takeTheReaderToTheFault(summary, marks(built));
-    }
-
-    /**
-     * Every card's marks, in the order the cards are drawn.
-     *
-     * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @return {@link Label}[] the name and description marks of every card
-     */
-    private static Label[] marks(final List<CategoryCard.Result> built) {
-        return built.stream()
-                .flatMap(card -> Stream.of(card.nameViolation(), card.descriptionViolation(),
-                        card.examplesViolation()))
-                .toArray(Label[]::new);
-    }
-
-    /**
-     * The topmost field on a card that the save had something to say about.
-     *
-     * <p>The reader lands on the field actually at fault rather than on the card's first one. A card
-     * whose only problem is its examples would otherwise put the cursor in a name that is fine.
-     *
-     * @param refusal {@link CardRefusal} what the save said about this card
-     * @param card {@link CategoryCard.Result} the controls behind it
-     * @return {@link Node} the field to take the reader to
-     */
-    private static Node firstAtFault(final CardRefusal refusal, final CategoryCard.Result card) {
-        if (refusal.name() != null) {
-            return card.name();
-        }
-        return refusal.description() != null ? card.description() : card.examples();
     }
 
     /**
@@ -294,7 +244,10 @@ final class PhotoCategoriesPane {
      * @param summary {@link Label} the page-level message
      */
     private static void clearRefusal(final List<CategoryCard.Result> built, final Label summary) {
-        SettingsRows.say(summary, null);
+        // The class goes with the text. The bar is built once and outlives every rebuild, so a
+        // refusal's red would otherwise stay on it under whatever the next press has to say.
+        summary.setText("");
+        summary.getStyleClass().setAll("settings-save-status");
         for (final CategoryCard.Result card : built) {
             SettingsRows.say(card.nameViolation(), null);
             SettingsRows.say(card.descriptionViolation(), null);
@@ -303,22 +256,18 @@ final class PhotoCategoriesPane {
     }
 
     /**
-     * The page's heading, and the way back to where it was opened from.
+     * The way back to the screen this was opened from, for the pinned header to carry.
      *
      * @param onBack {@link Runnable} returns to that screen
-     * @return {@link VBox} the header block
+     * @return {@link Button} the way back
      */
-    private static VBox header(final Runnable onBack) {
+    private static Button backButton(final Runnable onBack) {
         final var back = new Button("Back to Settings");
         back.setId("photo-categories-back");
         back.getStyleClass().add("button-quiet");
         back.setGraphic(uTurnGlyph());
         back.setOnAction(_ -> onBack.run());
-        final var heading = new Label("Photo categories");
-        heading.getStyleClass().add("pane-heading");
-        final var block = new VBox(back, heading);
-        block.getStyleClass().add("pane-header");
-        return block;
+        return back;
     }
 
     /**
@@ -339,17 +288,4 @@ final class PhotoCategoriesPane {
         return glyph;
     }
 
-    /**
-     * The banner saying a save took, built the same way as the one on the screen this is reached
-     * from. It leaves on its own, because the reader stays on this page and keeps editing. One
-     * left standing would still be up the next time a save is refused, above a refusal that says
-     * the opposite.
-     *
-     * @param container {@link VBox} the pane's body, which the banner removes itself from
-     * @param message {@link String} what to say
-     * @return {@link HBox} the banner
-     */
-    private static HBox savedBanner(final VBox container, final String message) {
-        return SettingsRows.banner(container, "photo-categories-banner", message, true);
-    }
 }

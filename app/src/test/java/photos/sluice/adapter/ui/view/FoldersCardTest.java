@@ -12,14 +12,17 @@ import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportIsARefusal;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportText;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.REFUSED;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.REFUSED_FOLDER;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.built;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.builtInAWindowThatScrolls;
-import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.inView;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.presenterOn;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.inView;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.rowOf;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.scrollOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 
@@ -55,9 +58,8 @@ class FoldersCardTest {
         });
 
         assertThat(textsOfClass(pane, "settings-violation")).contains("No folder could be found here.");
-        assertThat(textsOfClass(pane, "settings-save-status"))
-                .anyMatch(text -> text.contains("not saved"))
-                .noneMatch(text -> text.contains("sluice.paths"));
+        assertThat(reportText(pane)).contains("not saved").doesNotContain("sluice.paths");
+        assertThat(reportIsARefusal(pane)).isTrue();
     }
 
     // The roots this presenter opens on are fine, so the field starts unmarked. That is what makes
@@ -76,22 +78,43 @@ class FoldersCardTest {
         assertThat(field.getPseudoClassStates()).contains(REFUSED);
     }
 
-    // Save is at the foot, so pressing it means already being at the bottom. That is the position
-    // this test starts from. An unmoved page is then a refusal nobody sees, since the field at fault
-    // is above the fold.
     @Test
-    void aRefusedSaveBringsTheFolderAtFaultIntoView() throws Exception {
-        final var pane = (ScrollPane) onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic")));
-        final Node row = rowOf(pane, "#settings-library-root");
-        runOnFxThread(() -> pane.setVvalue(pane.getVmax()));
-        assertThat(inView(pane, row)).isFalse();
+    void aRefusedSaveDoesNotTravelToTheFolderAtFault() throws Exception {
+        final Parent page = onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic")));
+        final ScrollPane scroll = scrollOf(page);
+        final Node row = rowOf(scroll, "#settings-library-root");
+        runOnFxThread(() -> scroll.setVvalue(scroll.getVmax()));
+        assertThat(inView(scroll, row)).isFalse();
 
         runOnFxThread(() -> {
-            ((TextField) pane.lookup("#settings-library-root")).setText(REFUSED_FOLDER);
-            ((Button) pane.lookup("#settings-save-button")).fire();
+            ((TextField) page.lookup("#settings-library-root")).setText(REFUSED_FOLDER);
+            ((Button) page.lookup("#settings-save-button")).fire();
         });
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(inView(pane, row)).isTrue();
+        assertThat(inView(scroll, row)).isFalse();
+        assertThat(reportText(page)).contains("not saved");
+    }
+
+    @Test
+    void theCardSaysNoWorkRunsUntilAllThreeFoldersAreSet() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+
+        assertThat(pane.lookup("#folder-roots-required-legend")).isNotNull();
+    }
+
+    @Test
+    void theFolderCardCarriesTheRulesAboutHowTheThreeRootsRelate() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+
+        assertThat(pane.lookup("#folder-roots-help")).isNotNull();
+    }
+
+    @Test
+    void saveIsPinnedOutsideWhatScrolls() throws Exception {
+        final Parent page = onFxThread(() -> built(presenterOn("anthropic")));
+
+        assertThat(page.lookup("#settings-save-button")).isNotNull();
+        assertThat(scrollOf(page).lookup("#settings-save-button")).isNull();
     }
 }

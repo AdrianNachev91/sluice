@@ -157,10 +157,10 @@ public class StartupSequence {
      */
     private static boolean leavesTheWorkingRootUnusable(final PathViolation violation) {
         return switch (violation) {
-            case NotConfigured(final PathRole role) -> role == PathRole.REPO_ROOT;
-            case NotAPath(final PathRole role, final String _) -> role == PathRole.REPO_ROOT;
-            case NotADirectory(final PathRole role, final Path _) -> role == PathRole.REPO_ROOT;
-            case Unreadable(final PathRole role, final Path _) -> role == PathRole.REPO_ROOT;
+            case NotConfigured(final PathRole role) -> role == PathRole.WORKING_ROOT;
+            case NotAPath(final PathRole role, final String _) -> role == PathRole.WORKING_ROOT;
+            case NotADirectory(final PathRole role, final Path _) -> role == PathRole.WORKING_ROOT;
+            case Unreadable(final PathRole role, final Path _) -> role == PathRole.WORKING_ROOT;
             case Overlap _ -> false;
         };
     }

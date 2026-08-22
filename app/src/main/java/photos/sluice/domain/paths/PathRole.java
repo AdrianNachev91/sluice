@@ -10,7 +10,7 @@ package photos.sluice.domain.paths;
 public enum PathRole {
 
     /** The working root: the folder Sluice stages everything under. */
-    REPO_ROOT,
+    WORKING_ROOT,
 
     /** The library root: where committed keepers live for good. */
     LIBRARY_ROOT,

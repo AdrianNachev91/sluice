@@ -49,7 +49,7 @@ public final class RootLayout {
             violations.add(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX));
         }
         if (contains(inbox, repoRoot)) {
-            violations.add(new Overlap(PathRole.REPO_ROOT, PathRole.INBOX));
+            violations.add(new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX));
         }
         return List.copyOf(violations);
     }

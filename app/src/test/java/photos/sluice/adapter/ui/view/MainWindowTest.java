@@ -4,17 +4,19 @@ import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Hyperlink;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
-import photos.sluice.adapter.ui.ShellPresenter;
+import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
@@ -56,8 +58,9 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // The wiring only a built scene graph can be wrong about: which destination a nav entry shows, and
-// where the welcome card's own link lands. What either screen says is asserted elsewhere
-// (SettingsPaneTest for Settings; the Dashboard and Review panes carry nothing of their own yet).
+// which of its two states the Dashboard rests in. What either screen says is asserted elsewhere
+// (SettingsPaneTest for Settings, FirstRunCardTest for the first-run card; the Dashboard and
+// Review panes carry nothing of their own yet).
 //
 // Runs on the FX thread throughout. Building the scene reads the desktop's colour preferences, same
 // as SettingsPaneTest, and that call refuses any other thread.
@@ -80,14 +83,14 @@ class MainWindowTest {
 
     @Test
     void opensOnTheDashboard() throws Exception {
-        final BorderPane root = onFxThread(() -> built(shellPresenter(false)));
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
 
         assertThat(currentScreen(root).getId()).isEqualTo("Dashboard");
     }
 
     @Test
     void clickingSettingsShowsTheSettingsPane() throws Exception {
-        final BorderPane root = onFxThread(() -> built(shellPresenter(false)));
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
 
         clickNav(root, "#nav-settings");
 
@@ -97,7 +100,7 @@ class MainWindowTest {
 
     @Test
     void clickingReviewShowsTheReviewPane() throws Exception {
-        final BorderPane root = onFxThread(() -> built(shellPresenter(false)));
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
 
         clickNav(root, "#nav-review");
 
@@ -107,7 +110,7 @@ class MainWindowTest {
 
     @Test
     void clickingDashboardAfterSettingsReturnsToTheDashboard() throws Exception {
-        final BorderPane root = onFxThread(() -> built(shellPresenter(false)));
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
         clickNav(root, "#nav-settings");
 
         clickNav(root, "#nav-dashboard");
@@ -116,35 +119,40 @@ class MainWindowTest {
     }
 
     @Test
-    void anUnconfiguredInstallOpensOnTheWelcomeCard() throws Exception {
-        final BorderPane root = onFxThread(() -> built(shellPresenter(true)));
+    void anInstallWithNoFolderChosenOpensOnTheFirstRunCard() throws Exception {
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(true)));
 
-        assertThat(root.lookup("#welcome-settings-link")).isNotNull();
+        assertThat(root.lookup("#first-run-save-button")).isNotNull();
     }
 
     @Test
-    void aConfiguredInstallOpensOnAPlainDashboardWithNoWelcomeCard() throws Exception {
-        final BorderPane root = onFxThread(() -> built(shellPresenter(false)));
+    void aConfiguredInstallOpensOnAPlainDashboardWithNoFirstRunCard() throws Exception {
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
 
-        assertThat(root.lookup("#welcome-settings-link")).isNull();
+        assertThat(root.lookup("#first-run-save-button")).isNull();
         assertThat(headingText(currentScreen(root))).isEqualTo("Dashboard");
     }
 
     @Test
-    void theWelcomeCardsLinkOpensSettingsAndMarksItCurrentInTheSidebar() throws Exception {
-        final BorderPane root = onFxThread(() -> built(shellPresenter(true)));
+    void anInstallWithOneFolderStillUnchosenOpensOnTheFirstRunCard() throws Exception {
+        final BorderPane root =
+                onFxThread(() -> built(firstRunPresenterMissingOnly(PathRole.INBOX)));
 
-        runOnFxThread(() -> ((Hyperlink) root.lookup("#welcome-settings-link")).fire());
+        assertThat(root.lookup("#first-run-save-button")).isNotNull();
+    }
 
-        assertThat(currentScreen(root).getId()).isEqualTo("Settings");
-        assertThat(((ToggleButton) root.lookup("#nav-settings")).isSelected()).isTrue();
+    @Test
+    void theFirstRunCardTakesTheHeightTheWindowHas() throws Exception {
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(true)));
+
+        assertThat(VBox.getVgrow(currentScreen(root))).isEqualTo(Priority.ALWAYS);
     }
 
     @Test
     void openingTheShellAsksTheConfiguredProviderWhatThisAccountCanRun() throws Exception {
         final var checked = new ArrayBlockingQueue<String>(1);
 
-        onFxThread(() -> built(shellPresenter(false), settingsPresenter(checked::offer)));
+        onFxThread(() -> built(firstRunPresenter(false), settingsPresenter(checked::offer)));
 
         assertThat(checked.poll(10, TimeUnit.SECONDS)).isEqualTo("anthropic");
     }
@@ -153,10 +161,23 @@ class MainWindowTest {
     void theStartUpCheckRunsOffTheThreadThatDrawsTheWindow() throws Exception {
         final var ranOnTheFxThread = new ArrayBlockingQueue<Boolean>(1);
 
-        onFxThread(() -> built(shellPresenter(false),
+        onFxThread(() -> built(firstRunPresenter(false),
                 settingsPresenter(_ -> ranOnTheFxThread.offer(Platform.isFxApplicationThread()))));
 
         assertThat(ranOnTheFxThread.poll(10, TimeUnit.SECONDS)).isFalse();
+    }
+
+    @Test
+    void aSaveThatFinishesFirstRunReplacesTheCardWithTheDashboard() throws Exception {
+        final var install = new MovingRoots(PathRole.INBOX);
+        final BorderPane root = onFxThread(() -> built(new FirstRunPresenter(install),
+                settingsPresenter(_ -> { }, install)));
+        assertThat(root.lookup("#first-run-save-button")).isNotNull();
+
+        runOnFxThread(() -> ((Button) root.lookup("#first-run-save-button")).fire());
+
+        assertThat(root.lookup("#first-run-save-button")).isNull();
+        assertThat(headingText(currentScreen(root))).isEqualTo("Dashboard");
     }
 
     // A freshly drawn screen needs its own applyCss/layout pass before a lookup can reach inside it.
@@ -179,11 +200,11 @@ class MainWindowTest {
         return ((Label) screen.lookup(".pane-heading")).getText();
     }
 
-    private static BorderPane built(final ShellPresenter presenter) {
+    private static BorderPane built(final FirstRunPresenter presenter) {
         return built(presenter, settingsPresenter());
     }
 
-    private static BorderPane built(final ShellPresenter presenter, final SettingsPresenter settingsPresenter) {
+    private static BorderPane built(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter) {
         final Scene scene = MainWindow.scene(presenter, settingsPresenter, photoCategoriesPresenter());
         final var stage = new Stage();
         stage.setScene(scene);
@@ -193,8 +214,62 @@ class MainWindowTest {
         return (BorderPane) scene.getRoot();
     }
 
-    private static ShellPresenter shellPresenter(final boolean unconfigured) {
-        return new ShellPresenter(unconfigured ? allRootsUnconfigured() : noViolations());
+    private static FirstRunPresenter firstRunPresenter(final boolean unfinished) {
+        return new FirstRunPresenter(unfinished ? allRootsUnconfigured() : noViolations());
+    }
+
+    private static FirstRunPresenter firstRunPresenterMissingOnly(final PathRole role) {
+        return new FirstRunPresenter(new PathValidationUseCase() {
+            @Override
+            public List<PathViolation> violations(final PathSettings candidate) {
+                return List.of();
+            }
+
+            @Override
+            public List<PathViolation> violationsInForce() {
+                return List.of(new NotConfigured(role));
+            }
+        });
+    }
+
+    // Roots that change under the window, which is what a save does. A fixed double can never show
+    // the Dashboard swapping from one of its states to the other.
+    private static final class MovingRoots implements PathValidationUseCase, SettingsUseCase {
+
+        private final Settings settings = new Settings(new PathSettings("D:\\repo", "D:\\library", null),
+                "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
+                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+        private List<PathViolation> inForce;
+
+        private MovingRoots(final PathRole... unset) {
+            this.inForce = Arrays.stream(unset).<PathViolation>map(NotConfigured::new).toList();
+        }
+
+        @Override
+        public Settings settings() {
+            return this.settings;
+        }
+
+        @Override
+        public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+            return Optional.empty();
+        }
+
+        // The card's Save is what moves this install on, the same way a real one does.
+        @Override
+        public void save(final Settings toSave) {
+            this.inForce = List.of();
+        }
+
+        @Override
+        public List<PathViolation> violations(final PathSettings candidate) {
+            return List.of();
+        }
+
+        @Override
+        public List<PathViolation> violationsInForce() {
+            return this.inForce;
+        }
     }
 
     private static PathValidationUseCase noViolations() {
@@ -257,7 +332,7 @@ class MainWindowTest {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
-        final var useCase = new SettingsUseCase() {
+        return settingsPresenter(onCheck, new SettingsUseCase() {
             @Override
             public Settings settings() {
                 return settings;
@@ -271,7 +346,11 @@ class MainWindowTest {
             @Override
             public void save(final Settings toSave) {
             }
-        };
+        });
+    }
+
+    private static SettingsPresenter settingsPresenter(final Consumer<String> onCheck,
+                                                       final SettingsUseCase useCase) {
         final LibraryRootUseCase libraryRootUseCase = (_, _) -> {
             throw new AssertionError("no test here moves the library root");
         };

@@ -1,7 +1,12 @@
 package photos.sluice.adapter.ui.view;
 
+import javafx.scene.Scene;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -107,6 +112,47 @@ class SettingsRowsTest {
         onFxThread(field::clear);
 
         assertThat(field.getText()).isEmpty();
+    }
+
+    // Read inside the same block that starts the movement, so no frame can have run yet. The
+    // version of this that set the value outright would already be at the top by this line.
+    @Test
+    void travellingToTheTopDoesNotArriveAtOnce() throws Exception {
+        final ScrollPane scroll = onFxThread(SettingsRowsTest::aPageTallerThanItsWindow);
+        final var body = (VBox) scroll.getContent();
+        onFxThread(() -> scroll.setVvalue(scroll.getVmax()));
+
+        final double[] rightAfter = new double[1];
+        onFxThread(() -> {
+            SettingsRows.travelToTop(body);
+            rightAfter[0] = scroll.getVvalue();
+        });
+
+        assertThat(rightAfter[0]).isEqualTo(scroll.getVmax());
+    }
+
+    private static ScrollPane aPageTallerThanItsWindow() {
+        return aPage(40);
+    }
+
+    private static ScrollPane aPage(final int rowCount) {
+        final var body = new VBox(rows(rowCount));
+        final ScrollPane scroll = SettingsRows.scrolling(body);
+        final var stage = new Stage();
+        stage.setScene(new Scene(new VBox(scroll), 300, 200));
+        stage.show();
+        scroll.applyCss();
+        scroll.layout();
+        return scroll;
+    }
+
+    private static Label[] rows(final int count) {
+        final var rows = new Label[count];
+        for (int i = 0; i < count; i++) {
+            rows[i] = new Label("row " + i);
+            rows[i].setMinHeight(30);
+        }
+        return rows;
     }
 
     private static TextField bounded(final int characters) {

@@ -52,7 +52,7 @@ class StartupSequenceTest {
     void unusableRootsStopTheSequenceBeforeTheClaim(@TempDir final Path root) {
         final var lock = mock(WorkingRootLock.class);
         final var sequence = new StartupSequence(lock, paths(root), this.pipeline,
-                violating(new NotConfigured(PathRole.REPO_ROOT)));
+                violating(new NotConfigured(PathRole.WORKING_ROOT)));
 
         sequence.run();
 
@@ -76,7 +76,7 @@ class StartupSequenceTest {
     void overlappingRootsStopTheHousekeepingButNotTheClaim(@TempDir final Path root) {
         final var lock = mock(WorkingRootLock.class);
         final var sequence = new StartupSequence(lock, paths(root), this.pipeline,
-                violating(new Overlap(PathRole.REPO_ROOT, PathRole.INBOX)));
+                violating(new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX)));
 
         sequence.run();
 

@@ -32,7 +32,7 @@ class UnconfiguredStartupTest {
     @Test
     void theContextStartsWithNoFoldersConfigured() {
         assertThat(this.pathValidation.violationsInForce())
-                .containsExactly(new NotConfigured(PathRole.REPO_ROOT), new NotConfigured(PathRole.LIBRARY_ROOT),
+                .containsExactly(new NotConfigured(PathRole.WORKING_ROOT), new NotConfigured(PathRole.LIBRARY_ROOT),
                         new NotConfigured(PathRole.INBOX));
     }
 

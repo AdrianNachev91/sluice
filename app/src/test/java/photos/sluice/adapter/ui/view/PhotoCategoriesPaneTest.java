@@ -41,6 +41,7 @@ import java.util.concurrent.Callable;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportText;
 
 // What only a built scene graph can be wrong about: which controls a card draws, what Delete and
 // Add do to the page, and what a refusal marks. What a save decides is PhotoCategoriesPresenterTest's.
@@ -267,7 +268,7 @@ class PhotoCategoriesPaneTest {
 
         press(pane, "#photo-categories-save");
 
-        assertThat(pane.lookup("#photo-categories-banner")).isNotNull();
+        assertThat(pane.lookup("#settings-report-banner")).isNotNull();
     }
 
     @Test
@@ -282,7 +283,7 @@ class PhotoCategoriesPaneTest {
         assertThat(store.saved).isNull();
         assertThat(violationUnder(ordinaryCard(pane), "#category-name"))
                 .contains("Give this category a name");
-        assertThat(((Label) pane.lookup("#photo-categories-summary")).getText()).isNotEmpty();
+        assertThat(reportText(pane)).isNotEmpty();
     }
 
     // A save rebuilds every node, so a mark gone after one proves nothing about clearing it. Two
@@ -319,7 +320,7 @@ class PhotoCategoriesPaneTest {
         press(pane, "#photo-categories-save");
 
         assertThat(store.saved).isNotNull();
-        assertThat(pane.lookup("#photo-categories-banner")).isNotNull();
+        assertThat(pane.lookup("#settings-report-banner")).isNotNull();
     }
 
     @Test

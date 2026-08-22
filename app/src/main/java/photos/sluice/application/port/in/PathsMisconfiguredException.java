@@ -87,7 +87,7 @@ public final class PathsMisconfiguredException extends IllegalStateException {
      */
     private static String property(final PathRole role) {
         return switch (role) {
-            case REPO_ROOT -> "sluice.paths.repo-root";
+            case WORKING_ROOT -> "sluice.paths.repo-root";
             case LIBRARY_ROOT -> "sluice.paths.library-root";
             case INBOX -> "sluice.paths.inbox";
         };

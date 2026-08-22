@@ -24,17 +24,11 @@ final class FoldersCard {
     }
 
     static Result build(final SettingsView view) {
-        final var workingRoot = SettingsRows.folderRow("Working root", "settings-working-root",
-                view.workingRoot(), view.rootLimit());
-        final var libraryRoot = SettingsRows.folderRow("Library root", "settings-library-root",
-                view.libraryRoot(), view.rootLimit());
-        final var inbox = SettingsRows.folderRow("Inbox", "settings-inbox", view.inbox(), view.rootLimit());
-        final var card = SettingsRows.card("FOLDERS",
-                "Working root is where Sluice works. It makes its own folders underneath for what it "
-                        + "has sorted, what it wants you to look at, and the near-duplicates it set "
-                        + "aside. Library root is where the photos you keep end up for good. Inbox is "
-                        + "where new photos go in, and it usually sits inside the working root.",
-                workingRoot.row(), libraryRoot.row(), inbox.row());
+        final SettingsRows.FolderRow workingRoot = FolderRootRows.workingRoot(view);
+        final SettingsRows.FolderRow libraryRoot = FolderRootRows.libraryRoot(view);
+        final SettingsRows.FolderRow inbox = FolderRootRows.inbox(view);
+        final var card = SettingsRows.card("FOLDERS", null, workingRoot.row(), libraryRoot.row(), inbox.row(),
+                SettingsRows.requiredLegend(), FolderRootsHelp.panel());
         return new Result(card, workingRoot, libraryRoot, inbox);
     }
 }

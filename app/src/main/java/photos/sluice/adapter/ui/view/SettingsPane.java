@@ -2,16 +2,8 @@ package photos.sluice.adapter.ui.view;
 
 import javafx.concurrent.Task;
 import javafx.scene.Node;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
-import javafx.scene.control.Button;
-import javafx.scene.control.ButtonBar;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter.SaveOutcome;
@@ -50,9 +42,10 @@ final class SettingsPane {
     static Node pane(final SettingsPresenter presenter, final Runnable onOpenPhotoCategories) {
         final var container = new VBox();
         container.getStyleClass().add("settings-pane");
-        refresh(container, presenter, onOpenPhotoCategories, null);
+        final PageHeader.Result header = PageHeader.build("Settings", "settings-save-button", null);
+        refresh(container, header, presenter, onOpenPhotoCategories, null);
 
-        return SettingsRows.scrolling(container);
+        return PageHeader.pinnedOver(header, container);
     }
 
     /**
@@ -66,21 +59,18 @@ final class SettingsPane {
      * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
      * @param banner what to say above the screen about what just happened, or null for nothing
      */
-    private static void refresh(final VBox container, final SettingsPresenter presenter,
+    private static void refresh(final VBox container, final PageHeader.Result header,
+                                final SettingsPresenter presenter,
                                 final Runnable onOpenPhotoCategories,
                                 final @Nullable String banner) {
+        header.clearStatus();
         final SettingsView view = presenter.view();
-        final var heading = new Label("Settings");
-        heading.getStyleClass().add("pane-heading");
-
         final FoldersCard.Result folders = FoldersCard.build(view);
         final VisionProviderCard.Result provider = VisionProviderCard.build(view, presenter);
         final PhotoSheetsCard.Result montage = PhotoSheetsCard.build(view);
         final AppearanceCard.Result appearance = AppearanceCard.build(view, presenter);
 
-        final var status = new Label();
-        status.setWrapText(true);
-        status.getStyleClass().add("settings-save-status");
+        final Label status = header.status();
 
         provider.providerBox().getSelectionModel().selectedItemProperty().addListener((_, _, chosen) -> {
             // A refusal answers one press of Save against one set of choices. Changing the provider
@@ -109,46 +99,28 @@ final class SettingsPane {
                     .setPromptText(chosen.defaultEndpoint());
         });
 
-        final var save = new Button("Save");
-        save.setId("settings-save-button");
-        save.setOnAction(_ -> onSave(presenter, folders.workingRoot(), folders.libraryRoot(), folders.inbox(),
+        header.save().setOnAction(_ -> onSave(container, presenter, folders.workingRoot(), folders.libraryRoot(),
+                folders.inbox(),
                 VisionProviderCard.providerChoiceOf(provider.providerBox()), provider.providerFields(),
                 VisionProviderCard.watchAutomaticallyOf(provider.watchRow()), montage.tileSize().getValue(),
                 montage.tilesPerRow().getValue(), AppearanceCard.themeChoiceOf(appearance.themeBox()), status,
-                said -> refresh(container, presenter, onOpenPhotoCategories, said)));
+                said -> refresh(container, header, presenter, onOpenPhotoCategories, said)));
 
         // The secret card belongs to the provider card, not here. A node named in two parents lands
         // in whichever claimed it last, so adding it would quietly lift it out of the provider card.
-        container.getChildren().setAll(heading, folders.card(), provider.card(),
-                PhotoCategoriesCard.build(onOpenPhotoCategories), montage.card(),
-                appearance.card(), save, status);
+        container.getChildren().setAll(folders.card(), provider.card(),
+                PhotoCategoriesCard.build(onOpenPhotoCategories), montage.card(), appearance.card());
         if (banner != null) {
-            container.getChildren().add(1, savedBanner(container, banner));
+            SettingsRows.report(container, null, banner, SAVED.equals(banner));
+        }
+        if (banner != null) {
+            SettingsRows.travelToTop(container);
         }
     }
 
-    /**
-     * The strip that says a save landed, above the screen it saved.
-     *
-     * <p>At the top rather than beside the button, because a save rebuilds the page and returns the
-     * reader to the start of it. A message left at the foot would be a confirmation nobody is
-     * looking at.
-     *
-     * <p>The short confirmation leaves on its own after a few seconds, and can be dismissed before
-     * that. A confirmation that stays is still on screen the next time something goes wrong, where
-     * it reads as a claim about that. A longer report, a library move's say, stays until dismissed
-     * instead: it holds counts and a path the reader has not seen elsewhere, and four seconds is
-     * not enough to take those in.
-     *
-     * @param container {@link VBox} the pane's body, which the banner removes itself from
-     * @param text {@link String} what to say
-     * @return {@link HBox} the banner
-     */
-    private static HBox savedBanner(final VBox container, final String text) {
-        return SettingsRows.banner(container, "settings-saved-banner", text, SAVED.equals(text));
-    }
 
-    private static void onSave(final SettingsPresenter presenter, final SettingsRows.FolderRow workingRoot,
+    private static void onSave(final VBox container, final SettingsPresenter presenter,
+                               final SettingsRows.FolderRow workingRoot,
                                final SettingsRows.FolderRow libraryRoot, final SettingsRows.FolderRow inbox,
                                final SettingsView.ProviderChoice provider, final VBox providerFields,
                                final boolean watchAutomatically, final int tileSize, final int tilesPerRow,
@@ -166,8 +138,7 @@ final class SettingsPane {
                 // nothing saved yet, would otherwise be told Sluice is checking something it has
                 // not got. The line still clears either way, so a refusal from a previous press
                 // cannot sit under a save that worked.
-                status.setText(presenter.secretRow(provider.id()).hasStoredValue() ? "Checking your key..." : "");
-                status.getStyleClass().setAll("settings-save-status");
+                working(status, presenter.secretRow(provider.id()).hasStoredValue() ? "Checking your key..." : "");
                 final var task = new Task<Void>() {
                     @Override
                     protected Void call() {
@@ -184,126 +155,65 @@ final class SettingsPane {
                 SettingsRows.say(libraryRoot.violation(), refused.libraryRoot());
                 SettingsRows.say(inbox.violation(), refused.inbox());
                 SettingsRows.say(controls.modelViolation(), refused.model());
-                showRefusal(status, refused.message(), workingRoot.violation(), libraryRoot.violation(),
-                        inbox.violation(), controls.modelViolation());
+                showRefusal(container, status, refused.message(), refused.warning());
             }
             case final SaveOutcome.NeedsLibraryRootResolution needsResolution ->
-                    resolveLibraryRootMove(presenter, needsResolution, status, showBanner);
+                    LibraryRootMoveDialog.resolve(presenter, needsResolution,
+                            said -> working(status, said),
+                            moveOutcome -> reportTheMove(container, moveOutcome, status, showBanner));
         }
-    }
-
-    private static void resolveLibraryRootMove(final SettingsPresenter presenter,
-                                               final SaveOutcome.NeedsLibraryRootResolution needsResolution,
-                                               final Label status, final Consumer<String> showBanner) {
-        // Marked LEFT so the two real choices sit together on the left, apart from Cancel on the
-        // right. Centred as one row they read as three equal options, and backing out is not one
-        // of the choices.
-        final var copyAndKeep = new ButtonType("Copy the old library across", ButtonBar.ButtonData.LEFT);
-        final var startFresh = new ButtonType("Start the record fresh", ButtonBar.ButtonData.LEFT);
-        final var alert = new Alert(AlertType.CONFIRMATION, needsResolution.message(), copyAndKeep, startFresh,
-                ButtonType.CANCEL);
-        alert.setHeaderText("Moving the library root");
-        dress(alert);
-        // Restored by hand, because the LEFT placement above takes the default-button role with
-        // it. The copy is still the choice the dialog leads with, green fill and Enter both.
-        if (alert.getDialogPane().lookupButton(copyAndKeep) instanceof final Button leading) {
-            leading.setDefaultButton(true);
-        }
-        final ButtonType chosen = alert.showAndWait().orElse(ButtonType.CANCEL);
-        if (chosen == ButtonType.CANCEL) {
-            return;
-        }
-        final boolean copying = chosen == copyAndKeep;
-        status.setText("Moving the library...");
-        status.getStyleClass().setAll("settings-save-status");
-        final var task = new Task<SettingsPresenter.MoveOutcome>() {
-            @Override
-            protected SettingsPresenter.MoveOutcome call() {
-                return copying ? presenter.moveLibraryRootCopyingTheIndex(needsResolution.newLibraryRoot())
-                        : presenter.moveLibraryRootWithAFreshIndex(needsResolution.newLibraryRoot());
-            }
-        };
-        task.setOnSucceeded(_ -> {
-            final SettingsPresenter.MoveOutcome result = task.getValue();
-            if (result.succeeded()) {
-                // The outcome's own words, not the generic saved line. Each resolution says what it
-                // did with the files and the record, and that is what the user chose between. The
-                // saved line stands in only for a success with nothing of its own to report.
-                final String said = result.message();
-                showBanner.accept(said == null ? SAVED : said);
-            } else {
-                showRefusal(status, result.message());
-            }
-        });
-        task.setOnFailed(_ -> {
-            final Throwable failure = task.getException();
-            showRefusal(status, failure == null ? "The library move failed." : failure.getMessage());
-        });
-        Thread.ofVirtual().start(task);
     }
 
     /**
-     * Dresses a dialog in the look the app is wearing.
+     * Puts a refusal on the bar, beside the button that produced it.
      *
-     * <p>A dialog builds its own scene, so nothing this class dressed before covers it. What
-     * appears instead is the platform's own confirmation look: a question-mark badge, a stock
-     * title-bar icon, colours from no palette of ours. Read once rather than bound, since the
-     * dialog is modal and gone before the look can change under it.
+     * <p>The page is not moved. Save is pinned, so the reader is already looking at this line, and
+     * which field is at fault is said by the mark on that field.
      *
-     * @param alert {@link Alert} the dialog to dress
-     */
-    private static void dress(final Alert alert) {
-        alert.setGraphic(null);
-        alert.getDialogPane().getStylesheets().setAll(Stylesheet.sheetsInForce());
-        // The window is sized off label widths measured before this app's own fonts apply. A long
-        // choice then ends up wider than the room the skin reserved, and ellipsizes. Sizing hints
-        // on the buttons themselves lost that fight twice, in both directions. A floor on the pane
-        // ends it: wide enough for the three choices at their real widths, and still well inside
-        // the window the dialog covers.
-        for (final ButtonType type : alert.getDialogPane().getButtonTypes()) {
-            if (alert.getDialogPane().lookupButton(type) instanceof final Button button) {
-                ButtonBar.setButtonUniformSize(button, false);
-                button.setMinWidth(Region.USE_PREF_SIZE);
-            }
-        }
-        alert.getDialogPane().setMinWidth(600);
-        // The pane's own content label wraps or fails to by sizing arithmetic that has shifted
-        // under every width change above. A label of our own with the bound stated makes the wrap
-        // a fact rather than an outcome. The bound goes on the PREFERRED width, because that is
-        // what the window sizes itself to. A wrapping label still prefers its full single-line
-        // width. A maximum only caps the node after the window has already grown around it.
-        final var body = new Label(alert.getContentText());
-        body.setWrapText(true);
-        body.setPrefWidth(560);
-        body.setMaxWidth(560);
-        // The height half of the same fight: a wrapping label shorted on rows ellipsizes exactly
-        // like an unwrapped one. Pinning the minimum to the preferred height makes the dialog grow
-        // tall enough for every row the 560px wrap produces.
-        body.setMinHeight(Region.USE_PREF_SIZE);
-        alert.getDialogPane().setContent(body);
-        alert.setOnShowing(_ -> {
-            if (alert.getDialogPane().getScene().getWindow() instanceof final Stage stage) {
-                stage.getIcons().setAll(BrandMark.icons());
-            }
-        });
-    }
-
-    /**
-     * Puts a refusal at the foot, and takes the reader to the field that has to change.
-     *
-     * <p>Called once the rows are marked, since which field to go to is read off the marks
-     * themselves.
-     *
-     * @param status {@link Label} the line under Save
+     * @param status {@link Label} the line beside Save
      * @param message what was refused, or null where nothing was
-     * @param marks the field marks this refusal just set, in any order and none where a refusal
-     *              belongs to no field
      */
-    private static void showRefusal(final Label status, final @Nullable String message,
-                                    final Label... marks) {
-        status.setText(message == null ? "" : message);
-        status.getStyleClass().setAll("settings-save-status", "settings-violation");
-        SettingsRows.takeTheReaderToTheFault(status, marks);
+    private static void showRefusal(final VBox container, final Label status,
+                                    final @Nullable String message, final boolean warning) {
+        status.setText("");
+        status.getStyleClass().setAll("settings-save-status");
+        if (message != null) {
+            SettingsRows.report(container, warning ? "settings-banner-caution" : "settings-banner-violation",
+                    message, false);
+        }
+    }
+
+    /**
+     * Puts a finished library move on the screen, in the terms that state deserves.
+     *
+     * <p>Only a move that landed rebuilds the page. The other two leave every field exactly as the
+     * user typed it, because the save they were carrying never happened and a rebuild would read
+     * back the values on disk over the top of it.
+     *
+     * @param outcome {@link SettingsPresenter.MoveOutcome} what the move reported
+     * @param status {@link Label} the line beside Save
+     * @param showBanner {@link Consumer} of {@link String} redraws the page and says what happened
+     */
+    private static void reportTheMove(final VBox container, final SettingsPresenter.MoveOutcome outcome,
+                                      final Label status,
+                                      final Consumer<String> showBanner) {
+        switch (outcome) {
+            case final SettingsPresenter.MoveOutcome.Moved moved -> showBanner.accept(moved.message());
+            case final SettingsPresenter.MoveOutcome.NothingChanged nothing -> working(status, nothing.message());
+            case final SettingsPresenter.MoveOutcome.Failed failed ->
+                    showRefusal(container, status, failed.message(), false);
+        }
+    }
+
+    /**
+     * Says what the screen is busy with, in the line beside Save.
+     *
+     * @param status {@link Label} the line beside Save
+     * @param said {@link String} what is happening, or nothing at all
+     */
+    private static void working(final Label status, final String said) {
+        status.setText(said);
+        status.getStyleClass().setAll("settings-save-status");
     }
 
     /**

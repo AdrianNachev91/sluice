@@ -506,7 +506,7 @@ class SettingsServiceTest {
 
         assertThatThrownBy(() -> service.save(candidate))
                 .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
-                        .containsExactly(new NotAPath(PathRole.REPO_ROOT, impossible)));
+                        .containsExactly(new NotAPath(PathRole.WORKING_ROOT, impossible)));
 
         assertThat(lock.claimed).isEmpty();
     }

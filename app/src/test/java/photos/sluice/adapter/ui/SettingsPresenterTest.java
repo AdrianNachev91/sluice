@@ -11,6 +11,7 @@ import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome.CopiedAndMoved;
+import photos.sluice.application.port.in.LibraryRootMoveOutcome.CopyCancelled;
 import photos.sluice.application.port.in.LibraryRootResolution;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
@@ -199,7 +200,7 @@ class SettingsPresenterTest {
     @Test
     void anOverlapCarriesAMessageOnBothRoles() {
         final var presenter = presenterOver(settings("/repo", "/library", "/repo"), new FixedSecretStore(new Absent()),
-                violating(List.of(new Overlap(PathRole.REPO_ROOT, PathRole.INBOX))));
+                violating(List.of(new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX))));
 
         final SettingsView view = presenter.view();
         assertThat(view.workingRoot().violation()).isNotNull();
@@ -947,6 +948,23 @@ class SettingsPresenterTest {
     }
 
     @Test
+    void emptyingAConfiguredLibraryRootIsRefusedOnTheFieldRatherThanAsked() {
+        final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
+        settingsUseCase.saveFailure = new LibraryRootMoveNeedsAResolutionException(
+                Path.of("/library"), "refused, for a log");
+        final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
+
+        final var outcome = presenter.save("/repo", "", "/inbox", "anthropic", "claude-opus-5", "",
+                false, 224, 5, "SYSTEM");
+
+        assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Refused.class);
+        final var refused = (SettingsPresenter.SaveOutcome.Refused) outcome;
+        assertThat(refused.libraryRoot()).contains("cannot be left blank");
+        assertThat(refused.workingRoot()).isNull();
+        assertThat(refused.inbox()).isNull();
+    }
+
+    @Test
     void aRefusedSaveCarriesTheRefusalMessage() {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         settingsUseCase.saveFailure = new JobInProgressException("Sluice is busy");
@@ -975,11 +993,11 @@ class SettingsPresenterTest {
         final Path destination = Path.of("/new-library");
 
         final var copying = new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3));
-        presenterMoving(copying).moveLibraryRootCopyingTheIndex(destination);
+        presenterMoving(copying).moveLibraryRootCopyingTheIndex(refusedMoveTo(destination.toString()));
         assertThat(copying.received).isEqualTo(LibraryRootResolution.COPY_AND_KEEP_INDEX);
 
         final var starting = new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(0, 0));
-        presenterMoving(starting).moveLibraryRootWithAFreshIndex(destination);
+        presenterMoving(starting).moveLibraryRootWithAFreshIndex(refusedMoveTo(destination.toString()));
         assertThat(starting.received).isEqualTo(LibraryRootResolution.START_A_FRESH_INDEX);
     }
 
@@ -990,9 +1008,10 @@ class SettingsPresenterTest {
         final var presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null, null)), library,
                 new FixedSecretStore(new Absent()), noViolations(), twoProviders());
 
-        final var outcome = presenter.moveLibraryRoot(Path.of("/new-library"), LibraryRootResolution.COPY_AND_KEEP_INDEX);
+        final var outcome =
+                presenter.moveLibraryRoot(refusedMoveTo("/new-library"), LibraryRootResolution.COPY_AND_KEEP_INDEX);
 
-        assertThat(outcome.succeeded()).isTrue();
+        assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.Moved.class);
         assertThat(outcome.message()).contains("12");
     }
 
@@ -1003,10 +1022,146 @@ class SettingsPresenterTest {
         final var presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null, null)), library,
                 new FixedSecretStore(new Absent()), noViolations(), twoProviders());
 
-        final var outcome = presenter.moveLibraryRoot(Path.of("/new-library"), LibraryRootResolution.START_A_FRESH_INDEX);
+        final var outcome =
+                presenter.moveLibraryRoot(refusedMoveTo("/new-library"), LibraryRootResolution.START_A_FRESH_INDEX);
 
-        assertThat(outcome.succeeded()).isFalse();
+        assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.Failed.class);
         assertThat(outcome.message()).isEqualTo("cannot move");
+    }
+
+    @Test
+    void aMoveStoresTheRestOfTheSaveItWasAskedAbout() {
+        final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
+        final var presenter = new SettingsPresenter(settingsUseCase,
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)),
+                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        final Settings pending = settings("/new-repo", "/new-library", "/new-inbox");
+
+        final var outcome = presenter.moveLibraryRoot(
+                new SettingsPresenter.SaveOutcome.NeedsLibraryRootResolution(Path.of("/new-library"), pending,
+                        "asking"),
+                LibraryRootResolution.COPY_AND_KEEP_INDEX);
+
+        assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.Moved.class);
+        assertThat(settingsUseCase.saved).isEqualTo(pending);
+    }
+
+    @Test
+    void aCancelledCopySavesNothingAndSaysTheLibraryStayedPut() {
+        final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
+        final var presenter = new SettingsPresenter(settingsUseCase,
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopyCancelled(2, 9)),
+                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+
+        final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
+                LibraryRootResolution.COPY_AND_KEEP_INDEX);
+
+        assertThat(settingsUseCase.saved).isNull();
+        assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.NothingChanged.class);
+        assertThat(outcome.message())
+                .contains("cancelled")
+                .contains("still at its old folder")
+                .doesNotContain("Your library moved");
+    }
+
+    @Test
+    void aMoveWhoseFollowingSaveFailsSaysTheLibraryMovedAnyway() {
+        final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
+        settingsUseCase.saveFailure = new JobInProgressException("Sluice is running a job. Finish it first.");
+        final var presenter = new SettingsPresenter(settingsUseCase,
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)),
+                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+
+        final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
+                LibraryRootResolution.COPY_AND_KEEP_INDEX);
+
+        assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.Failed.class);
+        assertThat(outcome.message())
+                .contains("Your library moved")
+                .contains("Sluice is running a job");
+    }
+
+    @Test
+    void aMoveFailingWithNothingToSaySaysSoRatherThanNothing() {
+        final var library = new FailingLibraryRootUseCase(new JobRunner(), new IllegalStateException());
+        final var presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null, null)), library,
+                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+
+        final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
+                LibraryRootResolution.START_A_FRESH_INDEX);
+
+        assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.Failed.class);
+        assertThat(outcome.message())
+                .contains("The library did not move")
+                .contains("IllegalStateException");
+    }
+
+    @Test
+    void savingFolderRootsCarriesTheModelAProviderThatNeedsOneWouldBeRefusedWithout() {
+        final var settingsUseCase = new FixedSettingsUseCase(new Settings(new PathSettings(null, null, null),
+                "external-agent", Map.of(), List.of(), new ExternalAgentSettings(WatchMode.MANUAL),
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM));
+        final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
+
+        final var outcome = presenter.saveFolderRootsAndProvider("/repo", "/library", "/inbox", "anthropic");
+
+        assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Saved.class);
+        assertThat(settingsUseCase.saved).isNotNull();
+        // The catalog's own recommendation rather than any value this class could invent.
+        assertThat(settingsUseCase.saved.providerSettings("anthropic").model())
+                .isEqualTo(MODELS.recommended());
+    }
+
+    @Test
+    void savingFolderRootsStoresNoModelForAProviderThatRunsNone() {
+        final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
+        final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
+
+        presenter.saveFolderRootsAndProvider("/repo", "/library", "/inbox", "external-agent");
+
+        assertThat(settingsUseCase.saved).isNotNull();
+        assertThat(settingsUseCase.saved.providerSettings("external-agent").model()).isNull();
+    }
+
+    @Test
+    void savingFolderRootsLeavesEverySettingItDoesNotAskAboutAsItWas() {
+        final var configured = new Settings(new PathSettings(null, null, null), "external-agent",
+                Map.of("external-agent", new CullProviderSettings(null, "https://proxy.test", 7)), List.of(),
+                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(320, 4), ThemeChoice.DARK);
+        final var settingsUseCase = new FixedSettingsUseCase(configured);
+        final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
+
+        presenter.saveFolderRootsAndProvider("/repo", "/library", "/inbox", "external-agent");
+
+        assertThat(settingsUseCase.saved).isNotNull();
+        assertThat(settingsUseCase.saved.montage()).isEqualTo(new MontageConfig(320, 4));
+        assertThat(settingsUseCase.saved.theme()).isEqualTo(ThemeChoice.DARK);
+        assertThat(settingsUseCase.saved.externalAgent().mode()).isEqualTo(WatchMode.WATCH);
+        assertThat(settingsUseCase.saved.providerSettings("external-agent").endpoint())
+                .isEqualTo("https://proxy.test");
+        assertThat(settingsUseCase.saved.providerSettings("external-agent").maxRetries()).isEqualTo(7);
+    }
+
+    @Test
+    void removingAKeyAnEnvironmentVariableAlsoHoldsSaysTheProviderKeepsWorking() {
+        final var presenter = presenterOver(settings(null, null, null),
+                new FixedSecretStore(new InEnvironment("ANTHROPIC_API_KEY")));
+
+        final SettingsPresenter.SecretRemoval removal = presenter.secretRemoval("anthropic");
+
+        assertThat(removal.question()).contains("environment variable");
+        assertThat(removal.question()).doesNotContain("stop working");
+        assertThat(removal.removed()).contains("using the key in your environment");
+    }
+
+    @Test
+    void removingTheOnlyKeySaysTheProviderStopsWorking() {
+        final var presenter = presenterOver(settings(null, null, null), new FixedSecretStore(new InKeyring()));
+
+        final SettingsPresenter.SecretRemoval removal = presenter.secretRemoval("anthropic");
+
+        assertThat(removal.question()).contains("stop working");
+        assertThat(removal.removed()).contains("cannot run until you add a new key");
     }
 
     @Test
@@ -1106,6 +1261,13 @@ class SettingsPresenterTest {
                 .filter(choice -> choice.id().equals(id))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no choice offered for provider '" + id + "'"));
+    }
+
+    // The refusal a move answers, built where a save would have produced one. Only the destination
+    // and the document it carries matter to the methods under test.
+    private static SettingsPresenter.SaveOutcome.NeedsLibraryRootResolution refusedMoveTo(final String destination) {
+        return new SettingsPresenter.SaveOutcome.NeedsLibraryRootResolution(Path.of(destination),
+                settings("/repo", destination, "/inbox"), "asking");
     }
 
     private static SettingsPresenter presenterMoving(final LibraryRootUseCase libraryRoot) {

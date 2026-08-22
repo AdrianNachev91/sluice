@@ -83,12 +83,12 @@ class SluiceFxApplicationTest {
     }
 
     @Test
-    void aConfiguredInstallShowsTheOrdinaryDashboardRatherThanTheWelcomeCard(
+    void aConfiguredInstallShowsTheOrdinaryDashboardRatherThanTheFirstRunCard(
             @TempDir final Path repoRoot, @TempDir final Path libraryRoot, @TempDir final Path inbox)
             throws Exception {
         this.startApplication(repoRoot, libraryRoot, inbox);
 
-        assertThat(nodeExists(".welcome-card")).isFalse();
+        assertThat(nodeExists(".first-run-card")).isFalse();
         assertThat(paneHeadingText()).isEqualTo("Dashboard");
     }
 
@@ -195,7 +195,7 @@ class SluiceFxApplicationTest {
         new FxRobot().clickOn("#remove-setting-button");
 
         assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
-        assertThat(nodeExists(".welcome-card")).isTrue();
+        assertThat(nodeExists(".first-run-card")).isTrue();
         assertThat(Files.readString(this.configFileOrFail())).doesNotContain("tile-size");
     }
 
@@ -214,7 +214,7 @@ class SluiceFxApplicationTest {
         new FxRobot().clickOn("#set-aside-button");
 
         assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
-        assertThat(nodeExists(".welcome-card")).isTrue();
+        assertThat(nodeExists(".first-run-card")).isTrue();
         assertThat(this.configFileOrFail()).doesNotExist();
     }
 
@@ -229,7 +229,7 @@ class SluiceFxApplicationTest {
         this.startApplication();
 
         assertThat(styleClassesOfRoot()).contains("shell").doesNotContain("failure-screen");
-        assertThat(nodeExists(".welcome-card")).isTrue();
+        assertThat(nodeExists(".first-run-card")).isTrue();
     }
 
     // The stylesheet is loaded off the classpath, so it can be present in source and absent from

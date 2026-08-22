@@ -25,6 +25,7 @@
     -sluice-accent: #4fae7d;
     -sluice-danger: #e5484d;
     -sluice-banner-bg: #1b2a22;
+    -sluice-danger-bg: #2e1a1a;
     /* Its own value rather than the light sheet's. A caution colour has to carry against a dark
        card without turning into a signal lamp, and the saturation that reads as serious on white
        reads as neon here. */

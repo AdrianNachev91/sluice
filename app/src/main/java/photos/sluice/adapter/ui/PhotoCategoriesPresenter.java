@@ -51,7 +51,7 @@ public class PhotoCategoriesPresenter {
     // The same sentence the Settings screen says for the same thing, down to the wording. It names
     // no direction: the marks are on the cards, and this line sits under the last of them.
     private static final String CARDS_ARE_MARKED =
-            "These categories were not saved. What needs fixing is marked under each field that failed.";
+            "These categories were not saved. Each field that needs fixing is marked below.";
 
     // The whole examples box rather than one line of it, since the box is the control. Its own
     // per-line rule stays with the value type, which is what a save is judged against.

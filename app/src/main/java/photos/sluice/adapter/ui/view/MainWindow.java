@@ -1,21 +1,17 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
+import org.jspecify.annotations.Nullable;
+import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
-import photos.sluice.adapter.ui.ShellPresenter;
 
 import java.util.function.Supplier;
 
@@ -41,12 +37,12 @@ final class MainWindow {
      * <p>Building the shell also starts the check below, so a caller that only wants a scene is
      * still spending a call to whichever provider is configured.
      *
-     * @param presenter {@link ShellPresenter} says whether the dashboard opens on the welcome card
+     * @param presenter {@link FirstRunPresenter} says whether the dashboard opens on the first-run card
      * @param settingsPresenter {@link SettingsPresenter} supplies and drives the Settings pane
      * @param photoCategoriesPresenter {@link PhotoCategoriesPresenter} supplies and drives the photo categories pane
      * @return {@link Scene} the shell scene, styled by the base stylesheet
      */
-    static Scene scene(final ShellPresenter presenter, final SettingsPresenter settingsPresenter,
+    static Scene scene(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter,
                        final PhotoCategoriesPresenter photoCategoriesPresenter) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
@@ -57,10 +53,9 @@ final class MainWindow {
         // two disagreeing about which screen this is.
         final Runnable openSettings = settings::fire;
 
-        final Node opening = dashboardPane(presenter, openSettings);
-        opening.setId(DASHBOARD);
-        final var content = new VBox(opening);
+        final var content = new VBox();
         content.getStyleClass().add("shell-content");
+        drawDashboard(content, presenter, settingsPresenter, null);
         // A ToggleGroup lets its own selected toggle be clicked back to unselected, unlike a radio
         // group. Clicking the active nav entry would otherwise leave the sidebar showing none of
         // the three as current. Its content pane would still be the one on screen.
@@ -71,7 +66,8 @@ final class MainWindow {
         });
         dashboard.setSelected(true);
 
-        dashboard.setOnAction(_ -> show(content, DASHBOARD, () -> dashboardPane(presenter, openSettings)));
+        dashboard.setOnAction(_ -> show(content, DASHBOARD,
+                () -> dashboardPane(content, presenter, settingsPresenter, null)));
         // A screen without a sidebar entry. Settings stays the destination it was reached from and
         // stays marked as current, and Back is what leaves it.
         final Runnable openPhotoCategories = () -> show(content, PHOTO_CATEGORIES,
@@ -153,61 +149,57 @@ final class MainWindow {
     }
 
     /**
-     * The Dashboard pane: the welcome card while nothing is configured, an empty heading pane once
-     * it is.
+     * The Dashboard pane: the first-run card while any folder root is unset, an empty heading pane
+     * once all three are set.
      *
-     * @param presenter {@link ShellPresenter} says which of the two this is
-     * @return a pane ready to sit in the content area
+     * @param content {@link VBox} the content area, so a finished first run can redraw it
+     * @param presenter {@link FirstRunPresenter} says which of the two this is
+     * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
+     * @param said what the save that led here had to report, or null where nothing did
+     * @return {@link Node} a pane ready to sit in the content area
      */
-    private static Parent dashboardPane(final ShellPresenter presenter, final Runnable openSettings) {
-        return presenter.unconfigured() ? welcomeCard(openSettings) : headingPane(DASHBOARD);
+    private static Node dashboardPane(final VBox content, final FirstRunPresenter presenter,
+                                      final SettingsPresenter settingsPresenter, final @Nullable String said) {
+        if (presenter.unfinished()) {
+            return filling(FirstRunCard.pane(settingsPresenter, presenter,
+                    reported -> drawDashboard(content, presenter, settingsPresenter, reported)));
+        }
+        final var pane = headingPane(DASHBOARD);
+        if (said != null) {
+            // A report the save could not leave on the first-run card, because finishing took that
+            // card off the screen. It stays until it is dismissed. A library move says what it did
+            // with the old folder, and four seconds is not long enough to take that in.
+            pane.getChildren().addFirst(SettingsRows.banner(pane, "dashboard-banner", said, false));
+        }
+        return pane;
     }
 
     /**
-     * The card a fresh install opens on: nothing is configured yet, and this app cannot do
-     * anything until it is.
+     * Puts the Dashboard in the content area, whichever of its two states is due.
      *
-     * @param openSettings {@link Runnable} shows the Settings screen, as the sidebar would
-     * @return {@link VBox} the welcome card
+     * <p>Drawn rather than shown, because the two states share the Dashboard's own name. {@link
+     * #show} would read the card already there as the screen being asked for and leave it up.
+     *
+     * <p>A reader who has moved on is left where they are. This is called back into once a library
+     * move finishes, which can be minutes after the button was pressed, and by then the sidebar can
+     * be showing a different screen. Replacing it would leave the sidebar and the content
+     * disagreeing about which screen this is. The report is dropped with it, which is the lesser
+     * loss of the two.
+     *
+     * @param content {@link VBox} the content area, holding exactly the screen on show
+     * @param presenter {@link FirstRunPresenter} says which state the Dashboard is in
+     * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
+     * @param said what the save that led here had to report, or null where nothing did
      */
-    private static VBox welcomeCard(final Runnable openSettings) {
-        final var eyebrow = new Label("WELCOME");
-        eyebrow.getStyleClass().addAll("eyebrow", "welcome-eyebrow");
-
-        final var headline = new Label("Sluice needs to know where your photos live.");
-        headline.getStyleClass().add("welcome-headline");
-
-        final var card = new VBox(eyebrow, headline, welcomeDetail(openSettings));
-        card.getStyleClass().addAll("card", "welcome-card");
-        card.setAlignment(Pos.CENTER_LEFT);
-        return card;
-    }
-
-    /**
-     * The welcome card's own sentence, with Settings as a link to the screen it names.
-     *
-     * <p>A {@link Hyperlink} rather than coloured text. The word is the one instruction this card
-     * gives, and a reader who tried to click it was right to. It is also the control a keyboard
-     * reaches and a screen reader announces as a link, which styled text is not.
-     *
-     * @param openSettings {@link Runnable} shows the Settings screen, as the sidebar would
-     * @return {@link TextFlow} the detail line, wrapping like a label would
-     */
-    private static TextFlow welcomeDetail(final Runnable openSettings) {
-        final var before = new Text("Nothing is configured yet. Set your folders in ");
-        before.getStyleClass().add("welcome-detail-text");
-
-        final var settings = new Hyperlink(SETTINGS);
-        settings.setId("welcome-settings-link");
-        settings.getStyleClass().add("welcome-link");
-        settings.setOnAction(_ -> openSettings.run());
-
-        final var after = new Text(" to get started.");
-        after.getStyleClass().add("welcome-detail-text");
-
-        final var flow = new TextFlow(before, settings, after);
-        flow.getStyleClass().add("welcome-detail");
-        return flow;
+    private static void drawDashboard(final VBox content, final FirstRunPresenter presenter,
+                                      final SettingsPresenter settingsPresenter, final @Nullable String said) {
+        final Node current = content.getChildren().isEmpty() ? null : content.getChildren().getFirst();
+        if (current != null && !DASHBOARD.equals(current.getId())) {
+            return;
+        }
+        final Node pane = dashboardPane(content, presenter, settingsPresenter, said);
+        pane.setId(DASHBOARD);
+        content.getChildren().setAll(pane);
     }
 
     /**

@@ -36,7 +36,7 @@ class PathValidationServiceTest {
     @Test
     void nothingConfiguredNamesAllThreeRoots() {
         assertThat(validate(new PathSettings(null, null, null)))
-                .containsExactly(new NotConfigured(PathRole.REPO_ROOT), new NotConfigured(PathRole.LIBRARY_ROOT),
+                .containsExactly(new NotConfigured(PathRole.WORKING_ROOT), new NotConfigured(PathRole.LIBRARY_ROOT),
                         new NotConfigured(PathRole.INBOX));
     }
 
@@ -45,7 +45,7 @@ class PathValidationServiceTest {
         final PathSettings paths = directories(root, "work", "library", "inbox");
 
         assertThat(validate(new PathSettings("   ", paths.libraryRoot(), paths.inbox())))
-                .containsExactly(new NotConfigured(PathRole.REPO_ROOT));
+                .containsExactly(new NotConfigured(PathRole.WORKING_ROOT));
     }
 
     // A user typing a folder by hand can produce text no filesystem could ever hold. It has to come
@@ -56,7 +56,7 @@ class PathValidationServiceTest {
         final String unusable = "photos" + (char) 0;
 
         assertThat(validate(new PathSettings(unusable, paths.libraryRoot(), paths.inbox())))
-                .containsExactly(new NotAPath(PathRole.REPO_ROOT, unusable));
+                .containsExactly(new NotAPath(PathRole.WORKING_ROOT, unusable));
     }
 
     @Test
@@ -65,7 +65,7 @@ class PathValidationServiceTest {
         final Path missing = root.resolve("gone");
 
         assertThat(validate(new PathSettings(missing.toString(), paths.libraryRoot(), paths.inbox())))
-                .containsExactly(new NotADirectory(PathRole.REPO_ROOT, missing));
+                .containsExactly(new NotADirectory(PathRole.WORKING_ROOT, missing));
     }
 
     @Test
@@ -104,13 +104,13 @@ class PathValidationServiceTest {
         assertThat(validate(paths)).containsExactly(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX));
 
         assertThat(new PathValidationService(refusingToResolve(workingRoot), unconfiguredHolder()).violations(paths))
-                .containsExactly(new Unreadable(PathRole.REPO_ROOT, workingRoot));
+                .containsExactly(new Unreadable(PathRole.WORKING_ROOT, workingRoot));
     }
 
     @Test
     void aRelativeValueIsResolvedBeforeBeingReported() {
         assertThat(validate(new PathSettings("no-such-folder", null, null)))
-                .contains(new NotADirectory(PathRole.REPO_ROOT, Path.of("no-such-folder").toAbsolutePath()));
+                .contains(new NotADirectory(PathRole.WORKING_ROOT, Path.of("no-such-folder").toAbsolutePath()));
     }
 
     @Test
@@ -147,7 +147,7 @@ class PathValidationServiceTest {
         final Path shared = Files.createDirectories(root.resolve("shared"));
 
         assertThat(validate(new PathSettings(null, shared.toString(), shared.toString())))
-                .containsExactly(new NotConfigured(PathRole.REPO_ROOT));
+                .containsExactly(new NotConfigured(PathRole.WORKING_ROOT));
     }
 
     @Test
@@ -159,7 +159,7 @@ class PathValidationServiceTest {
 
         holder.apply(SettingsFixture.settings(new PathSettings(null, paths.libraryRoot(), paths.inbox())));
 
-        assertThat(service.violationsInForce()).containsExactly(new NotConfigured(PathRole.REPO_ROOT));
+        assertThat(service.violationsInForce()).containsExactly(new NotConfigured(PathRole.WORKING_ROOT));
     }
 
     private static PathSettings directories(final Path root, final String repoRoot, final String libraryRoot,

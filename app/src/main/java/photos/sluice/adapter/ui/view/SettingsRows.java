@@ -10,6 +10,7 @@ import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
+import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -17,8 +18,12 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.control.TextInputControl;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
@@ -31,9 +36,6 @@ import photos.sluice.adapter.ui.SettingsView;
 import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Optional;
 
 /**
  * The row and card vocabulary every Settings card is built from. Cards, labelled rows, help and
@@ -55,6 +57,14 @@ final class SettingsRows {
     // Long enough to read as travel rather than a jump, short enough that a reader adding several
     // cards is never waiting on it.
     private static final Duration SCROLL_TRAVEL = Duration.millis(180);
+
+    // Marks a spinner as mid-number. Held on the control itself, since it is the control that knows
+    // and every page asking the question has one to hand.
+    private static final String TYPED_INTO = "typedInto";
+
+    // The one slot a page reports a save in. Named rather than per-tone, so a refusal replaces a
+    // confirmation instead of standing beside one.
+    static final String REPORT = "settings-report-banner";
 
     // Where the two parts of a ring glyph's mark sit, measured from the ring's centre. A dot of
     // radius 1 and a stem 6 tall, two apart, span ten. So the far edge of each sits five out, and
@@ -90,6 +100,59 @@ final class SettingsRows {
     }
 
     /**
+     * Has a spinner keep track of whether the reader is in its text or on its arrows.
+     *
+     * <p>A spinner reports itself as holding focus in both cases, never its editor, so nothing about
+     * the focus owner separates them. It has to remember which the reader last reached for.
+     *
+     * <p>A press inside the text puts the caret there, which is enough on its own: the reader is in
+     * the field whether or not they have typed a character yet. A press on an arrow, or either
+     * arrow key, is the other case, and the value it lands on is whole at every step.
+     *
+     * <p>Filters rather than handlers. The editor consumes a typed character before the spinner's
+     * own handlers run, so listening on the way up hears nothing.
+     *
+     * @param spinner {@link Spinner} the field to watch
+     */
+    private static void rememberWhichInputItLastTook(final Spinner<Integer> spinner) {
+        spinner.addEventFilter(KeyEvent.KEY_TYPED, _ -> spinner.getProperties().put(TYPED_INTO, true));
+        spinner.addEventFilter(KeyEvent.KEY_PRESSED, pressed -> {
+            if (pressed.getCode() == KeyCode.UP || pressed.getCode() == KeyCode.DOWN) {
+                spinner.getProperties().put(TYPED_INTO, false);
+            }
+        });
+        spinner.addEventFilter(MouseEvent.MOUSE_PRESSED, pressed ->
+                spinner.getProperties().put(TYPED_INTO,
+                        pressed.getTarget() instanceof final Node hit && inside(hit, spinner.getEditor())));
+    }
+
+    /**
+     * Whether a reader is partway through typing a number into this spinner.
+     *
+     * @param spinner {@link Spinner} the field to ask
+     * @return boolean true while the last thing it took was a typed character
+     */
+    static boolean beingTypedInto(final Spinner<?> spinner) {
+        return Boolean.TRUE.equals(spinner.getProperties().get(TYPED_INTO));
+    }
+
+    /**
+     * Whether one node is another, or sits within it.
+     *
+     * @param node {@link Node} where the press landed
+     * @param within {@link Node} the part being asked about
+     * @return boolean true when the press was inside it
+     */
+    private static boolean inside(final Node node, final Node within) {
+        for (Node walk = node; walk != null; walk = walk.getParent()) {
+            if (walk == within) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * A page's body in the pane that scrolls it. Both settings pages are built this way, so the
      * one that is reached from the other does not arrive with different chrome.
      *
@@ -107,17 +170,60 @@ final class SettingsRows {
     }
 
     /**
-     * Puts a page back at its top, for a save that has just rebuilt it.
+     * Puts a report at the head of a page, in the tone the outcome deserves.
      *
-     * <p>Instant rather than travelled. The banner saying the save took is already drawn up there,
-     * and a reader who pressed Save at the foot should find it waiting rather than watch the page
-     * arrive. Asked for outright, because a rebuild only happens to reset the scroll position.
+     * <p>Every outcome of a save is said the same way, so none of them reads as less finished than
+     * the others. A refusal left on its own line in the header was the one report with no ground of
+     * its own.
+     *
+     * <p>Replaces whatever this page was saying before. Two reports of the same save stacked up
+     * would leave the reader deciding which one is current.
+     *
+     * <p>A refusal and a caution stay until they are dismissed. Only a plain confirmation fades: it
+     * says a thing the reader already knows they asked for, and there is nothing in it to act on.
+     *
+     * @param body {@link VBox} the page's own scrolling body
+     * @param tone the style class saying which kind of report this is, or null for a plain
+     *     confirmation
+     * @param message {@link String} what to say
+     * @param fades boolean whether it leaves on its own after a few seconds
+     */
+    static void report(final VBox body, final @Nullable String tone, final String message,
+                       final boolean fades) {
+        clearReport(body);
+        final HBox said = banner(body, REPORT, message, fades);
+        if (tone != null) {
+            said.getStyleClass().add(tone);
+        }
+        body.getChildren().addFirst(said);
+        travelToTop(body);
+    }
+
+    /**
+     * Takes whatever a page was last saying off it.
      *
      * @param body {@link VBox} the page's own scrolling body
      */
-    static void backToTop(final VBox body) {
+    static void clearReport(final VBox body) {
+        body.getChildren().removeIf(node -> REPORT.equals(node.getId()));
+    }
+
+    /**
+     * Carries the reader up to the top of the page.
+     *
+     * <p>Travelled rather than jumped, so a save reads as the page moving rather than as a
+     * different screen appearing.
+     *
+     * <p>Nothing puts the reader back where they were first. A scrolling pane keeps its own place
+     * across a rebuild, adjusting what it holds so the same contents stay in view, and it clamps
+     * to the end when the new page is too short to reach the old position. Both are what a reader
+     * would expect, so the movement starts from where they actually are.
+     *
+     * @param body {@link VBox} the page's own scrolling body
+     */
+    static void travelToTop(final VBox body) {
         if (body.getProperties().get(SCROLL) instanceof final ScrollPane scroll) {
-            scroll.setVvalue(0);
+            travelTo(scroll, 0);
         }
     }
 
@@ -134,68 +240,66 @@ final class SettingsRows {
      * @param node {@link Node} the thing just added
      */
     static void bringIntoView(final Node node) {
-        scrollTo(node, node, true);
-    }
-
-    /**
-     * Puts the topmost thing this refusal marked at the top of the view, or the summary when it
-     * marked nothing.
-     *
-     * <p>A refused save does not rebuild the screen, so nothing moves on its own. Save sits at the
-     * foot, so the reader is already at the bottom when they press it, and the field the refusal is
-     * about is usually somewhere above. Left alone, a refusal marks a row nobody is looking at.
-     *
-     * <p>The summary is the destination only when nothing else is, because it says what needs
-     * fixing is marked under the fields. Sending someone down to read that, when there is a mark
-     * above, points them the wrong way.
-     *
-     * <p>Jumped rather than travelled. This is a correction, not an arrival, and it has to be there
-     * the moment the reader looks up.
-     *
-     * @param summary {@link Label} the page-level message, and the last resort to scroll to
-     * @param marks the field marks this refusal set
-     */
-    static void takeTheReaderToTheFault(final Label summary, final Label... marks) {
-        scrollTo(summary, topmostMarkedRow(marks).orElse(summary), false);
+        scrollTo(node, node);
     }
 
     /**
      * Scrolls the body holding one node until another sits at the top of the view.
      *
+     * <p>Travelled rather than jumped. Every caller is an arrival at something the reader asked
+     * for, so the movement is what tells them where it came from.
+     *
      * @param inBody {@link Node} anything inside the scrolling body, used to find what scrolls
      * @param target {@link Node} what to bring to the top
-     * @param travelled boolean whether to move there over time rather than arrive at once
      */
-    private static void scrollTo(final Node inBody, final Node target, final boolean travelled) {
+    private static void scrollTo(final Node inBody, final Node target) {
         final Parent body = bodyOf(inBody);
         if (body == null || !(body.getProperties().get(SCROLL) instanceof final ScrollPane scroll)) {
             return;
         }
-        // A mark's own row has no height until the mark is measured, and a page that has just grown
-        // is taller than the layout every position below the new node was read off.
+        // A page that has just grown is taller than the layout every position below the new node
+        // was read off.
         scroll.applyCss();
         scroll.layout();
-        final double scrollable =
-                body.getBoundsInLocal().getHeight() - scroll.getViewportBounds().getHeight();
+        final double scrollable = scrollableIn(body, scroll);
         if (scrollable <= 0) {
             return;
         }
         final double top = body.sceneToLocal(target.localToScene(target.getBoundsInLocal())).getMinY();
-        final double at = Math.clamp(top / scrollable, 0, 1) * scroll.getVmax();
-        if (travelled) {
-            new Timeline(new KeyFrame(SCROLL_TRAVEL,
-                    new KeyValue(scroll.vvalueProperty(), at, Interpolator.EASE_BOTH))).play();
-        } else {
-            scroll.setVvalue(at);
-        }
+        travelTo(scroll, Math.clamp(top / scrollable, 0, 1) * scroll.getVmax());
     }
 
     /**
-     * The scrolling body the summary sits in, however deeply it is nested.
+     * Moves a pane to a position over {@link #SCROLL_TRAVEL} rather than at once.
      *
-     * <p>Settings puts the summary straight on the body; the categories page puts it below a row of
-     * buttons. Walking up until the scroll marker turns up covers both without either page having
-     * to say how deep it built.
+     * @param scroll {@link ScrollPane} what to move
+     * @param at double the vvalue to arrive at
+     */
+    private static void travelTo(final ScrollPane scroll, final double at) {
+        // A page already there would otherwise run an animation that shows nothing, and hold the
+        // reader for its duration before whatever comes next.
+        if (scroll.getVvalue() == at) {
+            return;
+        }
+        new Timeline(new KeyFrame(SCROLL_TRAVEL,
+                new KeyValue(scroll.vvalueProperty(), at, Interpolator.EASE_BOTH))).play();
+    }
+
+    /**
+     * How many pixels of a page sit outside the view.
+     *
+     * @param body {@link Parent} the scrolling body
+     * @param scroll {@link ScrollPane} the pane holding it
+     * @return double the scrollable height, zero or less where the page fits
+     */
+    private static double scrollableIn(final Parent body, final ScrollPane scroll) {
+        return body.getBoundsInLocal().getHeight() - scroll.getViewportBounds().getHeight();
+    }
+
+    /**
+     * The scrolling body a node sits in, however deeply it is nested.
+     *
+     * <p>Walking up until the scroll marker turns up means no page has to say how deep it built.
      *
      * @param from {@link Node} where to start walking up
      * @return {@link Parent} the body carrying the scroll marker, or null when there is none
@@ -207,28 +311,6 @@ final class SettingsRows {
             }
         }
         return null;
-    }
-
-    /**
-     * The highest row on the page carrying one of these marks.
-     *
-     * <p>Ordered by where each one ended up rather than by the order they were checked in. A row
-     * moving on the page then cannot leave this pointing at the wrong one. A mark with nothing to
-     * say is invisible, which is what keeps a cleared row out of the answer.
-     *
-     * <p>Only the marks handed in are candidates. Other things on a screen say what is wrong in the
-     * same words and the same red. A stale one of those is not where a refused save should send
-     * anybody.
-     *
-     * @param marks the field marks this refusal set
-     * @return {@link Optional} of {@link Node} the row to scroll to, empty where none is marked
-     */
-    private static Optional<Node> topmostMarkedRow(final Label... marks) {
-        return Arrays.stream(marks)
-                .filter(Node::isVisible)
-                .map(Node::getParent)
-                .min(Comparator.comparingDouble(row -> row.localToScene(row.getBoundsInLocal()).getMinY()))
-                .map(Node.class::cast);
     }
 
     /**
@@ -298,14 +380,16 @@ final class SettingsRows {
     record FolderRow(VBox row, TextField field, Label violation) {
     }
 
-    static FolderRow folderRow(final String label, final String id, final SettingsView.FolderField field,
-                               final int limit) {
+    static FolderRow folderRow(final String label, final String explanation, final String id,
+                               final SettingsView.FolderField field, final int limit) {
         final var text = new TextField(field.value());
         holdTo(text, limit);
         text.setId(id);
         text.setPromptText(field.suggestion());
 
-        final var fieldRow = new HBox(text, browseButton(text, field.suggestion()));
+        acceptSuggestionOnArrowRight(text, field.suggestion());
+        final var fieldRow = new HBox(text, useSuggestedButton(text, field.suggestion()),
+                browseButton(text, field.suggestion()));
         fieldRow.getStyleClass().add("settings-field-row");
         // A folder path is as long as it is, and the ones a user cares about are the long ones. The
         // field takes whatever width the row has left rather than truncating at a default.
@@ -315,9 +399,77 @@ final class SettingsRows {
         markWhileSomethingIsWrong(text, violation);
         say(violation, field.violation());
 
-        final var children = new VBox(fieldLabel(label), fieldRow, violation);
+        final var children = new VBox(fieldLabel(label), helpLine(explanation), fieldRow, violation);
         children.getStyleClass().add("settings-row");
         return new FolderRow(children, text, violation);
+    }
+
+    /**
+     * A button that takes the folder this row suggests, for a reader who would rather click than
+     * type it out.
+     *
+     * <p>Disabled once the field holds anything, rather than appearing and disappearing. A control
+     * that comes and goes resizes the field beside it on the first character typed.
+     *
+     * <p>Suggested, never "default". These roots have no configured default at all, which is why an
+     * install with none set meets the first-run card instead of running against guessed folders.
+     * A button calling them defaults would claim a property the app does not have.
+     *
+     * @param text {@link TextField} the field to fill
+     * @param suggestion {@link String} the folder this row suggests
+     * @return {@link Button} the button
+     */
+    private static Button useSuggestedButton(final TextField text, final String suggestion) {
+        final var use = new Button("Use suggested");
+        use.getStyleClass().add("button-suggest");
+        use.disableProperty().bind(text.textProperty().isNotEmpty());
+        use.setOnAction(_ -> text.setText(suggestion));
+        return use;
+    }
+
+    /**
+     * Takes the suggestion on the key a reader would already try for ghost text.
+     *
+     * <p>Right and End, never Tab. Tab moves focus, and a form whose fields fill themselves as
+     * somebody tabs past would configure folders nobody chose. Both keys do nothing in an empty
+     * field otherwise, so neither is taken away from anything.
+     *
+     * <p>Only while the field is empty. Once it holds a path, Right and End are how a reader moves
+     * around inside it.
+     *
+     * @param text {@link TextField} the field to fill
+     * @param suggestion {@link String} the folder this row suggests
+     */
+    private static void acceptSuggestionOnArrowRight(final TextField text, final String suggestion) {
+        text.addEventFilter(KeyEvent.KEY_PRESSED, key -> {
+            if (text.getText().isEmpty() && (key.getCode() == KeyCode.RIGHT || key.getCode() == KeyCode.END)) {
+                text.setText(suggestion);
+                text.positionCaret(suggestion.length());
+                key.consume();
+            }
+        });
+    }
+
+    /**
+     * The line saying what the mark on those field names means.
+     *
+     * <p>Said as a sentence rather than marked on each row. A mark on a field means a form will
+     * not submit without it, and this one does: the folders can be filled in over several saves.
+     * What is actually true is that nothing runs until all three are set, and this is where that is
+     * said.
+     *
+     * <p>Placed by whichever card draws the rows, and never further away than the rows themselves.
+     * A mark whose legend is on another screen explains nothing.
+     *
+     * @return {@link Label} the legend
+     */
+    static Label requiredLegend() {
+        final var legend = new Label("Sluice cannot start any work on your photos until all three are "
+                + "set. You can fill them in one at a time and save as you go.");
+        legend.setWrapText(true);
+        legend.setId("folder-roots-required-legend");
+        legend.getStyleClass().add("settings-required-legend");
+        return legend;
     }
 
     /**
@@ -493,6 +645,29 @@ final class SettingsRows {
         return sized(new StackPane(ring, dot, stem));
     }
 
+    /**
+     * Puts a block of text on the info ground, with the mark standing on its top-left corner.
+     *
+     * <p>The mark sits on the border rather than inside the box. Inside, it takes a column of the
+     * first line and leaves every line after it indented past nothing. It carries the card's own
+     * colour, which is what lets it break the border it stands on instead of printing over it.
+     *
+     * @param content {@link Region} what the box holds
+     * @return {@link Node} the box, ready to sit in a card
+     */
+    static Node badgedCallout(final Region content) {
+        content.getStyleClass().add("settings-callout");
+        final StackPane badge = infoGlyph();
+        badge.getStyleClass().add("callout-badge");
+        final var framed = new StackPane(content, badge);
+        StackPane.setAlignment(badge, Pos.TOP_LEFT);
+        StackPane.setMargin(badge, new Insets(-8, 0, 0, 13));
+        // A box with something standing on its edge needs room above it, or the badge reads as
+        // belonging to whatever line sits there.
+        VBox.setMargin(framed, new Insets(12, 0, 0, 0));
+        return framed;
+    }
+
     static Label overrideLabel(final String text) {
         final var label = new Label(text);
         label.setWrapText(true);
@@ -537,6 +712,7 @@ final class SettingsRows {
     static Spinner<Integer> numberField(final SettingsView.NumberRange range, final int value) {
         final var spinner = new Spinner<Integer>(range.least(), range.most(), value, range.step());
         spinner.setEditable(true);
+        rememberWhichInputItLastTook(spinner);
         final int digits = String.valueOf(range.most()).length();
         spinner.getEditor().setTextFormatter(new TextFormatter<>(change -> {
             final String proposed = change.getControlNewText();
@@ -610,7 +786,7 @@ final class SettingsRows {
      */
     private static Button browseButton(final TextField text, final String suggestion) {
         final var browse = new Button("Browse...");
-        browse.getStyleClass().add("button-quiet");
+        browse.getStyleClass().add("button-last-resort");
         browse.setOnAction(_ -> {
             final var chooser = new DirectoryChooser();
             final File initial = nearestExistingFolder(text.getText().isBlank() ? suggestion : text.getText());

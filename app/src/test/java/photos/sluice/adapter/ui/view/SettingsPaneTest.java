@@ -2,10 +2,9 @@ package photos.sluice.adapter.ui.view;
 
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
-import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
-import javafx.stage.Window;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -34,15 +33,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.answerDialog;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.built;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.oneStoredKey;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onlyRefusingOneFolder;
-import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportIsARefusal;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportText;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.threeProviders;
 
@@ -78,10 +80,10 @@ class SettingsPaneTest {
         };
         final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
 
-        final var saveFired = WaitForAsyncUtils.asyncFx(() -> ((Button) pane.lookup("#settings-save-button")).fire());
-        answerLibraryMoveDialog("Copy the old library across");
+        final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
+        answerDialog("Copy the old library across");
         saveFired.get(10, TimeUnit.SECONDS);
-        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> pane.lookup("#settings-saved-banner") != null);
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> pane.lookup("#settings-report-banner") != null);
 
         assertThat(received).containsExactly(LibraryRootResolution.COPY_AND_KEEP_INDEX);
         assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("Copied 5 file(s) into the new library. "
@@ -98,10 +100,10 @@ class SettingsPaneTest {
         };
         final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
 
-        final var saveFired = WaitForAsyncUtils.asyncFx(() -> ((Button) pane.lookup("#settings-save-button")).fire());
-        answerLibraryMoveDialog("Start the record fresh");
+        final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
+        answerDialog("Start the record fresh");
         saveFired.get(10, TimeUnit.SECONDS);
-        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> pane.lookup("#settings-saved-banner") != null);
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> pane.lookup("#settings-report-banner") != null);
 
         assertThat(received).containsExactly(LibraryRootResolution.START_A_FRESH_INDEX);
         assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("The library root moved. Sluice had no record "
@@ -122,8 +124,8 @@ class SettingsPaneTest {
         };
         final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
 
-        final var saveFired = WaitForAsyncUtils.asyncFx(() -> ((Button) pane.lookup("#settings-save-button")).fire());
-        answerLibraryMoveDialog("Cancel");
+        final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
+        answerDialog("Cancel");
         saveFired.get(10, TimeUnit.SECONDS);
 
         assertThatThrownBy(() -> WaitForAsyncUtils.waitFor(500, TimeUnit.MILLISECONDS, () -> !received.isEmpty()))
@@ -131,7 +133,7 @@ class SettingsPaneTest {
         // A false positive: the IDE infers lookup() cannot answer null through onFxThread's generic
         // return, which is exactly what this assertion is proving otherwise.
         //noinspection DataFlowIssue
-        assertThat(onFxThread(() -> pane.lookup("#settings-saved-banner"))).isNull();
+        assertThat(onFxThread(() -> pane.lookup("#settings-report-banner"))).isNull();
     }
 
     // Not the failure handler. SettingsPresenter.moveLibraryRoot catches every RuntimeException a
@@ -139,60 +141,44 @@ class SettingsPaneTest {
     // reaches task.setOnFailed through this presenter. This is the succeeded()-but-failed branch of
     // setOnSucceeded instead: the move ran, and what it ran into is the outcome, not a thrown one.
     @Test
-    void aRefusedMoveShowsARefusalRatherThanABanner() throws Exception {
+    void aFailedMoveIsReportedAsARefusalRatherThanAConfirmation() throws Exception {
         final var jobRunner = new JobRunner();
         final LibraryRootUseCase library = (_, _) -> jobRunner.submit(_ -> {
             throw new IllegalStateException("cannot move: disk full");
         });
         final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
 
-        final var saveFired = WaitForAsyncUtils.asyncFx(() -> ((Button) pane.lookup("#settings-save-button")).fire());
-        answerLibraryMoveDialog("Copy the old library across");
+        final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
+        answerDialog("Copy the old library across");
         saveFired.get(10, TimeUnit.SECONDS);
-        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS,
-                () -> textsOfClass(pane, "settings-save-status").stream().anyMatch(text -> text.contains("disk full")));
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> reportText(pane).contains("disk full"));
 
-        assertThat(pane.lookup("#settings-saved-banner")).isNull();
+        assertThat(reportIsARefusal(pane)).isTrue();
+    }
+
+    // Types a library root other than the one in force, which is the only thing that raises the
+    // question this dialog exists to ask, then presses Save.
+    private static void saveMovingTheLibraryRoot(final Parent pane) {
+        ((TextField) pane.lookup("#settings-library-root")).setText("D:\\moved-library");
+        ((Button) pane.lookup("#settings-save-button")).fire();
     }
 
     private static String bannerText(final Parent pane) {
-        final var banner = (HBox) pane.lookup("#settings-saved-banner");
+        final var banner = (HBox) pane.lookup("#settings-report-banner");
         return ((Label) banner.getChildren().getFirst()).getText();
     }
 
-    // Polls from the test thread, since the FX thread is inside the dialog's own nested event loop
-    // and cannot itself answer a lookup. A Platform.runLater task queued from any thread still runs
-    // during that loop, which is what lets this method reach in and press one of its buttons.
-    private static void answerLibraryMoveDialog(final String buttonText) throws Exception {
-        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> currentDialogPane().isPresent());
-        runOnFxThread(() -> {
-            final DialogPane dialogPane = currentDialogPane().orElseThrow();
-            dialogPane.applyCss();
-            dialogPane.layout();
-            final Button button = dialogPane.lookupAll(".button").stream()
-                    .map(Button.class::cast)
-                    .filter(candidate -> buttonText.equals(candidate.getText()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("no dialog button labelled '" + buttonText + "'"));
-            button.fire();
-        });
-    }
-
-    private static Optional<DialogPane> currentDialogPane() {
-        return Window.getWindows().stream()
-                .filter(Window::isShowing)
-                .map(Window::getScene)
-                .filter(scene -> scene != null && scene.getRoot() instanceof DialogPane)
-                .map(scene -> (DialogPane) scene.getRoot())
-                .findFirst();
-    }
-
-    // Its own settings use case rather than a shared fixture: this is the one save that must throw
-    // the resolution exception rather than succeed or refuse.
+    // Its own settings use case rather than a shared fixture: this is the one save that must ask for
+    // a resolution rather than succeed or refuse.
+    //
+    // It refuses while the library root being saved differs from the one in force, which is the real
+    // seam's own rule. A double that refused every save would also refuse the save the presenter
+    // makes after the move, and that save is what keeps the rest of what the user was storing.
     private static SettingsPresenter presenterNeedingLibraryRootResolution(final LibraryRootUseCase libraryRoot) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+        final var libraryRootInForce = new AtomicReference<>("D:\\library");
         final var useCase = new SettingsUseCase() {
             @Override
             public Settings settings() {
@@ -206,10 +192,20 @@ class SettingsPaneTest {
 
             @Override
             public void save(final Settings toSave) {
-                throw new LibraryRootMoveNeedsAResolutionException(Path.of("D:\\library"),
-                        "sluice.paths.library-root would move");
+                if (!libraryRootInForce.get().equals(toSave.paths().libraryRoot())) {
+                    throw new LibraryRootMoveNeedsAResolutionException(Path.of(libraryRootInForce.get()),
+                            "sluice.paths.library-root would move");
+                }
             }
         };
-        return new SettingsPresenter(useCase, libraryRoot, oneStoredKey(), onlyRefusingOneFolder(), threeProviders());
+        // The move is what puts the new root in force, so the save after it has nothing left to ask
+        // about. Recorded when the job is submitted rather than when it finishes, since the
+        // presenter joins that job before saving and nothing else reads this in between.
+        final LibraryRootUseCase moving = (newLibraryRoot, resolution) -> {
+            final var handle = libraryRoot.moveLibraryRoot(newLibraryRoot, resolution);
+            libraryRootInForce.set(newLibraryRoot.toString());
+            return handle;
+        };
+        return new SettingsPresenter(useCase, moving, oneStoredKey(), onlyRefusingOneFolder(), threeProviders());
     }
 }

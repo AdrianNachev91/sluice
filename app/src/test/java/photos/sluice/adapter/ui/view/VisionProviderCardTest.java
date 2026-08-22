@@ -47,6 +47,7 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.ANTHROPIC_KE
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.MODELS;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.REFUSED;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.SETUP_GUIDE;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.answerDialog;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.built;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.builtInAWindowThatScrolls;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.inView;
@@ -56,6 +57,7 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onlyRefusing
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.presenterOn;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.refusingLibraryRootUseCase;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.rowOf;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.scrollOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.settingsUseCase;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
@@ -110,11 +112,12 @@ class VisionProviderCardTest {
     void theApiKeyBlockFollowsTheChosenProviderRatherThanTheSavedOne() throws Exception {
         final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
 
-        assertThat(buttonsIn(pane.lookup("#settings-api-key"))).contains("Replace");
+        assertThat(buttonsIn(pane.lookup("#settings-api-key"))).contains("Replace key");
 
         runOnFxThread(() -> select(pane, "other-api"));
 
-        assertThat(buttonsIn(pane.lookup("#settings-api-key"))).contains("Save").doesNotContain("Replace");
+        assertThat(buttonsIn(pane.lookup("#settings-api-key")))
+                .contains("Activate key").doesNotContain("Replace key");
     }
 
     // Unlike a text field, the model picker cannot carry an arbitrary unsaved value across a
@@ -404,9 +407,30 @@ class VisionProviderCardTest {
     void removingAKeySaysSoToo() throws Exception {
         final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
 
-        runOnFxThread(() -> ((Button) pane.lookup("#settings-api-key-remove")).fire());
+        final var pressed = WaitForAsyncUtils.asyncFx(
+                () -> ((Button) pane.lookup("#settings-api-key-remove")).fire());
+        answerDialog("Remove key");
+        pressed.get(10, TimeUnit.SECONDS);
 
-        assertThat(textsOfClass(pane, "settings-confirmation")).contains("API key removed.");
+        assertThat(textsOfClass(pane, "settings-confirmation"))
+                .anyMatch(text -> text.startsWith("Your key is removed."));
+    }
+
+    @Test
+    void cancellingTheConfirmRemovesNothing() throws Exception {
+        final var checks = new AtomicInteger(0);
+        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> {
+            checks.incrementAndGet();
+            return new ProviderCheck.NoCredential();
+        })));
+
+        final var pressed = WaitForAsyncUtils.asyncFx(
+                () -> ((Button) pane.lookup("#settings-api-key-remove")).fire());
+        answerDialog("Keep it");
+        pressed.get(10, TimeUnit.SECONDS);
+
+        assertThat(checks.get()).isZero();
+        assertThat(textsOfClass(pane, "settings-confirmation")).isEmpty();
     }
 
     // A stored key changes which models this account can actually run. A save has to ask the
@@ -439,7 +463,10 @@ class VisionProviderCardTest {
             return new ProviderCheck.NoCredential();
         })));
 
-        runOnFxThread(() -> ((Button) pane.lookup("#settings-api-key-remove")).fire());
+        final var pressed = WaitForAsyncUtils.asyncFx(
+                () -> ((Button) pane.lookup("#settings-api-key-remove")).fire());
+        answerDialog("Remove key");
+        pressed.get(10, TimeUnit.SECONDS);
         WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> checks.get() > 0);
 
         assertThat(checks.get()).isEqualTo(1);
@@ -456,30 +483,31 @@ class VisionProviderCardTest {
         });
         final var model = modelBox(pane);
         assertThat(textsOfClass(pane, "settings-violation")).isNotEmpty();
-        assertThat(textsOfClass(pane, "settings-save-status")).anyMatch(text -> !text.isEmpty());
+        assertThat(pane.lookup("#settings-report-banner")).isNotNull();
         assertThat(model.getPseudoClassStates()).contains(REFUSED);
 
         runOnFxThread(() -> select(pane, "external-agent"));
 
         assertThat(textsOfClass(pane, "settings-violation")).isEmpty();
-        assertThat(textsOfClass(pane, "settings-save-status")).allMatch(String::isEmpty);
         assertThat(model.getPseudoClassStates()).doesNotContain(REFUSED);
     }
 
     @Test
-    void aSaveRefusedForABlankModelBringsTheModelIntoView() throws Exception {
-        final var pane = (ScrollPane) onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic")));
-        final Node row = rowOf(pane, "#settings-model");
-        runOnFxThread(() -> pane.setVvalue(pane.getVmax()));
-        assertThat(inView(pane, row)).isFalse();
+    void aSaveRefusedForABlankModelDoesNotTravelToTheModelRow() throws Exception {
+        final Parent page = onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic")));
+        final ScrollPane scroll = scrollOf(page);
+        final Node row = rowOf(scroll, "#settings-model");
+        runOnFxThread(() -> scroll.setVvalue(scroll.getVmax()));
+        assertThat(inView(scroll, row)).isFalse();
 
         runOnFxThread(() -> {
-            clearModelSelection(pane);
-            ((Button) pane.lookup("#settings-save-button")).fire();
+            clearModelSelection(page);
+            ((Button) page.lookup("#settings-save-button")).fire();
         });
         WaitForAsyncUtils.waitForFxEvents();
 
-        assertThat(inView(pane, row)).isTrue();
+        assertThat(inView(scroll, row)).isFalse();
+        assertThat(modelBox(page).getPseudoClassStates()).contains(REFUSED);
     }
 
     private static String chosenProvider(final Parent pane) {
@@ -563,10 +591,14 @@ class VisionProviderCardTest {
 
     // How far the mark's centre sits from the ring's, in the pane both are laid out in. Measured
     // off the built scene rather than off the numbers, so a change to either shape is caught.
+    // Scoped to the ring's own glyph. More than one info glyph can stand on a screen, and a lookup
+    // across the whole pane would measure one ring against another glyph's marks.
     private static double markOffsetWithinRing(final Parent pane, final String glyph) {
         final Node ring = pane.lookup("." + glyph + "-ring");
-        final List<Node> mark = List.copyOf(pane.lookupAll("." + glyph + "-mark"));
         assertThat(ring).isNotNull();
+        final List<Node> mark = ((Parent) ring.getParent()).getChildrenUnmodifiable().stream()
+                .filter(node -> node.getStyleClass().contains(glyph + "-mark"))
+                .toList();
         assertThat(mark).hasSize(2);
         final double top = mark.stream().mapToDouble(part -> part.getBoundsInParent().getMinY()).min().orElseThrow();
         final double bottom = mark.stream().mapToDouble(part -> part.getBoundsInParent().getMaxY()).max().orElseThrow();

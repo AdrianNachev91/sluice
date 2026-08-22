@@ -5,10 +5,14 @@ import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
@@ -88,6 +92,24 @@ final class SettingsPaneTestSupport {
     // about bringing something into view cannot be made either way.
     static Parent builtInAWindowThatScrolls(final SettingsPresenter presenter) {
         return built(presenter, 300);
+    }
+
+    // The body that scrolls, inside the page that pins a header over it.
+    // Every screen reports a save in one banner slot, whatever the outcome. The tone is what
+    // separates a confirmation from a refusal, so a test that only reads the words proves half of
+    // what it claims.
+    static String reportText(final Parent pane) {
+        final var banner = (HBox) pane.lookup("#settings-report-banner");
+        return banner == null ? "" : ((Label) banner.lookup(".label")).getText();
+    }
+
+    static boolean reportIsARefusal(final Parent pane) {
+        final Node banner = pane.lookup("#settings-report-banner");
+        return banner != null && banner.getStyleClass().contains("settings-banner-violation");
+    }
+
+    static ScrollPane scrollOf(final Parent page) {
+        return (ScrollPane) page.lookup(".settings-scroll");
     }
 
     static Node rowOf(final ScrollPane pane, final String fieldId) {
@@ -237,6 +259,33 @@ final class SettingsPaneTestSupport {
                 .map(node -> ((Label) node).getText())
                 .filter(text -> !text.isEmpty())
                 .toList();
+    }
+
+    // Polls from the test thread, since the FX thread is inside the dialog's own nested event loop
+    // and cannot itself answer a lookup. A Platform.runLater task queued from any thread still runs
+    // during that loop, which is what lets this method reach in and press one of its buttons.
+    static void answerDialog(final String buttonText) throws Exception {
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> currentDialogPane().isPresent());
+        runOnFxThread(() -> {
+            final DialogPane dialogPane = currentDialogPane().orElseThrow();
+            dialogPane.applyCss();
+            dialogPane.layout();
+            final Button button = dialogPane.lookupAll(".button").stream()
+                    .map(Button.class::cast)
+                    .filter(candidate -> buttonText.equals(candidate.getText()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("no dialog button labelled '" + buttonText + "'"));
+            button.fire();
+        });
+    }
+
+    private static Optional<DialogPane> currentDialogPane() {
+        return Window.getWindows().stream()
+                .filter(Window::isShowing)
+                .map(Window::getScene)
+                .filter(scene -> scene != null && scene.getRoot() instanceof DialogPane)
+                .map(scene -> (DialogPane) scene.getRoot())
+                .findFirst();
     }
 
     static <T> T onFxThread(final Callable<T> work) throws Exception {

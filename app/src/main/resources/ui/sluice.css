@@ -42,6 +42,7 @@
     -sluice-accent: #2f6f4f;
     -sluice-danger: #b3261e;
     -sluice-banner-bg: #eaf3ee;
+    -sluice-danger-bg: #fdecea;
     -sluice-caution: #b45309;
     -sluice-caution-bg: #fbeee0;
     /* Its own hue rather than the caution's. A fact worth noticing is not the same claim as a
@@ -226,10 +227,6 @@
     -fx-background-color: -sluice-banner-bg;
 }
 
-.welcome-link:hover {
-    -fx-opacity: 0.8;
-}
-
 /* An action that is on the screen because a field needs it, not because the screen wants it
    pressed. A folder picker and a password reveal are both this. Filled, they compete with Save
    and the fill stops meaning anything. */
@@ -244,6 +241,41 @@
 
 .button-quiet:hover {
     -fx-background-color: -sluice-ground;
+    -fx-opacity: 1.0;
+}
+
+/* The fast way to fill a folder row. Sluice has already worked out the folder, so taking the
+   suggestion is one press, and walking a file dialog for the same answer is not. Louder than the
+   picker beside it, and still not filled: three rows of filled buttons would out-shout the one
+   Save on the page, which is the objection the quiet rule above records. */
+.button-suggest {
+    -fx-background-color: -sluice-banner-bg;
+    -fx-border-color: -sluice-mark-bg;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-mark-bg;
+    -fx-font-weight: bold;
+}
+
+.button-suggest:hover {
+    -fx-background-color: -sluice-mark-bg;
+    -fx-text-fill: -sluice-mark-glyph;
+    -fx-opacity: 1.0;
+}
+
+/* The way out when the suggestion is wrong, which is the uncommon case. Offered rather than urged.
+   Somebody who needs it goes looking for it, and somebody who does not should not be steered into
+   picking three folders by hand through a file dialog. */
+.button-last-resort {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-weight: normal;
+}
+
+.button-last-resort:hover {
+    -fx-background-color: -sluice-ground;
+    -fx-text-fill: -sluice-text;
     -fx-opacity: 1.0;
 }
 
@@ -318,53 +350,67 @@
 }
 
 /* The card a fresh install opens on. Same family as .card, so it reads as the same kind of thing
-   as the failure card, just carrying better news. */
-.welcome-card {
-    -fx-max-width: 620px;
-}
-
-.welcome-headline {
+   as the failure card, just carrying better news. Wider than the welcome message it replaced,
+   because it now holds three path fields, and a path is long. */
+.first-run-headline {
     -fx-font-size: 20px;
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text;
     -fx-wrap-text: true;
 }
 
-/* The card's own eyebrow, in the brand green rather than the muted grey a plain eyebrow uses, since
-   this is the one card the app wants to read as an invitation rather than a status line. The accent
-   and not the mark's ground: that one is painted behind a white glyph and stays dark in both looks,
-   so text wearing it disappears into a dark card. */
-.welcome-eyebrow {
-    -fx-text-fill: -sluice-accent;
-}
-
-/* A TextFlow rather than a Label, so one word within the sentence can carry its own colour. Only
-   the flow's own layout properties belong here; a Text run's colour is its own style class. */
-.welcome-detail {
+/* The sentence under the headline, saying what the next two minutes hold. Muted, because the
+   fields below it are what the reader is here for. */
+.first-run-opening {
+    -fx-text-fill: -sluice-text-muted;
     -fx-line-spacing: 3px;
+    -fx-padding: 0 0 6px 0;
 }
 
-.welcome-detail-text {
-    -fx-fill: -sluice-text-muted;
+/* The line saying what the mark means. Under the three rows rather than above them, because it
+   answers a question the marks raise. */
+.settings-required-legend {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-size: 11px;
+    -fx-line-spacing: 2px;
+    -fx-padding: 6px 0 0 0;
 }
 
-/* Settings is the one word in this sentence that names a real destination, and it goes there. The
-   underline is what says so: in the brand green alone it read as emphasis, and a reader who tried
-   to click it was right to. A Hyperlink brings its own ground, padding and focus ring, all of which
-   would make a word in a sentence look like a button sitting in one. */
-.welcome-link {
-    -fx-text-fill: -sluice-accent;
-    -fx-font-weight: bold;
-    -fx-underline: true;
-    -fx-padding: 0;
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
-    -fx-cursor: hand;
+/* The rules about how the three folders sit against each other, inside whichever card draws them.
+   A .settings-subsection for its border and padding; only the room between rules is its own. Each
+   rule is a sentence rather than a field, so they need more air than a run of controls does. */
+/* The extra room at the top is the badge's: it stands on the border, and the heading would
+   otherwise run under it. */
+.folder-roots-help {
+    -fx-spacing: 6px;
+    -fx-padding: 16px 14px 12px 14px;
 }
 
-/*noinspection CssInvalidPseudoSelector*/
-.welcome-link:visited {
-    -fx-text-fill: -sluice-accent;
+/* The card's own colour, so the badge covers the length of border it stands on. Padding either
+   side is what it covers with. */
+.callout-badge {
+    -fx-background-color: -sluice-surface;
+    -fx-padding: 0 4px 0 4px;
+}
+
+/* One rule. Separated from its neighbours by the panel's spacing rather than by a bullet, so the
+   lines have to breathe a little more than a paragraph would. Colour and weight come from
+   settings-caution, the same as the callout that says a run costs money. */
+.folder-roots-help-rule {
+    -fx-line-spacing: 2px;
+}
+
+/* The bullet's own row. Top-aligned, so a rule that wraps keeps its dot beside the first line. How
+   far down that first line the dot sits is computed from the font. */
+.folder-roots-help-line {
+    -fx-spacing: 8px;
+}
+
+/* The bullet's padding is worked out from the rule's font in code, so nothing sets it here. A rule
+   with a value would win over that and put the dot back where it looks wrong. */
+
+.folder-roots-help-bullet {
+    -fx-fill: -sluice-info;
 }
 
 /* Where a rejected or unparsable value sits: the file, and the line and column where either is
@@ -441,14 +487,30 @@
     -fx-background-color: transparent;
 }
 
-/* The Settings screen's own container. Each of its sections is a plain .card, spaced apart from
-   its neighbours the way any stack of panels on a screen is.
+/* The two scrolling pages' own containers. Each of their sections is a plain .card, spaced apart
+   from its neighbours the way any stack of panels on a screen is. Named together, since the
+   first-run card scrolls the same way and a reader arriving at Settings from it should not find
+   different chrome.
 
    The right-hand padding is the scrollbar's room. That bar sits inside the viewport, so without it
    the bar rests against the cards' right edge with nothing between them. Padding on the content
    rather than a margin on the bar, because the bar is only there while the screen overflows and
    the spacing should not come and go with it. */
-.settings-pane {
+/* A page built as a pinned bar over a body that scrolls. The bar takes the height it asks for and
+   the body takes the rest, which is what keeps Save reachable from anywhere on a long page. */
+.pinned-header-page {
+    -fx-spacing: 0;
+}
+
+/* Stacked, not a row: the heading holds the left and Save holds the true middle, so the button
+   lands in the same place on every page whatever its heading is called. The right inset matches
+   the scrolling body's below, or Save would centre on a wider box than the cards do and sit a few
+   pixels off the axis they share. */
+.pane-header-actions {
+    -fx-padding: 0 12px 0 0;
+}
+
+.settings-pane, .first-run-pane {
     -fx-spacing: 16px;
     -fx-padding: 0 12px 0 0;
 }
@@ -776,6 +838,30 @@
 .settings-banner .label {
     -fx-text-fill: -sluice-accent;
     -fx-font-weight: bold;
+}
+
+/* A refusal, said where every other outcome of a save is said. On its own line in the header it was
+   the one report on these screens with no ground of its own, which read as unfinished beside the
+   banner a save gets. */
+.settings-banner-violation {
+    -fx-background-color: -sluice-danger-bg;
+    -fx-border-color: -sluice-danger;
+}
+
+.settings-banner-violation .label {
+    -fx-text-fill: -sluice-danger;
+}
+
+/* A save that stored nothing, on a card still asking for folders. The banner above wears the
+   colour of a confirmation, and this is not one. Nothing was written, so saying it in the same
+   green would report a dead end as progress. */
+.settings-banner-caution {
+    -fx-background-color: -sluice-caution-bg;
+    -fx-border-color: -sluice-caution;
+}
+
+.settings-banner-caution .label {
+    -fx-text-fill: -sluice-caution;
 }
 
 /* A fact worth a reader's own ground, not just its own colour, for something that stays on the

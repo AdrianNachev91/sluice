@@ -219,7 +219,7 @@ final class VisionProviderCard {
      * @param card {@link VBox} the block to fill, whatever it held before
      * @param presenter {@link SettingsPresenter} reads and writes that credential
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
-     * @param providerFields {@link VBox} the model and endpoint rows, whose Test button a
+     * @param providerFields {@link VBox} the model and endpoint rows, whose Test connection button a
      *         credential change leaves enabled or not, and whose model picker a save or remove can
      *         change the very choices in
      * @param said what just happened to the key, or null when nothing has
@@ -269,7 +269,11 @@ final class VisionProviderCard {
 
         final var eye = revealButton(entry, reveal);
 
-        final var saveButton = new Button(secret.hasStoredValue() ? "Replace" : "Save");
+        // Activate rather than Save. The press does more than store the key: it asks the provider
+        // what this account can run, and redraws the picker with the answer. Both halves name the
+        // key, so the control reads as one thing in either state. That also keeps either from being
+        // mistaken for the page's own Save, pinned in the bar above.
+        final var saveButton = new Button(secret.hasStoredValue() ? "Replace key" : "Activate key");
         saveButton.setId("settings-api-key-save");
         final var result = new Label();
         result.setWrapText(true);
@@ -287,14 +291,28 @@ final class VisionProviderCard {
 
         final var removeButton = new Button("Remove");
         removeButton.setId("settings-api-key-remove");
+        // Quiet beside Activate key. The fill says which action the card wants pressed, and it is
+        // never the one that throws the credential away.
+        removeButton.getStyleClass().add("button-quiet");
         removeButton.setDisable(!secret.hasStoredValue());
         removeButton.setOnAction(_ -> {
+            // Asked before anything is cleared. A key is the one thing on this card the app cannot
+            // put back, since Sluice never reads a stored credential out. An accidental press costs
+            // the user a trip to their provider for a new one.
+            final SettingsPresenter.SecretRemoval removal = presenter.secretRemoval(providerId);
+            // Backing out leads, because this asks about the one thing on the card the app cannot
+            // put back.
+            if (Dialogs.ask(removal.heading(), removal.question(),
+                    new Dialogs.Choice("Remove key", Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET),
+                    new Dialogs.Choice("Keep it", Dialogs.Role.CANCEL, Dialogs.Emphasis.LOUD)).isEmpty()) {
+                return;
+            }
             final String error = presenter.removeSecret(providerId);
             if (error != null) {
                 result.setText(error);
                 result.getStyleClass().setAll("settings-violation");
             } else {
-                onChanged.accept("API key removed.");
+                onChanged.accept(removal.removed());
                 refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
             }
         });
@@ -328,12 +346,7 @@ final class VisionProviderCard {
                 + "Checking your key or its models costs nothing.");
         billingText.setWrapText(true);
         billingText.getStyleClass().add("settings-caution");
-        HBox.setHgrow(billingText, Priority.ALWAYS);
-        final var billing = new HBox(SettingsRows.infoGlyph(), billingText);
-        billing.getStyleClass().add("settings-callout");
-        // The card's own spacing reads as ordinary line-to-line gap. A bordered box wants more air
-        // above it than a line of text does, so it carries the extra distance itself.
-        VBox.setMargin(billing, new Insets(8, 0, 0, 0));
+        final Node billing = SettingsRows.badgedCallout(new VBox(billingText));
 
         final var children = new ArrayList<Node>(List.of(SettingsRows.subsectionHeading("API key")));
         // Above the entry rather than in place of it. A store that will not say what it holds can
@@ -388,7 +401,15 @@ final class VisionProviderCard {
         wait.play();
     }
 
-    private static ComboBox<SettingsView.ProviderChoice> providerChoice(final SettingsView view) {
+    /**
+     * The dropdown of every provider a user can pick, opened on the configured one.
+     *
+     * <p>Shared with the first-run card, which offers the same choice before this card exists.
+     *
+     * @param view {@link SettingsView} carries the providers and which is selected
+     * @return {@link ComboBox} of {@link SettingsView.ProviderChoice} the dropdown
+     */
+    static ComboBox<SettingsView.ProviderChoice> providerChoice(final SettingsView view) {
         final var box = new ComboBox<SettingsView.ProviderChoice>();
         box.getItems().setAll(view.providers());
         box.setConverter(new StringConverter<>() {
@@ -456,8 +477,14 @@ final class VisionProviderCard {
         final var endpoint = new TextField(view.endpoint() == null ? "" : view.endpoint());
         endpoint.setId("settings-endpoint");
         SettingsRows.holdTo(endpoint, view.endpointLimit());
+        // Shown as a prompt, and deliberately not offered the way a folder row offers its suggestion.
+        // This one discloses what an empty field already reaches rather than proposing a value to
+        // store. Typing it in would pin the endpoint to today's address, so a reader who accepted it
+        // would stop following the provider the day it moved.
         endpoint.setPromptText(providerChoiceOf(providerBox).defaultEndpoint());
-        final var testConnection = new Button("Test");
+        // Names what it tries rather than sitting as a bare verb beside Activate key. The two are a
+        // press apart and would otherwise read as degrees of the same thing.
+        final var testConnection = new Button("Test connection");
         testConnection.setId("settings-test-connection");
         testConnection.getStyleClass().add("button-quiet");
         final var testResult = new Label();
@@ -537,7 +564,7 @@ final class VisionProviderCard {
      * provider. So the credential this asks about is a fact about the current choice, never about
      * the one on screen when the row was first drawn.
      *
-     * @param testConnection {@link Button} the Test button
+     * @param testConnection {@link Button} the Test connection button
      * @param presenter {@link SettingsPresenter} answers whether a credential is stored
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */

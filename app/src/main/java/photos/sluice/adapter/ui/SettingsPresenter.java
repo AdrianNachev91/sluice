@@ -109,11 +109,10 @@ public class SettingsPresenter {
             + "which clears the key from every place Sluice can reach, then save again. If it keeps "
             + "refusing, report this as a bug in Sluice, quoting this: ";
 
+    // Says which way to look. The line sits in the bar pinned above the page, so every field it is
+    // about is below it.
     private static final String FIELDS_ARE_MARKED =
-            "These settings were not saved. What needs fixing is marked under each field that failed.";
-
-    private static final Map<PathRole, String> ROLE_LABELS = Map.of(
-            PathRole.REPO_ROOT, "Working root", PathRole.LIBRARY_ROOT, "Library root", PathRole.INBOX, "Inbox");
+            "These settings were not saved. Each field that needs fixing is marked below.";
 
     private final SettingsUseCase settingsUseCase;
     private final LibraryRootUseCase libraryRootUseCase;
@@ -174,7 +173,7 @@ public class SettingsPresenter {
         final Map<PathRole, String> violations = this.violationsByRole(paths);
         final ModelPickerResult modelPicker = this.modelPickerFor(shownProvider, providerSettings.model());
         return new SettingsView(
-                folderField(paths.repoRoot(), workingRootSuggestion(), violations.get(PathRole.REPO_ROOT)),
+                folderField(paths.repoRoot(), workingRootSuggestion(), violations.get(PathRole.WORKING_ROOT)),
                 folderField(paths.libraryRoot(), librarySuggestion(), violations.get(PathRole.LIBRARY_ROOT)),
                 folderField(paths.inbox(), inboxSuggestion(paths.repoRoot()), violations.get(PathRole.INBOX)),
                 shownProvider, this.providerChoices(),
@@ -301,7 +300,10 @@ public class SettingsPresenter {
         createIfItIsOurOwnSuggestion(workingRoot, workingRootSuggestion());
         createIfItIsOurOwnSuggestion(libraryRoot, librarySuggestion());
         createIfItIsOurOwnSuggestion(inbox, inboxSuggestion(workingRoot));
+        final var paths = new PathSettings(blankToNull(workingRoot), blankToNull(libraryRoot),
+                blankToNull(inbox));
         final var watchMode = watchAutomatically ? WatchMode.WATCH : WatchMode.MANUAL;
+        final Settings settings;
         try {
             // Inside the guard with everything else that can refuse. An id this class never put in
             // the list it handed the screen is a refusal to report. Not an exception to escape into
@@ -310,46 +312,155 @@ public class SettingsPresenter {
             // This screen never asks about the retry count. A save carries forward whatever is
             // already configured for this provider rather than losing it, the same as categories.
             final Integer maxRetries = this.settingsUseCase.settings().providerSettings(provider).maxRetries();
-            final var settings = new Settings(
-                    new PathSettings(blankToNull(workingRoot), blankToNull(libraryRoot), blankToNull(inbox)),
-                    provider,
+            settings = new Settings(paths, provider,
                     this.providerSettingsWith(provider,
                             new CullProviderSettings(blankToNull(model), blankToNull(endpoint), maxRetries)),
                     this.settingsUseCase.settings().categories(), new ExternalAgentSettings(watchMode),
                     new MontageConfig(tileSize, tilesPerRow), theme);
+        } catch (final RuntimeException e) {
+            return this.refusalMarkingItsFields(e, paths);
+        }
+        try {
             this.settingsUseCase.save(settings);
             // After the save rather than before it, so a refused save cannot leave the app wearing a
             // look its own settings do not name.
-            ThemeSelection.set(theme);
+            ThemeSelection.set(settings.theme());
             return new SaveOutcome.Saved();
         } catch (final LibraryRootMoveNeedsAResolutionException e) {
-            return new SaveOutcome.NeedsLibraryRootResolution(Path.of(libraryRoot),
+            // Emptying a configured library root raises the same refusal, since a clear followed by
+            // a set is the move this exists to catch, done in two steps. There is no resolution to
+            // state for it though: both answers are about what to do with a library arriving
+            // somewhere, and a cleared field names nowhere. So it is refused on the field instead.
+            if (paths.libraryRoot() == null) {
+                return SaveOutcome.Refused.markingTheLibraryRoot("Your library folder cannot be left "
+                        + "blank once it is set. To move your library, point this at the folder it "
+                        + "should move to instead.");
+            }
+            // A move checks the roots already in force, so one of those being unset refuses it
+            // whatever the reader answers. Asking the question first would spend a dialog to reach a
+            // refusal that was certain before it opened.
+            if (!this.pathValidation.violationsInForce().isEmpty()) {
+                return this.storeEverythingExceptTheMove(settings, e.previousLibraryRoot());
+            }
+            // Nothing reached disk, so the whole document travels with the question. The resolution
+            // answers for the library root alone, and everything else this save carried still has
+            // to be stored once it is answered.
+            return new SaveOutcome.NeedsLibraryRootResolution(Path.of(libraryRoot), settings,
                     wordLibraryRootMove(e.previousLibraryRoot()));
         } catch (final RuntimeException e) {
-            return this.refusalMarkingItsFields(e, new PathSettings(blankToNull(workingRoot),
-                    blankToNull(libraryRoot), blankToNull(inbox)));
+            return this.refusalMarkingItsFields(e, paths);
         }
+    }
+
+    /**
+     * Stores a save that also asked to move the library, keeping everything except the move.
+     *
+     * <p>The move cannot run: it checks the roots in force, and one of those is unset. Refusing the
+     * whole save would leave the reader unable to fix that, since filling the empty folder in is
+     * itself a save, and it carries the same library root that raised this. The way out would be to
+     * put the library field back by hand, which nothing tells them to do.
+     *
+     * <p>So the folders land and the library stays where it is. By the time the reader reads the
+     * message, the roots that blocked the move are set, and asking again works.
+     *
+     * @param settings {@link Settings} everything this save was carrying
+     * @param stayingAt {@link Path} where the library is now, which it keeps
+     * @return {@link SaveOutcome} what happened, worded for the screen
+     */
+    private SaveOutcome storeEverythingExceptTheMove(final Settings settings, final Path stayingAt) {
+        final PathSettings asked = settings.paths();
+        final var keeping = new PathSettings(asked.repoRoot(), stayingAt.toString(), asked.inbox());
+        try {
+            this.settingsUseCase.save(new Settings(keeping, settings.provider(),
+                    settings.providerSettingsById(), settings.categories(), settings.externalAgent(),
+                    settings.montage(), settings.theme()));
+            ThemeSelection.set(settings.theme());
+        } catch (final RuntimeException e) {
+            return this.refusalMarkingItsFields(e, keeping);
+        }
+        // Worded by what this save actually left behind. A save that filled the empty folders in has
+        // cleared the way and only has to ask again. One made while they are still empty has not,
+        // and telling that reader their folders were saved names folders they never gave.
+        // The one refusal that says its own piece rather than sending the reader to the marked
+        // field. Every other one is wholly a refusal, so pointing at the fault is the most useful
+        // thing the summary can do. This one is half a save, and "the fields with a problem are
+        // marked" would report the half that landed as a failure.
+        if (this.pathValidation.violations(keeping).isEmpty()) {
+            return new SaveOutcome.Refused("Your other folders were saved. Your library folder "
+                    + "stayed where it is, because it could not move while another folder was empty. "
+                    + "Now that the others are set, save again to move it.",
+                    null, "This folder was not saved.", null, null, true);
+        }
+        return SaveOutcome.Refused.markingTheLibraryRoot("Your library folder cannot move while "
+                + "another folder is empty. Fill in the folders that are still empty and save those "
+                + "first. You can move your library afterwards.");
+    }
+
+    /**
+     * Saves the three folder roots and the chosen provider, leaving every other setting as it is.
+     *
+     * <p>What the first-run card collects. It reaches the same save as the Settings screen. So a
+     * refusal is worded once, and a folder root is checked the same way whichever card the user is
+     * looking at.
+     *
+     * @param workingRoot {@link String} the working-root field's text
+     * @param libraryRoot {@link String} the library-root field's text
+     * @param inbox {@link String} the inbox field's text
+     * @param providerId {@link String} the selected provider id
+     * @return {@link SaveOutcome} what happened
+     */
+    public SaveOutcome saveFolderRootsAndProvider(final String workingRoot, final String libraryRoot,
+                                                  final String inbox, final String providerId) {
+        final Settings settings = this.settingsUseCase.settings();
+        final CullProviderSettings provider = settings.providerSettings(providerId);
+        final String endpoint = provider.endpoint() == null ? "" : provider.endpoint();
+        return this.save(workingRoot, libraryRoot, inbox, providerId, this.modelToCarryFor(providerId), endpoint,
+                settings.externalAgent().mode() == WatchMode.WATCH, settings.montage().tileSize(),
+                settings.montage().tilesPerRow(), settings.theme().name());
     }
 
     /**
      * Carries out a library-root move already resolved by the user, blocking until it finishes.
      * Called off the FX thread: a move can copy a library for as long as the library takes.
      *
-     * @param newLibraryRoot {@link Path} the folder the library moves to
+     * <p>The move itself writes the library root and nothing else, from the settings in force at
+     * the moment it lands. So the refused save's own document is stored straight after, which is
+     * what keeps every other value that save was carrying. By then the library root in force is
+     * already the new one, so that second save moves nothing and asks nothing.
+     *
+     * @param refused {@link SaveOutcome.NeedsLibraryRootResolution} the save this answers, carrying
+     *     both the folder to move to and everything else it was going to store
      * @param resolution {@link LibraryRootResolution} what to do about the hash index
      * @return {@link MoveOutcome} what happened, worded for the screen
      */
-    public MoveOutcome moveLibraryRoot(final Path newLibraryRoot, final LibraryRootResolution resolution) {
+    public MoveOutcome moveLibraryRoot(final SaveOutcome.NeedsLibraryRootResolution refused,
+                                       final LibraryRootResolution resolution) {
+        final LibraryRootMoveOutcome outcome;
         try {
-            final LibraryRootMoveOutcome outcome =
-                    this.libraryRootUseCase.moveLibraryRoot(newLibraryRoot, resolution).join();
-            return new MoveOutcome(true, wordMoveOutcome(outcome));
+            outcome = this.libraryRootUseCase.moveLibraryRoot(refused.newLibraryRoot(), resolution).join();
         } catch (final CompletionException e) {
             final Throwable cause = e.getCause();
-            return new MoveOutcome(false, cause == null ? e.getMessage() : cause.getMessage());
+            return failedMove(cause == null ? e : cause);
         } catch (final RuntimeException e) {
-            return new MoveOutcome(false, e.getMessage());
+            return failedMove(e);
         }
+        if (!movedTheLibrary(outcome)) {
+            // A cancelled copy left the library where it was, so the rest of this save would be
+            // stored against a library root that never changed. Said as a state of its own, so the
+            // screen keeps every field as the user typed it and they can press Save again.
+            return new MoveOutcome.NothingChanged(wordMoveOutcome(outcome));
+        }
+        try {
+            this.settingsUseCase.save(refused.pending());
+        } catch (final RuntimeException e) {
+            // The move is already done, so this is not a failed move. Said as its own thing, since
+            // what the user has to do about it is press Save again rather than answer the question
+            // they just answered.
+            return new MoveOutcome.Failed("Your library moved. The rest of what you were saving did not: "
+                    + wordedForAUser(e));
+        }
+        ThemeSelection.set(refused.pending().theme());
+        return new MoveOutcome.Moved(wordMoveOutcome(outcome));
     }
 
     /**
@@ -357,21 +468,21 @@ public class SettingsPresenter {
      * hash index. Named rather than taking a {@link LibraryRootResolution}, so the view that offers
      * this choice never has to name that type itself.
      *
-     * @param newLibraryRoot {@link Path} the folder the library moves to
+     * @param refused {@link SaveOutcome.NeedsLibraryRootResolution} the save this answers
      * @return {@link MoveOutcome} what happened, worded for the screen
      */
-    public MoveOutcome moveLibraryRootCopyingTheIndex(final Path newLibraryRoot) {
-        return this.moveLibraryRoot(newLibraryRoot, LibraryRootResolution.COPY_AND_KEEP_INDEX);
+    public MoveOutcome moveLibraryRootCopyingTheIndex(final SaveOutcome.NeedsLibraryRootResolution refused) {
+        return this.moveLibraryRoot(refused, LibraryRootResolution.COPY_AND_KEEP_INDEX);
     }
 
     /**
      * Carries out a library-root move, filing the old hash index aside and starting a fresh one.
      *
-     * @param newLibraryRoot {@link Path} the folder the library moves to
+     * @param refused {@link SaveOutcome.NeedsLibraryRootResolution} the save this answers
      * @return {@link MoveOutcome} what happened, worded for the screen
      */
-    public MoveOutcome moveLibraryRootWithAFreshIndex(final Path newLibraryRoot) {
-        return this.moveLibraryRoot(newLibraryRoot, LibraryRootResolution.START_A_FRESH_INDEX);
+    public MoveOutcome moveLibraryRootWithAFreshIndex(final SaveOutcome.NeedsLibraryRootResolution refused) {
+        return this.moveLibraryRoot(refused, LibraryRootResolution.START_A_FRESH_INDEX);
     }
 
     /**
@@ -420,6 +531,60 @@ public class SettingsPresenter {
                     + "gets used. Nothing else you have configured is affected. Report this as a bug in "
                     + "Sluice, quoting this: " + e.getMessage();
         }
+    }
+
+    /**
+     * What to ask before clearing a provider's key, and what to say once it is gone.
+     *
+     * <p>Both halves have to name what is left, and that is not the same answer every time. A key
+     * held in an environment variable is not Sluice's to clear, so removing the stored one leaves
+     * the provider working on that. Saying it stops working would be wrong there.
+     *
+     * @param providerId {@link String} the provider whose key is being cleared
+     * @return {@link SecretRemoval} the question and the two things that can follow it
+     */
+    public SecretRemoval secretRemoval(final String providerId) {
+        final boolean anotherKeyAnswers = this.credentialOf(providerId)
+                .map(this::secretStatusOrAbsent)
+                .filter(InEnvironment.class::isInstance)
+                .isPresent();
+        final String consequence = anotherKeyAnswers
+                ? "An environment variable on this computer also holds a key for this provider, and "
+                        + "Sluice will go on using that key."
+                : "This provider will stop working until you add a new key and activate it.";
+        return new SecretRemoval("Remove your key?",
+                "Sluice will clear this key from everywhere on this computer it can reach. " + consequence,
+                anotherKeyAnswers
+                        ? "Your key is removed. Sluice is now using the key in your environment."
+                        : "Your key is removed. This provider cannot run until you add a new key.");
+    }
+
+    /**
+     * One provider's credential status, or absent where the store will not say.
+     *
+     * <p>A store that refuses to answer is not evidence that a second key is waiting, so it reads
+     * the same way as nothing being there. The wording that rests on this only ever softens what a
+     * removal costs, and softening it on a guess is the half that would be wrong.
+     *
+     * @param id {@link SecretId} the credential to ask about
+     * @return {@link SecretStatus} what holds it, or null when the store refused
+     */
+    private @Nullable SecretStatus secretStatusOrAbsent(final SecretId id) {
+        try {
+            return this.secretStore.status(id);
+        } catch (final SecretStoreException e) {
+            return null;
+        }
+    }
+
+    /**
+     * The words a credential removal needs, from the question to what it leaves behind.
+     *
+     * @param heading {@link String} what the question is about
+     * @param question {@link String} what removing does, and what it leaves
+     * @param removed {@link String} what to say once it is gone
+     */
+    public record SecretRemoval(String heading, String question, String removed) {
     }
 
     /**
@@ -609,9 +774,8 @@ public class SettingsPresenter {
      * @return {@link ModelPickerResult} what to draw, and the caution note beside it
      */
     public ModelPickerResult modelPickerFor(final String providerId) {
-        final CullProviderSettings saved = this.settingsUseCase.settings().providerSettingsById()
-                .getOrDefault(providerId, CullProviderSettings.unset());
-        return this.modelPickerFor(providerId, saved.model());
+        return this.modelPickerFor(providerId,
+                this.settingsUseCase.settings().providerSettings(providerId).model());
     }
 
     /**
@@ -673,7 +837,7 @@ public class SettingsPresenter {
     }
 
     /**
-     * A sentence describing what a provider said to a credential check, for the Test button's own
+     * A sentence describing what a provider said to a credential check, for the Test connection button's own
      * result and for a picker with nothing to offer.
      *
      * @param outcome {@link ProviderCheck} what the provider said
@@ -975,7 +1139,7 @@ public class SettingsPresenter {
     }
 
     private static String wordOverlap(final PathRole other) {
-        return "This overlaps with the " + ROLE_LABELS.get(other) + " folder.";
+        return "This overlaps with the " + PathRoleLabels.of(other) + " folder.";
     }
 
     private static void createIfItIsOurOwnSuggestion(final String value, final String suggestion) {
@@ -1015,10 +1179,48 @@ public class SettingsPresenter {
     /**
      * What happened when the library-root move a settings save asked to resolve was carried out.
      *
-     * @param succeeded boolean whether the move landed
-     * @param message {@link String} what to tell the user
+     * <p>Three states rather than a boolean, because a screen does three different things with
+     * them. Only {@link Moved} may redraw the page: it is the one state where what is on disk has
+     * changed, so what a redraw reads back is newer than what is on screen. Redrawing on either of
+     * the others would throw away every edit the user made in the same press, having just told them
+     * nothing happened.
+     *
+     * <p>Every state carries words. A screen renders whatever this holds, so an outcome with
+     * nothing to say clears the line it lands in and reads as a move that quietly worked.
      */
-    public record MoveOutcome(boolean succeeded, @Nullable String message) {
+    public sealed interface MoveOutcome {
+
+        /**
+         * What to tell the user.
+         *
+         * @return {@link String} the message
+         */
+        String message();
+
+        /**
+         * The library is somewhere new, and the rest of the save landed with it.
+         *
+         * @param message {@link String} what the move did with the files and the record
+         */
+        record Moved(String message) implements MoveOutcome {
+        }
+
+        /**
+         * Nothing on disk changed. A copy the user cancelled is the case: the library stayed where
+         * it was, so the save it was carrying is still unmade and every field is still as typed.
+         *
+         * @param message {@link String} what stopped, and where that leaves the library
+         */
+        record NothingChanged(String message) implements MoveOutcome {
+        }
+
+        /**
+         * The move, or the save that follows it, did not go through.
+         *
+         * @param message {@link String} what went wrong
+         */
+        record Failed(String message) implements MoveOutcome {
+        }
     }
 
     /**
@@ -1033,10 +1235,18 @@ public class SettingsPresenter {
         /**
          * The library root changed and the save needs a resolution first.
          *
+         * <p>Carries the whole document the refused save was trying to store. A move writes the
+         * library root and nothing else. Without this, every other value that save carried is lost
+         * the moment the user answers the question. On the first-run card those values are the
+         * other two folders they had just typed.
+         *
          * @param newLibraryRoot {@link Path} the folder the library would move to
-         * @param message {@link String} what the app is asking the user to decide
+         * @param pending {@link Settings} everything the refused save was going to store
+         * @param message {@link String} what the app is asking the user to decide, always worded:
+         *     a dialog with no question in it is one nobody can answer
          */
-        record NeedsLibraryRootResolution(Path newLibraryRoot, @Nullable String message) implements SaveOutcome {
+        record NeedsLibraryRootResolution(Path newLibraryRoot, Settings pending, String message)
+                implements SaveOutcome {
         }
 
         /**
@@ -1051,9 +1261,13 @@ public class SettingsPresenter {
          * @param libraryRoot what is wrong with the library root, or null
          * @param inbox what is wrong with the inbox, or null
          * @param model what is wrong with the model, or null
+         * @param warning boolean whether this is a caution rather than a plain refusal, which is
+         *     the half-saved case: reporting it in the colour of a failure would have the reader
+         *     typing again what is already on disk
          */
         record Refused(@Nullable String message, @Nullable String workingRoot, @Nullable String libraryRoot,
-                       @Nullable String inbox, @Nullable String model) implements SaveOutcome {
+                       @Nullable String inbox, @Nullable String model, boolean warning)
+                implements SaveOutcome {
 
             /**
              * A refusal that belongs to no field in particular.
@@ -1061,7 +1275,17 @@ public class SettingsPresenter {
              * @param message {@link String} why
              */
             Refused(final @Nullable String message) {
-                this(message, null, null, null, null);
+                this(message, null, null, null, null, false);
+            }
+
+            /**
+             * A refusal the library-root field is at fault for.
+             *
+             * @param message {@link String} what is wrong with the library root
+             * @return {@link Refused} that refusal, marking the field and summarising above
+             */
+            static Refused markingTheLibraryRoot(final String message) {
+                return new Refused(FIELDS_ARE_MARKED, null, message, null, null, false);
             }
 
             /**
@@ -1071,7 +1295,7 @@ public class SettingsPresenter {
              * @return {@link Refused} that refusal, marking the model and summarising at the foot
              */
             static Refused markingTheModel(final String message) {
-                return new Refused(FIELDS_ARE_MARKED, null, null, null, message);
+                return new Refused(FIELDS_ARE_MARKED, null, null, null, message, false);
             }
         }
     }
@@ -1096,8 +1320,8 @@ public class SettingsPresenter {
         // Once the rows say what is wrong in this screen's own words, the summary only has to send
         // the reader to them.
         final String summary = byRole.isEmpty() ? wordedForAUser(refusal) : FIELDS_ARE_MARKED;
-        return new SaveOutcome.Refused(summary, byRole.get(PathRole.REPO_ROOT),
-                byRole.get(PathRole.LIBRARY_ROOT), byRole.get(PathRole.INBOX), null);
+        return new SaveOutcome.Refused(summary, byRole.get(PathRole.WORKING_ROOT),
+                byRole.get(PathRole.LIBRARY_ROOT), byRole.get(PathRole.INBOX), null, false);
     }
 
     /**
@@ -1115,7 +1339,7 @@ public class SettingsPresenter {
 
     /**
      * Whether any writable tier actually holds a credential, for {@code Remove}'s enabled state and
-     * the Save-versus-Replace label.
+     * the label naming what the button does to the key.
      *
      * <p>Not the same question {@link #secretRow}'s status sentence answers. {@link SecretStatus}
      * names the tier a read would win from, and an environment variable can win a read while nothing
@@ -1185,5 +1409,76 @@ public class SettingsPresenter {
         final var merged = new LinkedHashMap<>(this.settingsUseCase.settings().providerSettingsById());
         merged.put(providerId, edited);
         return merged;
+    }
+
+    /**
+     * Whether an outcome that did not throw actually left the library somewhere new.
+     *
+     * <p>A switch over every case rather than a test for the one that did not. A fourth outcome
+     * fails to compile here until somebody says which side of the line it falls on.
+     *
+     * @param outcome {@link LibraryRootMoveOutcome} what the move reported
+     * @return boolean true when the library root in force is now the new one
+     */
+    private static boolean movedTheLibrary(final LibraryRootMoveOutcome outcome) {
+        return switch (outcome) {
+            case LibraryRootMoveOutcome.CopiedAndMoved _, LibraryRootMoveOutcome.MovedWithAFreshIndex _ -> true;
+            case LibraryRootMoveOutcome.CopyCancelled _ -> false;
+        };
+    }
+
+    /**
+     * A move that did not happen, always with something to show for it.
+     *
+     * <p>An exception carries no message of its own often enough to matter, and the screen renders
+     * whatever this returns. Left as it came, a failure with nothing to say clears the status line
+     * and reads as a move that quietly worked.
+     *
+     * @param failure {@link Throwable} what stopped the move
+     * @return {@link MoveOutcome} the failure, worded for the screen
+     */
+    private static MoveOutcome failedMove(final Throwable failure) {
+        final String said = failure.getMessage();
+        return new MoveOutcome.Failed(said == null || said.isBlank()
+                ? "The library did not move, and Sluice cannot say why. Your photos are still where they "
+                        + "were. Report this as a bug in Sluice, quoting this: " + failure
+                : said);
+    }
+
+    /**
+     * The model to save for a provider on a card that offers no model picker.
+     *
+     * <p>Whatever is configured, and otherwise the provider's own recommendation. A provider that
+     * needs a model refuses a save without one, and a card that never asked for one has no way to
+     * say which.
+     *
+     * <p>The provider's own list rather than the account's, whatever a live check has since
+     * answered. That is what the Settings picker offers somebody who has connected nothing yet,
+     * which is who this card is for. A first run on a machine whose key sits in an environment
+     * variable can therefore store a recommendation the account's real list would not have led
+     * with. The Settings picker is where that is corrected, and it says which list it is showing.
+     *
+     * @param providerId {@link String} the provider being saved
+     * @return {@link String} the model id to save, empty for a provider that runs no model
+     */
+    private String modelToCarryFor(final String providerId) {
+        final CullProviderSettings saved = this.settingsUseCase.settings().providerSettings(providerId);
+        if (saved.model() != null && !saved.model().isBlank()) {
+            return saved.model();
+        }
+        return this.providers.byId(providerId)
+                .map(VisionProviderDescriptor::models)
+                .map(SettingsPresenter::defaultOf)
+                .orElse("");
+    }
+
+    /**
+     * The model a catalog starts a fresh install on.
+     *
+     * @param catalog {@link ModelCatalog} the provider's own list
+     * @return {@link String} the recommended model, or the first offered where none is recommended
+     */
+    private static String defaultOf(final ModelCatalog catalog) {
+        return catalog.recommended() == null ? catalog.options().getFirst().id() : catalog.recommended();
     }
 }

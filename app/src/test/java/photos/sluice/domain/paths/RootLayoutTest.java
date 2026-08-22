@@ -65,7 +65,7 @@ class RootLayoutTest {
         final Path shared = root.resolve("shared");
 
         assertThat(RootLayout.violations(shared, root.resolve("library"), shared))
-                .containsExactly(new Overlap(PathRole.REPO_ROOT, PathRole.INBOX));
+                .containsExactly(new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX));
     }
 
     @Test
@@ -73,7 +73,7 @@ class RootLayoutTest {
         final Path inbox = root.resolve("inbox");
 
         assertThat(RootLayout.violations(inbox.resolve("work"), root.resolve("library"), inbox))
-                .containsExactly(new Overlap(PathRole.REPO_ROOT, PathRole.INBOX));
+                .containsExactly(new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX));
     }
 
     // A layout can break both rules at once, and a surface marking fields needs to hear about both.
@@ -83,6 +83,6 @@ class RootLayoutTest {
 
         assertThat(RootLayout.violations(inbox.resolve("work"), inbox.resolve("library"), inbox))
                 .containsExactly(new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX),
-                        new Overlap(PathRole.REPO_ROOT, PathRole.INBOX));
+                        new Overlap(PathRole.WORKING_ROOT, PathRole.INBOX));
     }
 }
