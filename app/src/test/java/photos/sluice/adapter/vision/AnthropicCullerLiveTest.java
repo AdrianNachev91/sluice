@@ -8,6 +8,7 @@ import com.anthropic.models.messages.TextBlock;
 import com.anthropic.services.blocking.MessageService;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
@@ -54,8 +55,9 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 // Live verify against the real Anthropic API. Skipped unless both gates hold: SLUICE_LIVE_CULL=true
-// opts in explicitly, and ANTHROPIC_API_KEY carries a key. The double gate keeps a normal test run
-// from spending API money just because a key happens to be set in the environment.
+// opts in explicitly, and a key is reachable. Only the first guards spending: nobody sets
+// SLUICE_LIVE_CULL by accident. The second exists so a machine with no key skips rather than going
+// red, and it asks the same question this test's own client asks.
 //
 // One run proves the two things the mocked tests cannot. The live API accepts the montage request
 // shape: image block, photo table, JSON-schema structured output, the structured-output schema. And it
@@ -69,11 +71,7 @@ import static org.mockito.Mockito.mock;
 // The montage is real: four distinct synthetic photos run through the full imaging pipeline, so the
 // API sees exactly what a production cull sends. Cost per run is a fraction of a cent.
 @EnabledIfEnvironmentVariable(named = "SLUICE_LIVE_CULL", matches = "true")
-// The key gate wants a value carrying something other than whitespace. A variable holding only
-// spaces counts as unset everywhere else in the app. Matching on it would enable this test and then
-// fail it for want of a key. The pattern matches the whole value, so it has to allow the
-// surrounding whitespace a real key can arrive with rather than demand none.
-@EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = "(?s).*\\S.*")
+@EnabledIf("aKeyIsReachable")
 class AnthropicCullerLiveTest {
 
     private static final String MODEL = "claude-sonnet-5";
@@ -87,6 +85,24 @@ class AnthropicCullerLiveTest {
             CullCategory.of("junk", "Objectively worthless photos: blurry, accidental shots, "
                     + "screenshots, documents, photos of a screen."),
             CullCategory.of("scenery", "Unremarkable scenery with no people and weak composition."));
+
+    // Asks the same three tiers the test's own client reads: environment, then this machine's
+    // keyring, then a file. The old gate named the environment variable alone, so a machine holding
+    // its key where Settings puts it skipped however deliberately the run was opted into.
+    //
+    // Answers false for anything that goes wrong rather than propagating. A condition method that
+    // throws fails the class instead of skipping it, and this one touches a platform keyring on
+    // whatever runner it lands on. A missing Secret Service is a reason to skip, never a red build.
+    static boolean aKeyIsReachable() {
+        try {
+            return TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
+                    Path.of(System.getProperty("java.io.tmpdir"), "sluice-live-gate"))
+                    .secret(AnthropicCuller.API_KEY)
+                    .isPresent();
+        } catch (final RuntimeException | LinkageError unreachable) {
+            return false;
+        }
+    }
 
     // cull() is strictly sequential, so plain fields suffice for the decorator's bookkeeping.
     private int liveCalls;
