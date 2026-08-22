@@ -8,15 +8,17 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter.SaveOutcome;
 import photos.sluice.adapter.ui.SettingsView;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 
 import java.util.function.Consumer;
 
 /**
  * The Settings screen: folder roots, the vision provider and its credential, and the montage grid.
  *
- * <p>Every value it shows and every note under a field comes from {@link SettingsPresenter}. This
- * class lays those out and forwards a click or an edit back to the presenter. It never decides on
- * its own what a field means or whether it is valid.
+ * <p>Every value it shows and every note under a field comes from {@link SettingsPresenter} or, for
+ * the credential and model catalogue, {@link VisionProviderPresenter}. This class lays those out
+ * and forwards a click or an edit back to whichever one owns it. It never decides on its own what a
+ * field means or whether it is valid.
  *
  * <p>Assembles the cards ({@link FoldersCard}, {@link VisionProviderCard},
  * {@link PhotoCategoriesCard}, {@link PhotoSheetsCard}, {@link AppearanceCard}) and wires Save, off
@@ -36,14 +38,17 @@ final class SettingsPane {
      * every save or credential action, so what is on screen always reflects a fresh read.
      *
      * @param presenter {@link SettingsPresenter} supplies what to show and carries out what is done
+     * @param visionProvider {@link VisionProviderPresenter} the VISION PROVIDER card's credential,
+     *         model catalogue and connection check
      * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
      * @return {@link Node} the settings pane
      */
-    static Node pane(final SettingsPresenter presenter, final Runnable onOpenPhotoCategories) {
+    static Node pane(final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
+                     final Runnable onOpenPhotoCategories) {
         final var container = new VBox();
         container.getStyleClass().add("settings-pane");
         final PageHeader.Result header = PageHeader.build("Settings", "settings-save-button", null);
-        refresh(container, header, presenter, onOpenPhotoCategories, null);
+        refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, null);
 
         return PageHeader.pinnedOver(header, container);
     }
@@ -56,17 +61,19 @@ final class SettingsPane {
      *
      * @param container {@link VBox} the pane's own body
      * @param presenter {@link SettingsPresenter} supplies the state and takes the actions
+     * @param visionProvider {@link VisionProviderPresenter} the VISION PROVIDER card's credential,
+     *         model catalogue and connection check
      * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
      * @param banner what to say above the screen about what just happened, or null for nothing
      */
     private static void refresh(final VBox container, final PageHeader.Result header,
-                                final SettingsPresenter presenter,
+                                final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
                                 final Runnable onOpenPhotoCategories,
                                 final @Nullable String banner) {
         header.clearStatus();
         final SettingsView view = presenter.view();
         final FoldersCard.Result folders = FoldersCard.build(view);
-        final VisionProviderCard.Result provider = VisionProviderCard.build(view, presenter);
+        final VisionProviderCard.Result provider = VisionProviderCard.build(view, visionProvider);
         final PhotoSheetsCard.Result montage = PhotoSheetsCard.build(view);
         final AppearanceCard.Result appearance = AppearanceCard.build(view, presenter);
 
@@ -86,10 +93,10 @@ final class SettingsPane {
             //
             // fillSecretCard leaves Test's own enabled state current as part of that. A credential
             // is exactly what that state depends on.
-            VisionProviderCard.fillSecretCard(provider.secretCard(), presenter, provider.providerBox(),
+            VisionProviderCard.fillSecretCard(provider.secretCard(), visionProvider, provider.providerBox(),
                     provider.providerFields(), null, view.keyLimit());
             VisionProviderCard.selectModelPickerFor(VisionProviderCard.controlsOf(provider.providerFields()).model(),
-                    VisionProviderCard.controlsOf(provider.providerFields()).modelInfo(), presenter, chosen.id(),
+                    VisionProviderCard.controlsOf(provider.providerFields()).modelInfo(), visionProvider, chosen.id(),
                     provider.providerBox());
             // A test answered for the provider that was chosen when it ran.
             VisionProviderCard.controlsOf(provider.providerFields()).testResult().setText("");
@@ -99,12 +106,12 @@ final class SettingsPane {
                     .setPromptText(chosen.defaultEndpoint());
         });
 
-        header.save().setOnAction(_ -> onSave(container, presenter, folders.workingRoot(), folders.libraryRoot(),
-                folders.inbox(),
+        header.save().setOnAction(_ -> onSave(container, presenter, visionProvider, folders.workingRoot(),
+                folders.libraryRoot(), folders.inbox(),
                 VisionProviderCard.providerChoiceOf(provider.providerBox()), provider.providerFields(),
                 VisionProviderCard.watchAutomaticallyOf(provider.watchRow()), montage.tileSize().getValue(),
                 montage.tilesPerRow().getValue(), AppearanceCard.themeChoiceOf(appearance.themeBox()), status,
-                said -> refresh(container, header, presenter, onOpenPhotoCategories, said)));
+                said -> refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, said)));
 
         // The secret card belongs to the provider card, not here. A node named in two parents lands
         // in whichever claimed it last, so adding it would quietly lift it out of the provider card.
@@ -120,6 +127,7 @@ final class SettingsPane {
 
 
     private static void onSave(final VBox container, final SettingsPresenter presenter,
+                               final VisionProviderPresenter visionProvider,
                                final SettingsRows.FolderRow workingRoot,
                                final SettingsRows.FolderRow libraryRoot, final SettingsRows.FolderRow inbox,
                                final SettingsView.ProviderChoice provider, final VBox providerFields,
@@ -138,11 +146,12 @@ final class SettingsPane {
                 // nothing saved yet, would otherwise be told Sluice is checking something it has
                 // not got. The line still clears either way, so a refusal from a previous press
                 // cannot sit under a save that worked.
-                working(status, presenter.secretRow(provider.id()).hasStoredValue() ? "Checking your key..." : "");
+                working(status,
+                        visionProvider.secretRow(provider.id()).hasStoredValue() ? "Checking your key..." : "");
                 final var task = new Task<Void>() {
                     @Override
                     protected Void call() {
-                        presenter.refreshModels(provider.id());
+                        visionProvider.refreshModels(provider.id());
                         return null;
                     }
                 };

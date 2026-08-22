@@ -19,6 +19,7 @@ import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
@@ -200,12 +201,17 @@ class MainWindowTest {
         return ((Label) screen.lookup(".pane-heading")).getText();
     }
 
+    // The presenter pair the Settings screen and its VISION PROVIDER card read and write through.
+    private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
+    }
+
     private static BorderPane built(final FirstRunPresenter presenter) {
         return built(presenter, settingsPresenter());
     }
 
-    private static BorderPane built(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter) {
-        final Scene scene = MainWindow.scene(presenter, settingsPresenter, photoCategoriesPresenter());
+    private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters) {
+        final Scene scene = MainWindow.scene(presenter, presenters.settings(), presenters.vision(),
+                photoCategoriesPresenter());
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();
@@ -300,7 +306,7 @@ class MainWindowTest {
         };
     }
 
-    private static SettingsPresenter settingsPresenter() {
+    private static Presenters settingsPresenter() {
         return settingsPresenter(_ -> {});
     }
 
@@ -328,7 +334,7 @@ class MainWindowTest {
         });
     }
 
-    private static SettingsPresenter settingsPresenter(final Consumer<String> onCheck) {
+    private static Presenters settingsPresenter(final Consumer<String> onCheck) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
@@ -349,8 +355,8 @@ class MainWindowTest {
         });
     }
 
-    private static SettingsPresenter settingsPresenter(final Consumer<String> onCheck,
-                                                       final SettingsUseCase useCase) {
+    private static Presenters settingsPresenter(final Consumer<String> onCheck,
+                                                final SettingsUseCase useCase) {
         final LibraryRootUseCase libraryRootUseCase = (_, _) -> {
             throw new AssertionError("no test here moves the library root");
         };
@@ -412,7 +418,10 @@ class MainWindowTest {
                 throw new AssertionError("no test here tries an endpoint the screen has not saved");
             }
         };
-        return new SettingsPresenter(useCase, libraryRootUseCase, secretStore, noViolations(), catalog);
+        final var vision = new VisionProviderPresenter(secretStore, catalog, useCase);
+        return new Presenters(
+                new SettingsPresenter(useCase, libraryRootUseCase, noViolations(), catalog, vision),
+                vision);
     }
 
     private static <T> T onFxThread(final Callable<T> work) throws Exception {

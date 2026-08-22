@@ -25,21 +25,15 @@ import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.SecretHolding;
-import photos.sluice.application.port.out.SecretHolding.Holding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStatus.Absent;
-import photos.sluice.application.port.out.SecretStatus.InEnvironment;
-import photos.sluice.application.port.out.SecretStatus.InFile;
 import photos.sluice.application.port.out.SecretStatus.InKeyring;
 import photos.sluice.application.port.out.SecretStatus.StoredLocation;
 import photos.sluice.application.port.out.SecretStore;
-import photos.sluice.application.port.out.SecretStoreException;
-import photos.sluice.application.port.out.SecretStoreException.Tier;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.SettingOverride.ByEnvironmentVariable;
 import photos.sluice.application.port.out.Settings;
-import photos.sluice.application.port.out.StaleSecretNotClearedException;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.application.service.JobHandle;
@@ -53,7 +47,6 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.domain.paths.PathViolation.Overlap;
 
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,7 +56,6 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,73 +101,6 @@ class SettingsPresenterTest {
         final var presenter = presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()));
 
         assertThat(presenter.view().workingRoot().value()).isEmpty();
-    }
-
-    @Test
-    void theRowSaysWhereASaveWouldLand() {
-        assertThat(secretRowFor(new InKeyring()).reassurance())
-                .startsWith("Saved to this computer's own credential store.");
-        assertThat(secretRowFor(new Absent()).reassurance())
-                .contains("Never shown to any AI agent");
-    }
-
-    @Test
-    void anEnvironmentStatusCarriesAnOverrideNoteNamingTheVariable() {
-        final SettingsView.SecretRow row = secretRowFor(new InEnvironment("ANTHROPIC_API_KEY"));
-
-        assertThat(row.environmentOverride()).contains("ANTHROPIC_API_KEY");
-    }
-
-    @Test
-    void aStoredStatusCarriesNoEnvironmentOverrideNote() {
-        assertThat(secretRowFor(new InKeyring()).environmentOverride()).isNull();
-    }
-
-    @Test
-    void aThrowingStatusCallDegradesTheRowRatherThanTheWholeScreen() {
-        final SecretStore throwing = new FixedSecretStore(new Absent()) {
-            @Override
-            public SecretStatus status(final SecretId id) {
-                throw new SecretStoreException(Tier.FILE, "the credential file could not be read");
-            }
-        };
-        final SettingsView view = presenterOver(settings(null, null, null), throwing).view();
-
-        // The store's own words are kept, since they are the only thing telling one refusal from
-        // another. What they are not is the whole message: a user needs what happened and what to
-        // do, and neither is in a sentence written for a log.
-        assertThat(view.secret().errorMessage())
-                .contains("the credential file could not be read")
-                .contains("bug in Sluice");
-    }
-
-    @Test
-    void twoHoldersProduceAMultiHolderNote() {
-        final var store = new FixedSecretStore(new Absent(), List.of(
-                new SecretHolding(new InEnvironment("ANTHROPIC_API_KEY"), Holding.HOLDS),
-                new SecretHolding(new InKeyring(), Holding.HOLDS),
-                new SecretHolding(new InFile(), Holding.EMPTY)));
-
-        assertThat(presenterOver(settings(null, null, null), store).view().secret().multiHolder()).isNotNull();
-    }
-
-    @Test
-    void oneHolderProducesNoMultiHolderNote() {
-        final var store = new FixedSecretStore(new InKeyring(), List.of(new SecretHolding(new InKeyring(), Holding.HOLDS)));
-
-        assertThat(presenterOver(settings(null, null, null), store).view().secret().multiHolder()).isNull();
-    }
-
-    @Test
-    void hasStoredValueReflectsHoldingsRatherThanWhichTierAnswers() {
-        // The environment answers status(), but nothing is actually stored: Remove has nothing to do.
-        final var envOnly = new FixedSecretStore(new InEnvironment("ANTHROPIC_API_KEY"),
-                List.of(new SecretHolding(new InEnvironment("ANTHROPIC_API_KEY"), Holding.HOLDS)));
-        assertThat(presenterOver(settings(null, null, null), envOnly).view().secret().hasStoredValue()).isFalse();
-
-        // The keyring both answers and holds a value: Remove has something to do.
-        final var stored = new FixedSecretStore(new InKeyring(), List.of(new SecretHolding(new InKeyring(), Holding.HOLDS)));
-        assertThat(presenterOver(settings(null, null, null), stored).view().secret().hasStoredValue()).isTrue();
     }
 
     @Test
@@ -277,257 +202,6 @@ class SettingsPresenterTest {
         assertThat(view.modelUnrecognised()).isNull();
     }
 
-    @Test
-    void theModelPickerOpensOnTheProvidersOwnStaticFloorBeforeAnyCheck() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> {
-                    throw new AssertionError("no check requested by this test");
-                });
-
-        final SettingsView.ModelPicker picker = presenter.view().model();
-
-        assertThat(picker).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.sourceNote()).contains("before you connect to your provider"));
-    }
-
-    // Nothing has ever been saved for this provider, so the picker falls back to a recommendation
-    // nobody chose. That fallback must never read as a caution. The caution's own claim is that a
-    // cull will fail on what the user configured, and here nothing was configured at all.
-    @Test
-    void aProviderNeverConfiguredDrawsNoUnrecognisedCautionEvenThoughThePickerFellBackToARecommendation() {
-        final var settings = new Settings(new PathSettings(null, null, null), "anthropic",
-                Map.of(), List.of(), new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5),
-                ThemeChoice.SYSTEM);
-        final SettingsPresenter presenter = presenterChecking(settings,
-                _ -> {
-                    throw new AssertionError("no check requested by this test");
-                });
-
-        final SettingsView view = presenter.view();
-
-        assertThat(view.model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.selected()).isNotBlank());
-        assertThat(view.modelUnrecognised()).isNull();
-    }
-
-    @Test
-    void refreshingModelsAfterASuccessfulCheckShowsTheAccountsRealCatalog() {
-        // Two models, and the saved one (settings(null, null, null) saves claude-opus-5) is not
-        // real-model's own recommendation. A single-option catalog could not tell "the saved model
-        // survived the check" apart from "the recommendation always wins".
-        final ModelCatalog live = new ModelCatalog(List.of(new ModelOption("real-model", "Real model"),
-                new ModelOption("claude-opus-5", "Claude Opus 5")), "real-model");
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.Accepted(live));
-
-        presenter.refreshModels("anthropic");
-        final SettingsView view = presenter.view();
-
-        assertThat(view.model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class, options -> {
-            assertThat(options.choices()).extracting(SettingsView.ModelChoice::id)
-                    .containsExactlyInAnyOrder("real-model", "claude-opus-5");
-            assertThat(options.selected()).isEqualTo("claude-opus-5");
-            assertThat(options.sourceNote()).contains("your account can run");
-        });
-        assertThat(view.modelUnrecognised()).isNull();
-    }
-
-    // The agent provider takes no key, and so has nowhere to send anybody.
-    @Test
-    void eachProviderChoiceCarriesWhereItsOwnCredentialComesFrom() {
-        final var presenter = presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()));
-
-        final List<SettingsView.ProviderChoice> choices = presenter.view().providers();
-
-        assertThat(choices).filteredOn(choice -> choice.id().equals("anthropic"))
-                .singleElement()
-                .extracting(SettingsView.ProviderChoice::setupGuide)
-                .isEqualTo(SETUP_GUIDE);
-        assertThat(choices).filteredOn(choice -> choice.id().equals("external-agent"))
-                .singleElement()
-                .extracting(SettingsView.ProviderChoice::setupGuide)
-                .isNull();
-    }
-
-    @Test
-    void theModelPickerHasNothingToShowWhileTheStartUpCheckIsStillRunning() throws Exception {
-        final var checking = new CountDownLatch(1);
-        final var answering = new CountDownLatch(1);
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
-
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
-        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
-        final SettingsView.ModelPicker whileChecking = presenter.view().model();
-        answering.countDown();
-        startUp.join();
-
-        assertThat(whileChecking).isInstanceOf(SettingsView.ModelPicker.Pending.class);
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.sourceNote()).contains("your account can run"));
-    }
-
-    @Test
-    void aStartUpCheckLeavesEveryOtherProvidersPickerAlone() throws Exception {
-        final var checking = new CountDownLatch(1);
-        final var answering = new CountDownLatch(1);
-        final SettingsPresenter presenter = new SettingsPresenter(
-                new FixedSettingsUseCase(settings(null, null, null)), failingLibraryRootUseCase(),
-                new FixedSecretStore(new InKeyring()), noViolations(),
-                checkingCatalog(twoApiProvidersAndAnAgent(),
-                        _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS))));
-
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
-        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
-        final SettingsView.ModelPicker unchecked = presenter.modelPickerFor("other-api").picker();
-        answering.countDown();
-        startUp.join();
-
-        assertThat(unchecked).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.sourceNote()).contains("before you connect"));
-    }
-
-    @Test
-    void awaitingAStartUpCheckReturnsOnceItHasSettled() throws Exception {
-        final var checking = new CountDownLatch(1);
-        final var answering = new CountDownLatch(1);
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
-
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
-        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
-        final var waiter = Thread.ofVirtual().start(() -> presenter.awaitStartUpCheck("anthropic"));
-        assertThat(waiter.join(Duration.ofMillis(200))).isFalse();
-        answering.countDown();
-        waiter.join();
-        startUp.join();
-
-        assertThat(presenter.view().model()).isInstanceOf(SettingsView.ModelPicker.Options.class);
-    }
-
-    @Test
-    void awaitingAStartUpCheckThatIsNotRunningReturnsAtOnce() throws Exception {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.Accepted(MODELS));
-
-        final var waiter = Thread.ofVirtual().start(() -> presenter.awaitStartUpCheck("anthropic"));
-
-        assertThat(waiter.join(Duration.ofSeconds(10))).isTrue();
-    }
-
-    // The provider's own static list would be the comfortable answer here and the wrong one. It
-    // sits under a note saying nothing has been asked yet, and by this point something has been
-    // asked and did not come back.
-    @Test
-    void aStartUpCheckThatOutlastsItsBudgetSaysSoRatherThanFallingBackToAGuess() {
-        final var checking = new CountDownLatch(1);
-        final var answering = new CountDownLatch(1);
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
-
-        presenter.refreshModelsAtStartup(Duration.ofMillis(50));
-
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("could not reach").contains("timed out"));
-        answering.countDown();
-    }
-
-    // Answering that there is nothing to check is not a failed check. Drawing it as one would open
-    // every fresh install on an error the user has not caused and cannot clear.
-    @Test
-    void aStartUpCheckOnAnInstallWithNoKeyOpensOnTheStaticListRatherThanAFailure() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.NoCredential());
-
-        presenter.refreshModelsAtStartup();
-
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.sourceNote()).contains("before you connect"));
-    }
-
-    // A provider is asked to answer rather than throw. One that throws anyway leaves the same reader
-    // with the same empty picker, so it is reported the same way.
-    @Test
-    void aStartUpCheckThatThrowsSaysSoRatherThanFallingBackToAGuess() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null), _ -> {
-            throw new IllegalStateException("the provider fell over");
-        });
-
-        presenter.refreshModelsAtStartup();
-
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("the provider fell over"));
-    }
-
-    @Test
-    void anAnswerStoredWhileTheStartUpCheckIsStillOutIsWhatThePickerDraws() throws Exception {
-        final var checking = new CountDownLatch(1);
-        final var answering = new CountDownLatch(1);
-        final ModelCatalog retried = new ModelCatalog(List.of(new ModelOption("retried-model", "Retried model")),
-                "retried-model");
-        final var calls = new AtomicInteger();
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> calls.getAndIncrement() == 0
-                        ? answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS))
-                        : new ProviderCheck.Accepted(retried));
-
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
-        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
-        presenter.refreshModels("anthropic");
-        final SettingsView.ModelPicker stillChecking = presenter.view().model();
-        answering.countDown();
-        startUp.join();
-
-        assertThat(stillChecking).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.choices()).extracting(SettingsView.ModelChoice::id)
-                        .containsExactly("retried-model"));
-    }
-
-    // The Retry answer here offers a model the start-up answer does not, so the two cannot be
-    // confused for each other.
-    @Test
-    void aStartUpCheckLandingLateDoesNotReplaceAnAnswerSomethingElseHasSinceStored() throws Exception {
-        final var checking = new CountDownLatch(1);
-        final var answering = new CountDownLatch(1);
-        final ModelCatalog retried = new ModelCatalog(List.of(new ModelOption("retried-model", "Retried model")),
-                "retried-model");
-        final var calls = new AtomicInteger();
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> calls.getAndIncrement() == 0
-                        ? answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS))
-                        : new ProviderCheck.Accepted(retried));
-
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
-        assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
-        presenter.refreshModels("anthropic");
-        answering.countDown();
-        startUp.join();
-
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.choices()).extracting(SettingsView.ModelChoice::id)
-                        .containsExactly("retried-model"));
-    }
-
-    // Counted rather than guarded by a throwing stub. The start-up check runs its provider call
-    // through a future, and that future wraps an AssertionError into the same failure the presenter
-    // deliberately swallows. A stub that threw here would prove nothing.
-    @Test
-    void noStartUpCheckIsMadeForAProviderThatOffersNoModels() {
-        final var settings = new Settings(new PathSettings(null, null, null), "external-agent", Map.of(),
-                List.of(), new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5),
-                ThemeChoice.SYSTEM);
-        final var checks = new AtomicInteger();
-        final SettingsPresenter presenter = presenterChecking(settings, _ -> {
-            checks.incrementAndGet();
-            return new ProviderCheck.Rejected();
-        });
-
-        presenter.refreshModelsAtStartup();
-
-        assertThat(checks).hasValue(0);
-        assertThat(presenter.view().model()).isNull();
-    }
-
     // Every provider in this fixture offers models, so a check made against the configured id
     // instead would find no catalog and ask nothing. That is what tells the two apart.
     @Test
@@ -539,122 +213,18 @@ class SettingsPresenterTest {
         final List<VisionProviderDescriptor> apiProvidersOnly = twoApiProvidersAndAnAgent().stream()
                 .filter(provider -> provider.models() != null)
                 .toList();
+        final var settingsUseCase = new FixedSettingsUseCase(settings);
+        final var catalog = checkingCatalog(apiProvidersOnly, id -> {
+            checked.add(id);
+            return new ProviderCheck.Accepted(MODELS);
+        });
         final SettingsPresenter presenter = new SettingsPresenter(
-                new FixedSettingsUseCase(settings), failingLibraryRootUseCase(),
-                new FixedSecretStore(new InKeyring()), noViolations(),
-                checkingCatalog(apiProvidersOnly, id -> {
-                    checked.add(id);
-                    return new ProviderCheck.Accepted(MODELS);
-                }));
+                settingsUseCase, failingLibraryRootUseCase(), noViolations(), catalog,
+                new VisionProviderPresenter(new FixedSecretStore(new InKeyring()), catalog, settingsUseCase));
 
         presenter.refreshModelsAtStartup();
 
         assertThat(checked).containsExactly(presenter.view().provider());
-    }
-
-    @Test
-    void aRejectedCheckLeavesNothingToSelect() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.Rejected());
-
-        presenter.refreshModels("anthropic");
-        final SettingsView.ModelPicker picker = presenter.view().model();
-
-        assertThat(picker).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).isEqualTo("This provider rejected the key."));
-    }
-
-    @Test
-    void anAccountWithNoUsableModelDrawsItsOwnViolation() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.NoUsableModels());
-
-        presenter.refreshModels("anthropic");
-
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation())
-                        .isEqualTo("This key works, but this account cannot run any model Sluice needs."));
-    }
-
-    @Test
-    void aRefusalCarriesTheProvidersOwnWords() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.Refused("your credit balance is too low"));
-
-        presenter.refreshModels("anthropic");
-
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("credit balance is too low"));
-    }
-
-    @Test
-    void anUnreachableProviderCarriesWhatFailed() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.Unreachable("connect timed out"));
-
-        presenter.refreshModels("anthropic");
-
-        assertThat(presenter.view().model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("connect timed out"));
-    }
-
-    // The saved settings name a model MODELS does not offer; a-model is the only one it has.
-    // This exercises the caution note against the provider's own static floor, no check performed.
-    @Test
-    void aSavedModelTheProviderDoesNotOfferDrawsACaution() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> {
-                    throw new AssertionError("no check requested by this test");
-                });
-
-        final SettingsView view = presenter.view();
-
-        assertThat(view.modelUnrecognised()).contains("claude-opus-5").contains("does not offer");
-        assertThat(view.model()).isInstanceOfSatisfying(SettingsView.ModelPicker.Options.class,
-                options -> assertThat(options.selected()).isEqualTo("a-model"));
-    }
-
-    @Test
-    void testConnectionAsksTheCatalogAboutTheCandidateEndpointRatherThanWhatIsStored() {
-        final var received = new ArrayList<CullProviderSettings>();
-        final SettingsPresenter presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null,
-                null)), failingLibraryRootUseCase(), new FixedSecretStore(new InKeyring()), noViolations(),
-                candidateCapturingCatalog(received));
-
-        final SettingsPresenter.ConnectionCheckResult result =
-                presenter.testConnection("anthropic", "https://example.test");
-
-        assertThat(received).containsExactly(new CullProviderSettings(null, "https://example.test", null));
-        assertThat(result.message()).contains("This works");
-        assertThat(result.succeeded()).isTrue();
-    }
-
-    @Test
-    void testConnectionWordsARejectionTheSameWayThePickerDoes() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
-                _ -> new ProviderCheck.Rejected());
-
-        final SettingsPresenter.ConnectionCheckResult result =
-                presenter.testConnection("anthropic", "https://example.test");
-
-        assertThat(result.message()).isEqualTo("This provider rejected the key.");
-        assertThat(result.succeeded()).isFalse();
-    }
-
-    @Test
-    void aProviderCallingAModelUsesTheModelSettingsAndNotTheWatchMode() {
-        final var fields = choiceFor("anthropic",
-                presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()))).fields();
-
-        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(true, true, false, true));
-    }
-
-    @Test
-    void theExternalAgentUsesTheWatchModeAndNoneOfTheModelSettings() {
-        final var fields = choiceFor("external-agent",
-                presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()))).fields();
-
-        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(false, false, true, false));
     }
 
     @Test
@@ -795,12 +365,12 @@ class SettingsPresenterTest {
     void aRefusalWhileTheStartUpCheckIsOutNamesNoRetry() throws Exception {
         final var checking = new CountDownLatch(1);
         final var answering = new CountDownLatch(1);
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+        final Presenters presenters = presenterChecking(settings(null, null, null),
                 _ -> answerOnceReleased(checking, answering, new ProviderCheck.Accepted(MODELS)));
 
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        final Thread startUp = Thread.ofVirtual().start(presenters.settings()::refreshModelsAtStartup);
         assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
-        final SettingsPresenter.SaveOutcome outcome = presenter.save("", "", "", "anthropic", "", "",
+        final SettingsPresenter.SaveOutcome outcome = presenters.settings().save("", "", "", "anthropic", "", "",
                 false, 224, 5, "SYSTEM");
         answering.countDown();
         startUp.join();
@@ -811,11 +381,11 @@ class SettingsPresenterTest {
 
     @Test
     void aRefusalAfterAFailedCheckSendsTheReaderToRetry() {
-        final SettingsPresenter presenter = presenterChecking(settings(null, null, null),
+        final Presenters presenters = presenterChecking(settings(null, null, null),
                 _ -> new ProviderCheck.Rejected());
-        presenter.refreshModels("anthropic");
+        presenters.vision().refreshModels("anthropic");
 
-        final SettingsPresenter.SaveOutcome outcome = presenter.save("", "", "", "anthropic", "", "",
+        final SettingsPresenter.SaveOutcome outcome = presenters.settings().save("", "", "", "anthropic", "", "",
                 false, 224, 5, "SYSTEM");
 
         assertThat(outcome).isInstanceOfSatisfying(SettingsPresenter.SaveOutcome.Refused.class,
@@ -1005,8 +575,7 @@ class SettingsPresenterTest {
     void moveLibraryRootReportsAFilesCopiedOutcome() {
         final var jobRunner = new JobRunner();
         final var library = new SucceedingLibraryRootUseCase(jobRunner, new CopiedAndMoved(12, 12));
-        final var presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null, null)), library,
-                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        final var presenter = presenterOverLibrary(new FixedSettingsUseCase(settings(null, null, null)), library);
 
         final var outcome =
                 presenter.moveLibraryRoot(refusedMoveTo("/new-library"), LibraryRootResolution.COPY_AND_KEEP_INDEX);
@@ -1019,8 +588,7 @@ class SettingsPresenterTest {
     void moveLibraryRootReportsAFailureFromTheJob() {
         final var jobRunner = new JobRunner();
         final var library = new FailingLibraryRootUseCase(jobRunner, new IllegalStateException("cannot move"));
-        final var presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null, null)), library,
-                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        final var presenter = presenterOverLibrary(new FixedSettingsUseCase(settings(null, null, null)), library);
 
         final var outcome =
                 presenter.moveLibraryRoot(refusedMoveTo("/new-library"), LibraryRootResolution.START_A_FRESH_INDEX);
@@ -1032,9 +600,8 @@ class SettingsPresenterTest {
     @Test
     void aMoveStoresTheRestOfTheSaveItWasAskedAbout() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
-        final var presenter = new SettingsPresenter(settingsUseCase,
-                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)),
-                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        final var presenter = presenterOverLibrary(settingsUseCase,
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)));
         final Settings pending = settings("/new-repo", "/new-library", "/new-inbox");
 
         final var outcome = presenter.moveLibraryRoot(
@@ -1049,9 +616,8 @@ class SettingsPresenterTest {
     @Test
     void aCancelledCopySavesNothingAndSaysTheLibraryStayedPut() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
-        final var presenter = new SettingsPresenter(settingsUseCase,
-                new SucceedingLibraryRootUseCase(new JobRunner(), new CopyCancelled(2, 9)),
-                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        final var presenter = presenterOverLibrary(settingsUseCase,
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopyCancelled(2, 9)));
 
         final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
                 LibraryRootResolution.COPY_AND_KEEP_INDEX);
@@ -1068,9 +634,8 @@ class SettingsPresenterTest {
     void aMoveWhoseFollowingSaveFailsSaysTheLibraryMovedAnyway() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
         settingsUseCase.saveFailure = new JobInProgressException("Sluice is running a job. Finish it first.");
-        final var presenter = new SettingsPresenter(settingsUseCase,
-                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)),
-                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        final var presenter = presenterOverLibrary(settingsUseCase,
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)));
 
         final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
                 LibraryRootResolution.COPY_AND_KEEP_INDEX);
@@ -1084,8 +649,7 @@ class SettingsPresenterTest {
     @Test
     void aMoveFailingWithNothingToSaySaysSoRatherThanNothing() {
         final var library = new FailingLibraryRootUseCase(new JobRunner(), new IllegalStateException());
-        final var presenter = new SettingsPresenter(new FixedSettingsUseCase(settings(null, null, null)), library,
-                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        final var presenter = presenterOverLibrary(new FixedSettingsUseCase(settings(null, null, null)), library);
 
         final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
                 LibraryRootResolution.START_A_FRESH_INDEX);
@@ -1143,67 +707,6 @@ class SettingsPresenterTest {
     }
 
     @Test
-    void removingAKeyAnEnvironmentVariableAlsoHoldsSaysTheProviderKeepsWorking() {
-        final var presenter = presenterOver(settings(null, null, null),
-                new FixedSecretStore(new InEnvironment("ANTHROPIC_API_KEY")));
-
-        final SettingsPresenter.SecretRemoval removal = presenter.secretRemoval("anthropic");
-
-        assertThat(removal.question()).contains("environment variable");
-        assertThat(removal.question()).doesNotContain("stop working");
-        assertThat(removal.removed()).contains("using the key in your environment");
-    }
-
-    @Test
-    void removingTheOnlyKeySaysTheProviderStopsWorking() {
-        final var presenter = presenterOver(settings(null, null, null), new FixedSecretStore(new InKeyring()));
-
-        final SettingsPresenter.SecretRemoval removal = presenter.secretRemoval("anthropic");
-
-        assertThat(removal.question()).contains("stop working");
-        assertThat(removal.removed()).contains("cannot run until you add a new key");
-    }
-
-    @Test
-    void saveSecretReportsNoErrorOnSuccess() {
-        final var presenter = presenterOver(settings(null, null, null), new FixedSecretStore(new Absent()));
-
-        assertThat(presenter.saveSecret("anthropic", "a-fresh-key")).isNull();
-    }
-
-    @Test
-    void saveSecretReportsAStaleCopyMessageForThatException() {
-        final SecretStore refusing = new FixedSecretStore(new Absent()) {
-            @Override
-            public void save(final SecretId id, final String secret) {
-                throw new StaleSecretNotClearedException("a stale copy above it could not be cleared");
-            }
-        };
-        final var presenter = presenterOver(settings(null, null, null), refusing);
-
-        // The store's own words are kept, since they are the only thing telling one refusal from
-        // another. They are not the whole message: a user needs what happened and what to try.
-        assertThat(presenter.saveSecret("anthropic", "a-fresh-key"))
-                .contains("a stale copy above it could not be cleared")
-                .contains("Try Remove");
-    }
-
-    @Test
-    void removeSecretReportsAnErrorMessageOnFailure() {
-        final SecretStore refusing = new FixedSecretStore(new Absent()) {
-            @Override
-            public void remove(final SecretId id) {
-                throw new SecretStoreException(Tier.KEYRING, "the keyring refused this entry");
-            }
-        };
-        final var presenter = presenterOver(settings(null, null, null), refusing);
-
-        assertThat(presenter.removeSecret("anthropic"))
-                .contains("the keyring refused this entry")
-                .contains("bug in Sluice");
-    }
-
-    @Test
     void saveNeverCreatesAFolderForAPathThatIsNotOurOwnSuggestion(final @TempDir Path tempDir) {
         final Path untouched = tempDir.resolve("a-user-typed-folder-that-does-not-exist-yet");
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
@@ -1243,10 +746,6 @@ class SettingsPresenterTest {
                 .isEqualTo(Path.of(SettingsPresenter.workingRootSuggestion(), "Inbox").toString());
     }
 
-    private static SettingsView.SecretRow secretRowFor(final SecretStatus status) {
-        return presenterOver(settings(null, null, null), new FixedSecretStore(status)).view().secret();
-    }
-
     private static SettingsPresenter presenterOver(final Settings settings, final SecretStore secretStore) {
         return presenterOver(settings, secretStore, noViolations());
     }
@@ -1254,13 +753,6 @@ class SettingsPresenterTest {
     private static SettingsPresenter presenterOver(final Settings settings, final SecretStore secretStore,
                                                     final PathValidationUseCase pathValidation) {
         return presenter(new FixedSettingsUseCase(settings), secretStore, pathValidation);
-    }
-
-    private static SettingsView.ProviderChoice choiceFor(final String id, final SettingsPresenter presenter) {
-        return presenter.view().providers().stream()
-                .filter(choice -> choice.id().equals(id))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no choice offered for provider '" + id + "'"));
     }
 
     // The refusal a move answers, built where a save would have produced one. Only the destination
@@ -1271,14 +763,24 @@ class SettingsPresenterTest {
     }
 
     private static SettingsPresenter presenterMoving(final LibraryRootUseCase libraryRoot) {
-        return new SettingsPresenter(new FixedSettingsUseCase(settings(null, null, null)), libraryRoot,
-                new FixedSecretStore(new Absent()), noViolations(), twoProviders());
+        return presenterOverLibrary(new FixedSettingsUseCase(settings(null, null, null)), libraryRoot);
     }
 
     private static SettingsPresenter presenter(final SettingsUseCase settingsUseCase, final SecretStore secretStore,
                                                final PathValidationUseCase pathValidation) {
-        return new SettingsPresenter(settingsUseCase, failingLibraryRootUseCase(), secretStore, pathValidation,
-                twoProviders());
+        final var visionProvider = new VisionProviderPresenter(secretStore, twoProviders(), settingsUseCase);
+        return new SettingsPresenter(settingsUseCase, failingLibraryRootUseCase(), pathValidation, twoProviders(),
+                visionProvider);
+    }
+
+    // The library-root move tests never touch the credential or model catalogue, so the vision
+    // presenter behind this one is a fixed, unremarkable fixture.
+    private static SettingsPresenter presenterOverLibrary(final SettingsUseCase settingsUseCase,
+                                                           final LibraryRootUseCase libraryRootUseCase) {
+        final var visionProvider = new VisionProviderPresenter(new FixedSecretStore(new Absent()), twoProviders(),
+                settingsUseCase);
+        return new SettingsPresenter(settingsUseCase, libraryRootUseCase, noViolations(), twoProviders(),
+                visionProvider);
     }
 
     // One of each type, and only the API one takes a key. Every question this screen asks a provider
@@ -1292,15 +794,24 @@ class SettingsPresenterTest {
                         Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
     }
 
-    // A presenter over the same anthropic/external-agent pair twoProviders() offers, but with a
+    // The presenter pair over settings this file's cross-seam tests read and write through.
+    private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
+    }
+
+    // A presenter pair over the same anthropic/external-agent pair twoProviders() offers, but with a
     // real answer for a credential check.
     //
     // catalogOf's own fixture throws AssertionError there instead; refreshModels and
     // testConnection are the only two callers that reach this one.
-    private static SettingsPresenter presenterChecking(final Settings settings,
-                                                        final Function<String, ProviderCheck> checkById) {
-        return new SettingsPresenter(new FixedSettingsUseCase(settings), failingLibraryRootUseCase(),
-                new FixedSecretStore(new InKeyring()), noViolations(), checkingCatalog(checkById));
+    private static Presenters presenterChecking(final Settings settings,
+                                                final Function<String, ProviderCheck> checkById) {
+        final var settingsUseCase = new FixedSettingsUseCase(settings);
+        final var catalog = checkingCatalog(checkById);
+        final var vision = new VisionProviderPresenter(new FixedSecretStore(new InKeyring()), catalog,
+                settingsUseCase);
+        return new Presenters(
+                new SettingsPresenter(settingsUseCase, failingLibraryRootUseCase(), noViolations(), catalog, vision),
+                vision);
     }
 
     private static VisionProviderCatalog checkingCatalog(final Function<String, ProviderCheck> checkById) {
@@ -1365,35 +876,6 @@ class SettingsPresenterTest {
             throw new AssertionError(e);
         }
         return answer;
-    }
-
-    // checkingCatalog ignores the candidate its own check(id, candidate) is given. This is the one
-    // fixture that reads it back, so a test can prove testConnection forwards the screen's typed
-    // endpoint rather than what is stored.
-    private static VisionProviderCatalog candidateCapturingCatalog(final List<CullProviderSettings> received) {
-        final VisionProviderCatalog delegate = checkingCatalog(_ -> new ProviderCheck.Rejected());
-        return new VisionProviderCatalog() {
-            @Override
-            public List<VisionProviderDescriptor> providers() {
-                return delegate.providers();
-            }
-
-            @Override
-            public Optional<VisionProviderDescriptor> byId(final String id) {
-                return delegate.byId(id);
-            }
-
-            @Override
-            public ProviderCheck check(final String id) {
-                throw new AssertionError("testConnection does not call the plain check");
-            }
-
-            @Override
-            public ProviderCheck check(final String id, final CullProviderSettings candidate) {
-                received.add(candidate);
-                return new ProviderCheck.Accepted(MODELS);
-            }
-        };
     }
 
     private static VisionProviderCatalog catalogOf(final VisionProviderDescriptor... providers) {

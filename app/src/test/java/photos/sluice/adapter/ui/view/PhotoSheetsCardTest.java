@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.built;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.presenterOn;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.visionProviderPresenterOn;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
 
 // A handful of structural claims rather than a second copy of SettingsPresenterTest. What the
@@ -35,7 +36,7 @@ class PhotoSheetsCardTest {
     // behind would be discarded, in favour of whatever the spinner last held.
     @Test
     void aTypedNumberIsTakenWhenTheFieldIsLeft() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         final var tileSize = (Spinner<?>) pane.lookup("#settings-tile-size");
         assertThat(tileSize.getValue()).isEqualTo(224);
 
@@ -54,7 +55,7 @@ class PhotoSheetsCardTest {
     // empty is not a value, and the field has to show what it will actually save.
     @Test
     void anEmptiedFieldShowsItsValueAgainWhenLeft() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         final var tileSize = (Spinner<?>) pane.lookup("#settings-tile-size");
 
         runOnFxThread(() -> {

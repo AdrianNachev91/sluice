@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome.CopiedAndMoved;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome.MovedWithAFreshIndex;
@@ -45,7 +46,6 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onlyRefusingOneFolder;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportIsARefusal;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportText;
-import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.threeProviders;
 
 // What SettingsPane keeps for itself once every card owns its own rows: the assembly, and the
@@ -78,7 +78,8 @@ class SettingsPaneTest {
             received.add(resolution);
             return jobRunner.submit(_ -> new CopiedAndMoved(5, 5));
         };
-        final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
+        final Presenters presenters = presenterNeedingLibraryRootResolution(library);
+        final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
 
         final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
         answerDialog("Copy the old library across");
@@ -98,7 +99,8 @@ class SettingsPaneTest {
             received.add(resolution);
             return jobRunner.submit(_ -> new MovedWithAFreshIndex(null));
         };
-        final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
+        final Presenters presenters = presenterNeedingLibraryRootResolution(library);
+        final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
 
         final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
         answerDialog("Start the record fresh");
@@ -122,7 +124,8 @@ class SettingsPaneTest {
             received.add(resolution);
             return jobRunner.submit(_ -> new CopiedAndMoved(1, 1));
         };
-        final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
+        final Presenters presenters = presenterNeedingLibraryRootResolution(library);
+        final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
 
         final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
         answerDialog("Cancel");
@@ -146,7 +149,8 @@ class SettingsPaneTest {
         final LibraryRootUseCase library = (_, _) -> jobRunner.submit(_ -> {
             throw new IllegalStateException("cannot move: disk full");
         });
-        final Parent pane = onFxThread(() -> built(presenterNeedingLibraryRootResolution(library)));
+        final Presenters presenters = presenterNeedingLibraryRootResolution(library);
+        final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
 
         final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
         answerDialog("Copy the old library across");
@@ -168,13 +172,17 @@ class SettingsPaneTest {
         return ((Label) banner.getChildren().getFirst()).getText();
     }
 
+    // The presenter pair this screen reads and writes through.
+    private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
+    }
+
     // Its own settings use case rather than a shared fixture: this is the one save that must ask for
     // a resolution rather than succeed or refuse.
     //
     // It refuses while the library root being saved differs from the one in force, which is the real
     // seam's own rule. A double that refused every save would also refuse the save the presenter
     // makes after the move, and that save is what keeps the rest of what the user was storing.
-    private static SettingsPresenter presenterNeedingLibraryRootResolution(final LibraryRootUseCase libraryRoot) {
+    private static Presenters presenterNeedingLibraryRootResolution(final LibraryRootUseCase libraryRoot) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
@@ -206,6 +214,9 @@ class SettingsPaneTest {
             libraryRootInForce.set(newLibraryRoot.toString());
             return handle;
         };
-        return new SettingsPresenter(useCase, moving, oneStoredKey(), onlyRefusingOneFolder(), threeProviders());
+        final var vision = new VisionProviderPresenter(oneStoredKey(), threeProviders(), useCase);
+        return new Presenters(
+                new SettingsPresenter(useCase, moving, onlyRefusingOneFolder(), threeProviders(), vision),
+                vision);
     }
 }

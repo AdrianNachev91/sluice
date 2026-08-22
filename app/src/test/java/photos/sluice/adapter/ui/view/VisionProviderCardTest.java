@@ -15,8 +15,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
-import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.SettingsView;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
@@ -53,9 +53,8 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.builtInAWind
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.inView;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.oneStoredKey;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
-import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onlyRefusingOneFolder;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.presenterOn;
-import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.refusingLibraryRootUseCase;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.visionProviderPresenterOn;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.rowOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.scrollOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
@@ -63,10 +62,10 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.settingsUseC
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.threeProviders;
 
-// A handful of structural claims rather than a second copy of SettingsPresenterTest. What the
-// screen says is the presenter's, and is asserted there. This file guards the wiring only a built
-// scene graph can be wrong about. Which controls a provider shows, which parent a block ends up
-// in, and whether a refusal or a credential change reaches the row it belongs to.
+// A handful of structural claims rather than a second copy of VisionProviderPresenterTest. What
+// the screen says is the vision presenter's, and is asserted there. This file guards the wiring
+// only a built scene graph can be wrong about. Which controls a provider shows, which parent a
+// block ends up in, and whether a refusal or a credential change reaches the row it belongs to.
 //
 // Everything runs on the FX thread. Building the pane reads the desktop's colour preferences, and
 // that call refuses any other thread.
@@ -84,7 +83,7 @@ class VisionProviderCardTest {
 
     @Test
     void theApiKeyBlockSitsInsideTheProviderCard() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         final Node apiKey = pane.lookup("#settings-api-key");
         assertThat(apiKey).isNotNull();
@@ -93,7 +92,7 @@ class VisionProviderCardTest {
 
     @Test
     void choosingAProviderShowsOnlyTheControlsThatProviderUses() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         assertThat(shown(pane, "#settings-provider-fields")).isTrue();
         assertThat(shown(pane, "#settings-api-key")).isTrue();
@@ -110,7 +109,7 @@ class VisionProviderCardTest {
     // Only anthropic's is stored, which is what makes the buttons say which provider is showing.
     @Test
     void theApiKeyBlockFollowsTheChosenProviderRatherThanTheSavedOne() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         assertThat(buttonsIn(pane.lookup("#settings-api-key"))).contains("Replace key");
 
@@ -132,7 +131,8 @@ class VisionProviderCardTest {
     // to the recommendation.
     @Test
     void switchingProviderAndBackReselectsThisProvidersSavedModel() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOnWithADistinctSavedModel()));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
+                visionProviderWithADistinctSavedModel()));
 
         runOnFxThread(() -> {
             select(pane, "external-agent");
@@ -146,8 +146,8 @@ class VisionProviderCardTest {
     // something left over from building the row.
     @Test
     void pressingTestShowsWhatTheProviderSaidAboutTheTypedEndpoint() throws Exception {
-        final Parent pane = onFxThread(() -> built(
-                checkingPresenterOn("anthropic", _ -> new ProviderCheck.Rejected())));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
+                checkingVisionProviderOn("anthropic", _ -> new ProviderCheck.Rejected())));
         runOnFxThread(() -> ((TextField) pane.lookup("#settings-endpoint")).setText("https://example.test"));
 
         runOnFxThread(() -> ((Button) pane.lookup("#settings-test-connection")).fire());
@@ -162,7 +162,8 @@ class VisionProviderCardTest {
     // the chosen provider, not a value every provider happens to share.
     @Test
     void anEmptyEndpointPromptsWithThisProvidersOwnDefault() throws Exception {
-        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> new ProviderCheck.Rejected())));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
+                checkingVisionProviderOn("anthropic", _ -> new ProviderCheck.Rejected())));
         final var endpoint = (TextField) pane.lookup("#settings-endpoint");
         assertThat(endpoint.getPromptText()).isEqualTo("https://api.anthropic.com");
 
@@ -173,8 +174,8 @@ class VisionProviderCardTest {
 
     @Test
     void theTestButtonIsEnabledWheneverThisProviderHasAStoredCredential() throws Exception {
-        final Parent pane = onFxThread(() -> built(
-                checkingPresenterOn("anthropic", _ -> new ProviderCheck.Rejected())));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
+                checkingVisionProviderOn("anthropic", _ -> new ProviderCheck.Rejected())));
         final var test = (Button) pane.lookup("#settings-test-connection");
 
         // Enabled with no endpoint typed at all: anthropic's key is stored, and an empty endpoint
@@ -193,12 +194,12 @@ class VisionProviderCardTest {
     void aTestResultArrivingAfterAProviderSwitchIsDiscarded() throws Exception {
         final var checkStarted = new CountDownLatch(1);
         final var releaseCheck = new CountDownLatch(1);
-        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+        final VisionProviderPresenter visionProvider = checkingVisionProviderOn("anthropic", _ -> {
             checkStarted.countDown();
             awaitRelease(releaseCheck);
             return new ProviderCheck.Rejected();
         });
-        final Parent pane = onFxThread(() -> built(presenter));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProvider));
         runOnFxThread(() -> ((TextField) pane.lookup("#settings-endpoint")).setText("https://example.test"));
 
         runOnFxThread(() -> ((Button) pane.lookup("#settings-test-connection")).fire());
@@ -220,13 +221,13 @@ class VisionProviderCardTest {
     @Test
     void aFailedCheckDrawsAnUnavailablePickerAndRetrySucceeds() throws Exception {
         final var succeeding = new AtomicBoolean(false);
-        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> succeeding.get()
+        final VisionProviderPresenter visionProvider = checkingVisionProviderOn("anthropic", _ -> succeeding.get()
                 ? new ProviderCheck.Accepted(MODELS) : new ProviderCheck.Unreachable("connect timed out"));
-        // Built after a check has already landed. The pane's own build reads the presenter's
-        // cache rather than checking anything itself. An unchecked presenter would open on the
+        // Built after a check has already landed. The pane's own build reads the visionProvider's
+        // cache rather than checking anything itself. An unchecked visionProvider would open on the
         // static floor regardless of what checkById answers.
-        presenter.refreshModels("anthropic");
-        final Parent pane = onFxThread(() -> built(presenter));
+        visionProvider.refreshModels("anthropic");
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProvider));
 
         assertThat(modelBox(pane).isDisabled()).isTrue();
         assertThat(textsOfClass(pane, "settings-violation")).anyMatch(text -> text.contains("connect timed out"));
@@ -244,14 +245,14 @@ class VisionProviderCardTest {
     void aPickerWaitingOnTheStartUpCheckRedrawsItselfOnceTheAnswerLands() throws Exception {
         final var checking = new CountDownLatch(1);
         final var answering = new CountDownLatch(1);
-        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+        final VisionProviderPresenter visionProvider = checkingVisionProviderOn("anthropic", _ -> {
             checking.countDown();
             awaitRelease(answering);
             return new ProviderCheck.Accepted(MODELS);
         });
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        final Thread startUp = Thread.ofVirtual().start(() -> visionProvider.refreshModelsAtStartup("anthropic"));
         assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
-        final Parent pane = onFxThread(() -> built(presenter));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProvider));
 
         answering.countDown();
         startUp.join();
@@ -268,15 +269,15 @@ class VisionProviderCardTest {
         final var calls = new AtomicInteger();
         final var pressed = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
-        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+        final VisionProviderPresenter visionProvider = checkingVisionProviderOn("anthropic", _ -> {
             if (calls.getAndIncrement() > 0) {
                 pressed.countDown();
                 awaitRelease(release);
             }
             return new ProviderCheck.Rejected();
         });
-        presenter.refreshModels("anthropic");
-        final Parent pane = onFxThread(() -> built(presenter));
+        visionProvider.refreshModels("anthropic");
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProvider));
         final var retry = (Button) pane.lookup("#settings-model-retry");
 
         runOnFxThread(retry::fire);
@@ -293,14 +294,14 @@ class VisionProviderCardTest {
     @Test
     void aRetryWhoseCheckThrowsStillLeavesAWayBack() throws Exception {
         final var calls = new AtomicInteger();
-        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+        final VisionProviderPresenter visionProvider = checkingVisionProviderOn("anthropic", _ -> {
             if (calls.getAndIncrement() > 0) {
                 throw new IllegalStateException("the provider fell over");
             }
             return new ProviderCheck.Rejected();
         });
-        presenter.refreshModels("anthropic");
-        final Parent pane = onFxThread(() -> built(presenter));
+        visionProvider.refreshModels("anthropic");
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProvider));
 
         runOnFxThread(((Button) pane.lookup("#settings-model-retry"))::fire);
         WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS,
@@ -315,7 +316,7 @@ class VisionProviderCardTest {
     // the line is read off the chosen provider rather than shown for every one of them.
     @Test
     void theCredentialCardSaysWhereThisProvidersKeyComesFrom() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         assertThat(sentenceOf(pane.lookup("#settings-api-key-setup-guide"))).isEqualTo(SETUP_GUIDE);
 
@@ -328,15 +329,15 @@ class VisionProviderCardTest {
     void aPickerWaitingOnTheStartUpCheckOffersNothingAndBlamesNothing() throws Exception {
         final var checking = new CountDownLatch(1);
         final var answering = new CountDownLatch(1);
-        final SettingsPresenter presenter = checkingPresenterOn("anthropic", _ -> {
+        final VisionProviderPresenter visionProvider = checkingVisionProviderOn("anthropic", _ -> {
             checking.countDown();
             awaitRelease(answering);
             return new ProviderCheck.Accepted(MODELS);
         });
-        final Thread startUp = Thread.ofVirtual().start(presenter::refreshModelsAtStartup);
+        final Thread startUp = Thread.ofVirtual().start(() -> visionProvider.refreshModelsAtStartup("anthropic"));
         assertThat(checking.await(10, TimeUnit.SECONDS)).isTrue();
 
-        final Parent pane = onFxThread(() -> built(presenter));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProvider));
 
         assertThat(modelBox(pane).isDisabled()).isTrue();
         assertThat(modelBox(pane).getPromptText()).isEqualTo("Loading...");
@@ -348,14 +349,15 @@ class VisionProviderCardTest {
 
     @Test
     void theInfoGlyphsMarkSitsCentredInItsRing() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         assertThat(onFxThread(() -> markOffsetWithinRing(pane, "info"))).isZero();
     }
 
     @Test
     void theCautionGlyphsMarkSitsCentredInItsRing() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("a-provider-this-build-lacks")));
+        final Parent pane = onFxThread(() -> built(presenterOn("a-provider-this-build-lacks"),
+                visionProviderPresenterOn("a-provider-this-build-lacks")));
 
         assertThat(onFxThread(() -> markOffsetWithinRing(pane, "caution"))).isZero();
     }
@@ -363,7 +365,8 @@ class VisionProviderCardTest {
     // Nothing was refused here, so the empty-violations assertion is half of what the name claims.
     @Test
     void anUnknownConfiguredProviderIsCautionedAboutWithoutBeingRefused() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("a-provider-this-build-lacks")));
+        final Parent pane = onFxThread(() -> built(presenterOn("a-provider-this-build-lacks"),
+                visionProviderPresenterOn("a-provider-this-build-lacks")));
 
         assertThat(textsOfClass(pane, "settings-caution"))
                 .anyMatch(text -> text.contains("a-provider-this-build-lacks"));
@@ -375,7 +378,8 @@ class VisionProviderCardTest {
     // because the dropdown was changed and left unsaved, which is what makes the check meaningful.
     @Test
     void savingAKeyLeavesAProviderPickedButNotYetSavedAlone() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("external-agent")));
+        final Parent pane = onFxThread(() -> built(presenterOn("external-agent"),
+                visionProviderPresenterOn("external-agent")));
         runOnFxThread(() -> select(pane, "anthropic"));
         assertThat(chosenProvider(pane)).isEqualTo("anthropic");
 
@@ -389,7 +393,7 @@ class VisionProviderCardTest {
 
     @Test
     void savingAKeySaysSoBesideTheRowRatherThanAtTheTopOfThePage() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         assertThat(textsOfClass(pane, "settings-confirmation")).isEmpty();
 
         runOnFxThread(() -> {
@@ -405,7 +409,7 @@ class VisionProviderCardTest {
 
     @Test
     void removingAKeySaysSoToo() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         final var pressed = WaitForAsyncUtils.asyncFx(
                 () -> ((Button) pane.lookup("#settings-api-key-remove")).fire());
@@ -419,7 +423,8 @@ class VisionProviderCardTest {
     @Test
     void cancellingTheConfirmRemovesNothing() throws Exception {
         final var checks = new AtomicInteger(0);
-        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> {
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
+                checkingVisionProviderOn("anthropic", _ -> {
             checks.incrementAndGet();
             return new ProviderCheck.NoCredential();
         })));
@@ -439,7 +444,8 @@ class VisionProviderCardTest {
     @Test
     void savingAKeyAsksTheProviderAgainForWhatItCanRun() throws Exception {
         final var checks = new AtomicInteger(0);
-        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> {
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
+                checkingVisionProviderOn("anthropic", _ -> {
             checks.incrementAndGet();
             return new ProviderCheck.Accepted(MODELS);
         })));
@@ -458,7 +464,8 @@ class VisionProviderCardTest {
     @Test
     void removingAKeyAsksTheProviderAgainToo() throws Exception {
         final var checks = new AtomicInteger(0);
-        final Parent pane = onFxThread(() -> built(checkingPresenterOn("anthropic", _ -> {
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"),
+                checkingVisionProviderOn("anthropic", _ -> {
             checks.incrementAndGet();
             return new ProviderCheck.NoCredential();
         })));
@@ -476,7 +483,7 @@ class VisionProviderCardTest {
     // otherwise outlive the choices it was about.
     @Test
     void changingProviderTakesTheLastRefusalOffTheScreen() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         runOnFxThread(() -> {
             clearModelSelection(pane);
             ((Button) pane.lookup("#settings-save-button")).fire();
@@ -494,7 +501,8 @@ class VisionProviderCardTest {
 
     @Test
     void aSaveRefusedForABlankModelDoesNotTravelToTheModelRow() throws Exception {
-        final Parent page = onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic")));
+        final Parent page = onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic"),
+                visionProviderPresenterOn("anthropic")));
         final ScrollPane scroll = scrollOf(page);
         final Node row = rowOf(scroll, "#settings-model");
         runOnFxThread(() -> scroll.setVvalue(scroll.getVmax()));
@@ -596,7 +604,7 @@ class VisionProviderCardTest {
     private static double markOffsetWithinRing(final Parent pane, final String glyph) {
         final Node ring = pane.lookup("." + glyph + "-ring");
         assertThat(ring).isNotNull();
-        final List<Node> mark = ((Parent) ring.getParent()).getChildrenUnmodifiable().stream()
+        final List<Node> mark = ring.getParent().getChildrenUnmodifiable().stream()
                 .filter(node -> node.getStyleClass().contains(glyph + "-mark"))
                 .toList();
         assertThat(mark).hasSize(2);
@@ -605,16 +613,16 @@ class VisionProviderCardTest {
         return (top + bottom) / 2 - ring.getBoundsInParent().getCenterY();
     }
 
-    // presenterOn's own presenter over threeProviders(), whose check() and check(id, candidate)
+    // visionProviderPresenterOn's own catalog is threeProviders(), whose check() and check(id, candidate)
     // both throw. A test that presses Test or Retry needs a real answer instead, so it builds its
-    // presenter over this one rather than presenterOn.
-    private static SettingsPresenter checkingPresenterOn(final String provider,
-                                                          final Function<String, ProviderCheck> checkById) {
+    // vision presenter over this one rather than visionProviderPresenterOn.
+    private static VisionProviderPresenter checkingVisionProviderOn(final String provider,
+                                                                     final Function<String, ProviderCheck> checkById) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
-        return new SettingsPresenter(settingsUseCase(settings), refusingLibraryRootUseCase(), oneStoredKey(),
-                onlyRefusingOneFolder(), checkingThreeProviders(checkById));
+        return new VisionProviderPresenter(oneStoredKey(), checkingThreeProviders(checkById),
+                settingsUseCase(settings));
     }
 
     private static VisionProviderCatalog checkingThreeProviders(final Function<String, ProviderCheck> checkById) {
@@ -645,7 +653,7 @@ class VisionProviderCardTest {
     // anthropic offers two models here, unlike threeProviders()'s single-option MODELS, and the
     // saved one is not the recommendation. Only this shape can tell "the saved model survived"
     // apart from "the recommendation always wins".
-    private static SettingsPresenter presenterOnWithADistinctSavedModel() {
+    private static VisionProviderPresenter visionProviderWithADistinctSavedModel() {
         final var richModels = new ModelCatalog(List.of(
                 new ModelOption("recommended-model", "Recommended model"),
                 new ModelOption("other-model", "Other model")), "recommended-model");
@@ -679,7 +687,6 @@ class VisionProviderCardTest {
                 throw new AssertionError("no test here presses a credential check");
             }
         };
-        return new SettingsPresenter(settingsUseCase(settings), refusingLibraryRootUseCase(), oneStoredKey(),
-                onlyRefusingOneFolder(), catalog);
+        return new VisionProviderPresenter(oneStoredKey(), catalog, settingsUseCase(settings));
     }
 }

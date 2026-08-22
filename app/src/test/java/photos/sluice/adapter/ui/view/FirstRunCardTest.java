@@ -17,6 +17,7 @@ import org.testfx.api.FxToolkit;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.SettingsView;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SettingsUseCase;
@@ -287,9 +288,10 @@ class FirstRunCardTest {
     private static Built built(final Install install) {
         final var handedOver = new AtomicInteger();
         // The card's own library-move arm cannot be driven here: the dialog it opens waits on a person.
+        final var visionProvider = new VisionProviderPresenter(oneStoredKey(), threeProviders(), install);
         final var presenter = new SettingsPresenter(install, (_, _) -> {
             throw new AssertionError("the move arm is covered at the presenter, not here");
-        }, oneStoredKey(), install, threeProviders());
+        }, install, threeProviders(), visionProvider);
         final Node pane = FirstRunCard.pane(presenter, new FirstRunPresenter(install), _ -> handedOver.incrementAndGet());
         final var scene = new Scene(new StackPane(pane), 900, 700);
         final var stage = new Stage();

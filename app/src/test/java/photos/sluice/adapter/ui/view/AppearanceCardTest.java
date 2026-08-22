@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ExternalAgentSettings;
@@ -56,7 +57,8 @@ class AppearanceCardTest {
     @Test
     void savingCarriesTheThemePickedOnTheScreen() throws Exception {
         final List<Settings> saved = new ArrayList<>();
-        final Parent pane = onFxThread(() -> built(presenterSavingInto(saved)));
+        final Presenters presenters = presenterSavingInto(saved);
+        final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
         assertThat(onFxThread(() -> selectedTheme(pane))).isEqualTo("DARK");
 
         runOnFxThread(() -> {
@@ -73,7 +75,8 @@ class AppearanceCardTest {
     @Test
     void pickingAThemeSavesItWithoutTouchingSave() throws Exception {
         final List<Settings> saved = new ArrayList<>();
-        final Parent pane = onFxThread(() -> built(presenterSavingInto(saved)));
+        final Presenters presenters = presenterSavingInto(saved);
+        final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
 
         runOnFxThread(() -> themeButton(pane, "LIGHT").setSelected(true));
 
@@ -97,9 +100,13 @@ class AppearanceCardTest {
                 .getUserData();
     }
 
+    // The presenter pair this card and its screen read and write through.
+    private record Presenters(SettingsPresenter settings, VisionProviderPresenter vision) {
+    }
+
     // Its own presenter because the shared one refuses every save. That is what the refusal test
     // above needs, and it leaves nothing for a test reading a saved value to read.
-    private static SettingsPresenter presenterSavingInto(final List<Settings> saved) {
+    private static Presenters presenterSavingInto(final List<Settings> saved) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.DARK);
@@ -119,7 +126,10 @@ class AppearanceCardTest {
                 saved.add(toSave);
             }
         };
-        return new SettingsPresenter(useCase, refusingLibraryRootUseCase(), oneStoredKey(),
-                onlyRefusingOneFolder(), threeProviders());
+        final var vision = new VisionProviderPresenter(oneStoredKey(), threeProviders(), useCase);
+        return new Presenters(
+                new SettingsPresenter(useCase, refusingLibraryRootUseCase(), onlyRefusingOneFolder(),
+                        threeProviders(), vision),
+                vision);
     }
 }

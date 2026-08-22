@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 
 import java.util.function.Supplier;
 
@@ -39,10 +40,13 @@ final class MainWindow {
      *
      * @param presenter {@link FirstRunPresenter} says whether the dashboard opens on the first-run card
      * @param settingsPresenter {@link SettingsPresenter} supplies and drives the Settings pane
+     * @param visionProviderPresenter {@link VisionProviderPresenter} the VISION PROVIDER card's
+     *         credential, model catalogue and connection check
      * @param photoCategoriesPresenter {@link PhotoCategoriesPresenter} supplies and drives the photo categories pane
      * @return {@link Scene} the shell scene, styled by the base stylesheet
      */
     static Scene scene(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter,
+                       final VisionProviderPresenter visionProviderPresenter,
                        final PhotoCategoriesPresenter photoCategoriesPresenter) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
@@ -73,7 +77,7 @@ final class MainWindow {
         final Runnable openPhotoCategories = () -> show(content, PHOTO_CATEGORIES,
                 () -> filling(PhotoCategoriesPane.pane(photoCategoriesPresenter, openSettings)));
         settings.setOnAction(_ -> show(content, SETTINGS,
-                () -> filling(SettingsPane.pane(settingsPresenter, openPhotoCategories))));
+                () -> filling(SettingsPane.pane(settingsPresenter, visionProviderPresenter, openPhotoCategories))));
         review.setOnAction(_ -> show(content, REVIEW, () -> headingPane(REVIEW)));
 
         final var sidebar = new VBox(dashboard, settings, review);

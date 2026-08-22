@@ -3,7 +3,6 @@ package photos.sluice.adapter.ui.view;
 import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.concurrent.Task;
-import javafx.geometry.Insets;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -22,8 +21,8 @@ import javafx.scene.shape.SVGPath;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 import org.jspecify.annotations.Nullable;
-import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.SettingsView;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,17 +63,17 @@ final class VisionProviderCard {
                   VBox watchRow, VBox secretCard) {
     }
 
-    static Result build(final SettingsView view, final SettingsPresenter presenter) {
+    static Result build(final SettingsView view, final VisionProviderPresenter visionProvider) {
         final var providerBox = providerChoice(view);
         providerBox.setId("settings-provider");
-        final var providerFields = providerFields(view, presenter, providerBox);
+        final var providerFields = providerFields(view, visionProvider, providerBox);
         providerFields.setId("settings-provider-fields");
         final var watchRow = watchModeRow(view);
         watchRow.setId("settings-watch-mode");
         final var secretCard = new VBox();
         secretCard.setId("settings-api-key");
         secretCard.getStyleClass().add("settings-subsection");
-        fillSecretCard(secretCard, presenter, providerBox, providerFields, null, view.keyLimit());
+        fillSecretCard(secretCard, visionProvider, providerBox, providerFields, null, view.keyLimit());
         final var card = SettingsRows.card("VISION PROVIDER",
                 "What actually looks at your photos and decides what is junk, a duplicate, or worth "
                         + "keeping. Sluice has no judgement of its own. It either calls a model you pay for, "
@@ -160,7 +159,7 @@ final class VisionProviderCard {
     }
 
     /**
-     * Reads what the presenter currently has to say about one provider's models, cached rather than
+     * Reads what the visionProvider currently has to say about one provider's models, cached rather than
      * freshly checked, and draws it.
      *
      * <p>Called both when the model row is first built and whenever the provider dropdown changes.
@@ -169,16 +168,16 @@ final class VisionProviderCard {
      *
      * @param model {@link ComboBox} the model picker
      * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
-     * @param presenter {@link SettingsPresenter} answers what to draw
+     * @param visionProvider {@link VisionProviderPresenter} answers what to draw
      * @param providerId {@link String} the provider to draw a picker for
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider,
      *         read again once a check completes in case the choice moved on while it ran
      */
     static void selectModelPickerFor(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
-                                     final SettingsPresenter presenter, final String providerId,
+                                     final VisionProviderPresenter visionProvider, final String providerId,
                                      final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        final SettingsPresenter.ModelPickerResult result = presenter.modelPickerFor(providerId);
-        showModelPicker(model, modelInfo, result, presenter, providerId, providerBox);
+        final VisionProviderPresenter.ModelPickerResult result = visionProvider.modelPickerFor(providerId);
+        showModelPicker(model, modelInfo, result, visionProvider, providerId, providerBox);
     }
 
     static ProviderFieldControls controlsOf(final VBox providerFields) {
@@ -217,7 +216,7 @@ final class VisionProviderCard {
      * cannot land under a provider other than the one on screen.
      *
      * @param card {@link VBox} the block to fill, whatever it held before
-     * @param presenter {@link SettingsPresenter} reads and writes that credential
+     * @param visionProvider {@link VisionProviderPresenter} reads and writes that credential
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      * @param providerFields {@link VBox} the model and endpoint rows, whose Test connection button a
      *         credential change leaves enabled or not, and whose model picker a save or remove can
@@ -225,13 +224,13 @@ final class VisionProviderCard {
      * @param said what just happened to the key, or null when nothing has
      * @param keyLimit int the most the entry field may hold
      */
-    static void fillSecretCard(final VBox card, final SettingsPresenter presenter,
+    static void fillSecretCard(final VBox card, final VisionProviderPresenter visionProvider,
                                final ComboBox<SettingsView.ProviderChoice> providerBox,
                                final VBox providerFields, final @Nullable String said,
                                final int keyLimit) {
         final String providerId = providerChoiceOf(providerBox).id();
-        card.getChildren().setAll(secretCardContents(presenter, presenter.secretRow(providerId), providerId,
-                said, message -> fillSecretCard(card, presenter, providerBox, providerFields, message, keyLimit),
+        card.getChildren().setAll(secretCardContents(visionProvider, visionProvider.secretRow(providerId), providerId,
+                said, message -> fillSecretCard(card, visionProvider, providerBox, providerFields, message, keyLimit),
                 providerFields, providerBox, keyLimit));
         // The button that was pressed leaves the scene along with the rest of this block. Focus goes
         // to whatever the window finds next, and a scrolling pane travels to wherever focus lands.
@@ -243,10 +242,10 @@ final class VisionProviderCard {
         }
         // A save or a remove is exactly what Test's own enabled state depends on.
         final ProviderFieldControls controls = controlsOf(providerFields);
-        enableTestIfThereIsSomethingToTry(controls.testConnection(), presenter, providerBox);
+        enableTestIfThereIsSomethingToTry(controls.testConnection(), visionProvider, providerBox);
     }
 
-    private static List<Node> secretCardContents(final SettingsPresenter presenter,
+    private static List<Node> secretCardContents(final VisionProviderPresenter visionProvider,
                                                  final SettingsView.SecretRow secret,
                                                  final String providerId, final @Nullable String said,
                                                  final Consumer<String> onChanged,
@@ -279,13 +278,13 @@ final class VisionProviderCard {
         result.setWrapText(true);
         final ProviderFieldControls controls = controlsOf(providerFields);
         saveButton.setOnAction(_ -> {
-            final String error = presenter.saveSecret(providerId, entry.getText());
+            final String error = visionProvider.saveSecret(providerId, entry.getText());
             if (error != null) {
                 result.setText(error);
                 result.getStyleClass().setAll("settings-violation");
             } else {
                 onChanged.accept("API key saved.");
-                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
+                refreshModelPicker(controls.model(), controls.modelInfo(), visionProvider, providerId, providerBox);
             }
         });
 
@@ -299,7 +298,7 @@ final class VisionProviderCard {
             // Asked before anything is cleared. A key is the one thing on this card the app cannot
             // put back, since Sluice never reads a stored credential out. An accidental press costs
             // the user a trip to their provider for a new one.
-            final SettingsPresenter.SecretRemoval removal = presenter.secretRemoval(providerId);
+            final VisionProviderPresenter.SecretRemoval removal = visionProvider.secretRemoval(providerId);
             // Backing out leads, because this asks about the one thing on the card the app cannot
             // put back.
             if (Dialogs.ask(removal.heading(), removal.question(),
@@ -307,13 +306,13 @@ final class VisionProviderCard {
                     new Dialogs.Choice("Keep it", Dialogs.Role.CANCEL, Dialogs.Emphasis.LOUD)).isEmpty()) {
                 return;
             }
-            final String error = presenter.removeSecret(providerId);
+            final String error = visionProvider.removeSecret(providerId);
             if (error != null) {
                 result.setText(error);
                 result.getStyleClass().setAll("settings-violation");
             } else {
                 onChanged.accept(removal.removed());
-                refreshModelPicker(controls.model(), controls.modelInfo(), presenter, providerId, providerBox);
+                refreshModelPicker(controls.model(), controls.modelInfo(), visionProvider, providerId, providerBox);
             }
         });
 
@@ -423,7 +422,7 @@ final class VisionProviderCard {
                 throw new UnsupportedOperationException("this converter is display-only");
             }
         });
-        // The presenter guarantees view.provider() names one of view.providers(); it resolves an
+        // The visionProvider guarantees view.provider() names one of view.providers(); it resolves an
         // unrecognized configured id to a known one before this ever runs.
         box.getSelectionModel().select(view.providers().stream()
                 .filter(choice -> choice.id().equals(view.provider())).findFirst().orElseThrow());
@@ -463,7 +462,7 @@ final class VisionProviderCard {
         node.setManaged(wanted);
     }
 
-    private static VBox providerFields(final SettingsView view, final SettingsPresenter presenter,
+    private static VBox providerFields(final SettingsView view, final VisionProviderPresenter visionProvider,
                                        final ComboBox<SettingsView.ProviderChoice> providerBox) {
         final var model = new ComboBox<SettingsView.ModelChoice>();
         model.setId("settings-model");
@@ -472,7 +471,7 @@ final class VisionProviderCard {
         model.setButtonCell(new ModelChoiceCell());
         final var modelInfo = new VBox();
         modelInfo.getStyleClass().add("settings-model-info");
-        selectModelPickerFor(model, modelInfo, presenter, providerChoiceOf(providerBox).id(), providerBox);
+        selectModelPickerFor(model, modelInfo, visionProvider, providerChoiceOf(providerBox).id(), providerBox);
 
         final var endpoint = new TextField(view.endpoint() == null ? "" : view.endpoint());
         endpoint.setId("settings-endpoint");
@@ -495,23 +494,23 @@ final class VisionProviderCard {
         // takes a line's height. Left alone it puts an empty gap below the Endpoint row.
         testResult.managedProperty().bind(testResult.visibleProperty());
         testResult.visibleProperty().bind(testResult.textProperty().isNotEmpty());
-        enableTestIfThereIsSomethingToTry(testConnection, presenter, providerBox);
+        enableTestIfThereIsSomethingToTry(testConnection, visionProvider, providerBox);
         testConnection.setOnAction(_ -> {
             testResult.setText("Checking...");
             testResult.getStyleClass().setAll("settings-help");
             final String providerId = providerChoiceOf(providerBox).id();
             final String typed = endpoint.getText();
-            final var task = new Task<SettingsPresenter.ConnectionCheckResult>() {
+            final var task = new Task<VisionProviderPresenter.ConnectionCheckResult>() {
                 @Override
-                protected SettingsPresenter.ConnectionCheckResult call() {
-                    return presenter.testConnection(providerId, typed);
+                protected VisionProviderPresenter.ConnectionCheckResult call() {
+                    return visionProvider.testConnection(providerId, typed);
                 }
             };
             // Guarded on the provider. The dropdown may have moved on while this ran, and its
             // answer belongs to the one it was asked about.
             task.setOnSucceeded(_ -> {
                 if (providerChoiceOf(providerBox).id().equals(providerId)) {
-                    final SettingsPresenter.ConnectionCheckResult result = task.getValue();
+                    final VisionProviderPresenter.ConnectionCheckResult result = task.getValue();
                     testResult.setText(result.message());
                     testResult.getStyleClass().setAll(result.succeeded() ? "settings-help" : "settings-violation");
                 }
@@ -565,29 +564,29 @@ final class VisionProviderCard {
      * the one on screen when the row was first drawn.
      *
      * @param testConnection {@link Button} the Test connection button
-     * @param presenter {@link SettingsPresenter} answers whether a credential is stored
+     * @param visionProvider {@link VisionProviderPresenter} answers whether a credential is stored
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
     private static void enableTestIfThereIsSomethingToTry(final Button testConnection,
-                                                          final SettingsPresenter presenter,
+                                                          final VisionProviderPresenter visionProvider,
                                                           final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        testConnection.setDisable(!presenter.secretRow(providerChoiceOf(providerBox).id()).hasStoredValue());
+        testConnection.setDisable(!visionProvider.secretRow(providerChoiceOf(providerBox).id()).hasStoredValue());
     }
 
     /**
-     * Draws one already-resolved {@link SettingsPresenter.ModelPickerResult}: a list to choose from,
+     * Draws one already-resolved {@link VisionProviderPresenter.ModelPickerResult}: a list to choose from,
      * or nothing to choose from and a Retry that checks again.
      *
      * @param model {@link ComboBox} the model picker
      * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
-     * @param result {@link SettingsPresenter.ModelPickerResult} what to draw
-     * @param presenter {@link SettingsPresenter} Retry checks through this
+     * @param result {@link VisionProviderPresenter.ModelPickerResult} what to draw
+     * @param visionProvider {@link VisionProviderPresenter} Retry checks through this
      * @param providerId {@link String} the provider this picker belongs to
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
     private static void showModelPicker(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
-                                        final SettingsPresenter.ModelPickerResult result,
-                                        final SettingsPresenter presenter, final String providerId,
+                                        final VisionProviderPresenter.ModelPickerResult result,
+                                        final VisionProviderPresenter visionProvider, final String providerId,
                                         final ComboBox<SettingsView.ProviderChoice> providerBox) {
         modelInfo.getChildren().clear();
         switch (result.picker()) {
@@ -597,7 +596,7 @@ final class VisionProviderCard {
             case final SettingsView.ModelPicker.Options options -> {
                 model.setDisable(false);
                 model.getItems().setAll(options.choices());
-                // SettingsPresenter.picked() only ever answers a selected() among choices(); a miss
+                // VisionProviderPresenter.picked() only ever answers a selected() among choices(); a miss
                 // here is that promise broken rather than a state this screen has to tolerate.
                 model.getSelectionModel().select(options.choices().stream()
                         .filter(choice -> choice.id().equals(options.selected()))
@@ -613,7 +612,7 @@ final class VisionProviderCard {
                 // number, which would be a second place to keep the font size in step. One line is
                 // what the answer usually brings; a wrapped violation is taller and still moves.
                 modelInfo.getChildren().add(SettingsRows.helpLine(""));
-                redrawWhenTheStartUpCheckSettles(model, modelInfo, presenter, providerId, providerBox);
+                redrawWhenTheStartUpCheckSettles(model, modelInfo, visionProvider, providerId, providerBox);
             }
             case final SettingsView.ModelPicker.Unavailable unavailable -> {
                 emptyAndDisabled(model);
@@ -634,13 +633,13 @@ final class VisionProviderCard {
                 // stopped responding is exactly the one a reader presses this against, and it takes
                 // the interactive timeout to say so. Left as it was, the press reads as ignored.
                 //
-                // Worded here, unlike the picker's own waiting text, which the presenter supplies.
+                // Worded here, unlike the picker's own waiting text, which the visionProvider supplies.
                 // Every button on this screen names itself; every line about the models comes from
-                // the presenter. This is a button saying what it is doing.
+                // the visionProvider. This is a button saying what it is doing.
                 retry.setOnAction(_ -> {
                     retry.setDisable(true);
                     retry.setText("Connecting...");
-                    refreshModelPicker(model, modelInfo, presenter, providerId, providerBox);
+                    refreshModelPicker(model, modelInfo, visionProvider, providerId, providerBox);
                 });
                 modelInfo.getChildren().addAll(violation, retry);
             }
@@ -674,24 +673,24 @@ final class VisionProviderCard {
      *
      * @param model {@link ComboBox} the model picker
      * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
-     * @param presenter {@link SettingsPresenter} holds the wait and the answer
+     * @param visionProvider {@link VisionProviderPresenter} holds the wait and the answer
      * @param providerId {@link String} the provider being waited on
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider,
      *         read again once the wait ends in case the choice moved on while it ran
      */
     private static void redrawWhenTheStartUpCheckSettles(final ComboBox<SettingsView.ModelChoice> model,
                                                          final VBox modelInfo,
-                                                         final SettingsPresenter presenter,
+                                                         final VisionProviderPresenter visionProvider,
                                                          final String providerId,
                                                          final ComboBox<SettingsView.ProviderChoice> providerBox) {
         final var task = new Task<Void>() {
             @Override
             protected Void call() {
-                presenter.awaitStartUpCheck(providerId);
+                visionProvider.awaitStartUpCheck(providerId);
                 return null;
             }
         };
-        redrawWhicheverWayItEnds(task, model, modelInfo, presenter, providerId, providerBox);
+        redrawWhicheverWayItEnds(task, model, modelInfo, visionProvider, providerId, providerBox);
     }
 
     /**
@@ -703,21 +702,21 @@ final class VisionProviderCard {
      *
      * @param model {@link ComboBox} the model picker
      * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
-     * @param presenter {@link SettingsPresenter} runs the check and keeps its answer
+     * @param visionProvider {@link VisionProviderPresenter} runs the check and keeps its answer
      * @param providerId {@link String} the provider to check
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
     private static void refreshModelPicker(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
-                                           final SettingsPresenter presenter, final String providerId,
+                                           final VisionProviderPresenter visionProvider, final String providerId,
                                            final ComboBox<SettingsView.ProviderChoice> providerBox) {
         final var task = new Task<Void>() {
             @Override
             protected Void call() {
-                presenter.refreshModels(providerId);
+                visionProvider.refreshModels(providerId);
                 return null;
             }
         };
-        redrawWhicheverWayItEnds(task, model, modelInfo, presenter, providerId, providerBox);
+        redrawWhicheverWayItEnds(task, model, modelInfo, visionProvider, providerId, providerBox);
     }
 
     /**
@@ -733,19 +732,19 @@ final class VisionProviderCard {
      * @param task {@link Task} the check to run
      * @param model {@link ComboBox} the model picker
      * @param modelInfo {@link VBox} where the source note, a violation, or a caution lands
-     * @param presenter {@link SettingsPresenter} answers what to draw
+     * @param visionProvider {@link VisionProviderPresenter} answers what to draw
      * @param providerId {@link String} the provider this task asked about
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
     private static void redrawWhicheverWayItEnds(final Task<Void> task,
                                                  final ComboBox<SettingsView.ModelChoice> model,
                                                  final VBox modelInfo,
-                                                 final SettingsPresenter presenter,
+                                                 final VisionProviderPresenter visionProvider,
                                                  final String providerId,
                                                  final ComboBox<SettingsView.ProviderChoice> providerBox) {
         final Runnable redraw = () -> {
             if (providerChoiceOf(providerBox).id().equals(providerId)) {
-                selectModelPickerFor(model, modelInfo, presenter, providerId, providerBox);
+                selectModelPickerFor(model, modelInfo, visionProvider, providerId, providerBox);
             }
         };
         task.setOnSucceeded(_ -> redraw.run());

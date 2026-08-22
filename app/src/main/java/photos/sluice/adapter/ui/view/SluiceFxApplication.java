@@ -9,6 +9,7 @@ import photos.sluice.SluiceApplication;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.adapter.ui.StartupSequence;
 import photos.sluice.adapter.ui.UiBootstrap;
 
@@ -128,6 +129,7 @@ public class SluiceFxApplication extends Application {
             final var built = Objects.requireNonNull(this.context, "no failure means a context was built");
             stage.setScene(MainWindow.scene(built.getBean(FirstRunPresenter.class),
                     built.getBean(SettingsPresenter.class),
+                    built.getBean(VisionProviderPresenter.class),
                     built.getBean(PhotoCategoriesPresenter.class)));
             return;
         }

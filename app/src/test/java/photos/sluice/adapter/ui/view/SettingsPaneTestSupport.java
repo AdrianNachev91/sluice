@@ -15,6 +15,7 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
@@ -64,10 +65,11 @@ final class SettingsPaneTestSupport {
 
     private SettingsPaneTestSupport() {}
 
-    private static Parent built(final SettingsPresenter presenter, final int windowHeight) {
+    private static Parent built(final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
+                                final int windowHeight) {
         // A destination that does nothing is enough here. The button only has to go somewhere, so
         // the card renders and Settings lays out as it really does.
-        final Parent pane = (Parent) SettingsPane.pane(presenter, () -> { });
+        final Parent pane = (Parent) SettingsPane.pane(presenter, visionProvider, () -> { });
         // In a scene and laid out before anything is looked up. A ScrollPane holds its content
         // through a skin, and the skin is built when CSS is applied, so a lookup before that finds
         // nothing inside it.
@@ -83,15 +85,16 @@ final class SettingsPaneTestSupport {
         return pane;
     }
 
-    static Parent built(final SettingsPresenter presenter) {
-        return built(presenter, 700);
+    static Parent built(final SettingsPresenter presenter, final VisionProviderPresenter visionProvider) {
+        return built(presenter, visionProvider, 700);
     }
 
     // A window short enough that most of the page is off screen. At the height the other tests use,
     // the page is barely taller than the viewport. Nothing is ever out of view there, so a claim
     // about bringing something into view cannot be made either way.
-    static Parent builtInAWindowThatScrolls(final SettingsPresenter presenter) {
-        return built(presenter, 300);
+    static Parent builtInAWindowThatScrolls(final SettingsPresenter presenter,
+                                            final VisionProviderPresenter visionProvider) {
+        return built(presenter, visionProvider, 300);
     }
 
     // The body that scrolls, inside the page that pins a header over it.
@@ -130,11 +133,22 @@ final class SettingsPaneTestSupport {
     }
 
     static SettingsPresenter presenterOn(final String provider) {
-        final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
+        final SettingsUseCase settingsUseCase = settingsUseCase(settingsFor(provider));
+        final var visionProvider = new VisionProviderPresenter(oneStoredKey(), threeProviders(), settingsUseCase);
+        return new SettingsPresenter(settingsUseCase, refusingLibraryRootUseCase(), onlyRefusingOneFolder(),
+                threeProviders(), visionProvider);
+    }
+
+    // Over the same fixed settings presenterOn saves against, so the two agree on which provider is
+    // chosen and what is saved for it.
+    static VisionProviderPresenter visionProviderPresenterOn(final String provider) {
+        return new VisionProviderPresenter(oneStoredKey(), threeProviders(), settingsUseCase(settingsFor(provider)));
+    }
+
+    private static Settings settingsFor(final String provider) {
+        return new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
-        return new SettingsPresenter(settingsUseCase(settings), refusingLibraryRootUseCase(), oneStoredKey(),
-                onlyRefusingOneFolder(), threeProviders());
     }
 
     static SettingsUseCase settingsUseCase(final Settings settings) {

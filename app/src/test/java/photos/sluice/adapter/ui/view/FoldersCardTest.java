@@ -20,6 +20,7 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.built;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.builtInAWindowThatScrolls;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.presenterOn;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.visionProviderPresenterOn;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.inView;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.rowOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.scrollOf;
@@ -49,7 +50,7 @@ class FoldersCardTest {
     // refused, which is what makes the mark afterwards mean the save put it there.
     @Test
     void aRefusedSaveMarksTheFolderRowAndKeepsASummaryAtTheFoot() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         assertThat(textsOfClass(pane, "settings-violation")).isEmpty();
 
         runOnFxThread(() -> {
@@ -66,7 +67,7 @@ class FoldersCardTest {
     // the mark afterwards mean this save put it there.
     @Test
     void aRefusedSaveMarksTheFieldAndNotOnlyTheLineUnderIt() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         final var field = (TextField) pane.lookup("#settings-library-root");
         assertThat(field.getPseudoClassStates()).doesNotContain(REFUSED);
 
@@ -80,7 +81,7 @@ class FoldersCardTest {
 
     @Test
     void aRefusedSaveDoesNotTravelToTheFolderAtFault() throws Exception {
-        final Parent page = onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic")));
+        final Parent page = onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         final ScrollPane scroll = scrollOf(page);
         final Node row = rowOf(scroll, "#settings-library-root");
         runOnFxThread(() -> scroll.setVvalue(scroll.getVmax()));
@@ -98,21 +99,21 @@ class FoldersCardTest {
 
     @Test
     void theCardSaysNoWorkRunsUntilAllThreeFoldersAreSet() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         assertThat(pane.lookup("#folder-roots-required-legend")).isNotNull();
     }
 
     @Test
     void theFolderCardCarriesTheRulesAboutHowTheThreeRootsRelate() throws Exception {
-        final Parent pane = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         assertThat(pane.lookup("#folder-roots-help")).isNotNull();
     }
 
     @Test
     void saveIsPinnedOutsideWhatScrolls() throws Exception {
-        final Parent page = onFxThread(() -> built(presenterOn("anthropic")));
+        final Parent page = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
         assertThat(page.lookup("#settings-save-button")).isNotNull();
         assertThat(scrollOf(page).lookup("#settings-save-button")).isNull();
