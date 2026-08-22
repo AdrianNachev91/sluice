@@ -72,6 +72,11 @@ unsupported. **All three are accepted and enforced**, tested on `claude-sonnet-5
 `maxLength: 8` cut a long phrase to exactly eight characters, and `pattern: ^[a-z-]+$` reshaped one
 into a slug. Sluice's own design carried a limitation from that documented list that never existed.
 
+Test rather than assume in either direction. The same list is right about some things: `minItems`
+above 1 really is refused on an array, checked the same free way on 2026-08-22, and the API says so
+in the 400 it returns. One proven error does not make a list worthless, it makes it a thing to
+verify.
+
 The catch is the mechanism. This is **constrained decoding rather than validation**, so a constraint
 bends the answer to fit instead of rejecting an answer that does not. That makes the direction of a
 constraint decide whether it is safe.
