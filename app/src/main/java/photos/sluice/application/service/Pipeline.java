@@ -4,9 +4,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
+import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
+import photos.sluice.application.port.in.SortedTally;
+import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MediaStore;
@@ -77,6 +80,7 @@ public class Pipeline {
     private final PrepDirRemedies prepDirRemedies;
     private final PathsPort pathsPort;
     private final RootsGuard rootsGuard;
+    private final MediaTallies mediaTallies;
 
     /**
      * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
@@ -175,6 +179,7 @@ public class Pipeline {
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
         this.pathsPort = pathsPort;
+        this.mediaTallies = new MediaTallies(mediaStore, pathsPort);
     }
 
     /**
@@ -291,6 +296,55 @@ public class Pipeline {
     public List<CullRunSummary> cullRuns() {
         this.requireUsableRoots();
         return this.prepDirDoctor.runs(this.pathsPort.cullPrep());
+    }
+
+    /**
+     * How much is waiting in the Inbox.
+     *
+     * <p>A walk of the tree, so its cost grows with what is in there. A caller that would block a
+     * window on it runs it off whatever thread paints.
+     *
+     * <p>Not routed through {@link JobRunner}: it only reads, so it does not compete for the single
+     * job slot. The same reasoning as {@link #cullRuns}.
+     *
+     * @return {@link InboxTally} what is waiting, and what it comes to on disk
+     */
+    public InboxTally inboxTally() {
+        this.requireUsableRoots();
+        return this.mediaTallies.inbox();
+    }
+
+    /**
+     * What is staged in Sorted, by year.
+     *
+     * <p>Carries the same cost and the same reasoning as {@link #inboxTally}.
+     *
+     * @return {@link SortedTally} one row per year holding anything, newest first
+     */
+    public SortedTally sortedTally() {
+        this.requireUsableRoots();
+        return this.mediaTallies.sorted();
+    }
+
+    /**
+     * What sifting this many photos is expected to consume.
+     *
+     * <p>Takes a count rather than a scope. A screen showing a figure beside a scope somebody is
+     * still typing then recomputes it without walking the tree again. The count itself comes from
+     * {@link #sortedTally}, whose rows carry the year and month breakdown a scope narrows to.
+     *
+     * <p>The tree is the expensive read this avoids, and it is not the only read. Each call reads
+     * the spend ledger, which is one small file rather than a walk. A caller putting this behind
+     * every keystroke is doing that much disk work per keystroke.
+     *
+     * <p>No roots check. The one path it reads is the spend ledger, where an unusable root degrades
+     * the estimate rather than escaping: a failed read falls back to the shipped seed.
+     *
+     * @param photos how many photos the scope holds
+     * @return {@link SpendEstimate} what a sift over them is expected to consume
+     */
+    public SpendEstimate estimateFor(final int photos) {
+        return this.cullEngine.estimateFor(photos);
     }
 
     /**
@@ -430,17 +484,24 @@ public class Pipeline {
     }
 
     /**
-     * Test seam: whether a job's work is currently executing. A test that starts a background job it
-     * holds no handle to waits on this going false. That is the only point at which the job's file
-     * work is known to be over. Waiting on any effect the job produces instead leaves whatever the
-     * job does afterwards racing the test's own teardown.
+     * Whether a job's work is currently executing.
+     *
+     * <p>A screen holding a start control asks this as it draws. One drawn again while a job it
+     * started earlier is still running would otherwise offer a second. The refusal for that arrives
+     * only once the button has been pressed.
+     *
+     * <p>Also a test seam. A test that starts a background job it holds no handle to waits on this
+     * going false. That is the only point at which the job's file work is known to be over. Waiting
+     * on any effect the job produces instead leaves whatever the job does afterwards racing the
+     * test's own teardown.
      *
      * <p>False on its own says nothing, since it is also false before the job ever starts. A caller
-     * pairs it with a signal that the work happened at all.
+     * asking whether some particular work has finished pairs it with a signal that the work
+     * happened at all.
      *
      * @return boolean true if a job's work is currently executing
      */
-    boolean isBusy() {
+    public boolean isBusy() {
         return this.jobRunner.isBusy();
     }
 

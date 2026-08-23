@@ -155,6 +155,60 @@ class SpendEstimatorTest {
         assertThat(estimator.ceilingFor(montages, montages, estimate)).isNotNull();
     }
 
+    @Test
+    void aProviderThatCallsNoModelCostsNothingBeforeAnythingIsPrepared(@TempDir final Path workingRoot) {
+        final SpendEstimate estimate = estimator(workingRoot).estimateBeforePreparing(500, false, MODEL, SHIPPED);
+
+        assertThat(estimate).isEqualTo(new SpendEstimate(0, 0, true, false));
+    }
+
+    @Test
+    void photosAreCountedIntoSheetsWithAPartOneStillCostingAWholeCall(@TempDir final Path workingRoot) {
+        final SpendEstimator estimator = estimator(workingRoot);
+
+        final SpendEstimate two = estimator.estimateBeforePreparing(50, true, MODEL, SHIPPED);
+        final SpendEstimate three = estimator.estimateBeforePreparing(51, true, MODEL, SHIPPED);
+
+        assertThat(three.totalTokens()).isGreaterThan(two.totalTokens());
+        assertThat(three.totalTokens()).isEqualTo(two.totalTokens() / 2 * 3);
+    }
+
+    @Test
+    void aDenserGridPutsTheSameScopeOntoFewerSheets(@TempDir final Path workingRoot) {
+        final SpendEstimator estimator = estimator(workingRoot);
+
+        final SpendEstimate atFive = estimator.estimateBeforePreparing(100, true, MODEL, SHIPPED);
+        final SpendEstimate atTen = estimator.estimateBeforePreparing(100, true, MODEL, new MontageConfig(224, 10));
+
+        assertThat(atFive.totalTokens()).isEqualTo(atTen.totalTokens() * 4);
+    }
+
+    @Test
+    void anEstimateTakenBeforePreparingNeverClaimsItsInputHalfWasCounted(@TempDir final Path workingRoot) {
+        final SpendEstimate estimate = estimator(workingRoot).estimateBeforePreparing(100, true, MODEL, SHIPPED);
+
+        assertThat(estimate.exactInput()).isFalse();
+        assertThat(estimate.inputTokens()).isPositive();
+    }
+
+    @Test
+    void aScopeHoldingNoPhotosAtAllCostsNothing(@TempDir final Path workingRoot) {
+        final SpendEstimate estimate = estimator(workingRoot).estimateBeforePreparing(0, true, MODEL, SHIPPED);
+
+        assertThat(estimate.totalTokens()).isZero();
+    }
+
+    @Test
+    void anEstimateTakenBeforePreparingProjectsItsOutputHalfFromARecordedRun(@TempDir final Path workingRoot) {
+        final SpendLedgerPort ledger = ledger(workingRoot);
+        ledger.append(recordedRun(10, 20, 100_000));
+
+        final SpendEstimate estimate = new SpendEstimator(ledger)
+                .estimateBeforePreparing(100, true, MODEL, SHIPPED);
+
+        assertThat(estimate.historicOutput()).isTrue();
+    }
+
     private static SpendLedgerEntry recordedRun(final int montagesCulled, final int apiCalls,
                                                 final long outputTokens) {
         return new SpendLedgerEntry(Instant.parse("2026-08-22T10:00:00Z"), "2018", "anthropic", MODEL,

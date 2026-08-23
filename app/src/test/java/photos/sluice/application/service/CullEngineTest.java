@@ -1314,6 +1314,7 @@ class CullEngineTest {
                 ":00:00Z"));
         final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        this.armed.add(pipeline);
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));

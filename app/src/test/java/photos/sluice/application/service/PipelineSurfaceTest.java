@@ -46,18 +46,30 @@ class PipelineSurfaceTest {
             "stopAcceptingJobs(Duration)",
             "troubleshoot(Path)",
             "purgeCompleted()",
-            "discard(Path)");
+            "discard(Path)",
+            "inboxTally()",
+            "sortedTally()",
+            "estimateFor(int)",
+            "isBusy()");
 
     // The methods that must run whatever the roots say. Named rather than detected, because what
-    // exempts one is what its caller is doing, which no property of the method reveals. Neither
-    // resolves a path of its own, so the check has nothing here to protect either way.
+    // exempts one is what its caller is doing, which no property of the method reveals.
+    //
     // stopAllWatching's callers are a folder root that just moved, and an app that is closing.
     // Refusing the first would strand every watcher on a folder nothing is working in, for the life
     // of the process. stopAcceptingJobs is the closing half of that same caller. An install whose
     // roots are unusable is the one most likely to be closed. Refused there, its exit path could
     // never learn whether anything was still moving files.
+    //
+    // estimateFor takes a photo count rather than a scope, so no folder appears in the question it
+    // answers. It does reach one path of its own, the spend ledger. An unusable root there degrades
+    // the estimate rather than escaping, since the estimator catches a failed read and falls back
+    // to the shipped seed.
+    //
+    // isBusy asks the job runner whether it is running something, which is true or false whatever
+    // the roots say. A screen asks it while drawing, and one refused there could not draw at all.
     private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK =
-            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)");
+            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "estimateFor(int)", "isBusy()");
 
     // The facade is where every driving adapter passes through, so it is where the folder-root check
     // belongs. A guard written into a screen would be walked past by a command line. This reads the

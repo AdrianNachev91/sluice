@@ -11,6 +11,7 @@ import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
+import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 
@@ -43,11 +44,13 @@ final class MainWindow {
      * @param visionProviderPresenter {@link VisionProviderPresenter} the VISION PROVIDER card's
      *         credential, model catalogue and connection check
      * @param photoCategoriesPresenter {@link PhotoCategoriesPresenter} supplies and drives the photo categories pane
+     * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the run launcher
      * @return {@link Scene} the shell scene, styled by the base stylesheet
      */
     static Scene scene(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter,
                        final VisionProviderPresenter visionProviderPresenter,
-                       final PhotoCategoriesPresenter photoCategoriesPresenter) {
+                       final PhotoCategoriesPresenter photoCategoriesPresenter,
+                       final RunLauncherPresenter runLauncherPresenter) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
         final var settings = navEntry(group, "nav-settings", SETTINGS);
@@ -59,7 +62,7 @@ final class MainWindow {
 
         final var content = new VBox();
         content.getStyleClass().add("shell-content");
-        drawDashboard(content, presenter, settingsPresenter, null);
+        drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter, null);
         // A ToggleGroup lets its own selected toggle be clicked back to unselected, unlike a radio
         // group. Clicking the active nav entry would otherwise leave the sidebar showing none of
         // the three as current. Its content pane would still be the one on screen.
@@ -71,7 +74,7 @@ final class MainWindow {
         dashboard.setSelected(true);
 
         dashboard.setOnAction(_ -> show(content, DASHBOARD,
-                () -> dashboardPane(content, presenter, settingsPresenter, null)));
+                () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, null)));
         // A screen without a sidebar entry. Settings stays the destination it was reached from and
         // stays marked as current, and Back is what leaves it.
         final Runnable openPhotoCategories = () -> show(content, PHOTO_CATEGORIES,
@@ -153,29 +156,36 @@ final class MainWindow {
     }
 
     /**
-     * The Dashboard pane: the first-run card while any folder root is unset, an empty heading pane
-     * once all three are set.
+     * The Dashboard pane: the first-run card while any folder root is unset, the run launcher once
+     * all three are set.
      *
      * @param content {@link VBox} the content area, so a finished first run can redraw it
      * @param presenter {@link FirstRunPresenter} says which of the two this is
      * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
+     * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the launcher
      * @param said what the save that led here had to report, or null where nothing did
      * @return {@link Node} a pane ready to sit in the content area
      */
     private static Node dashboardPane(final VBox content, final FirstRunPresenter presenter,
-                                      final SettingsPresenter settingsPresenter, final @Nullable String said) {
+                                      final SettingsPresenter settingsPresenter,
+                                      final RunLauncherPresenter runLauncherPresenter,
+                                      final @Nullable String said) {
         if (presenter.unfinished()) {
             return filling(FirstRunCard.pane(settingsPresenter, presenter,
-                    reported -> drawDashboard(content, presenter, settingsPresenter, reported)));
+                    reported -> drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter,
+                            reported)));
         }
-        final var pane = headingPane(DASHBOARD);
-        if (said != null) {
-            // A report the save could not leave on the first-run card, because finishing took that
-            // card off the screen. It stays until it is dismissed. A library move says what it did
-            // with the old folder, and four seconds is not long enough to take that in.
-            pane.getChildren().addFirst(SettingsRows.banner(pane, "dashboard-banner", said, false));
+        final Node launcher = RunLauncherPane.pane(runLauncherPresenter);
+        if (said == null) {
+            return filling(launcher);
         }
-        return pane;
+        // A report the save could not leave on the first-run card, because finishing took that card
+        // off the screen. It stays until it is dismissed. A library move says what it did with the
+        // old folder, and four seconds is not long enough to take that in.
+        final var pane = new VBox(launcher);
+        VBox.setVgrow(launcher, Priority.ALWAYS);
+        pane.getChildren().addFirst(SettingsRows.banner(pane, "dashboard-banner", said, false));
+        return filling(pane);
     }
 
     /**
@@ -193,15 +203,18 @@ final class MainWindow {
      * @param content {@link VBox} the content area, holding exactly the screen on show
      * @param presenter {@link FirstRunPresenter} says which state the Dashboard is in
      * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
+     * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the launcher
      * @param said what the save that led here had to report, or null where nothing did
      */
     private static void drawDashboard(final VBox content, final FirstRunPresenter presenter,
-                                      final SettingsPresenter settingsPresenter, final @Nullable String said) {
+                                      final SettingsPresenter settingsPresenter,
+                                      final RunLauncherPresenter runLauncherPresenter,
+                                      final @Nullable String said) {
         final Node current = content.getChildren().isEmpty() ? null : content.getChildren().getFirst();
         if (current != null && !DASHBOARD.equals(current.getId())) {
             return;
         }
-        final Node pane = dashboardPane(content, presenter, settingsPresenter, said);
+        final Node pane = dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, said);
         pane.setId(DASHBOARD);
         content.getChildren().setAll(pane);
     }

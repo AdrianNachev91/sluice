@@ -27,8 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.FailingMoves;
+import static photos.sluice.application.service.PipelineTestSupport.AutoApproveCuller;
 import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
+import static photos.sluice.application.service.PipelineTestSupport.autoApproveCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
@@ -42,6 +44,50 @@ import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 import static photos.sluice.application.service.PipelineTestSupport.writeShard;
 
 class PipelineTest {
+
+    @Test
+    void theInboxTallyCountsMediaAndLeavesEverythingWhereItFoundIt(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        final Path photo = inboxOf(root).resolve("20210315_photo.jpg");
+        writeFile(photo, padded("keeper"));
+        writeFile(inboxOf(root).resolve("notes.txt"), padded("not media"));
+
+        assertThat(pipeline(root, progress).inboxTally().files()).isEqualTo(1);
+        assertThat(photo).exists();
+        assertThat(progress.events).isEmpty();
+    }
+
+    @Test
+    void theSortedTallyReportsAYearThatHasBeenStagedIntoIt(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        writeFile(sortedPhotosDir(root, "2019", "06").resolve("a.jpg"), padded("staged"));
+
+        assertThat(pipeline(root, progress).sortedTally().years())
+                .singleElement()
+                .satisfies(year -> {
+                    assertThat(year.year()).isEqualTo(2019);
+                    assertThat(year.photos()).isEqualTo(1);
+                });
+    }
+
+    @Test
+    void aScopeCostsNothingToSiftThroughAProviderThatCallsNoModel(@TempDir final Path root) {
+        final var progress = new RecordingProgressPort();
+
+        assertThat(cullPipeline(root, progress).estimateFor(100).totalTokens()).isZero();
+    }
+
+    @Test
+    void aScopeSiftedThroughAProviderThatCallsAModelIsSizedOnItsPhotoCount(@TempDir final Path root) {
+        final var progress = new RecordingProgressPort();
+        final Pipeline pipeline =
+                cullPipeline(root, progress, autoApproveCullSettings(), List.of(new AutoApproveCuller()));
+
+        final long hundred = pipeline.estimateFor(100).totalTokens();
+
+        assertThat(hundred).isPositive();
+        assertThat(pipeline.estimateFor(200).totalTokens()).isEqualTo(hundred * 2);
+    }
 
     @Test
     void sortRunsSortEngineAndReturnsItsSummary(@TempDir final Path root) throws IOException {

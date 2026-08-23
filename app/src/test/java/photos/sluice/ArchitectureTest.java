@@ -140,12 +140,9 @@ class ArchitectureTest {
                     .as("adapters must not depend on LiveSettings; save through the settings use case instead");
 
     // A view constructs controls, binds them to presenter state and forwards events. It decides
-    // nothing. Everywhere else in this codebase tests and review are two independent nets. In
-    // adapter/ui/view they fail together, since that package sits outside the coverage gate, so
-    // logic drifting there is untested and lightly reviewed at once. A view handed only
-    // display-ready strings and observable properties has nothing left to branch on, format, sort
-    // or round. This catches the half of that shaped like an import. A view sorting a list it was
-    // handed still needs a reader to spot it.
+    // nothing. A view handed only display-ready strings and observable properties has nothing left
+    // to branch on, format, sort or round. This catches the half of that shaped like an import. A
+    // view sorting a list it was handed still needs a reader to spot it.
     @ArchTest
     static final ArchRule viewsDecideNothing =
             noClasses().that().resideInAPackage("..adapter.ui.view..")

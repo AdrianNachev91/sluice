@@ -1139,3 +1139,286 @@
 .category-delete:disabled .bin-glyph {
     -fx-fill: -sluice-text-muted;
 }
+
+/* The dashboard's working state. The mode row and the action block sit outside the pane that
+   scrolls, so a long list of staged years never carries the start button off the screen. */
+.run-launcher {
+    -fx-spacing: 14px;
+}
+
+/* Five buttons meant to read as one control. The spacing is tight enough that they group, and wide
+   enough that a press lands on the one being aimed at. */
+.run-mode-row {
+    -fx-spacing: 6px;
+}
+
+/* Outlined rather than filled, chosen or not. Start is the one filled button on this screen. A
+   filled mode button beside it would put two brand-coloured controls in one glance, with only one
+   of them being the action. */
+.run-mode-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6px;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-text;
+    -fx-font-weight: normal;
+    -fx-padding: 8px 16px;
+    -fx-cursor: hand;
+}
+
+.run-mode-button:hover {
+    -fx-background-color: -sluice-ground;
+}
+
+/* The chosen mode: tinted and outlined without being filled, so Start stays the only filled control
+   here. In the accent rather than the fixed brand green, which the sidebar's selected entry settles
+   the same way. The brand green holds its value in both looks by design. In the dark look this
+   ground goes dark, and the green on it reads dimmer than the plain buttons beside it. The chosen
+   mode would be the hardest one on the row to find. */
+/*noinspection CssInvalidPseudoSelector*/
+.run-mode-button:selected {
+    -fx-background-color: -sluice-banner-bg;
+    -fx-border-color: -sluice-accent;
+    -fx-text-fill: -sluice-accent;
+    -fx-font-weight: bold;
+}
+
+/* The two cards, inside the pane that scrolls them. */
+.run-launcher-body {
+    -fx-spacing: 14px;
+}
+
+/* What a card is chiefly there to say. Heavier than the muted line beneath it, and short of the
+   size a page heading takes. */
+.run-card-headline {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+/* What the chosen mode does, under the row that chose it. Bigger and bolder than the muted help
+   lines below it, keeping their colour, so the one sentence explaining the page's five actions is
+   not the faintest thing on it. */
+.run-mode-hint {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.run-year-rows {
+    -fx-spacing: 4px;
+}
+
+/* One staged year, laid out the way a nav entry is: full width and left aligned. It carries a
+   ground at rest rather than none, because these rows are pressable and nothing else on the card
+   says so. A hover state alone arrives after the click that needed the hint. */
+.run-year-row {
+    -fx-background-color: -sluice-ground;
+    -fx-background-radius: 6px;
+    -fx-padding: 8px 12px;
+    -fx-max-width: infinity;
+    -fx-alignment: center-left;
+    -fx-cursor: hand;
+    /* The bar the selected rule fills in, carried here as transparent so a row is the same width
+       whichever state it is in. Selecting one would otherwise shunt its text 3px right. */
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 0 3px;
+    -fx-border-radius: 6px;
+}
+
+/* The border token as a ground, for its value rather than its name: one step further from the
+   card's surface than the resting ground is, in both looks. Light moves darker and dark moves
+   lighter, so hover reads as the stronger of the two either way. */
+.run-year-row:hover {
+    -fx-background-color: -sluice-border;
+}
+
+/* A bar down the leading edge rather than the tint alone. Once every row carries a ground, two pale
+   fills a few percent apart in hue are the only thing separating chosen from not, and at a glance
+   they read as the same row. The accent is the one colour on this card that nothing else uses. */
+/*noinspection CssInvalidPseudoSelector*/
+.run-year-row:selected {
+    -fx-background-color: -sluice-banner-bg;
+    -fx-border-color: -sluice-accent;
+}
+
+/* A year and the months under it, held together so the group reads as one block against the 4px
+   between years. No spacing of its own: the months below carry the gap as padding, so a year whose
+   months are folded away is exactly as tall as a year that has none. */
+.run-year-stack {
+    -fx-spacing: 0;
+}
+
+/* The months of the year now chosen. The indent lives here rather than on the rows, so the whole
+   row is inset, ground and all, and the block reads as a list under a heading. */
+.run-month-rows {
+    -fx-padding: 2px 0 0 24px;
+    -fx-spacing: 2px;
+}
+
+/* A month of the year now chosen. Lighter than its year, so the two read as a list under a heading
+   rather than as rows of equal standing. */
+.run-month-row {
+    -fx-background-color: -sluice-ground;
+    -fx-background-radius: 6px;
+    -fx-padding: 6px 12px;
+    -fx-max-width: infinity;
+    -fx-alignment: center-left;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 0 3px;
+    -fx-border-radius: 6px;
+}
+
+.run-month-row:hover {
+    -fx-background-color: -sluice-border;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.run-month-row:selected {
+    -fx-background-color: -sluice-banner-bg;
+    -fx-border-color: -sluice-accent;
+}
+
+/* A row the run cannot be scoped by. What it counts is still true and still worth reading, so it
+   keeps its ground and loses only its accent, its cursor and the strength of its words. JavaFX dims
+   a disabled control whole, which is the treatment the start button and the model picker each undo
+   for the same reason: at 40% the counts stop being legible at all. */
+/*noinspection CssInvalidPseudoSelector*/
+.run-year-row:disabled,
+.run-month-row:disabled {
+    -fx-opacity: 1;
+    -fx-background-color: -sluice-ground;
+    -fx-border-color: transparent;
+    -fx-cursor: default;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.run-year-row:disabled .run-year-label,
+.run-year-row:disabled .run-year-counts,
+.run-month-row:disabled .run-month-label,
+.run-month-row:disabled .run-year-counts {
+    -fx-text-fill: -sluice-text-muted;
+}
+
+.run-month-label {
+    -fx-text-fill: -sluice-text;
+}
+
+/* The mark that says months add up where years switch. A box that fills rather than one that gets a
+   tick, the same call the category switch makes and for the same reason: down a column, a filled
+   square reads at a glance and a tick at this size does not. Drawn from the row's own state, so the
+   row stays one target rather than growing a second thing to hit. */
+.run-month-box {
+    -fx-min-width: 11px;
+    -fx-min-height: 11px;
+    -fx-max-width: 11px;
+    -fx-max-height: 11px;
+    -fx-background-color: -sluice-surface;
+    -fx-border-color: -sluice-border;
+    -fx-border-width: 1px;
+    -fx-border-radius: 3px;
+    -fx-background-radius: 3px;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.run-month-row:selected .run-month-box {
+    -fx-background-color: -sluice-accent;
+    -fx-border-color: -sluice-accent;
+}
+
+/* The gap between a year and what it holds, wide enough to read as two facts rather than one
+   sentence. */
+.run-year-inside {
+    -fx-spacing: 14px;
+}
+
+.run-year-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+.run-year-counts {
+    -fx-text-fill: -sluice-text-muted;
+}
+
+/* A year and some months, never more. Run the width of the window and a text field that short
+   reads as a bar being filled rather than something to type in. See the note at the top on why a
+   maximum is not the pinned width that note rules out. */
+.run-scope-field {
+    -fx-max-width: 280px;
+}
+
+/* A field for a mode that decides its own scope. What was typed for another mode is kept and still
+   readable, so coming back to that mode finds it where it was left. JavaFX dims a disabled control
+   whole, which would take the text almost to the ground it sits on and leave the reader unsure
+   whether anything is in there.
+
+   The border is set here rather than left alone. A field's edge is drawn by one of the stacked
+   background layers a plain -fx-background-color replaces, so a single fill erases the outline and
+   the control stops looking like a control at all. */
+/*noinspection CssInvalidPseudoSelector*/
+.run-scope-field:disabled {
+    -fx-opacity: 1;
+    -fx-background-color: -sluice-ground;
+    -fx-background-insets: 0;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 3px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-cursor: default;
+}
+
+/* Start sits under everything it depends on, so nothing it is about is still below it. Right of the
+   column because it is the one thing on the page that acts. */
+.run-start-row {
+    -fx-padding: 6px 0 0 0;
+}
+
+/* The border is here rather than only on the disabled rule below, so the button is the same size
+   whether it can be pressed or not. Set on the resting state, it cannot make the control jump the
+   moment the scope field is refused. */
+.run-start {
+    -fx-border-color: transparent;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+}
+
+/* Unpressable drawn outright rather than left to JavaFX's blanket dim, the way the model picker
+   settles the same problem. Dimming a filled button fades its ground and the word on it towards each
+   other, and the word ends up at roughly twice the contrast of the ground it sits on. A flat ground
+   and muted text keep it readable while saying plainly that there is nothing to press. The dark
+   look needs the outline in particular: its ground token and the page behind the button are the
+   same value, so without an edge the word would float with no control around it. */
+/*noinspection CssInvalidPseudoSelector*/
+.run-start:disabled {
+    -fx-opacity: 1;
+    -fx-background-color: -sluice-ground;
+    -fx-border-color: -sluice-border;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-cursor: default;
+}
+
+/* Everything to do with starting a run, under a rule separating it from the cards it reads. Pinned
+   below the pane that scrolls, so it stays reachable however many years are staged. */
+.run-action {
+    -fx-spacing: 8px;
+    -fx-border-color: -sluice-border transparent transparent transparent;
+    -fx-border-width: 1px 0 0 0;
+    -fx-padding: 14px 0 0 0;
+}
+
+/* What a run is expected to cost, set apart from the field above it. Against that field it would
+   read as part of the scope rather than as a consequence of it. */
+.run-estimate {
+    -fx-spacing: 4px;
+    -fx-padding: 6px 0 0 0;
+}
+
+/* The figure itself, which is the part somebody scans for. The sentences under it are muted help
+   text, so this needs weight to be found among them. */
+.run-estimate-figure {
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+

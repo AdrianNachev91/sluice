@@ -84,6 +84,37 @@ final class SpendEstimator {
     }
 
     /**
+     * Estimates what a scope would consume before anything has been prepared for it.
+     *
+     * <p>The input half cannot be counted here, and the difference from {@link #estimate} is why.
+     * A provider counts a request, and a request carries a montage image, and no montage exists
+     * until prep has run. So this is the seeded figure, which is the same answer a provider that
+     * could not count would produce. It goes through the seed directly rather than through
+     * {@link SpendForecast.Unknown}, whose log line would report a provider failing to answer a
+     * question nothing asked it.
+     *
+     * <p>Montages are derived from the photos in scope, which is the count before unreviewable
+     * ones are dropped. A photo that cannot render a judgeable tile never reaches a sheet, so the
+     * real run has this many montages or fewer. The figure therefore leans high, which is the
+     * direction a number about somebody's money should lean.
+     *
+     * @param photos how many photos the scope holds
+     * @param spends boolean whether the configured provider calls a model at all
+     * @param modelId {@link String} the model the run would use, or null for a provider with none
+     * @param grid {@link MontageConfig} the montage grid the run would be prepared at
+     * @return {@link SpendEstimate} what the run is expected to consume
+     */
+    SpendEstimate estimateBeforePreparing(final int photos, final boolean spends,
+                                          final @Nullable String modelId, final MontageConfig grid) {
+        if (!spends) {
+            return new SpendEstimate(0, 0, true, false);
+        }
+        final int perMontage = grid.tilesPerRow() * grid.tilesPerRow();
+        final int montages = (photos + perMontage - 1) / perMontage;
+        return this.estimateFrom(montages, SEED_INPUT_TOKENS_PER_CALL, false, modelId, grid);
+    }
+
+    /**
      * Scales one call's input across the run and adds the output half the ledger projects.
      *
      * @param montages how many montages the run will dispatch for

@@ -8,6 +8,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import photos.sluice.SluiceApplication;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
+import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.adapter.ui.StartupSequence;
@@ -130,7 +131,8 @@ public class SluiceFxApplication extends Application {
             stage.setScene(MainWindow.scene(built.getBean(FirstRunPresenter.class),
                     built.getBean(SettingsPresenter.class),
                     built.getBean(VisionProviderPresenter.class),
-                    built.getBean(PhotoCategoriesPresenter.class)));
+                    built.getBean(PhotoCategoriesPresenter.class),
+                    built.getBean(RunLauncherPresenter.class)));
             return;
         }
         final var presenter = UiBootstrap.reportAndPresent(startupFailure);

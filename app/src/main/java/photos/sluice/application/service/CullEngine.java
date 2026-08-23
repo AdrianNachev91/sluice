@@ -249,6 +249,30 @@ final class CullEngine {
     }
 
     /**
+     * What sifting this many photos is expected to consume, asked before anything is prepared.
+     *
+     * <p>Whether the run spends at all is read off the configured provider's type rather than off
+     * a forecast. A forecast is a provider counting one real request, and no request exists yet. A
+     * provider of type {@link ProviderType#API} is one this app calls a model through, which is
+     * what spending means here.
+     *
+     * <p>The two questions coincide today rather than by construction. Every registered API
+     * provider bills, and the one MANUAL provider forecasts {@code NoSpend}. A locally-run model
+     * would be the first to separate them: this app would call it, so it is API, and it would cost
+     * nothing. A screen would then show a token figure and a money disclaimer for a free run. The
+     * fix at that point is a question on the port, not a wider reading of the type.
+     *
+     * @param photos how many photos the scope holds
+     * @return {@link SpendEstimate} what a sift over them is expected to consume
+     */
+    SpendEstimate estimateFor(final int photos) {
+        return this.spendEstimator.estimateBeforePreparing(photos,
+                this.cullDispatcher.configuredProviderIs(ProviderType.API),
+                this.cullSettings.providerSettings().model(),
+                this.cullSettings.montage());
+    }
+
+    /**
      * Throws if scope's own prep dir is occupied by a run that is not finished.
      *
      * <p>Occupancy is presence, not readability. Any prep dir holding at least one file occupies

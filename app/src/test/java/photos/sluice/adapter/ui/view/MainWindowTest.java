@@ -18,6 +18,7 @@ import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
+import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
@@ -38,6 +39,7 @@ import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
+import photos.sluice.application.service.Pipeline;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
@@ -57,11 +59,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 // The wiring only a built scene graph can be wrong about: which destination a nav entry shows, and
-// which of its two states the Dashboard rests in. What either screen says is asserted elsewhere
-// (SettingsPaneTest for Settings, FirstRunCardTest for the first-run card; the Dashboard and
-// Review panes carry nothing of their own yet).
+// which of its two states the Dashboard rests in. What each screen says is asserted elsewhere
+// (SettingsPaneTest for Settings, FirstRunCardTest for the first-run card, RunLauncherPaneTest for
+// the launcher the configured Dashboard rests on; the Review pane carries nothing of its own yet).
 //
 // Runs on the FX thread throughout. Building the scene reads the desktop's colour preferences, same
 // as SettingsPaneTest, and that call refuses any other thread.
@@ -117,6 +120,18 @@ class MainWindowTest {
         clickNav(root, "#nav-dashboard");
 
         assertThat(currentScreen(root).getId()).isEqualTo("Dashboard");
+    }
+
+    // The launcher is the configured Dashboard's whole content, and the shell is the only thing that
+    // puts it there. Without this, it could stop being wired in and every other Dashboard assertion
+    // here would still pass, because they read the screen's name rather than what is on it.
+    @Test
+    void aConfiguredDashboardRestsOnTheRunLauncher() throws Exception {
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
+
+        assertThat(root.lookup("#run-mode-sort")).isNotNull();
+        assertThat(root.lookup("#run-scope-field")).isNotNull();
+        assertThat(root.lookup("#run-start")).isNotNull();
     }
 
     @Test
@@ -211,13 +226,17 @@ class MainWindowTest {
 
     private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters) {
         final Scene scene = MainWindow.scene(presenter, presenters.settings(), presenters.vision(),
-                photoCategoriesPresenter());
+                photoCategoriesPresenter(), runLauncherPresenter());
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();
         scene.getRoot().applyCss();
         scene.getRoot().layout();
         return (BorderPane) scene.getRoot();
+    }
+
+    private static RunLauncherPresenter runLauncherPresenter() {
+        return new RunLauncherPresenter(mock(Pipeline.class));
     }
 
     private static FirstRunPresenter firstRunPresenter(final boolean unfinished) {
