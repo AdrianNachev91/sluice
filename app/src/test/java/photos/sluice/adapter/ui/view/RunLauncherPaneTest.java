@@ -75,14 +75,14 @@ class RunLauncherPaneTest {
         settledOpen(pane, 2018, true);
     }
 
-    /**
-     * Waits for one year's months to finish opening or closing.
-     */
+    // Waits for one year's months to finish opening or closing. Reads through readOnFxThread
+    // rather than onFxThread: what this waits on is an animation, and it needs the toolkit thread
+    // to get pulses while the wait is running.
     private static void settledOpen(final Parent pane, final int year, final boolean open)
             throws Exception {
         WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> {
-            final Node months = onFxThread(() -> pane.lookup("#run-months-" + year));
-            final double height = onFxThread(months::getBoundsInLocal).getHeight();
+            final double height = readOnFxThread(
+                    () -> pane.lookup("#run-months-" + year).getBoundsInLocal().getHeight());
             return open ? height > 0 : height == 0;
         });
     }
@@ -365,7 +365,7 @@ class RunLauncherPaneTest {
     }
 
     private static boolean inView(final Parent pane, final int year) throws Exception {
-        return onFxThread(() -> {
+        return readOnFxThread(() -> {
             final ScrollPane scroll = scrollIn(pane);
             final Node months = pane.lookup("#run-months-" + year);
             final double viewport = scroll.getViewportBounds().getHeight();
@@ -433,5 +433,15 @@ class RunLauncherPaneTest {
         final T result = WaitForAsyncUtils.asyncFx(work).get();
         WaitForAsyncUtils.waitForFxEvents();
         return result;
+    }
+
+    // Reads state on the toolkit thread and returns, where onFxThread above also drains the event
+    // queue behind it. Draining is what an acting call wants, so that a press has landed before the
+    // next line reads. A polled predicate wants the opposite. Each drain costs several more
+    // traversals of the one thread the animation needs, so a predicate polled for seconds starves
+    // what it is waiting for. Measured on this class under load, the fold test ran 3.4s through
+    // onFxThread against 0.5s unloaded, and CI's Windows leg passed 10s and timed out.
+    private static <T> T readOnFxThread(final Callable<T> work) throws Exception {
+        return WaitForAsyncUtils.asyncFx(work).get();
     }
 }
