@@ -1,6 +1,6 @@
-// Where a job's progress is reported. Its own package rather than a corner of adapter/ui, because
-// a log line is not a desktop concern. Every driving adapter needs somewhere for progress to go,
-// and adapter/ui's beans are all excluded from the cli profile.
+// Where a job's progress goes when no surface has claimed it: one log line per event, readable in
+// a console or a log file. Its own package rather than a corner of adapter/ui, because a log line
+// is not a desktop concern.
 @NullMarked
 package photos.sluice.adapter.progress;
 

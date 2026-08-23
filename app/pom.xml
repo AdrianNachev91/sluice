@@ -55,6 +55,15 @@
       <groupId>org.jspecify</groupId>
       <artifactId>jspecify</artifactId>
     </dependency>
+    <!-- Parses the command line. The starter rather than picocli alone, for the one bean it adds:
+         a factory that builds each command through Spring, so a command class can be injected with
+         the services it drives. Help text generates from the same annotations the parser reads, so
+         it cannot fall out of step with what the parser accepts. Apache-2.0. -->
+    <dependency>
+      <groupId>info.picocli</groupId>
+      <artifactId>picocli-spring-boot-starter</artifactId>
+      <version>4.7.7</version>
+    </dependency>
     <dependency>
       <groupId>tools.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>

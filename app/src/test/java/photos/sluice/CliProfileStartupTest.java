@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import photos.sluice.adapter.cli.ConsoleProgressPort;
 import photos.sluice.adapter.ui.StartupSequence;
 import photos.sluice.adapter.ui.FolderRootsHousekeeping;
 import photos.sluice.application.port.out.ProgressPort;
@@ -48,6 +49,13 @@ class CliProfileStartupTest {
     void theFacadeAndItsProgressReporterAreBothBuilt() {
         assertThat(this.context.getBeanNamesForType(Pipeline.class)).hasSize(1);
         assertThat(this.context.getBeanNamesForType(ProgressPort.class)).hasSize(1);
+    }
+
+    // Which one, not only how many. Swapping the console writer back out for the log-line one
+    // leaves the count at one, and sends every command's progress somewhere nobody is watching.
+    @Test
+    void progressIsReportedByTheCommandLinesOwnWriter() {
+        assertThat(this.context.getBean(ProgressPort.class)).isInstanceOf(ConsoleProgressPort.class);
     }
 
     @Test

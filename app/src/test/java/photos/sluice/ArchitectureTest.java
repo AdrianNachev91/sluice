@@ -74,7 +74,7 @@ class ArchitectureTest {
                     .as("application must not perform filesystem or stream I/O directly, only through ports");
 
     // Adapters are effect implementations reached only through their ports. Only config, the
-    // composition root, may name a concrete adapter type (to wire it); anything else depending on a
+    // composition root, may name a concrete adapter type, to wire it. Anything else depending on a
     // concrete adapter has bypassed the port it should go through.
     @ArchTest
     static final ArchRule adaptersReachedOnlyThroughPorts =
@@ -83,9 +83,9 @@ class ArchitectureTest {
                     .as("only config (the composition root) may depend on a concrete adapter; everything else goes " +
                             "through ports");
 
-    // Config is the composition root: it may depend on adapters (to wire them), but the arrow must
-    // not point back - an adapter depending on config would mean the wiring layer's concerns leak
-    // into the effect implementation it's supposed to just assemble.
+    // Config is the composition root, so it may depend on adapters to wire them. The arrow must not
+    // point back. An adapter depending on config would mean the wiring layer's concerns leak into
+    // the effect implementation it is supposed to just assemble.
     @ArchTest
     static final ArchRule adaptersDoNotDependOnConfig =
             noClasses().that().resideInAPackage("..adapter..")
@@ -93,7 +93,7 @@ class ArchitectureTest {
                     .as("adapters receive resolved values from wiring; they must not depend on config");
 
     // Adapters are siblings, each an isolated effect implementation. If one needed another's
-    // behavior, it should depend on the port that other adapter implements - Spring already injects
+    // behavior, it should depend on the port that other adapter implements. Spring already injects
     // every adapter by its port, so a concrete adapter-to-adapter dependency is never necessary.
     @ArchTest
     static final ArchRule adaptersAreSiblings =
@@ -102,9 +102,9 @@ class ArchitectureTest {
                     .as("adapters must not depend on other adapters; depend on the other adapter's port instead");
 
     // The slice rule above only buckets classes that sit in an adapter subpackage (fs, imaging,
-    // ...) - a class placed directly in adapter itself would have no subpackage segment to key a
-    // slice on, so it would fall outside every slice and go unchecked in both directions. These two
-    // rules close that gap explicitly. Empty-should is allowed on this direction only, since the
+    // ...). A class placed directly in adapter itself has no subpackage segment to key a slice on.
+    // So it falls outside every slice, and goes unchecked in both directions. These two rules close
+    // that gap explicitly. Empty-should is allowed on this direction only, since the
     // `that()` clause can legitimately match zero classes rather than finding zero violations among
     // some.
     @ArchTest
@@ -127,6 +127,18 @@ class ArchitectureTest {
                     .and().areMetaAnnotatedWith(Component.class)
                     .should().beAnnotatedWith(Profile.class)
                     .as("every Spring bean in adapter/ui must also be annotated @Profile");
+
+    // The mirror of the rule above, for the other driving adapter. A command-line bean built inside
+    // a desktop run is at best dead weight. At worst it is a second candidate for something the
+    // core requires exactly one of, which stops the app starting at all. The same reasoning about
+    // local convention applies: a bare @Component is the house default everywhere else, so a new
+    // command would carry one and look right.
+    @ArchTest
+    static final ArchRule cliBeansAreProfileGated =
+            classes().that().resideInAPackage("..adapter.cli..")
+                    .and().areMetaAnnotatedWith(Component.class)
+                    .should().beAnnotatedWith(Profile.class)
+                    .as("every Spring bean in adapter/cli must also be annotated @Profile");
 
     // Putting settings in force is a step of saving them, never a thing to do on its own. Reached
     // directly, it skips the write to disk, the working-root claim and the refusal to move a folder
