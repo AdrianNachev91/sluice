@@ -23,6 +23,7 @@ import photos.sluice.application.port.out.RunEnding;
 import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.SpendLedgerPort;
+import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
@@ -249,25 +250,41 @@ final class CullEngine {
     }
 
     /**
-     * What sifting this many photos is expected to consume, asked before anything is prepared.
+     * Whether a run on the configured provider can spend anything.
      *
-     * <p>Whether the run spends at all is read off the configured provider's type rather than off
-     * a forecast. A forecast is a provider counting one real request, and no request exists yet. A
-     * provider of type {@link ProviderType#API} is one this app calls a model through, which is
-     * what spending means here.
+     * <p>Read off the provider's type rather than off a forecast. A forecast is a provider counting
+     * one real request, and a caller asking this has no request to count. A provider of type
+     * {@link ProviderType#API} is one this app calls a model through, which is what spending means
+     * here.
      *
      * <p>The two questions coincide today rather than by construction. Every registered API
      * provider bills, and the one MANUAL provider forecasts {@code NoSpend}. A locally-run model
      * would be the first to separate them: this app would call it, so it is API, and it would cost
-     * nothing. A screen would then show a token figure and a money disclaimer for a free run. The
-     * fix at that point is a question on the port, not a wider reading of the type.
+     * nothing. A screen would then show a token figure and a money disclaimer for a free run.
+     *
+     * <p>The fix at that point is a third {@link ProviderType} rather than a defaulted question on
+     * the port. A new constant makes the provider declare which it is. A default would guess for
+     * it, and guess wrong for exactly the provider that prompted the change.
+     * {@link VisionCuller#type} refuses a default for the same reason.
+     *
+     * @return boolean true when a run on the configured provider can spend
+     */
+    boolean configuredProviderSpends() {
+        return this.cullDispatcher.configuredProviderIs(ProviderType.API);
+    }
+
+    /**
+     * What sifting this many photos is expected to consume, asked before anything is prepared.
+     *
+     * <p>A provider that cannot spend, per {@link #configuredProviderSpends}, estimates zero of
+     * both token counts rather than declining to answer.
      *
      * @param photos how many photos the scope holds
      * @return {@link SpendEstimate} what a sift over them is expected to consume
      */
     SpendEstimate estimateFor(final int photos) {
         return this.spendEstimator.estimateBeforePreparing(photos,
-                this.cullDispatcher.configuredProviderIs(ProviderType.API),
+                this.configuredProviderSpends(),
                 this.cullSettings.providerSettings().model(),
                 this.cullSettings.montage());
     }

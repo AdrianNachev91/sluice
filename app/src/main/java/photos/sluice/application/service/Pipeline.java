@@ -348,6 +348,23 @@ public class Pipeline {
     }
 
     /**
+     * Whether a run on the configured provider can spend anything.
+     *
+     * <p>A screen asks this to decide whether to raise the question of cost at all. It is not the
+     * same question as {@link #estimateFor}, which needs a photo count. A sort resolves which
+     * photos land under which year, so a curate has no count to ask with until it has run. Reading
+     * a zero estimate back is therefore not a route open to every caller.
+     *
+     * <p>No roots check and no disk read. The answer is the configured provider's own type, so a
+     * caller may put it behind a keystroke.
+     *
+     * @return boolean true when a run on the configured provider can spend
+     */
+    public boolean configuredProviderSpends() {
+        return this.cullEngine.configuredProviderSpends();
+    }
+
+    /**
      * Turns one waiting run's auto-resume on, whatever the configured mode is. The two halves of
      * the waiting card's "auto-apply when shards arrive" toggle are this and
      * {@link #stopWatching}. Neither touches the run itself: it stays Waiting, stays listed, and

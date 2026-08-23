@@ -50,6 +50,7 @@ class PipelineSurfaceTest {
             "inboxTally()",
             "sortedTally()",
             "estimateFor(int)",
+            "configuredProviderSpends()",
             "isBusy()");
 
     // The methods that must run whatever the roots say. Named rather than detected, because what
@@ -68,8 +69,13 @@ class PipelineSurfaceTest {
     //
     // isBusy asks the job runner whether it is running something, which is true or false whatever
     // the roots say. A screen asks it while drawing, and one refused there could not draw at all.
+    //
+    // configuredProviderSpends reads the configured provider's own type. No folder appears in the
+    // question and none is read to answer it. A screen asks it while drawing, the same way it asks
+    // isBusy.
     private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK =
-            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "estimateFor(int)", "isBusy()");
+            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "estimateFor(int)",
+                    "configuredProviderSpends()", "isBusy()");
 
     // The facade is where every driving adapter passes through, so it is where the folder-root check
     // belongs. A guard written into a screen would be walked past by a command line. This reads the

@@ -90,6 +90,21 @@ class PipelineTest {
     }
 
     @Test
+    void aProviderThatCallsNoModelIsReportedAsSpendingNothing(@TempDir final Path root) {
+        final var progress = new RecordingProgressPort();
+
+        assertThat(cullPipeline(root, progress).configuredProviderSpends()).isFalse();
+    }
+
+    @Test
+    void aProviderThatCallsAModelIsReportedAsAbleToSpend(@TempDir final Path root) {
+        final var progress = new RecordingProgressPort();
+
+        assertThat(cullPipeline(root, progress, autoApproveCullSettings(), List.of(new AutoApproveCuller()))
+                .configuredProviderSpends()).isTrue();
+    }
+
+    @Test
     void sortRunsSortEngineAndReturnsItsSummary(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
         writeFile(inboxOf(root).resolve("20210315_photo.jpg"), padded("keeper"));

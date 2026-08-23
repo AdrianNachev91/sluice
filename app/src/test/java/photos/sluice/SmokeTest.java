@@ -8,8 +8,10 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import photos.sluice.adapter.ui.FolderRootsHousekeeping;
+import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
+import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 
@@ -45,6 +47,15 @@ class SmokeTest {
 
     @Test
     void contextLoads() {
+    }
+
+    // Naming the type as well as the count catches a reporter that is registered here but writes to
+    // the log instead of the screen.
+    @Test
+    void theDesktopBuildsExactlyOneProgressReporterAndItIsItsOwn() {
+        assertThat(this.context.getBeanNamesForType(ProgressPort.class)).hasSize(1);
+        assertThat(this.context.getBeansOfType(ProgressPort.class).values())
+                .hasOnlyElementsOfType(FxProgressPort.class);
     }
 
     // The service's own tests hand it listeners directly, so a listener nobody registered would
