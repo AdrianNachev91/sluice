@@ -55,6 +55,16 @@ and also depends on, extends, or reaches into any part of Sluice outside the
 SPI. A module like that is an ordinary modification of Sluice. It is governed
 by the AGPL on the same terms as the rest of the codebase, with no exception.
 
+The configuration Sluice is started with, and the property names in it, are
+not part of Sluice's source code. A Vision Plugin reading its own values
+from that configuration is not reaching into Sluice under the conditions
+above.
+
+This permission is about code, and not about what Sluice's own screens can
+be made to show. Sluice draws configuration controls for a fixed set of
+settings. A Vision Plugin needing a value outside that set is left to read
+it from the configuration file. Nothing here promises that set will widen.
+
 This permission does not change the license of Sluice itself, and it
 grants no rights beyond the one stated above. It is not an offer to
 relicense any other part of Sluice. Nor is it a waiver of the copyright
