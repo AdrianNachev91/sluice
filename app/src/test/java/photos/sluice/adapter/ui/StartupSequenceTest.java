@@ -211,7 +211,7 @@ class StartupSequenceTest {
 
         @Override
         public Path graveyard() {
-            return this.logs().resolve("disasters");
+            return this.logs().resolve("archives");
         }
     }
 }

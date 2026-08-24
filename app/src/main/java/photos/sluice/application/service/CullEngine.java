@@ -56,7 +56,7 @@ final class CullEngine {
 
     private static final Logger log = LoggerFactory.getLogger(CullEngine.class);
 
-    private static final String PREPPING = "Building montages...";
+    private static final String PREPPING = "Reading photos...";
     private static final String CULLING = "Sifting...";
     private static final String APPLYING = "Applying decisions...";
 

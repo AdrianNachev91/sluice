@@ -1,0 +1,104 @@
+package photos.sluice.adapter.ui;
+
+import org.jspecify.annotations.Nullable;
+
+import java.nio.file.Path;
+import java.util.List;
+
+/**
+ * What the dashboard draws once a run has ended, chosen from a {@link RunLauncherPresenter} and
+ * carrying only display-ready values. The view reads fields off this and decides nothing about what
+ * they mean.
+ *
+ * <p>An ending is not a success. A sift that paused for its shards, a run that stopped at its spend
+ * ceiling and a job that threw all arrive here. {@code tone} is what separates them.
+ *
+ * @param heading {@link String} how the run ended, named after the work the user chose
+ * @param tone {@link Tone} how the heading should read
+ * @param detail a sentence about the ending where the heading needs one, or null
+ * @param counts a {@link List} of {@link Count} what the run did, one row each, empty where it did
+ *     nothing worth counting
+ * @param archived what to say about a previous record of this scope moved aside on the way in, or
+ *     null where none was
+ * @param warning {@link Warning} something that stopped nothing and is still worth a reader's
+ *     attention, or null
+ * @param resume {@link Resume} the offer to continue a stopped run, or null where none is open
+ * @param doneLabel {@link String} what the button back to the launcher says
+ */
+public record RunResultView(String heading, Tone tone, @Nullable String detail, List<Count> counts,
+                            @Nullable String archived, @Nullable Warning warning,
+                            @Nullable Resume resume, String doneLabel) {
+
+    /**
+     * Defensively copies the mutable collection component.
+     *
+     * @param heading {@link String} how the run ended
+     * @param tone {@link Tone} how the heading should read
+     * @param detail a sentence about the ending, or null
+     * @param counts a {@link List} of {@link Count} what the run did
+     * @param archived what to say about a previous record moved aside, or null
+     * @param warning {@link Warning} something worth attention that stopped nothing, or null
+     * @param resume {@link Resume} the offer to continue a stopped run, or null
+     * @param doneLabel {@link String} what the button back to the launcher says
+     */
+    public RunResultView {
+        counts = List.copyOf(counts);
+    }
+
+    /**
+     * How a run's ending should read.
+     *
+     * <p>Three rather than two, because most of the ways a sift ends are neither. A sift waiting on
+     * an agent's decisions did everything asked of it and is still not finished. Drawn as a
+     * success it claims work nobody has done; drawn as a fault it blames the reader for a pause
+     * the design intends.
+     */
+    public enum Tone {
+
+        /** The work asked for was carried out. */
+        FINISHED,
+
+        /** The run stopped with work left, and nothing went wrong. */
+        UNFINISHED,
+
+        /** The run could not do what it was asked. */
+        FAILED
+    }
+
+    /**
+     * Something a run noticed and did not stop for.
+     *
+     * <p>Two parts rather than one paragraph. The stripe carries its weight through its own ground
+     * and border, so a whole paragraph set bold in the caution colour is shouting. A short line a
+     * reader can take in at a glance earns that weight; what it means does not.
+     *
+     * @param headline {@link String} what a reader needs to know, in one line
+     * @param detail {@link String} what caused it and what Sluice did instead
+     */
+    public record Warning(String headline, String detail) {
+    }
+
+    /**
+     * One row of what a run did.
+     *
+     * @param id {@link String} the control's id, for the screen to set on it
+     * @param label {@link String} what was counted
+     * @param value {@link String} the count, written out
+     */
+    public record Count(String id, String label, String value) {
+    }
+
+    /**
+     * An offer to continue a run that stopped with work still in front of it.
+     *
+     * <p>{@code prepDir} is the stopped run's own identity, handed back when the button is pressed
+     * rather than something for the screen to render. What the screen shows is {@code label} and
+     * the question above it.
+     *
+     * @param question {@link String} what the reader is being asked
+     * @param label {@link String} what the button says
+     * @param prepDir {@link Path} which stopped run it continues
+     */
+    public record Resume(String question, String label, Path prepDir) {
+    }
+}

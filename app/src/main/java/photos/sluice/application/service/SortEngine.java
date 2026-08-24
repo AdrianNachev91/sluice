@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.SortUseCase;
 import photos.sluice.application.port.out.HashIndexPort;
@@ -7,6 +8,7 @@ import photos.sluice.application.port.out.ImageDimensionsPort;
 import photos.sluice.application.port.out.InboxScannerPort;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
+import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.ScopeSelector;
@@ -63,6 +65,10 @@ public class SortEngine implements SortUseCase {
     // unmistakable rather than clever: this flags a collapse, not a quality metric.
     private static final double PAIRING_COLLAPSE_THRESHOLD = 0.05;
 
+    private static final String FINDING_DATES = "Finding dates...";
+    private static final String CHECKING_COPIES = "Checking for duplicates...";
+    private static final String SORTING = "Sorting...";
+
     // Returned when cancellation lands during dating, before any file is moved, deleted, or
     // written - a clean abort with nothing to report.
     private static final SortSummary EMPTY_SORT_SUMMARY =
@@ -75,6 +81,7 @@ public class SortEngine implements SortUseCase {
     private final HashIndexPort hashIndexPort;
     private final ImageDimensionsPort imageDimensionsPort;
     private final MediaStore mediaStore;
+    private final PhaseRunner phaseRunner;
     private final ByteIdenticalDedup dedup = new ByteIdenticalDedup();
     private final ScopeSelector scopeSelector = new ScopeSelector();
     private final MediaTypeDetector mediaTypeDetector = new MediaTypeDetector();
@@ -90,11 +97,12 @@ public class SortEngine implements SortUseCase {
      * @param hashIndexPort {@link HashIndexPort} looks up hashes already in the library
      * @param imageDimensionsPort {@link ImageDimensionsPort} reads image pixel dimensions
      * @param mediaStore {@link MediaStore} moves, deletes, and inspects files
+     * @param progressPort {@link ProgressPort} where this engine reports its own stages
      */
     public SortEngine(final PathsPort pathsPort, final InboxScannerPort inboxScanner, final DateResolver dateResolver,
                       final Sha256Port sha256Port, final HashIndexPort hashIndexPort,
                       final ImageDimensionsPort imageDimensionsPort,
-                      final MediaStore mediaStore) {
+                      final MediaStore mediaStore, final ProgressPort progressPort) {
         this.pathsPort = pathsPort;
         this.inboxScanner = inboxScanner;
         this.dateResolver = dateResolver;
@@ -102,40 +110,31 @@ public class SortEngine implements SortUseCase {
         this.hashIndexPort = hashIndexPort;
         this.imageDimensionsPort = imageDimensionsPort;
         this.mediaStore = mediaStore;
+        this.phaseRunner = new PhaseRunner(progressPort);
     }
 
     /**
-     * Sorts the given scope with no progress reporting or cancellation support.
+     * Sorts the given scope with no cancellation support.
      *
      * @param scope {@link SortScope} which files to sort this run
      * @return {@link SortSummary} summary of what was sorted, deduped, and routed
      */
     @Override
     public SortSummary sort(final SortScope scope) {
-        return this.sort(scope, ProgressCallback.NO_OP, CancellationSignal.NEVER);
+        return this.sort(scope, CancellationSignal.NEVER);
     }
 
     /**
-     * Sorts the given scope, reporting progress but not cancellable.
+     * Sorts the given scope with cancellation support.
+     *
+     * <p>Takes no progress callback. This engine reports its own three stages, so a caller
+     * bracketing the whole call in one phase would report a single stage over all of them.
      *
      * @param scope {@link SortScope} which files to sort this run
-     * @param progress {@link ProgressCallback} receives per-file progress ticks
-     * @return {@link SortSummary} summary of what was sorted, deduped, and routed
-     */
-    public SortSummary sort(final SortScope scope, final ProgressCallback progress) {
-        return this.sort(scope, progress, CancellationSignal.NEVER);
-    }
-
-    /**
-     * Sorts the given scope with progress reporting and cancellation support. The full sort
-     * entry point that the parameter-light overloads delegate to.
-     *
-     * @param scope {@link SortScope} which files to sort this run
-     * @param progress {@link ProgressCallback} receives per-file progress ticks
      * @param cancellation {@link CancellationSignal} checked to allow a clean early abort
      * @return {@link SortSummary} summary of what was sorted, deduped, and routed
      */
-    public SortSummary sort(final SortScope scope, final ProgressCallback progress,
+    public SortSummary sort(final SortScope scope,
                             final CancellationSignal cancellation) {
         // Every scanned file is dated before scope narrows anything, not just the files a caller
         // is about to process. OldestYear and OldestN need to compare dates across the whole
@@ -146,28 +145,27 @@ public class SortEngine implements SortUseCase {
         // cancellation seen here is a clean abort with zero side effects. The check exists only to
         // stop wasted work quickly on the pass most likely to run long: it spans the whole Inbox,
         // not just the requested scope.
+        // Three stages rather than one, because the two before routing are where a sort spends most
+        // of its time and neither moves a file. Reported as one phase, the bar ran indeterminate
+        // through the reading and the hashing and then measured only the fast part.
         final ScanResult scanResult = this.inboxScanner.scan(this.pathsPort.inbox());
-        final List<DatedMedia> allDated = new ArrayList<>();
-        for (final MediaFile file : scanResult.media()) {
-            if (cancellation.isCancelled()) {
-                return EMPTY_SORT_SUMMARY;
-            }
-            allDated.add(new DatedMedia(file, this.dateResolver.resolve(file, scanResult.sidecars().get(file))));
+        final List<DatedMedia> allDated = this.phaseRunner.around(FINDING_DATES,
+                dating -> this.dateEveryFile(scanResult, cancellation, dating));
+        if (allDated == null) {
+            return EMPTY_SORT_SUMMARY;
         }
         final List<DatedMedia> inScope = this.scopeSelector.select(allDated, scope);
         final Map<MediaFile, DateResult> dateByFile = new HashMap<>();
         inScope.forEach(dated -> dateByFile.put(dated.file(), dated.date()));
 
-        final Set<String> libraryHashes = this.existingLibraryHashes();
-        final List<HashedMedia> hashed = inScope.stream()
-                .map(dated -> new HashedMedia(dated.file(), this.sha256Port.hash(dated.file().path())))
-                .toList();
-        final DedupPlan plan = this.dedup.plan(hashed, libraryHashes);
+        final DedupPlan plan = this.phaseRunner.around(CHECKING_COPIES,
+                hashing -> this.dedupPlanFor(inScope, hashing));
 
         plan.redundantVsLibrary().forEach(file -> this.mediaStore.delete(file.path()));
         plan.withinBatchDuplicates().forEach(file -> this.mediaStore.delete(file.path()));
 
-        final RoutingResult routing = this.routeSurvivors(plan.toSort(), dateByFile, progress, cancellation);
+        final RoutingResult routing = this.phaseRunner.around(SORTING,
+                moving -> this.routeSurvivors(plan.toSort(), dateByFile, moving, cancellation));
 
         // A cancelled routing pass can stop before every survivor is routed. Those unrouted files
         // never actually left the Inbox, even though scope selection picked them. This is the set
@@ -330,6 +328,49 @@ public class SortEngine implements SortUseCase {
      * @param cancellation {@link CancellationSignal} checked between files to allow early stop
      * @return {@link RoutingResult} tally of the routing outcomes
      */
+    /**
+     * Dates every scanned file, counting as it goes.
+     *
+     * @param scanResult {@link ScanResult} what the Inbox scan found
+     * @param cancellation {@link CancellationSignal} asked between files
+     * @param progress {@link ProgressCallback} ticked per file dated
+     * @return a {@link List} of {@link DatedMedia} every file with its date, or null where the
+     *     run was cancelled before any of it mattered
+     */
+    private @Nullable List<DatedMedia> dateEveryFile(final ScanResult scanResult,
+                                                     final CancellationSignal cancellation,
+                                                     final ProgressCallback progress) {
+        final List<MediaFile> media = scanResult.media();
+        final int total = media.size();
+        final List<DatedMedia> dated = new ArrayList<>();
+        for (final MediaFile file : media) {
+            if (cancellation.isCancelled()) {
+                return null;
+            }
+            dated.add(new DatedMedia(file, this.dateResolver.resolve(file, scanResult.sidecars().get(file))));
+            progress.tick(dated.size(), total);
+        }
+        return dated;
+    }
+
+    /**
+     * Hashes what is in scope and plans what is already held elsewhere.
+     *
+     * @param inScope a {@link List} of {@link DatedMedia} the files this run covers
+     * @param progress {@link ProgressCallback} ticked per file hashed
+     * @return {@link DedupPlan} what to delete and what to sort
+     */
+    private DedupPlan dedupPlanFor(final List<DatedMedia> inScope, final ProgressCallback progress) {
+        final Set<String> libraryHashes = this.existingLibraryHashes();
+        final int total = inScope.size();
+        final List<HashedMedia> hashed = new ArrayList<>();
+        for (final DatedMedia dated : inScope) {
+            hashed.add(new HashedMedia(dated.file(), this.sha256Port.hash(dated.file().path())));
+            progress.tick(hashed.size(), total);
+        }
+        return this.dedup.plan(hashed, libraryHashes);
+    }
+
     private RoutingResult routeSurvivors(final List<MediaFile> toSort, final Map<MediaFile, DateResult> dateByFile,
                                          final ProgressCallback progress, final CancellationSignal cancellation) {
         final var routing = new RoutingResult();

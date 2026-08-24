@@ -1,0 +1,229 @@
+package photos.sluice.adapter.ui.view;
+
+import javafx.css.PseudoClass;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.layout.StackPane;
+import javafx.stage.Stage;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.testfx.api.FxToolkit;
+import org.testfx.util.WaitForAsyncUtils;
+import photos.sluice.adapter.ui.RunLauncherPresenter;
+import photos.sluice.adapter.ui.RunResultView;
+import photos.sluice.adapter.ui.RunResultView.Count;
+import photos.sluice.adapter.ui.RunResultView.Resume;
+import photos.sluice.adapter.ui.RunResultView.Tone;
+import photos.sluice.adapter.ui.RunResultView.Warning;
+
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+
+// The card is mounted on its own and handed states directly, because it takes a view record and
+// nothing else. What each ending puts in that record is RunResultsTest's.
+class RunResultPaneTest {
+
+    private static final PseudoClass FAILED = PseudoClass.getPseudoClass("failed");
+
+    private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
+
+    @BeforeAll
+    static void startToolkit() throws Exception {
+        FxToolkit.registerPrimaryStage();
+    }
+
+    @AfterEach
+    void closeStages() throws Exception {
+        FxToolkit.cleanupStages();
+    }
+
+    @Test
+    void everyCountedThingGetsARowSayingWhatItWasAndHowMany() throws Exception {
+        final Parent pane = onFxThread(() -> shown(finished(List.of(
+                new Count("result-photos-sorted", "Photos sorted", "980"),
+                new Count("result-videos-sorted", "Videos sorted", "122")))));
+
+        assertThat(pane.lookupAll(".run-result-count-label")).extracting(node -> ((Label) node).getText())
+                .containsExactly("Photos sorted", "Videos sorted");
+        assertThat(pane.lookupAll(".run-result-count-value")).extracting(node -> ((Label) node).getText())
+                .containsExactly("980", "122");
+    }
+
+    @Test
+    void aRunThatCountedNothingDrawsNoRowsAtAll() throws Exception {
+        final Parent pane = onFxThread(() -> shown(finished(List.of())));
+
+        assertThat(pane.lookupAll(".run-result-count")).isEmpty();
+    }
+
+    @Test
+    void aWarningDrawsItsHeadlineOverItsDetail() throws Exception {
+        final Parent pane = onFxThread(() -> shown(with(new Warning(
+                "The dates on these photos may be wrong.", "They came with date files alongside them."))));
+
+        assertThat(pane.lookup("#run-result-warning").isManaged()).isTrue();
+        assertThat(text(pane, "#run-result-warning .settings-caution"))
+                .isEqualTo("The dates on these photos may be wrong.");
+        assertThat(text(pane, ".run-result-warning-detail"))
+                .isEqualTo("They came with date files alongside them.");
+    }
+
+    @Test
+    void aRunWithNothingToWarnAboutKeepsNoRoomForTheStripe() throws Exception {
+        final Parent pane = onFxThread(() -> shown(finished(List.of())));
+
+        assertThat(pane.lookup("#run-result-warning").isManaged()).isFalse();
+    }
+
+    @Test
+    void anOfferToContinueDrawsItsQuestionInTheBodyAndItsButtonInTheActionRow() throws Exception {
+        final Parent pane = onFxThread(() -> shown(offering()));
+
+        assertThat(text(pane, "#run-result-resume .label")).isEqualTo("Continue?");
+        assertThat(resume(pane).getText()).isEqualTo("Continue sifting");
+        assertThat(resume(pane).isManaged()).isTrue();
+    }
+
+    @Test
+    void aCardWithNoOfferKeepsNoRoomForEitherHalfOfOne() throws Exception {
+        final Parent pane = onFxThread(() -> shown(finished(List.of())));
+
+        assertThat(pane.lookup("#run-result-resume").isManaged()).isFalse();
+        assertThat(resume(pane).isManaged()).isFalse();
+    }
+
+    // The card outlives every run it shows, so a directory captured when the button was built would
+    // continue whichever run happened to be first.
+    @Test
+    void continuingNamesTheRunTheCardIsShowingRatherThanAnEarlierOne() throws Exception {
+        final RunLauncherPresenter presenter = mock(RunLauncherPresenter.class);
+        final var redraws = new AtomicInteger();
+        final RunResultPane.Mounted mounted = onFxThread(
+                () -> RunResultPane.mount(presenter, redraws::incrementAndGet));
+        final Path second = Path.of("logs", "sift-prep", "2018");
+        onFxThread(() -> {
+            mounted.fill().accept(offering());
+            mounted.fill().accept(offeringFor(second));
+        });
+
+        onFxThread(() -> ((Button) mounted.node().lookup("#run-resume")).fire());
+
+        verify(presenter).continueRun(second);
+        assertThat(redraws.get()).isOne();
+    }
+
+    @Test
+    void pressingDoneDismissesTheReportAndDrawsAgain() throws Exception {
+        final RunLauncherPresenter presenter = mock(RunLauncherPresenter.class);
+        final var redraws = new AtomicInteger();
+        final Parent pane = onFxThread(
+                () -> shown(presenter, redraws::incrementAndGet, finished(List.of())));
+
+        onFxThread(() -> ((Button) pane.lookup("#run-done")).fire());
+
+        verify(presenter).dismissResult();
+        assertThat(redraws.get()).isOne();
+    }
+
+    // Neither button wears the brand fill, because carrying on and stopping are the reader's own
+    // choice between spending more and spending no more.
+    @Test
+    void neitherButtonOnTheCardIsDrawnAsTheOneToPress() throws Exception {
+        final Parent pane = onFxThread(() -> shown(offering()));
+
+        assertThat(resume(pane).getStyleClass()).contains("run-cancel").doesNotContain("run-start");
+        assertThat(pane.lookup("#run-done").getStyleClass())
+                .contains("run-cancel").doesNotContain("run-start");
+    }
+
+    @Test
+    void aFailedRunMarksTheCardSoItsOwnSentenceCanBeDrawnToBeRead() throws Exception {
+        final Parent pane = onFxThread(() -> shown(new RunResultView("Sorting stopped.", Tone.FAILED,
+                "Sluice could not do that.", List.of(), null, null, null, "Done")));
+
+        assertThat(pane.getPseudoClassStates()).contains(FAILED);
+    }
+
+    @Test
+    void aCardThatShowedAFailureDropsTheFailureMarkWhenTheNextRunEndsWell() throws Exception {
+        final RunResultPane.Mounted mounted = onFxThread(
+                () -> RunResultPane.mount(mock(RunLauncherPresenter.class), () -> { }));
+        onFxThread(() -> mounted.fill().accept(new RunResultView("Sorting stopped.", Tone.FAILED,
+                "Broke.", List.of(), null, null, null, "Done")));
+
+        onFxThread(() -> mounted.fill().accept(finished(List.of())));
+
+        assertThat(mounted.node().getPseudoClassStates()).doesNotContain(FAILED);
+    }
+
+    private static RunResultView finished(final List<Count> counts) {
+        return new RunResultView("Sorting finished.", Tone.FINISHED, null, counts, null, null, null,
+                "Done");
+    }
+
+    private static RunResultView with(final Warning warning) {
+        return new RunResultView("Sorting finished.", Tone.FINISHED, null, List.of(), null, warning,
+                null, "Done");
+    }
+
+    private static RunResultView offering() {
+        return offeringFor(PREP_DIR);
+    }
+
+    private static RunResultView offeringFor(final Path prepDir) {
+        return new RunResultView("Sifting stopped at its spending limit.", Tone.UNFINISHED, null,
+                List.of(), null, null, new Resume("Continue?", "Continue sifting", prepDir), "Done");
+    }
+
+    private static Button resume(final Parent pane) {
+        return (Button) pane.lookup("#run-resume");
+    }
+
+    private static String text(final Parent pane, final String selector) {
+        return ((Label) pane.lookup(selector)).getText();
+    }
+
+    private static Parent shown(final RunResultView view) {
+        return shown(mock(RunLauncherPresenter.class), () -> { }, view);
+    }
+
+    // The real stylesheet. A scene built without it answers for Modena rather than for this app,
+    // and the assertions above read style classes the sheet is what gives meaning to.
+    private static Parent shown(final RunLauncherPresenter presenter, final Runnable redraw,
+                                final RunResultView view) {
+        final RunResultPane.Mounted mounted = RunResultPane.mount(presenter, redraw);
+        mounted.fill().accept(view);
+        final var page = (Parent) mounted.node();
+        final var scene = new Scene(new StackPane(page), 900, 700);
+        scene.getStylesheets().add(
+                Objects.requireNonNull(RunResultPaneTest.class.getResource("/ui/sluice.css"),
+                        "the app stylesheet is missing from the test classpath").toExternalForm());
+        final var stage = new Stage();
+        stage.setScene(scene);
+        stage.show();
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        return page;
+    }
+
+    private static void onFxThread(final Runnable work) throws Exception {
+        WaitForAsyncUtils.asyncFx(work).get();
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    private static <T> T onFxThread(final Callable<T> work) throws Exception {
+        final T result = WaitForAsyncUtils.asyncFx(work).get();
+        WaitForAsyncUtils.waitForFxEvents();
+        return result;
+    }
+}

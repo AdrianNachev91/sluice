@@ -367,7 +367,7 @@ class PrepDirRemediesTest {
         final DiscardReport report = prepDirRemedies(root, root.resolve("Library")).discard(prepDir);
         final Path graveyard = report.graveyard();
 
-        assertThat(graveyard.getParent()).isEqualTo(root.resolve("logs/disasters"));
+        assertThat(graveyard.getParent()).isEqualTo(root.resolve("logs/archives"));
         assertThat(graveyard.getFileName().toString()).startsWith("scope1-");
         assertThat(Files.exists(graveyard.resolve("index.json"))).isTrue();
         assertThat(Files.exists(graveyard.resolve("montage-001.json"))).isTrue();

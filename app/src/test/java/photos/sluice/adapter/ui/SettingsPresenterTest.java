@@ -220,7 +220,8 @@ class SettingsPresenterTest {
         });
         final SettingsPresenter presenter = new SettingsPresenter(
                 settingsUseCase, failingLibraryRootUseCase(), noViolations(), catalog,
-                new VisionProviderPresenter(new FixedSecretStore(new InKeyring()), catalog, settingsUseCase));
+                new VisionProviderPresenter(new FixedSecretStore(new InKeyring()), catalog, settingsUseCase),
+                new FxProgressPort());
 
         presenter.refreshModelsAtStartup();
 
@@ -746,6 +747,51 @@ class SettingsPresenterTest {
                 .isEqualTo(Path.of(SettingsPresenter.workingRootSuggestion(), "Inbox").toString());
     }
 
+    @Test
+    void aMoveThatHasReportedNothingYetSaysOnlyThatItIsMoving() throws Exception {
+        final var said = new ArrayList<String>();
+
+        try (AutoCloseable _ = presenterWatching(new FxProgressPort(Runnable::run)).reportMoving(said::add)) {
+            assertThat(said).containsExactly("Moving the library...");
+        }
+    }
+
+    @Test
+    void aMoveInFlightSaysWhichPhaseItIsOnAndHowFarThroughItIs() throws Exception {
+        final var port = new FxProgressPort(Runnable::run);
+        final var said = new ArrayList<String>();
+
+        try (AutoCloseable _ = presenterWatching(port).reportMoving(said::add)) {
+            port.phaseStarted("Copying");
+            port.tick("Copying", 1500, 12000);
+        }
+
+        assertThat(said).last().isEqualTo("Copying... 1,500 of 12,000");
+    }
+
+    @Test
+    void aPhaseWithNoTotalToCountAgainstIsNamedWithoutANumber() throws Exception {
+        final var port = new FxProgressPort(Runnable::run);
+        final var said = new ArrayList<String>();
+
+        try (AutoCloseable _ = presenterWatching(port).reportMoving(said::add)) {
+            port.phaseStarted("Reading the library");
+        }
+
+        assertThat(said).last().isEqualTo("Reading the library...");
+    }
+
+    @Test
+    void aClosedHandleIgnoresPhasesReportedAfterIt() throws Exception {
+        final var port = new FxProgressPort(Runnable::run);
+        final var said = new ArrayList<String>();
+        presenterWatching(port).reportMoving(said::add).close();
+
+        port.phaseStarted("Copying");
+
+        assertThat(said).containsExactly("Moving the library...");
+    }
+
     private static SettingsPresenter presenterOver(final Settings settings, final SecretStore secretStore) {
         return presenterOver(settings, secretStore, noViolations());
     }
@@ -766,11 +812,19 @@ class SettingsPresenterTest {
         return presenterOverLibrary(new FixedSettingsUseCase(settings(null, null, null)), libraryRoot);
     }
 
+    private static SettingsPresenter presenterWatching(final FxProgressPort progress) {
+        final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
+        final var visionProvider = new VisionProviderPresenter(new FixedSecretStore(new Absent()),
+                twoProviders(), settingsUseCase);
+        return new SettingsPresenter(settingsUseCase, failingLibraryRootUseCase(), noViolations(),
+                twoProviders(), visionProvider, progress);
+    }
+
     private static SettingsPresenter presenter(final SettingsUseCase settingsUseCase, final SecretStore secretStore,
                                                final PathValidationUseCase pathValidation) {
         final var visionProvider = new VisionProviderPresenter(secretStore, twoProviders(), settingsUseCase);
         return new SettingsPresenter(settingsUseCase, failingLibraryRootUseCase(), pathValidation, twoProviders(),
-                visionProvider);
+                visionProvider, new FxProgressPort());
     }
 
     // The library-root move tests never touch the credential or model catalogue, so the vision
@@ -780,7 +834,7 @@ class SettingsPresenterTest {
         final var visionProvider = new VisionProviderPresenter(new FixedSecretStore(new Absent()), twoProviders(),
                 settingsUseCase);
         return new SettingsPresenter(settingsUseCase, libraryRootUseCase, noViolations(), twoProviders(),
-                visionProvider);
+                visionProvider, new FxProgressPort());
     }
 
     // One of each type, and only the API one takes a key. Every question this screen asks a provider
@@ -810,7 +864,8 @@ class SettingsPresenterTest {
         final var vision = new VisionProviderPresenter(new FixedSecretStore(new InKeyring()), catalog,
                 settingsUseCase);
         return new Presenters(
-                new SettingsPresenter(settingsUseCase, failingLibraryRootUseCase(), noViolations(), catalog, vision),
+                new SettingsPresenter(settingsUseCase, failingLibraryRootUseCase(), noViolations(), catalog,
+                        vision, new FxProgressPort()),
                 vision);
     }
 
@@ -931,6 +986,7 @@ class SettingsPresenterTest {
         return WaitForAsyncUtils.asyncFx(work).get(10, TimeUnit.SECONDS);
     }
 
+    @SuppressWarnings("SameParameterValue")
     private static Settings settingsWithTheme(final ThemeChoice theme) {
         final Settings base = settings(null, null, null);
         return new Settings(base.paths(), base.provider(), base.providerSettingsById(), base.categories(),

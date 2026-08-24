@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
+import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.SortedTally;
@@ -23,13 +24,19 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.model.SortSummary;
+import photos.sluice.application.service.JobHandle;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -293,7 +300,7 @@ class RunLauncherPaneTest {
     void aCostThisRunWillCarryIsDrawnWithWhatTheFigureIsWorth() throws Exception {
         final Pipeline pipeline = pipeline();
         when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true));
-        final Parent pane = onFxThread(() -> built(new RunLauncherPresenter(pipeline)));
+        final Parent pane = onFxThread(() -> built(new RunLauncherPresenter(pipeline, new FxProgressPort())));
 
         onFxThread(() -> fire(pane, "#run-mode-sift"));
         onFxThread(() -> type(pane, "2019"));
@@ -315,7 +322,7 @@ class RunLauncherPaneTest {
     void withNothingStagedTheSortedCardSaysSoInsteadOfDrawingAnEmptyList() throws Exception {
         final Pipeline pipeline = pipeline();
         when(pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
-        final Parent pane = onFxThread(() -> built(new RunLauncherPresenter(pipeline)));
+        final Parent pane = onFxThread(() -> built(new RunLauncherPresenter(pipeline, new FxProgressPort())));
 
         assertThat(pane.lookup("#run-year-2019")).isNull();
         assertThat(text(pane, "#run-nothing-staged")).contains("Sort your Inbox first");
@@ -332,6 +339,99 @@ class RunLauncherPaneTest {
         assertThat(pane.lookup("#run-scope-hint").isManaged()).isFalse();
     }
 
+    @Test
+    void nothingHasRunYetSoTheLauncherIsTheOnlyFaceTakingRoom() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenter()));
+
+        assertThat(showing(pane)).isEqualTo("#run-launcher");
+    }
+
+    @Test
+    void aRunningJobPutsTheProgressAreaUpAndTakesTheLauncherOut() throws Exception {
+        final Pipeline pipeline = pipeline();
+        final RunLauncherPresenter presenter = new RunLauncherPresenter(pipeline, new FxProgressPort());
+        stillSorting(pipeline);
+        final Parent pane = onFxThread(() -> built(presenter));
+
+        onFxThread(() -> fire(pane, "#run-start"));
+
+        assertThat(showing(pane)).isEqualTo("#run-progress");
+    }
+
+    @Test
+    void aReportedPhaseReachesTheScreenWithoutAnythingElseAskingItTo() throws Exception {
+        final Pipeline pipeline = pipeline();
+        final var progress = new FxProgressPort();
+        final RunLauncherPresenter presenter = new RunLauncherPresenter(pipeline, progress);
+        stillSorting(pipeline);
+        final Parent pane = onFxThread(() -> built(presenter));
+        onFxThread(() -> fire(pane, "#run-start"));
+
+        onFxThread(() -> {
+            progress.phaseStarted("Sorting");
+            progress.tick("Sorting", 40, 100);
+        });
+
+        assertThat(text(pane, "#run-progress-bars .run-phase-label")).isEqualTo("Sorting");
+        assertThat(text(pane, "#run-progress-bars .run-phase-counts")).isEqualTo("40 of 100");
+    }
+
+    @Test
+    void aFinishedRunPutsItsReportUpAndDoneBringsTheLauncherBack() throws Exception {
+        final Pipeline pipeline = pipeline();
+        sortFinishes(pipeline);
+        final Parent pane = onFxThread(() -> built(
+                new RunLauncherPresenter(pipeline, new FxProgressPort())));
+
+        onFxThread(() -> fire(pane, "#run-start"));
+        assertThat(showing(pane)).isEqualTo("#run-result");
+
+        onFxThread(() -> fire(pane, "#run-done"));
+        assertThat(showing(pane)).isEqualTo("#run-launcher");
+    }
+
+    @Test
+    void aProviderThatSpendsNothingDrawsItsOwnBoxWhereTheFigureWouldGo() throws Exception {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(false);
+        final Parent pane = onFxThread(() -> built(
+                new RunLauncherPresenter(pipeline, new FxProgressPort())));
+
+        onFxThread(() -> chooseAModeTheRowsScope(pane));
+        onFxThread(() -> type(pane, "2019"));
+
+        assertThat(pane.lookup("#run-free").isVisible()).isTrue();
+        assertThat(pane.lookup("#run-estimate").isVisible()).isFalse();
+    }
+
+    // Which face is taking room, read off the container whose own visibility the swap sets. A child
+    // of a hidden parent still answers true to isVisible, so a label inside one proves nothing.
+    private static String showing(final Parent pane) {
+        return Stream.of("#run-launcher", "#run-progress", "#run-result")
+                .filter(id -> pane.lookup(id).isManaged())
+                .reduce((one, other) -> {
+                    throw new AssertionError("two faces are up at once: " + one + " and " + other);
+                })
+                .orElseThrow(() -> new AssertionError("no face is up"));
+    }
+
+    private static void stillSorting(final Pipeline pipeline) {
+        sortAnswering(pipeline, new CompletableFuture<>());
+    }
+
+    private static void sortFinishes(final Pipeline pipeline) {
+        sortAnswering(pipeline, CompletableFuture.completedFuture(
+                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of())));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void sortAnswering(final Pipeline pipeline,
+                                      final CompletableFuture<SortSummary> result) {
+        final JobHandle<SortSummary> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(result);
+        when(pipeline.sort(any())).thenReturn(handle);
+    }
+
     private static List<ToggleButton> modeButtons(final Parent pane) {
         return ((HBox) pane.lookup(".run-mode-row")).getChildren().stream()
                 .map(ToggleButton.class::cast)
@@ -346,6 +446,9 @@ class RunLauncherPaneTest {
                 .toList();
     }
 
+    // Parameterised by the row, not by the one row the tests happen to read today. Inlining it
+    // would put a fixture's id in the helper's own name.
+    @SuppressWarnings("SameParameterValue")
     private static List<String> insideText(final Parent pane, final String id) {
         return ((HBox) ((ToggleButton) pane.lookup(id)).getGraphic()).getChildren().stream()
                 .map(child -> ((Label) child).getText())
@@ -364,6 +467,7 @@ class RunLauncherPaneTest {
         return (ScrollPane) pane.lookup(".settings-scroll");
     }
 
+    @SuppressWarnings("SameParameterValue")
     private static boolean inView(final Parent pane, final int year) throws Exception {
         return readOnFxThread(() -> {
             final ScrollPane scroll = scrollIn(pane);
@@ -394,7 +498,7 @@ class RunLauncherPaneTest {
     }
 
     private static RunLauncherPresenter presenter() {
-        return new RunLauncherPresenter(pipeline());
+        return new RunLauncherPresenter(pipeline(), new FxProgressPort());
     }
 
     private static Pipeline pipeline() {
@@ -405,6 +509,7 @@ class RunLauncherPaneTest {
                         new MonthRow(11, 30, 0))),
                 new YearRow(2018, 50, 0, List.of(new MonthRow(1, 50, 0))))));
         when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false));
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
         return pipeline;
     }
 
@@ -427,6 +532,11 @@ class RunLauncherPaneTest {
         scene.getRoot().applyCss();
         scene.getRoot().layout();
         return page;
+    }
+
+    private static void onFxThread(final Runnable work) throws Exception {
+        WaitForAsyncUtils.asyncFx(work).get();
+        WaitForAsyncUtils.waitForFxEvents();
     }
 
     private static <T> T onFxThread(final Callable<T> work) throws Exception {

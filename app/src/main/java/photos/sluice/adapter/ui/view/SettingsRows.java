@@ -153,6 +153,64 @@ final class SettingsRows {
     }
 
     /**
+     * A muted line built empty and written onto later, which takes no room at all while it has
+     * nothing to say.
+     *
+     * <p>A screen reserving a row for every line it might one day show would carry those gaps on
+     * every screen that has nothing to put in them.
+     *
+     * <p>Its sibling {@link #helpLine} is the other kind: built with its words and never changed.
+     * The two take an id and a sentence respectively, which is a difference nothing but the name
+     * would show at a call site.
+     *
+     * @param id {@link String} the control's id
+     * @return {@link Label} the line
+     */
+    static Label emptyHelpLine(final String id) {
+        final var line = new Label();
+        line.setId(id);
+        wrapping(line);
+        line.getStyleClass().add("settings-help");
+        showWhileItSaysSomething(line);
+        return line;
+    }
+
+    /**
+     * Makes a label wrap, and hold the height its wrapping needs.
+     *
+     * <p>Wrapping alone is not enough. A wrapped label's minimum height is one line. A column short
+     * of room shrinks it to that, and the sentence comes out on one line with an ellipsis rather
+     * than wrapped. Pinning the minimum to the preferred height moves the shrinking onto whichever
+     * control is built to give room up.
+     *
+     * @param line {@link Label} the label to wrap
+     */
+    static void wrapping(final Label line) {
+        line.setWrapText(true);
+        line.setMinHeight(Region.USE_PREF_SIZE);
+    }
+
+    /**
+     * Has a label take up room only while it carries text.
+     *
+     * @param line {@link Label} the label to bind
+     */
+    static void showWhileItSaysSomething(final Label line) {
+        line.managedProperty().bind(line.visibleProperty());
+        line.visibleProperty().bind(line.textProperty().isNotEmpty());
+    }
+
+    /**
+     * Text for a label, where nothing to say is an empty string rather than a missing one.
+     *
+     * @param said what the presenter had, or null where it had nothing
+     * @return {@link String} what to put in the label
+     */
+    static String orNothing(final @Nullable String said) {
+        return said == null ? "" : said;
+    }
+
+    /**
      * A page's body in the pane that scrolls it. Both settings pages are built this way, so the
      * one that is reached from the other does not arrive with different chrome.
      *
@@ -552,8 +610,7 @@ final class SettingsRows {
         final var violation = new Label();
         violation.setWrapText(true);
         violation.getStyleClass().add("settings-violation");
-        violation.managedProperty().bind(violation.visibleProperty());
-        violation.visibleProperty().bind(violation.textProperty().isNotEmpty());
+        showWhileItSaysSomething(violation);
         return violation;
     }
 

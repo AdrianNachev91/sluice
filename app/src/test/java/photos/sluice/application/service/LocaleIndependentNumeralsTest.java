@@ -12,6 +12,7 @@ import photos.sluice.adapter.imaging.ImageDimensionsReader;
 import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
+import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.commit.CommitScope;
@@ -102,7 +103,7 @@ class LocaleIndependentNumeralsTest {
                 new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
         return new SortEngine(pathsConfig, new InboxScanner(), dateResolver, new Sha256Hasher(),
                 new CsvLibraryHashIndex(SettingsFixture.workingRoot(root)),
-                new ImageDimensionsReader(), new NioMediaStore());
+                new ImageDimensionsReader(), new NioMediaStore(), ProgressPort.NO_OP);
     }
 
     private CommitEngine commitEngine(final Path root, final Path libraryRoot) {

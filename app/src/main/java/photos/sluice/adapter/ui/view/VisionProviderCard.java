@@ -341,7 +341,7 @@ final class VisionProviderCard {
         // This card only ever shows for a provider that calls a model with this key, so the spend
         // is real every time it does. Its own bordered ground, not just a line of text, since a
         // spend is worth noticing rather than reading past.
-        final var billingText = new Label("Every run spends against your own account with this provider. "
+        final var billingText = new Label("Every run spends from your provider account balance. "
                 + "Checking your key or its models costs nothing.");
         billingText.setWrapText(true);
         billingText.getStyleClass().add("settings-caution");
@@ -379,28 +379,6 @@ final class VisionProviderCard {
     }
 
     /**
-     * Fades a line out and empties it, four seconds after it appeared.
-     *
-     * <p>Emptied rather than left invisible, since the label stays in the card and is written to
-     * again the next time something happens to the key. Its opacity is put back for the same
-     * reason.
-     *
-     * @param line {@link Label} the line to take away
-     */
-    private static void takeAwayAfterFourSeconds(final Label line) {
-        final var fade = new FadeTransition(Duration.millis(400), line);
-        fade.setFromValue(1);
-        fade.setToValue(0);
-        fade.setOnFinished(_ -> {
-            line.setText("");
-            line.setOpacity(1);
-        });
-        final var wait = new PauseTransition(Duration.seconds(4));
-        wait.setOnFinished(_ -> fade.play());
-        wait.play();
-    }
-
-    /**
      * The dropdown of every provider a user can pick, opened on the configured one.
      *
      * <p>Shared with the first-run card, which offers the same choice before this card exists.
@@ -427,6 +405,28 @@ final class VisionProviderCard {
         box.getSelectionModel().select(view.providers().stream()
                 .filter(choice -> choice.id().equals(view.provider())).findFirst().orElseThrow());
         return box;
+    }
+
+    /**
+     * Fades a line out and empties it, four seconds after it appeared.
+     *
+     * <p>Emptied rather than left invisible, since the label stays in the card and is written to
+     * again the next time something happens to the key. Its opacity is put back for the same
+     * reason.
+     *
+     * @param line {@link Label} the line to take away
+     */
+    private static void takeAwayAfterFourSeconds(final Label line) {
+        final var fade = new FadeTransition(Duration.millis(400), line);
+        fade.setFromValue(1);
+        fade.setToValue(0);
+        fade.setOnFinished(_ -> {
+            line.setText("");
+            line.setOpacity(1);
+        });
+        final var wait = new PauseTransition(Duration.seconds(4));
+        wait.setOnFinished(_ -> fade.play());
+        wait.play();
     }
 
     /**
@@ -490,10 +490,9 @@ final class VisionProviderCard {
         testResult.setId("settings-test-result");
         testResult.setWrapText(true);
         testResult.getStyleClass().add("settings-help");
-        // Nothing has been tested until the button is pressed, and a label holding no text still
-        // takes a line's height. Left alone it puts an empty gap below the Endpoint row.
-        testResult.managedProperty().bind(testResult.visibleProperty());
-        testResult.visibleProperty().bind(testResult.textProperty().isNotEmpty());
+        // Nothing has been tested until the button is pressed, so this label starts empty and
+        // would otherwise leave a line's gap below the Endpoint row.
+        SettingsRows.showWhileItSaysSomething(testResult);
         enableTestIfThereIsSomethingToTry(testConnection, visionProvider, providerBox);
         testConnection.setOnAction(_ -> {
             testResult.setText("Checking...");

@@ -117,7 +117,7 @@ class PipelineTest {
     }
 
     @Test
-    void sortBracketsProgressEventsAroundTheSortPhase(@TempDir final Path root) throws IOException {
+    void sortReportsEachOfItsThreeStagesWithACountOfItsOwn(@TempDir final Path root) throws IOException {
         final var progress = new RecordingProgressPort();
         writeFile(inboxOf(root).resolve("20210315_a.jpg"), padded("a"));
         writeFile(inboxOf(root).resolve("20210316_b.jpg"), padded("b"));
@@ -125,6 +125,10 @@ class PipelineTest {
         pipeline(root, progress).sort(new SortScope.OldestYear()).join();
 
         assertThat(progress.events).containsExactly(
+                "started:Finding dates...", "tick:Finding dates...:1/2", "tick:Finding dates...:2/2",
+                "finished:Finding dates...",
+                "started:Checking for duplicates...", "tick:Checking for duplicates...:1/2",
+                "tick:Checking for duplicates...:2/2", "finished:Checking for duplicates...",
                 "started:Sorting...", "tick:Sorting...:1/2", "tick:Sorting...:2/2", "finished:Sorting...");
     }
 
@@ -284,9 +288,9 @@ class PipelineTest {
     // graveyard folder to prove the wiring reaches it too.
     @Test
     void sweepExpiredDisasterDrawersAlsoSweepsTheDiscardGraveyard(@TempDir final Path root) throws IOException {
-        final Path oldGraveyard = root.resolve("logs/disasters/scope1-2019-01-01_00-00-00");
+        final Path oldGraveyard = root.resolve("logs/archives/scope1-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
-        final Path freshEntry = root.resolve("logs/disasters/scope1-2099-01-01_00-00-00/index.json");
+        final Path freshEntry = root.resolve("logs/archives/scope1-2099-01-01_00-00-00/index.json");
         writeFile(freshEntry, "{}");
 
         pipeline(root, new RecordingProgressPort()).sweepExpiredDisasterDrawers();
@@ -349,7 +353,7 @@ class PipelineTest {
 
         final DiscardReport report = pipeline.discard(prepDir).join();
 
-        assertThat(report.graveyard().getParent()).isEqualTo(root.resolve("logs/disasters"));
+        assertThat(report.graveyard().getParent()).isEqualTo(root.resolve("logs/archives"));
         assertThat(Files.exists(report.graveyard().resolve("index.json"))).isTrue();
         assertThat(Files.exists(prepDir)).isFalse();
     }

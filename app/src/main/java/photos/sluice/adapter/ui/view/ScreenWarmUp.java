@@ -9,6 +9,7 @@ import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
@@ -58,7 +59,7 @@ final class ScreenWarmUp {
         return List.of(
                 new BorderPane(), new Group(), new HBox(), new Region(), new StackPane(), new VBox(),
                 new Button(), new CheckBox(), new ComboBox<String>(), new Hyperlink(),
-                new Label(), new PasswordField(), new RadioButton(), new ScrollPane(),
+                new Label(), new PasswordField(), new ProgressBar(), new RadioButton(), new ScrollPane(),
                 new Separator(), new Spinner<Integer>(), new TextArea(), new TextField(),
                 new TitledPane(), new ToggleButton(),
                 new Circle(), new Polygon(), new Rectangle(), new SVGPath(), new Text(), new TextFlow(),

@@ -1422,3 +1422,164 @@
     -fx-text-fill: -sluice-text;
 }
 
+/* The headline of the box shown where the chosen provider spends nothing. Weighted like the cost
+   figure it stands in place of, so the two occupy the same rank on the page. */
+.run-free-headline {
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+/* ---- The dashboard while a run works ---- */
+
+.run-progress {
+    -fx-spacing: 14px;
+}
+
+/* What the run covers, under the heading naming the work. Muted, because the heading is what a
+   reader is checking and this only confirms which photos it took. */
+.run-progress-scope {
+    -fx-text-fill: -sluice-text-muted;
+}
+
+.run-progress-body {
+    -fx-spacing: 8px;
+}
+
+.run-progress-bars {
+    -fx-spacing: 12px;
+}
+
+/* One phase: its name over its own bar. The gap is small enough that the name reads as belonging to
+   the bar under it rather than to the phase above. */
+.run-phase {
+    -fx-spacing: 4px;
+}
+
+.run-phase-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+/* The counts, which move on every tick. Muted so a number changing several times a second is not
+   the loudest thing on the page. */
+.run-phase-counts {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-size: 12px;
+}
+
+.run-phase-bar {
+    -fx-pref-height: 8px;
+}
+
+.run-phase-bar > .track {
+    -fx-background-color: -sluice-ground;
+    -fx-background-radius: 4px;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 4px;
+    -fx-border-width: 1px;
+}
+
+.run-phase-bar > .bar {
+    -fx-background-color: -sluice-accent;
+    -fx-background-radius: 4px;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+/* A finished phase recedes by its name, and its bar keeps the accent. Recolouring the bar instead
+   is what fails: pale enough not to outweigh the part-filled green above it, and a full bar is
+   then indistinguishable from an empty track, so a phase that has just started looks finished.
+   Left alone, the fill separates all three states on its own. Empty is waiting, part-filled is
+   working, full is done. */
+.run-phase-done .run-phase-label {
+    -fx-font-weight: normal;
+    -fx-text-fill: -sluice-text-muted;
+}
+
+/* Cancel carries no fill. The filled button on this app is the one that starts work, and stopping
+   is not the way through. */
+.run-cancel {
+    -fx-background-color: -sluice-ground;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-text;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.run-cancel:disabled {
+    -fx-opacity: 1;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-cursor: default;
+}
+
+/* ---- The dashboard once a run has ended ---- */
+
+.run-result {
+    -fx-spacing: 14px;
+}
+
+.run-result-body {
+    -fx-spacing: 10px;
+}
+
+.run-result-counts {
+    -fx-spacing: 2px;
+}
+
+/* One counted thing. The rule under each row is what lets the eye run from a name on the left to a
+   number on the right without the two being joined by dots. */
+.run-result-count {
+    -fx-padding: 7px 2px;
+    -fx-border-color: transparent transparent -sluice-border transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.run-result-count-label {
+    -fx-text-fill: -sluice-text;
+}
+
+.run-result-count-value {
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+/* The stripe carrying something the run noticed and did not stop for. Its own ground, because a
+   line of coloured text inside a list of counts reads as one of the counts. */
+.run-result-warning {
+    -fx-background-color: -sluice-caution-bg;
+    -fx-background-radius: 6px;
+    -fx-border-color: -sluice-caution;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-padding: 10px 14px;
+    -fx-spacing: 4px;
+}
+
+/* What the stripe's headline means, under it and in the page's own text colour. The stripe carries
+   its weight through its ground and its border, so the caution colour and the bold above are for
+   the one line a reader takes in at a glance. A whole paragraph set that way is shouting, which
+   this stylesheet says twice already about a refusal that runs past one line. */
+.run-result-warning-detail {
+    -fx-text-fill: -sluice-text;
+}
+
+/* What the reader is asked before carrying a stopped run on. It sits in the card's body with
+   everything else that card has to say, and only its button joins the row of actions. No measure
+   of its own: the counts and the archived note beside it run the card's full width, and a
+   paragraph wrapping short of them makes one card argue with itself about where its text ends. */
+.run-result-resume {
+    -fx-spacing: 6px;
+}
+
+/* On a failed card the sentence under the heading is the whole of what the card has to say, and
+   there are no counts under it. Muted help text is right where that sentence supports a report and
+   wrong where it is the report. */
+/*noinspection CssInvalidPseudoSelector*/
+.run-result:failed .run-result-detail {
+    -fx-text-fill: -sluice-text;
+}
+
+/* How a run ended is carried by the words, not by the heading's colour. A page heading wears the
+   brand on every screen, and this one is no exception. The sentence under it is where a reader
+   learns whether anything went wrong, and it says so in plainer terms than a colour can. */

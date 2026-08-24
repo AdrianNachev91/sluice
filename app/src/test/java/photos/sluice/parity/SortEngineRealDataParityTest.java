@@ -13,6 +13,7 @@ import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
+import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.service.SortEngine;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateResolver;
@@ -265,7 +266,7 @@ class SortEngineRealDataParityTest {
         final var dateResolver =
                 new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
         return new SortEngine(pathsConfig, new InboxScanner(), dateResolver, new Sha256Hasher(), hashIndex,
-                new ImageDimensionsReader(), new NioMediaStore());
+                new ImageDimensionsReader(), new NioMediaStore(), ProgressPort.NO_OP);
     }
 
     private static void copyRecursively(final Path source, final Path destination) throws IOException {

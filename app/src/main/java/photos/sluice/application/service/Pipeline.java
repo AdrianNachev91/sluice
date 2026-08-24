@@ -213,8 +213,8 @@ public class Pipeline {
      */
     public JobHandle<SortSummary> sort(final SortScope scope) {
         this.requireUsableRoots();
-        return this.jobRunner.submit(handle -> this.runPhase(SORTING,
-                progress -> this.sortEngine.sort(scope, progress, handle::isCancellationRequested)));
+        return this.jobRunner.submit(handle ->
+                this.sortEngine.sort(scope, handle::isCancellationRequested));
     }
 
     /**
@@ -563,9 +563,13 @@ public class Pipeline {
         /**
          * Creates the exception, rendering the refusal message from the occupying run.
          *
+         * <p>Public, like the refusals in {@code port.in}. A facade whose refusals only it can
+         * construct cannot be stood in for. Every screen that words one is tested against a
+         * stand-in rather than a real pipeline.
+         *
          * @param occupant {@link CullRunSummary} the run already occupying the scope
          */
-        ScopeOccupiedException(final CullRunSummary occupant) {
+        public ScopeOccupiedException(final CullRunSummary occupant) {
             super("A sift for '" + occupant.scope() + "' already occupies " + occupant.prepDir() + ", and is "
                     + occupant.health().state() + " - resume, troubleshoot or discard it before starting another"
                     + " for the same scope.");
@@ -606,7 +610,7 @@ public class Pipeline {
          * @param occupant {@link CullRunSummary} the run already occupying the scope
          * @param sortSummary {@link SortSummary} the sort summary produced before the conflict
          */
-        CurateConflictException(final CullRunSummary occupant, final SortSummary sortSummary) {
+        public CurateConflictException(final CullRunSummary occupant, final SortSummary sortSummary) {
             super(occupant);
             this.sortSummary = sortSummary;
         }
@@ -642,7 +646,7 @@ public class Pipeline {
          * @param prepDir {@link Path} the prep dir whose occupancy could not be determined
          * @param cause {@link Throwable} the read failure
          */
-        ScopeUnreadableException(final Path prepDir, final Throwable cause) {
+        public ScopeUnreadableException(final Path prepDir, final Throwable cause) {
             super("Scope's prep dir " + prepDir + " could not be read, so whether it is occupied is unknown - "
                     + "retry once whatever is holding it clears.", cause);
             this.prepDir = prepDir;
@@ -678,7 +682,7 @@ public class Pipeline {
          *
          * @param prepDir {@link Path} the prep dir that could not be resumed
          */
-        RunOutsideWorkingRootException(final Path prepDir) {
+        public RunOutsideWorkingRootException(final Path prepDir) {
             super("The sift at " + prepDir + " is not inside the working root Sluice is set up with now, "
                     + "so it was not resumed - point the working root back at the folder holding it, "
                     + "or discard the sift.");

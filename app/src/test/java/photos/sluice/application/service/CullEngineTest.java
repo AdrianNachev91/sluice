@@ -340,7 +340,7 @@ class CullEngineTest {
         cullPipeline(root, progress).cull(new CullScope.Year(2019, null)).join();
 
         assertThat(progress.events).containsExactly(
-                "started:Building montages...", "tick:Building montages...:1/1", "finished:Building montages...",
+                "started:Reading photos...", "tick:Reading photos...:1/1", "finished:Reading photos...",
                 "started:Sifting...", "finished:Sifting...");
     }
 
@@ -633,7 +633,7 @@ class CullEngineTest {
         // rather than reading a null.
         final var handleReady = new CountDownLatch(1);
         final var cancel = new AtomicReference<Runnable>(() -> {});
-        progress.cancelWhenPhaseFinishes("Building montages...", () -> {
+        progress.cancelWhenPhaseFinishes("Reading photos...", () -> {
             try {
                 if (!handleReady.await(5, TimeUnit.SECONDS)) {
                     throw new AssertionError("handle was never handed over");

@@ -21,8 +21,8 @@ import java.util.List;
  * @param scopeText {@link String} what the scope field should read
  * @param scopeHint {@link String} what the field accepts for the mode now chosen
  * @param scopeRefusal what is wrong with what has been typed, or null while nothing is
- * @param estimate {@link Estimate} what a sift over the chosen scope would cost, or null where
- *     this mode and provider spend nothing
+ * @param cost {@link Cost} what the screen says about money, or null where this mode never reaches
+ *     a vision provider
  * @param startLabel {@link String} what the start button says
  * @param canStart boolean whether the start button is live
  * @param message {@link Message} what the screen has to report, or null where it has nothing
@@ -31,7 +31,7 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
                               List<YearChoice> years, boolean scopeNamesTheRun,
                               @Nullable String nothingStaged,
                               String scopeLabel, String scopeText, String scopeHint,
-                              @Nullable String scopeRefusal, @Nullable Estimate estimate,
+                              @Nullable String scopeRefusal, @Nullable Cost cost,
                               String startLabel, boolean canStart, @Nullable Message message) {
 
     /**
@@ -47,7 +47,7 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
      * @param scopeText {@link String} what the scope field should read
      * @param scopeHint {@link String} what the field accepts for the mode now chosen
      * @param scopeRefusal what is wrong with what has been typed, or null
-     * @param estimate {@link Estimate} what a sift over the chosen scope would cost, or null
+     * @param cost {@link Cost} what the screen says about money, or null
      * @param startLabel {@link String} what the start button says
      * @param canStart boolean whether the start button is live
      * @param message {@link Message} what the screen has to report, or null
@@ -142,17 +142,42 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
     }
 
     /**
-     * What a sift over the chosen scope is expected to cost, with what the figure is worth.
+     * What the screen says about money for the mode now chosen.
      *
-     * <p>The figure is never presented on its own. It is an average of past runs rather than a
-     * quote, and a run costs more when a sheet needs a second attempt.
-     *
-     * @param figure {@link String} the expected cost, in the terms the app measures it
-     * @param disclaimer {@link String} what the figure is and is not
-     * @param withoutHistory what to add where this install has no finished runs behind the
-     *     figure, or null where it has some
+     * <p>Sealed, and null where the screen says nothing at all. Silence has to mean one thing, and
+     * on this screen it means the mode does not reach a vision provider. A provider that is reached
+     * and spends nothing says so. Left silent, its empty space reads as a figure that could not be
+     * worked out.
      */
-    public record Estimate(String figure, String disclaimer, @Nullable String withoutHistory) {
+    public sealed interface Cost {
+
+        /**
+         * What a sift over the chosen scope is expected to cost, with what the figure is worth.
+         *
+         * <p>The figure is never presented on its own. It is an average of past runs rather than a
+         * quote, and a run costs more when a sheet needs a second attempt.
+         *
+         * @param figure {@link String} the expected cost, in the terms the app measures it
+         * @param disclaimer {@link String} what the figure is and is not
+         * @param withoutHistory what to add where this install has no finished runs behind the
+         *     figure, or null where it has some
+         */
+        record Estimate(String figure, String disclaimer,
+                        @Nullable String withoutHistory) implements Cost {
+        }
+
+        /**
+         * The configured provider spends nothing, so there is no figure to show.
+         *
+         * <p>Drawn for every mode that reaches a vision provider, whether or not a scope has been
+         * chosen. What it reports is the provider rather than the scope, and a reader switching
+         * provider to find out what it costs is asking about exactly that.
+         *
+         * @param headline {@link String} what the box says first
+         * @param detail {@link String} why there is no figure
+         */
+        record Free(String headline, String detail) implements Cost {
+        }
     }
 
     /**

@@ -3,6 +3,8 @@ package photos.sluice.application.service;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.job.ProgressCallback;
 
+import java.util.function.Function;
+
 /**
  * Brackets a phase's progress events, {@code phaseStarted} then ticks then {@code phaseFinished},
  * around one engine call. Not a Spring bean. {@link Pipeline}, {@link CullEngine}, and
@@ -35,6 +37,28 @@ final class PhaseRunner {
         this.progressPort.phaseStarted(phase);
         try {
             return work.run((current, total) -> this.progressPort.tick(phase, current, total));
+        } finally {
+            this.progressPort.phaseFinished(phase);
+        }
+    }
+
+    /**
+     * The same bracket around work that throws nothing checked.
+     *
+     * <p>Apart from {@link #run} because of what the caller can declare. A stage inside an engine
+     * is reported by that engine, and its own method signature is the product's rather than this
+     * class's to widen. {@link SortEngine#sort} throws nothing, and making it declare
+     * {@code throws Exception} to report its own phases would push that onto every caller it has.
+     *
+     * @param phase {@link String} name of the phase being run
+     * @param work a {@link Function} of {@link ProgressCallback} to T the stage to bracket
+     * @param <T> the type of result the stage produces
+     * @return T the stage's result
+     */
+    <T> T around(final String phase, final Function<ProgressCallback, T> work) {
+        this.progressPort.phaseStarted(phase);
+        try {
+            return work.apply((current, total) -> this.progressPort.tick(phase, current, total));
         } finally {
             this.progressPort.phaseFinished(phase);
         }

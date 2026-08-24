@@ -8,10 +8,25 @@ package photos.sluice.application.port.out;
  * <p>{@link #phaseStarted} and {@link #phaseFinished} always bracket a phase. That holds even when
  * a phase's total is zero and it never ticks. A listener can then tell "not started yet" from
  * "done with nothing to do". The {@code phase} parameter is a short human-readable label the
- * caller controls directly ("Sorting...", "Building montages...", "Applying decisions...") rather
+ * caller controls directly ("Sorting...", "Reading photos...", "Applying decisions...") rather
  * than a code a listener has to translate.
  */
 public interface ProgressPort {
+
+    /** Reports nowhere, for a caller running an engine without watching it. */
+    ProgressPort NO_OP = new ProgressPort() {
+        @Override
+        public void phaseStarted(final String phase) {
+        }
+
+        @Override
+        public void tick(final String phase, final int current, final int total) {
+        }
+
+        @Override
+        public void phaseFinished(final String phase) {
+        }
+    };
 
     /**
      * Signals that a phase has begun.

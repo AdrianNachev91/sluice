@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
+import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
@@ -216,7 +217,8 @@ class SettingsPaneTest {
         };
         final var vision = new VisionProviderPresenter(oneStoredKey(), threeProviders(), useCase);
         return new Presenters(
-                new SettingsPresenter(useCase, moving, onlyRefusingOneFolder(), threeProviders(), vision),
+                new SettingsPresenter(useCase, moving, onlyRefusingOneFolder(), threeProviders(), vision,
+                        new FxProgressPort()),
                 vision);
     }
 }

@@ -1,13 +1,18 @@
 package photos.sluice.adapter.ui;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
+import photos.sluice.adapter.ui.RunProgressView.PhaseBar;
+import photos.sluice.domain.job.ShardTally;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.JobInProgressException;
@@ -19,6 +24,9 @@ import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
+import photos.sluice.domain.model.SortSummary;
+import photos.sluice.domain.commit.LibraryBucket;
+import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
@@ -28,8 +36,11 @@ import photos.sluice.domain.paths.PathViolation.NotADirectory;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,6 +50,7 @@ import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -51,6 +63,8 @@ class RunLauncherPresenterTest {
 
     private static final SpendEstimate NOTHING = new SpendEstimate(0, 0, true, false);
 
+    private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
+
     // Comfortably past the 200ms a read is given before the screen says it is reading. The pair of
     // tests either side of it are a negative and its control, so this number is checked by them
     // rather than picked to feel safe.
@@ -58,7 +72,13 @@ class RunLauncherPresenterTest {
 
     private final Pipeline pipeline = mock(Pipeline.class);
 
-    private final RunLauncherPresenter presenter = new RunLauncherPresenter(this.pipeline);
+    private final FxProgressPort progress = inlineProgress();
+
+    private final RunLauncherPresenter presenter = new RunLauncherPresenter(this.pipeline, this.progress);
+
+    // The handle behind whichever job a test left in flight, so a test about Cancel can ask what
+    // reached it.
+    private @Nullable JobHandle<Object> held;
 
     @BeforeEach
     void aStagedLibraryAndAnInboxWithSomethingInIt() {
@@ -70,6 +90,9 @@ class RunLauncherPresenterTest {
                 // up as a marked row rather than as nothing.
                 new YearRow(2018, 50, 0, List.of(new MonthRow(1, 30, 0), new MonthRow(6, 20, 0))))));
         when(this.pipeline.estimateFor(anyInt())).thenReturn(NOTHING);
+        // A spending provider is the fixture, so every test below is about the figure rather than
+        // about whether there is one at all. The tests that turn it off say so themselves.
+        when(this.pipeline.configuredProviderSpends()).thenReturn(true);
         this.presenter.refreshCounts();
     }
 
@@ -117,7 +140,7 @@ class RunLauncherPresenterTest {
         this.choose(RunMode.MOVE_TO_LIBRARY, "2019 6,11");
 
         assertThat(this.presenter.view().scopeRefusal())
-                .isEqualTo("Moving to your library narrows to a run of months, not a list. Reading "
+                .isEqualTo("Moving to library narrows to a run of months, not a list. Reading "
                         + "6,11 as 6-11 would take July too. Choose months that run together, like "
                         + "6-8, or none at all for the whole year.");
         this.presenter.start();
@@ -139,7 +162,7 @@ class RunLauncherPresenterTest {
 
     @Test
     void aGapIsRefusedWithoutNamingMonthsWhileTheCountsAreStillBeingRead() {
-        final var counting = new RunLauncherPresenter(this.pipeline);
+        final var counting = new RunLauncherPresenter(this.pipeline, inlineProgress());
         counting.setMode(RunMode.MOVE_TO_LIBRARY);
 
         counting.setScope("2019 6,11");
@@ -233,12 +256,12 @@ class RunLauncherPresenterTest {
         assertThat(asked).isNotNull();
         assertThat(asked.question())
                 .contains("the size of the sift cannot be estimated until sorting has finished");
-        assertThat(this.presenter.view().estimate()).isNull();
+        assertThat(this.presenter.view().cost()).isNull();
     }
 
     @Test
     void aCurateStillAsksWhereTheCountsHaveNotLanded() {
-        final var opening = new RunLauncherPresenter(this.pipeline);
+        final var opening = new RunLauncherPresenter(this.pipeline, inlineProgress());
 
         opening.setMode(RunMode.CURATE);
 
@@ -303,7 +326,7 @@ class RunLauncherPresenterTest {
     void aCurateCarriesNoCostFigureAndSaysWhyInsteadOfGuessingOne() {
         this.choose(RunMode.CURATE, "2019");
 
-        assertThat(this.presenter.view().estimate()).isNull();
+        assertThat(this.presenter.view().cost()).isNull();
         assertThat(this.presenter.view().scopeHint()).contains("not known until the sorting is done");
         verify(this.pipeline, never()).estimateFor(anyInt());
     }
@@ -312,15 +335,56 @@ class RunLauncherPresenterTest {
     void aSortIsNeverSizedForCostBecauseItCallsNoModel() {
         this.choose(RunMode.SORT, "2019");
 
-        assertThat(this.presenter.view().estimate()).isNull();
+        assertThat(this.presenter.view().cost()).isNull();
         verify(this.pipeline, never()).estimateFor(anyInt());
     }
 
     @Test
-    void aProviderThatSpendsNothingLeavesTheCostLineOffAltogether() {
+    void aProviderThatSpendsNothingSaysSoRatherThanLeavingTheCostSpaceEmpty() {
+        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
+
         this.choose(RunMode.SIFT, "2019");
 
-        assertThat(this.presenter.view().estimate()).isNull();
+        assertThat(freeOf(this.presenter).headline())
+                .isEqualTo("Sifting costs you nothing through Sluice.");
+        verify(this.pipeline, never()).estimateFor(anyInt());
+    }
+
+    @Test
+    void aProviderThatSpendsNothingSaysSoBeforeAnyScopeIsChosen() {
+        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
+
+        this.choose(RunMode.SIFT, "");
+
+        assertThat(this.presenter.view().cost()).isInstanceOf(RunLauncherView.Cost.Free.class);
+    }
+
+    @Test
+    void aCurateOnAProviderThatSpendsNothingIsNamedAsACurateRatherThanASift() {
+        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
+
+        this.choose(RunMode.CURATE, "");
+
+        assertThat(freeOf(this.presenter).headline())
+                .isEqualTo("Curating costs you nothing through Sluice.");
+    }
+
+    @Test
+    void aModeThatReachesNoProviderSaysNothingAboutMoneyEitherWay() {
+        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
+
+        this.choose(RunMode.MOVE_TO_LIBRARY, "2019");
+
+        assertThat(this.presenter.view().cost()).isNull();
+    }
+
+    @Test
+    void aCurateDoesNotAskAboutMoneyWhereTheProviderSpendsNone() {
+        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
+
+        this.choose(RunMode.CURATE, "");
+
+        assertThat(this.presenter.confirmationNeeded()).isNull();
     }
 
     @Test
@@ -386,8 +450,9 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(messageOf(this.presenter).text()).isEqualTo("Sorting finished.");
-        assertThat(messageOf(this.presenter).refused()).isFalse();
+        assertThat(this.finishedView().heading()).isEqualTo("Sorting finished.");
+        assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FINISHED);
+        this.presenter.dismissResult();
         assertThat(this.presenter.view().canStart()).isTrue();
     }
 
@@ -402,10 +467,10 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(messageOf(this.presenter).text())
+        assertThat(requireNonNull(this.finishedView().detail()))
                 .contains("Report this as a bug in Sluice")
                 .contains("Malformed hash index line: 7");
-        assertThat(messageOf(this.presenter).refused()).isTrue();
+        assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FAILED);
     }
 
     @Test
@@ -442,7 +507,7 @@ class RunLauncherPresenterTest {
         this.presenter.setMode(RunMode.SIFT);
         sorting.complete(new Object());
 
-        assertThat(messageOf(this.presenter).text()).isEqualTo("Sorting finished.");
+        assertThat(this.finishedView().heading()).isEqualTo("Sorting finished.");
     }
 
     @Test
@@ -508,7 +573,7 @@ class RunLauncherPresenterTest {
 
     @Test
     void aPressLandingBeforeTheReadHasFinishedIsToldWhyNothingStarted() {
-        final var counting = new RunLauncherPresenter(this.pipeline);
+        final var counting = new RunLauncherPresenter(this.pipeline, inlineProgress());
         counting.setMode(RunMode.SORT);
         assertThat(counting.view().canStart()).isFalse();
 
@@ -537,7 +602,7 @@ class RunLauncherPresenterTest {
             held.await();
             return new InboxTally(12, 4_300);
         });
-        final var slow = new RunLauncherPresenter(this.pipeline);
+        final var slow = new RunLauncherPresenter(this.pipeline, inlineProgress());
         slow.setMode(RunMode.SORT);
         slow.setRepaint(() -> liveWhenDrawn.add(slow.view().canStart()));
 
@@ -587,33 +652,111 @@ class RunLauncherPresenterTest {
     @Test
     void aSiftThatPausedForItsAgentDoesNotClaimToHaveFinished() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Waiting(mock(WaitingCullJob.class),
-                WaitingReason.SHARDS_OUTSTANDING, mock(CullReport.class), null));
+        this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
 
         this.presenter.start();
 
-        assertThat(messageOf(this.presenter).text()).doesNotContain("finished").contains("waiting");
+        assertThat(this.finishedView().heading()).isEqualTo("Sifting is waiting on your agent.");
+        assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.UNFINISHED);
     }
 
     @Test
-    void aSiftStoppedByItsSpendCeilingSaysNothingMoreWillBeSpent() {
+    void aSiftStoppedByItsSpendCeilingSaysNothingMoreHasBeenSpent() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Waiting(mock(WaitingCullJob.class),
-                WaitingReason.CEILING_REACHED, mock(CullReport.class), null));
+        this.siftEndsWith(waitingBecause(WaitingReason.CEILING_REACHED));
 
         this.presenter.start();
 
-        assertThat(messageOf(this.presenter).text()).contains("Nothing more will be spent");
+        assertThat(requireNonNull(this.finishedView().resume()).question())
+                .contains("No more money has been spent");
     }
 
     @Test
     void aSiftThatAppliedItsDecisionsIsTheOneThatSaysItFinished() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Applied(mock(CullReport.class), mock(ApplyReport.class), null));
+        this.siftEndsWith(new CullJobOutcome.Applied(mock(CullReport.class),
+                new ApplyReport(25, Map.of("Keep", 20), 0, 1, 3, List.of()), null));
 
         this.presenter.start();
 
-        assertThat(messageOf(this.presenter).text()).isEqualTo("Sifting finished.");
+        assertThat(this.finishedView().heading()).isEqualTo("Sifting finished.");
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label, RunResultView.Count::value)
+                .contains(tuple("Photos looked at", "25"), tuple("Keep", "20"),
+                        tuple("Copies set aside", "3"));
+    }
+
+    @Test
+    void aRunThatMovedAPreviousRecordAsideSaysSoRatherThanLettingItLookLost() {
+        final Path archived = Path.of("logs", "archives", "2019-2026-08-24_22-01-33");
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(new CullJobOutcome.Applied(mock(CullReport.class),
+                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), archived));
+
+        this.presenter.start();
+
+        assertThat(requireNonNull(this.finishedView().archived()))
+                .contains("moved that record to")
+                .contains(archived.toString());
+    }
+
+    @Test
+    void aSortWhoseDateFilesBarelyPairedWarnsThatItsDatesMayBeWrong() {
+        this.choose(RunMode.SORT, "");
+        this.sortEndsWith(sortSummaryWith(List.of("pairing-canary")));
+
+        this.presenter.start();
+
+        final RunResultView.Warning warned = requireNonNull(this.finishedView().warning());
+        assertThat(warned.headline()).isEqualTo("The dates on these photos may be wrong.");
+        assertThat(warned.detail()).contains("almost none of those matched a photo");
+    }
+
+    @Test
+    void aSortWhoseDateFilesPairedCarriesNoWarningAtAll() {
+        this.choose(RunMode.SORT, "");
+        this.sortEndsWith(sortSummaryWith(List.of()));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().warning()).isNull();
+    }
+
+    @Test
+    void aSortsCardCountsEveryBucketAnythingLandedIn() {
+        this.choose(RunMode.SORT, "");
+        this.sortEndsWith(new SortSummary(12, 1, 2, 5, 1, 2, 1, 0, List.of(), List.of(),
+                Set.of(2019), List.of()));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label, RunResultView.Count::value)
+                .containsExactly(tuple("Photos sorted", "5"), tuple("Videos sorted", "1"),
+                        tuple("Already in your library", "1"), tuple("Identical copies removed", "2"),
+                        tuple("Set aside for review", "2"), tuple("Could not be dated", "1"));
+    }
+
+    @Test
+    void aBucketNothingLandedInIsLeftOffTheCardRatherThanCountedAtZero() {
+        this.choose(RunMode.SORT, "");
+        this.sortEndsWith(sortSummaryWith(List.of()));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label)
+                .containsExactly("Photos sorted", "Videos sorted");
+    }
+
+    @Test
+    void aMoveToTheLibraryCountsEachPartOfItSeparatelyAndTogether() {
+        this.choose(RunMode.MOVE_TO_LIBRARY, "2019");
+        this.moveEndsWith(new CommitSummary(9, Map.of(LibraryBucket.PHOTOS, 6,
+                LibraryBucket.VIDEOS, 2, LibraryBucket.FUNNY, 1)));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label, RunResultView.Count::value)
+                .containsExactly(tuple("Photos", "6"), tuple("Videos", "2"), tuple("Funny", "1"),
+                        tuple("Moved to your library", "9"));
     }
 
     @Test
@@ -676,7 +819,7 @@ class RunLauncherPresenterTest {
 
     @Test
     void theButtonIsDeadUntilTheCountsHaveLanded() {
-        final var counting = new RunLauncherPresenter(this.pipeline);
+        final var counting = new RunLauncherPresenter(this.pipeline, inlineProgress());
 
         assertThat(counting.view().canStart()).isFalse();
         assertThat(counting.view().inbox().headline()).isEqualTo("Counting what is waiting...");
@@ -704,7 +847,7 @@ class RunLauncherPresenterTest {
 
         when(this.pipeline.inboxTally()).thenAnswer(_ -> {
             assertThat(this.presenter.view().nothingStaged()).contains("Nothing is sorted yet");
-            assertThat(this.presenter.view().estimate()).isNull();
+            assertThat(this.presenter.view().cost()).isNull();
             return new InboxTally(1, 1L);
         });
 
@@ -752,7 +895,7 @@ class RunLauncherPresenterTest {
 
     @Test
     void aMoveIsOfferedUntilTheReadThatWouldRefuseItHasLanded() {
-        final var opening = new RunLauncherPresenter(this.pipeline);
+        final var opening = new RunLauncherPresenter(this.pipeline, inlineProgress());
         opening.setMode(RunMode.MOVE_TO_LIBRARY);
 
         assertThat(opening.confirmationNeeded()).isNull();
@@ -1112,8 +1255,309 @@ class RunLauncherPresenterTest {
                 .containsExactly("Sort", "Sift", "Move to library", "Curate", "Rescue");
     }
 
-    private static RunLauncherView.Estimate estimateOf(final RunLauncherPresenter presenter) {
-        return requireNonNull(presenter.view().estimate());
+    @Test
+    void nothingRunningAndNothingReportedLeavesTheLauncherUp() {
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Setup.class);
+    }
+
+    @Test
+    void aRunningJobPutsTheProgressAreaUpInPlaceOfTheLauncher() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+
+        this.presenter.start();
+
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Running.class);
+    }
+
+    @Test
+    void theProgressAreaNamesTheWorkAndWhatItCovers() {
+        this.choose(RunMode.SIFT, "2019 6-7");
+        this.aSiftStillRunning();
+
+        this.presenter.start();
+
+        final RunProgressView showing = this.runningView();
+        assertThat(showing.heading()).isEqualTo("Sift progress");
+        assertThat(showing.scope()).isEqualTo("2019, June and July");
+    }
+
+    @Test
+    void aSortNamesTheYearItWillPickRatherThanTheFieldItIgnored() {
+        this.choose(RunMode.SORT, "2019");
+        this.aSortStillRunning();
+
+        this.presenter.start();
+
+        assertThat(this.runningView().scope()).isEqualTo("the oldest year in your Inbox");
+    }
+
+    @Test
+    void aPhaseThatHasReportedNoTotalDrawsWithoutAFraction() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+
+        this.progress.phaseStarted("Sorting");
+
+        assertThat(this.runningView().phases()).singleElement()
+                .extracting(PhaseBar::label, PhaseBar::measured, PhaseBar::counts)
+                .containsExactly("Sorting", false, null);
+    }
+
+    @Test
+    void aPhaseWithCountsCarriesThemAndHowFarThroughItIs() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+        this.progress.phaseStarted("Sorting");
+
+        this.progress.tick("Sorting", 850, 1204);
+
+        assertThat(this.runningView().phases()).singleElement()
+                .extracting(PhaseBar::counts, PhaseBar::measured, PhaseBar::fraction)
+                .containsExactly("850 of 1,204", true, 850d / 1204);
+    }
+
+    @Test
+    void aRunWithNoPhaseYetSaysItIsStartingRatherThanShowingAnEmptyPage() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+
+        this.presenter.start();
+
+        assertThat(this.runningView().phases()).isEmpty();
+        assertThat(this.runningView().waiting()).isEqualTo("Starting...");
+    }
+
+    @Test
+    void aPhaseLeftOverFromAnEarlierRunIsNotCountedAgainstThisOne() {
+        this.choose(RunMode.SORT, "");
+        this.progress.phaseStarted("Sorting");
+        this.aSortStillRunning();
+
+        this.presenter.start();
+
+        assertThat(this.runningView().phases()).isEmpty();
+    }
+
+    @Test
+    void cancelAsksTheRunningJobToStop() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+        final JobHandle<Object> handle = requireNonNull(this.held);
+
+        this.presenter.cancel();
+
+        verify(handle).requestCancellation();
+    }
+
+    @Test
+    void cancelGoesDeadOnceItHasBeenPressed() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+        assertThat(this.runningView().cancelPressable()).isTrue();
+
+        this.presenter.cancel();
+
+        assertThat(this.runningView().cancelPressable()).isFalse();
+    }
+
+    @Test
+    void aCancelledSiftWarnsAboutTheSheetAlreadyInFrontOfTheModel() {
+        this.choose(RunMode.SIFT, "2019");
+        this.aSiftStillRunning();
+        this.presenter.start();
+
+        this.presenter.cancel();
+
+        assertThat(this.runningView().cancelling()).contains("up to about a minute");
+    }
+
+    @Test
+    void aCancelledSortSaysWhatSurvivesRatherThanHowLongTheStopTakes() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+
+        this.presenter.cancel();
+
+        assertThat(this.runningView().cancelling())
+                .isEqualTo("What has already been sorted stays where it is. "
+                        + "Nothing further will be moved.");
+    }
+
+    @Test
+    void theCancelButtonReportsTheStopRatherThanGoingDeadStillOffering() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+        assertThat(this.runningView().cancelLabel()).isEqualTo("Cancel");
+
+        this.presenter.cancel();
+
+        assertThat(this.runningView().cancelLabel()).isEqualTo("Stopping...");
+    }
+
+    // Each of these was reaching the screen as "no plain words for why... report this as a bug",
+    // because the presenter had no arm for its type. The refusal is deliberate and the app knows
+    // exactly what is wrong, so the bug line is the one thing none of them may say.
+    @Test
+    void aTimelineAlreadyHoldingAnUnfinishedSiftIsRefusedInWordsRatherThanAsABug() {
+        this.choose(RunMode.SIFT, "2019");
+        doThrow(new Pipeline.ScopeOccupiedException(occupantOf2019())).when(this.pipeline).cull(any());
+
+        this.presenter.start();
+
+        assertThat(messageOf(this.presenter).text())
+                .isEqualTo("You already have a sift of 2019 that has not finished. Sluice will not "
+                        + "start another for the same timeline while that one is there.");
+    }
+
+    @Test
+    void aCurateRefusedAfterItSortedSaysTheSortingStands() {
+        this.choose(RunMode.CURATE, "");
+        doThrow(new Pipeline.CurateConflictException(occupantOf2019(), sortSummaryWith(List.of())))
+                .when(this.pipeline).curate(any());
+
+        this.presenter.start();
+
+        assertThat(messageOf(this.presenter).text())
+                .startsWith("Your photos were sorted, and then sifting stopped:")
+                .endsWith("The sorting stands.");
+    }
+
+    @Test
+    void aTimelineWhoseFolderCannotBeReadSaysSoRatherThanReportingABug() {
+        this.choose(RunMode.SIFT, "2019");
+        doThrow(new Pipeline.ScopeUnreadableException(Path.of("logs", "sift-prep", "2019"), new RuntimeException()))
+                .when(this.pipeline).cull(any());
+
+        this.presenter.start();
+
+        assertThat(messageOf(this.presenter).text())
+                .contains("could not read")
+                .contains("whether a sift is already running");
+    }
+
+    @Test
+    void aSiftOutsideTheFoldersInForceSaysWhereItIsAndWhatToDo() {
+        this.choose(RunMode.SIFT, "2019");
+        doThrow(new Pipeline.RunOutsideWorkingRootException(Path.of("D:", "old", "sift-prep", "2019")))
+                .when(this.pipeline).cull(any());
+
+        this.presenter.start();
+
+        assertThat(messageOf(this.presenter).text())
+                .contains("not inside the folders Sluice is set up with now")
+                .contains("discard the sift");
+    }
+
+    @Test
+    void cancelWithNothingRunningLeavesTheLauncherWhereItWas() {
+        this.presenter.cancel();
+
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Setup.class);
+    }
+
+    @Test
+    void aFinishedRunPutsItsReportUpInPlaceOfTheLauncher() {
+        this.chooseAndStart(RunMode.SORT, "");
+
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Finished.class);
+    }
+
+    @Test
+    void dismissingTheReportBringsTheLauncherBack() {
+        this.chooseAndStart(RunMode.SORT, "");
+
+        this.presenter.dismissResult();
+
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Setup.class);
+    }
+
+    @Test
+    void aRunRefusedBeforeItStartedLeavesTheLauncherUpWithTheRefusalOnIt() {
+        this.choose(RunMode.SORT, "");
+        doThrow(new JobInProgressException("Something else is running.")).when(this.pipeline).sort(any());
+
+        this.presenter.start();
+
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Setup.class);
+        assertThat(messageOf(this.presenter).text()).isEqualTo("Something else is running.");
+    }
+
+    @Test
+    void aReportAndARefusalAboutTheNextRunAreNeverOnScreenTogether() {
+        this.chooseAndStart(RunMode.SIFT, "2019");
+        // What a sift does to its own scope: applying the decisions empties the year the field
+        // still names, so the launcher behind the report now refuses it.
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        this.presenter.refreshCounts();
+
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Finished.class);
+        assertThat(this.presenter.view().scopeRefusal()).isNotNull();
+    }
+
+    @Test
+    void aStoppedSpendingLimitOffersToContinueTheRun() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(waitingBecause(WaitingReason.CEILING_REACHED));
+
+        this.presenter.start();
+
+        assertThat(requireNonNull(this.finishedView().resume()).prepDir()).isEqualTo(PREP_DIR);
+    }
+
+    @Test
+    void aSiftWaitingOnAnAgentOffersNoContinueBecauseNothingHasArrivedToActOn() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().resume()).isNull();
+    }
+
+    @Test
+    void continuingResumesTheStoppedRunWithoutWaivingItsMissingSheets() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(waitingBecause(WaitingReason.CEILING_REACHED));
+        this.presenter.start();
+        final JobHandle<Object> resumed = finished();
+        when(this.pipeline.resume(any(), anyBoolean())).thenReturn(retyped(resumed));
+
+        this.presenter.continueRun(PREP_DIR);
+
+        verify(this.pipeline).resume(PREP_DIR, false);
+    }
+
+    private RunProgressView runningView() {
+        return ((RunStage.Running) this.presenter.stage()).progress();
+    }
+
+    private RunResultView finishedView() {
+        return ((RunStage.Finished) this.presenter.stage()).result();
+    }
+
+    private static CullJobOutcome waitingBecause(final WaitingReason reason) {
+        return new CullJobOutcome.Waiting(
+                new WaitingCullJob("2019", PREP_DIR, new ShardTally(0, 0, 4), Instant.EPOCH),
+                reason, CullReport.nothingSpent("anthropic", 4), null);
+    }
+
+    private static FxProgressPort inlineProgress() {
+        return new FxProgressPort(Runnable::run);
+    }
+
+    private static RunLauncherView.Cost.Estimate estimateOf(final RunLauncherPresenter presenter) {
+        return (RunLauncherView.Cost.Estimate) requireNonNull(presenter.view().cost());
+    }
+
+    private static RunLauncherView.Cost.Free freeOf(final RunLauncherPresenter presenter) {
+        return (RunLauncherView.Cost.Free) requireNonNull(presenter.view().cost());
     }
 
     private static RunLauncherView.Message messageOf(final RunLauncherPresenter presenter) {
@@ -1162,6 +1606,22 @@ class RunLauncherPresenterTest {
         when(this.pipeline.cull(any())).thenReturn(retyped(handle));
     }
 
+    private void sortEndsWith(final SortSummary summary) {
+        final JobHandle<Object> handle = finished();
+        when(handle.onComplete()).thenReturn(CompletableFuture.completedFuture(summary));
+        when(this.pipeline.sort(any())).thenReturn(retyped(handle));
+    }
+
+    private void moveEndsWith(final CommitSummary summary) {
+        final JobHandle<Object> handle = finished();
+        when(handle.onComplete()).thenReturn(CompletableFuture.completedFuture(summary));
+        when(this.pipeline.commit(any())).thenReturn(retyped(handle));
+    }
+
+    private static SortSummary sortSummaryWith(final List<String> warnings) {
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), Set.of(2019), warnings);
+    }
+
     private void pipelineStarts() {
         final JobHandle<Object> sorted = finished();
         final JobHandle<Object> curated = finished();
@@ -1179,7 +1639,16 @@ class RunLauncherPresenterTest {
         final JobHandle<Object> handle = mock(JobHandle.class);
         when(handle.onComplete()).thenReturn(running);
         when(this.pipeline.sort(any())).thenReturn(retyped(handle));
+        this.held = handle;
         return running;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void aSiftStillRunning() {
+        final JobHandle<Object> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(new CompletableFuture<>());
+        when(this.pipeline.cull(any())).thenReturn(retyped(handle));
+        this.held = handle;
     }
 
     @SuppressWarnings("unchecked")
@@ -1189,10 +1658,17 @@ class RunLauncherPresenterTest {
         return handle;
     }
 
-    // The presenter only ever calls onComplete(), so what a handle claims to carry never matters
-    // here. Each Pipeline method declares its own result type, and one mock answers them all.
+    // What a handle claims to carry never matters here, since the presenter reads its result
+    // through onComplete() alone. Each Pipeline method declares its own result type, and one mock
+    // answers them all.
     @SuppressWarnings("unchecked")
     private static <T> JobHandle<T> retyped(final JobHandle<?> handle) {
         return (JobHandle<T>) handle;
+    }
+
+    private static CullRunSummary occupantOf2019() {
+        return new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+                new PrepDirHealth(PrepDirHealth.State.WAITING, List.of()),
+                new ShardTally(0, 0, 4), Instant.EPOCH);
     }
 }

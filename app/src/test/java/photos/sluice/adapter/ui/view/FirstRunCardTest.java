@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import photos.sluice.adapter.ui.FirstRunPresenter;
+import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.SettingsView;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
@@ -291,7 +292,7 @@ class FirstRunCardTest {
         final var visionProvider = new VisionProviderPresenter(oneStoredKey(), threeProviders(), install);
         final var presenter = new SettingsPresenter(install, (_, _) -> {
             throw new AssertionError("the move arm is covered at the presenter, not here");
-        }, install, threeProviders(), visionProvider);
+        }, install, threeProviders(), visionProvider, new FxProgressPort());
         final Node pane = FirstRunCard.pane(presenter, new FirstRunPresenter(install), _ -> handedOver.incrementAndGet());
         final var scene = new Scene(new StackPane(pane), 900, 700);
         final var stage = new Stage();

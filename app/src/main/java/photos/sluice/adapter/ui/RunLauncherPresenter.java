@@ -5,14 +5,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
-import photos.sluice.adapter.ui.RunLauncherView.Estimate;
+import photos.sluice.adapter.ui.RunLauncherView.Cost;
 import photos.sluice.adapter.ui.RunLauncherView.InboxCard;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
-import photos.sluice.application.port.in.CullJobOutcome;
-import photos.sluice.application.port.in.CurateOutcome;
+import photos.sluice.adapter.ui.RunProgressView.PhaseBar;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
@@ -21,12 +20,10 @@ import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
-import photos.sluice.application.port.in.WaitingReason;
-import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.cull.CullScope;
-import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.paths.PathRole;
@@ -41,9 +38,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 /**
@@ -64,21 +61,40 @@ public class RunLauncherPresenter {
 
     private static final String SCOPE_LABEL = "Timeline for this run";
 
-    // The one string here that is a placeholder rather than an answer. It names the missing screen
-    // rather than an empty result, so that a Review folder holding files is never called empty.
-    private static final String RESCUE_NOT_READY = "Rescue arrives with the Review screen.";
-
     // How long a folder read is given before the screen says it is reading. Under this, a reader
     // sees one state rather than three. Over it, they are waiting and want to know why.
     private static final long SETTLE_BEFORE_SAYING_SO = 200;
 
-    // Asked every time, because a curate is the one run whose cost cannot be shown before it starts.
+    // Asked wherever the run can spend, because a curate is the one run whose cost cannot be shown
+    // before it starts. A provider that spends nothing leaves nothing to weigh. The box above the
+    // button says so, where a dialog would only be in the way.
     private static final Confirmation CURATE_CONFIRM = new Confirmation(
             "Sort and sift the oldest year?",
             "Sluice sorts the oldest year in your Inbox, then sifts every photo it just sorted. "
                     + "Sifting is what spends money, and the size of the sift cannot be estimated "
                     + "until sorting has finished.",
             "Sort and sift", "Cancel");
+
+    // Careful about whose money it is. Sluice calls no model for these providers, so it spends
+    // nothing. An agent somebody runs themselves still bills them, and that is not ours to report.
+    private static final String FREE_DETAIL = "Sluice only spends from your provider account "
+            + "balance when it calls an agent for you. An agent you run yourself still costs "
+            + "whatever you pay for it.";
+
+    private static final String STARTING = "Starting...";
+    private static final String CANCEL = "Cancel";
+    // The button itself reports, rather than greying and leaving a line below to say what happened
+    // to the press. A dead button still reading Cancel is a press that looks like it missed.
+    private static final String STOPPING = "Stopping...";
+    // What survives is the question a cancelled run raises, and each mode answers it differently.
+    private static final String CANCELLING_A_MOVE = "What has already reached your library stays "
+            + "there. Nothing further will be moved.";
+    private static final String CANCELLING_A_SORT = "What has already been sorted stays where it "
+            + "is. Nothing further will be moved.";
+    // Named in the copy rather than left to a spinner. A model that has been asked a question
+    // answers in its own time, and a screen that only spun would look stuck for that whole minute.
+    private static final String CANCELLING_A_SIFT = "Finishing the sheet it is already looking at, "
+            + "which can take up to about a minute. Nothing further will be started.";
 
     private static final String INBOX_COUNTING = "Counting what is waiting...";
     private static final String INBOX_EMPTY = "Nothing to sort.";
@@ -110,6 +126,7 @@ public class RunLauncherPresenter {
             + "own sifts. It starts showing your actual numbers after a sift or two.";
 
     private final Pipeline pipeline;
+    private final FxProgressPort progress;
 
     // Volatile throughout. Every one of these is written off the thread that paints. The counts
     // come from the read behind the cards, the rest from a job reporting how it ended. The screen
@@ -127,6 +144,19 @@ public class RunLauncherPresenter {
     private volatile @Nullable Runnable repaint;
     private volatile @Nullable Runnable recount;
 
+    // The job now running, held so that Cancel has something to ask. Null between runs, which is
+    // what a Cancel arriving after one ended reads to decide it has nothing to do.
+    private volatile @Nullable JobHandle<?> inFlight;
+    // The card for the run that ended, and the only thing that keeps the launcher off the screen
+    // once nothing is running. Cleared by the press that dismisses it.
+    private volatile @Nullable RunResultView ended;
+    private volatile boolean cancelRequested;
+    // What the running or just-ended job was started as, and what it covers. The mode buttons and
+    // the field can both move while a job works, so neither can be asked afterwards what it was
+    // started with.
+    private volatile RunMode ranAs = RunMode.SORT;
+    private volatile String scopeOfTheRun = "";
+
     // The one field above that is not volatile, because it is the one no other thread touches. It
     // is written by a press and by a keystroke, and read while drawing, all on the thread that
     // paints. Volatile would not make its own toggle atomic anyway, and would suggest a second
@@ -142,12 +172,15 @@ public class RunLauncherPresenter {
     private volatile int lastEstimateCovered = -1;
 
     /**
-     * Creates the presenter over the facade it reads counts from and starts work through.
+     * Creates the presenter over the facade it reads counts from and starts work through, and the
+     * port a running job reports itself to.
      *
      * @param pipeline {@link Pipeline} the one way in to every engine
+     * @param progress {@link FxProgressPort} what a running job has reported so far
      */
-    public RunLauncherPresenter(final Pipeline pipeline) {
+    public RunLauncherPresenter(final Pipeline pipeline, final FxProgressPort progress) {
         this.pipeline = pipeline;
+        this.progress = progress;
     }
 
     /**
@@ -157,11 +190,11 @@ public class RunLauncherPresenter {
      */
     public RunLauncherView view() {
         final Scope scope = this.scope();
-        return new RunLauncherView(this.modes(), explained(this.chosen), this.inboxCard(),
+        return new RunLauncherView(this.modes(), this.chosen.explained(), this.inboxCard(),
                 this.yearChoices(), this.readsSorted(),
-                this.nothingStagedLine(), SCOPE_LABEL, this.scopeText, hintFor(this.chosen),
-                this.refusalOf(scope), this.estimate(scope), started(this.chosen), this.canStart(scope),
-                this.message);
+                this.nothingStagedLine(), SCOPE_LABEL, this.scopeText, this.chosen.scopeHint(),
+                this.refusalOf(scope), this.cost(scope), this.chosen.started(),
+                this.canStart(scope), this.message);
     }
 
     /**
@@ -186,8 +219,7 @@ public class RunLauncherPresenter {
         // reaches the screen through the FX thread, which refuses the handover once the window is
         // gone. Thrown from outside the try, that leaves the lock held for the rest of the run.
         try {
-            // A run that just finished spent against the ledger the estimate is averaged from, and
-            // this is what runs after one.
+            // A run that just finished spent against the ledger the estimate is averaged from.
             this.lastEstimateCovered = -1;
             // Raised on every read, not only the first. Between a run ending and this landing, the
             // cards hold the state from before that run. A Start pressed against them would scope a
@@ -301,9 +333,14 @@ public class RunLauncherPresenter {
     /**
      * The question to put before starting, where this run needs one asked.
      *
-     * <p>Curate always does. It is the one mode that spends without showing a figure first. A sort
-     * decides which photos land under which year, so nothing can be sized until it has run. Every
-     * other spending run either shows what it will cost or costs nothing.
+     * <p>Curate does wherever the configured provider can spend. It is the one mode that spends
+     * without showing a figure first. A sort decides which photos land under which year, so nothing
+     * can be sized until it has run. Every other spending run either shows what it will cost or
+     * costs nothing.
+     *
+     * <p>On a provider that spends nothing the question is not merely redundant, it is false: its
+     * own words say that sifting spends money. What replaces it is a statement rather than a
+     * question, in the cost box above the button, since nothing needs weighing before a press.
      *
      * <p>The bare move to the library is the other. Every other mode either names its own scope or
      * takes the oldest year, and both are small enough to be undone by hand. Moving everything
@@ -314,7 +351,7 @@ public class RunLauncherPresenter {
      */
     public @Nullable Confirmation confirmationNeeded() {
         if (this.chosen == RunMode.CURATE) {
-            return CURATE_CONFIRM;
+            return this.pipeline.configuredProviderSpends() ? CURATE_CONFIRM : null;
         }
         // Nothing to ask where the counts are not in. Start stays live so the facade can name the
         // folder at fault, and this question names years and a file count it has neither of.
@@ -353,35 +390,70 @@ public class RunLauncherPresenter {
             }
             return;
         }
-        this.running = true;
-        this.message = null;
-        // Read once, and everything below works from it. The outcome line names the work that
-        // ended, and the mode can move under a job in flight.
+        // Read once, and everything below works from it. The progress area and the result card
+        // both name the work that was started, and the mode can move under a job in flight.
         final RunMode ran = this.chosen;
-        try {
-            this.submit(ran, scope).whenComplete((outcome, failure) -> {
-                this.running = false;
-                if (failure != null) {
-                    // The line this failure renders as sends the reader to the log for the real
-                    // error. JobRunner catches Throwable and completes the future without writing
-                    // anything, so an engine that threw without logging first would leave that
-                    // promise pointing at nothing.
-                    log.warn("{} failed", ran, failure);
-                }
-                this.message = failure == null
-                        ? new Message(endedLine(ran, outcome), false)
-                        : new Message(stoppedLine(ran, failure), true);
-                this.repaint();
-                this.recount();
-            });
-        } catch (final RuntimeException e) {
-            // Everything the facade refuses outright arrives here, before any job exists. A job
-            // already running, an app on its way out, a folder root gone bad since this screen was
-            // drawn. Each carries a sentence written for the person reading it.
-            log.info("Refused to start {}", ran, e);
-            this.running = false;
-            this.message = new Message(plainly(e), true);
+        this.begin(ran, describe(ran, scope), () -> this.submit(ran, scope));
+    }
+
+    /**
+     * Continues a stopped run from where it left off.
+     *
+     * <p>Reached from the result card of a run its own spending limit stopped. Resuming skips every
+     * sheet already holding a decision, so nothing already paid for is judged twice.
+     *
+     * @param prepDir {@link Path} the stopped run's own directory, as the card handed it back
+     */
+    public void continueRun(final Path prepDir) {
+        if (this.running) {
+            return;
         }
+        this.begin(RunMode.SIFT, this.scopeOfTheRun,
+                () -> this.pipeline.resume(prepDir, false));
+    }
+
+    /**
+     * Puts the launcher back, dropping the report of the run that ended.
+     *
+     * <p>The counts behind the launcher were read again the moment that run ended. So what comes
+     * back describes the folders as they now stand, not as the run found them.
+     */
+    public void dismissResult() {
+        this.ended = null;
+    }
+
+    /**
+     * Asks the running job to stop.
+     *
+     * <p>Cooperative rather than an interruption: a stage already in flight finishes first. On a
+     * sift that is one call to a model, which is what the screen warns can take about a minute.
+     *
+     * <p>Asking twice changes nothing, and the button goes dead on the first press, so the second
+     * would have to come from somewhere other than this screen.
+     */
+    public void cancel() {
+        final JobHandle<?> handle = this.inFlight;
+        if (handle == null) {
+            return;
+        }
+        this.cancelRequested = true;
+        handle.requestCancellation();
+    }
+
+    /**
+     * Which of the dashboard's three faces is up.
+     *
+     * <p>Read in the order the ending writes them, so the running flag is asked first. A job that
+     * has just dropped it has already stored what it produced.
+     *
+     * @return {@link RunStage} the face to draw
+     */
+    public RunStage stage() {
+        if (this.running) {
+            return new RunStage.Running(this.progressView());
+        }
+        final RunResultView done = this.ended;
+        return done == null ? new RunStage.Setup() : new RunStage.Finished(done);
     }
 
     /**
@@ -400,6 +472,20 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Says how a screen redraws itself while a job is reporting progress.
+     *
+     * <p>Apart from {@link #setRepaint} because of the thread each arrives on. A job reports its
+     * ending from whatever thread it ran on, so that one has to be marshalled by its caller. The
+     * port has already marshalled this one, and has already folded a burst of events into a single
+     * draw. Handing it on to be marshalled again would undo that folding.
+     *
+     * @param redraw {@link Runnable} draws the dashboard again. Called on the application thread.
+     */
+    public void setProgressRepaint(final Runnable redraw) {
+        this.progress.setRepaint(redraw);
+    }
+
+    /**
      * Says how a screen goes back to the folders for fresh counts.
      *
      * <p>Apart from {@link #setRepaint} because the two cannot be the same action. A read begins by
@@ -410,6 +496,163 @@ public class RunLauncherPresenter {
      */
     public void setRecount(final Runnable recount) {
         this.recount = recount;
+    }
+
+    /**
+     * Starts a job and takes the screen into its running state.
+     *
+     * <p>The one place a job's whole life is wired up, so a first press and a continue cannot end
+     * up reporting themselves two different ways.
+     *
+     * @param ran {@link RunMode} the mode to report this job as
+     * @param scope {@link String} what this job covers, written out for the progress area
+     * @param submit a {@link Supplier} of {@link JobHandle} hands the work to the facade
+     */
+    private void begin(final RunMode ran, final String scope, final Supplier<JobHandle<?>> submit) {
+        this.message = null;
+        try {
+            final JobHandle<?> handle = submit.get();
+            // Nothing above this line has changed what the screen shows, and that is the point. A
+            // refusal leaves the card of the run that ended standing. On a run stopped at its
+            // spending limit, that card holds the only offer to continue it. Cleared beforehand, a
+            // refused press would strand the reader on a launcher with no way back to sheets they
+            // have already paid for.
+            this.ranAs = ran;
+            this.scopeOfTheRun = scope;
+            this.ended = null;
+            this.cancelRequested = false;
+            // The port holds whatever the last job reported until somebody says a new one has
+            // begun. It is told about phases and never about jobs, so this is the only place that
+            // boundary is known.
+            this.progress.forgetPhases();
+            this.inFlight = handle;
+            this.running = true;
+            handle.onComplete().whenComplete((outcome, failure) -> this.ends(ran, outcome, failure));
+        } catch (final RuntimeException e) {
+            // Everything the facade refuses outright arrives here, before any job exists. A job
+            // already running, an app on its way out, a folder root gone bad since this screen was
+            // drawn. Each carries a sentence written for the person reading it.
+            log.info("Refused to start {}", ran, e);
+            this.message = new Message(plainly(e), true);
+        }
+    }
+
+    /**
+     * Takes the screen out of its running state and onto the result card.
+     *
+     * <p>The card is built and stored before the running flag drops, and that order is
+     * load-bearing. A reader between the two would otherwise find no job running and no result to
+     * show, and be handed the launcher for one frame.
+     *
+     * @param ran {@link RunMode} the mode the job was started in
+     * @param outcome what the job produced, null where it threw
+     * @param failure {@link Throwable} what it threw, null where it did not
+     */
+    private void ends(final RunMode ran, final @Nullable Object outcome,
+                      final @Nullable Throwable failure) {
+        if (failure != null) {
+            // JobRunner catches Throwable and completes the future without writing anything, so
+            // this is the only record the failure gets.
+            log.warn("{} failed", ran, failure);
+        }
+        this.inFlight = null;
+        this.ended = failure == null
+                ? RunResults.of(ran, outcome)
+                : RunResults.failed(ran, plainly(rootOf(failure)));
+        this.running = false;
+        this.repaint();
+        this.recount();
+    }
+
+    /**
+     * What the progress area draws for the job now running.
+     *
+     * @return {@link RunProgressView} every value that area puts on the page
+     */
+    private RunProgressView progressView() {
+        final List<PhaseBar> bars = this.progress.phases().stream().map(RunLauncherPresenter::bar).toList();
+        return new RunProgressView(this.ranAs.label() + " progress", this.scopeOfTheRun,
+                bars, bars.isEmpty() ? STARTING : null, this.cancelRequested ? STOPPING : CANCEL,
+                !this.cancelRequested, this.cancelRequested ? this.cancellingLine() : null,
+                this.ranAs.phases());
+    }
+
+    /**
+     * One reported phase as a bar.
+     *
+     * @param phase {@link ProgressPhase} what the job reported about it
+     * @return {@link PhaseBar} the bar
+     */
+    private static PhaseBar bar(final ProgressPhase phase) {
+        final boolean measured = phase.total() > 0;
+        return new PhaseBar("run-phase-" + phase.label().toLowerCase(Locale.UK).replace(' ', '-'),
+                phase.label(),
+                measured ? grouped(phase.current()) + " of " + grouped(phase.total()) : null,
+                measured ? (double) phase.current() / phase.total() : 0,
+                measured, phase.finished());
+    }
+
+    /**
+     * What the screen says while a cancellation is being honoured.
+     *
+     * <p>Each mode answers what survives, because that is the question a stop raises and each one
+     * answers it differently. A sift adds how long the stop itself takes. Its stages are calls to a
+     * model, and the one in flight has to come back before anything reads the request. Every other
+     * mode checks between files, so it stops as fast as a reader can see.
+     *
+     * @return {@link String} the line to show
+     */
+    private String cancellingLine() {
+        return switch (this.ranAs) {
+            case SIFT, CURATE -> CANCELLING_A_SIFT;
+            case MOVE_TO_LIBRARY -> CANCELLING_A_MOVE;
+            // Rescue cannot be started yet, so nothing reaches this arm through it. Answered with
+            // the sort's line because both move files out of a folder into another one.
+            case SORT, RESCUE -> CANCELLING_A_SORT;
+        };
+    }
+
+    /**
+     * What a run covers, written out for a screen that cannot show the field that named it.
+     *
+     * @param ran {@link RunMode} the mode being started
+     * @param scope {@link Scope} what the field and mode come to
+     * @return {@link String} what this run covers
+     */
+    private static String describe(final RunMode ran, final Scope scope) {
+        return switch (scope) {
+            case Scope.OfYear(final int year, final List<Integer> months) -> months.isEmpty()
+                    ? String.valueOf(year)
+                    : year + ", " + namedMonths(months);
+            case Scope.OldestYear _ -> "the oldest year in your Inbox";
+            case Scope.Everything _ -> "everything in Sorted";
+            // Neither can reach a started job: the button is dead over both. Answered anyway, since
+            // a switch over a sealed set that throws for two of five is one added case away from
+            // throwing on a screen.
+            case Scope.Refused _, Scope.Nothing _ -> ran.verb();
+        };
+    }
+
+    /**
+     * A run of months as a sentence names them.
+     *
+     * @param months a {@link List} of {@link Integer} the months, in order
+     * @return {@link String} the months written out
+     */
+    private static String namedMonths(final List<Integer> months) {
+        return listed(months.stream()
+                .map(month -> Month.of(month).getDisplayName(TextStyle.FULL, Locale.UK))
+                .toList());
+    }
+
+    /**
+     * A failure's own cause where it has one, since what a job threw is usually a wrapper.
+     *
+     * @param failure {@link Throwable} what the job's promise completed with
+     * @return {@link Throwable} the one carrying the sentence worth showing
+     */
+    private static Throwable rootOf(final Throwable failure) {
+        return failure.getCause() == null ? failure : failure.getCause();
     }
 
     /**
@@ -439,11 +682,11 @@ public class RunLauncherPresenter {
      */
     private List<ModeChoice> modes() {
         return List.of(
-                this.modeChoice(RunMode.SORT, "run-mode-sort", "Sort"),
-                this.modeChoice(RunMode.SIFT, "run-mode-sift", "Sift"),
-                this.modeChoice(RunMode.MOVE_TO_LIBRARY, "run-mode-move", "Move to library"),
-                this.modeChoice(RunMode.CURATE, "run-mode-curate", "Curate"),
-                this.modeChoice(RunMode.RESCUE, "run-mode-rescue", "Rescue"));
+                this.modeChoice(RunMode.SORT, "run-mode-sort"),
+                this.modeChoice(RunMode.SIFT, "run-mode-sift"),
+                this.modeChoice(RunMode.MOVE_TO_LIBRARY, "run-mode-move"),
+                this.modeChoice(RunMode.CURATE, "run-mode-curate"),
+                this.modeChoice(RunMode.RESCUE, "run-mode-rescue"));
     }
 
     /**
@@ -451,11 +694,10 @@ public class RunLauncherPresenter {
      *
      * @param mode {@link RunMode} which mode it starts
      * @param id {@link String} the control's id
-     * @param label {@link String} what it says
      * @return {@link ModeChoice} the button
      */
-    private ModeChoice modeChoice(final RunMode mode, final String id, final String label) {
-        return new ModeChoice(mode, id, label, mode == this.chosen, !this.running);
+    private ModeChoice modeChoice(final RunMode mode, final String id) {
+        return new ModeChoice(mode, id, mode.label(), mode == this.chosen, !this.running);
     }
 
     /**
@@ -594,35 +836,65 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * What sifting the chosen scope would cost, where it would cost anything.
+     * What the screen says about money for the chosen mode and scope.
      *
-     * <p>Only the two modes that reach a vision provider have one. A sort and a move to the library
-     * spend nothing whatever the provider is, so a figure beside either would be answering a
+     * <p>Only the two modes that reach a vision provider say anything. A sort and a move to the
+     * library spend nothing whatever the provider is, so a line beside either would be answering a
      * question nobody asked.
      *
+     * <p>Those two always say something. Where the provider spends nothing the box says so and
+     * carries the disclaimer, since what a user's own agent costs them is not Sluice's to know.
+     *
      * @param scope {@link Scope} what the field and mode come to
-     * @return {@link Estimate} the figure and what it is worth, or null where nothing is spent
+     * @return {@link Cost} what to say about money, or null where this mode never spends
      */
-    private @Nullable Estimate estimate(final Scope scope) {
-        if (!startable(scope)) {
+    private @Nullable Cost cost(final Scope scope) {
+        if (!this.reachesAProvider()) {
             return null;
         }
-        // A curate carries no figure, and the reason is that nothing can compute one. It sorts
-        // first, and which photos that sort files under which year is what the dating pass decides.
-        // Sizing it on the whole Inbox would be the wrong scope, by whatever multiple the sort
-        // narrows by. On a question about money, a wrong number is worse than none.
-        final int photos = switch (this.chosen) {
-            case SIFT -> this.photosIn(scope);
-            case SORT, CURATE, MOVE_TO_LIBRARY, RESCUE -> 0;
-        };
+        if (!this.pipeline.configuredProviderSpends()) {
+            return new Cost.Free(this.chosen.verb() + " costs you nothing through Sluice.",
+                    FREE_DETAIL);
+        }
+        return this.figureFor(scope);
+    }
+
+    /**
+     * Whether the chosen mode has a vision provider look at anything.
+     *
+     * @return boolean true for the two modes that sift
+     */
+    private boolean reachesAProvider() {
+        return this.chosen == RunMode.SIFT || this.chosen == RunMode.CURATE;
+    }
+
+    /**
+     * The expected cost of sifting the chosen scope, where one can be worked out.
+     *
+     * <p>A curate carries no figure, and the reason is that nothing can compute one. It sorts
+     * first, and which photos that sort files under which year is what the dating pass decides.
+     * Sizing it on the whole Inbox would be the wrong scope, by whatever multiple the sort narrows
+     * by. On a question about money, a wrong number is worse than none. The hint under the field
+     * says as much, and the confirm before a curate says it again.
+     *
+     * @param scope {@link Scope} what the field and mode come to
+     * @return {@link Cost.Estimate} the figure and what it is worth, or null where none can be given
+     */
+    private Cost.@Nullable Estimate figureFor(final Scope scope) {
+        if (!startable(scope) || this.chosen != RunMode.SIFT) {
+            return null;
+        }
+        final int photos = this.photosIn(scope);
         if (photos == 0) {
             return null;
         }
         final SpendEstimate expected = this.expectedFor(photos);
+        // A spending provider forecasting nothing is a state nothing produces today. A figure of
+        // zero tokens beside a money disclaimer would be the wrong thing to draw for it.
         if (expected.totalTokens() == 0) {
             return null;
         }
-        return new Estimate("About " + rounded(expected.totalTokens()) + " tokens", DISCLAIMER,
+        return new Cost.Estimate("About " + rounded(expected.totalTokens()) + " tokens", DISCLAIMER,
                 expected.historicOutput() ? null : WITHOUT_HISTORY);
     }
 
@@ -700,9 +972,6 @@ public class RunLauncherPresenter {
     /**
      * Whether a scope names work at all.
      *
-     * <p>Answered by a switch rather than by asking what it is not. A scope added later has to say
-     * which side it falls on before this compiles again.
-     *
      * @param scope {@link Scope} what the field and mode come to
      * @return boolean true where there is something for a run to take
      */
@@ -718,74 +987,15 @@ public class RunLauncherPresenter {
      *
      * @param ran {@link RunMode} the mode being started
      * @param scope {@link Scope} what the field and mode come to
-     * @return a {@link CompletionStage} of the job's own result
+     * @return a {@link JobHandle} of the job's own result
      */
-    private CompletionStage<?> submit(final RunMode ran, final Scope scope) {
+    private JobHandle<?> submit(final RunMode ran, final Scope scope) {
         return switch (ran) {
-            case SORT -> this.pipeline.sort(sortScope(scope)).onComplete();
-            case CURATE -> this.pipeline.curate(sortScope(scope)).onComplete();
-            case SIFT -> this.pipeline.cull(cullScope(scope)).onComplete();
-            case MOVE_TO_LIBRARY -> this.pipeline.commit(commitScope(scope)).onComplete();
+            case SORT -> this.pipeline.sort(sortScope(scope));
+            case CURATE -> this.pipeline.curate(sortScope(scope));
+            case SIFT -> this.pipeline.cull(cullScope(scope));
+            case MOVE_TO_LIBRARY -> this.pipeline.commit(commitScope(scope));
             case RESCUE -> throw new IllegalStateException("Rescue cannot be started from here yet");
-        };
-    }
-
-    /**
-     * What the screen says once the work has ended without failing.
-     *
-     * <p>Ending is not the same as finishing, and a sift is where the two come apart. Its ordinary
-     * outcome on the shipped provider is a pause: the montages are built and somebody's own agent
-     * still has to judge them. That completes the job without a failure. A line keyed off the
-     * absence of one would tell a user their sift was done while it was waiting on them.
-     *
-     * @param ran {@link RunMode} the mode the job was started in
-     * @param outcome what the job produced, which for a sift or a curate says how it ended
-     * @return {@link String} the line to show
-     */
-    private static String endedLine(final RunMode ran, final @Nullable Object outcome) {
-        return switch (outcome) {
-            case final CullJobOutcome sift -> siftEndedLine(ran, sift);
-            // A curate that never reached its sift stage sorted and stopped, which is a finish.
-            case final CurateOutcome curated when curated.cullOutcome() != null ->
-                    siftEndedLine(ran, curated.cullOutcome());
-            case null, default -> verb(ran) + " finished.";
-        };
-    }
-
-    /**
-     * What the screen says about a sift that has stopped running.
-     *
-     * <p>Three of the four ways one ends leave work behind, and none of them is a failure. What to
-     * do about each is the runs screen's to say. This says only which of the four happened, so
-     * nothing here claims a run is done when it is not.
-     *
-     * @param ran {@link RunMode} the mode that ended
-     * @param outcome {@link CullJobOutcome} how the sift ended
-     * @return {@link String} the line to show
-     */
-    private static String siftEndedLine(final RunMode ran, final CullJobOutcome outcome) {
-        return switch (outcome) {
-            case CullJobOutcome.Applied _ -> verb(ran) + " finished.";
-            case CullJobOutcome.Waiting(WaitingCullJob _, final WaitingReason reason, CullReport _, Path _) ->
-                    waitingLine(reason);
-            case CullJobOutcome.Blocked _ -> verb(ran) + " stopped and needs a look.";
-            case CullJobOutcome.Cancelled _ -> verb(ran) + " was cancelled.";
-        };
-    }
-
-    /**
-     * What the screen says about a sift that paused.
-     *
-     * @param reason {@link WaitingReason} why it paused
-     * @return {@link String} the line to show
-     */
-    private static String waitingLine(final WaitingReason reason) {
-        return switch (reason) {
-            case SHARDS_OUTSTANDING -> "The photos are ready to be sifted, and Sluice is waiting "
-                    + "for your agent's decisions on them.";
-            case CEILING_REACHED -> "Sifting stopped because it went far past what it was expected "
-                    + "to cost. Nothing more will be spent until you say so.";
-            case CANCELLED -> "Sifting was cancelled.";
         };
     }
 
@@ -875,7 +1085,8 @@ public class RunLauncherPresenter {
             // The way out is worded for a click as much as for a keystroke. Three presses on the
             // rows reach this state without the field being touched, and an answer that only says
             // what to type names nothing the user did.
-            return new Scope.Refused(verb(this.chosen) + " narrows to a run of months, not a list. Reading "
+            return new Scope.Refused(this.chosen.verb()
+                    + " narrows to a run of months, not a list. Reading "
                     + joined(months) + " as " + months.getFirst() + "-" + months.getLast()
                     + " would take " + wouldAlsoTake(blocking) + ". Choose months that run "
                     + "together, like 6-8, or none at all for the whole year.");
@@ -947,90 +1158,6 @@ public class RunLauncherPresenter {
      */
     private boolean countsAreIn() {
         return !this.counting && !this.countsUnreadable;
-    }
-
-    /**
-     * What a mode does to somebody's photos, in one sentence.
-     *
-     * <p>The button row names five actions and says nothing about any of them. A name alone tells a
-     * reader which one they picked, never what it is about to do. Two of the five move files out of
-     * a folder they will not think to look in afterwards.
-     *
-     * @param mode {@link RunMode} the mode to explain
-     * @return {@link String} what that mode does, in one sentence
-     */
-    private static String explained(final RunMode mode) {
-        return switch (mode) {
-            case SORT -> "Reads the dates on what is in your Inbox and moves it into Sorted, by "
-                    + "year and month. Takes the oldest year in your Inbox.";
-            case SIFT -> "Sifts through your sorted photos and organises them into categories.";
-            case MOVE_TO_LIBRARY -> "Moves what is in Sorted into your library.";
-            case CURATE -> "Sorts, then sifts automatically. Takes the oldest year in your Inbox.";
-            case RESCUE -> "Moves what is left in a Review folder into your library.";
-        };
-    }
-
-    /**
-     * What the button that starts a mode says.
-     *
-     * <p>Names the work rather than saying Start. The confirm before a move to the library already
-     * names its own go-ahead this way. A button saying what it is about to do is one a reader can
-     * check against the scope beside it.
-     *
-     * <p>Run is the verb here, which the vocabulary carve-out allows. What it must not become is the
-     * noun: a sift a user started is a sift, never a run.
-     *
-     * @param mode {@link RunMode} the mode the button would start
-     * @return {@link String} what it says
-     */
-    private static String started(final RunMode mode) {
-        return "Run " + switch (mode) {
-            case SORT -> "Sort";
-            case SIFT -> "Sift";
-            case MOVE_TO_LIBRARY -> "Move to library";
-            case CURATE -> "Curate";
-            case RESCUE -> "Rescue";
-        };
-    }
-
-    /**
-     * How to name what a mode does, at the start of a sentence.
-     *
-     * @param mode {@link RunMode} the mode to name
-     * @return {@link String} the mode as a verb
-     */
-    private static String verb(final RunMode mode) {
-        return switch (mode) {
-            case SORT -> "Sorting";
-            case SIFT -> "Sifting";
-            case MOVE_TO_LIBRARY -> "Moving to your library";
-            case CURATE -> "Curating";
-            case RESCUE -> "Rescuing";
-        };
-    }
-
-    /**
-     * What the field accepts for a mode, said before anything is typed into it.
-     *
-     * <p>Stated up front rather than only refused afterwards. The mode is chosen before anybody
-     * types, so the screen knows what it will accept and can say so, which the command line cannot.
-     *
-     * @param mode {@link RunMode} the mode now chosen
-     * @return {@link String} the hint under the field
-     */
-    private static String hintFor(final RunMode mode) {
-        return switch (mode) {
-            // Neither says which year is taken. The line under the mode buttons already does, and
-            // saying it twice leaves two sentences to keep in step.
-            case SORT -> "";
-            case CURATE -> "Curating sorts your photos before it looks at them, so what the looking "
-                    + "costs is not known until the sorting is done.";
-            case SIFT -> "Type a year, or click one below. Add a run of months after it like "
-                    + "2019 6-8, or pick months out like 2019 6,8,11.";
-            case MOVE_TO_LIBRARY -> "Leave this empty to move everything in Sorted. Or type a year, "
-                    + "and a run of months after it if you want less, like 2019 6-8.";
-            case RESCUE -> RESCUE_NOT_READY;
-        };
     }
 
     /**
@@ -1273,21 +1400,6 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * What the screen says when work ends badly.
-     *
-     * <p>Named after the work the user chose, the way the line for work that ended well is. The two
-     * outcomes of one press should not name that press two different ways.
-     *
-     * @param ran {@link RunMode} the mode the job was started in
-     * @param failure {@link Throwable} what the job threw
-     * @return {@link String} the line to show
-     */
-    private static String stoppedLine(final RunMode ran, final Throwable failure) {
-        final Throwable cause = failure.getCause() == null ? failure : failure.getCause();
-        return verb(ran) + " stopped. " + plainly(cause);
-    }
-
-    /**
      * A failure as a sentence, falling back to the type where it carries no message.
      *
      * <p>Most of what reaches here was written for the person reading it, and those messages are
@@ -1297,6 +1409,24 @@ public class RunLauncherPresenter {
      * @param failure {@link Throwable} what went wrong
      * @return {@link String} the sentence to show
      */
+    /**
+     * What to say about a timeline a sift is already sitting on.
+     *
+     * <p>The exception's own message names the prep dir and the raw state, which is what a log
+     * needs. A reader needs to know their earlier sift is still there, and why this one stopped.
+     *
+     * <p>It names no way out, because today there is none to name. The screen that lists unfinished
+     * sifts and offers to continue or discard one arrives with the runs list. Saying so here would
+     * be a remedy pointing at nothing.
+     *
+     * @param occupied {@link Pipeline.ScopeOccupiedException} the refusal, carrying the run
+     * @return {@link String} the sentence to show
+     */
+    private static String occupiedBy(final Pipeline.ScopeOccupiedException occupied) {
+        return "You already have a sift of " + occupied.occupant().scope() + " that has not finished. "
+                + "Sluice will not start another for the same timeline while that one is there.";
+    }
+
     private static String plainly(final Throwable failure) {
         return switch (failure) {
             // These two are refusals this app writes for the person meeting them, and each says
@@ -1307,6 +1437,17 @@ public class RunLauncherPresenter {
             // wrong. Which folder is at fault is the part a reader needs, in the words the rest of
             // this app calls that folder by.
             case final PathsMisconfiguredException misconfigured -> foldersAtFault(misconfigured);
+            // A curate that already moved files before being refused. Said first, because what it
+            // did is the part a reader cannot see and would otherwise go looking for.
+            case final Pipeline.CurateConflictException conflict -> "Your photos were sorted, and then "
+                    + "sifting stopped: " + occupiedBy(conflict) + " The sorting stands.";
+            case final Pipeline.ScopeOccupiedException occupied -> occupiedBy(occupied);
+            case final Pipeline.ScopeUnreadableException unreadable -> "Sluice could not read "
+                    + unreadable.prepDir() + ", so it cannot tell whether a sift is already running "
+                    + "for that timeline. Try again once whatever is holding that folder has let go.";
+            case final Pipeline.RunOutsideWorkingRootException outside -> "That sift is at "
+                    + outside.prepDir() + ", which is not inside the folders Sluice is set up with "
+                    + "now. Point your working folder back at the one holding it, or discard the sift.";
             // Nothing here was written for a reader, so the words are this screen's and the
             // technical text rides along verbatim. Quoting it is what makes the bug report worth
             // filing, and this screen is the only place the user can copy it from.

@@ -12,6 +12,7 @@ import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.application.port.out.HashIndexPort;
+import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.job.CancellationSignal;
@@ -475,15 +476,42 @@ class SortEngineTest {
     }
 
     @Test
-    void progressCallbackTicksOnceForEachSurvivorAgainstTheFinalSortedCount(@TempDir final Path root) throws IOException {
+    void everyStageOfASortIsReportedAndCounted(@TempDir final Path root) throws IOException {
         final Path inbox = inboxOf(root);
         writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
         writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
 
-        final List<String> ticks = new ArrayList<>();
-        this.sortEngine(root).sort(new SortScope.OldestYear(), (current, total) -> ticks.add(current + "/" + total));
+        final var reported = new RecordingPhases();
+        this.sortEngine(root, reported).sort(new SortScope.OldestYear());
 
-        assertThat(ticks).containsExactly("1/2", "2/2");
+        assertThat(reported.events).containsExactly(
+                "started:Finding dates...", "tick:Finding dates...:1/2", "tick:Finding dates...:2/2",
+                "finished:Finding dates...",
+                "started:Checking for duplicates...", "tick:Checking for duplicates...:1/2",
+                "tick:Checking for duplicates...:2/2", "finished:Checking for duplicates...",
+                "started:Sorting...", "tick:Sorting...:1/2", "tick:Sorting...:2/2", "finished:Sorting...");
+    }
+
+    // Every stage is counted. None of the three can quietly become the indeterminate one covering
+    // the slow work while a measured bar covers the fast one.
+    private static final class RecordingPhases implements ProgressPort {
+
+        private final List<String> events = new ArrayList<>();
+
+        @Override
+        public void phaseStarted(final String phase) {
+            this.events.add("started:" + phase);
+        }
+
+        @Override
+        public void tick(final String phase, final int current, final int total) {
+            this.events.add("tick:" + phase + ":" + current + "/" + total);
+        }
+
+        @Override
+        public void phaseFinished(final String phase) {
+            this.events.add("finished:" + phase);
+        }
     }
 
     @Test
@@ -499,7 +527,7 @@ class SortEngineTest {
         final CancellationSignal cancelBeforeSecondFile = () -> polls.incrementAndGet() > 1;
 
         final SortSummary summary =
-                this.sortEngine(root).sort(new SortScope.OldestYear(), ProgressCallback.NO_OP, cancelBeforeSecondFile);
+                this.sortEngine(root).sort(new SortScope.OldestYear(),cancelBeforeSecondFile);
 
         assertThat(summary.processed()).isEqualTo(0);
         assertThat(summary.photosSorted()).isEqualTo(0);
@@ -518,10 +546,8 @@ class SortEngineTest {
         // Cancels once the first survivor's move has already ticked, so routing stops before the
         // remaining two are even looked at.
         final AtomicBoolean cancelled = new AtomicBoolean(false);
-        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
-
-        final SortSummary summary =
-                this.sortEngine(root).sort(new SortScope.OldestYear(), cancelAfterFirstTick, cancelled::get);
+        final SortSummary summary = this.sortEngine(root, cancelOnFirstFileRouted(cancelled))
+                .sort(new SortScope.OldestYear(), cancelled::get);
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(summary.photosSorted()).isEqualTo(1);
@@ -552,10 +578,8 @@ class SortEngineTest {
         // routed file's sidecar; the other file's media never left the Inbox, so its own sidecar
         // has to survive for a future run.
         final AtomicBoolean cancelled = new AtomicBoolean(false);
-        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
-
-        final SortSummary summary =
-                this.sortEngine(root).sort(new SortScope.OldestYear(), cancelAfterFirstTick, cancelled::get);
+        final SortSummary summary = this.sortEngine(root, cancelOnFirstFileRouted(cancelled))
+                .sort(new SortScope.OldestYear(), cancelled::get);
 
         final boolean aRouted = !Files.exists(photoA);
         assertThat(summary.sidecarsDeleted()).isEqualTo(1);
@@ -600,10 +624,8 @@ class SortEngineTest {
         writeSidecar(sidecar, LocalDateTime.of(2015, 5, 5, 12, 0, 0));
 
         final AtomicBoolean cancelled = new AtomicBoolean(false);
-        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
-
-        final SortSummary summary =
-                this.sortEngine(root).sort(new SortScope.OldestYear(), cancelAfterFirstTick, cancelled::get);
+        final SortSummary summary = this.sortEngine(root, cancelOnFirstFileRouted(cancelled))
+                .sort(new SortScope.OldestYear(), cancelled::get);
 
         assertThat(summary.processed()).isEqualTo(1);
         assertThat(Files.exists(original) ^ Files.exists(editedCopy)).isTrue();
@@ -657,14 +679,43 @@ class SortEngineTest {
         return root.resolve("Inbox");
     }
 
+    // Cancellation is hung off the routing stage's own tick, so the run stops with exactly one
+    // file moved. Dating and the duplicate check tick too, and cancelling on either would stop
+    // the run before anything had moved at all.
+    private static ProgressPort cancelOnFirstFileRouted(final AtomicBoolean cancelled) {
+        return new ProgressPort() {
+            @Override
+            public void phaseStarted(final String phase) {
+            }
+
+            @Override
+            public void tick(final String phase, final int current, final int total) {
+                cancelled.set("Sorting...".equals(phase) && current == 1);
+            }
+
+            @Override
+            public void phaseFinished(final String phase) {
+            }
+        };
+    }
+
     private SortEngine sortEngine(final Path root) {
         return this.sortEngine(root, new CsvLibraryHashIndex(SettingsFixture.workingRoot(root)));
     }
 
+    private SortEngine sortEngine(final Path root, final ProgressPort progressPort) {
+        return this.sortEngine(root, new CsvLibraryHashIndex(SettingsFixture.workingRoot(root)), progressPort);
+    }
+
     private SortEngine sortEngine(final Path root, final HashIndexPort hashIndex) {
+        return this.sortEngine(root, hashIndex, ProgressPort.NO_OP);
+    }
+
+    private SortEngine sortEngine(final Path root, final HashIndexPort hashIndex,
+                                  final ProgressPort progressPort) {
         final var pathsConfig = SettingsFixture.pathsConfig(root, root, root.resolve("Inbox"));
         return new SortEngine(pathsConfig, this.inboxScanner, this.dateResolver, this.sha256Port, hashIndex,
-                this.imageDimensionsPort, this.mediaStore);
+                this.imageDimensionsPort, this.mediaStore, progressPort);
     }
 
     private static HashIndexPort seededIndex(final Path root, final String hash, final Path libraryPath) {

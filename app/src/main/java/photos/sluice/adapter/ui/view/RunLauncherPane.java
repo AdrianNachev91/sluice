@@ -7,6 +7,7 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -15,15 +16,20 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
 import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunLauncherView;
+import photos.sluice.adapter.ui.RunLauncherView.Cost;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
+import photos.sluice.adapter.ui.RunProgressView;
+import photos.sluice.adapter.ui.RunResultView;
+import photos.sluice.adapter.ui.RunStage;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -72,18 +78,18 @@ final class RunLauncherPane {
 
         final var modeRow = new HBox();
         modeRow.getStyleClass().add("run-mode-row");
-        final Label modeHint = helpLine("run-mode-hint");
+        final Label modeHint = SettingsRows.emptyHelpLine("run-mode-hint");
         modeHint.getStyleClass().add("run-mode-hint");
 
         final var inboxHeadline = new Label();
         inboxHeadline.setId("run-inbox-headline");
         inboxHeadline.getStyleClass().add("run-card-headline");
-        final Label inboxDetail = helpLine("run-inbox-detail");
+        final Label inboxDetail = SettingsRows.emptyHelpLine("run-inbox-detail");
         final VBox inboxCard = SettingsRows.card("INBOX", null, inboxHeadline, inboxDetail);
 
         final var yearRows = new VBox();
         yearRows.getStyleClass().add("run-year-rows");
-        final Label nothingStaged = helpLine("run-nothing-staged");
+        final Label nothingStaged = SettingsRows.emptyHelpLine("run-nothing-staged");
         final VBox sortedCard = SettingsRows.card("SORTED", null, yearRows, nothingStaged);
 
         final var body = new VBox(inboxCard, sortedCard);
@@ -101,33 +107,47 @@ final class RunLauncherPane {
         startRow.getStyleClass().add("run-start-row");
         startRow.setAlignment(Pos.CENTER_RIGHT);
 
-        final Label hint = helpLine("run-scope-hint");
+        final Label hint = SettingsRows.emptyHelpLine("run-scope-hint");
         final var refusal = new Label();
         refusal.setId("run-scope-refusal");
-        wrapping(refusal);
+        SettingsRows.wrapping(refusal);
         // The class that draws a refusal at length rather than the one that draws it in a phrase.
         // What this says of a gapped month list runs to a short paragraph. The bold weight that
         // suits a single line under a field turns a paragraph into shouting.
         refusal.getStyleClass().add("settings-violation-detail");
-        showWhileItSaysSomething(refusal);
+        SettingsRows.showWhileItSaysSomething(refusal);
 
         final var figure = new Label();
         figure.setId("run-estimate-figure");
         figure.getStyleClass().add("run-estimate-figure");
-        final Label disclaimer = helpLine("run-estimate-disclaimer");
-        final Label withoutHistory = helpLine("run-estimate-without-history");
+        final Label disclaimer = SettingsRows.emptyHelpLine("run-estimate-disclaimer");
+        final Label withoutHistory = SettingsRows.emptyHelpLine("run-estimate-without-history");
         final var estimate = new VBox(figure, disclaimer, withoutHistory);
         estimate.setId("run-estimate");
         estimate.getStyleClass().add("run-estimate");
         estimate.managedProperty().bind(estimate.visibleProperty());
         estimate.visibleProperty().bind(figure.textProperty().isNotEmpty());
 
+        // The same box Settings puts a standing fact in, for the same reason. This one stays on the
+        // page rather than fading, and it warns about nothing.
+        final var freeHeadline = new Label();
+        freeHeadline.setId("run-free-headline");
+        SettingsRows.wrapping(freeHeadline);
+        freeHeadline.getStyleClass().add("run-free-headline");
+        final Label freeDetail = SettingsRows.emptyHelpLine("run-free-detail");
+        final var freeBox = new VBox(freeHeadline, freeDetail);
+        final Node free = SettingsRows.badgedCallout(freeBox);
+        free.setId("run-free");
+        free.managedProperty().bind(free.visibleProperty());
+        free.visibleProperty().bind(freeHeadline.textProperty().isNotEmpty());
+
         final var message = new Label();
         message.setId("run-message");
-        wrapping(message);
-        showWhileItSaysSomething(message);
+        SettingsRows.wrapping(message);
+        SettingsRows.showWhileItSaysSomething(message);
 
-        final var action = new VBox(scopeLabel, scopeField, hint, refusal, estimate, message, startRow);
+        final var action = new VBox(scopeLabel, scopeField, hint, refusal, estimate, free, message,
+                startRow);
         action.getStyleClass().add("run-action");
 
         // No grow priority, and a floor of nothing. With the cards short the pane takes only their
@@ -138,26 +158,88 @@ final class RunLauncherPane {
         scroll.setMinHeight(0);
 
         final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, yearRows, nothingStaged,
-                scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, withoutHistory, message,
-                scroll, new HashSet<>(), new HashMap<>());
+                scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, withoutHistory,
+                freeHeadline, freeDetail, message, scroll, new HashSet<>(), new HashMap<>());
         controls.buildModeRow(presenter);
         scopeField.textProperty().addListener((_, _, typed) -> {
             presenter.setScope(typed);
             controls.fillFrom(presenter.view());
         });
-        start.setOnAction(_ -> onStart(presenter, controls));
-        // Whichever launcher is on screen when a run ends is the one that draws it, and that is not
-        // always the one that started it.
-        presenter.setRepaint(() -> Platform.runLater(() -> controls.fillFrom(presenter.view())));
         presenter.setRecount(() -> recount(presenter, controls));
-        controls.drawCounts(presenter);
+
+        final var launcher = new VBox(heading, modeRow, modeHint, scroll, action);
+        launcher.setId("run-launcher");
+        launcher.getStyleClass().add("run-launcher");
+
+        // Each face needs the draw and the draw needs every face, so one of the two is handed over
+        // after the other is built.
+        final var redraw = new Redraw();
+        final RunProgressPane.Mounted progress = RunProgressPane.mount(presenter, redraw);
+        final RunResultPane.Mounted result = RunResultPane.mount(presenter, redraw);
 
         // No id of its own. The shell names whichever screen it puts in the content area, so one set
         // here would be overwritten. A test finding it would be finding the shell's name.
-        final var page = new VBox(heading, modeRow, modeHint, scroll, action);
-        page.getStyleClass().add("run-launcher");
+        final var dashboard = new StackPane(launcher, progress.node(), result.node());
+        final Runnable draw = () -> show(presenter, controls, launcher, progress, result);
+        redraw.becomes(draw);
+        start.setOnAction(_ -> onStart(presenter, draw));
+
+        // Two routes in, and they differ by the thread they arrive on. A job reports its ending from
+        // whatever thread it ran on, so that one hops. Progress arrives already marshalled by the
+        // port, and hopping again would put a second draw behind every one it had folded together.
+        presenter.setRepaint(() -> Platform.runLater(draw));
+        presenter.setProgressRepaint(draw);
+        controls.drawCounts(presenter);
+        draw.run();
         countInTheBackground(presenter, controls);
-        return page;
+        return dashboard;
+    }
+
+    /**
+     * Shows whichever of the dashboard's three faces the presenter says is up, and fills it in.
+     *
+     * <p>Only the one being shown is filled. Writing onto a face nobody can see costs a rebuild of
+     * its rows on every progress event, and a run reports one per file.
+     *
+     * @param presenter {@link RunLauncherPresenter} decides which face is up
+     * @param controls {@link Controls} the launcher's own controls
+     * @param launcher {@link Node} the launcher
+     * @param progress {@link RunProgressPane.Mounted} the progress area
+     * @param result {@link RunResultPane.Mounted} the result card
+     */
+    private static void show(final RunLauncherPresenter presenter, final Controls controls,
+                             final Node launcher, final RunProgressPane.Mounted progress,
+                             final RunResultPane.Mounted result) {
+        switch (presenter.stage()) {
+            case RunStage.Setup _ -> {
+                only(launcher, launcher, progress.node(), result.node());
+                controls.fillFrom(presenter.view());
+            }
+            case RunStage.Running(final RunProgressView showing) -> {
+                only(progress.node(), launcher, progress.node(), result.node());
+                progress.fill().accept(showing);
+            }
+            case RunStage.Finished(final RunResultView ended) -> {
+                only(result.node(), launcher, progress.node(), result.node());
+                result.fill().accept(ended);
+            }
+        }
+    }
+
+    /**
+     * Leaves one of the faces showing and takes the room back from the others.
+     *
+     * <p>Unmanaged as well as hidden. A stack sizes itself to its widest and tallest child whether
+     * or not that child can be seen. A merely hidden face would still be setting the page's size.
+     *
+     * @param shown {@link Node} the face to show
+     * @param faces {@link Node}[] every face, the shown one included
+     */
+    private static void only(final Node shown, final Node... faces) {
+        for (final Node face : faces) {
+            face.setVisible(face == shown);
+            face.setManaged(face == shown);
+        }
     }
 
     /**
@@ -166,10 +248,14 @@ final class RunLauncherPane {
      * <p>The dialog blocks, so nothing else happens while it is open. Backing out of it leaves the
      * screen exactly as it was.
      *
+     * <p>Drawn rather than filled afterwards, because a press that starts something takes the whole
+     * page onto the progress area. A press the facade refuses leaves it on the launcher, and the
+     * same draw puts the refusal on it.
+     *
      * @param presenter {@link RunLauncherPresenter} decides everything this screen shows
-     * @param controls {@link Controls} the controls to fill in afterwards
+     * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
      */
-    private static void onStart(final RunLauncherPresenter presenter, final Controls controls) {
+    private static void onStart(final RunLauncherPresenter presenter, final Runnable redraw) {
         final RunLauncherPresenter.Confirmation asked = presenter.confirmationNeeded();
         if (asked != null && Dialogs.ask(asked.heading(), asked.question(),
                 new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD),
@@ -177,7 +263,7 @@ final class RunLauncherPane {
             return;
         }
         presenter.start();
-        controls.fillFrom(presenter.view());
+        redraw.run();
     }
 
     /**
@@ -212,59 +298,6 @@ final class RunLauncherPane {
     }
 
     /**
-     * A muted line that takes no room at all while it has nothing to say.
-     *
-     * @param id {@link String} the control's id
-     * @return {@link Label} the line
-     */
-    private static Label helpLine(final String id) {
-        final var line = new Label();
-        line.setId(id);
-        wrapping(line);
-        line.getStyleClass().add("settings-help");
-        showWhileItSaysSomething(line);
-        return line;
-    }
-
-    /**
-     * Makes a label wrap, and hold the height its wrapping needs.
-     *
-     * <p>Wrapping alone is not enough. A wrapped label's minimum height is one line. A column short
-     * of room shrinks it to that, and the sentence comes out on one line with an ellipsis rather
-     * than wrapped. Pinning the minimum to the preferred height moves the shrinking onto the
-     * scrolling pane above, the one control here built to give room up.
-     *
-     * @param line {@link Label} the label to wrap
-     */
-    private static void wrapping(final Label line) {
-        line.setWrapText(true);
-        line.setMinHeight(Region.USE_PREF_SIZE);
-    }
-
-    /**
-     * Has a label take up room only while it carries text.
-     *
-     * <p>A screen reserving a row for every line it might one day show would carry those gaps on
-     * every screen that has nothing to put in them.
-     *
-     * @param line {@link Label} the label to bind
-     */
-    private static void showWhileItSaysSomething(final Label line) {
-        line.managedProperty().bind(line.visibleProperty());
-        line.visibleProperty().bind(line.textProperty().isNotEmpty());
-    }
-
-    /**
-     * Text for a label, where nothing to say is an empty string rather than a missing one.
-     *
-     * @param said what the presenter had, or null where it had nothing
-     * @return {@link String} what to put in the label
-     */
-    private static String orNothing(final @Nullable String said) {
-        return said == null ? "" : said;
-    }
-
-    /**
      * Every control the screen fills in after a change.
      *
      * @param modeRow {@link HBox} the row of mode buttons
@@ -281,6 +314,8 @@ final class RunLauncherPane {
      * @param figure {@link Label} the estimated cost
      * @param disclaimer {@link Label} what that figure is worth
      * @param withoutHistory {@link Label} the extra line where nothing backs the figure yet
+     * @param freeHeadline {@link Label} the first line of the box saying this provider spends nothing
+     * @param freeDetail {@link Label} why that box has no figure in it
      * @param message {@link Label} what the screen has to report
      * @param scroll {@link ScrollPane} the pane the cards sit in
      * @param unfolded a {@link Set} of {@link VBox} the month boxes now showing
@@ -289,8 +324,8 @@ final class RunLauncherPane {
     private record Controls(HBox modeRow, Label modeHint, Label inboxHeadline, Label inboxDetail,
                             VBox yearRows, Label nothingStaged, Label scopeLabel, TextField scopeField,
                             Button start, Label hint, Label refusal, Label figure, Label disclaimer,
-                            Label withoutHistory, Label message, ScrollPane scroll, Set<VBox> unfolded,
-                            Map<VBox, Timeline> folding) {
+                            Label withoutHistory, Label freeHeadline, Label freeDetail, Label message,
+                            ScrollPane scroll, Set<VBox> unfolded, Map<VBox, Timeline> folding) {
 
         /**
          * Builds the five mode buttons, once.
@@ -374,10 +409,10 @@ final class RunLauncherPane {
             this.drawModes(view.modes());
             this.modeHint.setText(view.modeHint());
             this.inboxHeadline.setText(view.inbox().headline());
-            this.inboxDetail.setText(orNothing(view.inbox().detail()));
+            this.inboxDetail.setText(SettingsRows.orNothing(view.inbox().detail()));
             this.selectYear(view.years(), view.scopeNamesTheRun());
             this.scopeField.setDisable(!view.scopeNamesTheRun());
-            this.nothingStaged.setText(orNothing(view.nothingStaged()));
+            this.nothingStaged.setText(SettingsRows.orNothing(view.nothingStaged()));
             this.scopeLabel.setText(view.scopeLabel());
             // Only when it differs. Setting it fires the listener that got here, and an unguarded
             // write would go round again. It also moves the caret, which a reader mid-word notices.
@@ -385,8 +420,8 @@ final class RunLauncherPane {
                 this.scopeField.setText(view.scopeText());
             }
             this.hint.setText(view.scopeHint());
-            this.refusal.setText(orNothing(view.scopeRefusal()));
-            this.drawEstimate(view.estimate());
+            this.refusal.setText(SettingsRows.orNothing(view.scopeRefusal()));
+            this.drawCost(view.cost());
             this.start.setText(view.startLabel());
             this.start.setDisable(!view.canStart());
             this.drawMessage(view.message());
@@ -507,9 +542,23 @@ final class RunLauncherPane {
          * closes one box and opens another. Two timelines would each drive the pane's own position,
          * each from a page height counting only its own half of the change.
          *
+         * <p>Everything below reads geometry: each box's own width and height, the page's height,
+         * and where the box sits in it. A press arrives on the application thread between pulses,
+         * so the layout those readings want can still be pending. Forcing it first is what makes
+         * the travel land where the rows actually end up. Left to chance, the pane travels to a
+         * position worked out from the page as it stood before the rows it is about to move. A
+         * year opened below the fold then never comes into view at all.
+         *
+         * <p>Free where nothing is pending: a clean tree lays out in no time, and this runs on
+         * every fill.
+         *
          * @param years a {@link List} of {@link YearChoice} the rows and which show their months
          */
         private void fold(final List<YearChoice> years) {
+            if (this.scroll.getContent() instanceof final Parent laidOut) {
+                laidOut.applyCss();
+                laidOut.layout();
+            }
             final List<Turn> turns = years.stream().map(this::turnFor).filter(Objects::nonNull).toList();
             if (turns.isEmpty()) {
                 return;
@@ -736,14 +785,21 @@ final class RunLauncherPane {
         }
 
         /**
-         * Fills in the cost block, or empties it where this run costs nothing.
+         * Fills in whichever way this run has of saying what it costs, and empties the other.
          *
-         * @param estimate {@link RunLauncherView.Estimate} what a sift would cost, or null
+         * <p>Both are written on every fill. A mode change that left the last one standing would
+         * put a figure beside a box saying there is no figure.
+         *
+         * @param cost {@link Cost} what to say about money, or null where this mode never spends
          */
-        private void drawEstimate(final RunLauncherView.@Nullable Estimate estimate) {
-            this.figure.setText(estimate == null ? "" : estimate.figure());
-            this.disclaimer.setText(estimate == null ? "" : estimate.disclaimer());
-            this.withoutHistory.setText(estimate == null ? "" : orNothing(estimate.withoutHistory()));
+        private void drawCost(final @Nullable Cost cost) {
+            final Cost.Estimate figures = cost instanceof final Cost.Estimate estimate ? estimate : null;
+            final Cost.Free free = cost instanceof final Cost.Free spendsNothing ? spendsNothing : null;
+            this.figure.setText(figures == null ? "" : figures.figure());
+            this.disclaimer.setText(figures == null ? "" : figures.disclaimer());
+            this.withoutHistory.setText(figures == null ? "" : SettingsRows.orNothing(figures.withoutHistory()));
+            this.freeHeadline.setText(free == null ? "" : free.headline());
+            this.freeDetail.setText(free == null ? "" : free.detail());
         }
 
         /**
@@ -757,6 +813,31 @@ final class RunLauncherPane {
                     said != null && said.refused() ? "settings-violation" : "settings-confirmation");
         }
 
+    }
+
+    /**
+     * The redraw the faces are handed before the thing that does it exists.
+     *
+     * <p>Does nothing until it is told what it is. That state is never reachable from a press: the
+     * faces are built and told within the same method, before either is on a window.
+     */
+    private static final class Redraw implements Runnable {
+
+        private Runnable draw = () -> {};
+
+        /**
+         * Says what this redraw actually does.
+         *
+         * @param draw {@link Runnable} the real thing
+         */
+        private void becomes(final Runnable draw) {
+            this.draw = draw;
+        }
+
+        @Override
+        public void run() {
+            this.draw.run();
+        }
     }
 
     /**

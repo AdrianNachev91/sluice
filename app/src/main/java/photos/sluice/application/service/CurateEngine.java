@@ -80,8 +80,8 @@ final class CurateEngine {
             this.cullEngine.refuseIfScopeOccupied(known);
         }
         return this.jobRunner.submit(handle -> {
-            final SortSummary sortSummary = this.phaseRunner.run(SORTING,
-                    progress -> this.sortEngine.sort(scope, progress, handle::isCancellationRequested));
+            final SortSummary sortSummary =
+                    this.sortEngine.sort(scope, handle::isCancellationRequested);
             if (handle.isCancellationRequested()) {
                 return new CurateOutcome(sortSummary, null);
             }

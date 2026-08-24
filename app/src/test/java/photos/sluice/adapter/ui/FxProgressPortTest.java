@@ -19,6 +19,31 @@ class FxProgressPortTest {
     private final FxProgressPort port = new FxProgressPort(this.handedToTheToolkit::add);
 
     @Test
+    void aSecondWatcherIsRunAlongsideTheScreenThatOwnsTheArea() throws Exception {
+        final var screen = new AtomicInteger();
+        final var alongside = new AtomicInteger();
+        this.port.setRepaint(screen::incrementAndGet);
+        try (AutoCloseable _ = this.port.alsoRedraw(alongside::incrementAndGet)) {
+            this.port.phaseStarted("Copying...");
+            this.runWhatTheToolkitWasHanded();
+        }
+
+        assertThat(screen.get()).isEqualTo(1);
+        assertThat(alongside.get()).isEqualTo(1);
+    }
+
+    @Test
+    void aWatcherThatHasClosedIsNotRunAgain() throws Exception {
+        final var alongside = new AtomicInteger();
+        this.port.alsoRedraw(alongside::incrementAndGet).close();
+
+        this.port.phaseStarted("Copying...");
+        this.runWhatTheToolkitWasHanded();
+
+        assertThat(alongside.get()).isZero();
+    }
+
+    @Test
     void aStartedPhaseIsListedWithNothingDoneYet() {
         this.port.phaseStarted("Sorting...");
 

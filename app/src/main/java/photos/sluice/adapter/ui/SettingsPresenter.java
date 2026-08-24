@@ -41,9 +41,11 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
+import java.util.function.Consumer;
 
 /**
  * Decides what the Settings screen shows and carries out what a user does on it.
@@ -70,11 +72,14 @@ public class SettingsPresenter {
     private static final String FIELDS_ARE_MARKED =
             "These settings were not saved. Each field that needs fixing is marked below.";
 
+    private static final String MOVING = "Moving the library...";
+
     private final SettingsUseCase settingsUseCase;
     private final LibraryRootUseCase libraryRootUseCase;
     private final PathValidationUseCase pathValidation;
     private final VisionProviderCatalog providers;
     private final VisionProviderPresenter visionProvider;
+    private final FxProgressPort progress;
 
     /**
      * Creates the presenter over the use cases the screen reads and writes through.
@@ -87,15 +92,36 @@ public class SettingsPresenter {
      *         each of them uses
      * @param visionProvider {@link VisionProviderPresenter} the credential, model catalogue and
      *         connection check the VISION PROVIDER card needs beyond this document
+     * @param progress {@link FxProgressPort} what a library move reports itself to
      */
     public SettingsPresenter(final SettingsUseCase settingsUseCase, final LibraryRootUseCase libraryRootUseCase,
                              final PathValidationUseCase pathValidation, final VisionProviderCatalog providers,
-                             final VisionProviderPresenter visionProvider) {
+                             final VisionProviderPresenter visionProvider, final FxProgressPort progress) {
         this.settingsUseCase = settingsUseCase;
         this.libraryRootUseCase = libraryRootUseCase;
         this.pathValidation = pathValidation;
         this.providers = providers;
         this.visionProvider = visionProvider;
+        this.progress = progress;
+    }
+
+    /**
+     * Reports how far a library move has got, for as long as the returned handle is open.
+     *
+     * <p>A move copies a whole library, which is long enough that a static line reads as a screen
+     * that has stopped. The copy already reports its phases to the same port a run's progress area
+     * reads, and nothing on this screen was listening.
+     *
+     * <p>The line names the last phase reported rather than all of them, because a dialog has one
+     * line rather than a page of bars. A phase that has not said how much work it has keeps the
+     * plain line. A count with nothing to count against says less than no count at all.
+     *
+     * @param line a {@link Consumer} of {@link String} takes each line, on the application thread
+     * @return {@link AutoCloseable} closing it stops the reporting
+     */
+    public AutoCloseable reportMoving(final Consumer<String> line) {
+        line.accept(MOVING);
+        return this.progress.alsoRedraw(() -> line.accept(movingLine(this.progress.phases())));
     }
 
     /**
@@ -967,5 +993,31 @@ public class SettingsPresenter {
      */
     private static String defaultOf(final ModelCatalog catalog) {
         return catalog.recommended() == null ? catalog.options().getFirst().id() : catalog.recommended();
+    }
+
+    /**
+     * What the move says it is doing, from what it has reported.
+     *
+     * @param phases a {@link List} of {@link ProgressPhase} what the move has reported so far
+     * @return {@link String} the line to show
+     */
+    private static String movingLine(final List<ProgressPhase> phases) {
+        if (phases.isEmpty()) {
+            return MOVING;
+        }
+        final ProgressPhase now = phases.getLast();
+        return now.total() > 0
+                ? now.label() + "... " + counted(now.current()) + " of " + counted(now.total())
+                : now.label() + "...";
+    }
+
+    /**
+     * A number with thousands separated, the way somebody reading it would write it.
+     *
+     * @param value int the number
+     * @return {@link String} the number written out
+     */
+    private static String counted(final int value) {
+        return String.format(Locale.UK, "%,d", value);
     }
 }

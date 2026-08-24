@@ -18,6 +18,7 @@ import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
+import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
@@ -236,7 +237,7 @@ class MainWindowTest {
     }
 
     private static RunLauncherPresenter runLauncherPresenter() {
-        return new RunLauncherPresenter(mock(Pipeline.class));
+        return new RunLauncherPresenter(mock(Pipeline.class), new FxProgressPort());
     }
 
     private static FirstRunPresenter firstRunPresenter(final boolean unfinished) {
@@ -439,7 +440,8 @@ class MainWindowTest {
         };
         final var vision = new VisionProviderPresenter(secretStore, catalog, useCase);
         return new Presenters(
-                new SettingsPresenter(useCase, libraryRootUseCase, noViolations(), catalog, vision),
+                new SettingsPresenter(useCase, libraryRootUseCase, noViolations(), catalog, vision,
+                        new FxProgressPort()),
                 vision);
     }
 

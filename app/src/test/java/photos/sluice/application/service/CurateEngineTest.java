@@ -62,8 +62,11 @@ class CurateEngineTest {
         // Untouched: AutoApproveCuller's shard carries no decision for it, so it's implicitly kept.
         assertThat(Files.exists(sorted)).isTrue();
         assertThat(progress.events).containsExactly(
+                "started:Finding dates...", "tick:Finding dates...:1/1", "finished:Finding dates...",
+                "started:Checking for duplicates...", "tick:Checking for duplicates...:1/1",
+                "finished:Checking for duplicates...",
                 "started:Sorting...", "tick:Sorting...:1/1", "finished:Sorting...",
-                "started:Building montages...", "tick:Building montages...:1/1", "finished:Building montages...",
+                "started:Reading photos...", "tick:Reading photos...:1/1", "finished:Reading photos...",
                 "started:Sifting...", "finished:Sifting...",
                 "started:Applying decisions...", "finished:Applying decisions...");
     }

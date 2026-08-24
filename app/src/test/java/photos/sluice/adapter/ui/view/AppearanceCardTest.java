@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
+import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.SettingsUseCase;
@@ -129,7 +130,7 @@ class AppearanceCardTest {
         final var vision = new VisionProviderPresenter(oneStoredKey(), threeProviders(), useCase);
         return new Presenters(
                 new SettingsPresenter(useCase, refusingLibraryRootUseCase(), onlyRefusingOneFolder(),
-                        threeProviders(), vision),
+                        threeProviders(), vision, new FxProgressPort()),
                 vision);
     }
 }

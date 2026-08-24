@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.ProgressPort;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -43,6 +44,11 @@ public class FxProgressPort implements ProgressPort {
     // Assigned by whichever screen owns the progress area, and read when a redraw runs rather than
     // when it is handed over. Volatile so a job already running sees the assignment.
     private volatile Runnable repaint = () -> {};
+    // Anything watching for the length of one job rather than for the length of a screen. Adding,
+    // removing and running all happen on the application thread today, so no writer can reach it
+    // mid-walk. Copy-on-write is what keeps that true of a caller who registers from somewhere
+    // else, at the cost of a copy per registration and none per redraw.
+    private final List<Runnable> alongside = new CopyOnWriteArrayList<>();
 
     /**
      * The one Spring builds. With no constructor annotated and no single candidate to infer, Spring
@@ -75,6 +81,25 @@ public class FxProgressPort implements ProgressPort {
      */
     public void setRepaint(final Runnable repaint) {
         this.repaint = repaint;
+    }
+
+    /**
+     * Adds a second thing to run on every redraw, alongside whichever screen owns the progress
+     * area, and takes it away again when the returned handle is closed.
+     *
+     * <p>Apart from {@link #setRepaint} because the two have different lifetimes. A screen owns the
+     * area for as long as it is built. This is for a job whose progress is reported somewhere else
+     * entirely, and only while it runs. The library move is the one: it reports through the same
+     * port, from a dialog on a different screen.
+     *
+     * <p>Runs on the application thread, in the same redraw the screen's own repaint runs in.
+     *
+     * @param redraw {@link Runnable} what else to run
+     * @return {@link AutoCloseable} closing it stops this running again
+     */
+    public AutoCloseable alsoRedraw(final Runnable redraw) {
+        this.alongside.add(redraw);
+        return () -> this.alongside.remove(redraw);
     }
 
     /**
@@ -171,6 +196,7 @@ public class FxProgressPort implements ProgressPort {
             this.onFxThread.accept(() -> {
                 this.redrawPending.set(false);
                 this.repaint.run();
+                this.alongside.forEach(Runnable::run);
             });
         } catch (final IllegalStateException noToolkitToDrawOn) {
             this.redrawPending.set(false);

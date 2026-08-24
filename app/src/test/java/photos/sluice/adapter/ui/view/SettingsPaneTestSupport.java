@@ -14,6 +14,7 @@ import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import org.testfx.util.WaitForAsyncUtils;
+import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
@@ -145,7 +146,7 @@ final class SettingsPaneTestSupport {
         final SettingsUseCase settingsUseCase = settingsUseCase(settingsFor(provider));
         final var visionProvider = new VisionProviderPresenter(oneStoredKey(), threeProviders(), settingsUseCase);
         return new SettingsPresenter(settingsUseCase, refusingLibraryRootUseCase(), onlyRefusingOneFolder(),
-                threeProviders(), visionProvider);
+                threeProviders(), visionProvider, new FxProgressPort());
     }
 
     // Over the same fixed settings presenterOn saves against, so the two agree on which provider is

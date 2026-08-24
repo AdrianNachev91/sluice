@@ -164,7 +164,7 @@ class LibraryRootMoveServiceTest {
                     fixture.move(newLibrary, LibraryRootResolution.START_A_FRESH_INDEX);
 
             final Path filedAt = ((LibraryRootMoveOutcome.MovedWithAFreshIndex) outcome).previousIndexFiledAt();
-            assertThat(filedAt).isNotNull().exists().hasParent(root.resolve("logs/disasters"));
+            assertThat(filedAt).isNotNull().exists().hasParent(root.resolve("logs/archives"));
             assertThat(fixture.hashIndex.contains("abc123")).isFalse();
             assertThat(fixture.libraryRootInForce()).isEqualTo(newLibrary.toString());
         }

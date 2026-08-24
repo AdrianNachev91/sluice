@@ -422,7 +422,7 @@ final class PipelineTestSupport {
         final var dateResolver =
                 new DateResolver(new TakeoutJsonSource(), new ExifSource(), new FilenameSource(), new MtimeSource());
         final var sortEngine = new SortEngine(pathsConfig, new InboxScanner(), dateResolver, sha256Port, hashIndex,
-                new ImageDimensionsReader(), mediaStore);
+                new ImageDimensionsReader(), mediaStore, progress);
         final var commitEngine = new CommitEngine(pathsConfig, mediaStore, sha256Port, hashIndex);
         final var rescueDateResolver = new RescueDateResolver(new ExifSource(), new FilenameSource());
         final var rescueEngine = new RescueEngine(pathsConfig, mediaStore, sha256Port, hashIndex, rescueDateResolver);

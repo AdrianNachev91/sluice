@@ -22,6 +22,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -244,7 +245,7 @@ class CullMontageRendererTest {
     }
 
     @Test
-    void progressCallbackTicksOnceForEachMontageWritten(@TempDir final Path root) throws IOException {
+    void progressIsCountedInPhotosReadRatherThanSheetsWritten(@TempDir final Path root) throws IOException {
         final var pathsConfig = pathsConfig(root);
         final Path juneDir = pathsConfig.sorted().resolve("Photos").resolve("2019").resolve("06");
         writePhoto(juneDir, "a.jpg", Instant.parse("2019-06-01T00:00:00Z"));
@@ -257,8 +258,10 @@ class CullMontageRendererTest {
         final PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), new MontageConfig(64, 2),
                 (current, total) -> ticks.add(current + "/" + total));
 
+        // Five photos into two sheets. The bar counts the five, since that is the number a reader
+        // can check against their own folder, and the sheets are what the result card reports.
         assertThat(result.montages()).isEqualTo(2);
-        assertThat(ticks).containsExactly("1/2", "2/2");
+        assertThat(ticks).containsExactly("1/5", "2/5", "3/5", "4/5", "5/5");
     }
 
     @Test
@@ -313,17 +316,23 @@ class CullMontageRendererTest {
         // (one per montage): false for the first montage, true from the second montage onward.
         final AtomicInteger checks = new AtomicInteger();
         final CancellationSignal cancelBeforeSecondMontage = () -> checks.incrementAndGet() > 3;
-        // Ticked once per montage actually written to disk, so this is what separates "the cleanup
-        // removed montage-001" from "montage-001 was never written in the first place". Without it
-        // the empty-directory assertion below would hold under either.
-        final AtomicInteger montagesWritten = new AtomicInteger();
+        // Watched on disk while the run is still going, because afterwards there is nothing left
+        // to tell apart. Progress cannot answer this: it counts photos read, so it reports the
+        // same two ticks whether a sheet was ever written or not. Without a witness taken during
+        // the run, the empty-directory assertion below holds under either.
+        final Path prepDir = pathsConfig.logs().resolve("sift-prep").resolve("2019");
+        final AtomicInteger sheetsSeenOnDisk = new AtomicInteger();
+        final CancellationSignal watchingCancel = () -> {
+            sheetsSeenOnDisk.set(Math.max(sheetsSeenOnDisk.get(), montageImagesIn(prepDir)));
+            return cancelBeforeSecondMontage.isCancelled();
+        };
 
         final PrepDir result = renderer(pathsConfig).build(new CullScope.Year(2019, null), config,
-                (current, _) -> montagesWritten.set(current), cancelBeforeSecondMontage);
+                ProgressCallback.NO_OP, watchingCancel);
 
         assertThat(result).isNull();
-        assertThat(montagesWritten.get()).isEqualTo(1);
-        assertThat(pathsConfig.logs().resolve("sift-prep").resolve("2019")).doesNotExist();
+        assertThat(sheetsSeenOnDisk.get()).isEqualTo(1);
+        assertThat(prepDir).doesNotExist();
     }
 
     // The category set is captured at prep time and travels with the run. Proved against a set that
@@ -349,6 +358,17 @@ class CullMontageRendererTest {
 
     private static PathsConfig pathsConfig(final Path root) {
         return SettingsFixture.pathsConfig(root, root.resolve("Library"), root.resolve("Inbox"));
+    }
+
+    private static int montageImagesIn(final Path prepDir) {
+        if (!Files.isDirectory(prepDir)) {
+            return 0;
+        }
+        try (final var files = Files.list(prepDir)) {
+            return (int) files.filter(f -> f.getFileName().toString().endsWith(".jpg")).count();
+        } catch (final IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static CullMontageRenderer renderer(final PathsConfig pathsConfig) {

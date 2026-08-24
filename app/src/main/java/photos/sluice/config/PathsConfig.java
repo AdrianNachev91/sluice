@@ -134,7 +134,7 @@ public class PathsConfig implements PathsPort {
      */
     @Override
     public Path graveyard() {
-        return this.logs().resolve("disasters");
+        return this.logs().resolve("archives");
     }
 
     /**

@@ -150,6 +150,10 @@ public class CullMontageRenderer implements MontageRenderer {
         // This is the long pass (one HEIC CLI decode per candidate), and it runs entirely before
         // clearPrepDir() below. A cancellation seen here leaves disk fully untouched - there is no
         // partial prep dir for a caller to resume from.
+        // Counted in photos, which is the number a reader can check against their own folder. The
+        // sheets written afterwards are a handful of near-instant steps. Counting them would make
+        // the total larger than the photo count and mean nothing anybody could point at. How many
+        // sheets a run produced is what the result card reports.
         final List<RenderedCandidate> rendered = new ArrayList<>();
         for (final CullCandidate candidate : ordered) {
             if (cancellation.isCancelled()) {
@@ -157,6 +161,7 @@ public class CullMontageRenderer implements MontageRenderer {
             }
             rendered.add(new RenderedCandidate(candidate, this.tileRenderer.render(candidate.path(),
                     config.tileSize())));
+            progress.tick(rendered.size(), ordered.size());
         }
         final List<RenderedCandidate> reviewable = rendered.stream()
                 .filter(candidate -> !candidate.tile().unreviewable())
@@ -177,7 +182,6 @@ public class CullMontageRenderer implements MontageRenderer {
         this.mediaStore.ensureDirectory(prepDir);
 
         final int tilesPerMontage = config.tilesPerRow() * config.tilesPerRow();
-        final int totalMontages = (reviewable.size() + tilesPerMontage - 1) / tilesPerMontage;
         final List<String> entries = new ArrayList<>();
         for (int start = 0; start < reviewable.size(); start += tilesPerMontage) {
             // Checked per montage. Whatever montages this run wrote before stopping are cleared
@@ -196,7 +200,6 @@ public class CullMontageRenderer implements MontageRenderer {
             final String tag = MontageNaming.montageIdFor(entries.size() + 1);
             this.writeMontage(prepDir, tag, reviewable.subList(start, end), config);
             entries.add(tag);
-            progress.tick(entries.size(), totalMontages);
         }
 
         // photos reports reviewable.size(), not the raw count found in scope. An unreviewable file
