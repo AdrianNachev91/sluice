@@ -119,6 +119,15 @@ final class SettingsPaneTestSupport {
         return pane.lookup(fieldId).getParent().getParent();
     }
 
+    // A report travels to the top over 180ms. The position a moment after the press is a frame of
+    // that animation, not where the page comes to rest. So a position read before this returns is
+    // only a point the page was passing through. Read without draining the event queue, which would
+    // flood the one thread the animation needs pulses on.
+    static void settledAtTheTop(final ScrollPane scroll) throws Exception {
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS,
+                () -> WaitForAsyncUtils.asyncFx(() -> scroll.getVvalue() == 0).get());
+    }
+
     // Which slice of the page is on screen, and whether a node falls inside it. Worked out from the
     // scroll position rather than from the viewport's own origin, which a ScrollPane only moves
     // when its skin next runs. The node's position is taken in the body's coordinates, where

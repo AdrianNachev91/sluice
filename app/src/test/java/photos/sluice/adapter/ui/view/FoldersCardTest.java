@@ -9,7 +9,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
-import org.testfx.util.WaitForAsyncUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportIsARefusal;
@@ -25,6 +24,7 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.inView;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.rowOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.scrollOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.settledAtTheTop;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 
 // A handful of structural claims rather than a second copy of SettingsPresenterTest. What the
@@ -79,8 +79,11 @@ class FoldersCardTest {
         assertThat(field.getPseudoClassStates()).contains(REFUSED);
     }
 
+    // Asserted on the report rather than on the row, because the library root sits high enough that
+    // arriving at the top brings it into view anyway. Landing on the row instead would put it at the
+    // top of the viewport and carry the report off the screen above it.
     @Test
-    void aRefusedSaveDoesNotTravelToTheFolderAtFault() throws Exception {
+    void aRefusedSaveTravelsToTheReportRatherThanToTheFolderAtFault() throws Exception {
         final Parent page = onFxThread(() -> builtInAWindowThatScrolls(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
         final ScrollPane scroll = scrollOf(page);
         final Node row = rowOf(scroll, "#settings-library-root");
@@ -91,9 +94,9 @@ class FoldersCardTest {
             ((TextField) page.lookup("#settings-library-root")).setText(REFUSED_FOLDER);
             ((Button) page.lookup("#settings-save-button")).fire();
         });
-        WaitForAsyncUtils.waitForFxEvents();
+        settledAtTheTop(scroll);
 
-        assertThat(inView(scroll, row)).isFalse();
+        assertThat(inView(scroll, page.lookup("#settings-report-banner"))).isTrue();
         assertThat(reportText(page)).contains("not saved");
     }
 

@@ -59,6 +59,7 @@ import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.rowOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.scrollOf;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.settingsUseCase;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.settledAtTheTop;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.textsOfClass;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.threeProviders;
 
@@ -512,7 +513,7 @@ class VisionProviderCardTest {
             clearModelSelection(page);
             ((Button) page.lookup("#settings-save-button")).fire();
         });
-        WaitForAsyncUtils.waitForFxEvents();
+        settledAtTheTop(scroll);
 
         assertThat(inView(scroll, row)).isFalse();
         assertThat(modelBox(page).getPseudoClassStates()).contains(REFUSED);
