@@ -6,7 +6,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * What the dashboard draws once a run has ended, chosen from a {@link RunLauncherPresenter} and
+ * What the dashboard draws once a run has ended, chosen from {@link RunResults} and
  * carrying only display-ready values. The view reads fields off this and decides nothing about what
  * they mean.
  *

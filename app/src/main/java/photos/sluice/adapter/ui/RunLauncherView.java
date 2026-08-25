@@ -5,7 +5,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 
 /**
- * What the run launcher draws, chosen from a {@link RunLauncherPresenter} and carrying only
+ * What the run launcher draws, chosen from a {@link RunSetupPresenter} and carrying only
  * display-ready values. The view reads fields off this and decides nothing about what they mean.
  *
  * @param modes a {@link List} of {@link ModeChoice} the buttons across the top, in the order drawn

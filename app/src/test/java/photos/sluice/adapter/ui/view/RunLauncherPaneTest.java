@@ -520,7 +520,7 @@ class RunLauncherPaneTest {
     }
 
     private static Parent built(final RunLauncherPresenter presenter, final int height) {
-        presenter.refreshCounts();
+        presenter.setup().refreshCounts();
         final var page = (Parent) RunLauncherPane.pane(presenter);
         final var scene = new Scene(new StackPane(page), 900, height);
         scene.getStylesheets().add(

@@ -121,8 +121,8 @@ final class RunResults {
      */
     private static List<Count> sortCounts(final SortSummary sorted) {
         final List<Count> rows = new ArrayList<>();
-        rows.add(new Count("result-photos-sorted", PHOTOS_SORTED, grouped(sorted.photosSorted())));
-        rows.add(new Count("result-videos-sorted", VIDEOS_SORTED, grouped(sorted.videosSorted())));
+        rows.add(new Count("result-photos-sorted", PHOTOS_SORTED, RunWords.grouped(sorted.photosSorted())));
+        rows.add(new Count("result-videos-sorted", VIDEOS_SORTED, RunWords.grouped(sorted.videosSorted())));
         addWhenAny(rows, "result-reimports", "Already in your library", sorted.reimportsDeleted());
         addWhenAny(rows, "result-byte-dups", "Identical copies removed", sorted.byteDupsDeleted());
         addWhenAny(rows, "result-low-res", "Set aside for review", sorted.lowRes());
@@ -158,10 +158,10 @@ final class RunResults {
                 .sorted(Comparator.comparing(bucket -> bucket.getKey().ordinal()))
                 .forEach(bucket -> rows.add(new Count(
                         "result-moved-" + bucket.getKey().name().toLowerCase(Locale.UK),
-                        bucketLabel(bucket.getKey()), grouped(bucket.getValue()))));
+                        bucketLabel(bucket.getKey()), RunWords.grouped(bucket.getValue()))));
         // Drawn even where every bucket read zero, since a move that moved nothing has to say so
         // rather than showing an empty card.
-        rows.add(new Count("result-moved-total", "Moved to your library", grouped(moved.committed())));
+        rows.add(new Count("result-moved-total", "Moved to your library", RunWords.grouped(moved.committed())));
         return rows;
     }
 
@@ -192,7 +192,7 @@ final class RunResults {
      */
     private static RunResultView rescueResult(final RunMode ran, final RescueSummary rescued) {
         final List<Count> rows = new ArrayList<>();
-        rows.add(new Count("result-rescued", "Moved to your library", grouped(rescued.rescued())));
+        rows.add(new Count("result-rescued", "Moved to your library", RunWords.grouped(rescued.rescued())));
         addWhenAny(rows, "result-rescue-skipped", "Left behind", rescued.skipped().size());
         return new RunResultView(finishedHeading(ran), Tone.FINISHED, null, rows, null, null, null,
                 DONE);
@@ -266,15 +266,15 @@ final class RunResults {
      */
     private static List<Count> siftCounts(final CullReport report, final ApplyReport applied) {
         final List<Count> rows = new ArrayList<>();
-        rows.add(new Count("result-reviewed", "Photos looked at", grouped(applied.reviewed())));
-        rows.add(new Count("result-sheets", "Sheets judged", grouped(report.montagesCulled())));
-        rows.add(new Count("result-api-calls", "Calls to your provider", grouped(report.apiCalls())));
+        rows.add(new Count("result-reviewed", "Photos looked at", RunWords.grouped(applied.reviewed())));
+        rows.add(new Count("result-sheets", "Sheets judged", RunWords.grouped(report.montagesCulled())));
+        rows.add(new Count("result-api-calls", "Calls to your provider", RunWords.grouped(report.apiCalls())));
         applied.byCategory().entrySet().stream()
                 .filter(category -> category.getValue() > 0)
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(category -> rows.add(new Count(
                         "result-category-" + category.getKey().toLowerCase(Locale.UK),
-                        category.getKey(), grouped(category.getValue()))));
+                        category.getKey(), RunWords.grouped(category.getValue()))));
         addWhenAny(rows, "result-near-dup-groups", "Near-duplicate groups", applied.nearDupGroups());
         addWhenAny(rows, "result-near-dup-rejects", "Copies set aside", applied.nearDupRejects());
         addWhenAny(rows, "result-unreviewable", "Could not be judged", applied.unreviewable());
@@ -298,7 +298,7 @@ final class RunResults {
      */
     private static List<Count> sheetCounts(final ShardTally sheets) {
         return List.of(new Count("result-sheets-judged", "Sheets judged",
-                grouped(sheets.valid()) + " of " + grouped(sheets.total())));
+                RunWords.grouped(sheets.valid()) + " of " + RunWords.grouped(sheets.total())));
     }
 
     /**
@@ -393,7 +393,7 @@ final class RunResults {
     private static void addWhenAny(final List<Count> rows, final String id, final String label,
                                    final int count) {
         if (count > 0) {
-            rows.add(new Count(id, label, grouped(count)));
+            rows.add(new Count(id, label, RunWords.grouped(count)));
         }
     }
 
@@ -408,15 +408,5 @@ final class RunResults {
         final List<Count> rows = new ArrayList<>(first);
         rows.addAll(second);
         return rows;
-    }
-
-    /**
-     * A number with thousands separated, the way somebody reading it would write it.
-     *
-     * @param value int the number
-     * @return {@link String} the number written out
-     */
-    private static String grouped(final int value) {
-        return String.format(Locale.UK, "%,d", value);
     }
 }

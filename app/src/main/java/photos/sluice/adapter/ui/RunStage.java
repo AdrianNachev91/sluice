@@ -17,7 +17,7 @@ public sealed interface RunStage {
     /**
      * No run is working, so the launcher is up.
      *
-     * <p>Carries nothing. What the launcher draws is {@link RunLauncherPresenter#view()}, which
+     * <p>Carries nothing. What the launcher draws is {@link RunSetupPresenter#view()}, which
      * answers whether or not a run has ever been started.
      */
     record Setup() implements RunStage {

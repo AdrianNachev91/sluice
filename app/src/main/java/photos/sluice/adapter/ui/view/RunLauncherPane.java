@@ -29,6 +29,7 @@ import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.adapter.ui.RunProgressView;
 import photos.sluice.adapter.ui.RunResultView;
+import photos.sluice.adapter.ui.RunSetupPresenter;
 import photos.sluice.adapter.ui.RunStage;
 
 import java.util.ArrayList;
@@ -69,10 +70,12 @@ final class RunLauncherPane {
     /**
      * Builds the launcher, ready to sit in the shell's content area.
      *
-     * @param presenter {@link RunLauncherPresenter} decides everything this screen shows
+     * @param presenter {@link RunLauncherPresenter} says which face is up, and holds the one that
+     *     decides what the launcher shows
      * @return {@link Node} the launcher
      */
     static Node pane(final RunLauncherPresenter presenter) {
+        final RunSetupPresenter setup = presenter.setup();
         final var heading = new Label("Dashboard");
         heading.getStyleClass().add("pane-heading");
 
@@ -160,12 +163,12 @@ final class RunLauncherPane {
         final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, yearRows, nothingStaged,
                 scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, withoutHistory,
                 freeHeadline, freeDetail, message, scroll, new HashSet<>(), new HashMap<>());
-        controls.buildModeRow(presenter);
+        controls.buildModeRow(setup);
         scopeField.textProperty().addListener((_, _, typed) -> {
-            presenter.setScope(typed);
-            controls.fillFrom(presenter.view());
+            setup.setScope(typed);
+            controls.fillFrom(setup.view());
         });
-        presenter.setRecount(() -> recount(presenter, controls));
+        presenter.setRecount(() -> recount(setup, controls));
 
         final var launcher = new VBox(heading, modeRow, modeHint, scroll, action);
         launcher.setId("run-launcher");
@@ -180,7 +183,7 @@ final class RunLauncherPane {
         // No id of its own. The shell names whichever screen it puts in the content area, so one set
         // here would be overwritten. A test finding it would be finding the shell's name.
         final var dashboard = new StackPane(launcher, progress.node(), result.node());
-        final Runnable draw = () -> show(presenter, controls, launcher, progress, result);
+        final Runnable draw = () -> show(presenter, setup, controls, launcher, progress, result);
         redraw.becomes(draw);
         start.setOnAction(_ -> onStart(presenter, draw));
 
@@ -189,9 +192,9 @@ final class RunLauncherPane {
         // port, and hopping again would put a second draw behind every one it had folded together.
         presenter.setRepaint(() -> Platform.runLater(draw));
         presenter.setProgressRepaint(draw);
-        controls.drawCounts(presenter);
+        controls.drawCounts(setup);
         draw.run();
-        countInTheBackground(presenter, controls);
+        countInTheBackground(setup, controls);
         return dashboard;
     }
 
@@ -202,18 +205,20 @@ final class RunLauncherPane {
      * its rows on every progress event, and a run reports one per file.
      *
      * @param presenter {@link RunLauncherPresenter} decides which face is up
+     * @param setup {@link RunSetupPresenter} decides what the launcher shows
      * @param controls {@link Controls} the launcher's own controls
      * @param launcher {@link Node} the launcher
      * @param progress {@link RunProgressPane.Mounted} the progress area
      * @param result {@link RunResultPane.Mounted} the result card
      */
-    private static void show(final RunLauncherPresenter presenter, final Controls controls,
-                             final Node launcher, final RunProgressPane.Mounted progress,
+    private static void show(final RunLauncherPresenter presenter, final RunSetupPresenter setup,
+                             final Controls controls, final Node launcher,
+                             final RunProgressPane.Mounted progress,
                              final RunResultPane.Mounted result) {
         switch (presenter.stage()) {
             case RunStage.Setup _ -> {
                 only(launcher, launcher, progress.node(), result.node());
-                controls.fillFrom(presenter.view());
+                controls.fillFrom(setup.view());
             }
             case RunStage.Running(final RunProgressView showing) -> {
                 only(progress.node(), launcher, progress.node(), result.node());
@@ -256,7 +261,7 @@ final class RunLauncherPane {
      * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
      */
     private static void onStart(final RunLauncherPresenter presenter, final Runnable redraw) {
-        final RunLauncherPresenter.Confirmation asked = presenter.confirmationNeeded();
+        final RunSetupPresenter.Confirmation asked = presenter.setup().confirmationNeeded();
         if (asked != null && Dialogs.ask(asked.heading(), asked.question(),
                 new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD),
                 new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET)).isEmpty()) {
@@ -273,11 +278,11 @@ final class RunLauncherPane {
      * appearing. A virtual thread rather than the common pool: the work is a long wait on a disk
      * rather than arithmetic, and nothing else should queue behind it.
      *
-     * @param presenter {@link RunLauncherPresenter} does the reading
+     * @param setup {@link RunSetupPresenter} does the reading
      * @param controls {@link Controls} the controls to fill in once it lands
      */
-    private static void countInTheBackground(final RunLauncherPresenter presenter, final Controls controls) {
-        AfterFirstFrame.run(() -> recount(presenter, controls));
+    private static void countInTheBackground(final RunSetupPresenter setup, final Controls controls) {
+        AfterFirstFrame.run(() -> recount(setup, controls));
     }
 
     /**
@@ -287,13 +292,13 @@ final class RunLauncherPane {
      * again would put the numbers from before the run back on the cards. It would also refuse a
      * sift over the year that run had just created.
      *
-     * @param presenter {@link RunLauncherPresenter} does the reading
+     * @param setup {@link RunSetupPresenter} does the reading
      * @param controls {@link Controls} the controls to fill in once it lands
      */
-    private static void recount(final RunLauncherPresenter presenter, final Controls controls) {
+    private static void recount(final RunSetupPresenter setup, final Controls controls) {
         Thread.ofVirtual().start(() -> {
-            presenter.refreshCounts();
-            Platform.runLater(() -> controls.drawCounts(presenter));
+            setup.refreshCounts();
+            Platform.runLater(() -> controls.drawCounts(setup));
         });
     }
 
@@ -333,20 +338,20 @@ final class RunLauncherPane {
          * <p>The row never changes, so it is built here and only re-selected afterwards. Building it
          * again on each fill would replace the button whose press caused the fill.
          *
-         * @param presenter {@link RunLauncherPresenter} takes the press
+         * @param setup {@link RunSetupPresenter} takes the press
          */
-        private void buildModeRow(final RunLauncherPresenter presenter) {
+        private void buildModeRow(final RunSetupPresenter setup) {
             final var group = new ToggleGroup();
             final List<Node> buttons = new ArrayList<>();
-            for (final ModeChoice mode : presenter.view().modes()) {
+            for (final ModeChoice mode : setup.view().modes()) {
                 final var button = new ToggleButton(mode.label());
                 button.setId(mode.id());
                 button.setToggleGroup(group);
                 button.setSelected(mode.chosen());
                 button.getStyleClass().add("run-mode-button");
                 button.setOnAction(_ -> {
-                    presenter.setMode(mode.mode());
-                    this.fillFrom(presenter.view());
+                    setup.setMode(mode.mode());
+                    this.fillFrom(setup.view());
                 });
                 buttons.add(button);
             }
@@ -374,10 +379,10 @@ final class RunLauncherPane {
          * <p>The one place rows are replaced. Called when the counts first land and when a run has
          * finished changing them, and at neither moment is a row being pressed.
          *
-         * @param presenter {@link RunLauncherPresenter} decides everything this screen shows
+         * @param setup {@link RunSetupPresenter} decides everything this screen shows
          */
-        private void drawCounts(final RunLauncherPresenter presenter) {
-            final RunLauncherView view = presenter.view();
+        private void drawCounts(final RunSetupPresenter setup) {
+            final RunLauncherView view = setup.view();
             final var group = new ToggleGroup();
             // The boxes these hold are about to be discarded, along with any fold still running
             // over one. Left in, they are held for the life of the screen and never asked about
@@ -387,7 +392,7 @@ final class RunLauncherPane {
             this.unfolded.clear();
             final List<Node> rows = new ArrayList<>();
             for (final YearChoice year : view.years()) {
-                rows.add(this.yearRow(year, group, presenter));
+                rows.add(this.yearRow(year, group, setup));
             }
             this.yearRows.getChildren().setAll(rows);
             this.fillFrom(view);
@@ -459,17 +464,17 @@ final class RunLauncherPane {
          *
          * @param year {@link YearChoice} the row to draw
          * @param group {@link ToggleGroup} the group every row belongs to
-         * @param presenter {@link RunLauncherPresenter} takes the click
+         * @param setup {@link RunSetupPresenter} takes the click
          * @return {@link Node} the row
          */
         private Node yearRow(final YearChoice year, final ToggleGroup group,
-                             final RunLauncherPresenter presenter) {
+                             final RunSetupPresenter setup) {
             // The same two steps a mode button takes: tell the presenter, then draw what it says.
             // The scope field is one of the things a fill writes, so a click and a keystroke reach
             // the screen by the same route.
             final ToggleButton row = this.scopeRow(year.id(), "run-year-row",
                     rowInside("run-year-label", year.label(), year.counts(), null), year.chosen(),
-                    () -> presenter.pressYear(year.year()), presenter);
+                    () -> setup.pressYear(year.year()), setup);
             row.setToggleGroup(group);
             if (year.months().isEmpty()) {
                 return row;
@@ -477,7 +482,7 @@ final class RunLauncherPane {
             // Every month built here, whichever year is chosen, and shown or hidden by a fill. Built
             // on selection instead, a year's own press would replace the row it came from.
             final List<Node> under = new ArrayList<>();
-            year.months().forEach(month -> under.add(this.monthRow(year, month, presenter)));
+            year.months().forEach(month -> under.add(this.monthRow(year, month, setup)));
             final var months = new VBox(under.toArray(new Node[0]));
             months.setId(monthsId(year.year()));
             months.getStyleClass().add("run-month-rows");
@@ -723,16 +728,16 @@ final class RunLauncherPane {
          *
          * @param year {@link YearChoice} the year it sits under
          * @param month {@link MonthChoice} the month to draw
-         * @param presenter {@link RunLauncherPresenter} takes the click
+         * @param setup {@link RunSetupPresenter} takes the click
          * @return {@link Node} the row
          */
         private Node monthRow(final YearChoice year, final MonthChoice month,
-                              final RunLauncherPresenter presenter) {
+                              final RunSetupPresenter setup) {
             final var box = new Region();
             box.getStyleClass().add("run-month-box");
             return this.scopeRow(month.id(), "run-month-row",
                     rowInside("run-month-label", month.label(), month.counts(), box), month.chosen(),
-                    () -> presenter.pressMonth(year.year(), month.month()), presenter);
+                    () -> setup.pressMonth(year.year(), month.month()), setup);
         }
 
         /**
@@ -766,12 +771,12 @@ final class RunLauncherPane {
          * @param inside {@link HBox} what the row shows
          * @param chosen boolean whether the scope names it
          * @param press {@link Runnable} what to tell the presenter
-         * @param presenter {@link RunLauncherPresenter} asked again once it has been told
+         * @param setup {@link RunSetupPresenter} asked again once it has been told
          * @return {@link ToggleButton} the row
          */
         private ToggleButton scopeRow(final String id, final String rowClass, final HBox inside,
                                       final boolean chosen, final Runnable press,
-                                      final RunLauncherPresenter presenter) {
+                                      final RunSetupPresenter setup) {
             final var row = new ToggleButton();
             row.setId(id);
             row.setGraphic(inside);
@@ -779,7 +784,7 @@ final class RunLauncherPane {
             row.getStyleClass().add(rowClass);
             row.setOnAction(_ -> {
                 press.run();
-                this.fillFrom(presenter.view());
+                this.fillFrom(setup.view());
             });
             return row;
         }

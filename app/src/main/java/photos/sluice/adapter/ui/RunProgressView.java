@@ -5,7 +5,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 
 /**
- * What the dashboard draws while a run works, chosen from a {@link RunLauncherPresenter} and
+ * What the dashboard draws while a run works, chosen from a {@link RunProgressPresenter} and
  * carrying only display-ready values. The view reads fields off this and decides nothing about what
  * they mean.
  *
