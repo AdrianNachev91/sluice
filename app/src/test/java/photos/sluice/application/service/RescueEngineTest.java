@@ -285,6 +285,11 @@ class RescueEngineTest {
         }
 
         @Override
+        public Path realFile(final Path path) {
+            return this.delegate.realFile(path);
+        }
+
+        @Override
         public Path move(final Path source, final Path destDir) {
             if (this.movesUntilFailure <= 0) {
                 throw new RuntimeException("simulated crash");

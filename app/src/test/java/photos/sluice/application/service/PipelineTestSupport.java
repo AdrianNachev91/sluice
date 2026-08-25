@@ -314,6 +314,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Path realFile(final Path path) {
+            return this.delegate.realFile(path);
+        }
+
+        @Override
         public long size(final Path path) {
             return this.delegate.size(path);
         }
@@ -659,6 +664,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Path realFile(final Path path) {
+            return this.delegate.realFile(path);
+        }
+
+        @Override
         public Path move(final Path source, final Path destDir) {
             throw new RuntimeException("simulated crash");
         }
@@ -765,6 +775,11 @@ final class PipelineTestSupport {
         @Override
         public Optional<Path> realDirectory(final Path path) {
             return this.delegate.realDirectory(path);
+        }
+
+        @Override
+        public Path realFile(final Path path) {
+            return this.delegate.realFile(path);
         }
 
         @Override
@@ -893,6 +908,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Path realFile(final Path path) {
+            return this.delegate.realFile(path);
+        }
+
+        @Override
         public Path move(final Path source, final Path destDir) {
             return this.delegate.move(source, destDir);
         }
@@ -1000,6 +1020,11 @@ final class PipelineTestSupport {
         @Override
         public Optional<Path> realDirectory(final Path path) {
             return this.delegate.realDirectory(path);
+        }
+
+        @Override
+        public Path realFile(final Path path) {
+            return this.delegate.realFile(path);
         }
 
         @Override

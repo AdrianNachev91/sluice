@@ -266,6 +266,21 @@ public class NioMediaStore implements MediaStore {
     }
 
     /**
+     * Resolves a path that is not a directory to its real form.
+     *
+     * @param path {@link Path} path to resolve
+     * @return {@link Path} the resolved path
+     */
+    @Override
+    public Path realFile(final Path path) {
+        try {
+            return path.toRealPath();
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to resolve the real path of " + path, e);
+        }
+    }
+
+    /**
      * Reads a file's size in bytes.
      *
      * @param path {@link Path} file to check

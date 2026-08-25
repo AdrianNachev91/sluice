@@ -220,6 +220,31 @@ class ImportEngineTest {
             assertThat(card.resolve("holiday.jpg")).doesNotExist();
         }
 
+        // Pins the resolution rather than what it prevents. A walked file is spelled the way its
+        // real root spells it, so a file named on its own has to be resolved to be comparable. The
+        // spellings that differ are a Windows short name and a link, and no temp directory produces
+        // either on every platform this ships to. Left unresolved, the de-duplication silently
+        // stops working wherever they do differ, which is how Windows CI found it.
+        @Test
+        void resolvesAFileNamedOnItsOwnBeforeComparingItWithAWalkedOne(@TempDir final Path card,
+                                                                        @TempDir final Path root) {
+            write(card.resolve("holiday.jpg"), "holiday");
+            final List<Path> resolved = new ArrayList<>();
+            final MediaStore recording = new NioMediaStore() {
+                @Override
+                public Path realFile(final Path path) {
+                    resolved.add(path);
+                    return super.realFile(path);
+                }
+            };
+
+            new ImportEngine(recording, paths(root), new Sha256Hasher()).importFrom(
+                    List.of(card.resolve("holiday.jpg")), ImportKind.COPY,
+                    ProgressCallback.NO_OP, CancellationSignal.NEVER);
+
+            assertThat(resolved).containsExactly(card.resolve("holiday.jpg"));
+        }
+
         @Test
         void keepsBothSidesWhereTheCopyCannotBeProvedToMatch(@TempDir final Path card,
                                                              @TempDir final Path root) {
@@ -296,7 +321,7 @@ class ImportEngineTest {
         void carriesOnPastAFileItCannotCopy(@TempDir final Path card, @TempDir final Path root) {
             write(card.resolve("one.jpg"), "one");
             write(card.resolve("two.jpg"), "two");
-            final var engine = new ImportEngine(refusingToCopy(card.resolve("one.jpg")),
+            final var engine = new ImportEngine(refusingToCopy("one.jpg"),
                     paths(root), new Sha256Hasher());
 
             final ImportSummary summary = engine.importFrom(List.of(card), ImportKind.COPY,
@@ -324,7 +349,7 @@ class ImportEngineTest {
         void leavesTheOriginalOfAFileItCouldNotCopy(@TempDir final Path card,
                                                     @TempDir final Path root) {
             write(card.resolve("one.jpg"), "one");
-            final var engine = new ImportEngine(refusingToCopy(card.resolve("one.jpg")),
+            final var engine = new ImportEngine(refusingToCopy("one.jpg"),
                     paths(root), new Sha256Hasher());
 
             engine.importFrom(List.of(card), ImportKind.MOVE, ProgressCallback.NO_OP,
@@ -406,11 +431,13 @@ class ImportEngineTest {
         };
     }
 
-    private static MediaStore refusingToCopy(final Path unreadable) {
+    // Matched on the file name. Every source is resolved before it is copied. A path built here is
+    // not equal to the one the engine holds wherever the two spell it differently.
+    private static MediaStore refusingToCopy(final String unreadable) {
         return new NioMediaStore() {
             @Override
             public Path copyTo(final Path source, final Path destination) {
-                if (source.equals(unreadable)) {
+                if (source.getFileName().toString().equals(unreadable)) {
                     throw new UncheckedIOException(new IOException("refused " + source));
                 }
                 return super.copyTo(source, destination);

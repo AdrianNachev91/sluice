@@ -949,6 +949,11 @@ class ApplyEngineTest {
         }
 
         @Override
+        public Path realFile(final Path path) {
+            return this.delegate.realFile(path);
+        }
+
+        @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
         }

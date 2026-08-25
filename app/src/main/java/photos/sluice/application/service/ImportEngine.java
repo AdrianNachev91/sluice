@@ -164,7 +164,11 @@ public class ImportEngine {
                         addOnce(arrivalsSoFar, alreadyGathered, under(inbox, walkedRoot, file));
                     }
                 } else {
-                    addOnce(arrivalsSoFar, alreadyGathered, new Arrival(source, inbox));
+                    // Resolved for the same reason the folder above is. A walked file arrives
+                    // spelled the way its real root spells it. Resolved here too, the two
+                    // spellings meet, and the de-duplication below can see they are one file.
+                    addOnce(arrivalsSoFar, alreadyGathered,
+                            new Arrival(this.mediaStore.realFile(source), inbox));
                 }
             } catch (final UncheckedIOException e) {
                 throw new ImportSourceException("Sluice could not read " + source + " any more. If "

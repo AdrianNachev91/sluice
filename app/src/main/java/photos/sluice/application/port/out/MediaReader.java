@@ -115,6 +115,19 @@ public interface MediaReader {
     Optional<Path> realDirectory(Path path);
 
     /**
+     * The same resolution for a path that is not a directory.
+     *
+     * <p>A caller holding both a folder and a file has to compare them as plain paths, so both
+     * have to be spelled the same way. Windows gives the same file a short name and a long one,
+     * and a link gives it a second name anywhere.
+     *
+     * @param path {@link Path} the path to resolve
+     * @return {@link Path} the resolved path
+     * @throws UncheckedIOException if it could not be resolved, which includes it not being there
+     */
+    Path realFile(Path path);
+
+    /**
      * Reads a file's size.
      *
      * @param path {@link Path} the file to measure
