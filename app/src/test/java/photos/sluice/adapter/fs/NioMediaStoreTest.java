@@ -369,6 +369,43 @@ class NioMediaStoreTest {
         assertThat(Files.exists(missing)).isFalse();
     }
 
+    @Test
+    void copyToWritesTheFileAtExactlyTheNameItWasGiven(@TempDir final Path root) throws IOException {
+        Files.writeString(root.resolve("holiday.jpg"), "holiday");
+
+        final Path written = this.store.copyTo(root.resolve("holiday.jpg"),
+                root.resolve("2019").resolve("holiday.jpg.sluice-part"));
+
+        assertThat(written).isEqualTo(root.resolve("2019").resolve("holiday.jpg.sluice-part"));
+        assertThat(written).hasContent("holiday");
+        assertThat(root.resolve("holiday.jpg")).hasContent("holiday");
+    }
+
+    // An import rests the safety of its part files on this refusal.
+    @Test
+    void copyToRefusesANameAlreadyTakenRatherThanReplacingIt(@TempDir final Path root) throws IOException {
+        Files.writeString(root.resolve("holiday.jpg"), "the one being copied");
+        Files.writeString(root.resolve("taken.jpg"), "the one already there");
+
+        assertThatThrownBy(() -> this.store.copyTo(root.resolve("holiday.jpg"), root.resolve("taken.jpg")))
+                .isInstanceOf(UncheckedIOException.class);
+        assertThat(root.resolve("taken.jpg")).hasContent("the one already there");
+    }
+
+    @Test
+    void listFilesToleratingAnswersEveryFileAndNoRefusalWhereItReadEverything(@TempDir final Path root)
+            throws IOException {
+        Files.writeString(root.resolve("top.jpg"), "top");
+        Files.createDirectories(root.resolve("2019"));
+        Files.writeString(root.resolve("2019").resolve("holiday.jpg"), "holiday");
+
+        final NioMediaStore.Walk walk = this.store.listFilesTolerating(root);
+
+        assertThat(walk.files()).containsExactlyInAnyOrder(
+                root.resolve("top.jpg"), root.resolve("2019").resolve("holiday.jpg"));
+        assertThat(walk.unreadablePlaces()).isEmpty();
+    }
+
     // Probes the real filesystem instead of checking the OS name, since a case-sensitive volume can
     // be mounted on any platform.
     private static boolean isCaseInsensitive(final Path dir) throws IOException {

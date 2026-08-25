@@ -1,5 +1,6 @@
 package photos.sluice.adapter.ui;
 
+import java.nio.file.Path;
 import java.time.Month;
 import java.time.format.TextStyle;
 import java.util.List;
@@ -88,6 +89,20 @@ final class RunWords {
             return counted(videos, "video", "videos");
         }
         return counted(photos, "photo", "photos") + " and " + counted(videos, "video", "videos");
+    }
+
+    /**
+     * What to call a chosen folder or file on screen.
+     *
+     * <p>A drive root has no leaf name, so it answers with itself. Somebody importing a camera card
+     * picks one, and {@code E:\} is what they call it.
+     *
+     * @param chosen {@link Path}
+     * @return {@link String}
+     */
+    static String named(final Path chosen) {
+        final Path leaf = chosen.getFileName();
+        return String.valueOf(leaf == null ? chosen : leaf);
     }
 
     /**

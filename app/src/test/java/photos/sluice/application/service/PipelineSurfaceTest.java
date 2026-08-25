@@ -36,6 +36,7 @@ class PipelineSurfaceTest {
             "sort(SortScope)",
             "commit(CommitScope)",
             "rescue(String)",
+            "importFrom(List, ImportKind)",
             "cull(CullScope)",
             "curate(SortScope)",
             "resume(Path, boolean)",

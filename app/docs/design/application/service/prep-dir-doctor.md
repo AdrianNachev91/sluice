@@ -134,7 +134,7 @@ never race a re-prep of a scope it's mid-delete on.
 that kept them. A caller can then render "N runs cleared, M left because: ..." without a second
 diagnose pass.
 
-`DAMAGED` gets its own bucket instead: `unreadable`, mapped to a short reason rather than a state.
+`DAMAGED` gets its own bucket instead: `unreadablePlaces`, mapped to a short reason rather than a state.
 Its state carries no more than that something could not be read, not a state a user can act on the
 way `WAITING` or `BLOCKED` are. `purgeDir()` guards itself the same way `prepDirsUnder`'s own
 per-candidate read does. A run whose own delete then fails partway lands in the same bucket, so one

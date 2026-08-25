@@ -1,5 +1,6 @@
 package photos.sluice.application.port.out;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 
 /**
@@ -51,6 +52,16 @@ public interface MediaStore extends MediaReader {
      * @return {@link Path} the path the copy was written to
      */
     Path copy(Path source, Path destDir);
+
+    /**
+     * Copies source to exactly destination.
+     *
+     * @param source {@link Path}
+     * @param destination {@link Path} must be free
+     * @return {@link Path} the destination path
+     * @throws UncheckedIOException if destination is already taken, or the copy fails
+     */
+    Path copyTo(Path source, Path destination);
 
     /**
      * Deletes a file.

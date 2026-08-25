@@ -2,6 +2,7 @@ package photos.sluice.adapter.ui;
 
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.RunProgressView.PhaseBar;
+import photos.sluice.domain.imports.ImportKind;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -39,9 +40,9 @@ class RunProgressPresenterTest {
 
     @Test
     void theAreaHoldsRoomForAsManyBarsAsTheModeCanReport() {
-        assertThat(this.presenter.view(RunMode.SIFT, "2019", false).reservedBars())
+        assertThat(this.presenter.view(RunMode.SIFT, "2019", false, null).reservedBars())
                 .isEqualTo(RunMode.SIFT.phases());
-        assertThat(this.presenter.view(RunMode.MOVE_TO_LIBRARY, "2019", false).reservedBars())
+        assertThat(this.presenter.view(RunMode.MOVE_TO_LIBRARY, "2019", false, null).reservedBars())
                 .isEqualTo(RunMode.MOVE_TO_LIBRARY.phases());
     }
 
@@ -53,15 +54,13 @@ class RunProgressPresenterTest {
     @Test
     void aCancelledSortSaysWhatSurvivesRatherThanHowLongTheStopTakes() {
         assertThat(this.stopping(RunMode.SORT).cancelling())
-                .isEqualTo("What has already been sorted stays where it is. "
-                        + "Nothing further will be moved.");
+                .isEqualTo("What was sorted stays where it is.");
     }
 
     @Test
-    void aCancelledMoveSaysWhatHasAlreadyReachedTheLibraryStaysThere() {
+    void aCancelledMoveSaysWhatReachedTheLibraryStaysThere() {
         assertThat(this.stopping(RunMode.MOVE_TO_LIBRARY).cancelling())
-                .isEqualTo("What has already reached your library stays there. "
-                        + "Nothing further will be moved.");
+                .isEqualTo("What reached your library stays there.");
     }
 
     @Test
@@ -73,11 +72,33 @@ class RunProgressPresenterTest {
         assertThat(this.stopping(RunMode.SORT).cancelPressable()).isFalse();
     }
 
+    @Test
+    void aCancelledCopyClaimsNothingAboutTheOriginals() {
+        assertThat(this.stoppingAnImport(ImportKind.COPY).cancelling())
+                .isEqualTo("What arrived stays in your Inbox.");
+    }
+
+    @Test
+    void aCancelledMoveSaysFilesAlreadyMovedIn() {
+        assertThat(this.stoppingAnImport(ImportKind.MOVE).cancelling())
+                .contains("already moved to your Inbox");
+    }
+
+    @Test
+    void anImportWithNoKindClaimsNothingAboutTheFolderItCameFrom() {
+        assertThat(this.presenter.view(RunMode.IMPORT, "DCIM", true, null).cancelling())
+                .isEqualTo(this.stoppingAnImport(ImportKind.COPY).cancelling());
+    }
+
     private RunProgressView working() {
-        return this.presenter.view(RunMode.SORT, "the oldest year in your Inbox", false);
+        return this.presenter.view(RunMode.SORT, "the oldest year in your Inbox", false, null);
     }
 
     private RunProgressView stopping(final RunMode ran) {
-        return this.presenter.view(ran, "2019", true);
+        return this.presenter.view(ran, "2019", true, null);
+    }
+
+    private RunProgressView stoppingAnImport(final ImportKind kind) {
+        return this.presenter.view(RunMode.IMPORT, "DCIM", true, kind);
     }
 }

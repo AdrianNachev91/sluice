@@ -1,5 +1,6 @@
 package photos.sluice.adapter.ui;
 
+import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
@@ -34,10 +35,11 @@ final class RunRefusals {
      */
     static String plainly(final Throwable failure) {
         return switch (failure) {
-            // These two are refusals this app writes for the person meeting them, and each says
+            // These three are refusals this app writes for the person meeting them, and each says
             // what to do about itself.
             case final JobInProgressException refused -> messageOf(refused);
             case final ShuttingDownException closing -> messageOf(closing);
+            case final ImportSourceException unusable -> messageOf(unusable);
             // This one carries a message built for a log, down to the configuration key that is
             // wrong. Which folder is at fault is the part a reader needs, in the words the rest of
             // this app calls that folder by.

@@ -929,6 +929,11 @@ class ApplyEngineTest {
         }
 
         @Override
+        public Walk listFilesTolerating(final Path root) {
+            return this.delegate.listFilesTolerating(root);
+        }
+
+        @Override
         public List<Path> listChildDirectories(final Path root) {
             return this.delegate.listChildDirectories(root);
         }
@@ -946,6 +951,11 @@ class ApplyEngineTest {
         @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public Path copyTo(final Path source, final Path destination) {
+            return this.delegate.copyTo(source, destination);
         }
 
         @Override

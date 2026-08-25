@@ -1,7 +1,7 @@
 package photos.sluice.adapter.ui;
 
 /**
- * The five kinds of work the dashboard can start, each carrying the words the app says about it.
+ * The kinds of work the dashboard can start, each carrying the words the app says about it.
  *
  * <p>These are the user's words rather than the engine's. What the screen calls sifting is what the
  * code calls culling, and what it calls moving to the library is what the code calls committing.
@@ -51,7 +51,16 @@ public enum RunMode {
      */
     RESCUE("Rescue", "Rescuing",
             "Moves what is left in a Review folder into your library.",
-            "Rescue arrives with the Review screen.", 1);
+            "Rescue arrives with the Review screen.", 1),
+
+    /**
+     * Brings photos into the Inbox from folders and files outside it.
+     *
+     * <p>The one kind of work with no button in the row: it starts from the Inbox card, or from
+     * folders dropped on the dashboard. Each of those already names what is coming in, so the two
+     * fields the row would read are empty.
+     */
+    IMPORT("Import", "Importing", "", "", 1);
 
     private final String label;
     private final String verb;

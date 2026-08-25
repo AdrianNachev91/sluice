@@ -1,5 +1,6 @@
 package photos.sluice.adapter.fs;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
 
@@ -7,11 +8,15 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +45,52 @@ public class NioMediaStore implements MediaStore {
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to walk " + root, e);
         }
+    }
+
+    /**
+     * Walks a tree, keeping what it reached and noting every place it was refused.
+     *
+     * @param root {@link Path}
+     * @return {@link Walk} the files reached and the places refused
+     */
+    @Override
+    public Walk listFilesTolerating(final Path root) {
+        final List<Path> files = new ArrayList<>();
+        final List<Path> unreadable = new ArrayList<>();
+        try {
+            // walkFileTree rather than walk. A stream reports a refusal by throwing out of the
+            // terminal operation, which ends the whole walk. This one is asked about each failure
+            // as it happens and answers CONTINUE, so a denied directory costs that directory.
+            Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) {
+                    if (attrs.isRegularFile()) {
+                        files.add(file);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(final Path file, final IOException e) {
+                    unreadable.add(file);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                // Fires for a directory that could be entered and then failed partway through.
+                @Override
+                public FileVisitResult postVisitDirectory(final Path dir, final @Nullable IOException e) {
+                    if (e != null) {
+                        unreadable.add(dir);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (final IOException e) {
+            // Only root itself failing reaches here, since every failure below it was answered
+            // above.
+            throw new UncheckedIOException("Failed to walk " + root, e);
+        }
+        return new Walk(files, unreadable);
     }
 
     /**
@@ -133,6 +184,25 @@ public class NioMediaStore implements MediaStore {
             throw new UncheckedIOException("Failed to copy " + source + " to " + dest, e);
         }
         return dest;
+    }
+
+    /**
+     * Copies a file to an exact destination path, creating parent directories as needed.
+     *
+     * @param source {@link Path}
+     * @param destination {@link Path}
+     * @return {@link Path} the destination path
+     */
+    @Override
+    public Path copyTo(final Path source, final Path destination) {
+        this.ensureDirectory(destination.getParent());
+        try {
+            // No REPLACE_EXISTING, so a name already taken throws rather than being written over.
+            Files.copy(source, destination, StandardCopyOption.COPY_ATTRIBUTES);
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to copy " + source + " to " + destination, e);
+        }
+        return destination;
     }
 
     /**

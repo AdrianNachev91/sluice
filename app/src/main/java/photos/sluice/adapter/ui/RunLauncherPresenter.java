@@ -8,8 +8,10 @@ import org.springframework.stereotype.Component;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.imports.ImportKind;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -52,6 +54,9 @@ public class RunLauncherPresenter {
     // started with.
     private volatile RunMode ranAs = RunMode.SORT;
     private volatile String scopeOfTheRun = "";
+    // What a cancelled import leaves behind differs between the two kinds, and the mode alone
+    // cannot say which.
+    private volatile @Nullable ImportKind importing;
 
     /**
      * Creates the presenter over the facade it starts work through, and the port a running job
@@ -85,8 +90,8 @@ public class RunLauncherPresenter {
      */
     public RunStage stage() {
         if (this.running) {
-            return new RunStage.Running(
-                    this.progress.view(this.ranAs, this.scopeOfTheRun, this.cancelRequested));
+            return new RunStage.Running(this.progress.view(this.ranAs, this.scopeOfTheRun,
+                    this.cancelRequested, this.importing));
         }
         final RunResultView done = this.ended;
         return done == null ? new RunStage.Setup() : new RunStage.Finished(done);
@@ -104,7 +109,28 @@ public class RunLauncherPresenter {
         // Read once, and everything below works from it. The progress area and the result card
         // both name the work that was started, and the mode can move under a job in flight.
         final RunMode ran = this.setup.chosenMode();
-        this.begin(ran, RunScope.describe(ran, scope), () -> this.submit(ran, scope));
+        this.begin(ran, RunScope.describe(ran, scope), null, () -> this.submit(ran, scope));
+    }
+
+    /**
+     * Brings photos into the Inbox, leaving the originals where they are.
+     *
+     * @param sources a {@link List} of {@link Path} the folders and files to bring in
+     */
+    public void startImportCopying(final List<Path> sources) {
+        this.startImport(sources, ImportKind.COPY);
+    }
+
+    /**
+     * Brings photos into the Inbox and removes each original once its bytes have arrived.
+     *
+     * <p>The screen offering the choice names which of its own two answers was taken, never what
+     * that answer means. What it amounts to is this side's to say.
+     *
+     * @param sources a {@link List} of {@link Path} the folders and files to bring in
+     */
+    public void startImportMoving(final List<Path> sources) {
+        this.startImport(sources, ImportKind.MOVE);
     }
 
     /**
@@ -119,7 +145,7 @@ public class RunLauncherPresenter {
         if (this.running) {
             return;
         }
-        this.begin(RunMode.SIFT, this.scopeOfTheRun, () -> this.pipeline.resume(prepDir, false));
+        this.begin(RunMode.SIFT, this.scopeOfTheRun, null, () -> this.pipeline.resume(prepDir, false));
     }
 
     /**
@@ -204,9 +230,11 @@ public class RunLauncherPresenter {
      *
      * @param ran {@link RunMode} the mode to report this job as
      * @param scope {@link String} what this job covers, written out for the progress area
+     * @param kind {@link ImportKind} null for every run that is not an import
      * @param submit a {@link Supplier} of {@link JobHandle} hands the work to the facade
      */
-    private void begin(final RunMode ran, final String scope, final Supplier<JobHandle<?>> submit) {
+    private void begin(final RunMode ran, final String scope, final @Nullable ImportKind kind,
+                       final Supplier<JobHandle<?>> submit) {
         this.setup.report(null);
         try {
             final JobHandle<?> handle = submit.get();
@@ -217,6 +245,7 @@ public class RunLauncherPresenter {
             // have already paid for.
             this.ranAs = ran;
             this.scopeOfTheRun = scope;
+            this.importing = kind;
             this.ended = null;
             this.cancelRequested = false;
             // The port holds whatever the last job reported until somebody says a new one has
@@ -276,7 +305,37 @@ public class RunLauncherPresenter {
             case SIFT -> this.pipeline.cull(RunScope.asCull(scope));
             case MOVE_TO_LIBRARY -> this.pipeline.commit(RunScope.asCommit(scope));
             case RESCUE -> throw new IllegalStateException("Rescue cannot be started from here yet");
+            // An import takes folders rather than a timeline, so it arrives through startImport
+            // rather than the start button.
+            case IMPORT -> throw new IllegalStateException("An import is not started from a scope");
         };
+    }
+
+    /**
+     * Starts an import of either kind.
+     *
+     * <p>Started from the Inbox card or from a drop, so what it covers is the folders that were
+     * chosen rather than what the scope field says.
+     *
+     * @param sources a {@link List} of {@link Path} the folders and files to bring in
+     * @param kind {@link ImportKind} whether the originals stay where they are
+     */
+    private void startImport(final List<Path> sources, final ImportKind kind) {
+        if (this.running) {
+            return;
+        }
+        this.begin(RunMode.IMPORT, describe(sources), kind,
+                () -> this.pipeline.importFrom(sources, kind));
+    }
+
+    /**
+     * What an import covers, written out for a screen that cannot show what was chosen.
+     *
+     * @param sources a {@link List} of {@link Path} the folders and files chosen
+     * @return {@link String} what this import covers
+     */
+    private static String describe(final List<Path> sources) {
+        return RunWords.listed(sources.stream().map(RunWords::named).toList());
     }
 
     /**

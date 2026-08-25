@@ -404,6 +404,27 @@ class RunLauncherPaneTest {
         assertThat(pane.lookup("#run-estimate").isVisible()).isFalse();
     }
 
+    @Test
+    void theInboxCardDrawsAnEnabledImportButton() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenter()));
+
+        assertThat(((Button) pane.lookup("#run-import")).getText()).isEqualTo("Import a folder...");
+        assertThat(pane.lookup("#run-import").isDisabled()).isFalse();
+        assertThat(((Label) pane.lookup("#run-import-hint")).getText())
+                .isEqualTo("Or drop folders and files anywhere on this screen.");
+    }
+
+    // Neither the press nor a drop can be fired here. Both open a modal dialog, and a headless run
+    // would sit on it until the suite timed out.
+    @Test
+    void dropIsWired() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenter()));
+
+        final Node launcher = pane.lookup("#run-launcher");
+        assertThat(launcher.getOnDragOver()).isNotNull();
+        assertThat(launcher.getOnDragDropped()).isNotNull();
+    }
+
     // Which face is taking room, read off the container whose own visibility the swap sets. A child
     // of a hidden parent still answers true to isVisible, so a label inside one proves nothing.
     private static String showing(final Parent pane) {

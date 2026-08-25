@@ -14,11 +14,14 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
+import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
@@ -32,6 +35,8 @@ import photos.sluice.adapter.ui.RunResultView;
 import photos.sluice.adapter.ui.RunSetupPresenter;
 import photos.sluice.adapter.ui.RunStage;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -88,7 +93,16 @@ final class RunLauncherPane {
         inboxHeadline.setId("run-inbox-headline");
         inboxHeadline.getStyleClass().add("run-card-headline");
         final Label inboxDetail = SettingsRows.emptyHelpLine("run-inbox-detail");
-        final VBox inboxCard = SettingsRows.card("INBOX", null, inboxHeadline, inboxDetail);
+        final var importPhotos = new Button();
+        importPhotos.setId("run-import");
+        importPhotos.getStyleClass().add("button-quiet");
+        // Left-aligned in a row of its own. The start button is the one control on this screen that
+        // sits to the right, and a second right-aligned button would read as its equal.
+        final var importRow = new HBox(importPhotos);
+        importRow.getStyleClass().add("run-import-row");
+        final Label importHint = SettingsRows.emptyHelpLine("run-import-hint");
+        final VBox inboxCard = SettingsRows.card("INBOX", null, inboxHeadline, inboxDetail, importRow,
+                importHint);
 
         final var yearRows = new VBox();
         yearRows.getStyleClass().add("run-year-rows");
@@ -160,7 +174,8 @@ final class RunLauncherPane {
         final var scroll = SettingsRows.scrolling(body);
         scroll.setMinHeight(0);
 
-        final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, yearRows, nothingStaged,
+        final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, importPhotos,
+                importHint, yearRows, nothingStaged,
                 scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, withoutHistory,
                 freeHeadline, freeDetail, message, scroll, new HashSet<>(), new HashMap<>());
         controls.buildModeRow(setup);
@@ -186,6 +201,8 @@ final class RunLauncherPane {
         final Runnable draw = () -> show(presenter, setup, controls, launcher, progress, result);
         redraw.becomes(draw);
         start.setOnAction(_ -> onStart(presenter, draw));
+        importPhotos.setOnAction(_ -> onImportPressed(presenter, importPhotos, draw));
+        acceptDroppedFolders(launcher, presenter, draw);
 
         // Two routes in, and they differ by the thread they arrive on. A job reports its ending from
         // whatever thread it ran on, so that one hops. Progress arrives already marshalled by the
@@ -272,6 +289,111 @@ final class RunLauncherPane {
     }
 
     /**
+     * Takes a press on the button that brings photos in.
+     *
+     * <p>Folders only, since a native dialog picks one or the other and what people import is a
+     * card, a phone folder or an export.
+     *
+     * @param presenter {@link RunLauncherPresenter} starts the import
+     * @param owner {@link Node} the button the dialog opens over
+     * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
+     */
+    private static void onImportPressed(final RunLauncherPresenter presenter, final Node owner,
+                                        final Runnable redraw) {
+        final File chosen = new DirectoryChooser().showDialog(owner.getScene().getWindow());
+        if (chosen != null) {
+            askThenImport(presenter, List.of(chosen.toPath()), redraw);
+        }
+    }
+
+    /**
+     * Lets folders and files be dropped onto the launcher.
+     *
+     * <p>Onto the launcher rather than the window, so a drop cannot land on the progress area or on
+     * a finished run's card.
+     *
+     * <p>What is dropped is accepted whatever it is, and refused afterwards by name where it cannot
+     * be imported.
+     *
+     * @param launcher {@link Node} the face that takes the drop
+     * @param presenter {@link RunLauncherPresenter} starts the import
+     * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
+     */
+    private static void acceptDroppedFolders(final Node launcher, final RunLauncherPresenter presenter,
+                                             final Runnable redraw) {
+        launcher.setOnDragOver(event -> {
+            // Nothing this app started.
+            if (event.getGestureSource() == null && event.getDragboard().hasFiles()) {
+                event.acceptTransferModes(TransferMode.COPY);
+            }
+            event.consume();
+        });
+        launcher.setOnDragEntered(event -> {
+            if (event.getGestureSource() == null && event.getDragboard().hasFiles()) {
+                launcher.getStyleClass().add("run-launcher-taking-a-drop");
+            }
+            event.consume();
+        });
+        launcher.setOnDragExited(event -> {
+            launcher.getStyleClass().remove("run-launcher-taking-a-drop");
+            event.consume();
+        });
+        launcher.setOnDragDropped(event -> {
+            launcher.getStyleClass().remove("run-launcher-taking-a-drop");
+            final boolean carriedFiles = event.getDragboard().hasFiles();
+            final List<Path> dropped = carriedFiles ? pathsOf(event.getDragboard()) : List.of();
+            // Answered and released before the question is put. The drag is still in flight until
+            // this handler returns, and the application dragged from is waiting on it. A modal
+            // opened from inside here would leave that window frozen behind ours until somebody
+            // answered. The paths are read out first, because the dragboard does not outlive the
+            // gesture.
+            event.setDropCompleted(carriedFiles);
+            event.consume();
+            if (carriedFiles) {
+                Platform.runLater(() -> askThenImport(presenter, dropped, redraw));
+            }
+        });
+    }
+
+    /**
+     * What a drag is carrying, as paths.
+     *
+     * @param board {@link Dragboard}
+     * @return a {@link List} of {@link Path}
+     */
+    private static List<Path> pathsOf(final Dragboard board) {
+        return board.getFiles().stream().map(File::toPath).toList();
+    }
+
+    /**
+     * Asks whether to copy or move, and starts the import unless the question is backed out of.
+     *
+     * <p>Copy is the loud answer. It is the one of the two that cannot lose anything, and the one
+     * almost every import wants.
+     *
+     * @param presenter {@link RunLauncherPresenter} starts the import
+     * @param sources a {@link List} of {@link Path} the folders and files chosen
+     * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
+     */
+    private static void askThenImport(final RunLauncherPresenter presenter, final List<Path> sources,
+                                      final Runnable redraw) {
+        final RunSetupPresenter.ImportQuestion asked = presenter.setup().importQuestion(sources);
+        final var copy = new Dialogs.Choice(asked.copy(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD);
+        final var move = new Dialogs.Choice(asked.move(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET);
+        final Optional<Dialogs.Choice> taken = Dialogs.ask(asked.heading(), asked.question(), copy, move,
+                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET));
+        if (taken.isEmpty()) {
+            return;
+        }
+        if (taken.get().equals(move)) {
+            presenter.startImportMoving(sources);
+        } else {
+            presenter.startImportCopying(sources);
+        }
+        redraw.run();
+    }
+
+    /**
      * Reads the two folder trees away from the thread that paints, then fills the cards in.
      *
      * <p>Held back until the window has been painted, so the walk cannot delay the screen
@@ -309,6 +431,8 @@ final class RunLauncherPane {
      * @param modeHint {@link Label} what the chosen mode does
      * @param inboxHeadline {@link Label} the Inbox card's first line
      * @param inboxDetail {@link Label} the Inbox card's second line
+     * @param importPhotos {@link Button}
+     * @param importHint {@link Label} the line naming the drop as the other way in
      * @param yearRows {@link VBox} the Sorted card's rows
      * @param nothingStaged {@link Label} what the Sorted card says with no rows to show
      * @param scopeLabel {@link Label} the label above the scope field
@@ -327,7 +451,8 @@ final class RunLauncherPane {
      * @param folding a {@link Map} of {@link VBox} to {@link Timeline} the folds still running
      */
     private record Controls(HBox modeRow, Label modeHint, Label inboxHeadline, Label inboxDetail,
-                            VBox yearRows, Label nothingStaged, Label scopeLabel, TextField scopeField,
+                            Button importPhotos, Label importHint, VBox yearRows, Label nothingStaged,
+                            Label scopeLabel, TextField scopeField,
                             Button start, Label hint, Label refusal, Label figure, Label disclaimer,
                             Label withoutHistory, Label freeHeadline, Label freeDetail, Label message,
                             ScrollPane scroll, Set<VBox> unfolded, Map<VBox, Timeline> folding) {
@@ -415,6 +540,9 @@ final class RunLauncherPane {
             this.modeHint.setText(view.modeHint());
             this.inboxHeadline.setText(view.inbox().headline());
             this.inboxDetail.setText(SettingsRows.orNothing(view.inbox().detail()));
+            this.importPhotos.setText(view.inbox().importLabel());
+            this.importHint.setText(view.inbox().importHint());
+            this.importPhotos.setDisable(!view.inbox().canImport());
             this.selectYear(view.years(), view.scopeNamesTheRun());
             this.scopeField.setDisable(!view.scopeNamesTheRun());
             this.nothingStaged.setText(SettingsRows.orNothing(view.nothingStaged()));

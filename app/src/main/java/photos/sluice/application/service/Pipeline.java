@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
+import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
@@ -25,6 +26,8 @@ import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.imports.ImportKind;
+import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -55,10 +58,10 @@ import java.util.List;
 @Component
 public class Pipeline {
 
-    private static final String SORTING = "Sorting...";
     private static final String COMMITTING = "Moving to library...";
     private static final String RESCUING = "Rescuing...";
     private static final String DISCARDING = "Discarding...";
+    private static final String IMPORTING = "Importing...";
 
     // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
     // unlike mode, this cadence isn't a documented user-facing knob, just an internal
@@ -70,6 +73,7 @@ public class Pipeline {
     private final SortEngine sortEngine;
     private final CommitEngine commitEngine;
     private final RescueEngine rescueEngine;
+    private final ImportEngine importEngine;
     private final JobRunner jobRunner;
     private final PhaseRunner phaseRunner;
     private final CullEngine cullEngine;
@@ -90,6 +94,7 @@ public class Pipeline {
      * @param sortEngine {@link SortEngine} the sort engine
      * @param commitEngine {@link CommitEngine} the commit engine
      * @param rescueEngine {@link RescueEngine} the rescue engine
+     * @param importEngine {@link ImportEngine} brings chosen folders and files into the Inbox
      * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
      * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
      * @param applyEngine {@link ApplyEngine} applies merged cull decisions
@@ -110,8 +115,8 @@ public class Pipeline {
      */
     @Autowired
     public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
-                    final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
-                    final ApplyEngine applyEngine,
+                    final ImportEngine importEngine, final MontageRenderer montageRenderer,
+                    final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
                     final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort,
                     final CullSettings cullSettings,
                     final MediaStore mediaStore, final PathsPort pathsPort,
@@ -120,7 +125,8 @@ public class Pipeline {
                     final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
                     final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
                     final PathValidationUseCase pathValidation, final SpendLedgerPort spendLedger) {
-        this(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine, prepDirRemedies,
+        this(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, cullDispatcher, applyEngine,
+                prepDirRemedies,
                 cullPrepPort, cullSettings, mediaStore, pathsPort, jobRunner, progressPort,
                 disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader, pathValidation,
                 spendLedger, DEFAULT_WATCH_POLL_INTERVAL);
@@ -135,6 +141,7 @@ public class Pipeline {
      * @param sortEngine {@link SortEngine} the sort engine
      * @param commitEngine {@link CommitEngine} the commit engine
      * @param rescueEngine {@link RescueEngine} the rescue engine
+     * @param importEngine {@link ImportEngine} brings chosen folders and files into the Inbox
      * @param montageRenderer {@link MontageRenderer} renders cull contact-sheet montages
      * @param cullDispatcher {@link CullDispatcher} dispatches cull decisions to the vision agent
      * @param applyEngine {@link ApplyEngine} applies merged cull decisions
@@ -155,7 +162,8 @@ public class Pipeline {
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
-             final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
+             final ImportEngine importEngine, final MontageRenderer montageRenderer,
+             final CullDispatcher cullDispatcher, final ApplyEngine applyEngine,
              final PrepDirRemedies prepDirRemedies, final CullPrepPort cullPrepPort, final CullSettings cullSettings,
              final MediaStore mediaStore, final PathsPort pathsPort,
              final JobRunner jobRunner,
@@ -167,6 +175,7 @@ public class Pipeline {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
         this.rescueEngine = rescueEngine;
+        this.importEngine = importEngine;
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.rootsGuard = new RootsGuard(pathValidation);
@@ -227,6 +236,25 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(handle -> this.runPhase(COMMITTING,
                 progress -> this.commitEngine.commit(scope, progress, handle::isCancellationRequested)));
+    }
+
+    /**
+     * Runs an import as a cancellable background job.
+     *
+     * <p>The sources are checked before the job is submitted, so a refusal reaches the caller
+     * before a screen changes.
+     *
+     * @param sources a {@link List} of {@link Path} the folders and files to bring in
+     * @param kind {@link ImportKind} whether the originals stay where they are
+     * @return a {@link JobHandle} of {@link ImportSummary} a handle to the running job
+     * @throws ImportSourceException where a source is gone, or lies inside the Inbox or holds it
+     */
+    public JobHandle<ImportSummary> importFrom(final List<Path> sources, final ImportKind kind) {
+        this.requireUsableRoots();
+        this.importEngine.requireImportable(sources);
+        return this.jobRunner.submit(handle -> this.runPhase(IMPORTING,
+                progress -> this.importEngine.importFrom(sources, kind, progress,
+                        handle::isCancellationRequested)));
     }
 
     /**

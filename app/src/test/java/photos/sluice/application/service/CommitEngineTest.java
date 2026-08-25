@@ -233,6 +233,12 @@ class CommitEngineTest {
     // the delegate's result so which file counts as "first" doesn't depend on filesystem walk order.
     private static final class FailingAfterMoves implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
+
+        @Override
+        public Walk listFilesTolerating(final Path root) {
+            return this.delegate.listFilesTolerating(root);
+        }
+
         private int movesUntilFailure;
 
         FailingAfterMoves(final int movesUntilFailure) {
@@ -281,6 +287,11 @@ class CommitEngineTest {
         @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public Path copyTo(final Path source, final Path destination) {
+            return this.delegate.copyTo(source, destination);
         }
 
         @Override

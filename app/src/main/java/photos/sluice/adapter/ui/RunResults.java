@@ -12,6 +12,7 @@ import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
 
@@ -58,11 +59,14 @@ final class RunResults {
 
     private static final String CANCELLED = "You can continue at any time.";
 
-    // The other cancelled ending, and it gets its own words because the offer above is not on this
-    // card. Stopping during the reading leaves no sheets, so there is nothing to pick up. A reader
-    // told they can continue would go looking for a button that is not there.
-    private static final String CANCELLED_BEFORE_ANY_SHEET =
-            "No sheets had been built yet, so there is nothing to pick up.";
+    // True because an import keeps no record. The folder it came from is the record, so running it
+    // again is the resume.
+    private static final String IMPORT_STOPPED = "Not all files were imported. Run the import "
+            + "again to pick up the rest.";
+
+    // Its own words because the Continue offer above is not on this card. A reader told they can
+    // continue would go looking for a button that is not there.
+    private static final String CANCELLED_BEFORE_ANY_SHEET = "No sheets were built yet.";
 
     private RunResults() {
     }
@@ -81,6 +85,7 @@ final class RunResults {
             case final CullJobOutcome sift -> siftResult(ran, sift, List.of());
             case final CurateOutcome curated -> curateResult(ran, curated);
             case final RescueSummary rescued -> rescueResult(ran, rescued);
+            case final ImportSummary brought -> importResult(ran, brought);
             // A mode whose engine answers with something nothing here reads yet. The heading is
             // still true and the card still has its Done. That is what stops an unknown result
             // stranding the screen on a page with no way off it.
@@ -196,6 +201,54 @@ final class RunResults {
         addWhenAny(rows, "result-rescue-skipped", "Left behind", rescued.skipped().size());
         return new RunResultView(finishedHeading(ran), Tone.FINISHED, null, rows, null, null, null,
                 DONE);
+    }
+
+    /**
+     * What the card says about a finished import.
+     *
+     * @param ran {@link RunMode} the mode the job was started in
+     * @param brought {@link ImportSummary} what the import did
+     * @return {@link RunResultView} the card
+     */
+    private static RunResultView importResult(final RunMode ran, final ImportSummary brought) {
+        final List<Count> rows = new ArrayList<>();
+        // Drawn at zero as well, since an import that brought nothing in has to say so rather than
+        // showing an empty card.
+        rows.add(new Count("result-imported", "Imported", RunWords.grouped(brought.broughtIn())));
+        addWhenAny(rows, "result-import-already", "Skipped: already in your Inbox",
+                brought.alreadyThere());
+        addWhenAny(rows, "result-import-unreadable", "Could not be read", brought.couldNotBeRead());
+        addWhenAny(rows, "result-import-unverified", "Arrived broken", brought.unverified());
+        // A card formatted by Windows keeps a folder of its own that no ordinary user may read, so
+        // almost every card import reads one holding no photos.
+        addWhenAny(rows, "result-import-unopenable", "Folders could not be opened",
+                brought.unreadablePlaces());
+        return new RunResultView(
+                brought.cancelled() ? ran.verb() + " stopped." : importHeading(ran, brought),
+                brought.cancelled() ? Tone.UNFINISHED : Tone.FINISHED,
+                brought.cancelled() ? IMPORT_STOPPED : null,
+                rows, null, null, null, DONE);
+    }
+
+    /**
+     * How an import that ran to the end is headed.
+     *
+     * <p>A plain "finished" is the first thing read, so a run that left photos behind says so
+     * there rather than only in a row further down. A pulled card is the way this happens.
+     *
+     * <p>Folders it could not open are not counted in. Every Windows-formatted card carries one no
+     * ordinary user may read, so counting them would head almost every card import as gone wrong.
+     *
+     * @param ran {@link RunMode} the mode the job was started in
+     * @param brought {@link ImportSummary} what the import did
+     * @return {@link String} the heading
+     */
+    private static String importHeading(final RunMode ran, final ImportSummary brought) {
+        final int leftBehind = brought.couldNotBeRead() + brought.unverified();
+        if (leftBehind == 0) {
+            return finishedHeading(ran);
+        }
+        return ran.verb() + " finished, with " + RunWords.grouped(leftBehind) + " left behind.";
     }
 
     /**

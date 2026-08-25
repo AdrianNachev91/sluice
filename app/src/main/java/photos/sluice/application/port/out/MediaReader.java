@@ -27,6 +27,37 @@ public interface MediaReader {
     List<Path> listFiles(Path root);
 
     /**
+     * The same walk, carrying on past a directory it is refused, and answering with both halves.
+     *
+     * <p>For a tree the app does not own, where a refusal is ordinary: a Windows-formatted card
+     * carries a System Volume Information directory nobody may read.
+     *
+     * @param root {@link Path}
+     * @return {@link Walk} the files reached and the places refused
+     */
+    Walk listFilesTolerating(Path root);
+
+    /**
+     * What a tolerant walk found.
+     *
+     * @param files a {@link List} of {@link Path} every regular file it reached, as absolute paths
+     * @param unreadablePlaces a {@link List} of {@link Path}, deepest first
+     */
+    record Walk(List<Path> files, List<Path> unreadablePlaces) {
+
+        /**
+         * Defensively copies the mutable collection components.
+         *
+         * @param files a {@link List} of {@link Path}
+         * @param unreadablePlaces a {@link List} of {@link Path}
+         */
+        public Walk {
+            files = List.copyOf(files);
+            unreadablePlaces = List.copyOf(unreadablePlaces);
+        }
+    }
+
+    /**
      * Every immediate subdirectory of root, non-recursive, as absolute paths. Order is unspecified.
      * A file sitting directly in root, rather than in one of its subdirectories, is not named here.
      * Only directories are. root itself must exist. A caller checking {@link #exists} first is what

@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Objects.requireNonNull;
@@ -41,6 +42,8 @@ class RunSetupPresenterTest {
     private static final long SLOWER_THAN_THE_WAIT = 400;
 
     private final Pipeline pipeline = mock(Pipeline.class);
+
+    private final AtomicBoolean jobIsRunning = new AtomicBoolean();
 
     private volatile Runnable redraw = () -> { };
 
@@ -548,7 +551,7 @@ class RunSetupPresenterTest {
     @Test
     void everyModeSaysWhatItDoesRatherThanOnlyNamingItself() {
         final List<String> said = new ArrayList<>();
-        for (final RunMode mode : RunMode.values()) {
+        for (final RunMode mode : this.modesInTheRow()) {
             this.presenter.setMode(mode);
             said.add(this.presenter.view().modeHint());
         }
@@ -563,9 +566,58 @@ class RunSetupPresenterTest {
     }
 
     @Test
+    void theRowOffersEveryModeButImport() {
+        assertThat(this.modesInTheRow()).containsExactly(RunMode.SORT, RunMode.SIFT,
+                RunMode.MOVE_TO_LIBRARY, RunMode.CURATE, RunMode.RESCUE);
+    }
+
+    @Test
+    void theInboxCardOffersToBringPhotosIn() {
+        assertThat(this.presenter.view().inbox().importLabel()).isEqualTo("Import a folder...");
+        assertThat(this.presenter.view().inbox().importHint())
+                .isEqualTo("Or drop folders and files anywhere on this screen.");
+        assertThat(this.presenter.view().inbox().canImport()).isTrue();
+    }
+
+    @Test
+    void nothingCanBeBroughtInWhileAJobIsRunning() {
+        this.jobIsRunning.set(true);
+
+        assertThat(this.presenter.view().inbox().canImport()).isFalse();
+    }
+
+    @Test
+    void anInboxThatCouldNotBeReadStillOffersToBringPhotosIn() {
+        this.anUnreadableInbox();
+
+        assertThat(this.presenter.view().inbox().canImport()).isTrue();
+    }
+
+    @Test
+    void oneChosenFolderIsNamedInTheQuestionAskedAboutIt() {
+        assertThat(this.presenter.importQuestion(List.of(Path.of("cards", "DCIM"))).heading())
+                .isEqualTo("Import DCIM?");
+    }
+
+    @Test
+    void severalChosenAtOnceAreNotNamedOneByOne() {
+        assertThat(this.presenter.importQuestion(
+                List.of(Path.of("DCIM"), Path.of("phone"))).heading())
+                .isEqualTo("Import these?");
+    }
+
+    @Test
+    void theQuestionAsksWhichOfTheTwoWaysIn() {
+        final RunSetupPresenter.ImportQuestion asked =
+                this.presenter.importQuestion(List.of(Path.of("DCIM")));
+
+        assertThat(asked.question()).isEqualTo("Would you like to copy or move your files?");
+    }
+
+    @Test
     void theButtonNamesWhicheverModeItWouldRun() {
         final List<String> labels = new ArrayList<>();
-        for (final RunMode mode : RunMode.values()) {
+        for (final RunMode mode : this.modesInTheRow()) {
             this.presenter.setMode(mode);
             labels.add(this.presenter.view().startLabel());
         }
@@ -858,7 +910,7 @@ class RunSetupPresenterTest {
     }
 
     private RunSetupPresenter launcher() {
-        return new RunSetupPresenter(this.pipeline, () -> false, () -> this.redraw.run());
+        return new RunSetupPresenter(this.pipeline, this.jobIsRunning::get, () -> this.redraw.run());
     }
 
     private RunLauncherView.Cost.Estimate estimatedCost() {
@@ -901,5 +953,10 @@ class RunSetupPresenterTest {
     private RunLauncherView viewOf(final RunMode mode) {
         this.presenter.setMode(mode);
         return this.presenter.view();
+    }
+
+    // RunMode.values() would sweep in one the row draws no button for.
+    private List<RunMode> modesInTheRow() {
+        return this.presenter.view().modes().stream().map(RunLauncherView.ModeChoice::mode).toList();
     }
 }

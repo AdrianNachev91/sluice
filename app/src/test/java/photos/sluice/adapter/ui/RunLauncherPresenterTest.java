@@ -12,6 +12,7 @@ import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.job.WaitingCullJob;
+import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
@@ -26,6 +27,8 @@ import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.imports.ImportKind;
+import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.paths.PathRole;
@@ -60,6 +63,8 @@ class RunLauncherPresenterTest {
     private static final SpendEstimate NOTHING = new SpendEstimate(0, 0, true, false);
 
     private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
+
+    private static final List<Path> CARD = List.of(Path.of("DCIM"));
 
     private static final long SLOWER_THAN_THE_WAIT = 400;
 
@@ -196,6 +201,100 @@ class RunLauncherPresenterTest {
         assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FINISHED);
         this.presenter.dismissResult();
         assertThat(this.setup.view().canStart()).isTrue();
+    }
+
+    @Test
+    void whichAnswerTheQuestionTookDecidesWhetherTheOriginalsAreRemoved() {
+        this.importEndsWith(new ImportSummary(2, 2, 0, 0, 0, 0, false));
+
+        this.presenter.startImportCopying(CARD);
+
+        verify(this.pipeline).importFrom(CARD, ImportKind.COPY);
+
+        this.presenter.dismissResult();
+        this.presenter.startImportMoving(CARD);
+
+        verify(this.pipeline).importFrom(CARD, ImportKind.MOVE);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void aRunningImportNamesTheFoldersItWasGiven() {
+        final JobHandle<Object> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(new CompletableFuture<>());
+        when(this.pipeline.importFrom(any(), any())).thenReturn(retyped(handle));
+
+        this.presenter.startImportCopying(List.of(Path.of("cards", "DCIM"), Path.of("phone")));
+
+        assertThat(((RunStage.Running) this.presenter.stage()).progress().scope())
+                .isEqualTo("DCIM and phone");
+    }
+
+    @Test
+    void aFinishedImportCountsWhatArrivedAndWhatWasAlreadyThere() {
+        this.importEndsWith(new ImportSummary(1204, 1180, 24, 0, 0, 0, false));
+
+        this.presenter.startImportCopying(CARD);
+
+        assertThat(this.finishedView().heading()).isEqualTo("Importing finished.");
+        assertThat(this.finishedView().counts())
+                .extracting(RunResultView.Count::label, RunResultView.Count::value)
+                .containsExactly(tuple("Imported", "1,180"),
+                        tuple("Skipped: already in your Inbox", "24"));
+    }
+
+    @Test
+    void aStoppedImportIsUnfinishedRatherThanFailedAndSaysHowToPickItUp() {
+        this.importEndsWith(new ImportSummary(1204, 312, 0, 0, 0, 0, true));
+
+        this.presenter.startImportCopying(CARD);
+
+        assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.UNFINISHED);
+        assertThat(this.finishedView().heading()).isEqualTo("Importing stopped.");
+        assertThat(this.finishedView().detail()).contains("Run the import again");
+    }
+
+// Every import refusal is something the person choosing did. Left to the fallback arm they reach
+    // the reader as a class name and an invitation to file a bug against Sluice.
+    @Test
+    void aRefusedImportIsReportedInTheWordsTheRefusalItselfUsed() {
+        doThrow(new ImportSourceException(
+                "Sluice cannot import from D:\\Photos, because your Inbox is inside it."))
+                .when(this.pipeline).importFrom(any(), any());
+
+        this.presenter.startImportCopying(List.of(Path.of("D:\\Photos")));
+
+        assertThat(this.reported().text())
+                .isEqualTo("Sluice cannot import from D:\\Photos, because your Inbox is inside it.");
+        assertThat(this.reported().refused()).isTrue();
+    }
+
+    // An import kind left set would have a later sort's cancellation tell the reader their
+    // originals were gone, about photos nothing had touched.
+    @Test
+    void aSortStartedAfterAMoveImportClaimsNothingAboutAnyOriginals() {
+        this.importEndsWith(new ImportSummary(1, 1, 0, 0, 0, 0, false));
+        this.presenter.startImportMoving(CARD);
+        this.presenter.dismissResult();
+
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+        this.presenter.cancel();
+
+        assertThat(((RunStage.Running) this.presenter.stage()).progress().cancelling())
+                .isEqualTo("What was sorted stays where it is.");
+    }
+
+    @Test
+    void nothingIsBroughtInWhileAnotherJobHasTheSlot() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+
+        this.presenter.startImportCopying(CARD);
+
+        verify(this.pipeline, never()).importFrom(any(), any());
     }
 
     @SuppressWarnings("unchecked")
@@ -715,6 +814,12 @@ class RunLauncherPresenterTest {
         this.choose(mode, scope);
         this.pipelineStarts();
         this.presenter.start();
+    }
+
+    private void importEndsWith(final ImportSummary brought) {
+        final JobHandle<Object> handle = finished();
+        when(handle.onComplete()).thenReturn(CompletableFuture.completedFuture(brought));
+        when(this.pipeline.importFrom(any(), any())).thenReturn(retyped(handle));
     }
 
     // Each handle is built before the call that returns it is stubbed. Building one inside the

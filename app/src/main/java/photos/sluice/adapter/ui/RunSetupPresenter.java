@@ -16,6 +16,7 @@ import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -68,8 +69,21 @@ public class RunSetupPresenter {
 
     private static final String INBOX_COUNTING = "Counting what is waiting...";
     private static final String INBOX_EMPTY = "Nothing to sort.";
+    // The page rather than the window: the sidebar, the progress area and the result card take no
+    // drop.
     private static final String INBOX_EMPTY_DETAIL =
-            "Put photos in your Inbox folder and they will show up here.";
+            "Bring some in below, or drop folders anywhere on this page.";
+
+    // A folder, because the picker behind it is a DirectoryChooser and takes one.
+    private static final String IMPORT_LABEL = "Import a folder...";
+    // The drop target only shows itself once something is already held over it. Without this line
+    // the route is found by accident or not at all, and it is the only way loose files get in.
+    private static final String IMPORT_HINT = "Or drop folders and files anywhere on this screen.";
+
+    private static final String IMPORT_QUESTION = "Would you like to copy or move your files?";
+    private static final String IMPORT_COPY = "Copy";
+    private static final String IMPORT_MOVE = "Move";
+    private static final String IMPORT_CANCEL = "Cancel";
     // One card reports a failed read for both, so it names neither. Any of the three folder
     // settings can be what broke, and this card cannot tell which.
     private static final String INBOX_UNREADABLE = "Sluice could not read your folders. Check them "
@@ -329,6 +343,22 @@ public class RunSetupPresenter {
     }
 
     /**
+     * The question to put before bringing photos in.
+     *
+     * <p>Several sources go unnamed, because the only way to choose several is to drop them, and
+     * somebody who has just dropped them knows what they were.
+     *
+     * @param sources a {@link List} of {@link Path}
+     * @return {@link ImportQuestion}
+     */
+    public ImportQuestion importQuestion(final List<Path> sources) {
+        final String heading = sources.size() == 1
+                ? "Import " + RunWords.named(sources.getFirst()) + "?"
+                : "Import these?";
+        return new ImportQuestion(heading, IMPORT_QUESTION, IMPORT_COPY, IMPORT_MOVE, IMPORT_CANCEL);
+    }
+
+    /**
      * The mode a press would start.
      *
      * @return {@link RunMode} the mode now chosen
@@ -431,18 +461,21 @@ public class RunSetupPresenter {
      * @return {@link InboxCard} the card's lines and whether it is still counting
      */
     private InboxCard inboxCard() {
+        // Live even on the unreadable card, since a card that could not be counted is still where
+        // somebody may want to put photos.
+        final boolean canImport = !this.jobRunning.getAsBoolean();
         final InboxTally waiting = this.inbox;
         if (this.counting && waiting == null && !this.countsUnreadable) {
-            return new InboxCard(INBOX_COUNTING, null);
+            return new InboxCard(INBOX_COUNTING, null, IMPORT_LABEL, IMPORT_HINT, canImport);
         }
         if (this.countsUnreadable || waiting == null) {
-            return new InboxCard(INBOX_UNREADABLE, null);
+            return new InboxCard(INBOX_UNREADABLE, null, IMPORT_LABEL, IMPORT_HINT, canImport);
         }
         if (waiting.files() == 0) {
-            return new InboxCard(INBOX_EMPTY, INBOX_EMPTY_DETAIL);
+            return new InboxCard(INBOX_EMPTY, INBOX_EMPTY_DETAIL, IMPORT_LABEL, IMPORT_HINT, canImport);
         }
         return new InboxCard(RunWords.counted(waiting.files(), "photo or video", "photos and videos"),
-                RunWords.sized(waiting.bytes()));
+                RunWords.sized(waiting.bytes()), IMPORT_LABEL, IMPORT_HINT, canImport);
     }
 
     /**
@@ -686,7 +719,10 @@ public class RunSetupPresenter {
             // every year is equally ready and none of them is the one next in line. So a blank
             // field is where a sift starts rather than something gone wrong, and the hint under it
             // already says to pick a year.
-            case SIFT, RESCUE -> new RunScope.Nothing();
+            //
+            // Import is here because the field is never about it: it has no button in the row, and
+            // what it covers is the folders that were picked.
+            case SIFT, RESCUE, IMPORT -> new RunScope.Nothing();
         };
     }
 
@@ -877,5 +913,18 @@ public class RunSetupPresenter {
      * @param cancel {@link String} what the button that backs out says
      */
     public record Confirmation(String heading, String question, String goAhead, String cancel) {
+    }
+
+    /**
+     * The question asked before photos are brought in, which has two ways of going ahead.
+     *
+     * @param heading {@link String}
+     * @param question {@link String}
+     * @param copy {@link String}
+     * @param move {@link String}
+     * @param cancel {@link String}
+     */
+    public record ImportQuestion(String heading, String question, String copy, String move,
+                                 String cancel) {
     }
 }

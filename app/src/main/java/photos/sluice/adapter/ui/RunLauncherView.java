@@ -86,8 +86,12 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
      *
      * @param headline {@link String} the count and size, or what the card is doing or could not do
      * @param detail a second line, or null where the headline says it all
+     * @param importLabel {@link String}
+     * @param importHint {@link String} the other way in, which nothing on screen would otherwise show
+     * @param canImport boolean whether that button can be pressed right now
      */
-    public record InboxCard(String headline, @Nullable String detail) {
+    public record InboxCard(String headline, @Nullable String detail, String importLabel,
+                            String importHint, boolean canImport) {
     }
 
     /**

@@ -294,6 +294,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Walk listFilesTolerating(final Path root) {
+            return this.delegate.listFilesTolerating(root);
+        }
+
+        @Override
         public List<Path> listChildDirectories(final Path root) {
             return this.delegate.listChildDirectories(root);
         }
@@ -336,6 +341,11 @@ final class PipelineTestSupport {
         @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public Path copyTo(final Path source, final Path destination) {
+            return this.delegate.copyTo(source, destination);
         }
 
         @Override
@@ -443,13 +453,16 @@ final class PipelineTestSupport {
                 disasterDrawer, moveLedger);
         final var prepDirDoctor = new PrepDirDoctor(cullPrepPort, mediaStore, applyPlanner, moveLedger);
         final var troubleshooter = new Troubleshooter(prepDirDoctor, reconcileEngine, prepDirRemedies, disasterDrawer);
+        final var importEngine = new ImportEngine(mediaStore, pathsConfig, sha256Port);
         if (pollInterval == null) {
-            return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
+            return new Pipeline(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer,
+                    cullDispatcher, applyEngine,
                     prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig,
                     new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner,
                     moveLedger, pathValidation, spendLedger);
         }
-        return new Pipeline(sortEngine, commitEngine, rescueEngine, montageRenderer, cullDispatcher, applyEngine,
+        return new Pipeline(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, cullDispatcher,
+                applyEngine,
                 prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, new JobRunner(),
                 progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pathValidation,
                 spendLedger, pollInterval);
@@ -626,6 +639,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Walk listFilesTolerating(final Path root) {
+            return this.delegate.listFilesTolerating(root);
+        }
+
+        @Override
         public List<Path> listChildDirectories(final Path root) {
             return this.delegate.listChildDirectories(root);
         }
@@ -658,6 +676,11 @@ final class PipelineTestSupport {
         @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public Path copyTo(final Path source, final Path destination) {
+            return this.delegate.copyTo(source, destination);
         }
 
         @Override
@@ -725,6 +748,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Walk listFilesTolerating(final Path root) {
+            return this.delegate.listFilesTolerating(root);
+        }
+
+        @Override
         public List<Path> listChildDirectories(final Path root) {
             return this.delegate.listChildDirectories(root);
         }
@@ -764,6 +792,11 @@ final class PipelineTestSupport {
         @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public Path copyTo(final Path source, final Path destination) {
+            return this.delegate.copyTo(source, destination);
         }
 
         @Override
@@ -818,6 +851,12 @@ final class PipelineTestSupport {
     // technique BlockingMoves above gives the sort/routing loop.
     static final class BlockingListFiles implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
+
+        @Override
+        public Walk listFilesTolerating(final Path root) {
+            return this.delegate.listFilesTolerating(root);
+        }
+
         private final CountDownLatch listStarted;
         private final CountDownLatch releaseList;
 
@@ -871,6 +910,11 @@ final class PipelineTestSupport {
         @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public Path copyTo(final Path source, final Path destination) {
+            return this.delegate.copyTo(source, destination);
         }
 
         @Override
@@ -939,6 +983,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public Walk listFilesTolerating(final Path root) {
+            return this.delegate.listFilesTolerating(root);
+        }
+
+        @Override
         public List<Path> listChildDirectories(final Path root) {
             return this.delegate.listChildDirectories(root);
         }
@@ -978,6 +1027,11 @@ final class PipelineTestSupport {
         @Override
         public Path copy(final Path source, final Path destDir) {
             return this.delegate.copy(source, destDir);
+        }
+
+        @Override
+        public Path copyTo(final Path source, final Path destination) {
+            return this.delegate.copyTo(source, destination);
         }
 
         @Override

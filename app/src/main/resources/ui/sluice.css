@@ -1141,8 +1141,19 @@
 }
 
 /* The dashboard's working state. The mode row and the action block sit outside the pane that
-   scrolls, so a long list of staged years never carries the start button off the screen. */
+   scrolls, so a long list of staged years never carries the start button off the screen.
+
+   The drop-target border lives here, drawn in nothing until something is dragged over it. A
+   region's border width counts toward the insets its children are laid out inside, so a border
+   that arrived with the drag would move the whole page in and shrink every card. The padding
+   keeps it off the card edges. */
 .run-launcher {
+    -fx-border-color: transparent;
+    -fx-border-radius: 8px;
+    /*noinspection CssInvalidFunction*/
+    -fx-border-style: segments(6, 5) line-cap round;
+    -fx-border-width: 2px;
+    -fx-padding: 4px;
     -fx-spacing: 14px;
 }
 
@@ -1373,6 +1384,20 @@
    column because it is the one thing on the page that acts. */
 .run-start-row {
     -fx-padding: 6px 0 0 0;
+}
+
+/* The Inbox card's own action, set off from the two lines above it. Left where those lines start,
+   rather than right where Start sits, since it acts on one card and Start acts on the page. */
+.run-import-row {
+    -fx-padding: 4px 0 0 0;
+}
+
+/* While files are held over the dashboard. A dashed edge rather than a filled ground, because at
+   this size a ground would repaint the whole page under the reader's cursor. The colour is all this
+   changes. Everything the border is shaped by sits on the launcher's own rule, where it holds the
+   page still. */
+.run-launcher-taking-a-drop {
+    -fx-border-color: -sluice-accent;
 }
 
 /* The border is here rather than only on the disabled rule below, so the button is the same size

@@ -11,6 +11,7 @@ import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.model.SortSummary;
@@ -74,7 +75,7 @@ class RunResultsTest {
                 new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
 
         assertThat(card.resume()).isNull();
-        assertThat(card.detail()).isEqualTo("No sheets had been built yet, so there is nothing to pick up.");
+        assertThat(card.detail()).isEqualTo("No sheets were built yet.");
     }
 
     // Its sheets are built and some are judged, so the door back in stays open. What it must not do
@@ -186,6 +187,55 @@ class RunResultsTest {
                 CullReport.nothingSpent("anthropic", 0), archived)).archived()).isNotNull();
         assertThat(RunResults.of(RunMode.SIFT, new CullJobOutcome.Cancelled(
                 CullReport.nothingSpent("anthropic", 0), archived)).archived()).isNotNull();
+    }
+
+    @Test
+    void everyWayAnImportedPhotoEndsUpGetsItsOwnRow() {
+        final RunResultView card = RunResults.of(RunMode.IMPORT,
+                new ImportSummary(1204, 1190, 4, 2, 3, 5, false));
+
+        assertThat(card.counts()).extracting(Count::label, Count::value).containsExactly(
+                tuple("Imported", "1,190"),
+                tuple("Skipped: already in your Inbox", "4"),
+                tuple("Could not be read", "3"),
+                tuple("Arrived broken", "2"),
+                tuple("Folders could not be opened", "5"));
+    }
+
+    // The four counts a row is drawn for only when it is non-zero, against a clean import that has
+    // none of them.
+    @Test
+    void anImportThatWentPerfectlyDrawsOnlyTheRowSayingSo() {
+        final RunResultView card = RunResults.of(RunMode.IMPORT,
+                new ImportSummary(1204, 1204, 0, 0, 0, 0, false));
+
+        assertThat(card.counts()).extracting(Count::label).containsExactly("Imported");
+    }
+
+    @Test
+    void anImportThatLeftPhotosBehindSaysSoInItsHeading() {
+        final RunResultView card = RunResults.of(RunMode.IMPORT,
+                new ImportSummary(1204, 1195, 0, 2, 7, 0, false));
+
+        assertThat(card.heading()).isEqualTo("Importing finished, with 9 left behind.");
+    }
+
+    // A folder it could not open is not a photo left behind. Counting one would head almost every
+    // card import as gone wrong, since a Windows-formatted card always carries one.
+    @Test
+    void aFolderItCouldNotOpenLeavesTheHeadingAlone() {
+        final RunResultView card = RunResults.of(RunMode.IMPORT,
+                new ImportSummary(1204, 1204, 0, 0, 0, 3, false));
+
+        assertThat(card.heading()).isEqualTo("Importing finished.");
+    }
+
+    @Test
+    void aTroubledImportStillCarriesNoWarningStripe() {
+        final RunResultView card = RunResults.of(RunMode.IMPORT,
+                new ImportSummary(1204, 1190, 4, 2, 3, 5, false));
+
+        assertThat(card.warning()).isNull();
     }
 
     private static String labelled(final RunResultView card, final String label) {
