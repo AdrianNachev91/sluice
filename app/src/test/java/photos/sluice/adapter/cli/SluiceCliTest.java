@@ -1,6 +1,7 @@
 package photos.sluice.adapter.cli;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.application.service.Pipeline;
 import picocli.CommandLine;
 
 import java.util.Arrays;
@@ -8,10 +9,12 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class SluiceCliTest {
 
-    private final CommandLine commandLine = SluiceCli.parser(new SluiceCli(), CommandLine.defaultFactory());
+    private final CommandLine commandLine = SluiceCli.parser(new SluiceCli(), CliHarness.supplying(
+            new RunsCommand(mock(Pipeline.class), new CommandReports(new RefusalClassifier(new NoSecrets())))));
 
     @Test
     void argumentsNamingNoCommandAreRefused() {
@@ -67,6 +70,24 @@ class SluiceCliTest {
     }
 
     @Test
+    void theHelpListsTheVerbThatOpensTheWindow() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "--help");
+
+        assertThat(result.out()).contains("app").contains("Open the Sluice desktop application.");
+    }
+
+    @Test
+    void theWindowVerbCarryingAnArgumentIsRefusedRatherThanIgnored() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "app", "--json");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err().lines().filter(line -> !line.isBlank())).containsExactly(
+                "app takes no arguments. Run 'sluice app' on its own to open the desktop application.",
+                "Try 'sluice app --help' for more information.");
+    }
+
+    @Test
     void helpIsAskedForRatherThanStumbledInto() {
         final CliHarness.Result result = CliHarness.run(this.commandLine, "--help");
 
@@ -89,6 +110,54 @@ class SluiceCliTest {
     void noOptionAnywhereOnTheSurfaceIsSpelledWithADot() {
         assertThat(optionNames(this.commandLine)).isNotEmpty().allSatisfy(name ->
                 assertThat(name).doesNotContain("."));
+    }
+
+    @Test
+    void theHelpNamesEveryVerbTheSurfaceCarries() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "--help");
+
+        assertThat(this.commandLine.getSubcommands().keySet())
+                .isNotEmpty()
+                .allSatisfy(verb -> assertThat(result.out()).containsPattern("(?m)^\\s+" + verb + "\\s"));
+    }
+
+    // Asking for a document is asking about a result, and help is not one. A document written here
+    // would be an empty one wrapped around nothing.
+    @Test
+    void askingForHelpPrintsHelpEvenWhenADocumentWasAskedFor() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "--json", "--help");
+
+        assertThat(result.exitCode()).isEqualTo(CommandLine.ExitCode.OK);
+        assertThat(result.out()).contains("Usage: sluice").doesNotContain("\"status\"");
+    }
+
+    @Test
+    void argumentsNamingNoCommandWriteNoDocumentEvenWhenOneWasAskedFor() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "--json");
+
+        assertThat(result.exitCode()).isEqualTo(CommandLine.ExitCode.USAGE);
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err()).contains("No command given.");
+    }
+
+    @Test
+    void theDocumentFlagIsReadFromArgumentsWhereverItSits() {
+        assertThat(SluiceCli.documentAsked(new String[]{"runs", "--json"})).isTrue();
+        assertThat(SluiceCli.documentAsked(new String[]{"--json", "runs"})).isTrue();
+        assertThat(SluiceCli.documentAsked(new String[]{"runs"})).isFalse();
+    }
+
+    @Test
+    void anArgumentAfterTheEndOfOptionsMarkerIsAValueRatherThanTheFlag() {
+        assertThat(SluiceCli.documentAsked(new String[]{"rescue", "--", "--json"})).isFalse();
+    }
+
+    @Test
+    void aSpellingTheArgumentReadingCannotSeeIsRefusedByTheParserToo() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "runs", "--json=true");
+
+        assertThat(result.exitCode()).isEqualTo(CommandLine.ExitCode.USAGE);
+        assertThat(SluiceCli.documentAsked(new String[]{"runs", "--json=true"})).isFalse();
     }
 
     private static List<String> optionNames(final CommandLine commandLine) {

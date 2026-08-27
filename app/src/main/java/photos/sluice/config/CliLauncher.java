@@ -5,6 +5,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import photos.sluice.SluiceApplication;
 import photos.sluice.adapter.cli.SluiceCli;
+import photos.sluice.adapter.cli.StartupFailureReport;
 import picocli.CommandLine.IFactory;
 
 import java.nio.file.Path;
@@ -24,6 +25,8 @@ import java.util.stream.Stream;
  *
  * <p>Nothing gives the working root back on the way out. A one-shot process holds what it claimed
  * for its whole life, and the kernel drops the claim when the process ends.
+ *
+ * <p>A failure that stops the app before any command runs is answered here rather than escaping.
  */
 public final class CliLauncher {
 
@@ -46,28 +49,64 @@ public final class CliLauncher {
     private static final String CLI_PROFILE = "cli";
 
     /**
+     * Names the stream the logging configuration writes to.
+     */
+    private static final String LOG_STREAM_PROPERTY = "sluice.log.stream";
+
+    /**
+     * The stream log output goes to here, leaving the other one for the command's own result.
+     */
+    private static final String ERROR_STREAM = "System.err";
+
+    /**
+     * Silences the framework's own report of a failed start, which this class answers itself.
+     */
+    private static final String STARTUP_FAILURE_LEVEL_PROPERTY = "sluice.log.startupFailure";
+
+    /**
+     * The level that stops that report being written at all.
+     */
+    private static final String SILENT = "OFF";
+
+    /**
      * Prevents instantiation of this static utility class.
      */
     private CliLauncher() {
     }
 
     /**
-     * Runs the command the arguments name.
+     * Runs the command the arguments name, or reports why nothing could run.
+     *
+     * <p>Both properties are set before anything else happens, because the earliest failure here
+     * happens before the framework initialises logging at all. By then the logging configuration
+     * has already read them.
+     *
+     * <p>Both are set for the whole process and never put back. A command runs once and exits, so
+     * there is nothing after it to put them back for. Anything that drives this method more than
+     * once in one process is on its own.
      *
      * @param configFile {@link Path} the user's config file, which need not exist
      * @param args {@link String}[] the command-line arguments
      * @return int the exit code to leave the process with
      */
     public static int run(final Path configFile, final String[] args) {
-        try (final ConfigurableApplicationContext context = new SpringApplicationBuilder(SluiceApplication.class)
-                .profiles(CLI_PROFILE)
-                // Both would otherwise write to the output stream, which carries the command's
-                // result. Log output is kept off that stream by logback-spring.xml, which sends
-                // this profile's to the error stream. Neither of these two is log output, so each
-                // is switched off here instead.
-                .bannerMode(Banner.Mode.OFF)
-                .logStartupInfo(false)
-                .run(springArgs(configFile, args))) {
+        System.setProperty(LOG_STREAM_PROPERTY, ERROR_STREAM);
+        System.setProperty(STARTUP_FAILURE_LEVEL_PROPERTY, SILENT);
+        final ConfigurableApplicationContext context;
+        try {
+            context = new SpringApplicationBuilder(SluiceApplication.class)
+                    .profiles(CLI_PROFILE)
+                    // Both would otherwise write to the output stream, which carries the command's
+                    // result. Neither is log output, so the logging configuration cannot reach
+                    // them.
+                    .bannerMode(Banner.Mode.OFF)
+                    .logStartupInfo(false)
+                    .run(springArgs(configFile, args));
+        } catch (final RuntimeException failedToStart) {
+            return new StartupFailureReport(System.out, System.err, SluiceCli.documentAsked(commandArgs(args)))
+                    .write(new SpringStartupFailureClassifier(configFile).classify(failedToStart));
+        }
+        try (context) {
             return SluiceCli.parser(context.getBean(SluiceCli.class), context.getBean(IFactory.class))
                     .execute(commandArgs(args));
         }
@@ -78,8 +117,7 @@ public final class CliLauncher {
      * the user passed. The user's arguments come last so an explicitly passed property still wins.
      *
      * <p>Everything is passed on, the parser's own flags included. A flag Spring does not
-     * recognise becomes a property nothing reads, which costs nothing. Filtering instead would mean
-     * this class knowing the whole command surface.
+     * recognise becomes a property nothing reads, which costs nothing.
      *
      * @param configFile {@link Path} the user's config file, which need not exist
      * @param args {@link String}[] the command-line arguments
@@ -98,11 +136,9 @@ public final class CliLauncher {
      * run at a different folder without editing anything. The parser would read it as a mistyped
      * flag, so it never reaches the parser.
      *
-     * <p>Telling the two apart is the dot, plus Spring's two dotless switches by name. Every
-     * setting is a dotted name, and a flag on this surface may not contain one.
-     * {@code SluiceCliTest} holds that convention to the registered option names, so a later verb
-     * cannot quietly break it. A mistyped flag is still refused, which is the half a blanket
-     * "ignore what you do not recognise" would have thrown away.
+     * <p>Telling the two apart is the dot, plus Spring's dotless switches by name. Every setting is
+     * a dotted name, and a flag on this surface may not contain one. A mistyped flag is still
+     * refused.
      *
      * <p>Nothing is filtered after {@code --}. What follows it is a value the user is insisting on
      * rather than an option. So a value that happens to look like a dotted flag reaches the command

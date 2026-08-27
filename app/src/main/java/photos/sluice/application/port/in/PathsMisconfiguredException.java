@@ -50,6 +50,28 @@ public final class PathsMisconfiguredException extends IllegalStateException {
     }
 
     /**
+     * What a config file and an environment variable call this root. Kept here rather than on
+     * {@link PathRole}, so how a root is spelled outside the app stays the caller's business rather
+     * than the domain's. Adding a fourth root fails to compile here until it is named.
+     *
+     * <p>Public because a surface reporting a refusal to somebody who has to go and fix it needs
+     * this name. A second mapping elsewhere would be a second thing to keep in step.
+     *
+     * <p>The role and the property are not interchangeable. {@code WORKING_ROOT} is spelled
+     * {@code repo-root} in a config file, and either could be renamed without the other.
+     *
+     * @param role {@link PathRole} the root to name
+     * @return {@link String} the configuration property that sets it
+     */
+    public static String property(final PathRole role) {
+        return switch (role) {
+            case WORKING_ROOT -> "sluice.paths.repo-root";
+            case LIBRARY_ROOT -> "sluice.paths.library-root";
+            case INBOX -> "sluice.paths.inbox";
+        };
+    }
+
+    /**
      * Words the violations for a log.
      *
      * @param violations a {@link List} of {@link PathViolation} the violations to word
@@ -70,26 +92,10 @@ public final class PathsMisconfiguredException extends IllegalStateException {
         return switch (violation) {
             case final NotConfigured v -> property(v.role()) + " is not set.";
             case final NotAPath v -> property(v.role()) + " (" + v.value() + ") is not a usable folder path.";
-            case final NotADirectory v -> property(v.role()) + " (" + v.path() + ") is not an existing folder.";
+            case final NotADirectory v -> property(v.role()) + " (" + v.path() + ") is not a folder.";
             case final Unreadable v -> property(v.role()) + " (" + v.path() + ") is there but could not be read.";
             case final Overlap v -> property(v.first()) + " and " + property(v.second())
                     + " must not contain each other.";
-        };
-    }
-
-    /**
-     * What a config file and an environment variable call this root. Kept here rather than on
-     * {@link PathRole}, so how a root is spelled outside the app stays the caller's business rather
-     * than the domain's. Adding a fourth root fails to compile here until it is named.
-     *
-     * @param role {@link PathRole} the root to name
-     * @return {@link String} the configuration property that sets it
-     */
-    private static String property(final PathRole role) {
-        return switch (role) {
-            case WORKING_ROOT -> "sluice.paths.repo-root";
-            case LIBRARY_ROOT -> "sluice.paths.library-root";
-            case INBOX -> "sluice.paths.inbox";
         };
     }
 }

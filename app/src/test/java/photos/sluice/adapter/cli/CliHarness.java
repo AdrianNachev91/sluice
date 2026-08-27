@@ -25,6 +25,26 @@ final class CliHarness {
     record Result(int exitCode, String out, String err) {
     }
 
+    // Hands the parser one of these where it asks for a type it recognises, and lets it build
+    // anything else itself.
+    //
+    // Verbs are registered by class rather than as instances, which is what a real run does. So the
+    // parser constructs every one of them while it builds the command tree. A test supplying none
+    // cannot build that tree at all, whether or not it means to run a verb.
+    static CommandLine.IFactory supplying(final Object... commands) {
+        return new CommandLine.IFactory() {
+            @Override
+            public <K> K create(final Class<K> type) throws Exception {
+                for (final Object command : commands) {
+                    if (type.isInstance(command)) {
+                        return type.cast(command);
+                    }
+                }
+                return CommandLine.defaultFactory().create(type);
+            }
+        };
+    }
+
     static Result run(final CommandLine commandLine, final String... args) {
         final StringWriter out = new StringWriter();
         final StringWriter err = new StringWriter();
@@ -35,8 +55,6 @@ final class CliHarness {
                 .setOut(outWriter)
                 .setErr(errWriter)
                 .execute(args);
-        // Explicitly, rather than trusting the parser to have done it. A writer left unflushed
-        // reads as a command that printed nothing, which is what half these tests assert.
         outWriter.flush();
         errWriter.flush();
         return new Result(exitCode, out.toString(), err.toString());

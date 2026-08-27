@@ -7,6 +7,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 
 import java.util.Objects;
@@ -16,33 +17,54 @@ import java.util.concurrent.Callable;
  * The command a user types. Every verb hangs off this one as a subcommand, so a single parser
  * covers the whole surface. Its help text generates from the same annotations that parser reads.
  *
- * <p>Reached only when the user passed arguments. Sluice with none opens the desktop window
- * instead, which is why nothing here has to mean "no command given, so show the app".
+ * <p>Reached whenever this process is not opening the window, which includes the empty invocation:
+ * that arrives here as a request for help.
  */
 @Component
 @Profile("cli")
-@Command(name = "sluice", description = "Sluice organises your photos and videos.")
+@Command(name = "sluice", description = "Sluice organises your photos and videos.",
+        subcommands = {AppCommand.class, RunsCommand.class})
 public class SluiceCli implements Callable<Integer> {
 
-    // Both fields are filled in by the parser rather than by construction, which is why neither is
-    // final and neither is read anywhere in this class. The spec is the only route from a command
-    // back to the parse that ran it. The help option exists to be declared: what it does is turn
-    // --help into help, which the parser handles before this class is reached.
+    /**
+     * The flag asking for a machine-readable document.
+     */
+    private static final String DOCUMENT_FLAG = "--json";
+
+    /**
+     * Where the parser stops treating arguments as options.
+     */
+    private static final String END_OF_OPTIONS = "--";
+
+    // Filled in by the parser rather than by construction, which is why it is not final. It is the
+    // only route from a command back to the parse that ran it.
     @Spec
     @SuppressWarnings("unused")
     private @Nullable CommandSpec spec;
 
     // Declared rather than taken from the parser's standard mixin, which pairs --help with a
-    // --version that has no version to print until the packaged build supplies one.
+    // --version that has no version to print until the packaged build supplies one. The parser
+    // turns --help into help before this class is reached, so nothing here ever reads the field.
     @Option(names = {"-h", "--help"}, usageHelp = true, description = "Show this message.")
     @SuppressWarnings("unused")
     private boolean helpRequested;
 
+    // Inherited, so it reads the same before the verb as after it. A caller that has to remember
+    // where a global flag goes gets it wrong from a shell history entry sooner or later.
+    //
+    // The arity is stated rather than left to the parser. Unstated, a flag also answers to
+    // --json=true, which documentAsked(String[]) cannot see: it reads the arguments without a
+    // parser, on the one path where the parser never ran. Stating the arity turns that spelling
+    // into a usage error, so the two readings agree by construction.
+    @Option(names = "--json", scope = ScopeType.INHERIT, arity = "0",
+            description = "Write the result to the output stream as one JSON document.")
+    @SuppressWarnings("unused")
+    private boolean documentAsked;
+
     /**
      * Builds the parser for this surface, configured the one way every verb inherits.
      *
-     * <p>Here rather than at the launcher, so a test drives the same parser a user does. What it
-     * configures is how a refusal reads, which is the part no test would notice going wrong.
+     * <p>Here rather than at the launcher, so a test drives the same parser a user does.
      *
      * @param root {@link SluiceCli} the command every verb hangs off
      * @param factory {@link CommandLine.IFactory} builds each subcommand
@@ -53,11 +75,49 @@ public class SluiceCli implements Callable<Integer> {
     }
 
     /**
+     * Whether the running command was asked for a machine-readable document.
+     *
+     * <p>The flag is inherited, so a verb may be given it and the value still lands on this one
+     * object. A verb reading its own field would find it unset whenever the flag was typed before
+     * the verb.
+     *
+     * @param spec {@link CommandSpec} the running command
+     * @return boolean true when a document was asked for
+     */
+    static boolean documentAsked(final CommandSpec spec) {
+        return ((SluiceCli) spec.root().userObject()).documentAsked;
+    }
+
+    /**
+     * Whether an argument list asks for a machine-readable document, read without a parser.
+     *
+     * <p>For the one failure that happens before there is a parser to ask. A config file the app
+     * cannot start on stops it during preparation, and the caller still has to be answered in the
+     * shape it asked for.
+     *
+     * <p>It stops where the parser stops treating arguments as options. What follows is a value
+     * somebody is insisting on, and a value that happens to read as this flag is not one.
+     *
+     * @param args {@link String}[] the command-line arguments
+     * @return boolean true when a document was asked for
+     */
+    public static boolean documentAsked(final String[] args) {
+        for (final String arg : args) {
+            if (END_OF_OPTIONS.equals(arg)) {
+                return false;
+            }
+            if (DOCUMENT_FLAG.equals(arg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Answers arguments that named no command.
      *
      * <p>A usage error rather than a request for help, so it goes to the error stream and the exit
-     * code says the arguments were not understood. It points at the help rather than reprinting it,
-     * matching what a mistyped argument gets.
+     * code says the arguments were not understood. It points at the help rather than reprinting it.
      *
      * @return {@link Integer} the exit code
      */

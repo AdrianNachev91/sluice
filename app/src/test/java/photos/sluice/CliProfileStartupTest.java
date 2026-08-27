@@ -9,19 +9,21 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import photos.sluice.adapter.cli.ConsoleProgressPort;
+import photos.sluice.adapter.cli.SluiceCli;
 import photos.sluice.adapter.ui.StartupSequence;
 import photos.sluice.adapter.ui.FolderRootsHousekeeping;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
 import photos.sluice.application.service.Pipeline;
+import picocli.CommandLine.IFactory;
 
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// The context a command line builds. Every other context test runs the desktop's profile, which is
-// what let a cli one that could not start at all go unnoticed. The gating rule is that adapter/ui's
-// beans are absent here; the trap is a bean elsewhere that one of them was the only supplier of.
+// The context a command line builds. Every other context test runs the desktop's profile. The
+// gating rule is that adapter/ui's beans are absent here. The trap is a bean elsewhere that one of
+// them was the only supplier of.
 @SpringBootTest
 @ActiveProfiles("cli")
 class CliProfileStartupTest {
@@ -56,6 +58,14 @@ class CliProfileStartupTest {
     @Test
     void progressIsReportedByTheCommandLinesOwnWriter() {
         assertThat(this.context.getBean(ProgressPort.class)).isInstanceOf(ConsoleProgressPort.class);
+    }
+
+    // The parser builds every verb through Spring while it assembles its command tree. So a verb
+    // whose own dependencies cannot be satisfied stops the whole surface, not just itself.
+    @Test
+    void everyVerbTheSurfaceCarriesCanBeBuilt() {
+        assertThat(SluiceCli.parser(this.context.getBean(SluiceCli.class), this.context.getBean(IFactory.class))
+                .getSubcommands()).containsOnlyKeys("app", "runs");
     }
 
     @Test

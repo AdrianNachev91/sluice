@@ -33,7 +33,7 @@ class PathsMisconfiguredExceptionTest {
         final Path missing = Path.of("gone").toAbsolutePath();
 
         assertThat(new PathsMisconfiguredException(List.of(new NotADirectory(PathRole.LIBRARY_ROOT, missing)))
-                .getMessage()).contains("sluice.paths.library-root", missing.toString(), "not an existing folder");
+                .getMessage()).contains("sluice.paths.library-root", missing.toString(), "not a folder");
     }
 
     // The two sentences are compared rather than substring-matched. A negative quoting

@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,8 +61,6 @@ class CliLauncherTest {
         assertThat(args).containsExactly("cull");
     }
 
-    // Spring's own switches carry no dotted name, so the dot alone would send them to the parser,
-    // which refuses them as unknown options.
     @Test
     void springsOwnDotlessSwitchesAreNotParsedAsFlags() {
         final String[] args = CliLauncher.commandArgs(new String[]{"--debug", "sort", "--trace"});
@@ -68,8 +68,6 @@ class CliLauncherTest {
         assertThat(args).containsExactly("sort");
     }
 
-    // Past the end-of-options marker the user is naming values, not options. Filtering there would
-    // delete an argument silently, which is worse than refusing it.
     @Test
     void nothingIsFilteredAfterTheEndOfOptionsMarker() {
         final String[] args = CliLauncher.commandArgs(
@@ -78,7 +76,6 @@ class CliLauncherTest {
         assertThat(args).containsExactly("rescue", "--", "--2019.06", "--debug");
     }
 
-    // The half a blanket "ignore anything unrecognised" would have thrown away.
     @Test
     void aMistypedFlagStillReachesTheParser() {
         final String[] args = CliLauncher.commandArgs(new String[]{"sort", "--month=6-8"});
@@ -93,15 +90,36 @@ class CliLauncherTest {
         assertThat(args).containsExactly("rescue", "Review/2019.06");
     }
 
-    // The whole boot, end to end. The profile activates, the command bean and the factory that
-    // builds it are both there, and the exit code comes back out. The override rides along to prove
-    // the parser never sees it: one that did would refuse the run and the exit code would say so.
-    // What reaches Spring is the separate concern springArgs covers.
+    // The setting override rides along to prove the parser never sees it: one that did would refuse
+    // the run, and the exit code would say so.
     @Test
     void aRunBootsTheCommandLineAndAnswersWithItsExitCode(@TempDir final Path dir) {
         final int exitCode = CliLauncher.run(dir.resolve("config.yml"),
                 new String[]{"--help", "--sluice.paths.inbox=" + dir});
 
         assertThat(exitCode).isEqualTo(CommandLine.ExitCode.OK);
+    }
+
+    // This failure kills the context before a command runs. Nothing narrower than the whole boot
+    // reaches it, so the classifier, the report and this class only meet here.
+    @Test
+    void aConfigFileTheParserGivesUpOnIsRefusedRatherThanCrashingTheProcess(@TempDir final Path dir)
+            throws IOException {
+        final Path config = dir.resolve("config.yml");
+        Files.writeString(config, "sluice:\n  paths:\n    repo-root: \"unclosed");
+
+        final int exitCode = CliLauncher.run(config, new String[]{"runs"});
+
+        assertThat(exitCode).isEqualTo(3);
+    }
+
+    // Reordering the two property writes below the builder would put the whole report back on the
+    // output stream with a green suite.
+    @Test
+    void theLoggingPropertiesAreInForceOnceARunHasStarted(@TempDir final Path dir) {
+        CliLauncher.run(dir.resolve("config.yml"), new String[]{"--help"});
+
+        assertThat(System.getProperty("sluice.log.stream")).isEqualTo("System.err");
+        assertThat(System.getProperty("sluice.log.startupFailure")).isEqualTo("OFF");
     }
 }

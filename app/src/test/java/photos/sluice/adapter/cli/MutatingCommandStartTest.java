@@ -83,9 +83,9 @@ class MutatingCommandStartTest {
         verify(lock).acquire(root);
     }
 
-    // Only the exit code and the empty result are asserted. What reaches the error stream is the
-    // parser's own unhandled-exception report, a stack trace, because nothing between the sequence
-    // and the shell catches this yet. Asserting that text would pin a shape nobody chose.
+    // The stand-in does not report through CommandReports, as a real verb does, so what reaches the
+    // error stream here is the parser's own unhandled-exception report. Asserting that text would
+    // pin a shape nobody chose.
     @Test
     void aBusyWorkingRootStopsTheCommandThoughNothingHasWordedTheRefusal(@TempDir final Path root) {
         final var command = new StandInCommand(this.start(root, new RefusingLock(), usableRoots()));

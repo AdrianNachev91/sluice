@@ -10,10 +10,9 @@ import java.util.Locale;
 /**
  * Reports a running job's progress on the error stream, one line per event.
  *
- * <p>The error stream rather than the output one, because the output stream carries the command's
- * result. A run piped into another program then arrives as the result, while the person watching it
- * still sees what it is doing. Progress joins the framework's own log output there, which
- * {@code logback-spring.xml} moves off the output stream for this profile.
+ * <p>The error stream, because the output stream carries the command's result. Progress joins the
+ * framework's own log output there, which the launcher moves off the output stream before anything
+ * can write to it.
  *
  * <p>Counts are grouped in threes against {@link Locale#ROOT} rather than the machine's locale.
  * Every word this app prints is English, and a number punctuated one way beside sentences written

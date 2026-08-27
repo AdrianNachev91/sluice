@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sends log output to the stream the launcher names, and to the output stream when it names none.
+
+  A command's result goes to the output stream, and a run piped into another program has to arrive
+  as that result alone. Logging shares that stream by default, so Spring's own debug switch puts
+  several kilobytes of framework report in front of the answer, and a failure lands in the middle
+  of it. The desktop has no pipe, so it keeps the default and anyone who knows where to look for
+  its output still finds it there.
+
+  The stream is a system property rather than a profile, because the earliest failure this app has
+  happens before there is a profile to read. A config file the parser gives up on stops Spring
+  during environment preparation, which is ahead of the point where it initialises logging at all.
+  Logback has configured itself from this file by then, so what is set here is already in force.
+-->
+<configuration>
+
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <target>${sluice.log.stream:-System.out}</target>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>${CONSOLE_LOG_THRESHOLD}</level>
+    </filter>
+    <encoder>
+      <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+      <charset>${CONSOLE_LOG_CHARSET}</charset>
+    </encoder>
+  </appender>
+
+  <!--
+    Whether the framework reports a failed start itself. Left on where a window would otherwise have
+    no way of saying anything at all. Turned off where the surface answers the same failure in its
+    own words, since a several-kilobyte trace above that sentence buries it.
+  -->
+  <logger name="org.springframework.boot.SpringApplication" level="${sluice.log.startupFailure:-ERROR}"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+
+</configuration>
