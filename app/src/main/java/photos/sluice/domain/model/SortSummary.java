@@ -14,7 +14,7 @@ import java.util.Set;
  * <p>The {@code yearsSorted} field is every distinct year a file actually landed in under Sorted
  * (Photos or Videos) this run. A {@link SortScope.Year} or {@link SortScope.OldestYear} scope
  * always yields at most one entry, since both narrow to a single year before routing anything.
- * Empty means nothing reached Sorted at all. A curate run reads this field to learn which year an
+ * Empty means nothing reached Sorted at all. This field is how a caller learns which year an
  * auto-resolved {@link SortScope.OldestYear} scope actually picked, since nothing else reports it.
  *
  * <p>{@code warnings} carries conditions worth a human's attention that stopped nothing: today,

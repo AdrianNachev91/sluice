@@ -7,9 +7,8 @@ import java.util.function.Function;
 
 /**
  * Brackets a phase's progress events, {@code phaseStarted} then ticks then {@code phaseFinished},
- * around one engine call. Not a Spring bean. {@link Pipeline}, {@link CullEngine}, and
- * {@link CurateEngine} each own their own instance, built from the same {@link ProgressPort} they
- * already receive.
+ * around one engine call. Not a Spring bean. {@link Pipeline} and {@link CullEngine} each own their
+ * own instance, built from the same {@link ProgressPort} they already receive.
  */
 final class PhaseRunner {
 

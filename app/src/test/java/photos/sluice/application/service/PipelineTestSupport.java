@@ -28,7 +28,12 @@ import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.ProviderCheck;
+import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SecretHolding;
+import photos.sluice.application.port.out.SecretId;
+import photos.sluice.application.port.out.SecretStatus;
+import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.SpendLedgerPort;
@@ -80,6 +85,9 @@ final class PipelineTestSupport {
     // Any id a manual-mode fake and the settings pointing at it can agree on. What CullEngine reads
     // is the type, so no test here needs a real provider's id to reach the manual-mode paths.
     static final String MANUAL_PROVIDER_ID = "a-manual-provider";
+
+    static final SecretId MANUAL_PROVIDER_KEY =
+            new SecretId(MANUAL_PROVIDER_ID, "A_MANUAL_PROVIDER_KEY");
 
     private PipelineTestSupport() {
     }
@@ -176,6 +184,14 @@ final class PipelineTestSupport {
     static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress, final CullSettings cullSettings,
                                  final List<VisionCuller> cullers) {
         return pipeline(root, progress, new NioMediaStore(), cullSettings, cullers);
+    }
+
+    // For the tests of what a run does about a provider's credential. Everything else wires a
+    // provider naming none, so what the machine holds never comes up.
+    static Pipeline credentialPipeline(final Path root, final RecordingProgressPort progress,
+                                       final List<VisionCuller> cullers, final SecretStore secretStore) {
+        return pipeline(root, progress, new NioMediaStore(), defaultCullSettings(), cullers, null,
+                new JsonCullPrepStore(), secretStore);
     }
 
     // curate() tests go through this name, wiring AutoApproveCuller as the configured provider.
@@ -435,6 +451,14 @@ final class PipelineTestSupport {
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
                              final CullSettings cullSettings, final List<VisionCuller> cullers,
                              final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort) {
+        return pipeline(root, progress, mediaStore, cullSettings, cullers, pollInterval, cullPrepPort,
+                new FixedSecretStore(null));
+    }
+
+    static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
+                             final CullSettings cullSettings, final List<VisionCuller> cullers,
+                             final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort,
+                             final SecretStore secretStore) {
         final Path libraryRoot = createDirectory(root.resolve("Library"));
         final Path inbox = createDirectory(root.resolve("Inbox"));
         final var settings = SettingsFixture.holder(root, libraryRoot, inbox);
@@ -474,13 +498,13 @@ final class PipelineTestSupport {
                     cullDispatcher, applyEngine,
                     prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig,
                     new JobRunner(), progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner,
-                    moveLedger, pathValidation, spendLedger);
+                    moveLedger, pathValidation, spendLedger, secretStore);
         }
         return new Pipeline(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, cullDispatcher,
                 applyEngine,
                 prepDirRemedies, cullPrepPort, cullSettings, mediaStore, pathsConfig, new JobRunner(),
                 progress, disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, moveLedger, pathValidation,
-                spendLedger, pollInterval);
+                spendLedger, secretStore, pollInterval);
     }
 
     // The folder roots have to be there for the pipeline's own path check to pass, the same way a
@@ -1127,10 +1151,69 @@ final class PipelineTestSupport {
         return new VisionProviderDescriptor(id, id, Set.of(), Set.of(), null, null, null, null);
     }
 
+    // The tiers of a machine holding the manual provider's credential, or none. The default above
+    // holds none, which asks nothing of any test wired to a describing() provider: those name no
+    // credential, so the engine's guard never reaches this. A test that does name one says here
+    // what the machine holds.
+    record FixedSecretStore(@Nullable String held) implements SecretStore {
+
+        @Override
+        public Optional<String> secret(final SecretId id) {
+            throw new UnsupportedOperationException("deciding whether to start a run reads no "
+                    + "credential value, only which tier answers");
+        }
+
+        // Answers for the manual provider's own credential and nothing else, so a caller asking
+        // about some other id reads as absent rather than as whatever this holds.
+        @Override
+        public SecretStatus status(final SecretId id) {
+            return this.held == null || !MANUAL_PROVIDER_KEY.equals(id)
+                    ? new SecretStatus.Absent() : new SecretStatus.InFile();
+        }
+
+        @Override
+        public List<SecretHolding> holdings(final SecretId id) {
+            return List.of(new SecretHolding(new SecretStatus.InFile(),
+                    this.held == null ? SecretHolding.Holding.EMPTY : SecretHolding.Holding.HOLDS));
+        }
+
+        @Override
+        public Optional<SecretStatus.StoredLocation> whereASaveWouldStoreIt() {
+            return Optional.of(new SecretStatus.InFile());
+        }
+
+        @Override
+        public void save(final SecretId id, final String secret) {
+            throw new UnsupportedOperationException("no pipeline test stores a credential");
+        }
+
+        @Override
+        public void remove(final SecretId id) {
+            throw new UnsupportedOperationException("no pipeline test clears a credential");
+        }
+    }
+
     static final class ManualModeCuller implements VisionCuller {
+
+        private final @Nullable SecretId credential;
+
+        ManualModeCuller() {
+            this(null);
+        }
+
+        // A provider that authenticates, for the tests of what a run does before it knows whether
+        // the key is there. Manual mode otherwise, so what a dispatch does stays the same either
+        // way and only the credential varies.
+        ManualModeCuller(final @Nullable SecretId credential) {
+            this.credential = credential;
+        }
+
         @Override
         public VisionProviderDescriptor describe() {
-            return describing(MANUAL_PROVIDER_ID);
+            return this.credential == null ? describing(MANUAL_PROVIDER_ID)
+                    : new VisionProviderDescriptor(MANUAL_PROVIDER_ID, MANUAL_PROVIDER_ID,
+                            Set.of(ProviderSetting.CREDENTIAL), Set.of(),
+                            this.credential, null, null, null);
         }
 
         @Override

@@ -60,16 +60,6 @@ public class RunSetupPresenter {
     // sees one state rather than three. Over it, they are waiting and want to know why.
     private static final long SETTLE_BEFORE_SAYING_SO = 200;
 
-    // Asked wherever the run can spend, because a curate is the one run whose cost cannot be shown
-    // before it starts. A provider that spends nothing leaves nothing to weigh. The box above the
-    // button says so, where a dialog would only be in the way.
-    private static final Confirmation CURATE_CONFIRM = new Confirmation(
-            "Sort and sift the oldest year?",
-            "Sluice sorts the oldest year in your Inbox, then sifts every photo it just sorted. "
-                    + "Sifting is what spends from your provider account balance, and the size of "
-                    + "the sift cannot be estimated until sorting has finished.",
-            "Sort and sift", "Cancel");
-
     // Careful about whose money it is. Sluice calls no model for these providers, so it spends
     // nothing. An agent somebody runs themselves still bills them, and that is not ours to report.
     private static final String FREE_DETAIL = "Sluice only spends from your provider account "
@@ -338,26 +328,18 @@ public class RunSetupPresenter {
     /**
      * The question to put before starting, where this run needs one asked.
      *
-     * <p>Curate does wherever the configured provider can spend. It is the one mode that spends
-     * without showing a figure first. A sort decides which photos land under which year, so nothing
-     * can be sized until it has run. Every other spending run either shows what it will cost or
-     * costs nothing.
+     * <p>The bare move to the library is the one that needs one. Every other mode either names its
+     * own scope or takes the oldest year, and both are small enough to be undone by hand. Moving
+     * everything staged is the one press that reaches the whole library in one go, so it says out
+     * loud what it is about to move.
      *
-     * <p>On a provider that spends nothing the question is not merely redundant, it is false: its
-     * own words say that sifting spends money. What replaces it is a statement rather than a
-     * question, in the cost box above the button, since nothing needs weighing before a press.
-     *
-     * <p>The bare move to the library is the other. Every other mode either names its own scope or
-     * takes the oldest year, and both are small enough to be undone by hand. Moving everything
-     * staged is the one press that reaches the whole library in one go, so it says out loud what it
-     * is about to move.
+     * <p>Sifting is not asked about here, because the launcher has already put what it will cost in
+     * the box above the button. Nothing is weighed twice. {@link #siftNowNeeds} is where a
+     * sift does get a question, on the one screen carrying no such box.
      *
      * @return {@link Confirmation} what to ask, or null where nothing needs asking
      */
     public @Nullable Confirmation confirmationNeeded() {
-        if (this.chosen == RunMode.CURATE) {
-            return this.pipeline.configuredProviderSpends() ? CURATE_CONFIRM : null;
-        }
         // Nothing to ask where the counts are not in. Start stays live so the facade can name the
         // folder at fault, and this question names years and a file count it has neither of.
         if (this.chosen != RunMode.MOVE_TO_LIBRARY || !this.countsAreIn()
@@ -371,6 +353,108 @@ public class RunSetupPresenter {
                         + RunWords.listed(staged.stream().map(row -> String.valueOf(row.year())).toList())
                         + " into your library folder.",
                 "Move to library", "Cancel");
+    }
+
+    /**
+     * What a press to sift a timeline from a finished sort's result card needs before it can start.
+     *
+     * <p>One answer rather than a question and a separate guard, so the whole decision is taken
+     * from one read of the counts.
+     *
+     * <p>A question is always put, whatever the provider costs. The launcher says what a run
+     * covers and what it costs above its own button, and this card has room for neither. So the
+     * dialog is the only place a reader learns either, and skipping it on a free provider would
+     * skip the scope along with the money.
+     *
+     * <p>The question names the whole timeline and splits out what this run put there. A sort that
+     * added two months to a year already holding others yields a sift over every month of it, and
+     * the photos it did not add are the ones a reader would not think they were paying for.
+     *
+     * @param year int the timeline the card offered to sift
+     * @param justSorted int how many photos this run filed into that timeline
+     * @return {@link SiftNow} the question to put first, or the refusal to report instead
+     */
+    public SiftNow siftNowNeeds(final int year, final int justSorted) {
+        final Message blocked = this.cannotSizeARun();
+        if (blocked != null) {
+            return new SiftNow.Refuse(blocked);
+        }
+        final int photos = this.photosIn(new RunScope.OfYear(year, List.of()));
+        // A sort files videos under a year as readily as photos, so a timeline can reach this card
+        // holding nothing a provider could look at. The launcher refuses the same timeline in the
+        // same words.
+        if (photos == 0) {
+            return new SiftNow.Refuse(new Message(nothingToSift(year), true));
+        }
+        return new SiftNow.Ask(new Confirmation("Sift " + year + "?",
+                whatItCovers(year, photos, justSorted) + " " + this.spendClause(photos),
+                "Sift " + year, "Cancel"));
+    }
+
+    /**
+     * What a sift of this timeline would look at, split into what the run just filed and what was
+     * already there.
+     *
+     * <p>The split is the point. A reader pressing this after a sort that filed six photos has no
+     * reason to expect the other two hundred. A single total hides those behind a number that
+     * reads as the run's own.
+     *
+     * <p>Falls back to the total alone where the two cannot be told apart. A stale count can put
+     * the timeline behind what the run reported. A sentence claiming a negative remainder is worse
+     * than one that simply says how many there are.
+     *
+     * @param year int the timeline
+     * @param photos int how many photos it holds in all
+     * @param justSorted int how many of those this run filed
+     * @return {@link String} the sentence
+     */
+    private static String whatItCovers(final int year, final int photos, final int justSorted) {
+        final String looksAt = "This looks at " + RunWords.counted(photos, "photo", "photos")
+                + " sorted for " + year;
+        final int earlier = photos - justSorted;
+        if (earlier <= 0) {
+            return looksAt + ", all of them from this run.";
+        }
+        return looksAt + ": " + RunWords.grouped(justSorted) + " from this run and "
+                + RunWords.grouped(earlier) + " sorted earlier.";
+    }
+
+    /**
+     * What a press to sift from a result card is answered with.
+     */
+    public sealed interface SiftNow {
+
+        /**
+         * Put this question first, and start only where the reader agrees.
+         *
+         * @param question {@link Confirmation} what to ask
+         */
+        record Ask(Confirmation question) implements SiftNow {
+        }
+
+        /**
+         * Start nothing, and report this instead.
+         *
+         * @param reason {@link Message} what to say on the card
+         */
+        record Refuse(Message reason) implements SiftNow {
+        }
+    }
+
+    /**
+     * Why a press that needs the folder counts cannot go ahead, or null where it can.
+     *
+     * <p>Two states, and they are not the same news. A read in flight is over in a moment and the
+     * press is worth making again. A read that failed will keep failing until the folders in
+     * Settings are put right.
+     *
+     * @return {@link Message} what to say instead of starting, or null where nothing is in the way
+     */
+    RunLauncherView.@Nullable Message cannotSizeARun() {
+        if (this.counting) {
+            return new Message(STILL_READING, true);
+        }
+        return this.countsUnreadable ? new Message(INBOX_UNREADABLE, true) : null;
     }
 
     /**
@@ -467,7 +551,6 @@ public class RunSetupPresenter {
                 this.modeChoice(RunMode.SORT, "run-mode-sort"),
                 this.modeChoice(RunMode.SIFT, "run-mode-sift"),
                 this.modeChoice(RunMode.MOVE_TO_LIBRARY, "run-mode-move"),
-                this.modeChoice(RunMode.CURATE, "run-mode-curate"),
                 this.modeChoice(RunMode.RESCUE, "run-mode-rescue"));
     }
 
@@ -653,20 +736,14 @@ public class RunSetupPresenter {
     /**
      * Whether the chosen mode has a vision provider look at anything.
      *
-     * @return boolean true for the two modes that sift
+     * @return boolean true for the one mode that sifts
      */
     private boolean reachesAProvider() {
-        return this.chosen == RunMode.SIFT || this.chosen == RunMode.CURATE;
+        return this.chosen == RunMode.SIFT;
     }
 
     /**
      * The expected cost of sifting the chosen scope, where one can be worked out.
-     *
-     * <p>A curate carries no figure, and the reason is that nothing can compute one. It sorts
-     * first, and which photos that sort files under which year is what the dating pass decides.
-     * Sizing it on the whole Inbox would be the wrong scope, by whatever multiple the sort narrows
-     * by. On a question about money, a wrong number is worse than none. The hint under the field
-     * says as much, and the confirm before a curate says it again.
      *
      * @param scope {@link RunScope} what the field and mode come to
      * @return {@link Cost.Estimate} the figure and what it is worth, or null where none can be given
@@ -757,7 +834,7 @@ public class RunSetupPresenter {
     private RunScope blankScope() {
         return switch (this.chosen) {
             // The oldest year of an empty Inbox is no year at all, so the run would be over nothing.
-            case SORT, CURATE -> this.inboxIsEmpty() ? new RunScope.Nothing() : new RunScope.OldestYear();
+            case SORT -> this.inboxIsEmpty() ? new RunScope.Nothing() : new RunScope.OldestYear();
             // Everything means everything staged, and on an install with nothing staged that is a
             // run over no files behind a confirm naming none of them. The Sorted card says so, in
             // the same words a line here would use and in a tone that does not read as a fault.
@@ -801,7 +878,7 @@ public class RunSetupPresenter {
             // here rather than left to an absent cost line, which a free provider draws too.
             return this.countsAreIn() && this.photosIn(sift) == 0
                     ? new RunScope.Refused(months.isEmpty()
-                            ? "No photos are sorted for " + year + ", so there is nothing to sift."
+                            ? nothingToSift(year)
                             : "No photos are sorted for the chosen months of " + year
                                     + ", so there is nothing to sift.")
                     : sift;
@@ -862,10 +939,10 @@ public class RunSetupPresenter {
     /**
      * Whether the chosen mode takes its work from the Inbox.
      *
-     * @return boolean true for the two modes that read the Inbox
+     * @return boolean true for the one mode that reads the Inbox
      */
     private boolean readsInbox() {
-        return this.chosen == RunMode.SORT || this.chosen == RunMode.CURATE;
+        return this.chosen == RunMode.SORT;
     }
 
     /**
@@ -892,6 +969,49 @@ public class RunSetupPresenter {
      */
     private boolean countsAreIn() {
         return !this.counting && !this.countsUnreadable;
+    }
+
+    /**
+     * What a timeline holding no photo is refused with.
+     *
+     * <p>One sentence, because two surfaces refuse the same timeline. The launcher greys Start on
+     * it, and a result card's Sift reports it. A reader who meets both must not be told two
+     * different things about one folder.
+     *
+     * @param year int the timeline nothing can be sifted out of
+     * @return {@link String} the refusal
+     */
+    private static String nothingToSift(final int year) {
+        return "No photos are sorted for " + year + ", so there is nothing to sift.";
+    }
+
+    /**
+     * What the sift question says about money.
+     *
+     * <p>Split out because the figure can be missing while the spending is certain. A provider
+     * forecasting nothing leaves the estimate empty, and the sentence still has to say that this
+     * press spends.
+     *
+     * <p>The ceiling rides with the figure and not without it. It is the reassurance the launcher's
+     * own disclaimer carries, and this route is the only other way to start a sift, so a reader who
+     * never sees that box hears it here instead. With no figure there is nothing for a reader to
+     * measure "far past" against.
+     *
+     * @param photos int how many photos the sift would cover
+     * @return {@link String} the clause about spending, with a figure where one can be given
+     */
+    private String spendClause(final int photos) {
+        if (!this.pipeline.configuredProviderSpends()) {
+            return "Sifting costs you nothing through Sluice. An agent you run yourself still "
+                    + "costs whatever you pay for it.";
+        }
+        final SpendEstimate expected = this.expectedFor(photos);
+        if (expected.totalTokens() == 0) {
+            return "Sifting spends from your provider account balance.";
+        }
+        return "That is about " + RunWords.rounded(expected.totalTokens())
+                + " tokens, and sifting spends from your provider account balance. Sluice will "
+                + "stop and ask if it goes far past that.";
     }
 
     /**

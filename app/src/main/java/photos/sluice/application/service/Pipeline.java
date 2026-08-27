@@ -17,6 +17,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
+import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
@@ -113,6 +114,7 @@ public class Pipeline {
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
      * @param spendLedger {@link SpendLedgerPort} records what each cull run consumed
+     * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
      */
     @Autowired
     public Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -125,12 +127,13 @@ public class Pipeline {
                     final ProgressPort progressPort, final DisasterDrawer disasterDrawer,
                     final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
                     final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
-                    final PathValidationUseCase pathValidation, final SpendLedgerPort spendLedger) {
+                    final PathValidationUseCase pathValidation, final SpendLedgerPort spendLedger,
+                    final SecretStore secretStore) {
         this(sortEngine, commitEngine, rescueEngine, importEngine, montageRenderer, cullDispatcher, applyEngine,
                 prepDirRemedies,
                 cullPrepPort, cullSettings, mediaStore, pathsPort, jobRunner, progressPort,
                 disasterDrawer, troubleshooter, prepDirDoctor, applyPlanner, ledgerReader, pathValidation,
-                spendLedger, DEFAULT_WATCH_POLL_INTERVAL);
+                spendLedger, secretStore, DEFAULT_WATCH_POLL_INTERVAL);
     }
 
     /**
@@ -160,6 +163,7 @@ public class Pipeline {
      * @param ledgerReader {@link LedgerReader} takes the disposition-ledger snapshot that gate honours
      * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
      * @param spendLedger {@link SpendLedgerPort} records what each cull run consumed
+     * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
      * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
      */
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
@@ -172,6 +176,7 @@ public class Pipeline {
              final Troubleshooter troubleshooter, final PrepDirDoctor prepDirDoctor,
              final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
              final PathValidationUseCase pathValidation, final SpendLedgerPort spendLedger,
+             final SecretStore secretStore,
              final Duration watchPollInterval) {
         this.sortEngine = sortEngine;
         this.commitEngine = commitEngine;
@@ -182,8 +187,8 @@ public class Pipeline {
         this.rootsGuard = new RootsGuard(pathValidation);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
-                prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, watchPollInterval);
-        this.curateEngine = new CurateEngine(sortEngine, jobRunner, progressPort, this.cullEngine);
+                prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, secretStore, watchPollInterval);
+        this.curateEngine = new CurateEngine(sortEngine, jobRunner, this.cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
@@ -283,6 +288,9 @@ public class Pipeline {
 
     /**
      * Delegates to CurateEngine to run a sort followed by a cull.
+     *
+     * <p>No surface calls this. It is kept whole and tested against the day one does.
+     * {@code PipelineSurfaceTest} pins it, so a later deletion is a decision rather than a tidy-up.
      *
      * @param scope {@link SortScope} which files to curate
      * @return a {@link JobHandle} of {@link CurateOutcome} a handle to the running job

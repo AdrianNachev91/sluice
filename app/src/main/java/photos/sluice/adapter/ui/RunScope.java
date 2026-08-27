@@ -68,7 +68,7 @@ sealed interface RunScope {
                     new SortScope.Year(year, range(months));
             case OldestYear _, Everything _ -> new SortScope.OldestYear();
             // Oldest-year is the widest thing a sort can be asked for, so a scope that names no
-            // work must not land in it. Curate reaches here too, and its second half spends.
+            // work must not land in it.
             case Refused _, Nothing _ ->
                     throw new IllegalStateException("A sort was started from a scope naming no work");
         };

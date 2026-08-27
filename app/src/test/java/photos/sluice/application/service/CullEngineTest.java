@@ -8,9 +8,11 @@ import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.RunEnding;
 import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendLedgerEntry;
+import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
@@ -51,7 +53,9 @@ import static photos.sluice.application.service.PipelineTestSupport.BlockingMove
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
 import static photos.sluice.application.service.PipelineTestSupport.FailableIndexReads;
 import static photos.sluice.application.service.PipelineTestSupport.FailingListingOfPrepDir;
+import static photos.sluice.application.service.PipelineTestSupport.FixedSecretStore;
 import static photos.sluice.application.service.PipelineTestSupport.FixedSettings;
+import static photos.sluice.application.service.PipelineTestSupport.MANUAL_PROVIDER_KEY;
 import static photos.sluice.application.service.PipelineTestSupport.ImpossibleCountCuller;
 import static photos.sluice.application.service.PipelineTestSupport.JunkEverythingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.listed;
@@ -65,6 +69,7 @@ import static photos.sluice.application.service.PipelineTestSupport.assertHoldsF
 import static photos.sluice.application.service.PipelineTestSupport.CeilingStoppedCuller;
 import static photos.sluice.application.service.PipelineTestSupport.autoApproveCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.classificationJson;
+import static photos.sluice.application.service.PipelineTestSupport.credentialPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.defaultCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
@@ -475,10 +480,6 @@ class CullEngineTest {
         assertThat(Files.exists(prepDir.resolve("stray.txt"))).isTrue();
     }
 
-    // Archive and proceed, with no confirmation asked. Curate resolves its own scope mid-job so no
-    // dialog could fire there anyway, and a monthly curate of the current year would meet this
-    // occupant every month. Nothing is destroyed: the old record keeps the graveyard's own 30-day
-    // window, and the outcome names where it went.
     @Test
     void cullArchivesACompletedRunOfTheSameScopeAndProceeds(@TempDir final Path root) throws IOException {
         final Path first = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
@@ -674,6 +675,73 @@ class CullEngineTest {
 
         assertThat(first).isInstanceOf(CullJobOutcome.Cancelled.class);
         assertThat(root.resolve("logs/sift-prep/2019")).doesNotExist();
+        assertThat(pipeline.cull(new CullScope.Year(2019, null)).join())
+                .isInstanceOf(CullJobOutcome.Waiting.class);
+    }
+
+    @Test
+    void aSiftForAProviderWithNoStoredKeyIsRefusedBeforeAnyMontageIsBuilt(@TempDir final Path root)
+            throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = credentialPipeline(root, new RecordingProgressPort(),
+                List.of(new ManualModeCuller(MANUAL_PROVIDER_KEY)), new FixedSecretStore(null));
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
+                .isInstanceOf(MissingCredentialException.class);
+
+        assertThat(root.resolve("logs/sift-prep/2019")).doesNotExist();
+    }
+
+    @Test
+    void aSiftForAProviderWhoseKeyIsHeldRunsOn(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = credentialPipeline(root, new RecordingProgressPort(),
+                List.of(new ManualModeCuller(MANUAL_PROVIDER_KEY)), new FixedSecretStore("a-key"));
+
+        final CullJobOutcome outcome = pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
+        assertThat(root.resolve("logs/sift-prep/2019")).exists();
+    }
+
+    // Both faults hold at once here, and only one sentence is shown. The key comes first because no
+    // sift can run without it, whatever else is on disk. Pinned because nothing else keeps this
+    // order: it is the sequence of two calls in one method.
+    @Test
+    void aKeylessProviderIsReportedAheadOfAnOccupiedTimeline(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path prepDir = root.resolve("logs/sift-prep/2019");
+        Files.createDirectories(prepDir);
+        Files.writeString(prepDir.resolve("stray.txt"), "an earlier sift, still here");
+        final var pipeline = credentialPipeline(root, new RecordingProgressPort(),
+                List.of(new ManualModeCuller(MANUAL_PROVIDER_KEY)), new FixedSecretStore(null));
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
+                .isInstanceOf(MissingCredentialException.class);
+    }
+
+    // A run whose montages all hold shards enters no culler, so it needs no key to finish. Guarding
+    // resume the way cull() is guarded would refuse it and strand work already paid for.
+    @Test
+    void aResumeFinishesAKeylessProvidersRunRatherThanRefusingIt(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var keyed = List.<VisionCuller>of(new ManualModeCuller(MANUAL_PROVIDER_KEY));
+        final var waiting = (CullJobOutcome.Waiting) credentialPipeline(root, new RecordingProgressPort(),
+                keyed, new FixedSecretStore("a-key")).cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001");
+
+        final CullJobOutcome resumed = credentialPipeline(root, new RecordingProgressPort(),
+                keyed, new FixedSecretStore(null)).resume(waiting.job().prepDir(), false).join();
+
+        assertThat(resumed).isInstanceOf(CullJobOutcome.Applied.class);
+    }
+
+    @Test
+    void aSiftForAProviderThatNeedsNoKeyRunsWithNothingStored(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = credentialPipeline(root, new RecordingProgressPort(),
+                List.of(new ManualModeCuller()), new FixedSecretStore(null));
+
         assertThat(pipeline.cull(new CullScope.Year(2019, null)).join())
                 .isInstanceOf(CullJobOutcome.Waiting.class);
     }

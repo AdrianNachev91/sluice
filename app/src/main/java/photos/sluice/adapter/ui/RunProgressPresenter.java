@@ -104,7 +104,7 @@ class RunProgressPresenter {
      */
     private static String cancellingLine(final RunMode ran, final @Nullable ImportKind importing) {
         return switch (ran) {
-            case SIFT, CURATE -> CANCELLING_A_SIFT;
+            case SIFT -> CANCELLING_A_SIFT;
             case MOVE_TO_LIBRARY -> CANCELLING_A_MOVE;
             // The copy's line for an import whose kind never arrived, being the one of the two that
             // claims nothing about the folder the photos came from.

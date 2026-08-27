@@ -7,12 +7,14 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.StartAction;
+import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.imports.ImportKind;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -50,6 +52,9 @@ public class RunLauncherPresenter {
     // The card for the run that ended, and the only thing that keeps the launcher off the screen
     // once nothing is running. Cleared by the press that dismisses it.
     private volatile @Nullable RunResultView ended;
+    // What a refused press on that card has to report. Held apart from the card itself, which
+    // RunResults builds out of what the run produced and nothing else.
+    private volatile @Nullable Message cardMessage;
     private volatile boolean cancelRequested;
     // What the running or just-ended job was started as, and what it covers. The mode buttons and
     // the field can both move while a job works, so neither can be asked afterwards what it was
@@ -96,7 +101,7 @@ public class RunLauncherPresenter {
                     this.cancelRequested, this.importing));
         }
         final RunResultView done = this.ended;
-        return done == null ? new RunStage.Setup() : new RunStage.Finished(done);
+        return done == null ? new RunStage.Setup() : new RunStage.Finished(done, this.cardMessage);
     }
 
     /**
@@ -193,6 +198,32 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Sifts the timeline a finished sort filled, from that sort's own result card.
+     *
+     * <p>The dialog is the caller's to put, because only a screen can open one. What it may not do
+     * is decide whether one is owed.
+     *
+     * @param offer {@link CardAction.SiftNow} what the card offered, carrying the timeline and
+     *     what this run put in it
+     * @param ask a {@link Predicate} of {@link RunSetupPresenter.Confirmation} puts the question and
+     *     answers true where the reader agreed
+     */
+    public void siftNow(final CardAction.SiftNow offer,
+                        final Predicate<RunSetupPresenter.Confirmation> ask) {
+        if (this.running) {
+            return;
+        }
+        switch (this.setup.siftNowNeeds(offer.year(), offer.justSorted())) {
+            case RunSetupPresenter.SiftNow.Refuse(final Message reason) -> this.cardMessage = reason;
+            case RunSetupPresenter.SiftNow.Ask(final var question) -> {
+                if (ask.test(question)) {
+                    this.startSift(offer.year());
+                }
+            }
+        }
+    }
+
+    /**
      * Puts the launcher back, dropping the report of the run that ended.
      *
      * <p>The counts behind the launcher were read again the moment that run ended. So what comes
@@ -200,6 +231,7 @@ public class RunLauncherPresenter {
      */
     public void dismissResult() {
         this.ended = null;
+        this.cardMessage = null;
     }
 
     /**
@@ -263,6 +295,17 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Hands a whole timeline to the facade as a sift.
+     *
+     * @param year int the timeline to sift
+     */
+    private void startSift(final int year) {
+        final RunScope scope = new RunScope.OfYear(year, List.of());
+        this.begin(RunMode.SIFT, RunScope.describe(RunMode.SIFT, scope), null,
+                () -> this.pipeline.cull(RunScope.asCull(scope)));
+    }
+
+    /**
      * Continues a stopped run, reported as covering what the caller says it covers.
      *
      * @param prepDir {@link Path} the stopped run's own directory
@@ -292,7 +335,7 @@ public class RunLauncherPresenter {
      */
     private void begin(final RunMode ran, final String scope, final @Nullable ImportKind kind,
                        final Supplier<JobHandle<?>> submit) {
-        this.setup.report(null);
+        this.report(null);
         try {
             final JobHandle<?> handle = submit.get();
             // Nothing above this line has changed what the screen shows, and that is the point. A
@@ -317,7 +360,29 @@ public class RunLauncherPresenter {
             // already running, an app on its way out, a folder root gone bad since this screen was
             // drawn. Each carries a sentence written for the person reading it.
             log.info("Refused to start {}", ran, e);
-            this.setup.report(new Message(RunRefusals.plainly(e), true));
+            this.report(new Message(RunRefusals.plainly(e), true));
+        }
+    }
+
+    /**
+     * Puts a refusal on whichever face the reader is looking at.
+     *
+     * <p>A card still standing is the face they pressed from, since it covers the launcher entirely.
+     *
+     * <p>Clearing goes to both faces whatever is up. A press that starts something can take the
+     * card off the screen, so the face that held the last refusal is not always the one still
+     * showing when the next one is drawn.
+     *
+     * @param message {@link Message} what to report, or null to clear both faces
+     */
+    private void report(final @Nullable Message message) {
+        if (message == null) {
+            this.setup.report(null);
+            this.cardMessage = null;
+        } else if (this.ended == null) {
+            this.setup.report(message);
+        } else {
+            this.cardMessage = message;
         }
     }
 
@@ -358,7 +423,6 @@ public class RunLauncherPresenter {
     private JobHandle<?> submit(final RunMode ran, final RunScope scope) {
         return switch (ran) {
             case SORT -> this.pipeline.sort(RunScope.asSort(scope));
-            case CURATE -> this.pipeline.curate(RunScope.asSort(scope));
             case SIFT -> this.pipeline.cull(RunScope.asCull(scope));
             case MOVE_TO_LIBRARY -> this.pipeline.commit(RunScope.asCommit(scope));
             case RESCUE -> throw new IllegalStateException("Rescue cannot be started from here yet");

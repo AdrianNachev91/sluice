@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
+import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
@@ -20,6 +21,9 @@ import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
+import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.SecretId;
+import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
@@ -44,6 +48,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 import static java.util.Objects.requireNonNull;
 
@@ -67,6 +72,10 @@ class RunLauncherPresenterTest {
     private static final List<Path> CARD = List.of(Path.of("DCIM"));
 
     private static final long SLOWER_THAN_THE_WAIT = 400;
+
+    // A reader who says yes to whatever they were asked, for the tests that are about what happens
+    // afterwards rather than about the asking.
+    private static final Predicate<RunSetupPresenter.Confirmation> AGREED = _ -> true;
 
     private final Pipeline pipeline = mock(Pipeline.class);
 
@@ -104,13 +113,6 @@ class RunLauncherPresenterTest {
         this.chooseAndStart(RunMode.SORT, "2019 6-8");
 
         verify(this.pipeline).sort(new SortScope.OldestYear());
-    }
-
-    @Test
-    void aCurateTakesTheOldestYearTheSameWay() {
-        this.chooseAndStart(RunMode.CURATE, "2019");
-
-        verify(this.pipeline).curate(new SortScope.OldestYear());
     }
 
     @Test
@@ -475,7 +477,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(requireNonNull(this.finishedView().resume()).question())
+        assertThat(((CardAction.ContinueRun) requireNonNull(this.finishedView().action())).question())
                 .contains("Nothing more has been spent from your provider account balance");
     }
 
@@ -670,17 +672,37 @@ class RunLauncherPresenterTest {
                         + "Open Runs to continue or discard it.");
     }
 
+    // The engine refuses a keyless provider before it starts a job. So this is the narrower shape:
+    // a key going missing between that check and the request, or a resume, which is not checked up
+    // front. Both arrive as a failed run rather than as a refusal.
     @Test
-    void aCurateRefusedAfterItSortedSaysTheSortingStands() {
-        this.choose(RunMode.CURATE, "");
-        doThrow(new Pipeline.CurateConflictException(occupantOf2019(), sortSummaryWith(List.of())))
-                .when(this.pipeline).curate(any());
+    void aSiftWithNoProviderKeySendsThemToSettingsRatherThanReportingABug() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftFailsWith(new MissingCredentialException(
+                new SecretId("anthropic", "ANTHROPIC_API_KEY"),
+                "No API key is stored for the 'anthropic' vision provider; add one in Settings"));
 
         this.presenter.start();
 
-        assertThat(this.reported().text())
-                .startsWith("Your photos were sorted, and then sifting stopped:")
-                .endsWith("The sorting stands.");
+        assertThat(this.finishedView().detail())
+                .isEqualTo("A sift cannot be started because your provider key is not set. "
+                        + "Add one in Settings.");
+    }
+
+    // A store answering neither yes nor no is a broken install, so the bug line is earned here and
+    // stays. What it must not be is the whole message.
+    @Test
+    void aSiftWhoseCredentialStoreIsBrokenSaysSoBeforeTheBugLine() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftFailsWith(new SecretStoreException(SecretStoreException.Tier.KEYRING,
+                "the keyring returned 0x80070005"));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().detail())
+                .startsWith("Sluice could not read your key. The credential store on this computer "
+                        + "refused to answer.")
+                .endsWith("the keyring returned 0x80070005");
     }
 
     @Test
@@ -762,7 +784,118 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(requireNonNull(this.finishedView().resume()).prepDir()).isEqualTo(PREP_DIR);
+        assertThat(((CardAction.ContinueRun) requireNonNull(this.finishedView().action())).prepDir()).isEqualTo(PREP_DIR);
+    }
+
+    @Test
+    void siftingFromAFinishedSortsCardCoversTheWholeTimelineThatSortFilled() {
+        this.aFinishedSortShowing();
+        this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
+
+        this.presenter.siftNow(offerOf(2019), AGREED);
+
+        verify(this.pipeline).cull(new CullScope.Year(2019, null));
+    }
+
+    // The one line between a card press and somebody's provider balance. Every other test here
+    // agrees to the question, so without this one the gate could be deleted and nothing would say.
+    @Test
+    void backingOutOfTheQuestionStartsNothing() {
+        this.aFinishedSortShowing();
+        this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
+
+        this.presenter.siftNow(offerOf(2019), _ -> false);
+
+        verify(this.pipeline, never()).cull(any());
+    }
+
+    @Test
+    void aSiftFromTheCardIsAskedAboutWhereTheProviderSpends() {
+        this.aFinishedSortShowing();
+        this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
+        final var asked = new AtomicInteger();
+
+        this.presenter.siftNow(offerOf(2019), _ -> {
+            asked.incrementAndGet();
+            return true;
+        });
+
+        assertThat(asked.get()).isOne();
+    }
+
+    @Test
+    void aSiftFromTheCardIsAskedAboutOnAFreeProviderToo() {
+        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
+        this.aFinishedSortShowing();
+        this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
+        final var asked = new AtomicInteger();
+
+        this.presenter.siftNow(offerOf(2019), _ -> {
+            asked.incrementAndGet();
+            return true;
+        });
+
+        assertThat(asked.get()).isOne();
+        verify(this.pipeline).cull(new CullScope.Year(2019, null));
+    }
+
+    @Test
+    void aSiftOfATimelineHoldingOnlyVideosIsRefusedWithoutEverAsking() {
+        this.aFinishedSortShowing();
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
+                new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0))))));
+        this.setup.refreshCounts();
+        final var asked = new AtomicInteger();
+
+        this.presenter.siftNow(offerOf(2021), _ -> {
+            asked.incrementAndGet();
+            return true;
+        });
+
+        assertThat(asked.get()).isZero();
+        verify(this.pipeline, never()).cull(any());
+        assertThat(this.reportedOnTheCard().text())
+                .isEqualTo("No photos are sorted for 2021, so there is nothing to sift.");
+    }
+
+    @Test
+    void aSiftRefusedFromTheCardIsReportedOnTheCard() {
+        this.aFinishedSortShowing();
+        doThrow(new JobInProgressException("Sluice is already running a job."))
+                .when(this.pipeline).cull(any());
+
+        this.presenter.siftNow(offerOf(2019), AGREED);
+
+        assertThat(this.reportedOnTheCard().text()).isEqualTo("Sluice is already running a job.");
+        assertThat(this.setup.view().message()).isNull();
+    }
+
+    // The counts are what the question was sized from, so a press without them would spend on a
+    // scope nobody was shown a figure for.
+    @Test
+    void aSiftIsTurnedBackWhereTheFoldersCouldNotBeCountedRatherThanStartedBlind() {
+        this.aFinishedSortShowing();
+        when(this.pipeline.sortedTally()).thenThrow(new RuntimeException("the disk went away"));
+        this.setup.refreshCounts();
+
+        this.presenter.siftNow(offerOf(2019), AGREED);
+
+        verify(this.pipeline, never()).cull(any());
+        assertThat(this.reportedOnTheCard().text())
+                .isEqualTo("Sluice could not read your folders. Check them in Settings.");
+    }
+
+    @Test
+    void dismissingTheCardTakesItsRefusalWithIt() {
+        this.aFinishedSortShowing();
+        doThrow(new JobInProgressException("Sluice is already running a job."))
+                .when(this.pipeline).cull(any());
+        this.presenter.siftNow(offerOf(2019), AGREED);
+
+        this.presenter.dismissResult();
+
+        assertThat(this.presenter.stage()).isInstanceOf(RunStage.Setup.class);
+        assertThat(this.setup.view().message()).isNull();
     }
 
     @Test
@@ -772,7 +905,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(this.finishedView().resume()).isNull();
+        assertThat(this.finishedView().action()).isNull();
     }
 
     @Test
@@ -798,6 +931,20 @@ class RunLauncherPresenterTest {
 
     private RunLauncherView.Message reported() {
         return requireNonNull(this.setup.view().message());
+    }
+
+    private static CardAction.SiftNow offerOf(final int year) {
+        return new CardAction.SiftNow("Sift " + year, year, 6);
+    }
+
+    private RunLauncherView.Message reportedOnTheCard() {
+        return requireNonNull(((RunStage.Finished) this.presenter.stage()).message());
+    }
+
+    private void aFinishedSortShowing() {
+        this.choose(RunMode.SORT, "");
+        this.sortEndsWith(sortSummaryWith(List.of()));
+        this.presenter.start();
     }
 
     private static CullJobOutcome waitingBecause(final WaitingReason reason) {
@@ -832,6 +979,12 @@ class RunLauncherPresenterTest {
         when(this.pipeline.cull(any())).thenReturn(retyped(handle));
     }
 
+    private void siftFailsWith(final RuntimeException thrown) {
+        final JobHandle<Object> handle = finished();
+        when(handle.onComplete()).thenReturn(CompletableFuture.failedFuture(thrown));
+        when(this.pipeline.cull(any())).thenReturn(retyped(handle));
+    }
+
     private void sortEndsWith(final SortSummary summary) {
         final JobHandle<Object> handle = finished();
         when(handle.onComplete()).thenReturn(CompletableFuture.completedFuture(summary));
@@ -850,11 +1003,9 @@ class RunLauncherPresenterTest {
 
     private void pipelineStarts() {
         final JobHandle<Object> sorted = finished();
-        final JobHandle<Object> curated = finished();
         final JobHandle<Object> sifted = finished();
         final JobHandle<Object> moved = finished();
         when(this.pipeline.sort(any())).thenReturn(retyped(sorted));
-        when(this.pipeline.curate(any())).thenReturn(retyped(curated));
         when(this.pipeline.cull(any())).thenReturn(retyped(sifted));
         when(this.pipeline.commit(any())).thenReturn(retyped(moved));
     }

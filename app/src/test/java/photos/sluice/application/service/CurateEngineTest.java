@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.CurateOutcome;
+import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.model.MonthRange;
@@ -23,9 +24,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoves;
+import static photos.sluice.application.service.PipelineTestSupport.FixedSecretStore;
+import static photos.sluice.application.service.PipelineTestSupport.MANUAL_PROVIDER_KEY;
+import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.OutOfScopeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
 import static photos.sluice.application.service.PipelineTestSupport.autoApproveCullSettings;
+import static photos.sluice.application.service.PipelineTestSupport.credentialPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.curatePipeline;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
@@ -69,6 +74,19 @@ class CurateEngineTest {
                 "started:Reading photos...", "tick:Reading photos...:1/1", "finished:Reading photos...",
                 "started:Sifting...", "finished:Sifting...",
                 "started:Applying decisions...", "finished:Applying decisions...");
+    }
+
+    @Test
+    void curateForAProviderWithNoStoredKeyIsRefusedBeforeTheSortMovesAnything(@TempDir final Path root)
+            throws IOException {
+        final Path photo = writeInboxPhoto(root, "20190601_photo.jpg");
+        final var pipeline = credentialPipeline(root, new RecordingProgressPort(),
+                List.of(new ManualModeCuller(MANUAL_PROVIDER_KEY)), new FixedSecretStore(null));
+
+        assertThatThrownBy(() -> pipeline.curate(new SortScope.Year(2019, null)))
+                .isInstanceOf(MissingCredentialException.class);
+
+        assertThat(Files.exists(photo)).isTrue();
     }
 
     // Curate reaches Blocked through the same cull stage a standalone cull() uses, so its outcome

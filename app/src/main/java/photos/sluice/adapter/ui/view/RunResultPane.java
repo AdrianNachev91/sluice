@@ -12,10 +12,13 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
+import photos.sluice.adapter.ui.RunLauncherView;
 import photos.sluice.adapter.ui.RunResultView;
+import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.adapter.ui.RunResultView.Count;
-import photos.sluice.adapter.ui.RunResultView.Resume;
 import photos.sluice.adapter.ui.RunResultView.Tone;
+import photos.sluice.adapter.ui.RunSetupPresenter;
+import photos.sluice.adapter.ui.RunStage;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -29,8 +32,8 @@ import java.util.function.Consumer;
  * <p>The count rows are the one part rebuilt, since which of them a run has is not known until it
  * ends. Everything else is built once and written onto.
  *
- * <p>Done and the button that continues a stopped run both sit outside the pane that scrolls. A
- * long list of categories must not be able to put the way off this page below the fold.
+ * <p>Done and whatever else the card offers both sit outside the pane that scrolls. A long list of
+ * categories must not be able to put the way off this page below the fold.
  */
 final class RunResultPane {
 
@@ -74,22 +77,28 @@ final class RunResultPane {
 
         // The question sits in the body with everything else the card has to say, and only its
         // button joins the row of actions. In that row the sentence reads as a label on Done.
-        final var resumeQuestion = new Label();
-        SettingsRows.wrapping(resumeQuestion);
-        final var resume = new VBox(resumeQuestion);
-        resume.setId("run-result-resume");
-        resume.getStyleClass().add("run-result-resume");
-        showWhile(resume, resumeQuestion);
+        final var actionQuestion = new Label();
+        SettingsRows.wrapping(actionQuestion);
+        final var question = new VBox(actionQuestion);
+        question.setId("run-result-resume");
+        question.getStyleClass().add("run-result-resume");
+        showWhile(question, actionQuestion);
 
-        // Neither button carries the fill, and that is the point. Where a card offers a way on,
-        // continuing and stopping are the reader's own choice between spending more and spending
-        // no more. A fill on either would be this app leaning on that choice. It has nothing to
-        // lean with, since which one is right depends on what the photos are worth to them.
-        final var resumeButton = new Button();
-        resumeButton.setId("run-resume");
-        resumeButton.getStyleClass().add("run-cancel");
-        resumeButton.managedProperty().bind(resumeButton.visibleProperty());
-        resumeButton.visibleProperty().bind(resumeButton.textProperty().isNotEmpty());
+        // What a refused press on this card has to say. It belongs here rather than on the
+        // launcher, which is behind the card and unread until the card is dismissed. Outside the
+        // scrolling body, next to the button it answers. Inside it, a card with counts enough to
+        // scroll would put the refusal below the fold while the button that drew it stayed in
+        // view. That reads as a press that did nothing.
+        final var message = new Label();
+        message.setId("run-result-message");
+        SettingsRows.wrapping(message);
+        SettingsRows.showWhileItSaysSomething(message);
+
+        // Its weight is the arm's, set on every fill, so the class goes on there rather than here.
+        final var actionButton = new Button();
+        actionButton.setId("run-resume");
+        actionButton.managedProperty().bind(actionButton.visibleProperty());
+        actionButton.visibleProperty().bind(actionButton.textProperty().isNotEmpty());
 
         final var done = new Button();
         done.setId("run-done");
@@ -98,11 +107,11 @@ final class RunResultPane {
             presenter.dismissResult();
             redraw.run();
         });
-        final var doneRow = new HBox(spacer(), resumeButton, done);
+        final var doneRow = new HBox(spacer(), actionButton, done);
         doneRow.getStyleClass().add("run-start-row");
         doneRow.setAlignment(Pos.CENTER_RIGHT);
 
-        final var body = new VBox(detail, resume, warning, counts, archived);
+        final var body = new VBox(detail, question, warning, counts, archived);
         body.getStyleClass().add("run-result-body");
         final ScrollPane scroll = SettingsRows.scrolling(body);
         scroll.setMinHeight(0);
@@ -115,13 +124,60 @@ final class RunResultPane {
         // scrollbar over rows that already fit.
         scroll.prefViewportHeightProperty().bind(body.heightProperty());
 
-        final var page = new VBox(heading, scroll, doneRow);
+        final var page = new VBox(heading, scroll, message, doneRow);
         page.setId("run-result");
         page.getStyleClass().add("run-result");
 
         final var controls = new Controls(page, heading, detail, counts, warningHeadline,
-                warningDetail, archived, resumeQuestion, resumeButton, done);
-        return new Mounted(page, view -> controls.fill(view, presenter, redraw));
+                warningDetail, archived, actionQuestion, actionButton, message, done);
+        return new Mounted(page, showing -> controls.fill(showing, presenter, redraw));
+    }
+
+    /**
+     * Sifts the timeline this card offers, putting whatever question the presenter says is owed.
+     *
+     * <p>This screen opens the dialog and decides nothing else. Whether one is owed at all, and
+     * what it says, are the presenter's.
+     *
+     * <p>The dialog blocks, so nothing else happens while it is open. Backing out of it leaves the
+     * card exactly as it was.
+     *
+     * @param presenter {@link RunLauncherPresenter} takes the press
+     * @param offer {@link CardAction.SiftNow} what the card offered
+     * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
+     */
+    private static void onSiftNow(final RunLauncherPresenter presenter,
+                                  final CardAction.SiftNow offer, final Runnable redraw) {
+        presenter.siftNow(offer, RunResultPane::agreed);
+        redraw.run();
+    }
+
+    /**
+     * Puts one question and answers whether the reader agreed.
+     *
+     * @param asked {@link RunSetupPresenter.Confirmation} what to ask
+     * @return boolean true where they chose to go ahead
+     */
+    private static boolean agreed(final RunSetupPresenter.Confirmation asked) {
+        return Dialogs.ask(asked.heading(), asked.question(),
+                new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD),
+                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET))
+                .isPresent();
+    }
+
+    /**
+     * Gives a button one of the two weights, dropping whichever it had.
+     *
+     * <p>Swaps the two rather than replacing the list. A control arrives with style classes of the
+     * toolkit's own, and a button stripped of {@code button} loses its padding and its border along
+     * with the weight.
+     *
+     * @param button {@link Button} the button to weigh
+     * @param weight {@link String} the style class to carry
+     */
+    private static void weigh(final Button button, final String weight) {
+        button.getStyleClass().removeAll("run-start", "run-cancel");
+        button.getStyleClass().add(weight);
     }
 
     /**
@@ -159,23 +215,25 @@ final class RunResultPane {
      * @param warningHeadline {@link Label} what a reader needs to know about it, in one line
      * @param warningDetail {@link Label} what caused it and what Sluice did instead
      * @param archived {@link Label} what happened to a previous record of this timeline
-     * @param resumeQuestion {@link Label} what the reader is asked before continuing
-     * @param resumeButton {@link Button} the button that continues
+     * @param actionQuestion {@link Label} what the reader is asked before the card's own action
+     * @param actionButton {@link Button} the card's own action, beside Done
+     * @param message {@link Label} what a refused press on this card has to report
      * @param done {@link Button} the button back to the launcher
      */
     private record Controls(VBox page, Label heading, Label detail, VBox counts,
                             Label warningHeadline, Label warningDetail, Label archived,
-                            Label resumeQuestion, Button resumeButton, Button done) {
+                            Label actionQuestion, Button actionButton, Label message, Button done) {
 
         /**
          * Puts everything the presenter says onto the card.
          *
-         * @param view {@link RunResultView} what the card shows now
-         * @param presenter {@link RunLauncherPresenter} takes the press on the resume button
+         * @param showing {@link RunStage.Finished} the card and anything it has to report
+         * @param presenter {@link RunLauncherPresenter} takes the press on the card's own action
          * @param redraw {@link Runnable} draws the dashboard again once it has been told
          */
-        private void fill(final RunResultView view, final RunLauncherPresenter presenter,
+        private void fill(final RunStage.Finished showing, final RunLauncherPresenter presenter,
                           final Runnable redraw) {
+            final RunResultView view = showing.result();
             this.heading.setText(view.heading());
             this.tone(view.tone());
             this.detail.setText(SettingsRows.orNothing(view.detail()));
@@ -183,7 +241,8 @@ final class RunResultPane {
             this.warningHeadline.setText(view.warning() == null ? "" : view.warning().headline());
             this.warningDetail.setText(view.warning() == null ? "" : view.warning().detail());
             this.archived.setText(SettingsRows.orNothing(view.archived()));
-            this.drawResume(view.resume(), presenter, redraw);
+            this.drawAction(view.action(), presenter, redraw);
+            this.drawMessage(showing.message());
             this.done.setText(view.doneLabel());
         }
 
@@ -215,25 +274,61 @@ final class RunResultPane {
         }
 
         /**
-         * Fills in the offer to continue a stopped run, or empties it where none is open.
+         * Fills in whatever this card offers beyond Done, or empties it where it offers nothing.
          *
-         * <p>The directory is read off the offer at press time rather than captured when the
-         * button was built. The button outlives every run this screen shows, so a captured one
-         * would continue whichever run happened to be first.
+         * <p>What the button carries is read off the offer at press time rather than captured when
+         * the button was built. The button outlives every run this screen shows, so a captured
+         * value would act on whichever run happened to be first.
          *
-         * @param resume {@link Resume} the offer, or null where none is open
+         * <p>Only one of the two arms puts a sentence above the button. Sifting asks in a dialog
+         * on the press, because what it costs is not known while this card is being built.
+         *
+         * @param action {@link CardAction} what the card offers, or null where it offers nothing
          * @param presenter {@link RunLauncherPresenter} takes the press
          * @param redraw {@link Runnable} draws the dashboard again once it has been told
          */
-        private void drawResume(final @Nullable Resume resume, final RunLauncherPresenter presenter,
-                                final Runnable redraw) {
-            this.resumeQuestion.setText(resume == null ? "" : resume.question());
-            this.resumeButton.setText(resume == null ? "" : resume.label());
-            final Path continuing = resume == null ? null : resume.prepDir();
-            this.resumeButton.setOnAction(continuing == null ? null : _ -> {
-                presenter.continueRun(continuing);
-                redraw.run();
-            });
+        private void drawAction(final @Nullable CardAction action,
+                                final RunLauncherPresenter presenter, final Runnable redraw) {
+            switch (action) {
+                case null -> {
+                    this.actionQuestion.setText("");
+                    this.actionButton.setText("");
+                    weigh(this.actionButton, "run-cancel");
+                    this.actionButton.setOnAction(null);
+                }
+                // Quiet, because a run that stopped at its spending limit leaves the reader
+                // choosing between spending more and spending no more. This app has nothing to
+                // lean with there: which one is right depends on what the photos are worth to them.
+                case CardAction.ContinueRun(final String asked, final String label, final Path dir) -> {
+                    this.actionQuestion.setText(asked);
+                    this.actionButton.setText(label);
+                    weigh(this.actionButton, "run-cancel");
+                    this.actionButton.setOnAction(_ -> {
+                        presenter.continueRun(dir);
+                        redraw.run();
+                    });
+                }
+                // Loud, because sifting is what the reader came to do and the card is where the
+                // work carries on. What it costs is put to them in the confirm the press opens,
+                // so the weight here is about the way forward rather than about the money.
+                case final CardAction.SiftNow offer -> {
+                    this.actionQuestion.setText("");
+                    this.actionButton.setText(offer.label());
+                    weigh(this.actionButton, "run-start");
+                    this.actionButton.setOnAction(_ -> onSiftNow(presenter, offer, redraw));
+                }
+            }
+        }
+
+        /**
+         * Fills in the line a refused press leaves behind, in the colour its own kind earns.
+         *
+         * @param said {@link RunLauncherView.Message} what to report, or null for nothing
+         */
+        private void drawMessage(final RunLauncherView.@Nullable Message said) {
+            this.message.setText(said == null ? "" : said.text());
+            this.message.getStyleClass().setAll("run-message",
+                    said != null && said.refused() ? "settings-violation" : "settings-confirmation");
         }
 
         /**
@@ -259,8 +354,8 @@ final class RunResultPane {
      * A built card and the way to fill it in.
      *
      * @param node {@link Node} the card itself
-     * @param fill a {@link Consumer} of {@link RunResultView} writes a view onto it
+     * @param fill a {@link Consumer} of {@link RunStage.Finished} writes a card onto it
      */
-    record Mounted(Node node, Consumer<RunResultView> fill) {
+    record Mounted(Node node, Consumer<RunStage.Finished> fill) {
     }
 }

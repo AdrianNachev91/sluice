@@ -252,7 +252,7 @@ final class RunLauncherPane {
                 only(progress.node(), launcher, progress.node(), result.node());
                 progress.fill().accept(showing);
             }
-            case RunStage.Finished(final RunResultView ended) -> {
+            case final RunStage.Finished ended -> {
                 only(result.node(), launcher, progress.node(), result.node());
                 result.fill().accept(ended);
             }

@@ -1,15 +1,14 @@
 package photos.sluice.adapter.ui;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.adapter.ui.RunResultView.Count;
 import photos.sluice.adapter.ui.RunResultView.Tone;
 import photos.sluice.application.port.in.CullJobOutcome;
-import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.in.WaitingReason;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
-import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.job.ShardTally;
@@ -27,7 +26,6 @@ import static java.util.Objects.requireNonNull;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
-import static org.mockito.Mockito.mock;
 
 // Every way a job can end, read straight rather than through a started job. The presenter's own
 // test covers the endings a screen reaches by pressing something. These are the arms a run has to
@@ -45,7 +43,7 @@ class RunResultsTest {
         assertThat(card.heading()).isEqualTo("Sifting stopped and needs a look.");
         assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
         assertThat(requireNonNull(card.detail())).contains("Nothing was moved");
-        assertThat(card.resume()).isNull();
+        assertThat(card.action()).isNull();
     }
 
     @Test
@@ -74,7 +72,7 @@ class RunResultsTest {
         final RunResultView card = RunResults.of(RunMode.SIFT,
                 new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
 
-        assertThat(card.resume()).isNull();
+        assertThat(card.action()).isNull();
         assertThat(card.detail()).isEqualTo("No sheets were built yet.");
     }
 
@@ -85,43 +83,79 @@ class RunResultsTest {
         final RunResultView card = RunResults.of(RunMode.SIFT, waiting(WaitingReason.CANCELLED));
 
         assertThat(card.heading()).isEqualTo("Sifting was cancelled.");
-        assertThat(requireNonNull(card.resume()).question())
-                .isEqualTo("You can continue at any time.");
-        assertThat(card.resume().prepDir()).isEqualTo(PREP_DIR);
+        assertThat(card.action()).isEqualTo(new CardAction.ContinueRun(
+                "You can continue at any time.", "Continue sifting", PREP_DIR));
     }
 
     @Test
-    void aCurateCountsWhatItSortedAboveWhatItSifted() {
-        final RunResultView card = RunResults.of(RunMode.CURATE, new CurateOutcome(
-                sortSummary(List.of()),
-                new CullJobOutcome.Applied(mock(CullReport.class),
-                        new ApplyReport(3, Map.of("Keep", 3), 0, 0, 0, List.of()), null)));
+    void aFinishedSortOffersToSiftTheOneTimelineItFilled() {
+        final RunResultView card = RunResults.of(RunMode.SORT, sortSummary(List.of()));
 
-        assertThat(card.heading()).isEqualTo("Curating finished.");
-        assertThat(card.counts()).extracting(Count::label)
-                .containsExactly("Photos sorted", "Videos sorted", "Photos looked at", "Sheets judged",
-                        "Calls to your provider", "Keep");
+        assertThat(card.action()).isEqualTo(new CardAction.SiftNow("Sift 2019", 2019, 2));
     }
 
     @Test
-    void aCurateWhoseSiftNeverRanReportsTheSortItDidFinish() {
-        final RunResultView card = RunResults.of(RunMode.CURATE,
-                new CurateOutcome(sortSummary(List.of()), null));
+    void aSortWithSomethingToSiftSaysNothingUnderItsHeading() {
+        final RunResultView card = RunResults.of(RunMode.SORT, sortSummary(List.of()));
 
-        assertThat(card.heading()).isEqualTo("Curating finished.");
-        assertThat(card.counts()).extracting(Count::label)
-                .containsExactly("Photos sorted", "Videos sorted");
+        assertThat(card.detail()).isNull();
     }
 
-    // The canary fires during the sort half, and a sift that paused afterwards does not make a
-    // doubtful date any less doubtful.
     @Test
-    void aCurateCarriesItsSortsDateWarningEvenWhereTheSiftDidNotFinish() {
-        final RunResultView card = RunResults.of(RunMode.CURATE, new CurateOutcome(
-                sortSummary(List.of("dates barely paired")), waiting(WaitingReason.SHARDS_OUTSTANDING)));
+    void aSortThatFiledNothingOffersNoSift() {
+        final RunResultView card = RunResults.of(RunMode.SORT, sortedInto(Set.of()));
 
-        assertThat(requireNonNull(card.warning()).headline())
-                .isEqualTo("The dates on these photos may be wrong.");
+        assertThat(card.action()).isNull();
+    }
+
+    @Test
+    void aSortThatSetEveryFileAsideSaysWhyAndWhereTheyWent() {
+        final RunResultView card = RunResults.of(RunMode.SORT, allOf(39, "lowRes"));
+
+        assertThat(card.detail())
+                .isEqualTo("Nothing ended up in Sorted, so there is nothing to sift yet. Their "
+                        + "file size or their resolution is under what a sift looks at, so they "
+                        + "are in Review instead.");
+    }
+
+    @Test
+    void aSortThatCouldDateNothingSaysThereIsNoYearToFileThemUnder() {
+        final RunResultView card = RunResults.of(RunMode.SORT, allOf(12, "unsorted"));
+
+        assertThat(requireNonNull(card.detail()))
+                .contains("Not one of them carries a date that can be trusted");
+    }
+
+    @Test
+    void aSortThatFoundEverythingAlreadyInTheLibrarySaysSo() {
+        final RunResultView card = RunResults.of(RunMode.SORT, allOf(7, "reimports"));
+
+        assertThat(requireNonNull(card.detail())).contains("in your library already");
+    }
+
+    // Naming one bucket where several took a share would describe part of the run as the whole.
+    @Test
+    void aSortWhoseFilesWentSeveralWaysLeavesTheReasonToTheRows() {
+        final RunResultView card = RunResults.of(RunMode.SORT,
+                new SortSummary(20, 0, 0, 0, 0, 12, 8, 0, List.of(), List.of(), Set.of(), List.of()));
+
+        assertThat(requireNonNull(card.detail()))
+                .endsWith("The rows below say what became of each one.");
+    }
+
+    @Test
+    void aSortWithNothingInScopeSaysSoRatherThanNamingRowsItHasNone() {
+        final RunResultView card = RunResults.of(RunMode.SORT,
+                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of()));
+
+        assertThat(card.detail()).isEqualTo("Nothing in your Inbox was ready to sort.");
+    }
+
+    @Test
+    void aSortSpanningSeveralTimelinesOffersNoSiftRatherThanPickingOne() {
+        final RunResultView card = RunResults.of(RunMode.SORT, sortedInto(Set.of(2019, 2020)));
+
+        assertThat(card.action()).isNull();
     }
 
     @Test
@@ -257,5 +291,18 @@ class RunResultsTest {
 
     private static SortSummary sortSummary(final List<String> warnings) {
         return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), Set.of(2019), warnings);
+    }
+
+    private static SortSummary allOf(final int files, final String bucket) {
+        return new SortSummary(files,
+                "reimports".equals(bucket) ? files : 0,
+                0, 0, 0,
+                "lowRes".equals(bucket) ? files : 0,
+                "unsorted".equals(bucket) ? files : 0,
+                0, List.of(), List.of(), Set.of(), List.of());
+    }
+
+    private static SortSummary sortedInto(final Set<Integer> years) {
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), years, List.of());
     }
 }

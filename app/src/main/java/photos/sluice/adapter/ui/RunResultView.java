@@ -22,12 +22,13 @@ import java.util.List;
  *     null where none was
  * @param warning {@link Warning} something that stopped nothing and is still worth a reader's
  *     attention, or null
- * @param resume {@link Resume} the offer to continue a stopped run, or null where none is open
+ * @param action {@link CardAction} the one thing this card offers beyond Done, or null where it
+ *     offers nothing
  * @param doneLabel {@link String} what the button back to the launcher says
  */
 public record RunResultView(String heading, Tone tone, @Nullable String detail, List<Count> counts,
                             @Nullable String archived, @Nullable Warning warning,
-                            @Nullable Resume resume, String doneLabel) {
+                            @Nullable CardAction action, String doneLabel) {
 
     /**
      * Defensively copies the mutable collection component.
@@ -38,7 +39,7 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
      * @param counts a {@link List} of {@link Count} what the run did
      * @param archived what to say about a previous record moved aside, or null
      * @param warning {@link Warning} something worth attention that stopped nothing, or null
-     * @param resume {@link Resume} the offer to continue a stopped run, or null
+     * @param action {@link CardAction} the one thing offered beyond Done, or null
      * @param doneLabel {@link String} what the button back to the launcher says
      */
     public RunResultView {
@@ -89,16 +90,47 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
     }
 
     /**
-     * An offer to continue a run that stopped with work still in front of it.
+     * The one thing a result card offers beyond Done.
      *
-     * <p>{@code prepDir} is the stopped run's own identity, handed back when the button is pressed
-     * rather than something for the screen to render. What the screen shows is {@code label} and
-     * the question above it.
+     * <p>Sealed, and the two arms carry different things, because they ask the reader in different
+     * places. Continuing states its case on the card, above its own button. Sifting states it in a
+     * confirm on the press, since what it costs is not known while the card is being built.
      *
-     * @param question {@link String} what the reader is being asked
-     * @param label {@link String} what the button says
-     * @param prepDir {@link Path} which stopped run it continues
+     * <p>A card offers at most one, so the view holds a single nullable field rather than one per
+     * arm. Nothing produces both: continuing belongs to a sift that stopped, and sifting to a sort
+     * that finished.
      */
-    public record Resume(String question, String label, Path prepDir) {
+    public sealed interface CardAction {
+
+        /**
+         * An offer to continue a run that stopped with work still in front of it.
+         *
+         * <p>{@code prepDir} is the stopped run's own identity, handed back when the button is
+         * pressed rather than something for the screen to render. What the screen shows is
+         * {@code label} and the question above it.
+         *
+         * @param question {@link String} what the reader is being asked
+         * @param label {@link String} what the button says
+         * @param prepDir {@link Path} which stopped run it continues
+         */
+        record ContinueRun(String question, String label, Path prepDir) implements CardAction {
+        }
+
+        /**
+         * An offer to sift the timeline a finished sort filled.
+         *
+         * <p>No question of its own. What this one spends depends on a count the card cannot have
+         * yet. So the question is asked on the press, where a fresh count is in and can be named.
+         *
+         * <p>{@code justSorted} is what this run put into that timeline, which the question splits
+         * out from the timeline's whole count. The two differ whenever the year already held
+         * photos, and the difference is the part a reader would not otherwise expect to pay for.
+         *
+         * @param label {@link String} what the button says
+         * @param year int the timeline it would sift
+         * @param justSorted int how many photos this run filed into that timeline
+         */
+        record SiftNow(String label, int year, int justSorted) implements CardAction {
+        }
     }
 }

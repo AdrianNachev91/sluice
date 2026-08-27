@@ -100,7 +100,10 @@ for the full reasoning on that one.
 
 ```mermaid
 flowchart TD
-    A["CullEngine.cull(scope)"] --> W{"scope's prep dir<br/>occupied?"}
+    A["CullEngine.cull(scope)"] --> K{"configured provider<br/>holds the key it needs?"}
+    K -- "no key held" --> KZ(["MissingCredentialException,<br/>thrown synchronously -<br/>scope never claimed"])
+    K -- "a tier cannot answer" --> KS(["SecretStoreException,<br/>thrown synchronously"])
+    K -- "yes, or needs none" --> W{"scope's prep dir<br/>occupied?"}
     W -- "yes, not COMPLETE" --> WZ(["ScopeOccupiedException,<br/>thrown synchronously -<br/>nothing rebuilt"])
     W -- "unreadable" --> WU(["ScopeUnreadableException,<br/>thrown synchronously -<br/>nothing rebuilt"])
     W -- "no, or COMPLETE" --> B["JobRunner.submit"]

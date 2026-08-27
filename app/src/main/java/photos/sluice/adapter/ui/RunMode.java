@@ -37,12 +37,6 @@ public enum RunMode {
             "Leave this empty to move everything in Sorted. Or type a year, and a run of months "
                     + "after it if you want less, like 2019 6-8.", 1),
 
-    /** Sorts and then sifts, in one go. */
-    CURATE("Curate", "Curating",
-            "Sorts, then sifts automatically. Takes the oldest year in your Inbox.",
-            "Curating sorts your photos before it looks at them, so what the looking costs is not "
-                    + "known until the sorting is done.", 6),
-
     /**
      * Moves what is left in a Review folder into the library.
      *
@@ -124,8 +118,8 @@ public enum RunMode {
     /**
      * What this mode does to somebody's photos, in one sentence.
      *
-     * <p>The button row names five actions and says nothing about any of them. A name alone tells a
-     * reader which one they picked, never what it is about to do. Two of the five move files out of
+     * <p>The button row names four actions and says nothing about any of them. A name alone tells a
+     * reader which one they picked, never what it is about to do. Two of the four move files out of
      * a folder they will not think to look in afterwards.
      *
      * @return {@link String} what it does

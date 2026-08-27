@@ -1,11 +1,10 @@
 package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
+import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.adapter.ui.RunResultView.Count;
-import photos.sluice.adapter.ui.RunResultView.Resume;
 import photos.sluice.adapter.ui.RunResultView.Tone;
 import photos.sluice.application.port.in.CullJobOutcome;
-import photos.sluice.application.port.in.CurateOutcome;
 import photos.sluice.application.port.in.WaitingReason;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.domain.job.ShardTally;
@@ -22,6 +21,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Turns what a finished job produced into what the result card says.
@@ -75,15 +75,14 @@ final class RunResults {
      * What the card says about a job that ended without throwing.
      *
      * @param ran {@link RunMode} the mode the job was started in
-     * @param outcome what the job produced, which for a sift or a curate says how it ended
+     * @param outcome what the job produced, which for a sift says how it ended
      * @return {@link RunResultView} the card
      */
     static RunResultView of(final RunMode ran, final @Nullable Object outcome) {
         return switch (outcome) {
             case final SortSummary sorted -> sortResult(ran, sorted);
             case final CommitSummary moved -> movedResult(ran, moved);
-            case final CullJobOutcome sift -> siftResult(ran, sift, List.of());
-            case final CurateOutcome curated -> curateResult(ran, curated);
+            case final CullJobOutcome sift -> siftResult(ran, sift);
             case final RescueSummary rescued -> rescueResult(ran, rescued);
             case final ImportSummary brought -> importResult(ran, brought);
             // A mode whose engine answers with something nothing here reads yet. The heading is
@@ -114,8 +113,76 @@ final class RunResults {
      * @return {@link RunResultView} the card
      */
     private static RunResultView sortResult(final RunMode ran, final SortSummary sorted) {
-        return new RunResultView(finishedHeading(ran), Tone.FINISHED, null, sortCounts(sorted),
-                null, canaryLine(sorted), null, DONE);
+        return new RunResultView(finishedHeading(ran), Tone.FINISHED, sortedNothing(sorted),
+                sortCounts(sorted), null, canaryLine(sorted), siftNowOffer(sorted), DONE);
+    }
+
+    /**
+     * What a sort that filed nothing into Sorted says about itself.
+     *
+     * <p>Said because the card otherwise ends on a heading saying the sort finished, counts that
+     * add up to nowhere, and no offer to sift. A reader is left working out which of those three is
+     * the fault. Every file went somewhere, and the rows name where, so what is missing is the one
+     * sentence tying them to the absent button.
+     *
+     * @param sorted {@link SortSummary} what the sort did
+     * @return {@link String} the sentence, or null where something did reach Sorted
+     */
+    private static @Nullable String sortedNothing(final SortSummary sorted) {
+        if (!sorted.yearsSorted().isEmpty()) {
+            return null;
+        }
+        return sorted.processed() == 0
+                ? "Nothing in your Inbox was ready to sort."
+                : "Nothing ended up in Sorted, so there is nothing to sift yet. " + becauseOf(sorted);
+    }
+
+    /**
+     * Why none of them reached Sorted, where one thing accounts for all of them.
+     *
+     * <p>A row names where a file went. This names why it went there. That is the question left
+     * over once the offer to sift is missing and every row reads as a destination.
+     *
+     * <p>Only where a single bucket took the lot. A run split across several has its answer in the
+     * rows already. A sentence picking one of them would describe part of the run as the whole.
+     *
+     * @param sorted {@link SortSummary} what the sort did
+     * @return {@link String} the reason, or a pointer to the rows where several share it
+     */
+    private static String becauseOf(final SortSummary sorted) {
+        final int all = sorted.processed();
+        if (sorted.lowRes() == all) {
+            return "Their file size or their resolution is under what a sift looks at, so they are "
+                    + "in Review instead.";
+        }
+        if (sorted.unsorted() == all) {
+            return "Not one of them carries a date that can be trusted, so there is no year to "
+                    + "file them under. They are in Review, under Unsorted.";
+        }
+        if (sorted.reimportsDeleted() == all) {
+            return "They are all in your library already, so the copies in your Inbox were removed.";
+        }
+        return "The rows below say what became of each one.";
+    }
+
+    /**
+     * The offer to sift what a sort just filed, where the sort filled exactly one timeline.
+     *
+     * <p>Empty means nothing reached Sorted, so there is nothing to offer. More than one timeline
+     * is refused rather than picked between. The button names what it would sift, and naming one of
+     * several spends the reader's money on photos they had not asked about. Nothing on the
+     * dashboard produces more than one today, and this is the answer for when something does.
+     *
+     * @param sorted {@link SortSummary} what the sort did
+     * @return {@link CardAction} the offer, or null where the card makes none
+     */
+    private static @Nullable CardAction siftNowOffer(final SortSummary sorted) {
+        final Set<Integer> years = sorted.yearsSorted();
+        if (years.size() != 1) {
+            return null;
+        }
+        final int year = years.iterator().next();
+        return new CardAction.SiftNow("Sift " + year, year, sorted.photosSorted());
     }
 
     /**
@@ -252,58 +319,32 @@ final class RunResults {
     }
 
     /**
-     * What the card says about a curate, which is a sort and then a sift.
-     *
-     * <p>A curate whose sift never ran is a sort that stopped, so its card is the sort's. That is
-     * the one case where the two halves do not both have something to report.
-     *
-     * @param ran {@link RunMode} the mode the job was started in
-     * @param curated {@link CurateOutcome} what both halves did
-     * @return {@link RunResultView} the card
-     */
-    private static RunResultView curateResult(final RunMode ran, final CurateOutcome curated) {
-        final CullJobOutcome sift = curated.cullOutcome();
-        final SortSummary sorted = curated.sortSummary();
-        if (sift == null) {
-            return sortResult(ran, sorted);
-        }
-        final RunResultView card = siftResult(ran, sift, sortCounts(sorted));
-        // The canary fired during this run's own sort, so it rides the one card the run produces.
-        // Read off the sort half whatever the sift half went on to do, since a sift that paused
-        // does not make a doubtful date any less doubtful.
-        return new RunResultView(card.heading(), card.tone(), card.detail(), card.counts(),
-                card.archived(), canaryLine(sorted), card.resume(), card.doneLabel());
-    }
-
-    /**
      * What the card says about a sift, whichever of the four ways it ended.
      *
      * @param ran {@link RunMode} the mode the job was started in
      * @param outcome {@link CullJobOutcome} how the sift ended
-     * @param before a {@link List} of {@link Count} rows to put above the sift's own, for a curate
      * @return {@link RunResultView} the card
      */
-    private static RunResultView siftResult(final RunMode ran, final CullJobOutcome outcome,
-                                            final List<Count> before) {
+    private static RunResultView siftResult(final RunMode ran, final CullJobOutcome outcome) {
         final Path movedTo = outcome.archivedPriorRun();
         final String archived = movedTo == null ? null : ARCHIVED.formatted(movedTo);
         return switch (outcome) {
             case CullJobOutcome.Applied(final CullReport report, final ApplyReport applied, Path _) ->
                     new RunResultView(finishedHeading(ran), Tone.FINISHED, null,
-                            joined(before, siftCounts(report, applied)), archived, null, null, DONE);
+                            siftCounts(report, applied), archived, null, null, DONE);
             case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _) ->
                     new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED, waitingDetail(why),
-                            joined(before, sheetCounts(job.shards())), archived, null,
+                            sheetCounts(job.shards()), archived, null,
                             resumeOffer(why, job.prepDir()), DONE);
             case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
                     new RunResultView(ran.verb() + " stopped and needs a look.",
                             Tone.UNFINISHED, BLOCKED.formatted(FindingFamily.wentWrong(findings)),
-                            joined(before, sheetCounts(job.shards())), archived, null, null, DONE);
+                            sheetCounts(job.shards()), archived, null, null, DONE);
             // The one case with no prep dir behind it, so nothing counted the sheets. It is reached
             // only before rendering finished, which is why there are none to count.
             case CullJobOutcome.Cancelled _ ->
                     new RunResultView(ran.verb() + " was cancelled.", Tone.UNFINISHED,
-                            CANCELLED_BEFORE_ANY_SHEET, before, archived, null, null, DONE);
+                            CANCELLED_BEFORE_ANY_SHEET, List.of(), archived, null, null, DONE);
         };
     }
 
@@ -366,12 +407,12 @@ final class RunResults {
      *
      * @param why {@link WaitingReason} why the sift paused
      * @param prepDir {@link Path} the paused run's own directory
-     * @return {@link Resume} the offer, or null where none is open
+     * @return {@link CardAction} the offer, or null where none is open
      */
-    private static @Nullable Resume resumeOffer(final WaitingReason why, final Path prepDir) {
+    private static @Nullable CardAction resumeOffer(final WaitingReason why, final Path prepDir) {
         return switch (why) {
-            case CEILING_REACHED -> new Resume(CEILING_QUESTION, CONTINUE, prepDir);
-            case CANCELLED -> new Resume(CANCELLED, CONTINUE, prepDir);
+            case CEILING_REACHED -> new CardAction.ContinueRun(CEILING_QUESTION, CONTINUE, prepDir);
+            case CANCELLED -> new CardAction.ContinueRun(CANCELLED, CONTINUE, prepDir);
             case SHARDS_OUTSTANDING -> null;
         };
     }
@@ -448,18 +489,5 @@ final class RunResults {
         if (count > 0) {
             rows.add(new Count(id, label, RunWords.grouped(count)));
         }
-    }
-
-    /**
-     * Two sets of rows as one.
-     *
-     * @param first a {@link List} of {@link Count} the rows to put above
-     * @param second a {@link List} of {@link Count} the rows to put below
-     * @return a {@link List} of {@link Count} the rows together
-     */
-    private static List<Count> joined(final List<Count> first, final List<Count> second) {
-        final List<Count> rows = new ArrayList<>(first);
-        rows.addAll(second);
-        return rows;
     }
 }

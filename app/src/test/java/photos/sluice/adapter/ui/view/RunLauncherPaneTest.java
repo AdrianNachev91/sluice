@@ -67,7 +67,7 @@ class RunLauncherPaneTest {
         final Parent pane = onFxThread(() -> built(presenter()));
 
         assertThat(modeButtons(pane)).extracting(ToggleButton::getText)
-                .containsExactly("Sort", "Sift", "Move to library", "Curate", "Rescue");
+                .containsExactly("Sort", "Sift", "Move to library", "Rescue");
         assertThat(modeButtons(pane)).filteredOn(ToggleButton::isSelected)
                 .extracting(ToggleButton::getText).containsExactly("Sort");
     }
@@ -295,10 +295,10 @@ class RunLauncherPaneTest {
         final Node before = pane.lookup("#run-mode-sift");
 
         onFxThread(() -> fire(pane, "#run-mode-sift"));
-        onFxThread(() -> fire(pane, "#run-mode-curate"));
+        onFxThread(() -> fire(pane, "#run-mode-move"));
 
         assertThat(pane.lookup("#run-mode-sift")).isSameAs(before);
-        assertThat(text(pane, "#run-scope-hint")).contains("sorts your photos before it looks at them");
+        assertThat(text(pane, "#run-scope-hint")).contains("Leave this empty to move everything");
     }
 
     @Test

@@ -15,11 +15,16 @@ import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.RunEnding;
+import photos.sluice.application.port.out.SecretId;
+import photos.sluice.application.port.out.SecretStatus;
+import photos.sluice.application.port.out.SecretStore;
+import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.SpendLedgerPort;
@@ -45,14 +50,14 @@ import java.util.Optional;
 /**
  * Orchestrates a whole cull job: prep, then dispatch, then apply (see
  * {@link #buildFreshAndDispatch}). It also owns {@link #resume} for a job still sitting on shards,
- * and the scope-occupancy rules that decide whether a fresh run may start at all. The watch-mode
- * lifecycle itself lives in {@link CullWatchers}. The dispatch step is conditional, not a fixed
- * stage: it runs only while a montage still lacks a shard.
+ * and the rules that decide whether a fresh run may start at all. The watch-mode lifecycle itself
+ * lives in {@link CullWatchers}. The dispatch step is conditional, not a fixed stage: it runs only
+ * while a montage still lacks a shard.
  *
  * <p>Not a Spring bean. {@link Pipeline} builds the one instance it needs, the same way it builds
- * the {@link CullWatchers} this engine delegates to. {@link #refuseIfScopeOccupied} and
- * {@link #buildFreshAndDispatch} stay package-private rather than private. {@link CurateEngine}'s
- * own cull stage reuses both directly instead of duplicating them.
+ * the {@link CullWatchers} this engine delegates to. Whichever members {@link CurateEngine}'s own
+ * cull stage reuses stay package-private rather than private, so it shares them rather than
+ * duplicating them.
  */
 final class CullEngine {
 
@@ -78,6 +83,7 @@ final class CullEngine {
     private final RootsGuard rootsGuard;
     private final SpendLedgerPort spendLedger;
     private final SpendEstimator spendEstimator;
+    private final SecretStore secretStore;
 
     /**
      * Wires together every collaborator this engine dispatches cull jobs through.
@@ -97,6 +103,7 @@ final class CullEngine {
      * @param prepDirRemedies {@link PrepDirRemedies} archives a completed run out of the way
      * @param rootsGuard {@link RootsGuard} refuses a resume whose folder roots are not usable
      * @param spendLedger {@link SpendLedgerPort} records what each run consumed
+     * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      */
     CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
@@ -107,7 +114,9 @@ final class CullEngine {
                final ApplyPlanner applyPlanner, final LedgerReader ledgerReader,
                final PrepDirDoctor prepDirDoctor, final PrepDirRemedies prepDirRemedies,
                final RootsGuard rootsGuard, final SpendLedgerPort spendLedger,
+               final SecretStore secretStore,
                final Duration watchPollInterval) {
+        this.secretStore = secretStore;
         this.spendLedger = spendLedger;
         this.spendEstimator = new SpendEstimator(spendLedger);
         this.rootsGuard = rootsGuard;
@@ -172,14 +181,14 @@ final class CullEngine {
      *
      * <p>Refused here, synchronously before submit(), for the earliest possible fail-fast.
      * claimScope() inside buildFreshAndDispatch() below asks the same question again once actually
-     * running. That is CurateEngine's only option for an auto-resolved scope, per its own comment.
-     * The archive of a completed occupant happens only there, on the job's own thread. Only that
-     * call can put the resulting graveyard path into the outcome.
+     * running. The archive of a completed occupant happens only there, on the job's own thread.
+     * Only that call can put the resulting graveyard path into the outcome.
      *
      * @param scope {@link CullScope} the media scope to cull
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
      */
     JobHandle<CullJobOutcome> cull(final CullScope scope) {
+        this.refuseIfTheProviderHasNoCredential();
         this.refuseIfScopeOccupied(scope);
         this.refuseIfScopeOverlaps(scope);
         return this.jobRunner.submit(handle -> this.buildFreshAndDispatch(scope, handle::isCancellationRequested));
@@ -295,6 +304,34 @@ final class CullEngine {
                 this.configuredProviderSpends(),
                 this.cullSettings.providerSettings().model(),
                 this.cullSettings.montage());
+    }
+
+    /**
+     * Throws if the configured provider needs a credential and no tier holds one.
+     *
+     * <p>Asked before a run is submitted, because everything a sift does before it needs the key is
+     * wasted without it. Prep decodes every photo in the scope and writes a montage set, and
+     * {@link #claimScope} takes the scope before that. A run that discovers the missing key at
+     * dispatch has already spent both. It also leaves a claimed scope behind, which its own next
+     * attempt is then refused for.
+     *
+     * <p>A provider that authenticates with nothing names no credential, so this asks nothing of
+     * the free path. {@link SecretStore#status} rather than a read: whether a key is held is the
+     * whole question, and an engine has no use for the value.
+     *
+     * <p>Not asked on a resume. A resume runs no prep, and its dispatch refuses before it makes a
+     * request. A run whose shards are all in enters no culler at all, and refusing that one would
+     * strand work already paid for behind a key it does not need.
+     *
+     * @throws MissingCredentialException if the configured provider needs a credential and none is held
+     * @throws SecretStoreException if a tier cannot say what it holds
+     */
+    void refuseIfTheProviderHasNoCredential() {
+        final SecretId credential = this.cullDispatcher.configuredCredential();
+        if (credential != null && this.secretStore.status(credential) instanceof SecretStatus.Absent) {
+            throw new MissingCredentialException(credential,
+                    "No credential is stored for the '" + credential.provider() + "' vision provider");
+        }
     }
 
     /**
@@ -444,9 +481,10 @@ final class CullEngine {
      * Frees scope's prep dir for a fresh run, and reports where a completed occupant was filed.
      *
      * <p>A COMPLETE run is archived into the graveyard rather than overwritten, and no confirmation
-     * is asked. Curate resolves its own scope mid-job, so no dialog could fire there anyway, and a
-     * monthly curate would pay that toll every month. Nothing is destroyed: the archive keeps the
-     * same 30-day recovery window every other graveyard entry gets.
+     * is asked. What such a run holds is a record of decisions already applied rather than work
+     * still owed. Nothing is destroyed either: the archive keeps the same 30-day recovery window
+     * every other graveyard entry gets. An occupant that has not finished is the other case, and
+     * that one is refused outright rather than archived.
      *
      * @param scope {@link CullScope} the scope to free
      * @return {@link Path} the graveyard directory a completed occupant was archived into, or null

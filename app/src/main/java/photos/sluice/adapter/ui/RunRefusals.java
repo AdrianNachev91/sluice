@@ -4,6 +4,8 @@ import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
+import photos.sluice.application.port.out.MissingCredentialException;
+import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathRole;
@@ -46,10 +48,18 @@ final class RunRefusals {
             // wrong. Which folder is at fault is the part a reader needs, in the words the rest of
             // this app calls that folder by.
             case final PathsMisconfiguredException misconfigured -> foldersAtFault(misconfigured);
-            // A curate that already moved files before being refused. Said first, because what it
-            // did is the part a reader cannot see and would otherwise go looking for.
-            case final Pipeline.CurateConflictException conflict -> "Your photos were sorted, and then "
-                    + "sifting stopped: " + occupiedBy(conflict) + " The sorting stands.";
+            // Several throw sites raise this, and their messages differ: one names the environment
+            // variable that would override the key, another only the provider. Its type and its id
+            // are the contract, so the words are composed here instead of taken from any of them.
+            case final MissingCredentialException _ -> "A sift cannot be started because your "
+                    + "provider key is not set. Add one in Settings.";
+            // A store that answers neither yes nor no. Worded as Settings words the same fault, and
+            // carrying the same remedy, since one broken store must not read as two problems.
+            case final SecretStoreException broken -> "Sluice could not read your key. The credential "
+                    + "store on this computer refused to answer. Nothing else you have configured is "
+                    + "affected. Open Settings and save your key again: that alone often fixes it. "
+                    + "If it keeps happening, report this as a bug in Sluice, quoting this: "
+                    + broken.getMessage();
             case final Pipeline.ScopeOccupiedException occupied -> occupiedBy(occupied);
             case final Pipeline.ScopeOverlapsException overlaps -> overlapping(overlaps);
             // Written for the person meeting it, like the three above. A run finishing between a
@@ -88,8 +98,8 @@ final class RunRefusals {
      *
      * <p>Names the runs screen, where that earlier sift can be carried on or thrown away. The
      * launcher offers the same thing on its own button wherever it can see the run coming. A reader
-     * meeting this sentence has usually arrived another way. A curate resolves its scope mid-job,
-     * or a run appeared between the screen being drawn and the button being pressed.
+     * meeting this sentence has usually arrived another way: a press on a finished sort's card, or
+     * a run that appeared between the screen being drawn and the button being pressed.
      *
      * @param occupied {@link Pipeline.ScopeOccupiedException} the refusal, carrying the run
      * @return {@link String} the sentence to show

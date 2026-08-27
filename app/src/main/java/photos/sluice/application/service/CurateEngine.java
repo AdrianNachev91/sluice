@@ -2,7 +2,6 @@ package photos.sluice.application.service;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.in.CurateOutcome;
-import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
@@ -15,14 +14,14 @@ import java.util.stream.IntStream;
  * Sorts a scope, then culls whatever that sort just populated, as one job. Not a Spring bean.
  * {@link Pipeline} builds the one instance it needs, wiring it to the same {@link CullEngine} it
  * builds for its own {@code cull}/{@code resume}.
+ *
+ * <p>No surface offers this, so nothing outside the tests reaches it. It is kept whole and tested
+ * against the day one does, rather than deleted and written again from scratch.
  */
 final class CurateEngine {
 
-    private static final String SORTING = "Sorting...";
-
     private final SortEngine sortEngine;
     private final JobRunner jobRunner;
-    private final PhaseRunner phaseRunner;
     private final CullEngine cullEngine;
 
     /**
@@ -30,14 +29,12 @@ final class CurateEngine {
      *
      * @param sortEngine {@link SortEngine} performs the sort phase
      * @param jobRunner {@link JobRunner} submits the combined sort+cull job
-     * @param progressPort {@link ProgressPort} reports phase progress
      * @param cullEngine {@link CullEngine} performs the cull phase
      */
-    CurateEngine(final SortEngine sortEngine, final JobRunner jobRunner, final ProgressPort progressPort,
+    CurateEngine(final SortEngine sortEngine, final JobRunner jobRunner,
                  final CullEngine cullEngine) {
         this.sortEngine = sortEngine;
         this.jobRunner = jobRunner;
-        this.phaseRunner = new PhaseRunner(progressPort);
         this.cullEngine = cullEngine;
     }
 
@@ -75,6 +72,10 @@ final class CurateEngine {
      * @return a {@link JobHandle} of {@link CurateOutcome} handle for the combined sort+cull job
      */
     JobHandle<CurateOutcome> curate(final SortScope scope) {
+        // Before the sort, not only before the cull stage. A curate whose provider cannot
+        // authenticate ends in a refusal whatever the sort does. By then it has moved real files
+        // for a run that was never going to finish.
+        this.cullEngine.refuseIfTheProviderHasNoCredential();
         final CullScope known = knownCullScope(scope);
         if (known != null) {
             this.cullEngine.refuseIfScopeOccupied(known);

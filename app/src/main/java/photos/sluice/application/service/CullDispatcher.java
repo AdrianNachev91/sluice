@@ -1,11 +1,13 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
@@ -117,6 +119,27 @@ public class CullDispatcher {
     public boolean configuredProviderIs(final ProviderType type) {
         final VisionCuller culler = this.byId.get(this.settings.provider());
         return culler != null && culler.type() == type;
+    }
+
+    /**
+     * Which credential the configured provider authenticates with, for a caller that has to know
+     * whether one is stored before starting work.
+     *
+     * <p>The descriptor's answer rather than a lookup of its own. A provider that takes no
+     * credential names none, so a null here is the provider saying it needs nothing, not a failure
+     * to find out.
+     *
+     * <p>Null too when nothing is registered under the configured id, the same answer
+     * {@link #configuredProviderIs} gives for the same case. A build that cannot cull with the
+     * configured id has no credential to demand, and the refusal for the id itself belongs to
+     * {@link #cull}.
+     *
+     * @return {@link SecretId} the credential the configured provider needs, or null when it needs
+     *     none
+     */
+    public @Nullable SecretId configuredCredential() {
+        final VisionCuller culler = this.byId.get(this.settings.provider());
+        return culler == null ? null : culler.describe().credential();
     }
 
     /**

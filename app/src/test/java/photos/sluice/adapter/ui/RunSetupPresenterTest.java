@@ -152,24 +152,71 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aCurateAsksFirstBecauseItSpendsWithoutEverShowingAFigure() {
-        this.choose(RunMode.CURATE, "");
+    void siftingFromAFinishedSortsCardAsksFirstAndNamesTheFigure() {
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true));
 
-        final RunSetupPresenter.Confirmation asked = this.presenter.confirmationNeeded();
+        final RunSetupPresenter.Confirmation asked = this.askedBeforeSifting(2019);
 
-        assertThat(asked).isNotNull();
+        assertThat(asked.heading()).isEqualTo("Sift 2019?");
         assertThat(asked.question())
-                .contains("the size of the sift cannot be estimated until sorting has finished");
-        assertThat(this.presenter.view().cost()).isNull();
+                .isEqualTo("This looks at 100 photos sorted for 2019: 6 from this run and 94 "
+                        + "sorted earlier. That is about 150,000 tokens, and sifting spends from "
+                        + "your provider account balance. Sluice will stop and ask if it goes "
+                        + "far past that.");
+        assertThat(asked.goAhead()).isEqualTo("Sift 2019");
     }
 
     @Test
-    void aCurateStillAsksWhereTheCountsHaveNotLanded() {
-        final RunSetupPresenter opening = this.launcher();
+    void theQuestionSplitsTheTimelineIntoThisRunAndWhatWasThereBefore() {
+        assertThat(this.askedBeforeSifting(2019).question())
+                .contains("100 photos sorted for 2019: 6 from this run and 94 sorted earlier");
+    }
 
-        opening.setMode(RunMode.CURATE);
+    @Test
+    void aTimelineHoldingOnlyWhatThisRunSortedSaysSo() {
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
+                new YearRow(2019, 6, 0, List.of(new MonthRow(6, 6, 0))))));
+        this.presenter.refreshCounts();
 
-        assertThat(opening.confirmationNeeded()).isNotNull();
+        assertThat(this.askedBeforeSifting(2019).question())
+                .contains("This looks at 6 photos sorted for 2019, all of them from this run.");
+    }
+
+    @Test
+    void siftingFromACardStillSaysItSpendsWhereNoFigureCanBeGiven() {
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false));
+
+        assertThat(this.askedBeforeSifting(2019).question())
+                .endsWith("Sifting spends from your provider account balance.")
+                .doesNotContain("tokens");
+    }
+
+    @Test
+    void siftingFromACardStillAsksWhereTheProviderSpendsNothing() {
+        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
+
+        assertThat(this.askedBeforeSifting(2019).question())
+                .contains("6 from this run and 94 sorted earlier", "costs you nothing through Sluice");
+    }
+
+    @Test
+    void siftingFromACardStartsNothingBeforeTheCountsHaveLanded() {
+        assertThat(this.launcher().siftNowNeeds(2019, 6))
+                .isInstanceOf(RunSetupPresenter.SiftNow.Refuse.class);
+    }
+
+    @Test
+    void siftingATimelineHoldingOnlyVideosIsRefusedInTheLaunchersOwnWords() {
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
+                new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0))))));
+        this.presenter.refreshCounts();
+
+        assertThat(this.presenter.siftNowNeeds(2021, 0))
+                .isEqualTo(new RunSetupPresenter.SiftNow.Refuse(new RunLauncherView.Message(
+                        "No photos are sorted for 2021, so there is nothing to sift.", true)));
+        this.choose(RunMode.SIFT, "2021");
+        assertThat(this.presenter.view().scopeRefusal())
+                .isEqualTo("No photos are sorted for 2021, so there is nothing to sift.");
     }
 
     @Test
@@ -227,15 +274,6 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aCurateCarriesNoCostFigureAndSaysWhyInsteadOfGuessingOne() {
-        this.choose(RunMode.CURATE, "2019");
-
-        assertThat(this.presenter.view().cost()).isNull();
-        assertThat(this.presenter.view().scopeHint()).contains("not known until the sorting is done");
-        verify(this.pipeline, never()).estimateFor(anyInt());
-    }
-
-    @Test
     void aSortIsNeverSizedForCostBecauseItCallsNoModel() {
         this.choose(RunMode.SORT, "2019");
 
@@ -264,31 +302,12 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aCurateOnAProviderThatSpendsNothingIsNamedAsACurateRatherThanASift() {
-        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
-
-        this.choose(RunMode.CURATE, "");
-
-        assertThat(this.freeCost().headline())
-                .isEqualTo("Curating costs you nothing through Sluice.");
-    }
-
-    @Test
     void aModeThatReachesNoProviderSaysNothingAboutMoneyEitherWay() {
         when(this.pipeline.configuredProviderSpends()).thenReturn(false);
 
         this.choose(RunMode.MOVE_TO_LIBRARY, "2019");
 
         assertThat(this.presenter.view().cost()).isNull();
-    }
-
-    @Test
-    void aCurateDoesNotAskAboutMoneyWhereTheProviderSpendsNone() {
-        when(this.pipeline.configuredProviderSpends()).thenReturn(false);
-
-        this.choose(RunMode.CURATE, "");
-
-        assertThat(this.presenter.confirmationNeeded()).isNull();
     }
 
     @Test
@@ -571,14 +590,13 @@ class RunSetupPresenterTest {
                         + "month. Takes the oldest year in your Inbox.",
                 "Sifts through your sorted photos and organises them into categories.",
                 "Moves what is in Sorted into your library.",
-                "Sorts, then sifts automatically. Takes the oldest year in your Inbox.",
                 "Moves what is left in a Review folder into your library.");
     }
 
     @Test
     void theRowOffersEveryModeButImport() {
         assertThat(this.modesInTheRow()).containsExactly(RunMode.SORT, RunMode.SIFT,
-                RunMode.MOVE_TO_LIBRARY, RunMode.CURATE, RunMode.RESCUE);
+                RunMode.MOVE_TO_LIBRARY, RunMode.RESCUE);
     }
 
     @Test
@@ -633,7 +651,7 @@ class RunSetupPresenterTest {
         }
 
         assertThat(labels).containsExactly("Run Sort", "Run Sift", "Run Move to library",
-                "Run Curate", "Run Rescue");
+                "Run Rescue");
     }
 
     @Test
@@ -667,14 +685,6 @@ class RunSetupPresenterTest {
     void namingAYearDoesNotGetRoundAnEmptyInbox() {
         this.anEmptyInbox();
         this.choose(RunMode.SORT, "2019");
-
-        assertThat(this.presenter.view().canStart()).isFalse();
-    }
-
-    @Test
-    void anEmptyInboxKillsStartForACurateToo() {
-        this.anEmptyInbox();
-        this.choose(RunMode.CURATE, "");
 
         assertThat(this.presenter.view().canStart()).isFalse();
     }
@@ -873,7 +883,7 @@ class RunSetupPresenterTest {
         assertThat(this.viewOf(RunMode.SIFT).scopeNamesTheRun()).isTrue();
         assertThat(this.viewOf(RunMode.MOVE_TO_LIBRARY).scopeNamesTheRun()).isTrue();
         assertThat(this.viewOf(RunMode.SORT).scopeNamesTheRun()).isFalse();
-        assertThat(this.viewOf(RunMode.CURATE).scopeNamesTheRun()).isFalse();
+        assertThat(this.viewOf(RunMode.RESCUE).scopeNamesTheRun()).isFalse();
     }
 
     @Test
@@ -907,16 +917,16 @@ class RunSetupPresenterTest {
 
     @Test
     void theModeNowChosenIsTheOnlyOneMarked() {
-        this.presenter.setMode(RunMode.CURATE);
+        this.presenter.setMode(RunMode.MOVE_TO_LIBRARY);
 
         assertThat(this.presenter.view().modes()).filteredOn(RunLauncherView.ModeChoice::chosen)
-                .extracting(RunLauncherView.ModeChoice::mode).containsExactly(RunMode.CURATE);
+                .extracting(RunLauncherView.ModeChoice::mode).containsExactly(RunMode.MOVE_TO_LIBRARY);
     }
 
     @Test
     void everyModeGetsAButtonAndTheyReadInTheOrderTheyAreOffered() {
         assertThat(this.presenter.view().modes()).extracting(RunLauncherView.ModeChoice::label)
-                .containsExactly("Sort", "Sift", "Move to library", "Curate", "Rescue");
+                .containsExactly("Sort", "Sift", "Move to library", "Rescue");
     }
 
     @Test
@@ -1072,6 +1082,12 @@ class RunSetupPresenterTest {
 
     private RunSetupPresenter launcher() {
         return new RunSetupPresenter(this.pipeline, this.jobIsRunning::get, () -> this.redraw.run());
+    }
+
+    private RunSetupPresenter.Confirmation askedBeforeSifting(final int year) {
+        assertThat(this.presenter.siftNowNeeds(year, 6))
+                .isInstanceOf(RunSetupPresenter.SiftNow.Ask.class);
+        return ((RunSetupPresenter.SiftNow.Ask) this.presenter.siftNowNeeds(year, 6)).question();
     }
 
     private RunLauncherView.Cost.Estimate estimatedCost() {
