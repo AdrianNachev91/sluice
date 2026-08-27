@@ -1738,6 +1738,19 @@
     -fx-cursor: hand;
 }
 
+/* Both lifted to the page's own text colour, rather than the fade an ordinary button takes. That
+   fade works on a filled control and barely reads on a transparent one, which is the whole of this
+   fold's look. */
+.runs-section-toggle:hover {
+    -fx-opacity: 1.0;
+    -fx-text-fill: -sluice-text;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.runs-section-toggle:hover .runs-fold-marker {
+    -fx-fill: -sluice-text;
+}
+
 .runs-completed {
     -fx-spacing: 10px;
 }
