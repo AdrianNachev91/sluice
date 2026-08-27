@@ -5,12 +5,14 @@ import photos.sluice.application.port.in.LibraryRootMoveOutcome;
 import photos.sluice.application.port.in.LibraryRootResolution;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
+import photos.sluice.application.port.in.RunsUnreadableException;
 import photos.sluice.application.port.in.UnfinishedRunsException;
 import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.copy.CopySummary;
 import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 
 import java.nio.file.Path;
@@ -116,7 +118,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
                 progress -> this.copyEngine.copyTree(movingFrom, movingTo, progress,
                         handle::isCancellationRequested));
         if (copy.cancelled()) {
-            return new LibraryRootMoveOutcome.CopyCancelled(copy.filesCopied(), copy.filesFound());
+            return new LibraryRootMoveOutcome.CopyCancelled(copy.filesCopied(), copy.filesFound(), movingTo);
         }
         this.settings.saveMovingTheLibraryRoot(movingTo);
         return new LibraryRootMoveOutcome.CopiedAndMoved(copy.filesCopied(), copy.filesFound());
@@ -214,10 +216,18 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
      * established anything about, and treating an unknown as finished is the reading that lets the
      * stall through.
      *
+     * <p>A sift-prep root nobody could read at all is the same reading one level up, and refuses
+     * for the same reason. The move retires the watchers polling under the working root, and the
+     * runs this check protects are the ones depending on them.
+     *
      * @throws UnfinishedRunsException when a run has not finished
+     * @throws RunsUnreadableException when the sift-prep root itself could not be read
      */
     private void requireEveryRunHasFinished() {
-        final List<String> unfinished = this.prepDirDoctor.runs(this.paths.cullPrep()).stream()
+        if (!(this.prepDirDoctor.runs(this.paths.cullPrep()) instanceof CullRuns.Listed(final List<CullRunSummary> runs))) {
+            throw new RunsUnreadableException(this.paths.cullPrep());
+        }
+        final List<String> unfinished = runs.stream()
                 .filter(run -> run.health().state() != State.COMPLETE)
                 .map(CullRunSummary::scope)
                 .toList();

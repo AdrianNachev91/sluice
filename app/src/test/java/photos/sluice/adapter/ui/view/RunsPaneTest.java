@@ -1,0 +1,183 @@
+package photos.sluice.adapter.ui.view;
+
+import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.stage.Stage;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.testfx.api.FxToolkit;
+import org.testfx.util.WaitForAsyncUtils;
+import photos.sluice.adapter.ui.RunsPresenter;
+import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.job.ShardTally;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+// What only a built scene graph can be wrong about. Which cards the screen draws, what each one
+// holds, and what a fold takes off the screen. What a state means is RunsPresenterTest's.
+class RunsPaneTest {
+
+    @BeforeAll
+    static void startToolkit() throws Exception {
+        FxToolkit.registerPrimaryStage();
+    }
+
+    @AfterEach
+    void closeStages() throws Exception {
+        FxToolkit.cleanupStages();
+    }
+
+    @Test
+    void everyUnfinishedRunGetsACardCarryingWhatItCoversAndWhereItGotTo() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
+
+        assertThat(pane.lookup("#run-card-2019")).isNotNull();
+        assertThat(textsIn(pane, "#run-card-2019"))
+                .contains("2019", "Waiting for sheets", "2 of 4 sheets judged");
+    }
+
+    // Height, not managed: the section stays laid out at nothing so the fold has a height to
+    // travel to. Waited for rather than read straight away, because that travel takes a moment.
+    @Test
+    void aFinishedRunTakesUpNoRoomUntilItsSectionIsOpened() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2018", State.COMPLETE)));
+        assertThat(heightOfFinished(pane)).isZero();
+
+        onFxThread(() -> fire(pane, "#runs-completed-toggle"));
+
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> heightOfFinished(pane) > 0);
+        assertThat(pane.lookup("#run-card-2018")).isNotNull();
+    }
+
+    @Test
+    void theFoldSaysHowManyRunsAreInsideIt() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2018", State.COMPLETE),
+                run("2017", State.COMPLETE)));
+
+        assertThat(((Button) pane.lookup("#runs-completed-toggle")).getText())
+                .isEqualTo("Finished runs (2)");
+    }
+
+    @Test
+    void aRunReadyToFinishDrawsBothItsButtons() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.READY)));
+
+        assertThat(pane.lookup("#run-continue-2019")).isNotNull();
+        assertThat(pane.lookup("#run-discard-2019")).isNotNull();
+    }
+
+    @Test
+    void aBlockedRunDrawsNoWayToCarryOn() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.BLOCKED)));
+
+        assertThat(pane.lookup("#run-continue-2019")).isNull();
+        assertThat(pane.lookup("#run-discard-2019")).isNotNull();
+    }
+
+    @Test
+    void clearingIsDeadWithNothingFinishedToClear() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
+
+        assertThat(pane.lookup("#runs-clear-completed").isDisabled()).isTrue();
+    }
+
+    @Test
+    void anInstallWithNoRunsSaysSoRatherThanDrawingAnEmptyList() throws Exception {
+        final Parent pane = onFxThread(RunsPaneTest::built);
+
+        assertThat(pane.lookup("#runs-nothing-yet").isManaged()).isTrue();
+        assertThat(pane.lookup("#runs-unreadable").isManaged()).isFalse();
+        assertThat(((Label) pane.lookup("#runs-nothing-yet")).getText()).contains("No sifts");
+    }
+
+    @Test
+    void aFolderThatCouldNotBeReadSaysSoInsteadOfTheNoRunsLine() throws Exception {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("logs", "sift-prep")));
+        final Parent pane = onFxThread(() -> built(new RunsPresenter(pipeline)));
+
+        assertThat(pane.lookup("#runs-unreadable").isManaged()).isTrue();
+        assertThat(pane.lookup("#runs-nothing-yet").isManaged()).isFalse();
+    }
+
+    @Test
+    void aScreenWithNothingToReportKeepsNoRoomForTheLineThatWouldReportIt() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
+
+        assertThat(pane.lookup("#runs-message").isManaged()).isFalse();
+    }
+
+    // The box's own resized height, not its bounds. A box holds its children at their full size
+    // whatever ceiling it is under, so its bounds answer for them rather than for the room it takes.
+    private static double heightOfFinished(final Parent pane) {
+        return ((Region) pane.lookup("#runs-completed-cards")).getHeight();
+    }
+
+    private static List<String> textsIn(final Parent pane, final String id) {
+        return pane.lookup(id).lookupAll(".label").stream()
+                .map(node -> ((Label) node).getText())
+                .toList();
+    }
+
+    private static Node fire(final Parent pane, final String id) {
+        final Node found = pane.lookup(id);
+        ((Button) found).fire();
+        return found;
+    }
+
+    private static CullRunSummary run(final String scope, final State state) {
+        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+                new PrepDirHealth(state, List.of()),
+                state == State.DAMAGED || state == State.COMPLETE ? null : new ShardTally(2, 2, 4),
+                Instant.now());
+    }
+
+    private static Parent built(final CullRunSummary... runs) {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runs)));
+        when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
+        return built(new RunsPresenter(pipeline));
+    }
+
+    // Read before the pane is built, as well as by the pane's own background read. So no assertion
+    // here depends on which of the two lands first.
+    private static Parent built(final RunsPresenter presenter) {
+        presenter.refresh();
+        final var page = (Parent) RunsPane.pane(presenter, () -> {});
+        final var scene = new Scene(new StackPane(page), 900, 700);
+        scene.getStylesheets().add(
+                Objects.requireNonNull(RunsPaneTest.class.getResource("/ui/sluice.css"),
+                        "the app stylesheet is missing from the test classpath").toExternalForm());
+        final var stage = new Stage();
+        stage.setScene(scene);
+        stage.show();
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        return page;
+    }
+
+    private static <T> T onFxThread(final Callable<T> work) throws Exception {
+        final T result = WaitForAsyncUtils.asyncFx(work).get();
+        WaitForAsyncUtils.waitForFxEvents();
+        return result;
+    }
+}

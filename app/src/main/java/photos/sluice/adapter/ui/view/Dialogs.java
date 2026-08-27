@@ -10,7 +10,9 @@ import javafx.scene.layout.Region;
 import javafx.stage.Stage;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -21,9 +23,11 @@ import java.util.Optional;
  * appears is the platform's own confirmation look: a question-mark badge, a stock title-bar icon,
  * colours from no palette of ours.
  *
- * <p>What a caller describes is the choices, not their placement. Where a button sits is the
- * platform's own convention, and the three desktops this app runs on do not agree on it. Deciding
- * it here from what each choice is for means each of them gets its own convention.
+ * <p>What a caller describes is the choices, not their placement. The row reads the same on every
+ * desktop this app runs on: the choice the dialog wants pressed, then the rest, then the way out.
+ * The three platforms order buttons by what each one is for and disagree with each other about
+ * where the way out goes, so following any of them would make the same question read differently
+ * depending on the machine.
  */
 final class Dialogs {
 
@@ -84,8 +88,9 @@ final class Dialogs {
     /**
      * Puts one question and answers which choice was taken.
      *
-     * <p>Two or more ways to go ahead are grouped together, apart from the way out. Left as a plain
-     * row they read as equal options, and backing out is not one of the choices.
+     * <p>The row leads with the choice this dialog wants pressed and keeps the way out last, so
+     * two or more ways to go ahead stay together rather than reading as equal options either side
+     * of it.
      *
      * @param heading {@link String} what the question is about
      * @param question {@link String} the question, in the terms the choices answer it
@@ -112,14 +117,18 @@ final class Dialogs {
     }
 
     /**
-     * The buttons for a set of choices, in the order they were offered.
+     * The buttons for a set of choices, the one the dialog leads with first.
      *
      * <p>Refuses a set the dialog could not draw an answer from, rather than drawing one nobody
      * meant. Each of the three is a shape a caller can write by accident and no reader would spot.
      * No way out, two answers to Enter, or a dialog whose only button leaves.
      *
+     * <p>The leading choice comes first whatever it is for. A dialog about something the app cannot
+     * undo leads with backing out, and a row putting the quiet choice ahead of it reads as an
+     * afterthought stuck on the end. The offered order decides the rest.
+     *
      * @param choices the choices to build
-     * @return a {@link Map} of {@link ButtonType} to {@link Choice}, in offer order
+     * @return a {@link Map} of {@link ButtonType} to {@link Choice}, leading choice first
      */
     private static Map<ButtonType, Choice> buttonsFor(final Choice... choices) {
         final long goAheads = Arrays.stream(choices).filter(c -> c.role() == Role.GO_AHEAD).count();
@@ -131,26 +140,71 @@ final class Dialogs {
                     + cancels + " way(s) out and " + loud + " leading");
         }
         final Map<ButtonType, Choice> buttons = new LinkedHashMap<>();
-        for (final Choice choice : choices) {
-            buttons.put(new ButtonType(choice.label(), dataFor(choice.role(), goAheads)), choice);
+        for (final Choice choice : leadingFirst(choices)) {
+            buttons.put(new ButtonType(choice.label(), dataFor(choice.role())), choice);
         }
         return buttons;
     }
 
     /**
-     * Where one choice sits, said in the terms {@link ButtonBar} orders buttons by.
+     * Has a dialog's button row keep the order the buttons were built in.
+     *
+     * <p>A miss leaves the bar sorting the buttons itself, which is the whole of what this turns
+     * off, so {@code DialogsTest} pins the resulting order rather than this call.
+     *
+     * @param alert {@link Alert} the dialog
+     */
+    private static void orderAsBuilt(final Alert alert) {
+        if (alert.getDialogPane().lookup(".button-bar") instanceof final ButtonBar bar) {
+            bar.setButtonOrder(ButtonBar.BUTTON_ORDER_NONE);
+        }
+    }
+
+    /**
+     * The choices in the order the row draws them: the leading one, the rest as offered, the way
+     * out last.
+     *
+     * <p>Pinning the way out to the end is what keeps two or more ways through together. A caller
+     * writing them in any order still gets one block rather than a set of alternatives split by
+     * the choice that answers none of them.
+     *
+     * <p>A dialog whose way out is itself the leading choice puts it first. Leading wins over last,
+     * and with one way through there is nothing left for it to be split from.
+     *
+     * @param choices the choices as the caller wrote them
+     * @return a {@link List} of {@link Choice} in the order the row draws them
+     */
+    private static List<Choice> leadingFirst(final Choice... choices) {
+        return Arrays.stream(choices)
+                .sorted(Comparator.comparingInt(Dialogs::placeOf))
+                .toList();
+    }
+
+    /**
+     * How early in the row one choice sits.
+     *
+     * @param choice {@link Choice} the choice
+     * @return int lower for earlier
+     */
+    private static int placeOf(final Choice choice) {
+        if (choice.emphasis() == Emphasis.LOUD) {
+            return 0;
+        }
+        return choice.role() == Role.CANCEL ? 2 : 1;
+    }
+
+    /**
+     * What one choice is, said in the terms the toolkit knows.
+     *
+     * <p>Only the way out carries anything the app relies on: it is what Escape closes, and what
+     * the stylesheet dresses as the way out. Where each choice sits is decided by the order they
+     * are built in instead.
      *
      * @param role {@link Role} what the choice is for
-     * @param goAheads long how many ways through this dialog offers
-     * @return {@link ButtonBar.ButtonData} the placement
+     * @return {@link ButtonBar.ButtonData} what the toolkit takes the choice to be
      */
-    private static ButtonBar.ButtonData dataFor(final Role role, final long goAheads) {
-        if (role == Role.CANCEL) {
-            return ButtonBar.ButtonData.CANCEL_CLOSE;
-        }
-        // One way through takes the platform's own accept position. Several are pinned together
-        // instead, since no platform convention orders a set of alternatives.
-        return goAheads == 1 ? ButtonBar.ButtonData.OK_DONE : ButtonBar.ButtonData.LEFT;
+    private static ButtonBar.ButtonData dataFor(final Role role) {
+        return role == Role.CANCEL ? ButtonBar.ButtonData.CANCEL_CLOSE : ButtonBar.ButtonData.OK_DONE;
     }
 
     /**
@@ -189,6 +243,9 @@ final class Dialogs {
             if (alert.getDialogPane().getScene().getWindow() instanceof final Stage stage) {
                 stage.getIcons().setAll(BrandMark.icons());
             }
+            // Without this the bar sorts the buttons itself, by what each one is for, and the
+            // order they were built in counts for nothing.
+            orderAsBuilt(alert);
         });
     }
 }

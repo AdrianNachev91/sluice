@@ -1,5 +1,8 @@
 package photos.sluice.adapter.ui;
 
+import org.jspecify.annotations.Nullable;
+import photos.sluice.domain.cull.CullScope;
+
 import java.nio.file.Path;
 import java.time.Month;
 import java.time.format.TextStyle;
@@ -16,6 +19,21 @@ import java.util.Locale;
 final class RunWords {
 
     private RunWords() {
+    }
+
+    /**
+     * A year scope as a sentence names it.
+     *
+     * @param scope {@link CullScope.Year} the scope, or null where its own tag names no year
+     * @return {@link String} what to call it
+     */
+    static String spelledScope(final CullScope.@Nullable Year scope) {
+        if (scope == null) {
+            return "another timeline";
+        }
+        return scope.months() == null
+                ? String.valueOf(scope.year())
+                : namedMonths(scope.months()) + " " + scope.year();
     }
 
     /**

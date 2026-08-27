@@ -155,9 +155,9 @@ final class RunScopeText {
         /**
          * The text could not be read as a scope.
          *
-         * @param why {@link String} what is wrong with it
+         * @param reason {@link String} what is wrong with it
          */
-        record Refused(String why) implements Typed {
+        record Refused(String reason) implements Typed {
         }
     }
 }

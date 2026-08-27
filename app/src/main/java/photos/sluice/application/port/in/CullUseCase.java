@@ -1,10 +1,9 @@
 package photos.sluice.application.port.in;
 
-import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
 
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * The use case for running the vision cull over sorted media, including waiting on and resuming
@@ -25,13 +24,15 @@ public interface CullUseCase {
     /**
      * Every cull run currently on disk, across this and prior app runs, each one diagnosed. Read
      * live by enumerating the sift-prep root, never from a persisted list. A run whose own index
-     * cannot be read is listed too, since that is the one a caller most needs to show.
+     * cannot be read is listed too, since that is the one a caller most needs to show. A root
+     * nobody could read at all is its own answer, never an empty list.
      *
-     * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
+     * @return {@link CullRuns} every run found, diagnosed and ordered by scope, or that the root
+     *     could not be read
      */
     // No UI consumes this port yet, so no caller currently invokes this method through it.
     @SuppressWarnings("unused")
-    List<CullRunSummary> cullRuns();
+    CullRuns cullRuns();
 
     /**
      * Picks a paused run back up. A montage still missing its shard sends the run back to the

@@ -1,17 +1,24 @@
 package photos.sluice.adapter.ui.view;
 
+import javafx.application.Platform;
+import javafx.event.ActionEvent;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
+import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 
@@ -25,7 +32,14 @@ final class MainWindow {
     private static final String DASHBOARD = "Dashboard";
     private static final String SETTINGS = "Settings";
     private static final String REVIEW = "Review";
+    private static final String RUNS = "Runs";
     private static final String PHOTO_CATEGORIES = "Photo categories";
+
+    // What the count on the Runs entry means, for a reader who meets a number beside a word and no
+    // explanation. The screen it leads to says the same thing per run.
+    private static final String RUNS_COUNT_MEANS =
+            "Sifts you have started that have not finished. Open Runs to carry them on or throw "
+                    + "them away.";
 
     /**
      * Prevents instantiation of this static factory class.
@@ -45,15 +59,20 @@ final class MainWindow {
      *         credential, model catalogue and connection check
      * @param photoCategoriesPresenter {@link PhotoCategoriesPresenter} supplies and drives the photo categories pane
      * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the run launcher
+     * @param runsPresenter {@link RunsPresenter} supplies and drives the runs screen, and answers
+     *         the count its sidebar entry carries
      * @return {@link Scene} the shell scene, styled by the base stylesheet
      */
     static Scene scene(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter,
                        final VisionProviderPresenter visionProviderPresenter,
                        final PhotoCategoriesPresenter photoCategoriesPresenter,
-                       final RunLauncherPresenter runLauncherPresenter) {
+                       final RunLauncherPresenter runLauncherPresenter,
+                       final RunsPresenter runsPresenter) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
         final var settings = navEntry(group, "nav-settings", SETTINGS);
+        final var runsCount = countBadge();
+        final var runs = countedNavEntry(group, "nav-runs", RUNS, runsCount);
         final var review = navEntry(group, "nav-review", REVIEW);
         // Firing the entry rather than swapping the content directly, so the sidebar ends up
         // showing Settings as current. Arriving there with Dashboard still marked would leave the
@@ -83,7 +102,26 @@ final class MainWindow {
                 () -> filling(SettingsPane.pane(settingsPresenter, visionProviderPresenter, openPhotoCategories))));
         review.setOnAction(_ -> show(content, REVIEW, () -> headingPane(REVIEW)));
 
-        final var sidebar = new VBox(dashboard, settings, review);
+        // Two of them, and the difference is who has already read the folder. The runs screen reads
+        // it as it draws, so its own recount only has to put that number on the badge. Every other
+        // nav press has nothing fresh to draw from and goes back to disk.
+        //
+        // Read on a press rather than on a timer of its own. What changes the count is a run
+        // starting, ending or being thrown away. A reader who did any of those is on a screen they
+        // will leave.
+        final Runnable drawCount = () -> runsCount.setText(countOf(runsPresenter));
+        final Runnable readThenCount = () -> countInTheBackground(runsPresenter, runsCount);
+        runs.setOnAction(_ -> show(content, RUNS,
+                () -> filling(RunsPane.pane(runsPresenter, drawCount))));
+        // The launcher's own way out of a timeline whose unfinished sift it cannot carry on. Set on
+        // the presenter rather than passed to the pane, so the several places that redraw the
+        // Dashboard need know nothing about it.
+        runLauncherPresenter.setOpenRuns(runs::fire);
+        dashboard.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());
+        settings.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());
+        review.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());
+
+        final var sidebar = new VBox(dashboard, runs, settings, review);
         sidebar.getStyleClass().add("sidebar");
 
         final var root = new BorderPane(content);
@@ -93,6 +131,10 @@ final class MainWindow {
                 new Scene(root, Stylesheet.INITIAL_WIDTH, Stylesheet.INITIAL_HEIGHT));
         ScreenWarmUp.afterFirstFrame(root);
         checkTheConfiguredProviderOncePainted(settingsPresenter);
+        // Counted once as the app opens, because nothing else does. Selecting the Dashboard above
+        // raises no action event. Without this, a reader with unfinished sifts comes back to a
+        // sidebar saying nothing until they happen to press a nav entry.
+        AfterFirstFrame.run(readThenCount);
         return scene;
     }
 
@@ -195,10 +237,9 @@ final class MainWindow {
      * #show} would read the card already there as the screen being asked for and leave it up.
      *
      * <p>A reader who has moved on is left where they are. This is called back into once a library
-     * move finishes, which can be minutes after the button was pressed, and by then the sidebar can
-     * be showing a different screen. Replacing it would leave the sidebar and the content
-     * disagreeing about which screen this is. The report is dropped with it, which is the lesser
-     * loss of the two.
+     * move finishes, which can be minutes after the button was pressed. By then the sidebar can be
+     * showing a different screen, and the sidebar and the content have to agree on which screen
+     * this is. The report is dropped with it, which is the lesser loss of the two.
      *
      * @param content {@link VBox} the content area, holding exactly the screen on show
      * @param presenter {@link FirstRunPresenter} says which state the Dashboard is in
@@ -232,6 +273,78 @@ final class MainWindow {
         final var pane = new VBox(label);
         pane.getStyleClass().add("placeholder-pane");
         return pane;
+    }
+
+    /**
+     * The count of unfinished runs, drawn beside the entry that leads to them.
+     *
+     * <p>Takes no room at zero, so a reader with nothing outstanding sees a plain sidebar.
+     *
+     * @return {@link Label} the badge
+     */
+    private static Label countBadge() {
+        final var badge = new Label();
+        badge.setId("nav-runs-count");
+        badge.getStyleClass().add("nav-count");
+        badge.setTooltip(new Tooltip(RUNS_COUNT_MEANS));
+        SettingsRows.showWhileItSaysSomething(badge);
+        return badge;
+    }
+
+    /**
+     * Reads how many runs are unfinished, away from the thread that paints, then draws the number.
+     *
+     * <p>The read walks every run in the folder and opens every sidecar and shard of each, which is
+     * long enough that a sidebar press has to stay responsive through it.
+     *
+     * @param presenter {@link RunsPresenter} does the reading
+     * @param badge {@link Label} the number to fill in once it lands
+     */
+    private static void countInTheBackground(final RunsPresenter presenter, final Label badge) {
+        Thread.ofVirtual().start(() -> {
+            presenter.refresh();
+            final String outstanding = countOf(presenter);
+            Platform.runLater(() -> badge.setText(outstanding));
+        });
+    }
+
+    /**
+     * What the badge says about the reading the presenter already holds.
+     *
+     * <p>Empty at none, so a reader with nothing outstanding meets a plain sidebar. A badge reading
+     * zero is a thing to read every time the app opens, saying nothing.
+     *
+     * @param presenter {@link RunsPresenter} holds the last reading
+     * @return {@link String} the number, or empty
+     */
+    private static String countOf(final RunsPresenter presenter) {
+        final int outstanding = presenter.unfinishedRuns();
+        return outstanding == 0 ? "" : String.valueOf(outstanding);
+    }
+
+    /**
+     * A sidebar entry carrying a count to the right of its name.
+     *
+     * @param group {@link ToggleGroup} the group every entry shares
+     * @param id {@link String} the control's id
+     * @param label {@link String} what the entry says
+     * @param count {@link Label} the badge that sits after it
+     * @return {@link ToggleButton} the entry
+     */
+    private static ToggleButton countedNavEntry(final ToggleGroup group, final String id,
+                                                final String label, final Label count) {
+        final var entry = navEntry(group, id, label);
+        final var name = new Label(label);
+        final var gap = new Region();
+        HBox.setHgrow(gap, Priority.ALWAYS);
+        final var inside = new HBox(name, gap, count);
+        inside.setAlignment(Pos.CENTER_LEFT);
+        inside.getStyleClass().add("nav-item-inside");
+        // The graphic carries the name, so the button's own text stays empty.
+        entry.setText("");
+        entry.setGraphic(inside);
+        entry.setMaxWidth(Double.MAX_VALUE);
+        return entry;
     }
 
     private static ToggleButton navEntry(final ToggleGroup group, final String id, final String label) {

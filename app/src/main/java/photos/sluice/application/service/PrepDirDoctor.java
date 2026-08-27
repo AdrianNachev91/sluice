@@ -10,6 +10,7 @@ import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth;
@@ -24,13 +25,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Health checks for a prep dir, plus the purge that clears completed runs. diagnose() is
  * side-effect-free and safe to call any time. It never throws, whatever state the dir is in, so one
- * unreadable run cannot take down a caller reading every other one. runs() diagnoses every prep dir
- * under the sift-prep root. Startup arming reads it today. The run-card dashboard and the
- * unresolved-run banner are the consumers it was shaped for.
+ * unreadable run cannot take down a caller reading every other one. runs() diagnoses every prep
+ * dir under the sift-prep root. Startup arming reads it today. The runs screen and the count its
+ * sidebar entry carries are the consumers it was shaped for.
  *
  * <p>Totality is not the same as cheapness. One diagnosis reads every sidecar twice, every shard
  * twice, and the move ledger twice. The validate pass and the tally pass each do their own reads,
@@ -45,7 +47,7 @@ import java.util.List;
  *
  * <p>Nothing on the diagnosis path can move a file: it reads through the planner, which is the
  * read-only half of applying. It also only ever holds a {@link LedgerReader}, never the
- * write-capable {@link MoveLedger} - diagnosing can take a ledger snapshot, never append one.
+ * write-capable {@link MoveLedger}. Diagnosing can take a ledger snapshot, never append one.
  * purgeCompleted() is the one method here that deletes, and it only ever touches a run diagnose()
  * has certified COMPLETE. It never touches media.
  *
@@ -131,11 +133,20 @@ public class PrepDirDoctor {
      *
      * <p>Ordered by scope so a dashboard's rows hold still between refreshes.
      *
+     * <p>A root nobody could list answers {@link CullRuns.Unlistable} rather than an empty list.
+     * Those two are the opposite answer, and a caller that cannot tell them apart reports a
+     * machine's silence as a user's runs being gone.
+     *
      * @param cullPrepRoot {@link Path} the sift-prep root directory to enumerate
-     * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
+     * @return {@link CullRuns} the runs found, diagnosed and ordered by scope, or that the root
+     *     could not be read
      */
-    public List<CullRunSummary> runs(final Path cullPrepRoot) {
-        return this.prepDirsUnder(cullPrepRoot).stream().map(this::summaryOf).toList();
+    public CullRuns runs(final Path cullPrepRoot) {
+        return switch (this.listingUnder(cullPrepRoot)) {
+            case Listing.Found(final List<Path> prepDirs) ->
+                    new CullRuns.Listed(prepDirs.stream().map(this::summaryOf).toList());
+            case Listing.Unlistable _ -> new CullRuns.Unlistable(cullPrepRoot);
+        };
     }
 
     /**
@@ -177,18 +188,24 @@ public class PrepDirDoctor {
      * user makes, never a timer.
      *
      * <p>A run diagnosed DAMAGED, or a COMPLETE run whose own delete fails partway, lands in the
-     * report's unreadable bucket rather than skipped or purged - neither is a state a user can act
-     * on the way WAITING or BLOCKED are. {@link #purgeDir} guards its own failure, so the sweep
+     * unreadable bucket rather than skipped or purged. Neither is a state a user can act on the way
+     * WAITING or BLOCKED are. {@link #purgeDir} guards its own failure, so the sweep
      * continues on to the rest regardless.
+     *
+     * <p>A root nobody could list purges nothing and says so, rather than reporting a sweep that
+     * found nothing to do. The counts alone cannot tell those two apart.
      *
      * @param cullPrepRoot {@link Path} the sift-prep root directory to sweep
      * @return {@link PurgeReport} every scope purged, skipped with its state, or left unreadable, this sweep
      */
     public PurgeReport purgeCompleted(final Path cullPrepRoot) {
+        if (!(this.listingUnder(cullPrepRoot) instanceof Listing.Found(final List<Path> prepDirs))) {
+            return new PurgeReport(List.of(), Map.of(), Map.of(), cullPrepRoot);
+        }
         final var purged = new ArrayList<String>();
         final var skipped = new LinkedHashMap<String, State>();
         final var unreadable = new LinkedHashMap<String, String>();
-        for (final Path prepDir : this.prepDirsUnder(cullPrepRoot)) {
+        for (final Path prepDir : prepDirs) {
             final String scope = scopeOf(prepDir);
             final State state = this.diagnose(prepDir).state();
             if (state == State.DAMAGED) {
@@ -203,7 +220,7 @@ public class PrepDirDoctor {
                 skipped.put(scope, state);
             }
         }
-        return new PurgeReport(purged, skipped, unreadable);
+        return new PurgeReport(purged, skipped, unreadable, null);
     }
 
     /**
@@ -330,31 +347,59 @@ public class PrepDirDoctor {
      * <p>Enumeration and occupancy are two separately guarded reads. The root is listed shallowly
      * for its immediate subdirectories, then each candidate is deep-listed on its own to check
      * occupancy. One candidate's read failing costs that one entry, not every entry after it. An
-     * unreadable candidate is treated as occupied rather than dropped, and its own diagnosis - run
-     * separately by every caller of this method - usually lands on DAMAGED. Only the root-level
-     * read itself failing yields no runs at all, logged rather than swallowed.
+     * unreadable candidate is treated as occupied rather than dropped. Its own diagnosis, run
+     * separately by every caller of this method, usually lands on DAMAGED.
+     *
+     * <p>A root that does not exist holds no runs, which is what a fresh install looks like. A root
+     * that exists and could not be read holds an unknown number, and answers so.
      *
      * @param cullPrepRoot {@link Path} the sift-prep root directory to enumerate
-     * @return a {@link List} of {@link Path} every prep dir found, ordered by name
+     * @return {@link Listing} every prep dir found and ordered by name, or the read failure
      */
-    private List<Path> prepDirsUnder(final Path cullPrepRoot) {
+    private Listing listingUnder(final Path cullPrepRoot) {
         try {
             if (!this.mediaStore.exists(cullPrepRoot)) {
-                return List.of();
+                return new Listing.Found(List.of());
             }
-            return this.mediaStore.listChildDirectories(cullPrepRoot).stream()
+            return new Listing.Found(this.mediaStore.listChildDirectories(cullPrepRoot).stream()
                     .filter(this::holdsAFile)
                     .sorted()
-                    .toList();
+                    .toList());
         } catch (final RuntimeException e) {
-            log.warn("Could not list {}, reporting no cull runs this pass", cullPrepRoot, e);
-            return List.of();
+            log.warn("Could not list {}, so what it holds is unknown this pass", cullPrepRoot, e);
+            return new Listing.Unlistable(e);
+        }
+    }
+
+    /**
+     * {@link #listingUnder}'s own answer: the prep dirs under the root, or that the root could not
+     * be read at all.
+     *
+     * <p>The failure is a case rather than an empty list. Every caller takes a different direction
+     * on it than on a root that is genuinely empty.
+     */
+    private sealed interface Listing {
+
+        /**
+         * The root was read.
+         *
+         * @param prepDirs a {@link List} of {@link Path} the prep dirs in it, ordered by name
+         */
+        record Found(List<Path> prepDirs) implements Listing {
+        }
+
+        /**
+         * The root could not be read.
+         *
+         * @param cause {@link RuntimeException} the read failure
+         */
+        record Unlistable(RuntimeException cause) implements Listing {
         }
     }
 
     /**
      * Whether prepDir holds at least one file anywhere in its own subtree, guarded on its own so one
-     * unreadable candidate cannot cost {@link #prepDirsUnder} every other one.
+     * unreadable candidate cannot cost {@link #listingUnder} every other one.
      *
      * @param prepDir {@link Path} the candidate prep dir to check
      * @return boolean true if prepDir holds at least one file, or its own occupancy could not be read

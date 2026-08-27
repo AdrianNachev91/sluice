@@ -26,6 +26,7 @@ import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
@@ -38,6 +39,7 @@ import photos.sluice.domain.paths.Containment;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -151,9 +153,14 @@ final class CullEngine {
         if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH || this.jobRunner.isBusy()) {
             return;
         }
-        this.prepDirDoctor.runs(this.cullPrepRoot()).stream()
-                .filter(run -> run.health().state() == State.WAITING || run.health().state() == State.READY)
-                .forEach(run -> this.cullWatchers.armWatchIfConfigured(run.prepDir()));
+        // A root nobody could list arms nothing, which is what an empty one does too. Said out
+        // loud because the two are the same action for opposite reasons, and only one of them
+        // means there was nothing to arm.
+        if (this.prepDirDoctor.runs(this.cullPrepRoot()) instanceof CullRuns.Listed(final List<CullRunSummary> runs)) {
+            runs.stream()
+                    .filter(run -> run.health().state() == State.WAITING || run.health().state() == State.READY)
+                    .forEach(run -> this.cullWatchers.armWatchIfConfigured(run.prepDir()));
+        }
     }
 
     /**
@@ -174,6 +181,7 @@ final class CullEngine {
      */
     JobHandle<CullJobOutcome> cull(final CullScope scope) {
         this.refuseIfScopeOccupied(scope);
+        this.refuseIfScopeOverlaps(scope);
         return this.jobRunner.submit(handle -> this.buildFreshAndDispatch(scope, handle::isCancellationRequested));
     }
 
@@ -314,6 +322,43 @@ final class CullEngine {
     }
 
     /**
+     * Throws if scope's timeline runs across unfinished sifts without being any of them.
+     *
+     * <p>The other half of the guard above, and the half a prep dir's own claim cannot make. A
+     * claim is on an exact tag, so an unfinished sift of June 2019 leaves the whole of 2019 free to
+     * start. That one builds its own folder beside it and pays a second time for sheets the first
+     * already holds. Both then hold decisions over the same photos, and whichever applies second
+     * finds its files already moved.
+     *
+     * <p>Only a year scope can overlap. An {@code OldestN} names no timeline, so nothing it covers
+     * can be worked out from its tag, and it neither blocks nor is blocked.
+     *
+     * <p>A run whose own tag names no year is passed over rather than treated as overlapping. It
+     * cannot be shown to share a month, and refusing on what cannot be established would block a
+     * scope over nothing.
+     *
+     * <p>Reads the runs freshly rather than from a snapshot. The desktop makes the same check
+     * against its last reading to grey Start early, and that copy can be a moment stale. This one
+     * is the guarantee.
+     *
+     * @param scope {@link CullScope} the scope about to be sifted
+     */
+    void refuseIfScopeOverlaps(final CullScope scope) {
+        if (!(scope instanceof final CullScope.Year chosen)) {
+            return;
+        }
+        final String exact = CullScope.tag(chosen);
+        final List<CullRunSummary> across = this.unfinishedRuns().stream()
+                .filter(run -> !run.scope().equals(exact))
+                .filter(run -> chosen.overlaps(CullScope.yearScopeOf(run.scope())))
+                .toList();
+        if (!across.isEmpty()) {
+            throw new Pipeline.ScopeOverlapsException(chosen, across);
+        }
+    }
+
+
+    /**
      * Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and
      * CurateEngine's cull stage; resume() re-enters at dispatchAndApply() directly instead, since it
      * must never rebuild an existing prep dir. See cull()'s own doc for why the occupancy question
@@ -423,6 +468,22 @@ final class CullEngine {
         // already-COMPLETE run leaves one armed here, since dispatchAndApply() disarms on entry.
         this.disarmWatch(run.prepDir());
         return this.prepDirRemedies.discard(run.prepDir()).graveyard();
+    }
+
+    /**
+     * Every run on disk that has not finished.
+     *
+     * <p>A sift-prep root nobody could list answers none rather than throwing. A failure here would
+     * otherwise refuse a scope on the strength of a read that established nothing. The exact-tag
+     * guard reads the one prep dir it cares about, and refuses on its own terms.
+     *
+     * @return a {@link List} of {@link CullRunSummary} the unfinished runs
+     */
+    private List<CullRunSummary> unfinishedRuns() {
+        if (this.prepDirDoctor.runs(this.cullPrepRoot()) instanceof CullRuns.Listed(final List<CullRunSummary> runs)) {
+            return runs.stream().filter(run -> run.health().state() != State.COMPLETE).toList();
+        }
+        return List.of();
     }
 
     /**

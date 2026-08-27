@@ -2,6 +2,8 @@ package photos.sluice.adapter.ui;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
+import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
@@ -10,12 +12,19 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -62,6 +71,7 @@ class RunSetupPresenterTest {
         // A spending provider is the fixture, so every test below is about the figure rather than
         // about whether there is one at all. The tests that turn it off say so themselves.
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
+        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
         this.presenter.refreshCounts();
     }
 
@@ -909,12 +919,188 @@ class RunSetupPresenterTest {
                 .containsExactly("Sort", "Sift", "Move to library", "Curate", "Rescue");
     }
 
+    @Test
+    void aTimelineHoldingAnUnfinishedSiftIsMarkedAndTheOthersAreNot() {
+        this.anUnfinishedSiftOf("2019", State.WAITING);
+
+        assertThat(this.presenter.view().years()).filteredOn(YearChoice::unfinishedSift)
+                .extracting(YearChoice::year).containsExactly(2019);
+    }
+
+    @Test
+    void onlyTheMonthsAnUnfinishedSiftCoversAreMarked() {
+        this.anUnfinishedSiftOf("2019-06", State.WAITING);
+        this.aModeTheRowsScope();
+
+        assertThat(this.monthsMarkedAsSifted(2019)).containsExactly(6);
+    }
+
+    @Test
+    void aSiftOfAWholeYearMarksEveryMonthUnderIt() {
+        this.anUnfinishedSiftOf("2019", State.WAITING);
+        this.aModeTheRowsScope();
+
+        assertThat(this.monthsMarkedAsSifted(2019)).containsExactly(6, 7, 11);
+    }
+
+    @Test
+    void aSiftOfOneYearLeavesTheSameMonthOfAnotherYearUnmarked() {
+        this.anUnfinishedSiftOf("2019-06", State.WAITING);
+        this.aModeTheRowsScope();
+
+        assertThat(this.monthsMarkedAsSifted(2018)).isEmpty();
+    }
+
+    @Test
+    void theLegendAppearsOnlyWhileSomeTimelineIsMarked() {
+        assertThat(this.presenter.view().scopeLegend()).isNull();
+
+        this.anUnfinishedSiftOf("2019", State.WAITING);
+
+        assertThat(this.presenter.view().scopeLegend()).isNotNull();
+    }
+
+    @Test
+    void aSiftOfATimelineThatCanCarryOnTurnsTheButtonIntoContinue() {
+        this.anUnfinishedSiftOf("2019", State.READY);
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.presenter.view().startLabel()).isEqualTo("Continue sifting");
+        assertThat(this.presenter.view().startAction())
+                .isEqualTo(new StartAction.ContinueRun(Path.of("logs", "sift-prep", "2019")));
+        assertThat(this.presenter.view().canStart()).isTrue();
+    }
+
+    @Test
+    void aSiftOfATimelineThatCannotCarryOnSendsTheReaderToTheRunsScreen() {
+        this.anUnfinishedSiftOf("2019", State.BLOCKED);
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.presenter.view().startLabel()).isEqualTo("Open in Runs");
+        assertThat(this.presenter.view().startAction()).isEqualTo(new StartAction.OpenRuns());
+    }
+
+    @Test
+    void aTimelineRunningAcrossAnUnfinishedSiftIsRefusedAndTheButtonGoesDead() {
+        this.anUnfinishedSiftOf("2019-06", State.WAITING);
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.presenter.view().scopeRefusal())
+                .isEqualTo("2019 overlaps June 2019, which is a sift you have not finished. "
+                        + "Finish or discard it in Runs, then you can sift this.");
+        assertThat(this.presenter.view().canStart()).isFalse();
+    }
+
+    // The screen greys Start off a snapshot and the facade refuses off a fresh read. Two checks,
+    // so a reader who gets past the first meets the same sentence at the second.
+    @Test
+    void theScreenAndTheFacadeWordTheSameOverlapIdentically() {
+        this.anUnfinishedSiftOf("2019-06", State.WAITING);
+        this.choose(RunMode.SIFT, "2019");
+
+        final String refused = RunRefusals.plainly(new Pipeline.ScopeOverlapsException(
+                new CullScope.Year(2019, null), List.of(aRun("2019-06", State.WAITING))));
+
+        assertThat(refused).isEqualTo(this.presenter.view().scopeRefusal());
+    }
+
+    @Test
+    void aMonthInsideAnUnfinishedWholeYearIsRefusedNamingTheMonth() {
+        this.anUnfinishedSiftOf("2019", State.WAITING);
+        this.choose(RunMode.SIFT, "2019 6");
+
+        assertThat(this.presenter.view().scopeRefusal())
+                .isEqualTo("June 2019 overlaps 2019, which is a sift you have not finished. "
+                        + "Finish or discard it in Runs, then you can sift this.");
+        assertThat(this.presenter.view().canStart()).isFalse();
+    }
+
+    @Test
+    void aTimelineAcrossSeveralUnfinishedSiftsNamesAllOfThem() {
+        this.unfinishedSiftsOf("2019-06", "2019-08");
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.presenter.view().scopeRefusal())
+                .contains("June 2019 and August 2019").contains("are sifts").contains("discard them");
+    }
+
+    @Test
+    void aTimelineNamingTheSameMonthsAsTheUnfinishedSiftIsContinuedRatherThanCalledAnOverlap() {
+        this.anUnfinishedSiftOf("2019-06", State.WAITING);
+        this.choose(RunMode.SIFT, "2019 6");
+
+        assertThat(this.presenter.view().scopeRefusal()).isNull();
+        assertThat(this.presenter.view().startLabel()).isEqualTo("Continue sifting");
+    }
+
+    @Test
+    void aTimelineSharingNoMonthWithAnUnfinishedSiftStartsFresh() {
+        this.anUnfinishedSiftOf("2019-06", State.WAITING);
+        this.choose(RunMode.SIFT, "2019 7");
+
+        assertThat(this.presenter.view().scopeRefusal()).isNull();
+        assertThat(this.presenter.view().startAction()).isEqualTo(new StartAction.StartFresh());
+    }
+
+    @Test
+    void aRunScopedToACountOfFilesMarksNoTimelineAndBlocksNothing() {
+        this.anUnfinishedSiftOf("oldest-25", State.WAITING);
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.presenter.view().years()).noneMatch(YearChoice::unfinishedSift);
+        assertThat(this.presenter.view().scopeRefusal()).isNull();
+        assertThat(this.presenter.view().canStart()).isTrue();
+    }
+
+    @Test
+    void aRunsFolderThatCouldNotBeReadMarksNothing() {
+        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("p")));
+        this.presenter.refreshCounts();
+
+        assertThat(this.presenter.view().years()).noneMatch(YearChoice::unfinishedSift);
+        assertThat(this.presenter.view().scopeLegend()).isNull();
+    }
+
+    @Test
+    void aModeOtherThanSiftIsNeverStoppedByAnUnfinishedSift() {
+        this.anUnfinishedSiftOf("2019", State.WAITING);
+        this.choose(RunMode.MOVE_TO_LIBRARY, "2019");
+
+        assertThat(this.presenter.view().scopeRefusal()).isNull();
+        assertThat(this.presenter.view().startAction()).isEqualTo(new StartAction.StartFresh());
+    }
+
     private RunSetupPresenter launcher() {
         return new RunSetupPresenter(this.pipeline, this.jobIsRunning::get, () -> this.redraw.run());
     }
 
     private RunLauncherView.Cost.Estimate estimatedCost() {
         return (RunLauncherView.Cost.Estimate) requireNonNull(this.presenter.view().cost());
+    }
+
+    private void anUnfinishedSiftOf(final String scope, final State state) {
+        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(aRun(scope, state))));
+        this.presenter.refreshCounts();
+    }
+
+    private void unfinishedSiftsOf(final String... scopes) {
+        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                Arrays.stream(scopes).map(scope -> aRun(scope, State.WAITING)).toList()));
+        this.presenter.refreshCounts();
+    }
+
+    private static CullRunSummary aRun(final String scope, final State state) {
+        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+                new PrepDirHealth(state, List.of()), null, Instant.now());
+    }
+
+    private List<Integer> monthsMarkedAsSifted(final int year) {
+        return this.presenter.view().years().stream()
+                .filter(row -> row.year() == year)
+                .flatMap(row -> row.months().stream())
+                .filter(MonthChoice::unfinishedSift)
+                .map(MonthChoice::month)
+                .toList();
     }
 
     private RunLauncherView.Cost.Free freeCost() {

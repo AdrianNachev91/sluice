@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
+import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.imports.ImportKind;
@@ -41,6 +42,7 @@ public class RunLauncherPresenter {
     private volatile boolean running;
     private volatile @Nullable Runnable repaint;
     private volatile @Nullable Runnable recount;
+    private volatile @Nullable Runnable openRuns;
 
     // The job now running, held so that Cancel has something to ask. Null between runs, which is
     // what a Cancel arriving after one ended reads to decide it has nothing to do.
@@ -98,6 +100,51 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Says how the screen goes to the runs list.
+     *
+     * <p>Held here rather than passed with each press, because the press that needs it is one the
+     * launcher answers rather than one it starts. A timeline whose unfinished sift cannot be
+     * carried on has its way out on that screen, and nothing else on this one leads there.
+     *
+     * @param openRuns {@link Runnable} shows the runs screen
+     */
+    public void setOpenRuns(final Runnable openRuns) {
+        this.openRuns = openRuns;
+    }
+
+    /**
+     * Takes a press on the button under the scope field.
+     *
+     * <p>What that button does depends on what the chosen timeline already holds, and the launcher
+     * has worked that out before the press arrives. Three things can happen and only one of them
+     * starts fresh work.
+     *
+     * @param action {@link StartAction} what the launcher said this press would do
+     */
+    public void press(final StartAction action) {
+        switch (action) {
+            case StartAction.StartFresh _ -> this.start();
+            // Named from the field rather than from the last run this screen started, since reached
+            // from the launcher there may have been no last run at all.
+            case StartAction.ContinueRun(final Path prepDir) ->
+                    this.resume(prepDir, RunScope.describe(RunMode.SIFT, this.setup.scope()));
+            case StartAction.OpenRuns _ -> this.showRuns();
+        }
+    }
+
+    /**
+     * Shows the runs screen, from wherever on the launcher asked for it.
+     *
+     * <p>Does nothing while the shell has yet to say how, which is the window still being built.
+     */
+    public void showRuns() {
+        final Runnable open = this.openRuns;
+        if (open != null) {
+            open.run();
+        }
+    }
+
+    /**
      * Starts the work the launcher is set up for.
      */
     public void start() {
@@ -142,10 +189,7 @@ public class RunLauncherPresenter {
      * @param prepDir {@link Path} the stopped run's own directory, as the card handed it back
      */
     public void continueRun(final Path prepDir) {
-        if (this.running) {
-            return;
-        }
-        this.begin(RunMode.SIFT, this.scopeOfTheRun, null, () -> this.pipeline.resume(prepDir, false));
+        this.resume(prepDir, this.scopeOfTheRun);
     }
 
     /**
@@ -216,6 +260,19 @@ public class RunLauncherPresenter {
      */
     public void setRecount(final Runnable recount) {
         this.recount = recount;
+    }
+
+    /**
+     * Continues a stopped run, reported as covering what the caller says it covers.
+     *
+     * @param prepDir {@link Path} the stopped run's own directory
+     * @param scope {@link String} what that run covers, written out for the progress area
+     */
+    private void resume(final Path prepDir, final String scope) {
+        if (this.running) {
+            return;
+        }
+        this.begin(RunMode.SIFT, scope, null, () -> this.pipeline.resume(prepDir, false));
     }
 
     /**

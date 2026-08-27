@@ -557,7 +557,10 @@ public class SettingsPresenter {
             case final LibraryRootMoveOutcome.CopiedAndMoved copied -> copiedAndMoved(copied);
             case final LibraryRootMoveOutcome.CopyCancelled cancelled -> "The copy was cancelled after "
                     + cancelled.filesCopied() + " of " + cancelled.filesFound()
-                    + " file(s). The library is still at its old folder.";
+                    + " files. The library is still at its old folder, but the files already copied now "
+                    + "also exist in your new location. Resuming the library move continues copying the "
+                    + "files instead of from the start. Sluice will never remove a library folder. If you "
+                    + "want to do this you can go to " + cancelled.copiedInto() + " and remove it by hand.";
             case final LibraryRootMoveOutcome.MovedWithAFreshIndex fresh -> fresh.previousIndexFiledAt() == null
                     ? "The library root moved. Sluice had no record yet of what was already in the library, "
                             + "so there was nothing to set aside."

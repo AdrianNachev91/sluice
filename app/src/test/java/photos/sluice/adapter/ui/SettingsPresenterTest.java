@@ -616,9 +616,10 @@ class SettingsPresenterTest {
 
     @Test
     void aCancelledCopySavesNothingAndSaysTheLibraryStayedPut() {
+        final Path copiedInto = Path.of("/new-library");
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
         final var presenter = presenterOverLibrary(settingsUseCase,
-                new SucceedingLibraryRootUseCase(new JobRunner(), new CopyCancelled(2, 9)));
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopyCancelled(2, 9, copiedInto)));
 
         final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
                 LibraryRootResolution.COPY_AND_KEEP_INDEX);
@@ -628,7 +629,9 @@ class SettingsPresenterTest {
         assertThat(outcome.message())
                 .contains("cancelled")
                 .contains("still at its old folder")
-                .doesNotContain("Your library moved");
+                .contains("continues copying")
+                .contains("never remove a library folder")
+                .contains(copiedInto.toString());
     }
 
     @Test

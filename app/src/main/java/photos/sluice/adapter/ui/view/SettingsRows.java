@@ -12,6 +12,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
@@ -28,6 +29,8 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
 import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
@@ -173,6 +176,83 @@ final class SettingsRows {
         line.getStyleClass().add("settings-help");
         showWhileItSaysSomething(line);
         return line;
+    }
+
+    /**
+     * A help line opening with a mark drawn in the mark's own colour rather than the line's.
+     *
+     * <p>The mark is a separate label because a label draws its text in one colour. Wrapped lines
+     * then sit under the sentence rather than under the mark, which is what a footnote wants.
+     *
+     * @param line {@link Region} the sentence, which decides whether the whole row is showing
+     * @param glyph {@link String} the mark to open with
+     * @param markClasses the style classes carrying the mark's colour and its gap
+     * @return {@link HBox} the line, taking room only while the sentence says something
+     */
+    static HBox markedHelpLine(final Region line, final String glyph, final String... markClasses) {
+        final var mark = new Label(glyph);
+        mark.getStyleClass().add("settings-help");
+        mark.getStyleClass().addAll(markClasses);
+        final var row = new HBox(mark, line);
+        row.setAlignment(Pos.TOP_LEFT);
+        HBox.setHgrow(line, Priority.ALWAYS);
+        row.managedProperty().bind(row.visibleProperty());
+        row.visibleProperty().bind(line.visibleProperty());
+        return row;
+    }
+
+    /**
+     * A help line with a word or two inside it leading somewhere else in this app.
+     *
+     * <p>A flow rather than a row, so the sentence wraps across the link the way prose does. Three
+     * pieces, because a label draws its whole text one way and only the middle should look
+     * pressable.
+     *
+     * @param id {@link String} the line's own id
+     * @param link {@link Hyperlink} the words that lead there, already wired
+     * @return {@link LinkedLine} the line and the two stretches of prose around the link
+     */
+    static LinkedLine linkedHelpLine(final String id, final Hyperlink link) {
+        final var before = new Text();
+        final var after = new Text();
+        before.getStyleClass().add("linked-text-word");
+        after.getStyleClass().add("linked-text-word");
+        final var flow = new TextFlow(before, link, after);
+        flow.setId(id);
+        flow.getStyleClass().add("settings-help");
+        flow.managedProperty().bind(flow.visibleProperty());
+        flow.visibleProperty().bind(before.textProperty().isNotEmpty());
+        return new LinkedLine(flow, before, after);
+    }
+
+    /**
+     * A help line built around a link, and the prose either side of it.
+     *
+     * @param flow {@link TextFlow} the line itself
+     * @param before {@link Text} what is said ahead of the link
+     * @param after {@link Text} what is said after it
+     */
+    record LinkedLine(TextFlow flow, Text before, Text after) {
+    }
+
+    /**
+     * A few words that open another screen when pressed.
+     *
+     * <p>The toolkit's own link, undressed. Its visited state and its standing underline both say
+     * something about a page left behind, and a screen in this app is not that.
+     *
+     * @param id {@link String} the link's own id
+     * @param goes {@link Runnable} what it opens
+     * @return {@link Hyperlink} the words, taking room only while they say something
+     */
+    static Hyperlink inAppLink(final String id, final Runnable goes) {
+        final var link = new Hyperlink();
+        link.setId(id);
+        link.getStyleClass().add("in-app-link");
+        link.setOnAction(_ -> goes.run());
+        link.managedProperty().bind(link.visibleProperty());
+        link.visibleProperty().bind(link.textProperty().isNotEmpty());
+        return link;
     }
 
     /**

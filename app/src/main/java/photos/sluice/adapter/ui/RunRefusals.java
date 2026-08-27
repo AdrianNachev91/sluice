@@ -5,11 +5,13 @@ import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Turns what a run refused or threw into the sentence the dashboard shows for it.
@@ -49,9 +51,14 @@ final class RunRefusals {
             case final Pipeline.CurateConflictException conflict -> "Your photos were sorted, and then "
                     + "sifting stopped: " + occupiedBy(conflict) + " The sorting stands.";
             case final Pipeline.ScopeOccupiedException occupied -> occupiedBy(occupied);
-            case final Pipeline.ScopeUnreadableException unreadable -> "Sluice could not read "
-                    + unreadable.prepDir() + ", so it cannot tell whether a sift is already running "
-                    + "for that timeline. Try again once whatever is holding that folder has let go.";
+            case final Pipeline.ScopeOverlapsException overlaps -> overlapping(overlaps);
+            // Written for the person meeting it, like the three above. A run finishing between a
+            // screen being drawn and its button being pressed is the ordinary way here.
+            case final Pipeline.RunAlreadyFinishedException finished -> messageOf(finished);
+            case final Pipeline.ScopeUnreadableException unreadable -> "Sluice doesn't know whether a "
+                    + "sift is already running for that timeline, because " + unreadable.prepDir()
+                    + " cannot be read. Most likely the folder is held by another process or not "
+                    + "there anymore.";
             case final Pipeline.RunOutsideWorkingRootException outside -> "That sift is at "
                     + outside.prepDir() + ", which is not inside the folders Sluice is set up with "
                     + "now. Point your working folder back at the one holding it, or discard the sift.";
@@ -79,16 +86,59 @@ final class RunRefusals {
      * <p>The exception's own message names the prep dir and the raw state, which is what a log
      * needs. A reader needs to know their earlier sift is still there, and why this one stopped.
      *
-     * <p>It names no way out, because today there is none to name. The screen that lists unfinished
-     * sifts and offers to continue or discard one arrives with the runs list. Saying so here would
-     * be a remedy pointing at nothing.
+     * <p>Names the runs screen, where that earlier sift can be carried on or thrown away. The
+     * launcher offers the same thing on its own button wherever it can see the run coming. A reader
+     * meeting this sentence has usually arrived another way. A curate resolves its scope mid-job,
+     * or a run appeared between the screen being drawn and the button being pressed.
      *
      * @param occupied {@link Pipeline.ScopeOccupiedException} the refusal, carrying the run
      * @return {@link String} the sentence to show
      */
     private static String occupiedBy(final Pipeline.ScopeOccupiedException occupied) {
         return "You already have a sift of " + occupied.occupant().scope() + " that has not finished. "
-                + "Sluice will not start another for the same timeline while that one is there.";
+                + "Another cannot be started for the same timeline while that one is there. "
+                + "Open Runs to continue or discard it.";
+    }
+
+    /**
+     * What to say about a refused overlap, once the runs in the way have been read back as scopes.
+     *
+     * <p>A run whose folder name this app did not build reads back as nothing, and a sentence
+     * cannot name what it could not read. Where that leaves nothing to name, the refusal falls
+     * back to its own message rather than saying a timeline overlaps an empty list.
+     *
+     * @param overlaps {@link Pipeline.ScopeOverlapsException} the refusal
+     * @return {@link String} the sentence to show
+     */
+    private static String overlapping(final Pipeline.ScopeOverlapsException overlaps) {
+        final List<CullScope.Year> across = overlaps.across().stream()
+                .map(run -> CullScope.yearScopeOf(run.scope()))
+                .filter(Objects::nonNull)
+                .toList();
+        return across.isEmpty() ? messageOf(overlaps) : coveringUnfinished(overlaps.chosen(), across);
+    }
+
+    /**
+     * What to say where the chosen timeline shares photos with unfinished sifts without being one of
+     * them.
+     *
+     * <p>Public and taking the scopes rather than the refusal, because two callers word it. The
+     * facade refuses on the same fault, and the launcher greys Start before anybody presses it. One
+     * sentence, so the screen and the refusal cannot drift apart.
+     *
+     * <p>Names every one of them rather than the first. A reader told about one deals with it,
+     * comes back, and is refused by the next.
+     *
+     * @param across a {@link List} of {@link String} the scopes in the way, as their runs name them
+     * @param chosen {@link String} the timeline the reader picked
+     * @return {@link String} the sentence to show
+     */
+    static String coveringUnfinished(final CullScope.Year chosen, final List<CullScope.Year> across) {
+        return RunWords.spelledScope(chosen) + " overlaps "
+                + RunWords.listed(across.stream().map(RunWords::spelledScope).toList())
+                + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
+                + " you have not finished. Finish or discard "
+                + (across.size() == 1 ? "it" : "them") + " in Runs, then you can sift this.";
     }
 
     /**

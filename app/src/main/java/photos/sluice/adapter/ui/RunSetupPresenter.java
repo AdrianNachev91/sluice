@@ -8,6 +8,7 @@ import photos.sluice.adapter.ui.RunLauncherView.InboxCard;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
+import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.SortedTally;
@@ -15,15 +16,22 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.PrepDirHealth.State;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -35,8 +43,9 @@ import java.util.stream.IntStream;
  * window. What the text itself amounts to is {@link RunScopeText}, and what an engine takes is
  * {@link RunScope}.
  *
- * <p>The counts are read by calling {@link #refreshCounts}, which walks two trees and blocks while
- * it does. The caller runs it off whatever thread paints.
+ * <p>The counts are read by calling {@link #refreshCounts}, which walks three trees and blocks
+ * while it does. The caller runs it off whatever thread paints. The runs folder is the expensive
+ * one: reading it diagnoses every sift on disk.
  *
  * <p>Whether a job is running is not held here. {@link RunLauncherPresenter} owns that, and answers
  * the question through the supplier handed in.
@@ -57,8 +66,8 @@ public class RunSetupPresenter {
     private static final Confirmation CURATE_CONFIRM = new Confirmation(
             "Sort and sift the oldest year?",
             "Sluice sorts the oldest year in your Inbox, then sifts every photo it just sorted. "
-                    + "Sifting is what spends money, and the size of the sift cannot be estimated "
-                    + "until sorting has finished.",
+                    + "Sifting is what spends from your provider account balance, and the size of "
+                    + "the sift cannot be estimated until sorting has finished.",
             "Sort and sift", "Cancel");
 
     // Careful about whose money it is. Sluice calls no model for these providers, so it spends
@@ -95,6 +104,19 @@ public class RunSetupPresenter {
     private static final String STILL_READING = "Sluice is still reading your folders. Try again in "
             + "a moment.";
 
+    // What the mark means, once under the rows. A reader who never hovers a row would otherwise
+    // meet a bare asterisk. The screen opens this line with the mark itself, in its own colour.
+    // Three pieces because the middle one is pressable. Split here rather than on the screen, which
+    // would have to read the sentence to find the word that leads anywhere.
+    private static final String UNFINISHED_LEGEND = "This timeline already has a sift that has not "
+            + "finished. Open ";
+    private static final String UNFINISHED_WAY_THERE = "Runs";
+    private static final String UNFINISHED_LEGEND_AFTER = " to see it.";
+
+    // A run scoped to a whole year covers every month a row could stand for.
+    private static final Set<Integer> WHOLE_YEAR =
+            IntStream.rangeClosed(1, 12).boxed().collect(Collectors.toUnmodifiableSet());
+
     private static final String NOTHING_STAGED =
             "Nothing is sorted yet. Sort your Inbox first, and the years will show up here.";
 
@@ -124,6 +146,7 @@ public class RunSetupPresenter {
     private volatile @Nullable SortedTally sorted;
     private volatile boolean counting = true;
     private volatile boolean countsUnreadable;
+    private volatile List<CullRunSummary> unfinished = List.of();
     private volatile @Nullable Message message;
 
     // The one field above that is not volatile, because it is the one no other thread touches. It
@@ -162,11 +185,15 @@ public class RunSetupPresenter {
      */
     public RunLauncherView view() {
         final RunScope scope = this.scope();
+        final List<YearChoice> years = this.yearChoices();
+        final StartAction action = this.startAction(scope);
         return new RunLauncherView(this.modes(), this.chosen.explained(), this.inboxCard(),
-                this.yearChoices(), this.readsSorted(),
+                years, this.readsSorted(),
                 this.nothingStagedLine(), SCOPE_LABEL, this.scopeText, this.chosen.scopeHint(),
-                this.refusalOf(scope), this.cost(scope), this.chosen.started(),
-                this.canStart(scope), this.message);
+                this.refusalOf(scope), this.cost(scope), legendFor(years),
+                legendFor(years) == null ? null : UNFINISHED_WAY_THERE,
+                legendFor(years) == null ? null : UNFINISHED_LEGEND_AFTER,
+                this.startLabel(action), this.canStart(scope), action, this.message);
     }
 
     /**
@@ -203,6 +230,10 @@ public class RunSetupPresenter {
             // milliseconds, and a button going dead and live again inside that reads as a glitch.
             // So the dead state waits to see which kind of walk this is.
             this.deadButtonOnceThisIsSlow();
+            // Read first and guarded on its own. What the runs folder answers decides which rows
+            // carry a mark and nothing else on this screen, so its failures stay off the Inbox and
+            // Sorted cards.
+            this.unfinished = this.unfinishedRunsOrNone();
             this.inbox = this.pipeline.inboxTally();
             this.sorted = this.pipeline.sortedTally();
             this.countsUnreadable = false;
@@ -381,7 +412,7 @@ public class RunSetupPresenter {
             return this.blankScope();
         }
         return switch (RunScopeText.parse(this.scopeText)) {
-            case RunScopeText.Typed.Refused(final String why) -> new RunScope.Refused(why);
+            case RunScopeText.Typed.Refused(final String reason) -> new RunScope.Refused(reason);
             case RunScopeText.Typed.Blank _ -> this.blankScope();
             case RunScopeText.Typed.OfYear(final int year, final List<Integer> months) ->
                     this.yearScope(year, months);
@@ -396,7 +427,8 @@ public class RunSetupPresenter {
      */
     boolean canStart(final RunScope scope) {
         return !this.jobRunning.getAsBoolean() && !this.counting && this.chosen != RunMode.RESCUE
-                && RunScope.startable(scope) && !this.pipeline.isBusy();
+                && RunScope.startable(scope) && !this.pipeline.isBusy()
+                && this.overlapRefusal(scope) == null;
     }
 
     /**
@@ -518,11 +550,29 @@ public class RunSetupPresenter {
                         ? months
                         : List.of();
         return this.stagedYears().stream()
-                .map(row -> new YearChoice(row.year(), "run-year-" + row.year(),
-                        String.valueOf(row.year()), held(row), row.year() == selected,
-                        row.year() == selected && !this.monthsCollapsed,
-                        monthChoices(row, row.year() == selected ? narrowed : List.of())))
+                .map(row -> this.yearChoice(row, selected, narrowed))
                 .toList();
+    }
+
+    /**
+     * One year's row, and the month rows under it.
+     *
+     * <p>The mark is drawn whatever mode is chosen, since it is about the timeline rather than the
+     * mode. A reader looking at Sorted is looking at the same timelines whichever mode they came
+     * here for.
+     *
+     * @param row {@link YearRow} the year's counts
+     * @param selected int the year the field names, or 0 where it names none
+     * @param narrowed a {@link List} of {@link Integer} the months the field names
+     * @return {@link YearChoice} the row
+     */
+    private YearChoice yearChoice(final YearRow row, final int selected,
+                                  final List<Integer> narrowed) {
+        final Set<Integer> sifted = this.siftedMonthsOf(row.year());
+        return new YearChoice(row.year(), "run-year-" + row.year(), String.valueOf(row.year()),
+                held(row), row.year() == selected,
+                row.year() == selected && !this.monthsCollapsed, !sifted.isEmpty(),
+                monthChoices(row, row.year() == selected ? narrowed : List.of(), sifted));
     }
 
     /**
@@ -539,9 +589,11 @@ public class RunSetupPresenter {
      *
      * @param row {@link YearRow} the year to break down
      * @param narrowed a {@link List} of {@link Integer} the months the scope names, empty for none
+     * @param sifted a {@link Set} of {@link Integer} the months an unfinished sift already covers
      * @return a {@link List} of {@link MonthChoice} one per month holding anything
      */
-    private static List<MonthChoice> monthChoices(final YearRow row, final List<Integer> narrowed) {
+    private static List<MonthChoice> monthChoices(final YearRow row, final List<Integer> narrowed,
+                                                  final Set<Integer> sifted) {
         return row.months().stream()
                 .filter(month -> month.photos() > 0 || month.videos() > 0)
                 .sorted(Comparator.comparingInt(MonthRow::month))
@@ -549,7 +601,8 @@ public class RunSetupPresenter {
                         "run-month-" + row.year() + "-" + month.month(),
                         RunWords.monthName(month.month()),
                         RunWords.held(month.photos(), month.videos()),
-                        narrowed.contains(month.month())))
+                        narrowed.contains(month.month()),
+                        sifted.contains(month.month())))
                 .toList();
     }
 
@@ -855,7 +908,154 @@ public class RunSetupPresenter {
         if (this.chosen == RunMode.RESCUE) {
             return null;
         }
-        return scope instanceof RunScope.Refused(final String why) ? why : null;
+        if (scope instanceof RunScope.Refused(final String reason)) {
+            return reason;
+        }
+        return this.overlapRefusal(scope);
+    }
+
+    /**
+     * What to say where the chosen timeline runs across an unfinished sift without being it.
+     *
+     * <p>The screen's half of a guard the facade also makes. This one greys Start while somebody
+     * types, off the last reading of the folder, so it can be a moment out of date and the worst it
+     * can do is fail to warn. {@code CullEngine.refuseIfScopeOverlaps} reads freshly and is the
+     * guarantee. Both word it through {@link RunRefusals#coveringUnfinished}, so the sentence on the
+     * screen and the sentence in the refusal cannot drift apart.
+     *
+     * @param scope {@link RunScope} what the field and mode come to
+     * @return {@link String} the sentence to show, or null where nothing overlaps
+     */
+    private @Nullable String overlapRefusal(final RunScope scope) {
+        final CullScope.Year chosenYear = this.siftedYear(scope);
+        if (chosenYear == null) {
+            return null;
+        }
+        final String exact = CullScope.tag(chosenYear);
+        final List<CullScope.Year> across = this.unfinished.stream()
+                .filter(run -> !run.scope().equals(exact))
+                .map(run -> CullScope.yearScopeOf(run.scope()))
+                .filter(Objects::nonNull)
+                .filter(chosenYear::overlaps)
+                .toList();
+        return across.isEmpty() ? null : RunRefusals.coveringUnfinished(chosenYear, across);
+    }
+
+    /**
+     * The year a sift of this scope would cover, or null where this is not a sift of one.
+     *
+     * @param scope {@link RunScope} what the field and mode come to
+     * @return {@link CullScope.Year} the year and months, or null
+     */
+    private CullScope.@Nullable Year siftedYear(final RunScope scope) {
+        if (this.chosen != RunMode.SIFT || !(scope instanceof RunScope.OfYear(final int year,
+                final List<Integer> months))) {
+            return null;
+        }
+        return new CullScope.Year(year, months.isEmpty() ? null : months);
+    }
+
+
+    /**
+     * What pressing the button under the field does.
+     *
+     * <p>A sift of a timeline that already holds an unfinished one is refused by the facade. Where
+     * that run can be continued, the button continues it. Where it cannot, the button goes to the
+     * screen that can deal with it.
+     *
+     * @param scope {@link RunScope} what the field and mode come to
+     * @return {@link StartAction} what the press should do
+     */
+    private StartAction startAction(final RunScope scope) {
+        final CullScope.Year chosenYear = this.siftedYear(scope);
+        if (chosenYear == null) {
+            return new StartAction.StartFresh();
+        }
+        final String exact = CullScope.tag(chosenYear);
+        return this.unfinished.stream()
+                .filter(run -> run.scope().equals(exact))
+                .findFirst()
+                .<StartAction>map(run -> carriedOn(run.health().state())
+                        ? new StartAction.ContinueRun(run.prepDir())
+                        : new StartAction.OpenRuns())
+                .orElseGet(StartAction.StartFresh::new);
+    }
+
+    /**
+     * Whether a run in this state can be picked up from the launcher.
+     *
+     * @param state {@link State} the run's state
+     * @return boolean true where continuing it would get somewhere
+     */
+    private static boolean carriedOn(final State state) {
+        return state == State.WAITING || state == State.READY;
+    }
+
+    /**
+     * What the button under the field says.
+     *
+     * @param action {@link StartAction} what pressing it does
+     * @return {@link String} the label
+     */
+    private String startLabel(final StartAction action) {
+        return switch (action) {
+            case StartAction.StartFresh _ -> this.chosen.started();
+            case StartAction.ContinueRun _ -> "Continue sifting";
+            case StartAction.OpenRuns _ -> "Open in Runs";
+        };
+    }
+
+    /**
+     * What the mark on a timeline row means, or nothing where no row carries one.
+     *
+     * @param years a {@link List} of {@link YearChoice} the rows as they will be drawn
+     * @return {@link String} the legend, or null
+     */
+    private static @Nullable String legendFor(final List<YearChoice> years) {
+        return years.stream().anyMatch(YearChoice::unfinishedSift) ? UNFINISHED_LEGEND : null;
+    }
+
+    /**
+     * Every run on disk that still owes somebody something.
+     *
+     * <p>A folder nobody could read marks nothing, and neither does one this refused to read at
+     * all. A mark is only ever drawn from a run the read established.
+     *
+     * @return a {@link List} of {@link CullRunSummary} the unfinished ones
+     */
+    private List<CullRunSummary> unfinishedRunsOrNone() {
+        try {
+            return this.pipeline.cullRuns() instanceof CullRuns.Listed(final List<CullRunSummary> listed)
+                    ? listed.stream().filter(run -> run.health().state() != State.COMPLETE).toList()
+                    : List.of();
+        } catch (final RuntimeException e) {
+            log.warn("Could not read the runs, so no timeline is marked this pass", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Which months of one year an unfinished sift already covers.
+     *
+     * <p>An empty answer means no sift touches that year. A run scoped to the whole year answers
+     * every month there is. So a month row is marked whether the sift named that month or named
+     * the year it sits in.
+     *
+     * @param year int the year the rows belong to
+     * @return a {@link Set} of {@link Integer} the months covered, empty where none are
+     */
+    private Set<Integer> siftedMonthsOf(final int year) {
+        final List<CullScope.Year> covering = this.unfinished.stream()
+                .map(run -> CullScope.yearScopeOf(run.scope()))
+                .filter(Objects::nonNull)
+                .filter(scope -> scope.year() == year)
+                .toList();
+        if (covering.stream().anyMatch(scope -> scope.months() == null)) {
+            return WHOLE_YEAR;
+        }
+        return covering.stream()
+                .flatMap(scope -> Objects.requireNonNull(scope.months()).stream())
+                .collect(Collectors.toSet());
     }
 
     /**

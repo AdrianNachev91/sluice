@@ -118,7 +118,8 @@ class LibraryRootMoveServiceTest {
             final LibraryRootMoveOutcome outcome =
                     fixture.move(newLibrary, LibraryRootResolution.COPY_AND_KEEP_INDEX);
 
-            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.CopyCancelled(1, 2));
+            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.CopyCancelled(1, 2,
+                    newLibrary.toAbsolutePath().normalize()));
             assertThat(fixture.libraryRootInForce()).isEqualTo(fixture.library.toString());
         }
 
@@ -137,7 +138,8 @@ class LibraryRootMoveServiceTest {
             handle.requestCancellation();
             engine.releaseOnceTheCopyHasStarted();
 
-            assertThat(handle.join()).isEqualTo(new LibraryRootMoveOutcome.CopyCancelled(0, 1));
+            assertThat(handle.join()).isEqualTo(new LibraryRootMoveOutcome.CopyCancelled(0, 1,
+                    newLibrary.toAbsolutePath().normalize()));
             assertThat(fixture.libraryRootInForce()).isEqualTo(fixture.library.toString());
         }
 

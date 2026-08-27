@@ -9,6 +9,7 @@ import photos.sluice.adapter.vision.JsonCullPrepStore;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.Finding;
@@ -31,6 +32,7 @@ import java.util.List;
 import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.application.service.CullPrepTestSupport.fixedCategories;
+import static photos.sluice.application.service.PipelineTestSupport.listed;
 
 // Fixture-writing helpers below mirror ApplyPlannerTest's own. PrepDirDoctor reuses ApplyPlanner's
 // validate()/checkMissingSources() internally, so the same shard/sidecar/index fixtures apply.
@@ -218,7 +220,7 @@ class PrepDirDoctorTest {
         writeIndex(damaged, 1, List.of("montage-001"));
 
         final List<CullRunSummary> runs =
-                doctor(root, new FailingIndexReadOf(damaged)).runs(root.resolve("logs/sift-prep"));
+                listed(doctor(root, new FailingIndexReadOf(damaged)).runs(root.resolve("logs/sift-prep")));
 
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getLast().health().state()).isEqualTo(State.DAMAGED);
@@ -469,7 +471,7 @@ class PrepDirDoctorTest {
         writeFile(real.resolve("drawer/corrupt-sidecar-montage-001.json"), "{}");
         writeFile(cullPrepRoot.resolve("stray-note.txt"), "not part of any run");
 
-        final List<CullRunSummary> runs = doctor(root).runs(cullPrepRoot);
+        final List<CullRunSummary> runs = listed(doctor(root).runs(cullPrepRoot));
 
         assertThat(runs).singleElement().extracting(CullRunSummary::scope).isEqualTo("2019");
     }
@@ -559,16 +561,20 @@ class PrepDirDoctorTest {
         }
     }
 
-    // Each asserts an empty result, so each first proves the same fixture yields a run through a
-    // working store. Without that control the assertion would hold against a root that simply has
-    // nothing in it, and would pass with no guard in the code at all.
     @Test
-    void runsReportsNoRunsWhenTheRootListingFailsRatherThanThrowing(@TempDir final Path root) throws IOException {
+    void runsSaysTheRootCouldNotBeListedRatherThanReportingNoRuns(@TempDir final Path root) throws IOException {
         final Path cullPrepRoot = root.resolve("logs/sift-prep");
         writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
-        assertThat(doctor(root).runs(cullPrepRoot)).hasSize(1);
 
-        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingListing()).runs(cullPrepRoot)).isEmpty();
+        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingListing()).runs(cullPrepRoot))
+                .isEqualTo(new CullRuns.Unlistable(cullPrepRoot));
+    }
+
+    @Test
+    void runsOverARootHoldingNothingIsListedAndEmpty(@TempDir final Path root) {
+        final Path cullPrepRoot = root.resolve("logs/sift-prep");
+
+        assertThat(doctor(root).runs(cullPrepRoot)).isEqualTo(new CullRuns.Listed(List.of()));
     }
 
     // The epoch reads as "as old as anything", putting a dir nobody can stat at the top of a list
@@ -627,13 +633,13 @@ class PrepDirDoctorTest {
     // The existence check reaches the same port as the listing does. So the guard covers it too,
     // not only the call that looks like the risky one.
     @Test
-    void runsReportsNoRunsWhenTheRootExistenceCheckFailsRatherThanThrowing(@TempDir final Path root)
+    void runsSaysTheRootCouldNotBeReadWhenTheExistenceCheckItselfFails(@TempDir final Path root)
             throws IOException {
         final Path cullPrepRoot = root.resolve("logs/sift-prep");
         writeFile(cullPrepRoot.resolve("2019-06/index.json"), "{}");
-        assertThat(doctor(root).runs(cullPrepRoot)).hasSize(1);
 
-        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingExists()).runs(cullPrepRoot)).isEmpty();
+        assertThat(CullPrepTestSupport.prepDirDoctor(root, new FailingExists()).runs(cullPrepRoot))
+                .isEqualTo(new CullRuns.Unlistable(cullPrepRoot));
     }
 
     // The new, narrower guard: only one candidate's own occupancy check fails, so only that one
@@ -652,7 +658,7 @@ class PrepDirDoctorTest {
         writeIndex(unreadable, 1, List.of("montage-001"));
         final var store = new FailingListingOf(unreadable);
 
-        final List<CullRunSummary> runs = CullPrepTestSupport.prepDirDoctor(root, store).runs(root.resolve("logs/sift-prep"));
+        final List<CullRunSummary> runs = listed(CullPrepTestSupport.prepDirDoctor(root, store).runs(root.resolve("logs/sift-prep")));
 
         assertThat(runs).extracting(CullRunSummary::scope).containsExactly("2019", "2020");
         assertThat(runs.getFirst().health().state()).isEqualTo(State.READY);

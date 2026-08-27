@@ -9,6 +9,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
@@ -69,6 +70,10 @@ final class RunLauncherPane {
      */
     private static final Duration FOLD_TRAVEL = Duration.millis(160);
 
+    // The glyph a marked timeline row carries. The legend explaining it is written by the
+    // presenter, which spells the same glyph, and RunLauncherPaneTest pins the two together.
+    private static final String UNFINISHED_MARK = "*";
+
     private RunLauncherPane() {
     }
 
@@ -107,7 +112,13 @@ final class RunLauncherPane {
         final var yearRows = new VBox();
         yearRows.getStyleClass().add("run-year-rows");
         final Label nothingStaged = SettingsRows.emptyHelpLine("run-nothing-staged");
-        final VBox sortedCard = SettingsRows.card("SORTED", null, yearRows, nothingStaged);
+        final Hyperlink openRuns = SettingsRows.inAppLink("run-scope-legend-link", presenter::showRuns);
+        final SettingsRows.LinkedLine scopeLegend =
+                SettingsRows.linkedHelpLine("run-scope-legend", openRuns);
+        final HBox scopeLegendRow = SettingsRows.markedHelpLine(scopeLegend.flow(), UNFINISHED_MARK,
+                "run-unfinished-mark", "run-legend-mark");
+        final VBox sortedCard = SettingsRows.card("SORTED", null, yearRows, nothingStaged,
+                scopeLegendRow);
 
         final var body = new VBox(inboxCard, sortedCard);
         body.getStyleClass().add("run-launcher-body");
@@ -175,7 +186,7 @@ final class RunLauncherPane {
         scroll.setMinHeight(0);
 
         final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, importPhotos,
-                importHint, yearRows, nothingStaged,
+                importHint, yearRows, nothingStaged, scopeLegend, openRuns,
                 scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, withoutHistory,
                 freeHeadline, freeDetail, message, scroll, new HashSet<>(), new HashMap<>());
         controls.buildModeRow(setup);
@@ -284,7 +295,7 @@ final class RunLauncherPane {
                 new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET)).isEmpty()) {
             return;
         }
-        presenter.start();
+        presenter.press(presenter.setup().view().startAction());
         redraw.run();
     }
 
@@ -435,6 +446,8 @@ final class RunLauncherPane {
      * @param importHint {@link Label} the line naming the drop as the other way in
      * @param yearRows {@link VBox} the Sorted card's rows
      * @param nothingStaged {@link Label} what the Sorted card says with no rows to show
+     * @param scopeLegend {@link SettingsRows.LinkedLine} what a mark on one of those rows means
+     * @param openRuns {@link Hyperlink} the word inside it that opens the runs screen
      * @param scopeLabel {@link Label} the label above the scope field
      * @param scopeField {@link TextField} the scope field
      * @param start {@link Button} the start button
@@ -452,6 +465,7 @@ final class RunLauncherPane {
      */
     private record Controls(HBox modeRow, Label modeHint, Label inboxHeadline, Label inboxDetail,
                             Button importPhotos, Label importHint, VBox yearRows, Label nothingStaged,
+                            SettingsRows.LinkedLine scopeLegend, Hyperlink openRuns,
                             Label scopeLabel, TextField scopeField,
                             Button start, Label hint, Label refusal, Label figure, Label disclaimer,
                             Label withoutHistory, Label freeHeadline, Label freeDetail, Label message,
@@ -546,6 +560,9 @@ final class RunLauncherPane {
             this.selectYear(view.years(), view.scopeNamesTheRun());
             this.scopeField.setDisable(!view.scopeNamesTheRun());
             this.nothingStaged.setText(SettingsRows.orNothing(view.nothingStaged()));
+            this.scopeLegend.before().setText(SettingsRows.orNothing(view.scopeLegend()));
+            this.openRuns.setText(SettingsRows.orNothing(view.scopeLegendWayThere()));
+            this.scopeLegend.after().setText(SettingsRows.orNothing(view.scopeLegendAfter()));
             this.scopeLabel.setText(view.scopeLabel());
             // Only when it differs. Setting it fires the listener that got here, and an unguarded
             // write would go round again. It also moves the caret, which a reader mid-word notices.
@@ -601,8 +618,9 @@ final class RunLauncherPane {
             // The scope field is one of the things a fill writes, so a click and a keystroke reach
             // the screen by the same route.
             final ToggleButton row = this.scopeRow(year.id(), "run-year-row",
-                    rowInside("run-year-label", year.label(), year.counts(), null), year.chosen(),
-                    () -> setup.pressYear(year.year()), setup);
+                    rowInside("run-year-label", year.label(), year.counts(), null,
+                            unfinishedMark(year.unfinishedSift())),
+                    year.chosen(), () -> setup.pressYear(year.year()), setup);
             row.setToggleGroup(group);
             if (year.months().isEmpty()) {
                 return row;
@@ -708,10 +726,13 @@ final class RunLauncherPane {
                 frames.add(following);
             }
             final var travel = new Timeline(new KeyFrame(FOLD_TRAVEL, frames.toArray(new KeyValue[0])));
-            travel.setOnFinished(_ -> turns.forEach(turn -> {
-                this.folding.remove(turn.months());
-                settle(turn.months(), turn.shown());
-            }));
+            travel.setOnFinished(_ -> {
+                turns.forEach(turn -> {
+                    this.folding.remove(turn.months());
+                    settle(turn.months(), turn.shown());
+                });
+                Platform.runLater(() -> this.arrive(turns));
+            });
             turns.forEach(turn -> this.folding.put(turn.months(), travel));
             travel.play();
         }
@@ -806,6 +827,47 @@ final class RunLauncherPane {
         }
 
         /**
+         * Puts the pane where it was travelling to, now that the rows hold their real heights.
+         *
+         * <p>{@link #following} works its target out before anything has moved. So it stands a
+         * measured preferred height in for the computed one each box settles at. A pane positions
+         * itself as a fraction of the page. Whatever those two heights differ by therefore comes
+         * off the destination, and the year that was opened finishes short of the bottom. By here
+         * the predicted page exists, so the same arithmetic over it predicts nothing.
+         *
+         * <p>Deferred a pulse rather than run as the travel ends, and that is what makes it work at
+         * all. {@link #settle} lifts a box's ceiling, and the box takes its real height on the
+         * layout pass after. Reading here without waiting for that pass gives a box of no height
+         * and a viewport that has not been sized, which is the same guess this exists to replace.
+         *
+         * <p>Reads the pane's own position rather than the target it was given: a fold this one
+         * interrupted leaves the pane wherever it got to. A box no longer open by the time this
+         * runs belongs to a fold that has since been replaced, so the fold that replaced it owns
+         * the destination.
+         *
+         * @param turns a {@link List} of {@link Turn} everything this fill moved, in row order
+         */
+        private void arrive(final List<Turn> turns) {
+            final Optional<Turn> opened = turns.stream().filter(Turn::shown).findFirst();
+            if (opened.isEmpty() || !(this.scroll.getContent() instanceof final Parent laidOut)
+                    || !this.unfolded.contains(opened.get().months())) {
+                return;
+            }
+            laidOut.applyCss();
+            laidOut.layout();
+            final double viewport = this.scroll.getViewportBounds().getHeight();
+            final double scrollable = laidOut.getLayoutBounds().getHeight() - viewport;
+            if (scrollable <= 0) {
+                return;
+            }
+            final VBox months = opened.get().months();
+            final double foot = laidOut.sceneToLocal(months.localToScene(months.getLayoutBounds())).getMaxY();
+            final double top = this.scroll.getVvalue() / this.scroll.getVmax() * scrollable;
+            this.scroll.setVvalue(Math.clamp(Math.max(top, foot - viewport), 0, scrollable)
+                    / scrollable * this.scroll.getVmax());
+        }
+
+        /**
          * Where the pane has to sit for a year's opening months to end up in view.
          *
          * <p>Only a year being opened asks for this. One closing is either in front of the reader
@@ -863,29 +925,54 @@ final class RunLauncherPane {
                               final RunSetupPresenter setup) {
             final var box = new Region();
             box.getStyleClass().add("run-month-box");
-            return this.scopeRow(month.id(), "run-month-row",
-                    rowInside("run-month-label", month.label(), month.counts(), box), month.chosen(),
+            final var inside = rowInside("run-month-label", month.label(), month.counts(), box,
+                    unfinishedMark(month.unfinishedSift()));
+            return this.scopeRow(month.id(), "run-month-row", inside, month.chosen(),
                     () -> setup.pressMonth(year.year(), month.month()), setup);
         }
 
         /**
-         * What sits inside a scope row: an optional mark, the name, and what it holds.
+         * The mark a timeline row carries when an unfinished sift already covers it.
+         *
+         * <p>The row is still pressable. What the mark changes is what the button under the field
+         * then offers, and the legend under the rows says so.
+         *
+         * @param unfinished boolean whether a sift of this row has not finished
+         * @return {@link Node} the mark, or null where the row carries none
+         */
+        private static @Nullable Node unfinishedMark(final boolean unfinished) {
+            if (!unfinished) {
+                return null;
+            }
+            final var mark = new Label(UNFINISHED_MARK);
+            mark.getStyleClass().add("run-unfinished-mark");
+            return mark;
+        }
+
+        /**
+         * What sits inside a scope row: the name, and what it holds.
          *
          * @param labelClass {@link String} the style class for the name
          * @param name {@link String} the year or month it stands for
          * @param counts {@link String} what that holds
-         * @param marker {@link Node} drawn before the name, or null where the row carries none
+         * @param leading {@link Node} drawn ahead of everything, or null where the row has none
+         * @param mark {@link Node} drawn at the end, or null where the row carries none
          * @return {@link HBox} the row's contents
          */
         private static HBox rowInside(final String labelClass, final String name, final String counts,
-                                      final @Nullable Node marker) {
+                                      final @Nullable Node leading, final @Nullable Node mark) {
             final var label = new Label(name);
             label.getStyleClass().add(labelClass);
             final var held = new Label(counts);
             held.getStyleClass().add("run-year-counts");
-            final var inside = marker == null
-                    ? new HBox(label, held)
-                    : new HBox(marker, label, held);
+            final var inside = new HBox();
+            if (leading != null) {
+                inside.getChildren().add(leading);
+            }
+            inside.getChildren().addAll(label, held);
+            if (mark != null) {
+                inside.getChildren().add(mark);
+            }
             inside.setAlignment(Pos.CENTER_LEFT);
             inside.getStyleClass().add("run-year-inside");
             return inside;

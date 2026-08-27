@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static photos.sluice.application.service.PipelineTestSupport.AutoApproveCuller;
@@ -53,6 +54,7 @@ import static photos.sluice.application.service.PipelineTestSupport.FailingListi
 import static photos.sluice.application.service.PipelineTestSupport.FixedSettings;
 import static photos.sluice.application.service.PipelineTestSupport.ImpossibleCountCuller;
 import static photos.sluice.application.service.PipelineTestSupport.JunkEverythingCuller;
+import static photos.sluice.application.service.PipelineTestSupport.listed;
 import static photos.sluice.application.service.PipelineTestSupport.ManualModeCuller;
 import static photos.sluice.application.service.PipelineTestSupport.NeverCalledCuller;
 import static photos.sluice.application.service.PipelineTestSupport.PlantOnFirstExists;
@@ -361,6 +363,60 @@ class CullEngineTest {
         assertThat(Files.exists(waiting.job().prepDir().resolve("decisions-001.json"))).isTrue();
     }
 
+    // The exact-tag claim cannot see this one. 2019 and 2019-06 are unrelated keys, so without the
+    // overlap guard the second run sheets and pays for June a second time.
+    @Test
+    void cullRefusesAWholeYearRunningAcrossAnUnfinishedSiftOfItsMonths(@TempDir final Path root)
+            throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, List.of(6))).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
+                .isInstanceOfSatisfying(Pipeline.ScopeOverlapsException.class, refusal ->
+                        assertThat(refusal.across()).extracting(CullRunSummary::scope)
+                                .containsExactly("2019-06"));
+    }
+
+    @Test
+    void cullRefusesAMonthInsideAnUnfinishedSiftOfItsWholeYear(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, List.of(6))))
+                .isInstanceOf(Pipeline.ScopeOverlapsException.class);
+    }
+
+    @Test
+    void cullAllowsAYearThatSharesNoMonthWithAnUnfinishedSift(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "11"), "IMG_2.jpg", Instant.parse("2019-11-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, List.of(6))).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        assertThatCode(() -> pipeline.cull(new CullScope.Year(2019, List.of(11))).join())
+                .doesNotThrowAnyException();
+    }
+
+    // A count of files names no timeline, so nothing it covers can be worked out from its tag.
+    @Test
+    void cullAllowsAScopeOfTheOldestFilesBesideAnUnfinishedYear(@TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        assertThatCode(() -> pipeline.cull(new CullScope.OldestN(1)).join()).doesNotThrowAnyException();
+    }
+
     // A run whose shards are all in but whose apply has not run holds the most unspent work of any
     // unfinished state. It is a full set of shards somebody paid for, one Resume away from
     // applying. So it refuses like every other one.
@@ -371,7 +427,7 @@ class CullEngineTest {
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(run -> run.health().state()).isEqualTo(State.READY);
 
         assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
@@ -478,11 +534,11 @@ class CullEngineTest {
         prepStore.startFailing();
         // The control: proves this fixture's failing read actually reaches DAMAGED before trusting
         // the READY assertion below to mean the read succeeding, not the absence of caching alone.
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(run -> run.health().state()).isEqualTo(State.DAMAGED);
 
         prepStore.stopFailing();
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(run -> run.health().state()).isEqualTo(State.READY);
     }
 
@@ -506,7 +562,7 @@ class CullEngineTest {
         this.armed.add(watchPipeline);
         watchPipeline.armWatchesForResumableRuns();
 
-        assertThat(watchPipeline.cullRuns()).singleElement()
+        assertThat(listed(watchPipeline.cullRuns())).singleElement()
                 .extracting(run -> run.health().state()).isEqualTo(State.DAMAGED);
         assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
     }
@@ -672,7 +728,7 @@ class CullEngineTest {
 
     @Test
     void cullRunsIsEmptyWhenNoCullHasEverRun(@TempDir final Path root) {
-        assertThat(cullPipeline(root, new RecordingProgressPort()).cullRuns()).isEmpty();
+        assertThat(listed(cullPipeline(root, new RecordingProgressPort()).cullRuns())).isEmpty();
     }
 
     @Test
@@ -681,7 +737,7 @@ class CullEngineTest {
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         pipeline.cull(new CullScope.Year(2019, null)).join();
 
-        final List<CullRunSummary> runs = pipeline.cullRuns();
+        final List<CullRunSummary> runs = listed(pipeline.cullRuns());
 
         assertThat(runs).hasSize(1);
         assertThat(runs.getFirst().scope()).isEqualTo("2019");
@@ -701,7 +757,7 @@ class CullEngineTest {
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
         pipeline.resume(waiting.job().prepDir(), false).join();
 
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(run -> run.health().state()).isEqualTo(State.COMPLETE);
     }
 
@@ -1165,7 +1221,7 @@ class CullEngineTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         // montage-002 belongs to no montage in the index, so the whole-batch gate refuses.
         writeShard(prepDir, "montage-002", classificationJson(photo, "junk", "blurry"));
-        assertThat(manualPipeline.cullRuns()).singleElement()
+        assertThat(listed(manualPipeline.cullRuns())).singleElement()
                 .extracting(run -> run.health().state()).isEqualTo(State.BLOCKED);
 
         final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
@@ -1211,7 +1267,7 @@ class CullEngineTest {
         pipeline.stopWatching(prepDir);
 
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(CullRunSummary::prepDir).isEqualTo(prepDir);
         assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
                 .isInstanceOf(Pipeline.ScopeOccupiedException.class);
@@ -1256,7 +1312,7 @@ class CullEngineTest {
         final var healthy = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2020, null)).join();
         Files.writeString(damaged.job().prepDir().resolve("index.json"), "{ not json at all");
 
-        final List<CullRunSummary> runs = pipeline.cullRuns();
+        final List<CullRunSummary> runs = listed(pipeline.cullRuns());
 
         assertThat(runs).extracting(CullRunSummary::prepDir)
                 .containsExactly(damaged.job().prepDir(), healthy.job().prepDir());
@@ -1280,7 +1336,7 @@ class CullEngineTest {
         Files.writeString(prepDir.resolve("montage-001.json"), "{ not json at all");
         Files.writeString(prepDir.resolve("decisions-001.json"), "{ not json at all");
 
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(CullRunSummary::shards).isEqualTo(new ShardTally(1, 0, 1));
     }
 
@@ -1298,7 +1354,7 @@ class CullEngineTest {
                 "{ \"montage\": \"montage-001\", \"decisions\": [ { \"file\": \"bad\\u0000name.jpg\", "
                         + "\"action\": \"junk\", \"reason\": \"blurry\" } ] }");
 
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(CullRunSummary::shards).isEqualTo(new ShardTally(1, 0, 1));
     }
 
@@ -1324,7 +1380,7 @@ class CullEngineTest {
         // The watcher firing is what retires it, so an inactive watch proves the resume ran.
         waitUntil(Duration.ofSeconds(2), () -> !pipeline.isWatchActive(prepDir));
 
-        assertThat(pipeline.cullRuns()).singleElement()
+        assertThat(listed(pipeline.cullRuns())).singleElement()
                 .extracting(CullRunSummary::shards).isEqualTo(new ShardTally(1, 1, 1));
         assertThat(Files.exists(photo)).isTrue();
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
@@ -1489,7 +1545,7 @@ class CullEngineTest {
                 "the shard itself is fine");
         // The tally still reads the montage as invalid - only the whole-batch pass knows to trust
         // its shard as its own scope. Readiness is what ignores that, which is the claim below.
-        assertThat(pipeline.cullRuns()).singleElement().satisfies(run -> {
+        assertThat(listed(pipeline.cullRuns())).singleElement().satisfies(run -> {
             assertThat(run.shards()).isNotNull();
             assertThat(run.shards().valid()).isEqualTo(0);
         });

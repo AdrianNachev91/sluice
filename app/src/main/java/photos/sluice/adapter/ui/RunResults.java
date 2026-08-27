@@ -43,7 +43,8 @@ final class RunResults {
     private static final String CONTINUE = "Continue sifting";
 
     private static final String CEILING_QUESTION = "Sluice stopped this sift because it went far "
-            + "past what it was expected to cost. No more money has been spent. Continuing on sends "
+            + "past what it was expected to cost. Nothing more has been spent from your provider "
+            + "account balance. Continuing on sends "
             + "the sheets it had not reached, under a fresh limit.";
 
     // Names the folder the record went to. Saying only that it was kept invites the question of
@@ -51,11 +52,10 @@ final class RunResults {
     private static final String ARCHIVED = "You had already sifted this timeline. Sluice moved that "
             + "record to %s rather than writing over it.";
 
-    private static final String SHARDS_OUTSTANDING = "The sheets are ready and Sluice is waiting "
-            + "for your agent's decisions on them. Nothing moves until they arrive.";
+    private static final String SHARDS_OUTSTANDING = "The sheets are ready, waiting for your "
+            + "agent's decisions on them. Nothing moves until they arrive.";
 
-    private static final String BLOCKED = "Every sheet has a decision, and Sluice could not act on "
-            + "them. Nothing has moved.";
+    private static final String BLOCKED = "Every sheet was judged. %s. Nothing was moved.";
 
     private static final String CANCELLED = "You can continue at any time.";
 
@@ -295,10 +295,10 @@ final class RunResults {
                     new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED, waitingDetail(why),
                             joined(before, sheetCounts(job.shards())), archived, null,
                             resumeOffer(why, job.prepDir()), DONE);
-            case CullJobOutcome.Blocked(final var job, _, _, Path _) ->
+            case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
                     new RunResultView(ran.verb() + " stopped and needs a look.",
-                            Tone.UNFINISHED, BLOCKED, joined(before, sheetCounts(job.shards())),
-                            archived, null, null, DONE);
+                            Tone.UNFINISHED, BLOCKED.formatted(FindingFamily.wentWrong(findings)),
+                            joined(before, sheetCounts(job.shards())), archived, null, null, DONE);
             // The one case with no prep dir behind it, so nothing counted the sheets. It is reached
             // only before rendering finished, which is why there are none to count.
             case CullJobOutcome.Cancelled _ ->

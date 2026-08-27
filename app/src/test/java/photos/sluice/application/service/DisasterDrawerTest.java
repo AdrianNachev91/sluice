@@ -107,7 +107,7 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredGraveyardDeletesOnlyGraveyardFoldersOlderThanThirtyDays(@TempDir final Path root) throws IOException {
-        final Path graveyardRoot = root.resolve("logs/disasters");
+        final Path graveyardRoot = root.resolve("logs/archives");
         final Path oldGraveyard = graveyardRoot.resolve("scope1-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
         // Preserves a nested disasters/ subfolder's own structure - proves the whole tree is swept,
@@ -129,10 +129,10 @@ class DisasterDrawerTest {
         // A Year scope narrowed to specific months tags itself "2020-06-07-08" (CullScope.tag()) -
         // exactly the shape TIMESTAMP_SUFFIX's trailing anchor exists to parse correctly regardless
         // of how many hyphens the scope segment itself contributes.
-        final Path oldGraveyard = root.resolve("logs/disasters/2020-06-07-08-2019-01-01_00-00-00");
+        final Path oldGraveyard = root.resolve("logs/archives/2020-06-07-08-2019-01-01_00-00-00");
         writeFile(oldGraveyard.resolve("index.json"), "{}");
 
-        final int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/disasters"));
+        final int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/archives"));
 
         assertThat(deleted).isEqualTo(1);
         assertThat(Files.exists(oldGraveyard)).isFalse();
@@ -140,7 +140,7 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredGraveyardLeavesAnUnparseableFolderNameAloneRatherThanGuessing(@TempDir final Path root) throws IOException {
-        final Path graveyardRoot = root.resolve("logs/disasters");
+        final Path graveyardRoot = root.resolve("logs/archives");
         final Path unparseable = writeFile(graveyardRoot.resolve("not-a-timestamped-name/index.json"), "{}");
 
         final int deleted = drawer().sweepExpiredGraveyard(graveyardRoot);
@@ -151,7 +151,7 @@ class DisasterDrawerTest {
 
     @Test
     void sweepExpiredGraveyardOnAMissingRootReturnsZeroWithoutThrowing(@TempDir final Path root) {
-        final int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/disasters"));
+        final int deleted = drawer().sweepExpiredGraveyard(root.resolve("logs/archives"));
 
         assertThat(deleted).isZero();
     }

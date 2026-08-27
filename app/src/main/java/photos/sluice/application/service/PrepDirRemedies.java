@@ -261,7 +261,7 @@ public class PrepDirRemedies {
 
     /**
      * Files a whole prep dir into the global graveyard, leaving its scope free. Every non-image file
-     * is moved wholesale into {@code logs/disasters/<scope>-<timestamp>/}, keeping its own relative
+     * is moved wholesale into {@code logs/archives/<scope>-<timestamp>/}, keeping its own relative
      * layout. That covers shards, sidecars, index.json, the move ledger, and any disaster drawer.
      * The graveyard gets the same 30-day retention window every other disaster-drawer artifact does.
      * Only the montage and tile contact-sheet images are truly deleted, since they cost cents to

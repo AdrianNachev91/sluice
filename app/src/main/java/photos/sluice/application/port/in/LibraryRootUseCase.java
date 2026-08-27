@@ -36,6 +36,8 @@ public interface LibraryRootUseCase {
      * @throws PathsMisconfiguredException if that folder cannot be worked in beside the roots in
      *         force, or if those roots are themselves unusable
      * @throws UnfinishedRunsException if any cull run on disk has not finished
+     * @throws RunsUnreadableException if the sift-prep root itself could not be read, leaving it
+     *         unknown whether any run is unfinished
      * @throws JobInProgressException if a job is already running
      * @throws ShuttingDownException if the app is closing
      */

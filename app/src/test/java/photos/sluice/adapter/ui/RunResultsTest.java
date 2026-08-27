@@ -37,14 +37,14 @@ class RunResultsTest {
     private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
 
     @Test
-    void aSiftBlockedByItsOwnValidationSaysNothingHasMoved() {
+    void aSiftBlockedByItsOwnValidationSaysNothingWasMoved() {
         final RunResultView card = RunResults.of(RunMode.SIFT, new CullJobOutcome.Blocked(
                 waitingJob(new ShardTally(28, 28, 28)), List.of(new Finding.MissingMontageField("montage-003")),
                 CullReport.nothingSpent("anthropic", 0), null));
 
         assertThat(card.heading()).isEqualTo("Sifting stopped and needs a look.");
         assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-        assertThat(requireNonNull(card.detail())).contains("Nothing has moved");
+        assertThat(requireNonNull(card.detail())).contains("Nothing was moved");
         assertThat(card.resume()).isNull();
     }
 

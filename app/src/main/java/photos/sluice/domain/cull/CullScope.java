@@ -3,6 +3,7 @@ package photos.sluice.domain.cull;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.model.Numerals;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -33,6 +34,28 @@ public sealed interface CullScope {
         public Year {
             months = months == null ? null : List.copyOf(months);
         }
+
+        /**
+         * Whether this scope and another cover any of the same months.
+         *
+         * <p>Null months mean the whole year, so such a scope meets anything else in that year.
+         *
+         * <p>Two scopes can overlap without sharing a tag, which is what makes this worth asking.
+         * A prep dir is claimed by its exact tag, so the whole of 2019 and June 2019 are unrelated
+         * keys. A run over each sheets and pays for June twice.
+         *
+         * @param other {@link Year} the scope to compare against, or null where none is known
+         * @return boolean true where the two share at least one month
+         */
+        public boolean overlaps(final @Nullable Year other) {
+            if (other == null || other.year != this.year) {
+                return false;
+            }
+            if (this.months == null || other.months == null) {
+                return true;
+            }
+            return this.months.stream().anyMatch(other.months::contains);
+        }
     }
 
     /**
@@ -44,9 +67,9 @@ public sealed interface CullScope {
 
     /**
      * The on-disk tag identifying this scope's prep dir (logs/sift-prep/<tag>/). Also PrepDir.scope()
-     * and a WaitingCullJob's own scope() - both carry this same string. Lives here, not in the
-     * adapter that names the directory, so the application layer can compute it too: Pipeline uses
-     * it to recognize an existing waiting job for the same scope before rebuilding its prep dir.
+     * and a WaitingCullJob's own scope() - both carry this same string. Lives here rather than in the
+     * adapter that names the directory, so the application layer can compute it too. Pipeline uses
+     * it to recognize an existing waiting job for a scope before rebuilding its prep dir.
      *
      * @param scope {@link CullScope} the cull scope to tag
      * @return {@link String} the scope's on-disk tag
@@ -56,6 +79,51 @@ public sealed interface CullScope {
             case Year(final int year, final List<Integer> months) -> yearTag(year, months);
             case OldestN(final int n) -> "oldest-" + n;
         };
+    }
+
+    /**
+     * The year scope a tag stands for, or null where it names no year.
+     *
+     * <p>The inverse of {@link #tag} over its {@link Year} case, and it lives beside it so the two
+     * cannot drift apart. A caller comparing what somebody has chosen against the runs already on
+     * disk needs the months back, not just the string.
+     *
+     * <p>{@link OldestN} answers null, because a count of files names no timeline. So does anything
+     * else found in the sift-prep root, including a folder somebody made by hand.
+     *
+     * @param tag {@link String} a prep dir's own folder name
+     * @return {@link Year} the scope it stands for, months null for a whole year, or null where the
+     *         tag names no year
+     */
+    static @Nullable Year yearScopeOf(final String tag) {
+        final String[] parts = tag.split("-");
+        if (parts.length == 0 || parts[0].length() != 4 || isNotDigits(parts[0])) {
+            return null;
+        }
+        final List<Integer> months = new ArrayList<>();
+        for (int i = 1; i < parts.length; i++) {
+            if (parts[i].length() != 2 || isNotDigits(parts[i])) {
+                return null;
+            }
+            final int month = Integer.parseInt(parts[i]);
+            // A tag is built from real months, so anything outside the calendar was not built by
+            // this app.
+            if (month < 1 || month > 12) {
+                return null;
+            }
+            months.add(month);
+        }
+        return new Year(Integer.parseInt(parts[0]), months.isEmpty() ? null : months);
+    }
+
+    /**
+     * Whether any character is not a digit.
+     *
+     * @param part {@link String} one hyphen-separated piece of a tag
+     * @return boolean true where something in it is not a digit
+     */
+    private static boolean isNotDigits(final String part) {
+        return !part.chars().allMatch(Character::isDigit);
     }
 
     /**

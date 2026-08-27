@@ -52,6 +52,7 @@ class PipelineSurfaceTest {
             "sortedTally()",
             "estimateFor(int)",
             "configuredProviderSpends()",
+            "archivesFolder()",
             "isBusy()");
 
     // The methods that must run whatever the roots say. Named rather than detected, because what
@@ -74,9 +75,13 @@ class PipelineSurfaceTest {
     // configuredProviderSpends reads the configured provider's own type. No folder appears in the
     // question and none is read to answer it. A screen asks it while drawing, the same way it asks
     // isBusy.
+    //
+    // archivesFolder resolves a path and reaches no disk. What asks it is a question put before a
+    // discard, naming where the records will go. Refused while the roots are unusable, that question
+    // could not be worded at all, and the roots being unusable is not what it is about.
     private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK =
             Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "estimateFor(int)",
-                    "configuredProviderSpends()", "isBusy()");
+                    "configuredProviderSpends()", "archivesFolder()", "isBusy()");
 
     // The facade is where every driving adapter passes through, so it is where the folder-root check
     // belongs. A guard written into a screen would be walked past by a command line. This reads the

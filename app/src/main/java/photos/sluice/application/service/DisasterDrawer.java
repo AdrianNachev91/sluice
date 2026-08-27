@@ -108,7 +108,7 @@ public class DisasterDrawer {
 
     /**
      * Deletes every {@code PrepDirRemedies.discard()} graveyard folder under graveyardRoot
-     * ({@code logs/disasters/}) whose own {@code <scope>-<timestamp>} name is older than the 30-day
+     * ({@code logs/archives/}) whose own {@code <scope>-<timestamp>} name is older than the 30-day
      * retention window. This is the directory-level counterpart to {@link #sweepExpired}. That
      * method only ever recognizes a per-prep-dir drawer entry sitting directly inside a literal
      * {@code disasters/} folder, not a whole graveyard folder discovered by name. A folder whose
@@ -121,7 +121,7 @@ public class DisasterDrawer {
      * prep dir turns out to have nothing worth keeping. Left unswept, but harmless; an empty folder
      * costs nothing.
      *
-     * @param graveyardRoot {@link Path} the discard graveyard root ({@code logs/disasters/})
+     * @param graveyardRoot {@link Path} the discard graveyard root ({@code logs/archives/})
      * @return int the number of graveyard folders deleted
      */
     public int sweepExpiredGraveyard(final Path graveyardRoot) {

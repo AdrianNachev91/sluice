@@ -263,19 +263,38 @@
     -fx-opacity: 1.0;
 }
 
-/* The way out when the suggestion is wrong, which is the uncommon case. Offered rather than urged.
-   Somebody who needs it goes looking for it, and somebody who does not should not be steered into
-   picking three folders by hand through a file dialog. */
+/* The way out when the suggestion is wrong, which is the uncommon case. Offered rather than urged:
+   an ordinary control beside a brand-coloured one, rather than a quieter kind of thing. Somebody
+   who does not need it should not be steered into picking three folders through a file dialog. */
 .button-last-resort {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
-    -fx-text-fill: -sluice-text-muted;
+    -fx-background-color: -sluice-ground;
+    -fx-border-color: -sluice-border;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-text-fill: -sluice-text;
     -fx-font-weight: normal;
 }
 
-.button-last-resort:hover {
-    -fx-background-color: -sluice-ground;
-    -fx-text-fill: -sluice-text;
+/* A few words inside a sentence that lead somewhere else in this app. A button rather than a
+   Hyperlink: the toolkit's own draws a visited state and its own underline, and neither means
+   anything for a screen you can come back to. No leaves-the-app mark either, which LinkedText draws
+   and this must not. */
+.in-app-link {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: -sluice-accent;
+    -fx-font-weight: normal;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+/*noinspection CssInvalidPseudoSelector*/
+.in-app-link:visited {
+    -fx-text-fill: -sluice-accent;
+}
+
+.in-app-link:hover {
+    -fx-underline: true;
     -fx-opacity: 1.0;
 }
 
@@ -676,6 +695,18 @@
     -fx-background-color: -sluice-ground;
     -fx-border-color: -sluice-border;
     -fx-text-fill: -sluice-text;
+}
+
+/* Where backing out is itself the action the screen wants pressed, which is every confirm about
+   something the app cannot undo. The two rules above both match that one button and carry equal
+   weight, so the ground fill wins on order alone. The dialog then puts its only colour on the
+   destructive choice and dresses the safe one as plain chrome. */
+/*noinspection CssInvalidPseudoSelector*/
+.dialog-pane .button:default:cancel {
+    -fx-background-color: -sluice-mark-bg;
+    -fx-border-color: transparent;
+    -fx-text-fill: -sluice-mark-glyph;
+    -fx-font-weight: bold;
 }
 
 /* A dropdown holding one setting's value, dressed like the fields holding the others. JavaFX draws
@@ -1384,6 +1415,7 @@
    column because it is the one thing on the page that acts. */
 .run-start-row {
     -fx-padding: 6px 0 0 0;
+    -fx-spacing: 8px;
 }
 
 /* The Inbox card's own action, set off from the two lines above it. Left where those lines start,
@@ -1569,9 +1601,9 @@
     -fx-text-fill: -sluice-text;
 }
 
-/* The stripe carrying something the run noticed and did not stop for. Its own ground, because a
-   line of coloured text inside a list of counts reads as one of the counts. */
-.run-result-warning {
+/* Text on its own caution ground, bordered the way the info callout is. A line of coloured text
+   among ordinary lines reads as one of them, and the ground is what stops that. */
+.warning-box {
     -fx-background-color: -sluice-caution-bg;
     -fx-background-radius: 6px;
     -fx-border-color: -sluice-caution;
@@ -1608,3 +1640,118 @@
 /* How a run ended is carried by the words, not by the heading's colour. A page heading wears the
    brand on every screen, and this one is no exception. The sentence under it is where a reader
    learns whether anything went wrong, and it says so in plainer terms than a colour can. */
+
+/* The count of unfinished sifts, sitting at the far end of the Runs entry. Caution rather than the
+   brand accent: the accent already means "this is the screen you are on" everywhere in this
+   sidebar, and a number wearing it would read as a second selection mark. */
+.nav-count {
+    -fx-background-color: -sluice-caution-bg;
+    -fx-background-radius: 9px;
+    -fx-text-fill: -sluice-caution;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 1px 7px;
+}
+
+/* A nav entry whose name and count sit at opposite ends of it. The name is drawn by the graphic
+   rather than the button's own text, so the row inside has to be told to take the whole width. */
+.nav-item-inside {
+    -fx-spacing: 8px;
+    -fx-min-width: 140px;
+}
+
+/* The runs screen: a pinned header over a body that scrolls, so Clear finished runs stays
+   reachable however many cards are below it. Matches the settings pages, which a reader may well
+   have arrived from. */
+.runs {
+    -fx-spacing: 16px;
+    -fx-padding: 24px 0 24px 24px;
+}
+
+.runs-header {
+    -fx-spacing: 12px;
+    -fx-padding: 0 12px 0 0;
+}
+
+.runs-body {
+    -fx-spacing: 16px;
+    -fx-padding: 0 12px 0 0;
+}
+
+/* A refusal this screen reports, on the help line it shares with the ordinary reports. That line's
+   own muted fill is declared further down this sheet than the shared caution class, and both are
+   single selectors, so the later one wins. Said here, past both, or a refusal comes out the colour
+   of a timestamp. */
+.runs-report-caution {
+    -fx-text-fill: -sluice-caution;
+    -fx-font-weight: bold;
+}
+
+.runs-cards {
+    -fx-spacing: 12px;
+}
+
+/* What the run covers, which is the first thing a reader looks for when scanning a stack of these.
+   The state beside it is the second, so it is the quieter of the two. */
+.runs-card-scope {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+/* What state the run is in, under its name. A fact about the run like the name and the sentence
+   below it, so it sits with them in the page's own colour rather than off to one side. */
+.runs-card-headline {
+    -fx-text-fill: -sluice-text;
+    -fx-font-weight: bold;
+    -fx-padding: -2px 0 0 0;
+}
+
+.runs-card-lines {
+    -fx-spacing: 6px;
+}
+
+
+.runs-card-detail {
+    -fx-text-fill: -sluice-text;
+}
+
+.runs-card-sheets, .runs-card-age {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-size: 11px;
+}
+
+/* The marker on the finished-runs fold. Rotated rather than swapped for a second shape, so the
+   two states cannot drift apart. */
+.runs-fold-marker {
+    -fx-fill: -sluice-text-muted;
+}
+
+/* The fold over the finished runs. A plain label with a pointer, since it opens a section rather
+   than doing anything, and a raised button would claim more than that. */
+.runs-section-toggle {
+    -fx-background-color: transparent;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+    -fx-padding: 4px 0;
+    -fx-cursor: hand;
+}
+
+.runs-completed {
+    -fx-spacing: 10px;
+}
+
+/* The mark on a timeline row whose sift has not finished, and the same mark opening the legend
+   below the rows. Caution-coloured, like the sidebar count that stands for the same runs.
+   Never the only signal: the legend spells it out, and the button under the field changes what it
+   offers. */
+.run-unfinished-mark {
+    -fx-text-fill: -sluice-caution;
+    -fx-font-weight: bold;
+}
+
+/* The gap between the legend's mark and its sentence, which no spacing of the row's own sets. */
+.run-legend-mark {
+    -fx-padding: 0 6px 0 0;
+}

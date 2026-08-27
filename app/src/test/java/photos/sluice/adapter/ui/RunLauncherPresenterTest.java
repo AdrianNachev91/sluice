@@ -476,7 +476,7 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(requireNonNull(this.finishedView().resume()).question())
-                .contains("No more money has been spent");
+                .contains("Nothing more has been spent from your provider account balance");
     }
 
     @Test
@@ -665,8 +665,9 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(this.reported().text())
-                .isEqualTo("You already have a sift of 2019 that has not finished. Sluice will not "
-                        + "start another for the same timeline while that one is there.");
+                .isEqualTo("You already have a sift of 2019 that has not finished. Another cannot "
+                        + "be started for the same timeline while that one is there. "
+                        + "Open Runs to continue or discard it.");
     }
 
     @Test
@@ -691,7 +692,7 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(this.reported().text())
-                .contains("could not read")
+                .contains("cannot be read")
                 .contains("whether a sift is already running");
     }
 

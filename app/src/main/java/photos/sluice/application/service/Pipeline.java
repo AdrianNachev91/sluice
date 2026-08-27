@@ -21,6 +21,7 @@ import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.PrepDirHealth;
@@ -304,8 +305,8 @@ public class Pipeline {
     }
 
     /**
-     * Every cull run currently on disk, diagnosed. This is the one source the run-card dashboard and
-     * the unresolved-run banner are both meant to render from.
+     * Every cull run currently on disk, diagnosed. This is the one source the runs screen and its
+     * counted nav entry are both meant to render from.
      *
      * <p>Derived by enumerating the sift-prep root and diagnosing each dir, never from a persisted
      * list. Enumerating is what keeps a damaged run visible, which is exactly when it most needs to
@@ -319,11 +320,32 @@ public class Pipeline {
      * <p>Not routed through JobRunner: it only reads, so it does not compete for the single job
      * slot.
      *
-     * @return a {@link List} of {@link CullRunSummary} every run found, diagnosed, ordered by scope
+     * <p>A sift-prep root nobody could read answers {@link CullRuns.Unlistable} rather than an
+     * empty list, so no screen renders a failed read as a reader having no runs.
+     *
+     * @return {@link CullRuns} every run found, diagnosed and ordered by scope, or that the root
+     *     could not be read
      */
-    public List<CullRunSummary> cullRuns() {
+    public CullRuns cullRuns() {
         this.requireUsableRoots();
         return this.prepDirDoctor.runs(this.pathsPort.cullPrep());
+    }
+
+    /**
+     * Where a discarded run's records are filed.
+     *
+     * <p>Named before a discard rather than after it, so the question asked beforehand can say
+     * where the records will be. {@link DiscardReport} names the run's own dated folder inside this
+     * one, which does not exist until the discard has run.
+     *
+     * <p>Unguarded by {@link #requireUsableRoots}, because it resolves a path rather than reaching
+     * the disk. A caller asking where records would go while the roots are unusable is answered
+     * rather than refused.
+     *
+     * @return {@link Path} the folder holding every discarded run's records
+     */
+    public Path archivesFolder() {
+        return this.pathsPort.graveyard();
     }
 
     /**
@@ -508,8 +530,7 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
             if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
-                throw new IllegalStateException("Prep dir " + prepDir
-                        + " has already completed - discard refuses a finished sift; purge it instead.");
+                throw new RunAlreadyFinishedException(prepDir);
             }
             this.cullEngine.disarmWatch(prepDir);
             return this.runPhase(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
@@ -615,6 +636,57 @@ public class Pipeline {
     }
 
     /**
+     * Thrown when a fresh sift is refused because its timeline shares photos with unfinished sifts
+     * being any of them. It carries every one of them, diagnosed, so a caller can name them all.
+     *
+     * <p>Apart from {@link ScopeOccupiedException}, which is the exact-tag case. A prep dir is
+     * claimed by the tag its scope comes to, so the whole of 2019 and June 2019 are unrelated keys.
+     * Nothing about the claim stops the two running together, and each would sheet and pay for June
+     * a second time.
+     *
+     * <p>Carries a list rather than the first one found. A reader told about one deals with it,
+     * comes back, and is refused by the next.
+     *
+     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
+     * refused needs no knowledge of this type at all.
+     */
+    public static final class ScopeOverlapsException extends IllegalStateException {
+        private final transient CullScope.Year chosen;
+        private final transient List<CullRunSummary> across;
+
+        /**
+         * Creates the exception over the timeline chosen and the unfinished runs it overlaps.
+         *
+         * @param chosen {@link CullScope.Year} the timeline the caller asked to sift
+         * @param across a {@link List} of {@link CullRunSummary} the unfinished runs it overlaps
+         */
+        public ScopeOverlapsException(final CullScope.Year chosen, final List<CullRunSummary> across) {
+            super(CullScope.tag(chosen) + " overlaps " + across.stream().map(CullRunSummary::scope).toList()
+                    + ", which have not finished - finish or discard them before sifting it.");
+            this.chosen = chosen;
+            this.across = List.copyOf(across);
+        }
+
+        /**
+         * Returns the timeline the caller asked to sift.
+         *
+         * @return {@link CullScope.Year} the chosen scope
+         */
+        public CullScope.Year chosen() {
+            return this.chosen;
+        }
+
+        /**
+         * Returns the unfinished runs the chosen timeline overlaps, diagnosed.
+         *
+         * @return a {@link List} of {@link CullRunSummary} the runs in the way
+         */
+        public List<CullRunSummary> across() {
+            return this.across;
+        }
+    }
+
+    /**
      * Thrown by {@code curate()} in place of a plain {@link ScopeOccupiedException} whenever the
      * refusal lands after its sort has already moved real files. Two calls reach that point. An
      * auto-resolved {@code OldestYear} scope cannot be checked until its year is known, which is
@@ -650,6 +722,33 @@ public class Pipeline {
          */
         public SortSummary sortSummary() {
             return this.sortSummary;
+        }
+    }
+
+    /**
+     * Thrown when a discard is refused because the run has already finished.
+     *
+     * <p>Reachable from a screen that offered the discard, because a run can finish between the
+     * screen being drawn and the button being pressed. A watcher applying an agent's last shard
+     * does exactly that, unattended. So this is a refusal a reader meets rather than a state only a
+     * caller writing the wrong code could reach.
+     *
+     * <p>Carries the prep dir, and its message says what to do instead. Purging is the finished
+     * run's own verb, and nothing was lost by asking for the other one.
+     *
+     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
+     * refused needs no knowledge of this type at all.
+     */
+    public static final class RunAlreadyFinishedException extends IllegalStateException {
+
+        /**
+         * Creates the exception, naming the run that had already finished.
+         *
+         * @param prepDir {@link Path} the run that was asked to be thrown away
+         */
+        public RunAlreadyFinishedException(final Path prepDir) {
+            super("That sift finished before it could be discarded, so nothing was lost. "
+                    + "Clear it with the finished runs instead. Its records are at " + prepDir + ".");
         }
     }
 

@@ -20,6 +20,7 @@ import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
+import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
@@ -43,12 +44,19 @@ import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.CullCategory;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
 
+import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +69,7 @@ import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 // The wiring only a built scene graph can be wrong about: which destination a nav entry shows, and
 // which of its two states the Dashboard rests in. What each screen says is asserted elsewhere
@@ -111,6 +120,38 @@ class MainWindowTest {
 
         assertThat(currentScreen(root).getId()).isEqualTo("Review");
         assertThat(headingText(currentScreen(root))).isEqualTo("Review");
+    }
+
+    @Test
+    void clickingRunsShowsTheRunsScreen() throws Exception {
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
+
+        clickNav(root, "#nav-runs");
+
+        assertThat(currentScreen(root).getId()).isEqualTo("Runs");
+        assertThat(currentScreen(root).lookup("#runs-clear-completed")).isNotNull();
+    }
+
+    @Test
+    void theRunsEntryCarriesNoBadgeWithNothingOutstanding() throws Exception {
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
+
+        assertThat(root.lookup("#nav-runs-count").isManaged()).isFalse();
+    }
+
+    // Selecting the Dashboard as the shell is built raises no action event, so nothing on the
+    // opening path counts unless the shell asks for it. A reader coming back to unfinished sifts
+    // would otherwise be told nothing until they happened to press a nav entry.
+    @Test
+    void theRunsEntryCountsWhatIsOutstandingWithoutWaitingForANavPress() throws Exception {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+                unfinishedRun("2019"), unfinishedRun("2018"))));
+        final BorderPane root = onFxThread(() ->
+                built(firstRunPresenter(false), settingsPresenter(), new RunsPresenter(pipeline)));
+
+        assertThat(waitFor(() -> "2".equals(((Label) root.lookup("#nav-runs-count")).getText())))
+                .isTrue();
     }
 
     @Test
@@ -226,8 +267,13 @@ class MainWindowTest {
     }
 
     private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters) {
+        return built(presenter, presenters, runsPresenter());
+    }
+
+    private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters,
+                                    final RunsPresenter runs) {
         final Scene scene = MainWindow.scene(presenter, presenters.settings(), presenters.vision(),
-                photoCategoriesPresenter(), runLauncherPresenter());
+                photoCategoriesPresenter(), runLauncherPresenter(), runs);
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();
@@ -236,8 +282,32 @@ class MainWindowTest {
         return (BorderPane) scene.getRoot();
     }
 
+    private static CullRunSummary unfinishedRun(final String scope) {
+        return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
+                new PrepDirHealth(State.WAITING, List.of()), new ShardTally(1, 1, 2), Instant.now());
+    }
+
+    // Polled rather than asserted straight away: the count is read on a thread of its own and drawn
+    // a frame later, which is the whole point of the path being tested.
+    private static boolean waitFor(final Callable<Boolean> settled) {
+        try {
+            WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, settled);
+            return true;
+        } catch (final java.util.concurrent.TimeoutException e) {
+            return false;
+        }
+    }
+
     private static RunLauncherPresenter runLauncherPresenter() {
         return new RunLauncherPresenter(mock(Pipeline.class), new FxProgressPort());
+    }
+
+    // A mock answers cullRuns() with null, so it is given an empty listing instead. The sidebar's
+    // count and the runs screen then both draw their real nothing-here state.
+    private static RunsPresenter runsPresenter() {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        return new RunsPresenter(pipeline);
     }
 
     private static FirstRunPresenter firstRunPresenter(final boolean unfinished) {

@@ -40,6 +40,7 @@ import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
@@ -140,9 +141,18 @@ final class PipelineTestSupport {
     // Every run still owing somebody something - anything but COMPLETE. An applied run stays on
     // disk until purged, so cullRuns() keeps listing it and "no runs at all" would never come true.
     static List<CullRunSummary> unresolvedRuns(final Pipeline pipeline) {
-        return pipeline.cullRuns().stream()
+        return listed(pipeline.cullRuns()).stream()
                 .filter(run -> run.health().state() != State.COMPLETE)
                 .toList();
+    }
+
+    // Fails rather than returning empty on an unlistable root, so a test that meant to read runs
+    // cannot pass by reading a failure as none.
+    static List<CullRunSummary> listed(final CullRuns runs) {
+        if (runs instanceof CullRuns.Listed(final List<CullRunSummary> found)) {
+            return found;
+        }
+        throw new AssertionError("The sift-prep root could not be listed: " + runs);
     }
 
     static Path sortedPhotosDir(final Path root, final String year, final String month) {

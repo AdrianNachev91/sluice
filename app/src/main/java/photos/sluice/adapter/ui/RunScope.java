@@ -135,9 +135,9 @@ sealed interface RunScope {
     /**
      * This mode cannot take what the field says.
      *
-     * @param why {@link String} what is wrong with it
+     * @param reason {@link String} what is wrong with it
      */
-    record Refused(String why) implements RunScope {
+    record Refused(String reason) implements RunScope {
     }
 
     /**

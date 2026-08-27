@@ -15,6 +15,7 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.PipelineTestSupport.RecordingProgressPort;
+import static photos.sluice.application.service.PipelineTestSupport.listed;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 
 // That every entry point runs the check is an ArchitectureTest rule, since it is a property of the
@@ -72,6 +73,6 @@ class PipelinePathGuardTest {
 
         Files.createDirectory(library);
 
-        assertThat(pipeline.cullRuns()).isEmpty();
+        assertThat(listed(pipeline.cullRuns())).isEmpty();
     }
 }

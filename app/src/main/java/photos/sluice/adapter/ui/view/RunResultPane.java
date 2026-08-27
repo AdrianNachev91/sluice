@@ -67,7 +67,7 @@ final class RunResultPane {
         warningDetail.getStyleClass().add("run-result-warning-detail");
         final var warning = new VBox(warningHeadline, warningDetail);
         warning.setId("run-result-warning");
-        warning.getStyleClass().add("run-result-warning");
+        warning.getStyleClass().add("warning-box");
         showWhile(warning, warningHeadline);
 
         final Label archived = SettingsRows.emptyHelpLine("run-result-archived");

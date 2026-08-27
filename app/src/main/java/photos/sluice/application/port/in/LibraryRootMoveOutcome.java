@@ -32,13 +32,14 @@ public sealed interface LibraryRootMoveOutcome {
 
     /**
      * The copy stopped because cancellation was asked for, so the root did not move. The settings
-     * still name the old library and the index is still true of it. What was copied is left where
-     * it landed, as inert files under the folder the user picked.
+     * still name the old library and the index is still true of it. What was copied stays where it
+     * landed, which is what lets a second attempt continue the copy rather than start it again.
      *
      * @param filesCopied int how many files were written before it stopped
      * @param filesFound int how many the old library held when the copy started
+     * @param copiedInto {@link Path} the folder those files were written into
      */
-    record CopyCancelled(int filesCopied, int filesFound) implements LibraryRootMoveOutcome {
+    record CopyCancelled(int filesCopied, int filesFound, Path copiedInto) implements LibraryRootMoveOutcome {
     }
 
     /**

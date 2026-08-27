@@ -24,9 +24,15 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.application.service.JobHandle;
 
+import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -221,6 +227,16 @@ class RunLauncherPaneTest {
 
         assertThat(text(pane, "#run-scope-refusal")).contains("run of months");
         assertThat(pane.lookup("#run-start").isDisabled()).isTrue();
+    }
+
+    // The pane draws both from one constant, so what they cannot be is different characters. What
+    // is worth pinning is that each is drawn at all, and that the row's sits at the end.
+    @Test
+    void aRowWithAnUnfinishedSiftAndTheLegendBothDrawTheMark() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenterOverAnUnfinishedSiftOf2019()));
+
+        assertThat(insideText(pane, "#run-year-2019")).last().isEqualTo("*");
+        assertThat(markOpening(pane, "#run-scope-legend")).isEqualTo("*");
     }
 
     @Test
@@ -480,6 +496,14 @@ class RunLauncherPaneTest {
         return ((Label) pane.lookup(id)).getText();
     }
 
+    // The mark is a label of its own beside the sentence, which is what lets it wear its own
+    // colour. So it is reached through the row the two share.
+    @SuppressWarnings("SameParameterValue")
+    private static String markOpening(final Parent pane, final String id) {
+        final Parent row = pane.lookup(id).getParent();
+        return ((Label) row.getChildrenUnmodifiable().getFirst()).getText();
+    }
+
     private static Node chooseAModeTheRowsScope(final Parent pane) {
         return fire(pane, "#run-mode-sift");
     }
@@ -520,6 +544,14 @@ class RunLauncherPaneTest {
 
     private static RunLauncherPresenter presenter() {
         return new RunLauncherPresenter(pipeline(), new FxProgressPort());
+    }
+
+    private static RunLauncherPresenter presenterOverAnUnfinishedSiftOf2019() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+                new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+                        new PrepDirHealth(State.WAITING, List.of()), null, Instant.EPOCH))));
+        return new RunLauncherPresenter(pipeline, new FxProgressPort());
     }
 
     private static Pipeline pipeline() {

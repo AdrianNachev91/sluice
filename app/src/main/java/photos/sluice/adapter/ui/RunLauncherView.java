@@ -2,6 +2,7 @@ package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
 
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -23,8 +24,12 @@ import java.util.List;
  * @param scopeRefusal what is wrong with what has been typed, or null while nothing is
  * @param cost {@link Cost} what the screen says about money, or null where this mode never reaches
  *     a vision provider
+ * @param scopeLegend what the mark on a timeline row means, or null where no row carries one
+ * @param scopeLegendWayThere the word inside it that leads to that sift, or null with the legend
+ * @param scopeLegendAfter what the legend says after that word, or null with the legend
  * @param startLabel {@link String} what the start button says
  * @param canStart boolean whether the start button is live
+ * @param startAction {@link StartAction} what pressing it does
  * @param message {@link Message} what the screen has to report, or null where it has nothing
  */
 public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard inbox,
@@ -32,7 +37,11 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
                               @Nullable String nothingStaged,
                               String scopeLabel, String scopeText, String scopeHint,
                               @Nullable String scopeRefusal, @Nullable Cost cost,
-                              String startLabel, boolean canStart, @Nullable Message message) {
+                              @Nullable String scopeLegend,
+                              @Nullable String scopeLegendWayThere,
+                              @Nullable String scopeLegendAfter,
+                              String startLabel, boolean canStart, StartAction startAction,
+                              @Nullable Message message) {
 
     /**
      * Defensively copies the mutable collection components.
@@ -48,13 +57,51 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
      * @param scopeHint {@link String} what the field accepts for the mode now chosen
      * @param scopeRefusal what is wrong with what has been typed, or null
      * @param cost {@link Cost} what the screen says about money, or null
+     * @param scopeLegend what the mark on a timeline row means, or null
+     * @param scopeLegendWayThere the word leading to that sift, or null
+     * @param scopeLegendAfter what follows it, or null
      * @param startLabel {@link String} what the start button says
      * @param canStart boolean whether the start button is live
+     * @param startAction {@link StartAction} what pressing it does
      * @param message {@link Message} what the screen has to report, or null
      */
     public RunLauncherView {
         modes = List.copyOf(modes);
         years = List.copyOf(years);
+    }
+
+    /**
+     * What the button under the scope field does when it is pressed.
+     *
+     * <p>Sealed rather than a flag, because these are three different actions rather than three
+     * dressings of one. What the button says comes from {@code startLabel} beside this, so a screen
+     * never works out what to call any of them.
+     *
+     * <p>A timeline already holding an unfinished sift cannot be sifted again.
+     */
+    public sealed interface StartAction {
+
+        /** Starts the work the launcher is set up for. */
+        record StartFresh() implements StartAction {
+        }
+
+        /**
+         * Picks the unfinished sift of the chosen timeline back up.
+         *
+         * @param prepDir {@link Path} that run's own directory
+         */
+        record ContinueRun(Path prepDir) implements StartAction {
+        }
+
+        /**
+         * Goes to the runs screen, where the chosen timeline's run can be dealt with.
+         *
+         * <p>Reached where that run is blocked or its records could not be read. Neither can be
+         * carried on from here. One wants an answer first, and the other has said nothing about
+         * itself.
+         */
+        record OpenRuns() implements StartAction {
+        }
     }
 
     /**
@@ -111,7 +158,7 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
      * @param months a {@link List} of {@link MonthChoice} its months, always listed
      */
     public record YearChoice(int year, String id, String label, String counts, boolean chosen,
-                             boolean monthsShown, List<MonthChoice> months) {
+                             boolean monthsShown, boolean unfinishedSift, List<MonthChoice> months) {
 
         /**
          * Defensively copies the mutable list.
@@ -142,7 +189,8 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
      * @param counts {@link String} what it holds, written out
      * @param chosen boolean whether the scope names this month
      */
-    public record MonthChoice(int month, String id, String label, String counts, boolean chosen) {
+    public record MonthChoice(int month, String id, String label, String counts, boolean chosen,
+                              boolean unfinishedSift) {
     }
 
     /**
