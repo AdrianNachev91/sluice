@@ -1,0 +1,234 @@
+package photos.sluice.adapter.cli;
+
+import org.jspecify.annotations.Nullable;
+import photos.sluice.domain.commit.CommitScope;
+import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.model.MonthRange;
+import photos.sluice.domain.model.SortScope;
+
+import java.util.List;
+
+/**
+ * What a caller typed to say which photos to work on, and the scope each verb makes of it.
+ *
+ * <p>A verb declares its own options, because the help each one needs differs. Sort orders its
+ * oldest by the date it resolves for a photo and sift by the file's own timestamp, so one
+ * description could not serve both.
+ *
+ * <p>The year arrives as text rather than as a number. Move-to-library takes {@code all} in the
+ * same position. And a year that reads as a number but is not four digits is refused with a
+ * document rather than by the parser.
+ *
+ * @param year {@link String} the positional year, or {@code all}, or null where none was given
+ * @param months {@link String} what was typed after {@code --months}, or null
+ * @param oldest {@link Integer} what was typed after {@code --oldest}, or null
+ */
+public record ScopeArguments(@Nullable String year, @Nullable String months, @Nullable Integer oldest) {
+
+    /**
+     * The option narrowing a year to some of its months.
+     */
+    public static final String MONTHS = "--months";
+
+    /**
+     * The option asking for the oldest photos rather than a year.
+     */
+    public static final String OLDEST = "--oldest";
+
+    /**
+     * The word standing for the whole library where a verb takes one.
+     */
+    public static final String ALL = "all";
+
+    /**
+     * How many digits a year has.
+     */
+    private static final int YEAR_DIGITS = 4;
+
+    /**
+     * What a year may not start with.
+     */
+    private static final String LEADING_ZERO = "0";
+
+    /**
+     * The smallest count {@code --oldest} can be asked for.
+     */
+    private static final int FEWEST = 1;
+
+    /**
+     * The scope a sort run takes from these arguments.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @return {@link SortScope} what to sort
+     * @throws ScopeRefusedException when the arguments name no scope this verb can build
+     */
+    public SortScope sortScope(final String verb) {
+        this.refuseTwoWays(verb);
+        if (this.oldest != null) {
+            return new SortScope.OldestN(count(this.oldest));
+        }
+        if (this.year == null) {
+            return new SortScope.OldestYear();
+        }
+        return new SortScope.Year(yearOf(this.year, null), this.span(verb));
+    }
+
+    /**
+     * The scope a sift run takes from these arguments.
+     *
+     * <p>Sifting spends from the caller's provider account balance, so the photos it covers are
+     * named rather than guessed at.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @return {@link CullScope} what to sift
+     * @throws ScopeRefusedException when the arguments name no scope this verb can build
+     */
+    public CullScope cullScope(final String verb) {
+        this.refuseTwoWays(verb);
+        if (this.oldest != null) {
+            return new CullScope.OldestN(count(this.oldest));
+        }
+        if (this.year == null) {
+            throw missing(verb, "Name a year, like " + verb + " 2019, or " + OLDEST + " 30.");
+        }
+        return new CullScope.Year(yearOf(this.year, null),
+                this.months == null ? null : Months.of(this.months));
+    }
+
+    /**
+     * The scope a move-to-library run takes from these arguments.
+     *
+     * <p>{@code all} is spelled out because this verb puts files into the library, and a mistyped
+     * argument should not sweep everything there.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @return {@link CommitScope} what to move
+     * @throws ScopeRefusedException when the arguments name no scope this verb can build
+     */
+    public CommitScope commitScope(final String verb) {
+        if (this.oldest != null) {
+            throw conflicting(verb, verb + " takes a year or " + ALL + ", never a count of photos.");
+        }
+        this.refuseMonthsWithNoYear(verb);
+        if (this.year == null) {
+            throw missing(verb, "Name a year, like " + verb + " 2019, or " + verb + " " + ALL + ".");
+        }
+        if (ALL.equals(this.year)) {
+            if (this.months != null) {
+                throw conflicting(verb, ALL + " is every year, so there is no year for " + MONTHS + " to narrow.");
+            }
+            return new CommitScope.All();
+        }
+        return new CommitScope.Year(yearOf(this.year, "For every year at once, write " + verb + " " + ALL + "."),
+                this.span(verb));
+    }
+
+    /**
+     * Refuses arguments that name the photos two ways at once.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @throws ScopeRefusedException when more than one of them names a set of photos
+     */
+    private void refuseTwoWays(final String verb) {
+        if (this.oldest != null && this.year != null) {
+            throw conflicting(verb, "A year and " + OLDEST + " name different photos, so " + verb
+                    + " takes one or the other.");
+        }
+        if (this.oldest != null && this.months != null) {
+            throw conflicting(verb, MONTHS + " narrows a year, and " + OLDEST + " names no year.");
+        }
+        this.refuseMonthsWithNoYear(verb);
+    }
+
+    /**
+     * Refuses months with no year for them to narrow.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @throws ScopeRefusedException when months were given and no year was
+     */
+    private void refuseMonthsWithNoYear(final String verb) {
+        if (this.year == null && this.months != null) {
+            throw missing(verb, MONTHS + " narrows a year, so name one, like " + verb + " 2019 " + MONTHS + " 6-8.");
+        }
+    }
+
+    /**
+     * The span this verb narrows its year to, where one was asked for.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @return {@link MonthRange} the span, or null where the whole year was asked for
+     * @throws ScopeRefusedException when the months cannot be read, or have a gap in them
+     */
+    private @Nullable MonthRange span(final String verb) {
+        return this.months == null ? null : Months.spanOf(this.months, verb);
+    }
+
+    /**
+     * The year some text names.
+     *
+     * <p>Four digits, and no leading zero. What rests on that is the guard against sifting the same
+     * months twice. A sift's folder is named for its scope, and
+     * {@link CullScope#yearScopeOf(String)} reads a year back out of that name to compare one
+     * timeline against another. It reads four digits alone, and a year is written into the name
+     * with its leading zeros dropped. So {@code 0019} would name a folder no comparison could read,
+     * and a second sift covering the same months would be neither noticed nor refused. It would
+     * build its sheets and spend for them again.
+     *
+     * @param text {@link String} what was typed in the year's position
+     * @param alsoAccepted {@link String} what else this verb takes in that position, or null where
+     *        it takes a year and nothing else
+     * @return int the year
+     * @throws ScopeRefusedException when it is not four digits, or carries a leading zero
+     */
+    private static int yearOf(final String text, final @Nullable String alsoAccepted) {
+        if (text.length() != YEAR_DIGITS || !text.chars().allMatch(Character::isDigit)
+                || text.startsWith(LEADING_ZERO)) {
+            final String said = "Sluice can't read " + Refusal.shown(text)
+                    + " as a year. A year is four digits with no leading zero, like 2019.";
+            throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
+                    alsoAccepted == null ? said : Refusal.sentences(List.of(said, alsoAccepted)),
+                    Fields.of("parameter", "year", "value", text)));
+        }
+        return Integer.parseInt(text);
+    }
+
+    /**
+     * The count {@code --oldest} was asked for.
+     *
+     * @param asked {@link Integer} what was typed after the option
+     * @return int the count
+     * @throws ScopeRefusedException when it is fewer than one photo
+     */
+    private static int count(final Integer asked) {
+        if (asked < FEWEST) {
+            throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
+                    "Sluice can't work on " + asked + " photos. " + OLDEST + " needs at least 1.",
+                    Fields.of("option", OLDEST, "value", asked)));
+        }
+        return asked;
+    }
+
+    /**
+     * The refusal for arguments that named nothing to work on.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @param remedy {@link String} what to write instead
+     * @return {@link ScopeRefusedException} the refusal to throw
+     */
+    private static ScopeRefusedException missing(final String verb, final String remedy) {
+        return new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_MISSING,
+                "Sluice doesn't know which photos to " + verb + ". " + remedy, Fields.of("verb", verb)));
+    }
+
+    /**
+     * The refusal for arguments that named the photos two ways at once.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @param why {@link String} which two, and why they do not go together
+     * @return {@link ScopeRefusedException} the refusal to throw
+     */
+    private static ScopeRefusedException conflicting(final String verb, final String why) {
+        return new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_CONFLICTING,
+                "Sluice can't tell which photos you mean. " + why, Fields.of("verb", verb)));
+    }
+}

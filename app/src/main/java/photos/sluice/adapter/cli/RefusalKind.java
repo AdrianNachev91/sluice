@@ -44,5 +44,30 @@ public enum RefusalKind {
     /**
      * The sift-prep root could not be read, so what sits under it is unknown.
      */
-    RUNS_UNREADABLE
+    RUNS_UNREADABLE,
+
+    /**
+     * Nothing in the arguments named which photos to work on.
+     */
+    SCOPE_MISSING,
+
+    /**
+     * The arguments named the photos two ways at once, and the two do not agree.
+     */
+    SCOPE_CONFLICTING,
+
+    /**
+     * A scope argument holds a value that is not the thing it names.
+     */
+    SCOPE_VALUE_REFUSED,
+
+    /**
+     * A verb that narrows a year by a span of months was given a set with a gap in it.
+     */
+    MONTHS_NOT_A_SPAN,
+
+    /**
+     * The address given names no sift on disk.
+     */
+    RUN_NOT_FOUND
 }

@@ -29,6 +29,10 @@ import java.util.concurrent.ExecutionException;
  * That is the sentence being carried through rather than read. Those exceptions word themselves
  * for a person to see, and rewriting them here would leave two versions to keep in step.
  *
+ * <p>One arm classifies nothing. A scope argument a verb refused already carries its own refusal,
+ * worked out where the rule that refused it lives. It comes through here so that a caller meets it
+ * on the same two streams, in the same document, as every refusal the app raises further down.
+ *
  * <p>Anything it does not recognise gets no answer here. That is what
  * {@link CommandStatus#FAILED} is for.
  */
@@ -90,6 +94,7 @@ public class RefusalClassifier {
      */
     private @Nullable Refusal branchFor(final Throwable failure) {
         return switch (failure) {
+            case final ScopeRefusedException scope -> scope.refusal();
             case final PathsMisconfiguredException paths -> foldersUnusable(paths);
             case final WorkingRootBusyException busy -> workingRootBusy(busy);
             case final JobInProgressException busy -> Refusal.of(RefusalKind.JOB_IN_PROGRESS, busy.getMessage());

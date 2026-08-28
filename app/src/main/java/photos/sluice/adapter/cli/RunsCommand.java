@@ -45,14 +45,6 @@ public class RunsCommand implements Callable<Integer> {
     private static final String NO_COUNT = "-";
 
     /**
-     * Told to somebody whose sift-prep root could not be read at all. The desktop says the same,
-     * and neither adapter may reach into the other for it.
-     */
-    private static final String UNREADABLE = "Sluice doesn't know what sifts are in %s because it "
-            + "cannot be read. Most likely the folder is held by another process or not there "
-            + "anymore.";
-
-    /**
      * Blanks between one column and the next.
      */
     private static final int COLUMN_GAP = 2;
@@ -101,9 +93,7 @@ public class RunsCommand implements Callable<Integer> {
         return switch (reading) {
             case CullRuns.Listed(final List<CullRunSummary> runs) ->
                     CommandOutcome.done(runs.stream().map(CullPayloads::run).toList(), lines(runs));
-            case CullRuns.Unlistable(final Path root) -> CommandOutcome.refused(
-                    new Refusal(RefusalKind.RUNS_UNREADABLE, UNREADABLE.formatted(root),
-                            Fields.of("root", root.toString())));
+            case CullRuns.Unlistable(final Path root) -> CommandOutcome.refused(RunsRefusals.unreadable(root));
         };
     }
 

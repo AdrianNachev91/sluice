@@ -62,6 +62,20 @@ public record Refusal(RefusalKind kind, String sentence, SequencedMap<String, Ob
     }
 
     /**
+     * A value the caller typed, as a sentence repeating it back should show it.
+     *
+     * <p>A shell hands over a blank argument as readily as any other, from an unset variable or a
+     * stray pair of quotes. Dropped straight into a sentence it leaves a hole the reader cannot
+     * see, so it is named rather than shown.
+     *
+     * @param value {@link String} what the caller typed
+     * @return {@link String} the value, or what to call it where there is nothing to show
+     */
+    static String shown(final String value) {
+        return value.isBlank() ? "an empty value" : value;
+    }
+
+    /**
      * What a refused command's document carries.
      *
      * @param kind {@link RefusalKind} which refusal this is
