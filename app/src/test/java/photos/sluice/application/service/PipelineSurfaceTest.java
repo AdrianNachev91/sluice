@@ -43,6 +43,9 @@ class PipelineSurfaceTest {
             "cullRuns()",
             "startWatching(Path)",
             "stopWatching(Path)",
+            "isWatchActive(Path)",
+            "onRunsMoved(Runnable)",
+            "launchPromptFor(Path)",
             "stopAllWatching()",
             "stopAcceptingJobs(Duration)",
             "troubleshoot(Path)",
@@ -79,9 +82,17 @@ class PipelineSurfaceTest {
     // archivesFolder resolves a path and reaches no disk. What asks it is a question put before a
     // discard, naming where the records will go. Refused while the roots are unusable, that question
     // could not be worded at all, and the roots being unusable is not what it is about.
+    //
+    // isWatchActive looks one path up in a map of the watchers this process has armed. It resolves
+    // nothing and reads nothing. A waiting card asks it while drawing, to know where to put its own
+    // toggle. Refused here, that card could not draw a control it already has.
+    //
+    // onRunsMoved takes no path at all. It adds a listener to a list, which is a question about this
+    // process rather than about any folder.
     private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK =
             Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "estimateFor(int)",
-                    "configuredProviderSpends()", "archivesFolder()", "isBusy()");
+                    "configuredProviderSpends()", "archivesFolder()", "isBusy()",
+                    "isWatchActive(Path)", "onRunsMoved(Runnable)");
 
     // The facade is where every driving adapter passes through, so it is where the folder-root check
     // belongs. A guard written into a screen would be walked past by a command line. This reads the

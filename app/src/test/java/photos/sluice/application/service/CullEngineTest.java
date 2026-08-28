@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1471,6 +1473,69 @@ class CullEngineTest {
 
         assertThat(pipeline.isWatchActive(first)).isFalse();
         assertThat(pipeline.isWatchActive(second)).isFalse();
+    }
+
+    // Asserts WHEN rather than whether. Retiring the watcher announces a change too, on the way
+    // into the resume. So a test that merely counted announcements would pass against a version
+    // saying nothing once the work is done.
+    @Test
+    void aWatchTellsWhoeverIsListeningOnceItHasFinishedTheRunRatherThanOnStarting(
+            @TempDir final Path root) throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
+                .job().prepDir();
+        // Registered after the cull, so the arming this run already did is not what the wait sees.
+        final var toldAfterThePhotoMoved = new AtomicBoolean();
+        pipeline.onRunsMoved(() -> {
+            if (!Files.exists(photo)) {
+                toldAfterThePhotoMoved.set(true);
+            }
+        });
+
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        waitUntil(Duration.ofSeconds(2), toldAfterThePhotoMoved::get);
+    }
+
+    @Test
+    void armingAWatchThatIsAlreadyPollingAnnouncesNothing(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
+                .job().prepDir();
+        final var told = new AtomicInteger();
+        pipeline.onRunsMoved(told::incrementAndGet);
+
+        pipeline.startWatching(prepDir);
+
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
+        assertHoldsFor(WINDOW, () -> told.get() == 0);
+    }
+
+    @Test
+    void retiringOneWatchAnnouncesItWhileRetiringThemAllDoesNot(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
+        final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
+                .job().prepDir();
+        final var told = new AtomicInteger();
+        pipeline.onRunsMoved(told::incrementAndGet);
+
+        pipeline.stopWatching(prepDir);
+        assertThat(told).hasValue(1);
+
+        // The control. Closing the app retires watchers too, and that one must stay silent: its
+        // caller has just promised nothing of this app's will read the folder again.
+        pipeline.startWatching(prepDir);
+        pipeline.stopAllWatching();
+
+        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
+        assertThat(told).hasValue(2);
     }
 
     @Test

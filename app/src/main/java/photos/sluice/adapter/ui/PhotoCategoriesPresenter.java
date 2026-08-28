@@ -280,7 +280,7 @@ public class PhotoCategoriesPresenter {
                 .filter(example -> !example.isBlank())
                 .toList();
         if (offered.size() > CullCategory.maxExamples()) {
-            return "Keep at most " + CullCategory.maxExamples() + " examples. This card has "
+            return "Keep at most " + CullCategory.maxExamples() + " examples. There are "
                     + offered.size() + ".";
         }
         return offered.stream().anyMatch(example -> example.strip().length() > CullCategory.maxExample())

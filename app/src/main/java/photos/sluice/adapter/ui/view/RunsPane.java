@@ -9,8 +9,11 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -29,6 +32,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The runs screen: every sift on disk, what state it is in, and what can be done about each.
@@ -127,6 +132,10 @@ final class RunsPane {
         // A job reports its ending from whatever thread it ran on, so this hops. The read behind
         // the redraw walks the whole runs folder, so it does not hop until that read has landed.
         presenter.setRepaint(() -> readThenDraw(presenter, drawBoth));
+        // Draws from the reading already taken, rather than reading again. Registered per screen
+        // and replaced by the next one built. A pane the reader has left stops being drawn into as
+        // soon as they come back to a new one.
+        presenter.setRedrawCards(() -> Platform.runLater(drawBoth));
         drawBoth.run();
         AfterFirstFrame.run(() -> readThenDraw(presenter, drawBoth));
         return page;
@@ -444,17 +453,125 @@ final class RunsPane {
 
             final var lines = new VBox(scope, headline);
             lines.getStyleClass().add("runs-card-lines");
-            addIfSaid(lines, run.detail(), "runs-card-detail");
-            addIfSaid(lines, run.sheets(), "runs-card-sheets");
-            addIfSaid(lines, run.age(), "runs-card-age");
+            addIfPresent(lines, run.detail(), "runs-card-detail");
+            addIfPresent(lines, run.sheets(), "runs-card-sheets");
 
             final var card = new VBox(lines);
             card.setId(run.id());
             card.getStyleClass().add("card");
+            final RunsView.Waiting waiting = run.waiting();
+            if (waiting != null) {
+                card.getChildren().add(waitingBlock(waiting, presenter, redraw));
+            }
+            addIfPresent(lines, run.age(), "runs-card-age");
             if (!run.actions().isEmpty()) {
                 card.getChildren().add(actionRow(run, presenter, redraw));
             }
             return card;
+        }
+
+        /**
+         * What a card shows while its run is still owed judged sheets.
+         *
+         * <p>The folder and the instructions get a button each because they answer separate
+         * questions. One is where to look, the other is what to ask for. A reader part way through
+         * this only wants one of them at a time.
+         *
+         * @param waiting {@link RunsView.Waiting} what the card carries in this state
+         * @param presenter {@link RunsPresenter} writes the text and takes each change
+         * @param redraw {@link Runnable} draws the screen again once it has been told
+         * @return {@link Node} the block
+         */
+        private static Node waitingBlock(final RunsView.Waiting waiting,
+                                         final RunsPresenter presenter, final Runnable redraw) {
+            final var note = new Label(waiting.note());
+            SettingsRows.wrapping(note);
+            note.getStyleClass().add("runs-card-detail");
+
+            final var folder = new Label(waiting.folder().toString());
+            SettingsRows.wrapping(folder);
+            folder.getStyleClass().add("runs-card-folder");
+
+            final List<Node> copyButtons = new ArrayList<>();
+            copyButtons.add(copyButton("run-copy-folder", waiting.copyFolder(), presenter.copied(),
+                    () -> presenter.folderPath(waiting.folder())));
+            if (waiting.copyPrompt() != null) {
+                copyButtons.add(copyButton("run-copy-prompt", waiting.copyPrompt(), presenter.copied(),
+                        // Redrawn only where it failed, since that is the one outcome with
+                        // something new to say. A copy that worked reports on the button itself.
+                        () -> {
+                            final String text = presenter.instructionsFor(waiting.folder());
+                            if (text == null) {
+                                redraw.run();
+                            }
+                            return text;
+                        }));
+            }
+            final var copyRow = new HBox(copyButtons.toArray(new Node[0]));
+            copyRow.getStyleClass().add("runs-card-copies");
+
+            final var block = new VBox(note, folder, copyRow);
+            block.getStyleClass().add("runs-card-waiting");
+            if (waiting.autoApply() != null) {
+                block.getChildren().add(switchBox(waiting.autoApply(), on -> {
+                    presenter.setAutoApply(waiting.folder(), on);
+                    redraw.run();
+                }));
+            }
+            final RunsView.Switch waive = waiting.waiveMissing();
+            if (waive != null) {
+                block.getChildren().add(switchBox(waive,
+                        on -> presenter.setWaiveMissing(waiting.folder(), on)));
+            }
+            return block;
+        }
+
+        /**
+         * A button that puts something on the clipboard and says it did.
+         *
+         * <p>Says so on itself rather than in a line elsewhere on the page. A copy is over the
+         * instant it is asked for, and a message somewhere else would be one more thing to find.
+         *
+         * @param id {@link String} the button's id
+         * @param label {@link String} what it says before it is pressed
+         * @param done {@link String} what it says once it has copied
+         * @param text a {@link Supplier} of {@link String} what to copy, or null where it could not
+         *     be written
+         * @return {@link Button} the button
+         */
+        private static Button copyButton(final String id, final String label, final String done,
+                                         final Supplier<@Nullable String> text) {
+            final var button = new Button(label);
+            button.setId(id);
+            button.getStyleClass().add("run-cancel");
+            button.setOnAction(_ -> {
+                final String copied = text.get();
+                if (copied != null) {
+                    final var content = new ClipboardContent();
+                    content.putString(copied);
+                    Clipboard.getSystemClipboard().setContent(content);
+                    button.setText(done);
+                }
+            });
+            return button;
+        }
+
+        /**
+         * One control a reader turns on and off.
+         *
+         * @param control {@link RunsView.Switch} what it says and where it sits
+         * @param changed a {@link Consumer} of boolean told where the reader put it
+         * @return {@link Node} the control
+         */
+        private static Node switchBox(final RunsView.Switch control, final Consumer<Boolean> changed) {
+            final var box = new CheckBox(control.label());
+            box.setId(control.id());
+            box.setSelected(control.on());
+            // A check box does not wrap on its own, and these labels are sentences rather than
+            // words. Without this one clips at the card's edge on a narrow window.
+            box.setWrapText(true);
+            box.setOnAction(_ -> changed.accept(box.isSelected()));
+            return box;
         }
 
         /**
@@ -527,15 +644,15 @@ final class RunsPane {
          * Adds a line to a card, where there is one to add.
          *
          * @param into {@link VBox} the card's lines
-         * @param says what the line says, or null where the card has no such line
+         * @param value what the line reads, or null where the card has no such line
          * @param styleClass {@link String} the line's own style class
          */
-        private static void addIfSaid(final VBox into, final @Nullable String says,
-                                      final String styleClass) {
-            if (says == null) {
+        private static void addIfPresent(final VBox into, final @Nullable String value,
+                                         final String styleClass) {
+            if (value == null) {
                 return;
             }
-            final var line = new Label(says);
+            final var line = new Label(value);
             SettingsRows.wrapping(line);
             line.getStyleClass().add(styleClass);
             into.getChildren().add(line);

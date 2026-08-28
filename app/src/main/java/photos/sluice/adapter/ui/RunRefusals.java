@@ -4,6 +4,7 @@ import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.service.Pipeline;
@@ -11,6 +12,7 @@ import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -72,6 +74,13 @@ final class RunRefusals {
             case final Pipeline.RunOutsideWorkingRootException outside -> "That sift is at "
                     + outside.prepDir() + ", which is not inside the folders Sluice is set up with "
                     + "now. Point your working folder back at the one holding it, or discard the sift.";
+            case final MalformedPrepJsonException _ -> "There are no instructions to copy for that "
+                    + "sift, because its records are damaged.";
+            // Deliberately says nothing about which file. This arm answers for every read in the
+            // app, and only the one that failed knows what it was after.
+            case final UncheckedIOException failed -> "A file could not be read. Another program "
+                    + "may have it open. If it keeps happening, report it, quoting this: "
+                    + failed.getMessage();
             // Nothing here was written for a reader, so the words are the app's own and the
             // technical text rides along verbatim. Quoting it is what makes the bug report worth
             // filing, and the dashboard is where the user can copy it from.
@@ -88,6 +97,29 @@ final class RunRefusals {
      */
     static Throwable rootOf(final Throwable failure) {
         return failure.getCause() == null ? failure : failure.getCause();
+    }
+
+    /**
+     * What to say where the chosen timeline shares photos with unfinished sifts without being one of
+     * them.
+     *
+     * <p>Takes the scopes rather than the refusal, because two callers word it. The facade refuses
+     * on the same fault, and the launcher greys Start before anybody presses it. One sentence, so
+     * the screen and the refusal cannot drift apart.
+     *
+     * <p>Names every one of them rather than the first. A reader told about one deals with it,
+     * comes back, and is refused by the next.
+     *
+     * @param across a {@link List} of {@link String} the scopes in the way, as their runs name them
+     * @param chosen {@link String} the timeline the reader picked
+     * @return {@link String} the sentence to show
+     */
+    static String coveringUnfinished(final CullScope.Year chosen, final List<CullScope.Year> across) {
+        return RunWords.spelledScope(chosen) + " overlaps "
+                + RunWords.listed(across.stream().map(RunWords::spelledScope).toList())
+                + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
+                + " you have not finished. Finish or discard "
+                + (across.size() == 1 ? "it" : "them") + " in Runs, then you can sift this.";
     }
 
     /**
@@ -126,29 +158,6 @@ final class RunRefusals {
                 .filter(Objects::nonNull)
                 .toList();
         return across.isEmpty() ? messageOf(overlaps) : coveringUnfinished(overlaps.chosen(), across);
-    }
-
-    /**
-     * What to say where the chosen timeline shares photos with unfinished sifts without being one of
-     * them.
-     *
-     * <p>Public and taking the scopes rather than the refusal, because two callers word it. The
-     * facade refuses on the same fault, and the launcher greys Start before anybody presses it. One
-     * sentence, so the screen and the refusal cannot drift apart.
-     *
-     * <p>Names every one of them rather than the first. A reader told about one deals with it,
-     * comes back, and is refused by the next.
-     *
-     * @param across a {@link List} of {@link String} the scopes in the way, as their runs name them
-     * @param chosen {@link String} the timeline the reader picked
-     * @return {@link String} the sentence to show
-     */
-    static String coveringUnfinished(final CullScope.Year chosen, final List<CullScope.Year> across) {
-        return RunWords.spelledScope(chosen) + " overlaps "
-                + RunWords.listed(across.stream().map(RunWords::spelledScope).toList())
-                + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
-                + " you have not finished. Finish or discard "
-                + (across.size() == 1 ? "it" : "them") + " in Runs, then you can sift this.";
     }
 
     /**

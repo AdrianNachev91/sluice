@@ -33,6 +33,7 @@ import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.LaunchPrompt;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth.State;
@@ -105,6 +106,7 @@ final class CullEngine {
      * @param spendLedger {@link SpendLedgerPort} records what each run consumed
      * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
+     * @param runChanges {@link RunChanges} told whenever a watch moves a run with nobody watching
      */
     CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
                final ApplyEngine applyEngine,
@@ -115,7 +117,7 @@ final class CullEngine {
                final PrepDirDoctor prepDirDoctor, final PrepDirRemedies prepDirRemedies,
                final RootsGuard rootsGuard, final SpendLedgerPort spendLedger,
                final SecretStore secretStore,
-               final Duration watchPollInterval) {
+               final Duration watchPollInterval, final RunChanges runChanges) {
         this.secretStore = secretStore;
         this.spendLedger = spendLedger;
         this.spendEstimator = new SpendEstimator(spendLedger);
@@ -131,7 +133,7 @@ final class CullEngine {
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
         this.cullWatchers = new CullWatchers(cullSettings, cullDispatcher::configuredProviderIs,
                 this.shardTallyCalculator, watchPollInterval,
-                prepDir -> this.resume(prepDir, false));
+                prepDir -> this.resume(prepDir, false), runChanges);
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
         this.pathsPort = pathsPort;
@@ -231,7 +233,17 @@ final class CullEngine {
     }
 
     /**
-     * Delegates to {@link CullWatchers}. Test seam: whether a watcher is currently polling prepDir.
+     * The instructions for the agent a reader drives themselves, for one waiting run.
+     *
+     * @param prepDir {@link Path} the run to write instructions for
+     * @return {@link String} the text to hand an agent
+     */
+    String launchPromptFor(final Path prepDir) {
+        return LaunchPrompt.forRun(this.cullPrepPort.readIndex(prepDir));
+    }
+
+    /**
+     * Delegates to {@link CullWatchers}: whether a watcher is currently polling prepDir.
      *
      * @param prepDir {@link Path} the prep dir to check
      * @return boolean whether a watcher is currently active for it

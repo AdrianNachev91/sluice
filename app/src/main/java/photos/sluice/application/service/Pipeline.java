@@ -87,6 +87,7 @@ public class Pipeline {
     private final PathsPort pathsPort;
     private final RootsGuard rootsGuard;
     private final MediaTallies mediaTallies;
+    private final RunChanges runChanges = new RunChanges();
 
     /**
      * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
@@ -187,7 +188,8 @@ public class Pipeline {
         this.rootsGuard = new RootsGuard(pathValidation);
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
-                prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, secretStore, watchPollInterval);
+                prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, secretStore, watchPollInterval,
+                this.runChanges);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, this.cullEngine);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
@@ -546,15 +548,49 @@ public class Pipeline {
     }
 
     /**
-     * Test seam: whether a watcher is currently polling prepDir. Lets a test prove CullEngine's own
-     * disarmWatch() claim - that any dispatchAndApply() call retires an existing watcher, not just
-     * the watcher's own auto-resume trigger.
+     * The instructions a reader hands to the agent they drive themselves, for one waiting run.
+     *
+     * <p>Names the categories the run was prepped with, so an answer written days later is judged
+     * against the set it was asked for.
+     *
+     * @param prepDir {@link Path} the run to write instructions for
+     * @return {@link String} the text to hand an agent
+     */
+    public String launchPromptFor(final Path prepDir) {
+        this.requireUsableRoots();
+        return this.cullEngine.launchPromptFor(prepDir);
+    }
+
+    /**
+     * Whether a watcher is currently polling prepDir, which is where the waiting card's own
+     * auto-apply toggle reads its position from.
+     *
+     * <p>Asked afresh each time the card is drawn rather than remembered from the press that set
+     * it. A watcher retires itself on several occasions the screen never hears about: a resume
+     * going in, a working-root move, the app closing. A remembered position would keep showing a
+     * run as watched long after nothing was watching it.
+     *
+     * <p>One window exists where an arm is undone by a resume it raced. A live read is what makes
+     * that show as a toggle falling back rather than a press that did nothing. The arm and disarm
+     * contract in {@code cull-engine.md} carries the full reasoning.
      *
      * @param prepDir {@link Path} the cull prep directory to check
      * @return boolean true if a watcher is currently polling it
      */
-    boolean isWatchActive(final Path prepDir) {
+    public boolean isWatchActive(final Path prepDir) {
         return this.cullEngine.isWatchActive(prepDir);
+    }
+
+    /**
+     * Asks to be told whenever a run moves with nobody pressing anything.
+     *
+     *
+     * @param listener {@link Runnable} what to run, on whatever thread caused the change. That can
+     *     be the one that paints, since turning a run's watch on is a press. A listener marshals
+     *     for itself and does anything slow somewhere else
+     */
+    public void onRunsMoved(final Runnable listener) {
+        this.runChanges.onMoved(listener);
     }
 
     /**

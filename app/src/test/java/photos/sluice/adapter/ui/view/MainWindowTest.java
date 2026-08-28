@@ -148,7 +148,7 @@ class MainWindowTest {
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
                 unfinishedRun("2019"), unfinishedRun("2018"))));
         final BorderPane root = onFxThread(() ->
-                built(firstRunPresenter(false), settingsPresenter(), new RunsPresenter(pipeline)));
+                built(firstRunPresenter(false), settingsPresenter(), runsPresenter(pipeline)));
 
         assertThat(waitFor(() -> "2".equals(((Label) root.lookup("#nav-runs-count")).getText())))
                 .isTrue();
@@ -307,7 +307,11 @@ class MainWindowTest {
     private static RunsPresenter runsPresenter() {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
-        return new RunsPresenter(pipeline);
+        return runsPresenter(pipeline);
+    }
+
+    private static RunsPresenter runsPresenter(final Pipeline pipeline) {
+        return new RunsPresenter(pipeline, new RunLauncherPresenter(pipeline, new FxProgressPort()));
     }
 
     private static FirstRunPresenter firstRunPresenter(final boolean unfinished) {

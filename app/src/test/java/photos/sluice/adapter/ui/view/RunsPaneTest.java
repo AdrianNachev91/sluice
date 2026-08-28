@@ -4,7 +4,9 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.input.Clipboard;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -13,6 +15,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
+import photos.sluice.adapter.ui.FxProgressPort;
+import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
@@ -29,7 +33,9 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 // What only a built scene graph can be wrong about. Which cards the screen draws, what each one
@@ -94,6 +100,81 @@ class RunsPaneTest {
     }
 
     @Test
+    void aWaitingRunDrawsItsFolderAndBothWaysToCopy() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
+
+        assertThat(textsIn(pane, "#run-card-2019"))
+                .contains(Path.of("logs", "sift-prep", "2019").toString());
+        assertThat(pane.lookup("#run-copy-folder")).isNotNull();
+        assertThat(pane.lookup("#run-copy-prompt")).isNotNull();
+    }
+
+    @Test
+    void copyingTheFolderPutsThePathOnTheClipboardAndSaysItDid() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
+
+        onFxThread(() -> fire(pane, "#run-copy-folder"));
+
+        assertThat(onFxThread(() -> Clipboard.getSystemClipboard().getString()))
+                .isEqualTo(Path.of("logs", "sift-prep", "2019").toString());
+        assertThat(((Button) pane.lookup("#run-copy-folder")).getText()).isEqualTo("Copied");
+    }
+
+    @Test
+    void copyingTheInstructionsPutsThemOnTheClipboard() throws Exception {
+        final Pipeline pipeline = waitingPipeline();
+        when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+
+        onFxThread(() -> fire(pane, "#run-copy-prompt"));
+
+        assertThat(onFxThread(() -> Clipboard.getSystemClipboard().getString()))
+                .isEqualTo("Sift the photo sheets in ...");
+    }
+
+    @Test
+    void instructionsThatCouldNotBeWrittenLeaveTheButtonAloneAndSayWhy() throws Exception {
+        final Pipeline pipeline = waitingPipeline();
+        when(pipeline.launchPromptFor(any())).thenThrow(new IllegalStateException("nope"));
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+
+        onFxThread(() -> fire(pane, "#run-copy-prompt"));
+
+        assertThat(((Button) pane.lookup("#run-copy-prompt")).getText()).isNotEqualTo("Copied");
+        assertThat(pane.lookup("#runs-message").isManaged()).isTrue();
+    }
+
+    @Test
+    void turningAutoApplyOnArmsThatRunsWatch() throws Exception {
+        final Pipeline pipeline = waitingPipeline();
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+
+        onFxThread(() -> select(pane, "#run-auto-apply-2019"));
+
+        verify(pipeline).startWatching(Path.of("logs", "sift-prep", "2019"));
+    }
+
+    @Test
+    void aWaitingRunOnAProviderThatJudgesForItselfDrawsNoToggleAndNoInstructions() throws Exception {
+        final Pipeline pipeline = waitingPipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+
+        assertThat(pane.lookup("#run-auto-apply-2019")).isNull();
+        assertThat(pane.lookup("#run-copy-prompt")).isNull();
+        assertThat(pane.lookup("#run-waive-missing-2019")).isNull();
+        assertThat(pane.lookup("#run-copy-folder")).isNotNull();
+    }
+
+    @Test
+    void aRunPastWaitingDrawsNoneOfThat() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.READY)));
+
+        assertThat(pane.lookup("#run-copy-folder")).isNull();
+        assertThat(pane.lookup("#run-waive-missing-2019")).isNull();
+    }
+
+    @Test
     void clearingIsDeadWithNothingFinishedToClear() throws Exception {
         final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
 
@@ -113,7 +194,7 @@ class RunsPaneTest {
     void aFolderThatCouldNotBeReadSaysSoInsteadOfTheNoRunsLine() throws Exception {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("logs", "sift-prep")));
-        final Parent pane = onFxThread(() -> built(new RunsPresenter(pipeline)));
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
 
         assertThat(pane.lookup("#runs-unreadable").isManaged()).isTrue();
         assertThat(pane.lookup("#runs-nothing-yet").isManaged()).isFalse();
@@ -144,6 +225,26 @@ class RunsPaneTest {
         return found;
     }
 
+    private static RunsPresenter runsPresenter(final Pipeline pipeline) {
+        return new RunsPresenter(pipeline, new RunLauncherPresenter(pipeline, new FxProgressPort()));
+    }
+
+    private static Pipeline waitingPipeline() {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.cullRuns())
+                .thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
+        return pipeline;
+    }
+
+    // A check box's own fire() flips it and then raises the action, so this is a press rather than
+    // a value written past the control.
+    private static Node select(final Parent pane, final String id) {
+        final var box = (CheckBox) pane.lookup(id);
+        box.fire();
+        return box;
+    }
+
     private static CullRunSummary run(final String scope, final State state) {
         return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
                 new PrepDirHealth(state, List.of()),
@@ -155,7 +256,7 @@ class RunsPaneTest {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runs)));
         when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
-        return built(new RunsPresenter(pipeline));
+        return built(runsPresenter(pipeline));
     }
 
     // Read before the pane is built, as well as by the pane's own background read. So no assertion

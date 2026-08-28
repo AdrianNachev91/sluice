@@ -65,7 +65,13 @@ import java.util.regex.Pattern;
 public final class ShardValidator {
 
     private static final Pattern GROUP_SLUG = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
-    private static final int GROUP_SLUG_MAX_LENGTH = 24;
+
+    /**
+     * How long a near-duplicate group name may be. Shared with {@link LaunchPrompt}, which asks an
+     * agent for names this will accept. A prompt asking for more than the validator allows buys its
+     * refusal at apply time, once the agent has already been paid.
+     */
+    static final int GROUP_SLUG_MAX_LENGTH = 24;
 
     /**
      * A parsed shard paired with the montage id its on-disk filename implies (e.g.

@@ -1,11 +1,14 @@
 package photos.sluice.adapter.ui;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.RunsView.Action;
 import photos.sluice.adapter.ui.RunsView.Kind;
 import photos.sluice.adapter.ui.RunsView.RunCard;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
@@ -23,12 +26,18 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -70,12 +79,17 @@ class RunsPresenterTest {
                 .containsExactly("Finish this sift", "Discard");
     }
 
+    // The press attempts the same thing whatever state the run is in, so one label covers all of
+    // them. A waiting run that cannot get there says so on the card it lands on.
     @Test
-    void aRunStillWaitingOnSheetsIsOfferedAWayToLookForThem() {
-        final RunsPresenter presenter = presenterOver(run("2019", State.WAITING));
+    void carryingARunOnSaysTheSameThingWhateverStateItIsIn() {
+        final RunsPresenter waiting = presenterOver(run("2019", State.WAITING));
+        final RunsPresenter ready = presenterOver(run("2018", State.READY));
 
-        assertThat(presenter.view().unfinished().getFirst().actions()).extracting(Action::label)
-                .containsExactly("Check for answers", "Discard");
+        assertThat(waiting.view().unfinished().getFirst().actions()).extracting(Action::label)
+                .containsExactly("Finish this sift", "Discard");
+        assertThat(ready.view().unfinished().getFirst().actions()).extracting(Action::label)
+                .containsExactly("Finish this sift", "Discard");
     }
 
     // Which button is drawn to be reached for is the presenter's to say, not the screen's. A screen
@@ -144,7 +158,7 @@ class RunsPresenterTest {
         final Path root = Path.of("logs", "sift-prep");
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(root));
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         assertThat(presenter.view().unreadable()).contains(root.toString());
@@ -171,7 +185,7 @@ class RunsPresenterTest {
     void theSidebarCountsNoneWhereTheFolderCouldNotBeRead() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("p")));
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         assertThat(presenter.unfinishedRuns()).isZero();
@@ -179,8 +193,13 @@ class RunsPresenterTest {
 
     @Test
     void discardingARunAsksFirstAndNamesWhatItSetsAsideAndWhereItGoes() {
-        final RunsPresenter presenter = presenterOver(new CullRunSummary("2019", Path.of("p"),
-                new PrepDirHealth(State.WAITING, List.of()), new ShardTally(17, 17, 28), Instant.now()));
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+                Path.of("p"), new PrepDirHealth(State.WAITING, List.of()),
+                new ShardTally(17, 17, 28), Instant.now()))));
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
 
         final Action discard = presenter.view().unfinished().getFirst().actions().getLast();
 
@@ -190,6 +209,18 @@ class RunsPresenterTest {
                 .contains("17 sheet decisions you have already paid for")
                 .contains(ARCHIVES.toString())
                 .doesNotContain("graveyard");
+    }
+
+    @Test
+    void discardingARunJudgedByTheirOwnAgentCountsTheSheetsWithoutClaimingTheyPaid() {
+        final RunsPresenter presenter = presenterOver(new CullRunSummary("2019", Path.of("p"),
+                new PrepDirHealth(State.WAITING, List.of()), new ShardTally(17, 17, 28), Instant.now()));
+
+        final Action discard = presenter.view().unfinished().getFirst().actions().getLast();
+
+        assertThat(requireNonNull(discard.confirm()).question())
+                .contains("17 sheet decisions are set aside with it")
+                .doesNotContain("paid");
     }
 
     @Test
@@ -219,7 +250,7 @@ class RunsPresenterTest {
                 prepDir, new PrepDirHealth(State.READY, List.of()), new ShardTally(3, 3, 3), Instant.now()))));
         final JobHandle<CullJobOutcome> job = finished();
         when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
@@ -228,18 +259,52 @@ class RunsPresenterTest {
     }
 
     @Test
-    void aRefusedPressLeavesTheCardsAloneAndSaysWhy() {
+    void carryingARunOnPutsItsProgressOnTheDashboard() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
-        when(pipeline.resume(any(), anyBoolean()))
-                .thenThrow(new JobInProgressException("Something else is running."));
-        final var presenter = new RunsPresenter(pipeline);
+        final JobHandle<CullJobOutcome> job = neverFinishes();
+        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
+        final RunLauncherPresenter dashboard = dashboard(pipeline);
+        final var presenter = new RunsPresenter(pipeline, dashboard);
         presenter.refresh();
 
         presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
 
-        assertThat(presenter.view().message()).isNotNull();
-        assertThat(requireNonNull(presenter.view().message()).text()).isEqualTo("Something else is running.");
+        assertThat(dashboard.stage()).isInstanceOfSatisfying(RunStage.Running.class,
+                running -> assertThat(running.progress().scope()).isEqualTo("2019"));
+    }
+
+    @Test
+    void carryingARunOnTakesTheReaderToWhereItReports() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
+        final JobHandle<CullJobOutcome> job = neverFinishes();
+        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
+        final var presenter = runsPresenter(pipeline);
+        final var opened = new AtomicInteger();
+        presenter.setOpenDashboard(opened::incrementAndGet);
+        presenter.refresh();
+
+        presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
+
+        assertThat(opened).hasValue(1);
+    }
+
+    @Test
+    void aRefusedCarryOnIsSaidOnTheDashboardTheReaderIsSentTo() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
+        when(pipeline.resume(any(), anyBoolean()))
+                .thenThrow(new JobInProgressException("Something else is running."));
+        final RunLauncherPresenter dashboard = dashboard(pipeline);
+        final var presenter = new RunsPresenter(pipeline, dashboard);
+        presenter.refresh();
+
+        presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
+
+        assertThat(requireNonNull(dashboard.setup().view().message()).text())
+                .isEqualTo("Something else is running.");
+        assertThat(presenter.view().message()).isNull();
         assertThat(presenter.view().unfinished()).hasSize(1);
     }
 
@@ -251,7 +316,7 @@ class RunsPresenterTest {
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
         when(pipeline.discard(any())).thenThrow(
                 new Pipeline.RunAlreadyFinishedException(Path.of("logs", "sift-prep", "2019")));
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         presenter.press(presenter.view().unfinished().getFirst().actions().getLast());
@@ -262,12 +327,25 @@ class RunsPresenterTest {
     }
 
     @Test
+    void aFolderNobodyHasConfiguredYetIsReportedTheSameWayAnyOtherFailedReadIs() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenThrow(new PathsMisconfiguredException(List.of()));
+        final var presenter = runsPresenter(pipeline);
+
+        presenter.refresh();
+
+        assertThat(presenter.view().message()).isNotNull();
+        assertThat(presenter.view().unfinished()).isEmpty();
+        assertThat(presenter.unfinishedRuns()).isZero();
+    }
+
+    @Test
     void aReadThatWorksClearsWhatAFailedOneHadToReport() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns())
                 .thenThrow(new IllegalStateException("nope"))
                 .thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
         assertThat(presenter.view().message()).isNotNull();
 
@@ -285,7 +363,7 @@ class RunsPresenterTest {
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
         final JobHandle<DiscardReport> job = failing(new JobInProgressException("Something else is running."));
         when(pipeline.discard(any())).thenReturn(job);
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         presenter.press(presenter.view().unfinished().getFirst().actions().getLast());
@@ -309,7 +387,7 @@ class RunsPresenterTest {
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.COMPLETE))));
         final JobHandle<PurgeReport> job = finished();
         when(pipeline.purgeCompleted()).thenReturn(job);
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         presenter.clearCompleted();
@@ -343,7 +421,7 @@ class RunsPresenterTest {
     void aFolderSettingRefusalReachesTheScreenRatherThanEscaping() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenThrow(new IllegalStateException("nope"));
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
 
         presenter.refresh();
 
@@ -379,15 +457,30 @@ class RunsPresenterTest {
     void everyButtonGoesDeadWhileAJobThisScreenStartedIsStillRunning() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
-        final JobHandle<CullJobOutcome> job = neverFinishes();
-        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
-        final var presenter = new RunsPresenter(pipeline);
+        final JobHandle<DiscardReport> job = neverFinishes();
+        when(pipeline.discard(any())).thenReturn(job);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
-        presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
+        presenter.press(presenter.view().unfinished().getFirst().actions().getLast());
 
         assertThat(presenter.working()).isTrue();
         assertThat(presenter.view().unfinished().getFirst().actions()).isEmpty();
+    }
+
+    // Stubbed rather than pressed. A sift carried on from here runs on the dashboard, so this
+    // screen holds no handle to the very job its own press caused.
+    @Test
+    void everyButtonGoesDeadWhileAJobStartedAnywhereElseIsStillRunning() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+                run("2019", State.READY), run("2018", State.COMPLETE))));
+        when(pipeline.isBusy()).thenReturn(true);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().actions()).isEmpty();
+        assertThat(presenter.view().canClearCompleted()).isFalse();
     }
 
     @Test
@@ -396,7 +489,7 @@ class RunsPresenterTest {
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.READY))));
         when(pipeline.resume(any(), anyBoolean()))
                 .thenThrow(new JobInProgressException("busy"));
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
@@ -408,15 +501,204 @@ class RunsPresenterTest {
     @Test
     void nothingIsAskedOfTheFacadeUntilTheScreenIsRead() {
         final Pipeline pipeline = pipeline();
-        new RunsPresenter(pipeline);
+        runsPresenter(pipeline);
 
         verify(pipeline, never()).cullRuns();
+    }
+
+    @Test
+    void aWaitingRunOnAnAgentOffersTheFolderTheInstructionsAndTheToggle() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        when(pipeline.configuredProviderSpends()).thenReturn(false);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunsView.Waiting waiting = requireNonNull(presenter.view().unfinished().getFirst().waiting());
+
+        assertThat(waiting.folder()).isEqualTo(Path.of("logs", "sift-prep", "2019"));
+        assertThat(waiting.copyPrompt()).isNotNull();
+        assertThat(waiting.autoApply()).isNotNull();
+    }
+
+    @Test
+    void aWaitingRunOnAProviderThatSpendsIsOfferedNoWatchToggleAndNoInstructions() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunsView.Waiting waiting = requireNonNull(presenter.view().unfinished().getFirst().waiting());
+
+        assertThat(waiting.autoApply()).isNull();
+        assertThat(waiting.copyPrompt()).isNull();
+        assertThat(waiting.note()).contains("provider account balance");
+    }
+
+    @Test
+    void onlyAWaitingRunCarriesAnyOfThat() {
+        final RunsPresenter presenter = presenterOver(run("2019", State.READY),
+                run("2018", State.BLOCKED), run("2017", State.DAMAGED), run("2016", State.COMPLETE));
+
+        assertThat(presenter.view().unfinished()).extracting(RunCard::waiting).containsOnlyNulls();
+        assertThat(presenter.view().completed()).extracting(RunCard::waiting).containsOnlyNulls();
+    }
+
+    @Test
+    void theToggleSitsWhereTheEngineSaysTheWatchIsRatherThanWhereItWasLeft() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        when(pipeline.isWatchActive(any())).thenReturn(true);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(requireNonNull(requireNonNull(
+                presenter.view().unfinished().getFirst().waiting()).autoApply()).on()).isTrue();
+    }
+
+    @Test
+    void turningTheToggleOnArmsThatRunsWatchAndTurningItOffRetiresIt() {
+        final Pipeline pipeline = pipeline();
+        final var presenter = runsPresenter(pipeline);
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+
+        presenter.setAutoApply(prepDir, true);
+        presenter.setAutoApply(prepDir, false);
+
+        verify(pipeline).startWatching(prepDir);
+        verify(pipeline).stopWatching(prepDir);
+    }
+
+    @Test
+    void aWatchThatCouldNotBeChangedSaysWhyRatherThanFailingSilently() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        doThrow(new JobInProgressException("Something else is running."))
+                .when(pipeline).startWatching(any());
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        presenter.setAutoApply(Path.of("logs", "sift-prep", "2019"), true);
+
+        assertThat(requireNonNull(presenter.view().message()).text())
+                .isEqualTo("Something else is running.");
+    }
+
+    @Test
+    void goingOnWithoutTheMissingSheetsIsWhatTheFacadeIsAskedFor() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        final JobHandle<CullJobOutcome> job = neverFinishes();
+        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+        presenter.setWaiveMissing(prepDir, true);
+
+        presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
+
+        verify(pipeline).resume(prepDir, true);
+    }
+
+    @Test
+    void theInstructionsAreNotWrittenUntilSomebodyAsksForThem() {
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        presenter.view();
+        verify(pipeline, never()).launchPromptFor(any());
+
+        // The control, and what makes the assertion above about the drawing rather than about a
+        // facade nothing would have called either way.
+        presenter.instructionsFor(prepDir);
+        verify(pipeline).launchPromptFor(prepDir);
+    }
+
+    @Test
+    void instructionsThatCouldNotBeWrittenSayWhyAndCopyNothing() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        when(pipeline.launchPromptFor(any()))
+                .thenThrow(new MalformedPrepJsonException("index.json will not parse",
+                        new IllegalStateException("unexpected end of input")));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.instructionsFor(Path.of("logs", "sift-prep", "2019"))).isNull();
+        assertThat(requireNonNull(presenter.view().message()).text())
+                .doesNotContain("MalformedPrepJsonException");
+    }
+
+    @Test
+    void aRunMovingWithNobodyLookingRedrawsBothTheCountAndTheCards() throws Exception {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        final var listener = new AtomicReference<@Nullable Runnable>(null);
+        doAnswer(call -> {
+            listener.set(call.getArgument(0));
+            return null;
+        }).when(pipeline).onRunsMoved(any());
+        final var presenter = runsPresenter(pipeline);
+        final var countDrawn = new CountDownLatch(1);
+        final var cardsDrawn = new CountDownLatch(1);
+        presenter.setRedrawCount(countDrawn::countDown);
+        presenter.setRedrawCards(cardsDrawn::countDown);
+
+        requireNonNull(listener.get()).run();
+
+        assertThat(countDrawn.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(cardsDrawn.await(5, TimeUnit.SECONDS)).isTrue();
+    }
+
+    @Test
+    void aRunMovingReadsTheFolderOnceRatherThanOncePerThingItRedraws() throws Exception {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        final var listener = new AtomicReference<@Nullable Runnable>(null);
+        doAnswer(call -> {
+            listener.set(call.getArgument(0));
+            return null;
+        }).when(pipeline).onRunsMoved(any());
+        final var presenter = runsPresenter(pipeline);
+        final var bothDrawn = new CountDownLatch(2);
+        presenter.setRedrawCount(bothDrawn::countDown);
+        presenter.setRedrawCards(bothDrawn::countDown);
+
+        requireNonNull(listener.get()).run();
+
+        assertThat(bothDrawn.await(5, TimeUnit.SECONDS)).isTrue();
+        verify(pipeline).cullRuns();
+    }
+
+    @Test
+    void aTallyWithAnswersItCannotReadSaysSoRatherThanJustStalling() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.WAITING, List.of()),
+                new ShardTally(4, 2, 6), Instant.now()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().sheets())
+                .isEqualTo("2 of 6 sheets judged, and 2 answers could not be read");
+    }
+
+    @Test
+    void aTallyWhoseAnswersAllReadNamesOnlyWhatWasJudged() {
+        final RunsPresenter presenter = presenterOver(run("2019", State.WAITING));
+
+        assertThat(presenter.view().unfinished().getFirst().sheets()).isEqualTo("2 of 4 sheets judged");
     }
 
     private static RunsPresenter presenterOver(final CullRunSummary... runs) {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runs)));
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
         return presenter;
     }
@@ -425,6 +707,16 @@ class RunsPresenterTest {
         final Pipeline pipeline = mock(Pipeline.class);
         when(pipeline.archivesFolder()).thenReturn(ARCHIVES);
         return pipeline;
+    }
+
+    // A real dashboard rather than a double, so a test asking where a press reported can read the
+    // face it actually put up.
+    private static RunsPresenter runsPresenter(final Pipeline pipeline) {
+        return new RunsPresenter(pipeline, dashboard(pipeline));
+    }
+
+    private static RunLauncherPresenter dashboard(final Pipeline pipeline) {
+        return new RunLauncherPresenter(pipeline, new FxProgressPort(Runnable::run));
     }
 
     private static CullRunSummary run(final String scope, final State state) {
@@ -443,7 +735,7 @@ class RunsPresenterTest {
         final JobHandle<PurgeReport> handle = mock(JobHandle.class);
         when(handle.onComplete()).thenReturn(CompletableFuture.completedFuture(report));
         when(pipeline.purgeCompleted()).thenReturn(handle);
-        final var presenter = new RunsPresenter(pipeline);
+        final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
         presenter.clearCompleted();

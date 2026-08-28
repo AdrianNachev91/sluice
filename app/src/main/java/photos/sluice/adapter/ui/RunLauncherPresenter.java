@@ -198,6 +198,26 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Continues a run the reader picked off the runs screen.
+     *
+     * <p>The caller names the run, unlike {@link #continueRun}, which carries on the job this
+     * screen itself last ran and already holds its name. A run chosen off a list may be one this
+     * screen has never seen.
+     *
+     * @param prepDir {@link Path} the run's own directory
+     * @param scope {@link String} what that run covers, in the words its own card used. The reader
+     *     has just crossed from one screen to the other, so the two naming it differently would
+     *     read as two different runs
+     * @param waiveMissing boolean whether to go on without the sheets still owed
+     */
+    public void continueRunFromRuns(final Path prepDir, final String scope, final boolean waiveMissing) {
+        if (this.running) {
+            return;
+        }
+        this.begin(RunMode.SIFT, scope, null, () -> this.pipeline.resume(prepDir, waiveMissing));
+    }
+
+    /**
      * Sifts the timeline a finished sort filled, from that sort's own result card.
      *
      * <p>The dialog is the caller's to put, because only a screen can open one. What it may not do

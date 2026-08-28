@@ -1721,6 +1721,25 @@
     -fx-font-size: 11px;
 }
 
+/* Its own top padding sets this block off from the lines above, which are facts about the run
+   rather than things to do about it. */
+.runs-card-waiting {
+    -fx-spacing: 8px;
+    -fx-padding: 10px 0 0 0;
+}
+
+/* The folder itself. Monospaced because a path is the one thing on this screen a reader compares
+   character by character, against what their file manager shows them. */
+.runs-card-folder {
+    -fx-font-family: "Monospaced";
+    -fx-font-size: 11px;
+    -fx-text-fill: -sluice-text-muted;
+}
+
+.runs-card-copies {
+    -fx-spacing: 8px;
+}
+
 /* The marker on the finished-runs fold. Rotated rather than swapped for a second shape, so the
    two states cannot drift apart. */
 .runs-fold-marker {

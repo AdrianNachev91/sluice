@@ -59,10 +59,13 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
      * @param detail a second line, or null where the headline says it all
      * @param sheets how far through its sheets it got, or null where nothing counted them
      * @param age {@link String} when it was last written to, as a reader would say it
+     * @param waiting what the card carries only while sheets are still owed, or null on a run past
+     *     that point
      * @param actions a {@link List} of {@link Action} what can be done about it, in the order drawn
      */
     public record RunCard(String id, String scope, String headline, @Nullable String detail,
-                          @Nullable String sheets, String age, List<Action> actions) {
+                          @Nullable String sheets, String age, @Nullable Waiting waiting,
+                          List<Action> actions) {
 
         /**
          * Defensively copies the mutable list.
@@ -73,11 +76,42 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
          * @param detail a second line, or null
          * @param sheets how far through its sheets it got, or null
          * @param age {@link String} when it was last written to
+         * @param waiting what the card carries while sheets are still owed, or null
          * @param actions a {@link List} of {@link Action} what can be done about it
          */
         public RunCard {
             actions = List.copyOf(actions);
         }
+    }
+
+    /**
+     * What a card carries only while its run is still short of judged sheets.
+     *
+     * <p>A state that has none of this cannot be handed half of it, which is what keeps these
+     * together rather than loose on a card.
+     *
+     * @param folder {@link Path} where the sheets are, shown so a reader can go and look
+     * @param copyFolder {@link String} what the button copying that path says
+     * @param copyPrompt what the button copying the instructions says, or null where nobody outside
+     *     the app is doing the judging
+     * @param autoApply the control deciding whether answers are acted on as they arrive, or null
+     *     where nothing arrives from outside
+     * @param waiveMissing whether going on means going on without the sheets still owed, or null
+     *     where going on would judge them rather than skip them
+     * @param note {@link String} what happens next, in the words that state fits
+     */
+    public record Waiting(Path folder, String copyFolder, @Nullable String copyPrompt,
+                          @Nullable Switch autoApply, @Nullable Switch waiveMissing, String note) {
+    }
+
+    /**
+     * One control a reader turns on and off.
+     *
+     * @param id {@link String} the control's id, for the screen to set on it
+     * @param label {@link String} what it says
+     * @param on boolean where it currently sits
+     */
+    public record Switch(String id, String label, boolean on) {
     }
 
     /**
@@ -91,11 +125,13 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
      * @param kind {@link Kind} what pressing it does
      * @param leading boolean whether this is the way on from the card, drawn to be reached for
      * @param prepDir {@link Path} the run it does it to
+     * @param scope {@link String} what that run covers, in the words this card used. Carried so a
+     *     press landing on another screen can name the run the way the reader just saw it named
      * @param confirm {@link Confirmation} what to ask first, or null where the action needs no
      *     asking
      */
     public record Action(String id, String label, Kind kind, boolean leading, Path prepDir,
-                         @Nullable Confirmation confirm) {
+                         String scope, @Nullable Confirmation confirm) {
     }
 
     /**

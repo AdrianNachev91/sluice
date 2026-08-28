@@ -106,17 +106,25 @@ final class MainWindow {
         // it as it draws, so its own recount only has to put that number on the badge. Every other
         // nav press has nothing fresh to draw from and goes back to disk.
         //
-        // Read on a press rather than on a timer of its own. What changes the count is a run
-        // starting, ending or being thrown away. A reader who did any of those is on a screen they
-        // will leave.
+        // Read on a press rather than on a timer of its own, plus once more whenever a run moves
+        // with nobody pressing anything. Almost everything that changes the count is done by a
+        // reader who is on a screen they will leave. A watch finishing a run is the exception, and
+        // it can land while they are anywhere.
         final Runnable drawCount = () -> runsCount.setText(countOf(runsPresenter));
         final Runnable readThenCount = () -> countInTheBackground(runsPresenter, runsCount);
+        // The badge alone, from a reading the presenter has already taken. Marshalled here because
+        // a run moving on its own is announced from whatever thread caused it.
+        runsPresenter.setRedrawCount(() -> {
+            final String outstanding = countOf(runsPresenter);
+            Platform.runLater(() -> runsCount.setText(outstanding));
+        });
         runs.setOnAction(_ -> show(content, RUNS,
                 () -> filling(RunsPane.pane(runsPresenter, drawCount))));
         // The launcher's own way out of a timeline whose unfinished sift it cannot carry on. Set on
         // the presenter rather than passed to the pane, so the several places that redraw the
         // Dashboard need know nothing about it.
         runLauncherPresenter.setOpenRuns(runs::fire);
+        runsPresenter.setOpenDashboard(dashboard::fire);
         dashboard.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());
         settings.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());
         review.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());
