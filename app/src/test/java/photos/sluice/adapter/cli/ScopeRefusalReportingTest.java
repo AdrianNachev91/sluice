@@ -2,7 +2,6 @@ package photos.sluice.adapter.cli;
 
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
-import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.model.SortScope;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -16,7 +15,6 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
 // The stand-in below declares the three scope arguments the way a real verb does, and does nothing
 // else. So what these assert is the route from a typed argument to an exit code, rather than any
@@ -77,9 +75,8 @@ class ScopeRefusalReportingTest {
 
     private static CliHarness.Result run(final String... args) {
         final var reports = new CommandReports(new RefusalClassifier(new NoSecrets()));
-        final var runs = new RunsCommand(mock(Pipeline.class), reports);
         final var scoped = new ScopedCommand(reports);
-        final CommandLine parser = SluiceCli.parser(new SluiceCli(), CliHarness.supplying(runs, scoped));
+        final CommandLine parser = CliHarness.parser(scoped);
         parser.addSubcommand("scoped", scoped);
         return CliHarness.run(parser, args);
     }

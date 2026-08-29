@@ -225,7 +225,7 @@ class RunsCommandTest {
         }));
 
         final CliHarness.Result result = CliHarness.run(
-                SluiceCli.parser(new SluiceCli(), CliHarness.supplying(command)), "runs", "--json");
+                CliHarness.parser(command), "runs", "--json");
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.FAILED.exitCode());
         assertThat(result.out()).contains("the original failure").contains("\"status\":\"FAILED\"");
@@ -233,7 +233,7 @@ class RunsCommandTest {
 
     private CliHarness.Result run(final String... args) {
         final var command = new RunsCommand(this.pipeline, new CommandReports(new RefusalClassifier(new NoSecrets())));
-        return CliHarness.run(SluiceCli.parser(new SluiceCli(), CliHarness.supplying(command)), args);
+        return CliHarness.run(CliHarness.parser(command), args);
     }
 
     private static CullRuns listed(final CullRunSummary... runs) {

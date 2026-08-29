@@ -23,7 +23,7 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = "sluice", description = "Sluice organises your photos and videos.",
-        subcommands = {AppCommand.class, RunsCommand.class})
+        subcommands = {AppCommand.class, RunsCommand.class, SortCommand.class})
 public class SluiceCli implements Callable<Integer> {
 
     /**
@@ -45,7 +45,12 @@ public class SluiceCli implements Callable<Integer> {
     // Declared rather than taken from the parser's standard mixin, which pairs --help with a
     // --version that has no version to print until the packaged build supplies one. The parser
     // turns --help into help before this class is reached, so nothing here ever reads the field.
-    @Option(names = {"-h", "--help"}, usageHelp = true, description = "Show this message.")
+    //
+    // Inherited, so every verb answers it. The two-line refusal a verb gives an unknown option ends
+    // by naming that verb's own --help. A verb that does not take one therefore offers a remedy
+    // answering with the same refusal.
+    @Option(names = {"-h", "--help"}, usageHelp = true, scope = ScopeType.INHERIT,
+            description = "Show this message.")
     @SuppressWarnings("unused")
     private boolean helpRequested;
 
@@ -60,6 +65,14 @@ public class SluiceCli implements Callable<Integer> {
             description = "Write the result to the output stream as one JSON document.")
     @SuppressWarnings("unused")
     private boolean documentAsked;
+
+    // Inherited, so it reads the same before the verb as after it. That reaches the verbs which
+    // report no progress too, where it does nothing. A caller would otherwise have to know which
+    // verbs are long-running before deciding where the flag goes.
+    @Option(names = "--quiet", scope = ScopeType.INHERIT, arity = "0",
+            description = "Report no progress while the command runs. The result is unaffected.")
+    @SuppressWarnings("unused")
+    private boolean quietAsked;
 
     /**
      * Builds the parser for this surface, configured the one way every verb inherits.
@@ -86,6 +99,16 @@ public class SluiceCli implements Callable<Integer> {
      */
     static boolean documentAsked(final CommandSpec spec) {
         return ((SluiceCli) spec.root().userObject()).documentAsked;
+    }
+
+    /**
+     * Whether the running command was asked to report no progress.
+     *
+     * @param spec {@link CommandSpec} the running command
+     * @return boolean true when progress was turned off
+     */
+    static boolean quietAsked(final CommandSpec spec) {
+        return ((SluiceCli) spec.root().userObject()).quietAsked;
     }
 
     /**

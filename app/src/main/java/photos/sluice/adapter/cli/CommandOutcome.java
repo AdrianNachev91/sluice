@@ -38,7 +38,33 @@ public record CommandOutcome(CommandStatus status, @Nullable Object payload,
      * @return {@link CommandOutcome} the outcome
      */
     public static CommandOutcome done(final @Nullable Object payload, final List<String> resultLines) {
-        return new CommandOutcome(CommandStatus.DONE, payload, resultLines, List.of());
+        return done(payload, resultLines, List.of());
+    }
+
+    /**
+     * A command that did what it was asked, with something else worth saying beside the answer.
+     *
+     * @param payload {@link Object} what the document says
+     * @param resultLines a {@link List} of {@link String} the same answer, for a person
+     * @param noteLines a {@link List} of {@link String} what is worth reading but is not the answer
+     * @return {@link CommandOutcome} the outcome
+     */
+    public static CommandOutcome done(final @Nullable Object payload, final List<String> resultLines,
+                                      final List<String> noteLines) {
+        return new CommandOutcome(CommandStatus.DONE, payload, resultLines, noteLines);
+    }
+
+    /**
+     * The same answer, reported as a run the caller stopped.
+     *
+     * <p>A stopped run still says what it did before it stopped, so nothing is dropped here. Only
+     * the status changes, which is how a script tells a run that finished from one that was cut
+     * short.
+     *
+     * @return {@link CommandOutcome} the outcome
+     */
+    public CommandOutcome cancelled() {
+        return new CommandOutcome(CommandStatus.CANCELLED, this.payload, this.resultLines, this.noteLines);
     }
 
     /**

@@ -1,7 +1,6 @@
 package photos.sluice.adapter.cli;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.application.service.Pipeline;
 import picocli.CommandLine;
 
 import java.util.Arrays;
@@ -9,12 +8,10 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
 class SluiceCliTest {
 
-    private final CommandLine commandLine = SluiceCli.parser(new SluiceCli(), CliHarness.supplying(
-            new RunsCommand(mock(Pipeline.class), new CommandReports(new RefusalClassifier(new NoSecrets())))));
+    private final CommandLine commandLine = CliHarness.parser();
 
     @Test
     void argumentsNamingNoCommandAreRefused() {
@@ -94,6 +91,18 @@ class SluiceCliTest {
         assertThat(result.exitCode()).isEqualTo(CommandLine.ExitCode.OK);
         assertThat(result.out()).contains("Usage: sluice");
         assertThat(result.err()).isEmpty();
+    }
+
+    // The refusal a verb gives an unknown option ends by naming that verb's own --help. Reachable
+    // only on the root, that line sends a reader to a command which answers with the same refusal.
+    @Test
+    void everyVerbAnswersTheHelpItsOwnRefusalPointsAt() {
+        assertThat(this.commandLine.getSubcommands().keySet()).isNotEmpty().allSatisfy(verb -> {
+            final CliHarness.Result result = CliHarness.run(CliHarness.parser(), verb, "--help");
+
+            assertThat(result.exitCode()).isEqualTo(CommandLine.ExitCode.OK);
+            assertThat(result.out()).contains("Usage: sluice " + verb);
+        });
     }
 
     @Test

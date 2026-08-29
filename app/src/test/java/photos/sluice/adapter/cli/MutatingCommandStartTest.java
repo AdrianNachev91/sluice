@@ -140,8 +140,8 @@ class MutatingCommandStartTest {
         }
     }
 
-    // Stands in for the verbs that will call this sequence, so the parser can drive it before one
-    // of them exists.
+    // Calls the sequence and nothing else, so what these drive is the claim rather than any verb's
+    // own work.
     @Command(name = "stand-in")
     private record StandInCommand(MutatingCommandStart start) implements Callable<Integer> {
         @Override

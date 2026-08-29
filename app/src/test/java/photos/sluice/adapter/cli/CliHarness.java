@@ -1,9 +1,14 @@
 package photos.sluice.adapter.cli;
 
+import photos.sluice.application.service.Pipeline;
 import picocli.CommandLine;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.mockito.Mockito.mock;
 
 // Runs a command the way a shell would and hands back everything a shell would see. In this
 // process, so a test names the command object it is driving and reads what came out of it.
@@ -25,12 +30,18 @@ final class CliHarness {
     record Result(int exitCode, String out, String err) {
     }
 
-    // Hands the parser one of these where it asks for a type it recognises, and lets it build
-    // anything else itself.
-    //
     // Verbs are registered by class rather than as instances, which is what a real run does. So the
     // parser constructs every one of them while it builds the command tree. A test supplying none
     // cannot build that tree at all, whether or not it means to run a verb.
+    static CommandLine parser(final Object... driven) {
+        final List<Object> commands = new ArrayList<>(List.of(driven));
+        commands.add(new RunsCommand(mock(Pipeline.class), mock(CommandReports.class)));
+        commands.add(new SortCommand(mock(Pipeline.class), mock(JobReports.class)));
+        return SluiceCli.parser(new SluiceCli(), supplying(commands.toArray()));
+    }
+
+    // Hands the parser one of these where it asks for a type it recognises, and lets it build
+    // anything else itself.
     static CommandLine.IFactory supplying(final Object... commands) {
         return new CommandLine.IFactory() {
             @Override
