@@ -5,11 +5,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
-import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.cull.Verdict.Keep;
+import photos.sluice.domain.cull.VerdictAction;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.DeserializationFeature;
@@ -25,16 +27,16 @@ import java.util.List;
 
 /**
  * Reads and writes a {@code decisions-NNN.json} shard, the file an external vision agent drops
- * into the prep directory to record its non-keep decisions for one montage. The pure domain
- * {@link Decision} types carry no framework annotations. The whole JSON contract lives in the
- * private {@code RawDecision} DTO below. It maps the action string to a subtype: {@code
- * near-dup-chosen} and {@code near-dup-reject} give the two near-dup shapes. Any other action
- * value is a {@link Classification} whose category is that action string.
+ * into the prep directory to record its verdict on every photo of one montage. The pure domain
+ * {@link Verdict} types carry no framework annotations. The whole JSON contract lives in the
+ * private {@code RawDecision} DTO below. It maps the action string to a subtype: {@code keep}
+ * gives a {@link Keep}, and {@code near-dup-chosen} and {@code near-dup-reject} the two near-dup
+ * shapes. Any other action value is a {@link Classification} whose category is that action string.
  *
  * <p>The read path splits two kinds of bad input. Anything that isn't a representable shard throws
  * {@link MalformedPrepJsonException}: an unknown field, malformed JSON, a null document, a null
  * decision entry, or a file name this platform cannot make a path out of. None can be turned into a
- * {@link Decision}, and an unknown field can't even be seen once parsed. So the codec is the only
+ * {@link Verdict}, and an unknown field can't even be seen once parsed. So the codec is the only
  * place to catch it. A read that merely failed, leaving
  * the content itself intact, throws a plain {@link UncheckedIOException} instead. That distinction
  * is what lets a caller report damaged content as a finding while letting a lock or a permission
@@ -47,9 +49,6 @@ import java.util.List;
  */
 @Component
 class ShardCodec {
-
-    private static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
-    private static final String NEAR_DUP_REJECT = "near-dup-reject";
 
     private final JsonMapper mapper;
 
@@ -98,7 +97,7 @@ class ShardCodec {
     public void write(final Path shardPath, final DecisionShard shard) {
         final var document = new RawShard(
                 shard.montage(),
-                shard.decisions().stream().map(ShardCodec::toRaw).toList());
+                shard.verdicts().stream().map(ShardCodec::toRaw).toList());
         try {
             AtomicJsonWrite.write(shardPath, this.mapper, document);
         } catch (final IOException e) {
@@ -147,32 +146,33 @@ class ShardCodec {
     }
 
     /**
-     * Converts a domain decision to its raw DTO representation.
+     * Converts a domain verdict to its raw DTO representation.
      *
-     * @param decision {@link Decision} the domain decision to convert
+     * @param verdict {@link Verdict} the domain verdict to convert
      * @return {@link RawDecision} the raw DTO representation
      */
-    private static RawDecision toRaw(final Decision decision) {
+    private static RawDecision toRaw(final Verdict verdict) {
         // Structurally similar to toDomain()'s switch below, but it maps the opposite direction
         // over a different type. Collapsing the two into one generic mapper would cost clarity.
         //noinspection DuplicatedCode
-        return switch (decision) {
+        return switch (verdict) {
+            case final Keep keep -> new RawDecision(keep.file().toString(), VerdictAction.KEEP, null, null, null);
             case final Classification c -> new RawDecision(c.file().toString(), c.category(), null, c.reason(), null);
-            case final NearDupChosen c ->
-                    new RawDecision(c.file().toString(), NEAR_DUP_CHOSEN, c.group(), null, c.chosenReason());
-            case final NearDupReject reject ->
-                    new RawDecision(reject.file().toString(), NEAR_DUP_REJECT, reject.group(), reject.reason(), null);
+            case final NearDupChosen c -> new RawDecision(c.file().toString(), VerdictAction.NEAR_DUP_CHOSEN,
+                    c.group(), null, c.chosenReason());
+            case final NearDupReject reject -> new RawDecision(reject.file().toString(),
+                    VerdictAction.NEAR_DUP_REJECT, reject.group(), reject.reason(), null);
         };
     }
 
     /**
-     * Converts a raw DTO to its domain decision representation.
+     * Converts a raw DTO to its domain verdict representation.
      *
      * @param raw {@link RawDecision} the raw DTO to convert
      * @param shardPath {@link Path} the shard's own path, used only for the error message
-     * @return {@link Decision} the domain decision
+     * @return {@link Verdict} the domain verdict
      */
-    private static Decision toDomain(final @Nullable RawDecision raw, final Path shardPath) {
+    private static Verdict toDomain(final @Nullable RawDecision raw, final Path shardPath) {
         if (raw == null) {
             throw new MalformedPrepJsonException("Shard " + shardPath + " has a null decision entry",
                     new IOException("null decision entry"));
@@ -180,8 +180,10 @@ class ShardCodec {
         final var file = decisionFile(raw.file(), shardPath);
         final String action = orEmpty(raw.action());
         return switch (action) {
-            case NEAR_DUP_CHOSEN -> new NearDupChosen(file, orEmpty(raw.group()), orEmpty(raw.chosenReason()));
-            case NEAR_DUP_REJECT -> new NearDupReject(file, orEmpty(raw.group()), orEmpty(raw.reason()));
+            case VerdictAction.KEEP -> new Keep(file);
+            case VerdictAction.NEAR_DUP_CHOSEN -> new NearDupChosen(file, orEmpty(raw.group()),
+                    orEmpty(raw.chosenReason()));
+            case VerdictAction.NEAR_DUP_REJECT -> new NearDupReject(file, orEmpty(raw.group()), orEmpty(raw.reason()));
             default -> new Classification(file, action, orEmpty(raw.reason()));
         };
     }

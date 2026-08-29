@@ -215,6 +215,46 @@ public sealed interface Finding {
     }
 
     /**
+     * A sheet's shard says nothing at all about one or more of the photos that sheet showed. Every
+     * photo needs a verdict, a {@link Verdict.Keep} included.
+     *
+     * <p>Names the photos rather than counting them. The list is what goes back to whoever produced
+     * the shard. Asking for three named photos is a different request from asking for the sheet
+     * again.
+     *
+     * <p>NONE: no engine can invent a judgement. What puts it right is the shard being written
+     * again.
+     */
+    record PhotosNotJudged(String montage, List<String> photos) implements Finding {
+        public PhotosNotJudged {
+            photos = List.copyOf(photos);
+        }
+
+        @Override
+        public String describe() {
+            return this.montage + ": no verdict for " + this.photos.size() + " of its photos ("
+                    + String.join(", ", this.photos) + ")";
+        }
+    }
+
+    /**
+     * A verdict names a photo that is in the run but was shown on a different sheet. The sheet it
+     * sits in never displayed that photo, so nobody looked at it to reach this verdict.
+     *
+     * <p>Distinct from {@link FileOutOfScope}, which is a file no sheet showed at all. Only one of
+     * the two is ever raised for a verdict: a file that reached no sheet cannot have reached the
+     * wrong one.
+     *
+     * <p>NONE, for the reason {@link PhotosNotJudged} carries.
+     */
+    record PhotoFromAnotherSheet(String montage, int index, Path file) implements Finding {
+        @Override
+        public String describe() {
+            return at(this.montage, this.index) + ": names a photo another sheet showed: " + this.file;
+        }
+    }
+
+    /**
      * A decision names a file the montages never actually showed, and no unique-basename heal
      * could resolve it back into scope.
      */

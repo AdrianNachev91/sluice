@@ -459,12 +459,23 @@ final class RunsPane {
             final var card = new VBox(lines);
             card.setId(run.id());
             card.getStyleClass().add("card");
+            addIfPresent(lines, run.age(), "runs-card-age");
             final RunsView.Waiting waiting = run.waiting();
             if (waiting != null) {
                 card.getChildren().add(waitingBlock(waiting, presenter, redraw));
             }
-            addIfPresent(lines, run.age(), "runs-card-age");
-            if (!run.actions().isEmpty()) {
+            // Kept with the button it is about rather than up among the run's own lines. A card
+            // carrying a waiting block would otherwise put that whole block between the two.
+            final RunsView.Redo redo = run.redo();
+            if (redo != null) {
+                addIfPresent(card, redo.note(), "runs-card-detail");
+            }
+            if (redo != null && redo.drawnAt() == null) {
+                final var offer = new HBox(redoButton(redo, presenter, redraw));
+                offer.getStyleClass().add("runs-card-copies");
+                card.getChildren().add(offer);
+            }
+            if (!run.actions().isEmpty() || redo != null) {
                 card.getChildren().add(actionRow(run, presenter, redraw));
             }
             return card;
@@ -472,10 +483,6 @@ final class RunsPane {
 
         /**
          * What a card shows while its run is still owed judged sheets.
-         *
-         * <p>The folder and the instructions get a button each because they answer separate
-         * questions. One is where to look, the other is what to ask for. A reader part way through
-         * this only wants one of them at a time.
          *
          * @param waiting {@link RunsView.Waiting} what the card carries in this state
          * @param presenter {@link RunsPresenter} writes the text and takes each change
@@ -492,26 +499,15 @@ final class RunsPane {
             SettingsRows.wrapping(folder);
             folder.getStyleClass().add("runs-card-folder");
 
-            final List<Node> copyButtons = new ArrayList<>();
-            copyButtons.add(copyButton("run-copy-folder", waiting.copyFolder(), presenter.copied(),
-                    () -> presenter.folderPath(waiting.folder())));
-            if (waiting.copyPrompt() != null) {
-                copyButtons.add(copyButton("run-copy-prompt", waiting.copyPrompt(), presenter.copied(),
-                        // Redrawn only where it failed, since that is the one outcome with
-                        // something new to say. A copy that worked reports on the button itself.
-                        () -> {
-                            final String text = presenter.instructionsFor(waiting.folder());
-                            if (text == null) {
-                                redraw.run();
-                            }
-                            return text;
-                        }));
-            }
-            final var copyRow = new HBox(copyButtons.toArray(new Node[0]));
-            copyRow.getStyleClass().add("runs-card-copies");
-
-            final var block = new VBox(note, folder, copyRow);
+            final var block = new VBox(note, folder);
             block.getStyleClass().add("runs-card-waiting");
+            if (waiting.copyPrompt() != null) {
+                final var copyRow = new HBox(copyButton("run-copy-prompt", waiting.copyPrompt(),
+                        presenter.copied(), redraw,
+                        () -> presenter.instructionsFor(waiting.folder(), waiting.promptCorrects())));
+                copyRow.getStyleClass().add("runs-card-copies");
+                block.getChildren().add(copyRow);
+            }
             if (waiting.autoApply() != null) {
                 block.getChildren().add(switchBox(waiting.autoApply(), on -> {
                     presenter.setAutoApply(waiting.folder(), on);
@@ -527,31 +523,71 @@ final class RunsPane {
         }
 
         /**
+         * The button that asks for a run's rejected answers again.
+         *
+         * <p>A press that goes ahead redraws and says nothing on the button itself. It files sheets
+         * away whichever route it takes, so the card that replaces this one is the answer. A press
+         * the reader called off changes nothing and draws nothing.
+         *
+         * @param redo {@link RunsView.Redo} what the card carries about it
+         * @param presenter {@link RunsPresenter} sets the answers aside and does what getting them
+         *     judged again takes
+         * @param redraw {@link Runnable} draws the screen again once it has been told
+         * @return {@link Button} the button
+         */
+        private static Button redoButton(final RunsView.Redo redo, final RunsPresenter presenter,
+                                         final Runnable redraw) {
+            final var button = new Button(redo.label());
+            button.setId(redo.id());
+            button.getStyleClass().add(redo.leading() ? "run-start" : "run-cancel");
+            button.setOnAction(_ -> {
+                if (agreed(redo.confirm())) {
+                    final String text = presenter.judgeAgain(redo.prepDir(), redo.scope());
+                    if (text != null) {
+                        final var content = new ClipboardContent();
+                        content.putString(text);
+                        Clipboard.getSystemClipboard().setContent(content);
+                    }
+                    redraw.run();
+                }
+            });
+            return button;
+        }
+
+        /**
          * A button that puts something on the clipboard and says it did.
          *
          * <p>Says so on itself rather than in a line elsewhere on the page. A copy is over the
          * instant it is asked for, and a message somewhere else would be one more thing to find.
          *
+         * <p>A press that moved the run says nothing here. The presenter asks for the screen to be
+         * read again, and the card that replaces this one is what reports it.
+         *
          * @param id {@link String} the button's id
          * @param label {@link String} what it says before it is pressed
          * @param done {@link String} what it says once it has copied
+         * @param redraw {@link Runnable} draws the card again where the press had something to
+         *     report and no clipboard to report it on
          * @param text a {@link Supplier} of {@link String} what to copy, or null where it could not
          *     be written
          * @return {@link Button} the button
          */
         private static Button copyButton(final String id, final String label, final String done,
+                                         final Runnable redraw,
                                          final Supplier<@Nullable String> text) {
             final var button = new Button(label);
             button.setId(id);
             button.getStyleClass().add("run-cancel");
             button.setOnAction(_ -> {
                 final String copied = text.get();
-                if (copied != null) {
-                    final var content = new ClipboardContent();
-                    content.putString(copied);
-                    Clipboard.getSystemClipboard().setContent(content);
-                    button.setText(done);
+                if (copied == null) {
+                    redraw.run();
+                    return;
                 }
+                final var content = new ClipboardContent();
+                content.putString(copied);
+                Clipboard.getSystemClipboard().setContent(content);
+                button.setText(done);
             });
             return button;
         }
@@ -577,6 +613,10 @@ final class RunsPane {
         /**
          * A card's buttons, along the bottom and pushed to its right.
          *
+         * <p>Where the way back sits among them is {@link RunsView.Redo#drawnAt()}'s to say, and a
+         * null there keeps it out of the row entirely. The row is one ordering question and the
+         * presenter answers all of it.
+         *
          * @param run {@link RunCard} the run they act on
          * @param presenter {@link RunsPresenter} takes the press
          * @param redraw {@link Runnable} draws the screen again once it has been told
@@ -586,7 +626,20 @@ final class RunsPane {
                                       final Runnable redraw) {
             final List<Node> buttons = new ArrayList<>();
             buttons.add(spacer());
-            run.actions().forEach(action -> buttons.add(button(action, presenter, redraw)));
+            final RunsView.Redo redo = run.redo();
+            // Clamped rather than trusted. A position past the end would otherwise drop the control
+            // silently, and a card missing its only way forward looks like a card that has none.
+            final int redoAt = redo == null || redo.drawnAt() == null
+                    ? -1
+                    : Math.min(redo.drawnAt(), run.actions().size());
+            for (int i = 0; i <= run.actions().size(); i++) {
+                if (redo != null && i == redoAt) {
+                    buttons.add(redoButton(redo, presenter, redraw));
+                }
+                if (i < run.actions().size()) {
+                    buttons.add(button(run.actions().get(i), presenter, redraw));
+                }
+            }
             final var row = new HBox(buttons.toArray(new Node[0]));
             row.setAlignment(Pos.CENTER_RIGHT);
             row.getStyleClass().add("run-start-row");
@@ -624,20 +677,15 @@ final class RunsPane {
         /**
          * Whether a reader agreed to what an action is about to do.
          *
-         * <p>Keeping it is the loud choice, and throwing away is not. Nothing on this screen can
-         * put back what a discard files away, so Enter lands on the answer that changes nothing.
-         * That is what {@link Dialogs.Emphasis} asks for wherever a dialog is about something the
-         * app cannot undo.
-         *
          * @param confirm {@link Confirmation} what to ask, or null where nothing needs asking
          * @return boolean true where the action should go ahead
          */
         private static boolean agreed(final @Nullable Confirmation confirm) {
             return confirm == null || Dialogs.ask(confirm.heading(), confirm.question(),
                     new Dialogs.Choice(confirm.goAhead(), Dialogs.Role.GO_AHEAD,
-                            Dialogs.Emphasis.QUIET),
+                            Dialogs.Emphasis.of(confirm.goAheadLeads())),
                     new Dialogs.Choice(confirm.cancel(), Dialogs.Role.CANCEL,
-                            Dialogs.Emphasis.LOUD)).isPresent();
+                            Dialogs.Emphasis.of(!confirm.goAheadLeads()))).isPresent();
         }
 
         /**

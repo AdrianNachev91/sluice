@@ -222,6 +222,38 @@ class PrepDirRemediesTest {
     }
 
     @Test
+    void setAsideAnswersFilesOnlyTheNamedSheetsAndLeavesTheRest(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        writeIndex(prepDir, 0, List.of("montage-001", "montage-002"));
+        writeShard(prepDir, "montage-001", classificationJson(root.resolve("Sorted/Photos/2019/06/a.jpg"), "junk",
+                "blurry"));
+        writeShard(prepDir, "montage-002", classificationJson(root.resolve("Sorted/Photos/2019/06/b.jpg"), "junk",
+                "blurry"));
+
+        final List<String> filed = prepDirRemedies(root, libraryRoot)
+                .setAsideAnswers(prepDir, List.of("montage-001"));
+
+        assertThat(filed).containsExactly("montage-001");
+        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isFalse();
+        assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isTrue();
+        try (final var drawer = Files.list(prepDir.resolve("disasters"))) {
+            assertThat(drawer.toList()).singleElement()
+                    .satisfies(filedAway -> assertThat(filedAway.getFileName().toString())
+                            .contains("rejected-answers-montage-001"));
+        }
+    }
+
+    @Test
+    void setAsideAnswersPassesOverASheetWhoseAnswersHaveAlreadyGone(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        writeIndex(prepDir, 0, List.of("montage-001"));
+
+        assertThat(prepDirRemedies(root, libraryRoot).setAsideAnswers(prepDir, List.of("montage-001"))).isEmpty();
+    }
+
+    @Test
     void rebuildIndexRebuildsFromContiguousSidecarsAndFilesTheCorruptOriginal(@TempDir final Path root) throws IOException {
         final Path prepDir = prepDir(root);
         final Path first = root.resolve("Sorted/Photos/2019/06/a.jpg");

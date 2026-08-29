@@ -15,6 +15,8 @@ import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.cull.LaunchPrompt;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.job.ShardTally;
@@ -61,27 +63,43 @@ public class RunsPresenter {
 
     private static final String CLEAR_COMPLETED = "Clear finished runs";
 
-    private static final String COPY_FOLDER = "Copy folder path";
-
     private static final String COPY_PROMPT = "Copy instructions for your agent";
 
+    private static final String COPY_FOLLOW_UP = "Copy a follow-up for your agent";
+
     private static final String COPIED = "Copied";
+
+    private static final String JUDGE_AGAIN = "Judge the faulty sheets again";
+
+    // Says only what the press covers beyond the button's own label, and what it costs. What
+    // happens to the decisions being replaced is bookkeeping the reader cannot act on.
+    private static final String JUDGE_AGAIN_NOTE = "Any sheets still missing are judged too. That "
+            + "spends from your provider account balance.";
 
     // One label for that press whatever state the run is in. What it attempts is the same in all of
     // them, and the card's own tally already says whether it can get there.
     private static final String FINISH = "Finish this sift";
 
-    private static final String AUTO_APPLY = "Move the photos as soon as the answers are all in";
+    private static final String AUTO_APPLY = "Move the photos as soon as every sheet is judged";
 
     private static final String WAIVE_MISSING = "Go on without the sheets that are still missing";
 
     // Says nothing about what happens afterwards. The toggle under it answers that, and answers it
     // two ways, so a sentence here would contradict one of them.
     private static final String WAITING_ON_AN_AGENT = "Copy the instructions for your own agent. "
-            + "They prompt it to write its answers back into this folder.";
+            + "They prompt it to write its decisions back into the folder below.";
+
+    private static final String FOLLOW_UP_NOTE = "The follow-up asks your agent for every sheet "
+            + "still outstanding, and discards any sheet that came back wrong so it can be judged "
+            + "again. Copy it once your agent has stopped working.";
 
     private static final String WAITING_ON_A_PROVIDER = "Finishing it judges the sheets that are "
             + "left, and that spends from your provider account balance.";
+
+    // Finishing is refused while a sheet came back wrong, so the note beside the button that does
+    // the judging carries what this state costs instead.
+    private static final String WAITING_ON_A_PROVIDER_BLAMED = "The sheets that are left cannot be "
+            + "judged until the ones that came back wrong are dealt with.";
 
     private final Pipeline pipeline;
     private final RunLauncherPresenter launcher;
@@ -90,7 +108,8 @@ public class RunsPresenter {
     // has ended writes the flag and the message from whatever thread it ran on.
     private volatile CullRuns runs = new CullRuns.Listed(List.of());
     // Two of them, because they are cleared by different things. A failed read is undone by the
-    // next read that works. What a press had to report is undone by the next press.
+    // next read that works. What a press had to report survives its own redraw, which takes no
+    // reading. It goes on the next read, which is the reader leaving the screen and coming back.
     private volatile @Nullable Message readFailure;
     private volatile @Nullable Message message;
     private volatile boolean working;
@@ -106,6 +125,14 @@ public class RunsPresenter {
     // redraw reads it off the thread that paints while a press writes it. Nothing prunes it:
     // filling it would take thousands of discarded and re-sifted scopes in one sitting.
     private final Set<Path> waiveMissing = ConcurrentHashMap.newKeySet();
+
+    // Which run's copy control last handed something over, so the card draws it as Copied. Held
+    // here rather than on the button because the press that fills it also files sheets away, and
+    // the redraw that follows builds a new button.
+    private volatile @Nullable Path justCopied;
+    // The read that press triggers must not clear what the press just set, so the field survives
+    // one read and the one after it clears.
+    private volatile boolean copiedAwaitsItsRead;
 
     // Plain, unlike the fields above: one thread both writes and reads it, on the thread that
     // paints.
@@ -184,8 +211,16 @@ public class RunsPresenter {
      *
      * <p>A refusal is kept as the screen's own message rather than thrown on, so the reader is told
      * why on the screen in front of them. The roots being unusable is the ordinary one.
+     *
+     * <p>Also ages out what a press last had to say, and what a copy control last handed over. A
+     * reader who leaves the screen and comes back is not still being told about a press they have
+     * walked away from.
      */
     public void refresh() {
+        this.forgetTheCopyAfterItsOwnRead();
+        // A press reports against the run as it stood then. This reading may find a different one,
+        // and a sentence about the old state reads as a claim about the new.
+        this.message = null;
         try {
             this.runs = this.pipeline.cullRuns();
             // Cleared on the way through, so a read that fails once and works after does not leave
@@ -216,9 +251,12 @@ public class RunsPresenter {
         final CullRuns reading = this.runs;
         final List<CullRunSummary> found = found(reading);
         final String unreadable = unreadable(reading);
+        // Oldest timeline first, which is the order a reader already has in their head. Sorted here
+        // rather than left to the reading's own order, since where the cards sit is this screen's
+        // claim to keep.
         final List<RunCard> unfinished = found.stream()
                 .filter(run -> run.health().state() != State.COMPLETE)
-                .sorted(Comparator.comparingInt(run -> urgency(run.health().state())))
+                .sorted(Comparator.comparing(CullRunSummary::scope))
                 .map(this::card)
                 .toList();
         final List<RunCard> completed = found.stream()
@@ -272,35 +310,86 @@ public class RunsPresenter {
     }
 
     /**
-     * Copies one run's folder path, for a reader who wants to go and look at it.
-     *
-     * @param prepDir {@link Path} the run
-     * @return {@link String} the path, as text
-     */
-    public String folderPath(final Path prepDir) {
-        return prepDir.toString();
-    }
-
-    /**
      * Writes the instructions for the agent the reader drives themselves.
      *
      * <p>Built here rather than kept on the card, so a screen of waiting runs reads no index until
      * somebody asks for one.
      *
+     * <p>A follow-up discards whatever came back unusable, then asks for every sheet outstanding,
+     * both being sheets with no answer once the discard is done. A run with nothing to discard has
+     * stalled rather than gone wrong, and its follow-up is the instructions themselves. The facade
+     * decides which it is, so a run put right between the card being drawn and this press still
+     * gets the answer that fits it rather than the one the card predicted.
+     *
      * <p>A run whose records have gone bad between the draw and this press has none to write. That
      * is reported on the screen the same way a refused press is, and nothing reaches the clipboard.
      *
+     * <p>Where sheets were filed away, the screen is told to read the run again and draw itself,
+     * which it does off the thread that paints. Whether that happened is decided here rather than
+     * by the card, which can only say what the press was offered as.
+     *
      * @param prepDir {@link Path} the run
+     * @param followUp boolean whether the card offered this as a follow-up
      * @return {@link String} the instructions, or null where they could not be written
      */
-    public @Nullable String instructionsFor(final Path prepDir) {
+    public @Nullable String instructionsFor(final Path prepDir, final boolean followUp) {
+        this.message = null;
         try {
+            if (followUp) {
+                try {
+                    final String freed = this.pipeline.redoRejectedAnswers(prepDir);
+                    this.justCopied = prepDir;
+                    this.copiedAwaitsItsRead = true;
+                    final Runnable draw = this.repaint;
+                    if (draw != null) {
+                        draw.run();
+                    }
+                    return freed;
+                } catch (final Pipeline.NothingToRedoException stalled) {
+                    log.info("Nothing to redo for {}, so the follow-up asks afresh", prepDir, stalled);
+                }
+            }
             return this.pipeline.launchPromptFor(prepDir);
         } catch (final RuntimeException e) {
             log.info("Could not write the instructions for {}", prepDir, e);
             this.message = new Message(RunRefusals.plainly(e), true);
             return null;
         }
+    }
+
+    /**
+     * Sets a run's unusable answers aside, then does whatever getting them judged again takes.
+     *
+     * <p>What that is turns on who judges. An agent outside the app is handed instructions, which
+     * come back for the caller to put on the clipboard. Where the app judges the sheets itself
+     * there is nobody to hand anything to. The freed sheets are dispatched in the same press, and
+     * nothing comes back. Freeing them and stopping there would destroy answers that were paid for
+     * and spend nothing, which is a state no reader asked to be left in.
+     *
+     * <p>The run moves either way, so a caller redraws after this.
+     *
+     * <p>Answers nothing where the press was refused. The reason lands on the screen's own message
+     * line, the way a refused press does, and nothing reaches the clipboard.
+     *
+     * @param prepDir {@link Path} the run
+     * @param scope {@link String} the timeline it covers, for the run this may start
+     * @return {@link String} the instructions to hand on, or null where there are none to hand on
+     *     or the press was refused
+     */
+    public @Nullable String judgeAgain(final Path prepDir, final String scope) {
+        this.message = null;
+        if (!this.pipeline.configuredProviderSpends()) {
+            return this.instructionsFor(prepDir, true);
+        }
+        try {
+            this.pipeline.redoRejectedAnswers(prepDir);
+        } catch (final RuntimeException e) {
+            log.info("Could not set the rejected answers aside for {}", prepDir, e);
+            this.message = new Message(RunRefusals.plainly(e), true);
+            return null;
+        }
+        this.carryOn(prepDir, scope);
+        return null;
     }
 
     /**
@@ -489,14 +578,109 @@ public class RunsPresenter {
     /**
      * One run's card.
      *
+     * <p>Whether a way back is offered at all is read off the findings, never off the tally. A
+     * sheet the tally counts as invalid can be so for a reason no rewrite fixes. A run's own
+     * problems can be about the run rather than about any one sheet.
+     *
+     * <p>Which button leads is decided here rather than by either half, because the answer is about
+     * the pair. Finishing leads only where nothing is blamed on a sheet, since apply refuses on an
+     * unusable answer however many have arrived.
+     *
+     * <p>The way back leads only where the app does the judging, and only where it could clear the
+     * run outright. A press that spends is worth leading with where it finishes the job. Where an
+     * agent outside the app judges, nothing on the card is dressed as the way on, whatever state
+     * the run is in: what it waits on is not the reader, and a copy is a quiet act anyway.
+     *
      * @param run {@link CullRunSummary} the run as it sits on disk
      * @return {@link RunCard} what the screen draws for it
      */
     private RunCard card(final CullRunSummary run) {
         final State state = run.health().state();
+        final List<Finding> findings = run.health().findings();
+        final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
+        final boolean blamesASheet = !LaunchPrompt.sheetsToRedo(findings).isEmpty();
+        // On the agent route this slot is used only where there is no waiting block to hold the
+        // follow-up. A card then carries one control rather than two saying near-enough the same.
+        final boolean anythingToRedo = !this.working() && blamesASheet
+                && (itJudgesThemItself || state == State.BLOCKED);
+        final boolean redoLeads = anythingToRedo && itJudgesThemItself
+                && findings.stream().allMatch(finding -> LaunchPrompt.sheetOf(finding) != null);
+        final boolean waitingOnAnAgent = state == State.WAITING && !itJudgesThemItself;
+        final List<Action> actions = this.actions(run, state, blamesASheet || waitingOnAnAgent);
+        // Counted off the row, so the two cannot disagree about whether this card offers a way to
+        // finish the run. Null where an agent judges. The offer sits with the card's text there,
+        // which is where the waiting block puts it, so one press does not move the control.
+        final Integer redoAt = itJudgesThemItself
+                ? (int) actions.stream().filter(action -> action.kind() == Kind.CONTINUE).count()
+                : null;
         return new RunCard("run-card-" + run.scope(), run.scope(), this.headline(state),
                 this.detail(run, state), sheets(run.shards()), age(run.since()),
-                this.waiting(run, state), this.actions(run, state));
+                this.waiting(run, state, blamesASheet),
+                anythingToRedo ? this.redo(run, findings, redoLeads, redoAt) : null, actions);
+    }
+
+    /**
+     * The card's own way back, on a run the diagnosis blames a sheet for.
+     *
+     * <p>Where the app judges the sheets this spans WAITING and BLOCKED, sitting beside the waiting
+     * block on the first. Where an agent judges them it is BLOCKED only, a waiting run carrying its
+     * follow-up in the block instead.
+     *
+     * <p>Where the app judges the sheets, the press frees them and judges them again in one
+     * gesture, which spends, so it is asked about first. Where an agent does, it frees them and
+     * hands back the follow-up to pass on, which spends nothing and needs no question.
+     *
+     * @param run {@link CullRunSummary} the run
+     * @param findings a {@link List} of {@link Finding} what the diagnosis blamed
+     * @param leads boolean whether this is the press the card is drawn to be reached for
+     * @param drawnAt {@link Integer} where it sits in the card's button row, or null to sit with
+     *     the card's own text
+     * @return {@link RunsView.Redo} the control
+     */
+    private RunsView.Redo redo(final CullRunSummary run, final List<Finding> findings,
+                               final boolean leads, final @Nullable Integer drawnAt) {
+        final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
+        return new RunsView.Redo("run-redo-" + run.scope(),
+                itJudgesThemItself ? JUDGE_AGAIN : COPY_FOLLOW_UP,
+                itJudgesThemItself ? JUDGE_AGAIN_NOTE : FOLLOW_UP_NOTE,
+                leads, drawnAt, run.prepDir(), run.scope(),
+                itJudgesThemItself ? this.judgeAgainConfirm(run, findings) : null);
+    }
+
+    /**
+     * What a reader is asked before sheets are judged again at their own expense.
+     *
+     * <p>Asked only where the app does the judging. On the other route the press spends nothing and
+     * the reader's own agent redoes the work, so there is nothing to weigh.
+     *
+     * <p>Counts the sheets rather than pricing them. What they cost depends on the provider's rates
+     * and the model, and neither is a number Sluice holds.
+     *
+     * <p>Counted the way the press chooses what to dispatch: the sheets the findings blame, plus
+     * the sheets that never arrived. The tally's own valid count would be the wrong number here,
+     * being computed per shard for display, so a fault spanning two shards leaves both of them
+     * counted valid while the press dispatches them anyway.
+     *
+     * <p>Going ahead is the loud choice, unlike the discard below. Judging a few sheets again is
+     * the cheaper of the two roads out. Backing away leaves a run nothing can finish, and the only
+     * way on from there discards every answer already paid for.
+     *
+     * <p>That holds while throwing the whole run away is the only other road. Somewhere a reader
+     * can discard single sheets, backing away costs them one sheet rather than all of them, and
+     * the two choices weigh about the same.
+     *
+     * @param run {@link CullRunSummary} the run
+     * @param findings a {@link List} of {@link Finding} what the diagnosis blamed
+     * @return {@link Confirmation} what to ask
+     */
+    private Confirmation judgeAgainConfirm(final CullRunSummary run, final List<Finding> findings) {
+        final ShardTally sheets = run.shards();
+        final int missing = sheets == null ? 0 : sheets.total() - sheets.present();
+        final int dispatched = LaunchPrompt.sheetsToRedo(findings).size() + missing;
+        return new Confirmation("Judge the faulty sheets again?",
+                RunWords.counted(dispatched, "sheet", "sheets") + " will be judged. That spends "
+                        + "from your provider account balance.",
+                "Judge again", "Leave it", true);
     }
 
     /**
@@ -522,26 +706,63 @@ public class RunsPresenter {
      * <p>Reads the provider now rather than what the run was started under. Nothing on disk records
      * that, and the question this answers is what going on would do today.
      *
+     * <p>A follow-up is withheld while a job runs, the way every button on the card is. It files
+     * shards into the drawer, so offering it beside a resume already applying them would let one
+     * press take work out from under the other.
+     *
      * @param run {@link CullRunSummary} the run
      * @param state {@link State} its state
+     * @param blamesASheet boolean whether any finding is one a sheet could answer for
      * @return {@link RunsView.Waiting} the block, or null on a run past waiting
      */
-    private RunsView.@Nullable Waiting waiting(final CullRunSummary run, final State state) {
+    private RunsView.@Nullable Waiting waiting(final CullRunSummary run, final State state,
+                                               final boolean blamesASheet) {
         if (state != State.WAITING) {
             return null;
         }
         final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
         final boolean watched = this.pipeline.isWatchActive(run.prepDir());
+        final boolean corrects = !itJudgesThemItself && !this.working()
+                && anAgentLeftItUnfinished(run, state);
         final RunsView.Switch autoApply = itJudgesThemItself && !watched
                 ? null
                 : new RunsView.Switch("run-auto-apply-" + run.scope(), AUTO_APPLY, watched);
-        return new RunsView.Waiting(run.prepDir(), COPY_FOLDER,
-                itJudgesThemItself ? null : COPY_PROMPT, autoApply,
+        final String asks = run.prepDir().equals(this.justCopied)
+                ? COPIED
+                : corrects ? COPY_FOLLOW_UP : COPY_PROMPT;
+        return new RunsView.Waiting(run.prepDir(),
+                itJudgesThemItself ? null : asks, corrects, autoApply,
                 itJudgesThemItself ? null
                         : new RunsView.Switch("run-waive-missing-" + run.scope(), WAIVE_MISSING,
                                 this.waiveMissing.contains(run.prepDir())),
-                itJudgesThemItself ? WAITING_ON_A_PROVIDER : WAITING_ON_AN_AGENT);
+                itJudgesThemItself
+                        ? blamesASheet ? WAITING_ON_A_PROVIDER_BLAMED : WAITING_ON_A_PROVIDER
+                        : corrects ? FOLLOW_UP_NOTE : WAITING_ON_AN_AGENT);
     }
+
+    /**
+     * Whether the press should ask an agent to pick a run back up, rather than start it.
+     *
+     * <p>From the moment one sheet has an answer, or from the moment nothing more is coming. Both
+     * are runs an agent has begun and left unfinished, whether it stopped or wrote answers nothing
+     * could use, and the same follow-up serves both.
+     *
+     * <p>Nothing answered and sheets still owed is the one case this refuses. An agent that has
+     * written nothing is not making mistakes, it is not working. What its owner needs then is to
+     * stop it and start it again, rather than a follow-up naming the whole run.
+     *
+     * <p>Counts what arrived rather than what passed. An answer that came back unusable is still
+     * an agent that started, and it is the one thing a follow-up exists to discard.
+     *
+     * @param run {@link CullRunSummary} the run
+     * @param state {@link State} its state
+     * @return boolean whether the press should ask for a follow-up
+     */
+    private static boolean anAgentLeftItUnfinished(final CullRunSummary run, final State state) {
+        final ShardTally sheets = run.shards();
+        return state != State.WAITING || (sheets != null && sheets.present() >= 1);
+    }
+
 
     /**
      * What can be done about a run, in the order the buttons are drawn.
@@ -555,18 +776,25 @@ public class RunsPresenter {
      *
      * <p>Every button goes dead while a job is running, since the app takes one at a time.
      *
+     * <p>Finishing leads only where no answer has come back unusable. Apply refuses on one however
+     * many sheets have arrived, so finishing is then a press that cannot get through, whether or
+     * not the way back could clear the run either. A card where neither press can finish it draws
+     * no filled button at all rather than dressing one of them as the way on.
+     *
      * @param run {@link CullRunSummary} the run
      * @param state {@link State} its state
+     * @param blamesASheet boolean whether any finding is one a sheet could answer for
      * @return a {@link List} of {@link Action} the buttons
      */
-    private List<Action> actions(final CullRunSummary run, final State state) {
+    private List<Action> actions(final CullRunSummary run, final State state,
+                                 final boolean blamesASheet) {
         if (state == State.COMPLETE || this.working()) {
             return List.of();
         }
         final List<Action> actions = new ArrayList<>();
         if (state == State.READY || state == State.WAITING) {
-            actions.add(new Action("run-continue-" + run.scope(), FINISH, Kind.CONTINUE, true,
-                    run.prepDir(), run.scope(), null));
+            actions.add(new Action("run-continue-" + run.scope(), FINISH, Kind.CONTINUE,
+                    !blamesASheet, run.prepDir(), run.scope(), null));
         }
         actions.add(new Action("run-discard-" + run.scope(), "Discard", Kind.DISCARD, false,
                 run.prepDir(), run.scope(), this.discardConfirm(run)));
@@ -604,28 +832,7 @@ public class RunsPresenter {
                 paidFor + "Discarding this run's records will archive them. "
                         + "They will stay on disk in " + this.pipeline.archivesFolder()
                         + " for 30 days.",
-                "Discard", "Keep");
-    }
-
-    /**
-     * Where one state sits in a list ordered by what wants somebody first.
-     *
-     * <p>Ready leads because it is one press from finished and costs nothing. Blocked next, since
-     * it is the one waiting on a decision only a person can make. Then damaged, which usually
-     * clears itself. Then waiting, since what it waits on is not the reader. A finished run sorts
-     * after all of them.
-     *
-     * @param state {@link State} the run's state
-     * @return int lower sorts higher up the screen
-     */
-    private static int urgency(final State state) {
-        return switch (state) {
-            case READY -> 0;
-            case BLOCKED -> 1;
-            case DAMAGED -> 2;
-            case WAITING -> 3;
-            case COMPLETE -> 4;
-        };
+                "Discard", "Keep", false);
     }
 
     /**
@@ -658,10 +865,9 @@ public class RunsPresenter {
      * @return {@link String} the sentence, or null where the headline says it all
      */
     private @Nullable String detail(final CullRunSummary run, final State state) {
-        if (state == State.WAITING && this.pipeline.configuredProviderSpends()) {
-            return "This sift stopped before every sheet was judged.";
-        }
-        return waitingOnSomebodyElse(run, state);
+        return state == State.WAITING && this.pipeline.configuredProviderSpends()
+                ? "This sift stopped before every sheet was judged."
+                : waitingOnSomebodyElse(run, state);
     }
 
     /**
@@ -675,8 +881,7 @@ public class RunsPresenter {
         return switch (state) {
             case READY -> "Every sheet was judged. Once you finish the sift the photos will be "
                     + "moved to their category destinations.";
-            case BLOCKED -> FindingFamily.wentWrong(run.health().findings())
-                    + ", so none of these photos were moved.";
+            case BLOCKED -> FindingFamily.nothingMoved(run.health().findings());
             // "Often", because the read failed and nothing here knows why. Naming the usual cause
             // is as far as this can honestly go.
             case DAMAGED -> "Often another program has the folder open.";
@@ -688,9 +893,9 @@ public class RunsPresenter {
     /**
      * How far through its sheets a run got.
      *
-     * <p>Names the answers that came back but cannot be used, where there are any. Otherwise a
-     * reader whose count has stopped climbing cannot tell an agent that has not answered from one
-     * whose answers are being turned away.
+     * <p>Accounts for every sheet, so the three numbers add up to the total a reader can see. A
+     * line naming only what was judged leaves them subtracting to find out whether the rest are
+     * late or turned away, and those are different problems with different next steps.
      *
      * @param sheets {@link ShardTally} what the prep dir holds, or null where nothing counted them
      * @return {@link String} the count, or null where there is none
@@ -700,12 +905,17 @@ public class RunsPresenter {
             return null;
         }
         final int unusable = sheets.present() - sheets.valid();
-        final String judged = RunWords.grouped(sheets.valid()) + " of "
-                + RunWords.grouped(sheets.total()) + " sheets judged";
-        return unusable == 0
-                ? judged
-                : judged + ", and " + RunWords.counted(unusable, "answer", "answers")
-                        + " could not be read";
+        final int missing = sheets.total() - sheets.present();
+        final String judged = RunWords.grouped(sheets.valid()) + " out of "
+                + RunWords.grouped(sheets.total()) + " sheets are judged and healthy.";
+        final List<String> rest = new ArrayList<>();
+        if (unusable > 0) {
+            rest.add(RunWords.grouped(unusable) + " came back wrong");
+        }
+        if (missing > 0) {
+            rest.add(RunWords.grouped(missing) + (missing == 1 ? " is" : " are") + " still missing");
+        }
+        return rest.isEmpty() ? judged : judged + " " + String.join(" and ", rest) + ".";
     }
 
     /**
@@ -766,5 +976,17 @@ public class RunsPresenter {
      */
     private static String completedHeading(final int completed) {
         return "Finished runs (" + RunWords.grouped(completed) + ")";
+    }
+
+    /**
+     * Lets what a copy control handed over stand through the read its own press sets off, and
+     * clears it on the read after that.
+     */
+    private void forgetTheCopyAfterItsOwnRead() {
+        if (this.copiedAwaitsItsRead) {
+            this.copiedAwaitsItsRead = false;
+            return;
+        }
+        this.justCopied = null;
     }
 }

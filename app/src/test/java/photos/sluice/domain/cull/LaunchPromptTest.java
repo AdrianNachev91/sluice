@@ -61,7 +61,8 @@ class LaunchPromptTest {
                 List.of(new ShardValidator.ShardFile("montage-001", new DecisionShard("montage-001",
                         List.of(new Decision.NearDupChosen(photo, groupNameFrom(prompt), "sharpest"),
                                 new Decision.NearDupReject(photo.resolveSibling("IMG_2.jpg"),
-                                        groupNameFrom(prompt), "eyes closed"))))),
+                                        groupNameFrom(prompt), "eyes closed"))),
+                        List.of(photo, photo.resolveSibling("IMG_2.jpg")))),
                 List.of(photo, photo.resolveSibling("IMG_2.jpg")), List.of("junk"), List.of());
 
         assertThat(report.findings()).isEmpty();
@@ -76,10 +77,128 @@ class LaunchPromptTest {
     }
 
     @Test
-    void aPhotoWorthKeepingIsSaidToNeedNoEntry() {
+    void aPhotoWorthKeepingIsSaidToNeedAnEntryOfItsOwn() {
         final String prompt = LaunchPrompt.forRun(prep(junk()));
 
-        assertThat(prompt).contains("A photo worth keeping is not listed at all");
+        assertThat(prompt).contains("Every photo on the sheet gets exactly one entry, keepers included")
+                .contains("\"action\": \"keep\"");
+    }
+
+    @Test
+    void theRunsOwnSizeIsStatedRatherThanLeftToBeCounted() {
+        final String prompt = LaunchPrompt.forRun(prep(junk()));
+
+        assertThat(prompt).contains("There are 2 sheets there, holding 50 photos.");
+    }
+
+    @Test
+    void aRunOfOneSheetAndOnePhotoSaysSoInTheSingular() {
+        final PrepDir smallest = new PrepDir("2019", List.of(junk()), Path.of("Sorted", "Photos"), 1,
+                List.of(), 1, Path.of("logs", "sift-prep", "2019"), List.of("montage-001"));
+
+        assertThat(LaunchPrompt.forRun(smallest)).contains("There is 1 sheet there, holding 1 photo.");
+    }
+
+    @Test
+    void photosNoSheetCouldShowAreAccountedForSoTheCountsAgree() {
+        final PrepDir withSkipped = new PrepDir("2019", List.of(junk()), Path.of("Sorted", "Photos"), 50,
+                List.of(Path.of("Sorted", "Photos", "2019", "06", "broken.jpg")), 2,
+                Path.of("logs", "sift-prep", "2019"), List.of("montage-001", "montage-002"));
+
+        assertThat(LaunchPrompt.forRun(withSkipped))
+                .contains("One more photo could not be turned into a tile and is on no sheet");
+    }
+
+    @Test
+    void severalPhotosNoSheetCouldShowAreCountedRatherThanNamed() {
+        final PrepDir withSkipped = new PrepDir("2019", List.of(junk()), Path.of("Sorted", "Photos"), 50,
+                List.of(Path.of("a.jpg"), Path.of("b.jpg"), Path.of("c.jpg")), 2,
+                Path.of("logs", "sift-prep", "2019"), List.of("montage-001", "montage-002"));
+
+        assertThat(LaunchPrompt.forRun(withSkipped))
+                .contains("Another 3 photos could not be turned into tiles and are on no sheet");
+    }
+
+    @Test
+    void aRunNothingWasSkippedInSaysNothingAboutSkippedPhotos() {
+        assertThat(LaunchPrompt.forRun(prep(junk()))).doesNotContain("on no sheet");
+    }
+
+    @Test
+    void theGridIsNeverStated() {
+        assertThat(LaunchPrompt.forRun(prep(junk()))).doesNotContain("rows of");
+    }
+
+    @Test
+    void theRedoInstructionsNameWhatWasWrongAndRepeatTheWholeContract() {
+        final String prompt = LaunchPrompt.forRedo(prep(junk()),
+                List.of(new Finding.PhotosNotJudged("montage-002", List.of("IMG_9.jpg"))));
+
+        assertThat(prompt).contains("montage-002: no verdict for 1 of its photos (IMG_9.jpg)")
+                .contains("Every photo on the sheet gets exactly one entry, keepers included")
+                .contains("junk");
+    }
+
+    @Test
+    void theRedoInstructionsLeaveOutAProblemNoSheetCouldAnswerFor() {
+        final String prompt = LaunchPrompt.forRedo(prep(junk()),
+                List.of(new Finding.CorruptIndex(Path.of("logs", "sift-prep", "2019", "index.json"))));
+
+        assertThat(prompt).doesNotContain("index.json");
+    }
+
+    @Test
+    void onlySheetScopedProblemsNameASheetToWriteAgain() {
+        assertThat(LaunchPrompt.sheetsToRedo(List.of(
+                new Finding.PhotosNotJudged("montage-002", List.of("IMG_9.jpg")),
+                new Finding.MissingReason("montage-002", 3),
+                new Finding.CorruptIndex(Path.of("index.json")),
+                new Finding.MissingSource(Path.of("a.jpg"), Path.of("moves.log")))))
+                .containsExactly("montage-002");
+    }
+
+    @Test
+    void everyProblemIsEitherAboutOneSheetOrAboutTheWholeRun() {
+        assertThat(sheetScoped()).allSatisfy(finding ->
+                assertThat(LaunchPrompt.sheetOf(finding)).isEqualTo("montage-003"));
+        assertThat(runScoped()).allSatisfy(finding ->
+                assertThat(LaunchPrompt.sheetOf(finding)).isNull());
+        assertThat(sheetScoped().size() + runScoped().size())
+                .isEqualTo(Finding.class.getPermittedSubclasses().length);
+    }
+
+    private static List<Finding> sheetScoped() {
+        final Path file = Path.of("Sorted", "Photos", "2019", "06", "IMG_1.jpg");
+        return List.of(
+                new Finding.PhotosNotJudged("montage-003", List.of("IMG_1.jpg")),
+                new Finding.PhotoFromAnotherSheet("montage-003", 7, file),
+                new Finding.MissingMontageField("montage-003"),
+                new Finding.MontageFieldMismatch("montage-003", "montage-004"),
+                new Finding.InvalidCategory("montage-003", 1, "pets", "allowed: junk"),
+                new Finding.MissingReason("montage-003", 2),
+                new Finding.MissingGroup("montage-003", 3),
+                new Finding.MissingChosenReason("montage-003", 4),
+                new Finding.WrongChosenCount("montage-003", "beach", 2),
+                new Finding.TooFewRejects("montage-003", "beach", 0),
+                new Finding.InvalidGroupSlug("montage-003", "Beach Day", 24),
+                new Finding.MissingFile("montage-003", 5),
+                new Finding.FileOutOfScope("montage-003", 6, file),
+                new Finding.CorruptShard("montage-003", "decisions-003.json"));
+    }
+
+    private static List<Finding> runScoped() {
+        final Path file = Path.of("Sorted", "Photos", "2019", "06", "IMG_1.jpg");
+        return List.of(
+                new Finding.GroupSpansMultipleMontages("beach", List.of("montage-001", "montage-003")),
+                new Finding.DuplicateFileReference(file.toString(), 2),
+                new Finding.DecisionUnreviewableOverlap(new Decision.Classification(file, "junk", "blurry")),
+                new Finding.SourceOutsideSorted(file, Path.of("Sorted")),
+                new Finding.StrayShard("decisions-009.json"),
+                new Finding.MissingShard("montage-003", "decisions-003.json"),
+                new Finding.CorruptIndex(Path.of("index.json")),
+                new Finding.UnreadablePrepDir(Path.of("logs", "sift-prep", "2019")),
+                new Finding.CorruptSidecar("montage-003"),
+                new Finding.MissingSource(file, Path.of("moves.log")));
     }
 
     private static String groupNameFrom(final String prompt) {

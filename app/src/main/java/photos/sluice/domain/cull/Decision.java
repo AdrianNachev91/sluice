@@ -3,8 +3,9 @@ package photos.sluice.domain.cull;
 import java.nio.file.Path;
 
 /**
- * One non-keep decision the vision step made about a single photo in a montage. Keeps are never
- * represented - an unlisted photo simply stays where it is. This is a closed set of three shapes:
+ * One non-keep decision the vision step made about a single photo in a montage. A photo it decided
+ * to keep is a {@link Verdict.Keep}, which is not one of these. This is a closed set of three
+ * shapes:
  *
  * <ul>
  *   <li>{@link Classification} routes one photo to a review/library category (junk, scenery, food,
@@ -18,16 +19,10 @@ import java.nio.file.Path;
  * </ul>
  *
  * <p>Near-dups keep their own two shapes because they carry a group identity and a chosen/reject
- * split that a flat category cannot express. {@code file} is the photo's absolute source path.
+ * split that a flat category cannot express. {@code file} is the photo's absolute source path,
+ * declared on {@link Verdict}.
  */
-public sealed interface Decision {
-
-    /**
-     * The photo's absolute source path.
-     *
-     * @return {@link Path} the decision's source file path
-     */
-    Path file();
+public sealed interface Decision extends Verdict {
 
     /**
      * Routes one photo to a review or library category, such as junk, scenery, food, funny, or a

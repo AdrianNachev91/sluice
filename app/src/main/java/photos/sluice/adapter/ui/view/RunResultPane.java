@@ -160,8 +160,10 @@ final class RunResultPane {
      */
     private static boolean agreed(final RunSetupPresenter.Confirmation asked) {
         return Dialogs.ask(asked.heading(), asked.question(),
-                new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD),
-                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET))
+                new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD,
+                        Dialogs.Emphasis.of(asked.goAheadLeads())),
+                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL,
+                        Dialogs.Emphasis.of(!asked.goAheadLeads())))
                 .isPresent();
     }
 

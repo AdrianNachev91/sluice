@@ -615,6 +615,17 @@ final class PipelineTestSupport {
                 .formatted(jsonEscaped(file), category, reason);
     }
 
+    static String keepJson(final Path file) {
+        return "{ \"file\": \"%s\", \"action\": \"keep\" }".formatted(jsonEscaped(file));
+    }
+
+    // Reads the sidecar rather than taking a count, so a fixture that grows a photo stays covered.
+    static void writeAllKeepsShard(final Path prepDir, final String montage) throws IOException {
+        writeShard(prepDir, montage, new JsonCullPrepStore().readSidecar(prepDir, montage).stream()
+                .map(photo -> keepJson(photo.src()))
+                .toArray(String[]::new));
+    }
+
     private static String jsonEscaped(final Path path) {
         return path.toString().replace("\\", "\\\\");
     }
@@ -1298,9 +1309,6 @@ final class PipelineTestSupport {
     // Unconditional, not gated on hasShard() the way ManualModeCuller is. buildFreshAndDispatch()
     // always rebuilds the prep dir fresh right before dispatch runs, so a montage here can never
     // already carry a shard.
-    //
-    // An empty decisions array is still a valid shard. ShardValidator has no "every photo needs a
-    // decision" rule, so every photo in scope is simply left in place, implicitly kept.
     static final class AutoApproveCuller implements VisionCuller {
         @Nullable CullOptions receivedOptions;
 
@@ -1329,7 +1337,7 @@ final class PipelineTestSupport {
             this.receivedOptions = opts;
             for (final String montage : prep.entries()) {
                 try {
-                    writeShard(prep.prepDir(), montage);
+                    writeAllKeepsShard(prep.prepDir(), montage);
                 } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -1364,7 +1372,7 @@ final class PipelineTestSupport {
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             for (final String montage : prep.entries()) {
                 try {
-                    writeShard(prep.prepDir(), montage);
+                    writeAllKeepsShard(prep.prepDir(), montage);
                 } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -1429,7 +1437,7 @@ final class PipelineTestSupport {
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             try {
-                writeShard(prep.prepDir(), prep.entries().getFirst());
+                writeAllKeepsShard(prep.prepDir(), prep.entries().getFirst());
             } catch (final IOException e) {
                 throw new UncheckedIOException(e);
             }
@@ -1474,7 +1482,7 @@ final class PipelineTestSupport {
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
             this.receivedCeiling = opts.ceiling();
             try {
-                writeShard(prep.prepDir(), prep.entries().getFirst());
+                writeAllKeepsShard(prep.prepDir(), prep.entries().getFirst());
             } catch (final IOException e) {
                 throw new UncheckedIOException(e);
             }
@@ -1553,10 +1561,16 @@ final class PipelineTestSupport {
 
         @Override
         public CullReport cull(final PrepDir prep, final CullOptions opts) {
+            final CullPrepPort prepPort = new JsonCullPrepStore();
             for (final String montage : prep.entries()) {
+                // Keeps for every photo the sheet showed, so coverage holds and the out-of-scope
+                // file is the only thing left to report.
+                final List<String> verdicts = new ArrayList<>(prepPort.readSidecar(prep.prepDir(), montage).stream()
+                        .map(photo -> keepJson(photo.src()))
+                        .toList());
+                verdicts.add(classificationJson(prep.prepDir().resolve("never-in-scope.jpg"), "junk", "blurry"));
                 try {
-                    writeShard(prep.prepDir(), montage,
-                            classificationJson(prep.prepDir().resolve("never-in-scope.jpg"), "junk", "blurry"));
+                    writeShard(prep.prepDir(), montage, verdicts.toArray(new String[0]));
                 } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -1638,7 +1652,7 @@ final class PipelineTestSupport {
                 final String montage = prep.entries().get(current);
                 current++;
                 try {
-                    writeShard(prep.prepDir(), montage);
+                    writeAllKeepsShard(prep.prepDir(), montage);
                 } catch (final IOException e) {
                     throw new UncheckedIOException(e);
                 }

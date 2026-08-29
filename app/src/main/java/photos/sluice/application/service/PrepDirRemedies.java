@@ -7,7 +7,6 @@ import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.Finding;
@@ -15,6 +14,7 @@ import photos.sluice.domain.cull.MontageNaming;
 import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
+import photos.sluice.domain.cull.Verdict;
 import photos.sluice.domain.job.ProgressCallback;
 
 import java.nio.file.Path;
@@ -163,8 +163,8 @@ public class PrepDirRemedies {
         final Set<Path> candidateSidecarFiles = this.cullPrepPort.readSidecar(prepDirPath, candidate).stream()
                 .map(SidecarPhotoEntry::src)
                 .collect(Collectors.toSet());
-        final boolean unambiguous = content.decisions().stream()
-                .map(Decision::file)
+        final boolean unambiguous = content.verdicts().stream()
+                .map(Verdict::file)
                 .allMatch(candidateSidecarFiles::contains);
         if (!unambiguous) {
             return Optional.empty();
@@ -184,6 +184,37 @@ public class PrepDirRemedies {
      */
     public Path setAsideStrayShard(final Path prepDirPath, final Finding.StrayShard strayShard) {
         return this.disasterDrawer.file(prepDirPath, prepDirPath.resolve(strayShard.shardFile()), "stray-shard");
+    }
+
+    /**
+     * Files the named sheets' decision files into prepDir's disaster drawer, so those sheets read
+     * as unanswered again and whoever is judging them can write them afresh.
+     *
+     * <p>Per sheet, never per decision. Dropping one decision out of a shard that is otherwise fine
+     * changes what happens to one photo without the reader ever seeing the decision that was
+     * dropped. A sheet is the unit a reader thinks in, and the unit an agent rewrites.
+     *
+     * <p>Filed rather than deleted. The reader has given up on these answers, not asked for them
+     * to be destroyed.
+     *
+     * <p>A sheet whose shard has already gone is skipped rather than refused. That happens when a
+     * second press lands on a card drawn before the first one took. The run is then already in the
+     * state the second press was asking for.
+     *
+     * @param prepDirPath {@link Path} the prep directory holding the sheets
+     * @param montages a {@link List} of {@link String} the montage ids whose answers go
+     * @return a {@link List} of {@link String} the montage ids whose shard was actually filed away
+     */
+    public List<String> setAsideAnswers(final Path prepDirPath, final List<String> montages) {
+        final var filed = new ArrayList<String>();
+        for (final String montage : montages) {
+            final Path shard = prepDirPath.resolve(MontageNaming.shardFileFor(montage));
+            if (this.mediaStore.exists(shard)) {
+                this.disasterDrawer.file(prepDirPath, shard, "rejected-answers-" + montage);
+                filed.add(montage);
+            }
+        }
+        return List.copyOf(filed);
     }
 
     /**

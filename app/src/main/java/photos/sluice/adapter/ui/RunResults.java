@@ -55,7 +55,10 @@ final class RunResults {
     private static final String SHARDS_OUTSTANDING = "The sheets are ready, waiting for your "
             + "agent's decisions on them. Nothing moves until they arrive.";
 
-    private static final String BLOCKED = "Every sheet was judged. %s. Nothing was moved.";
+    // Opens on what came back rather than on every sheet being judged. A sheet whose answer covers
+    // only some of its photos has a decisions file and has not been judged, and the clause that
+    // follows says exactly that.
+    private static final String BLOCKED = "Every sheet came back. %s. Nothing was moved.";
 
     private static final String CANCELLED = "You can continue at any time.";
 

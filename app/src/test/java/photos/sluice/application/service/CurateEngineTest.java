@@ -64,7 +64,7 @@ class CurateEngineTest {
         assertThat(outcome.cullOutcome()).isInstanceOf(CullJobOutcome.Applied.class);
         final var applied = (CullJobOutcome.Applied) Objects.requireNonNull(outcome.cullOutcome());
         assertThat(applied.applyReport().reviewed()).isEqualTo(1);
-        // Untouched: AutoApproveCuller's shard carries no decision for it, so it's implicitly kept.
+        // Untouched: AutoApproveCuller's shard keeps it, and a keep moves nothing.
         assertThat(Files.exists(sorted)).isTrue();
         assertThat(progress.events).containsExactly(
                 "started:Finding dates...", "tick:Finding dates...:1/1", "finished:Finding dates...",

@@ -32,7 +32,6 @@ import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.adapter.ui.RunProgressView;
-import photos.sluice.adapter.ui.RunResultView;
 import photos.sluice.adapter.ui.RunSetupPresenter;
 import photos.sluice.adapter.ui.RunStage;
 
@@ -291,8 +290,10 @@ final class RunLauncherPane {
     private static void onStart(final RunLauncherPresenter presenter, final Runnable redraw) {
         final RunSetupPresenter.Confirmation asked = presenter.setup().confirmationNeeded();
         if (asked != null && Dialogs.ask(asked.heading(), asked.question(),
-                new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD),
-                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET)).isEmpty()) {
+                new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD,
+                        Dialogs.Emphasis.of(asked.goAheadLeads())),
+                new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL,
+                        Dialogs.Emphasis.of(!asked.goAheadLeads()))).isEmpty()) {
             return;
         }
         presenter.press(presenter.setup().view().startAction());

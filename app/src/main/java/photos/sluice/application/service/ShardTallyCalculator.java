@@ -10,7 +10,9 @@ import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Computes a waiting cull job's present/valid shard counts from its prep dir, and answers whether
@@ -70,14 +72,20 @@ final class ShardTallyCalculator {
      * @return {@link ShardTally} present/valid/total shard counts
      */
     ShardTally tally(final PrepDir prep) {
-        final List<Path> sidecarSrcs = prep.entries().stream()
-                .flatMap(montage -> this.readSidecar(prep, montage).stream())
-                .map(SidecarPhotoEntry::src)
-                .toList();
+        // Held per montage as well as flattened. A verdict's file is judged against the whole run's
+        // set; whether a shard covers its sheet is judged against that one sheet's.
+        final Map<String, List<Path>> srcsByMontage = new LinkedHashMap<>();
+        for (final String montage : prep.entries()) {
+            srcsByMontage.put(montage, this.readSidecar(prep, montage).stream()
+                    .map(SidecarPhotoEntry::src)
+                    .toList());
+        }
+        final List<Path> sidecarSrcs = srcsByMontage.values().stream().flatMap(List::stream).toList();
         final List<Path> unreviewable = this.resolvedUnreviewable(prep);
 
         final List<MontageShardStatus> statuses = prep.entries().stream()
-                .map(montage -> this.montageShardStatus(prep, montage, sidecarSrcs, unreviewable))
+                .map(montage -> this.montageShardStatus(prep, montage,
+                        srcsByMontage.getOrDefault(montage, List.of()), sidecarSrcs, unreviewable))
                 .toList();
         final int present = (int) statuses.stream().filter(MontageShardStatus::present).count();
         final int valid = (int) statuses.stream().filter(MontageShardStatus::valid).count();
@@ -179,18 +187,21 @@ final class ShardTallyCalculator {
      *
      * @param prep {@link PrepDir} the prep dir being tallied
      * @param montage {@link String} the montage id to check
+     * @param sheetSrcs a {@link List} of {@link Path} source paths this one montage's sidecar lists
      * @param sidecarSrcs a {@link List} of {@link Path} source paths of every in-scope sidecar entry
      * @param unreviewable a {@link List} of {@link Path} the ledger-resolved unreviewable files
      * @return {@link MontageShardStatus} the montage's presence and validity
      */
     private MontageShardStatus montageShardStatus(final PrepDir prep, final String montage,
+                                                  final List<Path> sheetSrcs,
                                                   final List<Path> sidecarSrcs,
                                                   final List<Path> unreviewable) {
         try {
             if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
                 return new MontageShardStatus(false, false);
             }
-            final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage));
+            final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage),
+                    sheetSrcs);
             final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, prep.categoryNames(),
                     unreviewable);
             return new MontageShardStatus(true, report.valid());

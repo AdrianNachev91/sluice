@@ -66,7 +66,17 @@ final class Dialogs {
         LOUD,
 
         /** Offered, not urged. */
-        QUIET
+        QUIET;
+
+        /**
+         * The weight a choice is drawn at.
+         *
+         * @param leads boolean whether this is the choice the dialog leads with
+         * @return {@link Emphasis} the weight
+         */
+        static Emphasis of(final boolean leads) {
+            return leads ? LOUD : QUIET;
+        }
     }
 
     /**

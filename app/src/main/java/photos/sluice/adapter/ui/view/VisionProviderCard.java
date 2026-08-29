@@ -78,8 +78,8 @@ final class VisionProviderCard {
                 "What actually looks at your photos and decides what is junk, a duplicate, or worth "
                         + "keeping. Sluice has no judgement of its own. It either calls a model you pay for, "
                         + "or waits for an agent you already run to do the looking. That agent writes its "
-                        + "answers into a folder, so it has to be one that can work with files rather than "
-                        + "only chat.",
+                        + "decisions into a folder, so it has to be one that can work with files rather "
+                        + "than only chat.",
                 providerRow(providerBox, view.providerOverride(), view.providerUnrecognised()),
                 providerFields, watchRow, secretCard);
 

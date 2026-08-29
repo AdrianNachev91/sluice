@@ -4,7 +4,7 @@ import java.util.Set;
 
 /**
  * The action word a verdict carries as it travels between a vision provider and this app. Three are
- * fixed by {@link Decision}'s own shapes. Any other word a verdict carries is a classification
+ * fixed by {@link Verdict}'s own shapes. Any other word a verdict carries is a classification
  * category name.
  *
  * <p>Here so the classes that have to agree on these words read one definition. A schema asks a
@@ -17,7 +17,6 @@ import java.util.Set;
  */
 public final class VerdictAction {
 
-    // The photo stays where it is. Never recorded, so a shard carries no keep.
     public static final String KEEP = "keep";
     public static final String NEAR_DUP_CHOSEN = "near-dup-chosen";
     public static final String NEAR_DUP_REJECT = "near-dup-reject";

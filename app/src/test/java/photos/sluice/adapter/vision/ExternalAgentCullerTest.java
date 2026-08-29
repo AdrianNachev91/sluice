@@ -43,7 +43,8 @@ class ExternalAgentCullerTest {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
                 List.of(new Classification(junk, "junk", "photo of a monitor"))));
-        // An all-keeps montage still answers with a shard - an empty decisions list, not no file.
+        // This culler counts shards and never opens one, so an empty shard is as much an answer to
+        // it as a full one. Whether the shard says anything usable is ShardValidator's question.
         this.codec.write(dir.resolve("decisions-002.json"), new DecisionShard("montage-002", List.of()));
 
         assertThat(this.culler.cull(prep(dir, "montage-001", "montage-002"), options()))

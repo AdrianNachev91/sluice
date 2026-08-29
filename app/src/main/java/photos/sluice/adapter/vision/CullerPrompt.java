@@ -3,6 +3,8 @@ package photos.sluice.adapter.vision;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.domain.cull.CullCategory;
+import photos.sluice.domain.cull.CullJudgement;
+import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.io.IOException;
@@ -13,8 +15,10 @@ import java.util.stream.Collectors;
 
 /**
  * Assembles the text of an automated culling request. The system prompt is the bundled fixed
- * template with the run's category cards rendered into its placeholder. The template owns the
- * prompt engineering. A card contributes only its plain-words name and description.
+ * template with two things rendered into it. One is the run's category cards, each contributing
+ * only its plain-words name and description. The other is {@link CullJudgement}, which the
+ * reader's own agent is handed word for word as well. The template owns the rest of the prompt
+ * engineering.
  *
  * <p>The cards are a parameter rather than a settings read. They come from the prep dir the run is
  * culling, the same recorded set the response is then validated against. Rendering from live config
@@ -28,6 +32,8 @@ import java.util.stream.Collectors;
 class CullerPrompt {
 
     static final String CATEGORIES_PLACEHOLDER = "{{categories}}";
+    static final String JUDGEMENT_PLACEHOLDER = "{{judgement}}";
+    static final String GROUP_SLUG_MAX_PLACEHOLDER = "{{groupSlugMax}}";
     private static final String TEMPLATE_RESOURCE = "/cull/culler-prompt.md";
 
     private final CullSettings settings;
@@ -132,20 +138,39 @@ class CullerPrompt {
      * Package-private static so the placeholder contract is testable without swapping out the
      * bundled resource.
      *
-     * @param template {@link String} the prompt template containing the categories placeholder
+     * @param template {@link String} the prompt template containing both placeholders
      * @param categories a {@link List} of {@link CullCategory}, the run's cull categories to render into the
      * template
-     * @return {@link String} the template with the categories placeholder replaced
+     * @return {@link String} the template with both placeholders replaced
      */
     static String rendered(final String template, final List<CullCategory> categories) {
-        if (!template.contains(CATEGORIES_PLACEHOLDER)) {
-            throw new IllegalStateException("Prompt template " + TEMPLATE_RESOURCE
-                    + " lacks the " + CATEGORIES_PLACEHOLDER + " placeholder");
-        }
+        requirePlaceholder(template, CATEGORIES_PLACEHOLDER);
+        requirePlaceholder(template, JUDGEMENT_PLACEHOLDER);
+        requirePlaceholder(template, GROUP_SLUG_MAX_PLACEHOLDER);
         final String cards = categories.stream()
                 .map(CullerPrompt::card)
                 .collect(Collectors.joining("\n\n"));
-        return template.replace(CATEGORIES_PLACEHOLDER, cards);
+        // Rendered rather than written into the template, so the limit a model is asked for and the
+        // limit the validator enforces cannot drift. A prompt asking for more than the validator
+        // allows buys its refusal once the model has already been paid.
+        return template.replace(CATEGORIES_PLACEHOLDER, cards)
+                .replace(JUDGEMENT_PLACEHOLDER, CullJudgement.TEXT)
+                .replace(GROUP_SLUG_MAX_PLACEHOLDER, String.valueOf(ShardValidator.groupSlugMaxLength()));
+    }
+
+    /**
+     * Refuses a template that has lost one of its placeholders. A rendered prompt missing its
+     * judgement rules or its category set still reads as a plausible request, and the model would
+     * answer it. The answer would be judged against rules it was never given.
+     *
+     * @param template {@link String} the prompt template
+     * @param placeholder {@link String} the placeholder that has to be in it
+     */
+    private static void requirePlaceholder(final String template, final String placeholder) {
+        if (!template.contains(placeholder)) {
+            throw new IllegalStateException("Prompt template " + TEMPLATE_RESOURCE
+                    + " lacks the " + placeholder + " placeholder");
+        }
     }
 
     /**

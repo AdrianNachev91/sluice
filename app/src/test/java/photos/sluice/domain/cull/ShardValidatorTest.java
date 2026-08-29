@@ -19,9 +19,11 @@ import photos.sluice.domain.cull.Finding.MontageFieldMismatch;
 import photos.sluice.domain.cull.Finding.TooFewRejects;
 import photos.sluice.domain.cull.Finding.WrongChosenCount;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
+import photos.sluice.domain.cull.Verdict.Keep;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,11 +50,127 @@ class ShardValidatorTest {
     }
 
     @Test
-    void anEmptyDecisionsShardIsValid() {
-        final var report = this.validate(this.shardFile("montage-001"));
+    void aShardOfNothingButKeepsIsValidAndMergesNoDecisions() {
+        final var report = this.validate(this.shardFile("montage-001", new Keep(A), new Keep(B)));
 
         assertThat(report.valid()).isTrue();
+        assertThat(report.findings()).isEmpty();
         assertThat(report.decisions()).isEmpty();
+    }
+
+    @Test
+    void anEmptyShardForASheetHoldingPhotosIsRefused() {
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A, B)));
+
+        assertThat(report.valid()).isFalse();
+        assertThat(report.findings())
+                .contains(new Finding.PhotosNotJudged("montage-001", List.of("a.jpg", "b.jpg")));
+    }
+
+    @Test
+    void aShardSayingNothingAboutOnePhotoOnItsSheetIsRefused() {
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A, B, C),
+                new Keep(A), new Classification(B, "junk", "screenshot")));
+
+        assertThat(report.findings())
+                .contains(new Finding.PhotosNotJudged("montage-001", List.of("c.jpg")));
+    }
+
+    @Test
+    void aVerdictAboutAPhotoAnotherSheetShowedIsRefused() {
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A),
+                new Keep(A), new Classification(B, "junk", "screenshot")));
+
+        assertThat(report.valid()).isFalse();
+        assertThat(report.findings()).contains(new Finding.PhotoFromAnotherSheet("montage-001", 2, B));
+    }
+
+    // FileOutOfScope already says the file reached no sheet. Saying it twice would read as two
+    // faults on one verdict.
+    @Test
+    void aVerdictAboutAPhotoNoSheetShowedIsReportedOnceRatherThanTwice() {
+        final Path stranger = Path.of("Sorted/Photos/2016/08/stranger.jpg");
+
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A),
+                new Keep(A), new Keep(stranger)));
+
+        assertThat(report.findings()).containsExactly(new FileOutOfScope("montage-001", 2, stranger));
+    }
+
+    @Test
+    void aShardForASheetWhoseOwnPhotosCouldNotBeReadAcceptsAnyInScopePhoto() {
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(),
+                new Classification(B, "junk", "screenshot")));
+
+        assertThat(report.valid()).isTrue();
+    }
+
+    @Test
+    void aShardForASheetWhoseOwnPhotosCouldNotBeReadCarriesNoCoverageRule() {
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(),
+                new Classification(A, "junk", "screenshot")));
+
+        assertThat(report.valid()).isTrue();
+    }
+
+    @Test
+    void aHealedVerdictStillCoversThePhotoItNames() {
+        final Path drifted = Path.of("Sorted/Photos/2016/09/a.jpg");
+
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A),
+                new Classification(drifted, "junk", "screenshot")));
+
+        assertThat(report.valid()).isTrue();
+        assertThat(report.heals()).hasSize(1);
+    }
+
+    @Test
+    void aKeepNamingAFileNoSheetShowedIsRefused() {
+        final Path stranger = Path.of("Sorted/Photos/2016/08/stranger.jpg");
+
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A),
+                new Keep(A), new Keep(stranger)));
+
+        assertThat(report.findings()).contains(new FileOutOfScope("montage-001", 2, stranger));
+    }
+
+    @Test
+    void aPhotoKeptAndClassifiedAtOnceIsRefusedRatherThanMoved() {
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A, B),
+                new Keep(A), new Keep(B), new Classification(A, "junk", "screenshot")));
+
+        assertThat(report.valid()).isFalse();
+        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
+    }
+
+    @Test
+    void aPhotoKeptTwiceOverIsRefused() {
+        final var report = this.validate(this.shardOverSheet("montage-001", List.of(A, B),
+                new Keep(A), new Keep(A), new Keep(B)));
+
+        assertThat(report.findings()).contains(new DuplicateFileReference(A.toString(), 2));
+    }
+
+    // A year's sift spans month folders, so one sheet can show two photos of the same name. Counted
+    // over the name, the second would vanish and the message would ask for one photo back.
+    @Test
+    void twoUnjudgedPhotosSharingANameAreBothCounted() {
+        final Path other = Path.of("Sorted/Photos/2016/09/a.jpg");
+
+        final var report = this.validator().validate(
+                List.of(this.shardOverSheet("montage-001", List.of(A, other))),
+                List.of(A, other), CATEGORIES, List.of());
+
+        assertThat(report.findings())
+                .contains(new Finding.PhotosNotJudged("montage-001", List.of("a.jpg", "a.jpg")));
+    }
+
+    @Test
+    void aKeepNeverReachesTheMergedDecisions() {
+        final var report = this.validate(this.shardFile("montage-001",
+                new Keep(A), new Classification(B, "junk", "screenshot")));
+
+        assertThat(report.decisions()).containsExactly(new Classification(B, "junk", "screenshot"));
     }
 
     @Test
@@ -204,7 +322,8 @@ class ShardValidatorTest {
     @Test
     void aMontageFieldNotMatchingTheFilenameIsReported() {
         final var report = this.validate(new ShardFile("montage-001",
-                new DecisionShard("montage-002", List.of(new Classification(A, "junk", "screenshot")))));
+                new DecisionShard("montage-002", List.of(new Classification(A, "junk", "screenshot"))),
+                List.of(A)));
 
         assertThat(report.findings()).contains(new MontageFieldMismatch("montage-001", "montage-002"));
     }
@@ -212,7 +331,7 @@ class ShardValidatorTest {
     @Test
     void aBlankMontageFieldIsReported() {
         final var report = this.validate(new ShardFile("montage-001",
-                new DecisionShard("", List.of(new Classification(A, "junk", "screenshot")))));
+                new DecisionShard("", List.of(new Classification(A, "junk", "screenshot"))), List.of(A)));
 
         assertThat(report.findings()).contains(new MissingMontageField("montage-001"));
     }
@@ -266,6 +385,17 @@ class ShardValidatorTest {
                 List.of(A));
 
         assertThat(report.findings()).containsExactly(new DecisionUnreviewableOverlap(decision));
+    }
+
+    // The resolvable overlap offers a choice between trusting the decision and treating the file as
+    // unreviewable. A keep asks for nothing to happen, which is not one of those two, so this pair
+    // has no resolution and falls to the general finding.
+    @Test
+    void aFileKeptAndAlsoListedAsUnreviewableIsNotTheResolvableOverlap() {
+        final var report = this.validator().validate(
+                List.of(this.shardFile("montage-001", new Keep(A))), SCOPE, CATEGORIES, List.of(A));
+
+        assertThat(report.findings()).containsExactly(new DuplicateFileReference(A.toString(), 2));
     }
 
     // Distinguishes the resolvable one-decision-plus-one-unreviewable overlap above from every other
@@ -363,8 +493,18 @@ class ShardValidatorTest {
         return new Classification(NO_FILE, "junk", "screenshot");
     }
 
-    private ShardFile shardFile(final String montage, final Decision... decisions) {
-        return new ShardFile(montage, new DecisionShard(montage, List.of(decisions)));
+    // The sheet is whatever in-scope photos the verdicts name, so coverage is satisfied by
+    // construction and every test built on this one is about some other rule.
+    private ShardFile shardFile(final String montage, final Verdict... verdicts) {
+        final List<Path> sheet = Stream.of(verdicts)
+                .map(Verdict::file)
+                .filter(SCOPE::contains)
+                .toList();
+        return new ShardFile(montage, new DecisionShard(montage, List.of(verdicts)), sheet);
+    }
+
+    private ShardFile shardOverSheet(final String montage, final List<Path> sheet, final Verdict... verdicts) {
+        return new ShardFile(montage, new DecisionShard(montage, List.of(verdicts)), sheet);
     }
 
     private ValidationReport validate(final ShardFile... shards) {

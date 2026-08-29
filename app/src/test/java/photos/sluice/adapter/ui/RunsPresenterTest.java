@@ -20,6 +20,8 @@ import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -60,12 +62,12 @@ class RunsPresenterTest {
     }
 
     @Test
-    void theCardsAreOrderedByWhatWantsSomebodyFirst() {
-        final RunsPresenter presenter = presenterOver(run("2015", State.WAITING),
-                run("2016", State.DAMAGED), run("2017", State.BLOCKED), run("2018", State.READY));
+    void theCardsAreOrderedByTimelineWhateverStateEachRunIsIn() {
+        final RunsPresenter presenter = presenterOver(run("2018", State.READY),
+                run("2016", State.DAMAGED), run("2017", State.BLOCKED), run("2015", State.WAITING));
 
         assertThat(presenter.view().unfinished()).extracting(RunCard::scope)
-                .containsExactly("2018", "2017", "2016", "2015");
+                .containsExactly("2015", "2016", "2017", "2018");
     }
 
     @Test
@@ -127,8 +129,8 @@ class RunsPresenterTest {
                 new ShardTally(2, 2, 2), Instant.now()));
 
         assertThat(presenter.view().unfinished().getFirst().detail())
-                .isEqualTo("This sift's records could not be read, so none of these photos were "
-                        + "moved.");
+                .isEqualTo("This sift's records could not be read, so none of the photos in it "
+                        + "were moved.");
     }
 
     @Test
@@ -139,7 +141,8 @@ class RunsPresenterTest {
                 new ShardTally(2, 2, 2), Instant.now()));
 
         assertThat(presenter.view().unfinished().getFirst().detail())
-                .isEqualTo("There were problems with the sift, so none of these photos were moved.");
+                .isEqualTo("There were problems with the sift, so none of the photos in it were "
+                        + "moved.");
     }
 
     @Test
@@ -337,6 +340,27 @@ class RunsPresenterTest {
         assertThat(presenter.view().message()).isNotNull();
         assertThat(presenter.view().unfinished()).isEmpty();
         assertThat(presenter.unfinishedRuns()).isZero();
+    }
+
+    // A refusal describes the run as it stood at the press. The next read can find a different one,
+    // and leaving the screen and coming back is what takes that read.
+    @Test
+    void aReadClearsWhatAPressHadToReport() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        when(pipeline.redoRejectedAnswers(any()))
+                .thenThrow(new Pipeline.NothingToRedoException(prepDir));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+        presenter.judgeAgain(prepDir, "2019");
+        assertThat(presenter.view().message()).isNotNull();
+
+        presenter.refresh();
+
+        assertThat(presenter.view().message()).isNull();
     }
 
     @Test
@@ -615,7 +639,7 @@ class RunsPresenterTest {
 
         // The control, and what makes the assertion above about the drawing rather than about a
         // facade nothing would have called either way.
-        presenter.instructionsFor(prepDir);
+        presenter.instructionsFor(prepDir, false);
         verify(pipeline).launchPromptFor(prepDir);
     }
 
@@ -629,7 +653,7 @@ class RunsPresenterTest {
         final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
-        assertThat(presenter.instructionsFor(Path.of("logs", "sift-prep", "2019"))).isNull();
+        assertThat(presenter.instructionsFor(Path.of("logs", "sift-prep", "2019"), false)).isNull();
         assertThat(requireNonNull(presenter.view().message()).text())
                 .doesNotContain("MalformedPrepJsonException");
     }
@@ -676,7 +700,7 @@ class RunsPresenterTest {
     }
 
     @Test
-    void aTallyWithAnswersItCannotReadSaysSoRatherThanJustStalling() {
+    void aTallySeparatesTheSheetsThatCameBackWrongFromTheOnesStillMissing() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
                 Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.WAITING, List.of()),
@@ -685,14 +709,526 @@ class RunsPresenterTest {
         presenter.refresh();
 
         assertThat(presenter.view().unfinished().getFirst().sheets())
-                .isEqualTo("2 of 6 sheets judged, and 2 answers could not be read");
+                .isEqualTo("2 out of 6 sheets are judged and healthy. 2 came back wrong "
+                        + "and 2 are still missing.");
     }
 
     @Test
-    void aTallyWhoseAnswersAllReadNamesOnlyWhatWasJudged() {
+    void aTallyWithOneOfEachAgreesWithItselfOnSingularAndPlural() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2016",
+                Path.of("logs", "sift-prep", "2016"), new PrepDirHealth(State.WAITING, List.of()),
+                new ShardTally(9, 8, 10), Instant.now()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().sheets())
+                .isEqualTo("8 out of 10 sheets are judged and healthy. 1 came back wrong "
+                        + "and 1 is still missing.");
+    }
+
+    @Test
+    void aTallyWhoseSheetsAreAllInNamesOnlyWhatWasJudged() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.READY, List.of()),
+                new ShardTally(4, 4, 4), Instant.now()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().sheets())
+                .isEqualTo("4 out of 4 sheets are judged and healthy.");
+    }
+
+    @Test
+    void aTallyStillOwedSheetsSaysSoWithoutNamingAnythingWrong() {
         final RunsPresenter presenter = presenterOver(run("2019", State.WAITING));
 
-        assertThat(presenter.view().unfinished().getFirst().sheets()).isEqualTo("2 of 4 sheets judged");
+        assertThat(presenter.view().unfinished().getFirst().sheets())
+                .isEqualTo("2 out of 4 sheets are judged and healthy. 2 are still missing.");
+    }
+
+    // A blocked run has no waiting block to carry the follow-up, so the card holds it instead.
+    @Test
+    void onAnAgentRouteABlockedRunCarriesTheFollowUpOnTheCard() {
+        final RunsPresenter presenter = presenterOver(runWithRejectedAnswers("2019", State.BLOCKED));
+
+        final RunsView.Redo redo = requireNonNull(presenter.view().unfinished().getFirst().redo());
+
+        assertThat(redo.label()).isEqualTo("Copy a follow-up for your agent");
+        assertThat(redo.note()).contains("every sheet still outstanding");
+        assertThat(redo.confirm()).isNull();
+        assertThat(redo.leading()).isFalse();
+    }
+
+    // Waiting draws a block, and the block carries the follow-up, so a second control on the card
+    // would offer the same press twice.
+    @Test
+    void onAnAgentRouteAWaitingRunCarriesTheFollowUpNowhereButItsBlock() {
+        final RunsPresenter presenter = presenterOver(runWithRejectedAnswers("2019", State.WAITING));
+
+        final RunCard card = presenter.view().unfinished().getFirst();
+
+        assertThat(card.redo()).isNull();
+        assertThat(requireNonNull(card.waiting()).copyPrompt())
+                .isEqualTo("Copy a follow-up for your agent");
+        assertThat(requireNonNull(card.waiting()).promptCorrects()).isTrue();
+    }
+
+    @Test
+    void aRunHeldUpOnlyByItsAnswersIsLedByTheWayBackAndNotByFinishing() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunCard card = presenter.view().unfinished().getFirst();
+
+        assertThat(requireNonNull(card.redo()).leading()).isTrue();
+        assertThat(card.actions()).extracting(Action::label, Action::leading)
+                .containsExactly(tuple("Finish this sift", false), tuple("Discard", false));
+    }
+
+    // Redoing the sheets cannot clear a photo that has gone from disk, so a press that spends is
+    // filled only where it finishes the job.
+    @Test
+    void onAProviderThatSpendsARunAlsoHeldUpBySomethingElseOffersTheWayBackQuietly() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+                run("2019", State.BLOCKED, List.of(
+                        new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")),
+                        new Finding.MissingSource(Path.of("a.jpg"), Path.of("moves.log")))))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(requireNonNull(presenter.view().unfinished().getFirst().redo()).leading()).isFalse();
+    }
+
+    // Whatever the run's state, a card whose judging happens outside the app dresses no press as
+    // the way on. The same run leads with it where the app does the judging and could clear it.
+    @Test
+    void onAnAgentRouteTheWayBackNeverLeads() {
+        final RunsPresenter presenter = presenterOver(run("2019", State.BLOCKED, List.of(
+                new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")),
+                new Finding.MissingSource(Path.of("a.jpg"), Path.of("moves.log")))));
+
+        assertThat(requireNonNull(presenter.view().unfinished().getFirst().redo()).leading()).isFalse();
+    }
+
+    // The waiting block holds this offer on the state either side of a blocked one. A card putting
+    // it in the button row would move it under the press that acts on it.
+    @Test
+    void onAnAgentRouteTheWayBackSitsWithTheCardsTextRatherThanInTheButtonRow() {
+        final RunsPresenter presenter = presenterOver(runWithRejectedAnswers("2019", State.BLOCKED));
+
+        assertThat(requireNonNull(presenter.view().unfinished().getFirst().redo()).drawnAt()).isNull();
+    }
+
+    @Test
+    void theWayBackIsDrawnBetweenFinishingAndThrowingAway() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+                runWithRejectedAnswers("2019", State.WAITING),
+                runWithRejectedAnswers("2018", State.BLOCKED))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final List<RunCard> cards = presenter.view().unfinished();
+
+        assertThat(requireNonNull(cards.get(1).redo()).drawnAt()).isEqualTo(1);
+        assertThat(requireNonNull(cards.getFirst().redo()).drawnAt()).isZero();
+    }
+
+    @Test
+    void onAProviderThatSpendsTheSamePressNamesTheMoneyAndAsksFirst() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunsView.Redo redo = requireNonNull(presenter.view().unfinished().getFirst().redo());
+
+        assertThat(redo.label()).isEqualTo("Judge the faulty sheets again");
+        assertThat(redo.note()).contains("Any sheets still missing are judged too")
+                .contains("spends from your provider account balance");
+        assertThat(requireNonNull(redo.confirm()).question())
+                .contains("spends from your provider account balance");
+    }
+
+    // The press dispatches every sheet without a usable answer, which on a waiting run is more
+    // than the ones that came back wrong. Four sheets, three arrived, one of those blamed: the
+    // blamed one and the sheet that never came, and not the two that are fine.
+    @Test
+    void theQuestionCountsTheSheetsStillMissingAlongsideTheOnesComingBackWrong() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"),
+                new PrepDirHealth(State.WAITING,
+                        List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")))),
+                new ShardTally(3, 2, 4), Instant.now()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunsView.Redo redo = requireNonNull(presenter.view().unfinished().getFirst().redo());
+
+        assertThat(requireNonNull(redo.confirm()).question()).startsWith("2 sheets will be judged");
+    }
+
+    // The tally counts one shard at a time for display, so a fault spanning two of them leaves
+    // both counted valid. The press dispatches them regardless, and the question says so.
+    @Test
+    void theQuestionCountsWhatThePressDispatchesRatherThanWhatTheTallyCallsInvalid() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"),
+                new PrepDirHealth(State.BLOCKED, List.of(
+                        new Finding.GroupSpansMultipleMontages("harbour",
+                                List.of("montage-001", "montage-002")),
+                        new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")),
+                        new Finding.PhotosNotJudged("montage-002", List.of("IMG_2.jpg")))),
+                new ShardTally(4, 4, 4), Instant.now()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunsView.Redo redo = requireNonNull(presenter.view().unfinished().getFirst().redo());
+
+        assertThat(requireNonNull(redo.confirm()).question()).startsWith("2 sheets will be judged");
+    }
+
+    // Nothing a sheet can answer for means nothing to dispatch, and dispatching is what this press
+    // pays for.
+    @Test
+    void onAProviderThatSpendsARunHeldUpBySomethingNoSheetCanAnswerForIsOfferedNoWayBack() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.BLOCKED,
+                List.of(new Finding.CorruptIndex(Path.of("index.json")))))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().redo()).isNull();
+    }
+
+    // Writing a sheet again cannot mend a damaged index, so the press would be one an agent could
+    // not answer. Both routes withhold it on the same ground.
+    @Test
+    void onAnAgentRouteARunNoSheetCanAnswerForIsOfferedNoFollowUp() {
+        final RunsPresenter presenter = presenterOver(run("2019", State.BLOCKED,
+                List.of(new Finding.CorruptIndex(Path.of("index.json")))));
+
+        assertThat(presenter.view().unfinished().getFirst().redo()).isNull();
+    }
+
+    @Test
+    void onAProviderThatSpendsARunStillShortOfSheetsIsOfferedTheWayBackBesideItsWaitingBlock() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunCard card = presenter.view().unfinished().getFirst();
+
+        assertThat(card.waiting()).isNotNull();
+        assertThat(card.redo()).isNotNull();
+    }
+
+    // An answer that came back and was refused is still an agent that started, and it is the one
+    // thing the follow-up exists to discard. Counted on what arrived, never on what passed.
+    @Test
+    void aRunWhoseOnlyAnswerCameBackUnusableIsOfferedTheFollowUp() {
+        final RunsPresenter presenter = presenterOver(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"),
+                new PrepDirHealth(State.WAITING,
+                        List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")))),
+                new ShardTally(2, 0, 4), Instant.now()));
+
+        final RunsView.Waiting waiting = requireNonNull(
+                presenter.view().unfinished().getFirst().waiting());
+
+        assertThat(waiting.copyPrompt()).isEqualTo("Copy a follow-up for your agent");
+        assertThat(waiting.promptCorrects()).isTrue();
+    }
+
+    // Nothing on a waiting card an agent drives is urgent, whether or not an answer came back
+    // wrong. Nothing on it is dressed as the way on.
+    @Test
+    void onAnAgentRouteAWaitingCardDressesNoPressAsTheWayOn() {
+        final RunsPresenter blamed = presenterOver(runWithRejectedAnswers("2019", State.WAITING));
+        final RunsPresenter clean = presenterOver(run("2018", State.WAITING, List.of()));
+
+        assertThat(blamed.view().unfinished().getFirst().actions())
+                .extracting(Action::label, Action::leading)
+                .containsExactly(tuple("Finish this sift", false), tuple("Discard", false));
+        assertThat(clean.view().unfinished().getFirst().actions())
+                .extracting(Action::label, Action::leading)
+                .containsExactly(tuple("Finish this sift", false), tuple("Discard", false));
+    }
+
+    // The provider's own waiting card keeps its fill, nothing there waiting on anybody outside.
+    @Test
+    void onAProviderThatSpendsAWaitingCardWithNothingBlamedStillLeadsWithFinishing() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(run("2019", State.WAITING, List.of()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().actions())
+                .extracting(Action::label, Action::leading)
+                .containsExactly(tuple("Finish this sift", true), tuple("Discard", false));
+    }
+
+    // Filed sheets make the reading behind the card stale, so the screen is told to take another.
+    @Test
+    void aFollowUpThatFreedSheetsHasTheScreenReadTheRunsAgain() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final var repainted = new AtomicInteger();
+        final var presenter = runsPresenter(pipeline);
+        presenter.setRepaint(repainted::incrementAndGet);
+        presenter.refresh();
+
+        assertThat(presenter.instructionsFor(prepDir, true)).isEqualTo("write them again");
+
+        assertThat(repainted.get()).isEqualTo(1);
+    }
+
+    // The press files sheets away, so the read it sets off is the one that builds the card the
+    // reader is looking at. A read that cleared what the press had just set would leave it blank.
+    @Test
+    void theCopyControlReadsCopiedAfterTheReadItsOwnPressSetOff() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final var presenter = runsPresenter(pipeline);
+        presenter.setRepaint(presenter::refresh);
+        presenter.refresh();
+
+        presenter.instructionsFor(prepDir, true);
+
+        assertThat(requireNonNull(presenter.view().unfinished().getFirst().waiting()).copyPrompt())
+                .isEqualTo("Copied");
+    }
+
+    @Test
+    void theReadAfterThatPutsTheCopyControlBackToItsOrdinaryLabel() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final var presenter = runsPresenter(pipeline);
+        presenter.setRepaint(presenter::refresh);
+        presenter.refresh();
+        presenter.instructionsFor(prepDir, true);
+
+        presenter.refresh();
+
+        assertThat(requireNonNull(presenter.view().unfinished().getFirst().waiting()).copyPrompt())
+                .isEqualTo("Copy a follow-up for your agent");
+    }
+
+    // A press that freed nothing leaves the card describing the run correctly, so a second reading
+    // would cost a folder walk to learn what is already held.
+    @Test
+    void aFollowUpOnAStalledRunHasTheScreenReadNothingAgain() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        when(pipeline.redoRejectedAnswers(any()))
+                .thenThrow(new Pipeline.NothingToRedoException(prepDir));
+        when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
+        final var repainted = new AtomicInteger();
+        final var presenter = runsPresenter(pipeline);
+        presenter.setRepaint(repainted::incrementAndGet);
+        presenter.refresh();
+
+        assertThat(presenter.instructionsFor(prepDir, true)).isEqualTo("Sift the photo sheets in ...");
+
+        assertThat(repainted.get()).isZero();
+    }
+
+    // It files sheets into the drawer, so a resume already applying them would have work taken out
+    // from under it.
+    @Test
+    void theFollowUpGoesWhileAJobIsRunningLikeEveryOtherControl() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.isBusy()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunsView.Waiting waiting = requireNonNull(
+                presenter.view().unfinished().getFirst().waiting());
+
+        assertThat(waiting.copyPrompt()).isEqualTo("Copy instructions for your agent");
+        assertThat(waiting.promptCorrects()).isFalse();
+    }
+
+    // Not a follow-up until an agent has answered something. Nothing judged and sheets still owed
+    // is an agent that has not started, and the reader's move then is to start it again.
+    @Test
+    void aRunAnAgentHasNotAnsweredYetIsOfferedTheInstructionsRatherThanAFollowUp() {
+        final RunsPresenter presenter = presenterOver(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.WAITING, List.of()),
+                new ShardTally(0, 0, 4), Instant.now()));
+
+        final RunsView.Waiting waiting = requireNonNull(
+                presenter.view().unfinished().getFirst().waiting());
+
+        assertThat(waiting.copyPrompt()).isEqualTo("Copy instructions for your agent");
+        assertThat(waiting.promptCorrects()).isFalse();
+    }
+
+    @Test
+    void theWayBackGoesWhileAJobIsRunningLikeEveryOtherButton() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.isBusy()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().redo()).isNull();
+    }
+
+    @Test
+    void askingForTheAnswersAgainHandsBackWhatTheFacadeWrote() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.judgeAgain(Path.of("logs", "sift-prep", "2019"), "2019"))
+                .isEqualTo("write them again");
+        assertThat(presenter.view().message()).isNull();
+    }
+
+    @Test
+    void onAProviderThatSpendsARefusedPressReportsOnTheScreenAndHandsBackNothingToCopy() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.redoRejectedAnswers(any())).thenThrow(new Pipeline.NothingToRedoException(prepDir));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.judgeAgain(prepDir, "2019")).isNull();
+        assertThat(requireNonNull(presenter.view().message()).text())
+                .contains("nothing to judge again").contains("Nothing was discarded");
+    }
+
+    // Nothing to redo is not a refusal where an agent does the judging. The run has stalled rather
+    // than gone wrong, and asking afresh is what its reader needs.
+    @Test
+    void onAnAgentRouteARunWithNothingToRedoIsAskedAfreshRatherThanRefused() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        when(pipeline.redoRejectedAnswers(any())).thenThrow(new Pipeline.NothingToRedoException(prepDir));
+        when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.judgeAgain(prepDir, "2019")).isEqualTo("Sift the photo sheets in ...");
+        assertThat(presenter.view().message()).isNull();
+    }
+
+    // One press, or the reader is left holding a run whose paid-for answers are gone and whose
+    // sheets nobody has been asked to judge.
+    @Test
+    void onAProviderThatSpendsOnePressFreesTheSheetsAndStartsJudgingThem() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final JobHandle<CullJobOutcome> job = finished();
+        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.judgeAgain(prepDir, "2019")).isNull();
+
+        verify(pipeline).redoRejectedAnswers(prepDir);
+        verify(pipeline).resume(prepDir, false);
+    }
+
+    // Nothing is dispatched at the app's expense on a route where an agent outside it does the
+    // judging, however the press that frees the sheets is worded.
+    @Test
+    void onAnAgentRouteTheSamePressStartsNothing() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.judgeAgain(prepDir, "2019")).isEqualTo("write them again");
+
+        verify(pipeline, never()).resume(any(), anyBoolean());
+    }
+
+    // A refused freeing must not go on to spend. The sheets it would have judged still hold the
+    // answers the press was going to discard.
+    @Test
+    void aRefusedFreeingSpendsNothingOnAProviderThatWould() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        when(pipeline.redoRejectedAnswers(any()))
+                .thenThrow(new Pipeline.NothingToRedoException(prepDir));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.judgeAgain(prepDir, "2019")).isNull();
+
+        verify(pipeline, never()).resume(any(), anyBoolean());
+    }
+
+    @Test
+    void aPressBlockedByALockedFileReportsItWithTheTechnicalTextToQuote() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.BLOCKED))));
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.redoRejectedAnswers(any()))
+                .thenThrow(new UncheckedIOException(new IOException("montage-003.json")));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.judgeAgain(prepDir, "2019")).isNull();
+        assertThat(requireNonNull(presenter.view().message()).text())
+                .contains("A file could not be reached")
+                .contains("montage-003.json");
     }
 
     private static RunsPresenter presenterOver(final CullRunSummary... runs) {
@@ -720,10 +1256,18 @@ class RunsPresenterTest {
     }
 
     private static CullRunSummary run(final String scope, final State state) {
+        return run(scope, state, List.of());
+    }
+
+    private static CullRunSummary run(final String scope, final State state, final List<Finding> findings) {
         return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
-                new PrepDirHealth(state, List.of()),
+                new PrepDirHealth(state, findings),
                 state == State.DAMAGED || state == State.COMPLETE ? null : new ShardTally(2, 2, 4),
                 Instant.now());
+    }
+
+    private static CullRunSummary runWithRejectedAnswers(final String scope, final State state) {
+        return run(scope, state, List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg"))));
     }
 
     // Drives the real clear path rather than calling the wording directly, so the message the

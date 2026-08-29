@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.application.service.CullPrepTestSupport.applyPlanner;
 import static photos.sluice.application.service.CullPrepTestSupport.cards;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
+import static photos.sluice.application.service.CullPrepTestSupport.keepJson;
 import static photos.sluice.application.service.CullPrepTestSupport.moveLedger;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDirRemedies;
@@ -78,6 +79,26 @@ class ShardTallyCalculatorTest {
         writeSidecar(prepDir, "montage-002", sidecarEntry(configured));
         writeShard(prepDir, "montage-001", classificationJson(recorded, "receipts", "photographed paperwork"));
         writeShard(prepDir, "montage-002", classificationJson(configured, "junk", "blurry"));
+
+        final ShardTally tally = shardTallyCalculator(root).tally(readIndex(prepDir));
+
+        assertThat(tally).isEqualTo(new ShardTally(2, 1, 2));
+    }
+
+    @Test
+    void aShardJudgingOnlySomeOfItsOwnSheetCountsAsInvalid(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path judged = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path unjudged = root.resolve("Sorted/Photos/2019/06/b.jpg");
+        final Path elsewhere = root.resolve("Sorted/Photos/2019/06/c.jpg");
+        writeFile(judged, "paperwork");
+        writeFile(unjudged, "a keeper");
+        writeFile(elsewhere, "another keeper");
+        writeIndex(prepDir, 3, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(judged), sidecarEntry(unjudged));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(elsewhere));
+        writeShard(prepDir, "montage-001", classificationJson(judged, "junk", "photographed paperwork"));
+        writeShard(prepDir, "montage-002", keepJson(elsewhere));
 
         final ShardTally tally = shardTallyCalculator(root).tally(readIndex(prepDir));
 

@@ -219,7 +219,7 @@ public class ApplyPlanner {
             sidecarSrcs.addAll(srcs.get());
             if (hasShard) {
                 this.readShard(prepDirPath, montage, extraFindings)
-                        .ifPresent(shard -> shardFiles.add(new ShardFile(montage, shard)));
+                        .ifPresent(shard -> shardFiles.add(new ShardFile(montage, shard, srcs.get())));
             }
             return;
         }
@@ -233,8 +233,11 @@ public class ApplyPlanner {
         // way while still holding no shard contributes nothing, there being no shard yet to trust.
         if (resolution == CorruptSidecarResolution.APPLY_ANYWAY && hasShard) {
             this.readShard(prepDirPath, montage, extraFindings).ifPresent(shard -> {
-                shard.decisions().forEach(decision -> sidecarSrcs.add(decision.file()));
-                shardFiles.add(new ShardFile(montage, shard));
+                shard.verdicts().forEach(verdict -> sidecarSrcs.add(verdict.file()));
+                // No sheet list, so no coverage rule. Nothing here knows what that sheet showed,
+                // and this resolution is the reader having said to trust the shard's own account
+                // of it.
+                shardFiles.add(new ShardFile(montage, shard, List.of()));
             });
         }
     }

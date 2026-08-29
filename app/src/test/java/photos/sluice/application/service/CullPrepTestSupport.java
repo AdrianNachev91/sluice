@@ -116,6 +116,10 @@ final class CullPrepTestSupport {
                 reason);
     }
 
+    static String keepJson(final Path file) {
+        return "{ \"file\": \"%s\", \"action\": \"keep\" }".formatted(jsonEscaped(file));
+    }
+
     static String nearDupChosenJson(final Path file, final String group, final String chosenReason) {
         return "{ \"file\": \"%s\", \"action\": \"near-dup-chosen\", \"group\": \"%s\", \"chosen_reason\": \"%s\" }"
                 .formatted(jsonEscaped(file), group, chosenReason);

@@ -7,6 +7,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -18,9 +19,11 @@ import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
@@ -58,7 +61,8 @@ class RunsPaneTest {
 
         assertThat(pane.lookup("#run-card-2019")).isNotNull();
         assertThat(textsIn(pane, "#run-card-2019"))
-                .contains("2019", "Waiting for sheets", "2 of 4 sheets judged");
+                .contains("2019", "Waiting for sheets",
+                        "2 out of 4 sheets are judged and healthy. 2 are still missing.");
     }
 
     // Height, not managed: the section stays laid out at nothing so the fold has a height to
@@ -100,29 +104,19 @@ class RunsPaneTest {
     }
 
     @Test
-    void aWaitingRunDrawsItsFolderAndBothWaysToCopy() throws Exception {
+    void aWaitingRunDrawsItsFolderAndTheWayToCopyItsInstructions() throws Exception {
         final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
 
         assertThat(textsIn(pane, "#run-card-2019"))
                 .contains(Path.of("logs", "sift-prep", "2019").toString());
-        assertThat(pane.lookup("#run-copy-folder")).isNotNull();
         assertThat(pane.lookup("#run-copy-prompt")).isNotNull();
     }
 
-    @Test
-    void copyingTheFolderPutsThePathOnTheClipboardAndSaysItDid() throws Exception {
-        final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
-
-        onFxThread(() -> fire(pane, "#run-copy-folder"));
-
-        assertThat(onFxThread(() -> Clipboard.getSystemClipboard().getString()))
-                .isEqualTo(Path.of("logs", "sift-prep", "2019").toString());
-        assertThat(((Button) pane.lookup("#run-copy-folder")).getText()).isEqualTo("Copied");
-    }
-
+    // A run with judged sheets and nothing blamed has stalled. Its follow-up is then the
+    // instructions themselves, the facade refusing the redo it would otherwise do first.
     @Test
     void copyingTheInstructionsPutsThemOnTheClipboard() throws Exception {
-        final Pipeline pipeline = waitingPipeline();
+        final Pipeline pipeline = stalledPipeline();
         when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
         final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
 
@@ -134,13 +128,60 @@ class RunsPaneTest {
 
     @Test
     void instructionsThatCouldNotBeWrittenLeaveTheButtonAloneAndSayWhy() throws Exception {
-        final Pipeline pipeline = waitingPipeline();
+        final Pipeline pipeline = stalledPipeline();
         when(pipeline.launchPromptFor(any())).thenThrow(new IllegalStateException("nope"));
         final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
 
         onFxThread(() -> fire(pane, "#run-copy-prompt"));
 
         assertThat(((Button) pane.lookup("#run-copy-prompt")).getText()).isNotEqualTo("Copied");
+        assertThat(pane.lookup("#runs-message").isManaged()).isTrue();
+    }
+
+    @Test
+    void askingForRejectedAnswersAgainPutsTheInstructionsOnTheClipboard() throws Exception {
+        final Pipeline pipeline = rejectedAnswersPipeline();
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+
+        onFxThread(() -> fire(pane, "#run-redo-2019"));
+
+        assertThat(onFxThread(() -> Clipboard.getSystemClipboard().getString())).isEqualTo("write them again");
+    }
+
+    // The only press on this screen that reports on itself. A follow-up redraws instead, and the
+    // card it would have said it on is gone by then. A run nothing has answered gets no follow-up,
+    // so this is the press that leaves the run where it was.
+    @Test
+    void copyingInstructionsThatLeaveTheRunAloneSaysSoOnTheButton() throws Exception {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"), new PrepDirHealth(State.WAITING, List.of()),
+                new ShardTally(0, 0, 4), Instant.now()))));
+        when(pipeline.launchPromptFor(any())).thenReturn("Sift the photo sheets in ...");
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+
+        onFxThread(() -> fire(pane, "#run-copy-prompt"));
+
+        assertThat(((Button) pane.lookup("#run-copy-prompt")).getText()).isEqualTo("Copied");
+    }
+
+    // A run whose records went bad between the card being drawn and the press.
+    @Test
+    void aRefusedPressLeavesTheClipboardAloneAndSaysWhy() throws Exception {
+        final Pipeline pipeline = rejectedAnswersPipeline();
+        when(pipeline.redoRejectedAnswers(any()))
+                .thenThrow(new MalformedPrepJsonException("index.json will not parse",
+                        new IllegalStateException("unexpected end of input")));
+        final var untouched = new ClipboardContent();
+        untouched.putString("untouched");
+        onFxThread(() -> Clipboard.getSystemClipboard().setContent(untouched));
+        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+
+        onFxThread(() -> fire(pane, "#run-redo-2019"));
+
+        assertThat(onFxThread(() -> Clipboard.getSystemClipboard().getString())).isEqualTo("untouched");
         assertThat(pane.lookup("#runs-message").isManaged()).isTrue();
     }
 
@@ -163,14 +204,15 @@ class RunsPaneTest {
         assertThat(pane.lookup("#run-auto-apply-2019")).isNull();
         assertThat(pane.lookup("#run-copy-prompt")).isNull();
         assertThat(pane.lookup("#run-waive-missing-2019")).isNull();
-        assertThat(pane.lookup("#run-copy-folder")).isNotNull();
+        assertThat(textsIn(pane, "#run-card-2019"))
+                .contains(Path.of("logs", "sift-prep", "2019").toString());
     }
 
     @Test
     void aRunPastWaitingDrawsNoneOfThat() throws Exception {
         final Parent pane = onFxThread(() -> built(run("2019", State.READY)));
 
-        assertThat(pane.lookup("#run-copy-folder")).isNull();
+        assertThat(pane.lookup("#run-copy-prompt")).isNull();
         assertThat(pane.lookup("#run-waive-missing-2019")).isNull();
     }
 
@@ -246,10 +288,29 @@ class RunsPaneTest {
     }
 
     private static CullRunSummary run(final String scope, final State state) {
+        return run(scope, state, List.of());
+    }
+
+    private static CullRunSummary run(final String scope, final State state, final List<Finding> findings) {
         return new CullRunSummary(scope, Path.of("logs", "sift-prep", scope),
-                new PrepDirHealth(state, List.of()),
+                new PrepDirHealth(state, findings),
                 state == State.DAMAGED || state == State.COMPLETE ? null : new ShardTally(2, 2, 4),
                 Instant.now());
+    }
+
+    private static Pipeline stalledPipeline() {
+        final Pipeline pipeline = waitingPipeline();
+        when(pipeline.redoRejectedAnswers(any()))
+                .thenThrow(new Pipeline.NothingToRedoException(Path.of("logs", "sift-prep", "2019")));
+        return pipeline;
+    }
+
+    private static Pipeline rejectedAnswersPipeline() {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.BLOCKED,
+                List.of(new Finding.PhotosNotJudged("montage-001", List.of("IMG_1.jpg")))))));
+        when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
+        return pipeline;
     }
 
     private static Parent built(final CullRunSummary... runs) {
@@ -263,7 +324,7 @@ class RunsPaneTest {
     // here depends on which of the two lands first.
     private static Parent built(final RunsPresenter presenter) {
         presenter.refresh();
-        final var page = (Parent) RunsPane.pane(presenter, () -> {});
+        final var page = (Parent) RunsPane.pane(presenter, () -> { });
         final var scene = new Scene(new StackPane(page), 900, 700);
         scene.getStylesheets().add(
                 Objects.requireNonNull(RunsPaneTest.class.getResource("/ui/sluice.css"),

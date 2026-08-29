@@ -68,6 +68,9 @@ public record FindingPayload(String type, Finding.Remedy remedy, SequencedMap<St
             case final Finding.DuplicateFileReference f -> Fields.of("file", f.file(), "count", f.count());
             case final Finding.DecisionUnreviewableOverlap f -> Fields.of("file", text(f.decision().file()));
             case final Finding.GroupSpansMultipleMontages f -> Fields.of("group", f.group(), "montages", f.montages());
+            case final Finding.PhotosNotJudged f -> Fields.of("montage", f.montage(), "photos", f.photos());
+            case final Finding.PhotoFromAnotherSheet f -> Fields.of("montage", f.montage(), "index", f.index(),
+                    "file", text(f.file()));
             case final Finding.MissingFile f -> Fields.of("montage", f.montage(), "index", f.index());
             case final Finding.FileOutOfScope f -> Fields.of("montage", f.montage(), "index", f.index(),
                     "file", text(f.file()));

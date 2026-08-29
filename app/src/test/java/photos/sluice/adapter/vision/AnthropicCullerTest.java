@@ -57,6 +57,7 @@ import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.domain.cull.Verdict.Keep;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.job.WatchMode;
@@ -132,7 +133,8 @@ class AnthropicCullerTest {
 
         final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
         assertThat(shard.montage()).isEqualTo("montage-001");
-        assertThat(shard.decisions()).containsExactly(
+        assertThat(shard.verdicts()).containsExactly(
+                new Keep(this.src("IMG_0001.jpg")),
                 new Classification(this.src("IMG_0002.jpg"), "junk", "photo of a screen"),
                 new NearDupChosen(this.src("IMG_0003.jpg"), "beach", "sharpest of the burst"),
                 new NearDupReject(this.src("IMG_0004.jpg"), "beach", "blurrier than IMG_0003.jpg"));
@@ -140,7 +142,7 @@ class AnthropicCullerTest {
     }
 
     @Test
-    void anAllKeepsResponseWritesAnEmptyShardMarkingTheMontageReviewed() throws Exception {
+    void anAllKeepsResponseWritesAKeepPerPhoto() throws Exception {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg", "IMG_0002.jpg");
         this.respondWith(response("""
                 {
@@ -154,7 +156,8 @@ class AnthropicCullerTest {
         this.culler().cull(prep, OPTIONS);
 
         final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
-        assertThat(shard.decisions()).isEmpty();
+        assertThat(shard.verdicts()).containsExactly(
+                new Keep(this.src("IMG_0001.jpg")), new Keep(this.src("IMG_0002.jpg")));
     }
 
     @Test
@@ -313,7 +316,7 @@ class AnthropicCullerTest {
         this.writeMontage("montage-002", "IMG_0002.jpg");
         this.writeMontage("montage-003", "IMG_0003.jpg");
         new ShardCodec().write(this.prepDir.resolve("decisions-001.json"),
-                new DecisionShard("montage-001", List.of()));
+                new DecisionShard("montage-001", List.of(new Keep(this.src("IMG_0001.jpg")))));
         this.respondWith(keeping("IMG_0002.jpg", 100, 50), keeping("IMG_0003.jpg", 10, 10));
 
         final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002", "montage-003"),
@@ -506,7 +509,7 @@ class AnthropicCullerTest {
                 this.culler().cull(this.prep(List.of(this.src("IMG_0001.jpg")), "montage-001"), OPTIONS);
 
         assertThat(report).isEqualTo(report(1, 0, 1, 1000, 100));
-        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
                 .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
         // One call, so the overlap never even reached the corrective retry.
         verify(this.messages, times(1)).create(any(MessageCreateParams.class));
@@ -567,7 +570,7 @@ class AnthropicCullerTest {
         final CullReport report = this.culler().cull(this.prep("montage-001"), OPTIONS);
 
         assertThat(report).isEqualTo(report(0, 1, 0, 0, 0));
-        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
                 .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "the user's own answer"));
         verify(this.messages, times(0)).create(any(MessageCreateParams.class));
     }
@@ -594,7 +597,7 @@ class AnthropicCullerTest {
         final CullReport report = this.culler().cull(prep, OPTIONS);
 
         final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
-        assertThat(shard.decisions()).containsExactly(
+        assertThat(shard.verdicts()).containsExactly(
                 new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
         // Both attempts' tokens count: the failed first call cost real money too.
         assertThat(report).isEqualTo(report(1, 0, 2, 220, 40));
@@ -677,9 +680,9 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
 
-        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions())
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
                 .containsExactly(new Classification(this.src("IMG_0001.jpg"), "junk", "blurry"));
-        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-002.json")).decisions())
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-002.json")).verdicts())
                 .containsExactly(new Classification(this.src("IMG_0002.jpg"), "junk", "screenshot"));
         assertThat(report).isEqualTo(report(2, 0, 3, 420, 60));
     }
@@ -700,7 +703,8 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(prep, OPTIONS);
 
-        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions()).isEmpty();
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts())
+                .containsExactly(new Keep(this.src("IMG_0001.jpg")));
         assertThat(report).isEqualTo(report(1, 0, 2, 220, 40));
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
         verify(this.messages, times(2)).create(captor.capture());
@@ -751,7 +755,7 @@ class AnthropicCullerTest {
 
         assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
         final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
-        assertThat(shard.decisions()).containsExactly(
+        assertThat(shard.verdicts()).containsExactly(
                 new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
     }
 
@@ -773,7 +777,7 @@ class AnthropicCullerTest {
 
         assertThat(report).isEqualTo(report(1, 0, 1, 100, 10));
         final DecisionShard shard = new ShardCodec().read(this.prepDir.resolve("decisions-001.json"));
-        assertThat(shard.decisions()).containsExactly(
+        assertThat(shard.verdicts()).containsExactly(
                 new Classification(this.src("IMG_0001.jpg"), "junk", "screenshot"));
     }
 
@@ -861,7 +865,7 @@ class AnthropicCullerTest {
 
         final CullReport report = this.culler().cull(this.prep(List.of(recorded), List.of(), "montage-001"), OPTIONS);
 
-        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).decisions()).containsExactly(
+        assertThat(new ShardCodec().read(this.prepDir.resolve("decisions-001.json")).verdicts()).containsExactly(
                 new Classification(this.src("IMG_0001.jpg"), "receipts", "a scanned invoice"));
         assertThat(report.montagesCulled()).isEqualTo(1);
     }
@@ -1032,7 +1036,7 @@ class AnthropicCullerTest {
 
         assertThatThrownBy(() -> this.culler().cull(prep, OPTIONS))
                 .isInstanceOf(CullException.class)
-                .hasMessageContaining("no verdict for photo 2 (IMG_0002.jpg)");
+                .hasMessageContaining("montage-001: no verdict for 1 of its photos (IMG_0002.jpg)");
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
     }
 

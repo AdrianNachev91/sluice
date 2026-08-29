@@ -4,23 +4,24 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The vision step's decisions for one montage, mirroring an on-disk {@code decisions-NNN.json}
- * file: the montage id it covers, plus every non-keep decision within it.
+ * The vision step's verdicts for one montage, mirroring an on-disk {@code decisions-NNN.json} file:
+ * the montage id it covers, plus one verdict for every photo the montage showed.
  *
- * <p>An empty decisions list is valid and meaningful. It marks a montage as reviewed and held
- * entirely as keeps, distinct from a montage never processed, whose shard is simply absent.
- * {@code montage} must equal the shard filename's own id, a rule {@link ShardValidator} checks.
+ * <p>An empty list means nobody judged this sheet, and {@link ShardValidator} refuses it. A sheet
+ * held entirely as keepers is a full list of {@link Verdict.Keep}.
+ *
+ * <p>{@code montage} must equal the shard filename's own id, a rule {@link ShardValidator} checks.
  */
-public record DecisionShard(String montage, List<Decision> decisions) {
+public record DecisionShard(String montage, List<Verdict> verdicts) {
 
     /**
-     * Validates montage is present and defensively copies decisions.
+     * Validates montage is present and defensively copies verdicts.
      *
      * @param montage {@link String} the montage id this shard covers
-     * @param decisions a {@link List} of {@link Decision} the non-keep decisions for this montage
+     * @param verdicts a {@link List} of {@link Verdict} one verdict per photo the montage showed
      */
     public DecisionShard {
         Objects.requireNonNull(montage, "montage");
-        decisions = List.copyOf(decisions);
+        verdicts = List.copyOf(verdicts);
     }
 }

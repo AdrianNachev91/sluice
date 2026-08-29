@@ -7,6 +7,7 @@ import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
 import photos.sluice.domain.cull.DecisionShard;
+import photos.sluice.domain.cull.Verdict.Keep;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.exc.JacksonIOException;
 import tools.jackson.databind.json.JsonMapper;
@@ -32,8 +33,9 @@ class ShardCodecTest {
     private final ShardCodec codec = new ShardCodec();
 
     @Test
-    void roundTripsEveryDecisionSubtype(@TempDir final Path dir) {
+    void roundTripsEveryVerdictSubtype(@TempDir final Path dir) {
         final var shard = new DecisionShard("montage-007", List.of(
+                new Keep(dir.resolve("worth-keeping.jpg")),
                 new Classification(dir.resolve("junk.jpg"), "junk", "phone photo of a monitor"),
                 new Classification(dir.resolve("plate.jpg"), "food", "ordinary restaurant plate"),
                 new NearDupChosen(dir.resolve("best.jpg"), "lake-jun20", "sharpest of the burst"),
@@ -45,8 +47,10 @@ class ShardCodecTest {
         assertThat(this.codec.read(shardPath)).isEqualTo(shard);
     }
 
+    // The validator is what refuses a shard answering for nothing. The codec's job is to carry it
+    // there intact, so it reads and writes one rather than judging it.
     @Test
-    void roundTripsAnAllKeepsMontageAsAnEmptyDecisionsShard(@TempDir final Path dir) throws IOException {
+    void roundTripsAShardCarryingNoVerdictsAtAll(@TempDir final Path dir) throws IOException {
         final var shard = new DecisionShard("montage-008", List.of());
         final Path shardPath = dir.resolve("decisions-008.json");
 
@@ -108,7 +112,7 @@ class ShardCodecTest {
 
         final DecisionShard shard = this.codec.read(shardPath);
 
-        assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
+        assertThat(shard.verdicts()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
             assertThat(c.category()).isEqualTo("pets");
             assertThat(c.reason()).isEqualTo("cat");
         });
@@ -145,7 +149,7 @@ class ShardCodecTest {
 
         final DecisionShard shard = this.codec.read(shardPath);
 
-        assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
+        assertThat(shard.verdicts()).singleElement().isInstanceOfSatisfying(Classification.class, c -> {
             assertThat(c.file().toString()).isEmpty();
             assertThat(c.reason()).isEmpty();
         });
@@ -165,7 +169,7 @@ class ShardCodecTest {
 
         final DecisionShard shard = this.codec.read(shardPath);
 
-        assertThat(shard.decisions()).singleElement().isInstanceOfSatisfying(NearDupChosen.class, c -> {
+        assertThat(shard.verdicts()).singleElement().isInstanceOfSatisfying(NearDupChosen.class, c -> {
             assertThat(c.group()).isEmpty();
             assertThat(c.chosenReason()).isEmpty();
         });
@@ -234,7 +238,7 @@ class ShardCodecTest {
         Files.writeString(shardPath, """
                 { "montage": "montage-005" }""");
 
-        assertThat(this.codec.read(shardPath).decisions()).isEmpty();
+        assertThat(this.codec.read(shardPath).verdicts()).isEmpty();
     }
 
     @Test

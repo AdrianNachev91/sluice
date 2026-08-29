@@ -18,6 +18,7 @@ import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDirHealth.State;
@@ -75,6 +76,7 @@ import static photos.sluice.application.service.PipelineTestSupport.credentialPi
 import static photos.sluice.application.service.PipelineTestSupport.cullPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.defaultCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
+import static photos.sluice.application.service.PipelineTestSupport.keepJson;
 import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.prepDirRemedies;
@@ -84,6 +86,7 @@ import static photos.sluice.application.service.PipelineTestSupport.waitForJobTo
 import static photos.sluice.application.service.PipelineTestSupport.waitUntil;
 import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
+import static photos.sluice.application.service.PipelineTestSupport.writeAllKeepsShard;
 import static photos.sluice.application.service.PipelineTestSupport.writeFile;
 import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 import static photos.sluice.application.service.PipelineTestSupport.writeShard;
@@ -166,7 +169,7 @@ class CullEngineTest {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
         final var waiting = (CullJobOutcome.Waiting) cullPipeline(root, new RecordingProgressPort())
                 .cull(new CullScope.Year(2019, null)).join();
-        writeShard(waiting.job().prepDir(), "montage-001");
+        writeAllKeepsShard(waiting.job().prepDir(), "montage-001");
         final var culler = new CeilingStoppedCuller();
 
         cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(), List.of(culler))
@@ -242,7 +245,7 @@ class CullEngineTest {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        writeShard(waiting.job().prepDir(), "montage-001");
+        writeAllKeepsShard(waiting.job().prepDir(), "montage-001");
 
         pipeline.resume(waiting.job().prepDir(), false).join();
 
@@ -309,7 +312,7 @@ class CullEngineTest {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        writeShard(waiting.job().prepDir(), "montage-001");
+        writeAllKeepsShard(waiting.job().prepDir(), "montage-001");
         Files.createDirectories(waiting.job().prepDir().resolve("decisions.json"));
 
         assertThatThrownBy(() -> pipeline.resume(waiting.job().prepDir(), false).join())
@@ -730,7 +733,7 @@ class CullEngineTest {
         final var keyed = List.<VisionCuller>of(new ManualModeCuller(MANUAL_PROVIDER_KEY));
         final var waiting = (CullJobOutcome.Waiting) credentialPipeline(root, new RecordingProgressPort(),
                 keyed, new FixedSecretStore("a-key")).cull(new CullScope.Year(2019, null)).join();
-        writeShard(waiting.job().prepDir(), "montage-001");
+        writeAllKeepsShard(waiting.job().prepDir(), "montage-001");
 
         final CullJobOutcome resumed = credentialPipeline(root, new RecordingProgressPort(),
                 keyed, new FixedSecretStore(null)).resume(waiting.job().prepDir(), false).join();
@@ -950,13 +953,15 @@ class CullEngineTest {
     // renders the same list the troubleshoot screen does.
     @Test
     void resumeLandsBlockedCarryingTheFindingsWhenApplyRefusesACompleteShardSet(@TempDir final Path root) throws IOException {
-        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
         final var pipeline = cullPipeline(root, new RecordingProgressPort());
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
         // A file no montage ever showed, and whose basename matches no in-scope file either, so no
-        // unique-basename heal can pull it back into scope.
-        writeShard(prepDir, "montage-001",
+        // unique-basename heal can pull it back into scope. The keep beside it covers the one photo
+        // the sheet did show, so the out-of-scope file is the only thing left to report.
+        writeShard(prepDir, "montage-001", keepJson(photo),
                 classificationJson(root.resolve("never-in-scope.jpg"), "junk", "blurry"));
 
         final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
@@ -966,6 +971,60 @@ class CullEngineTest {
         assertThat(blocked.job().prepDir()).isEqualTo(prepDir);
         assertThat(blocked.findings()).singleElement().isInstanceOf(Finding.FileOutOfScope.class);
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
+    }
+
+    // The artifact the coverage rule exists to refuse: an agent that answered every sheet with an
+    // empty file. Without the rule this reaches READY, applies, moves nothing and reports success.
+    @Test
+    void aRunWhoseEveryShardJudgesNothingIsRefusedRatherThanAppliedAsAllKeepers(@TempDir final Path root)
+            throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001");
+
+        final CullJobOutcome outcome = pipeline.resume(prepDir, false).join();
+
+        assertThat(outcome).isInstanceOf(CullJobOutcome.Blocked.class);
+        assertThat(((CullJobOutcome.Blocked) outcome).findings())
+                .singleElement().isInstanceOf(Finding.PhotosNotJudged.class);
+        assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
+        assertThat(Files.exists(sortedPhotosDir(root, "2019", "06").resolve("IMG_1.jpg"))).isTrue();
+    }
+
+    @Test
+    void askingForRejectedAnswersAgainFilesThemAwayAndPutsTheRunBackToWaiting(@TempDir final Path root)
+            throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        // Judges nothing on a sheet that showed one photo, which is the hole coverage closes.
+        writeShard(prepDir, "montage-001");
+
+        final String prompt = pipeline.redoRejectedAnswers(prepDir);
+
+        assertThat(prompt).contains("could not be used")
+                .contains("montage-001: no verdict for 1 of its photos (IMG_1.jpg)");
+        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isFalse();
+        assertThat(pipeline.cullRuns()).isInstanceOfSatisfying(CullRuns.Listed.class, listed ->
+                assertThat(listed.runs()).singleElement()
+                        .satisfies(run -> assertThat(run.health().state()).isEqualTo(State.WAITING)));
+    }
+
+    @Test
+    void askingForRejectedAnswersAgainIsRefusedWhereNoSheetIsToBlame(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeAllKeepsShard(prepDir, "montage-001");
+
+        assertThatThrownBy(() -> pipeline.redoRejectedAnswers(prepDir))
+                .isInstanceOf(Pipeline.NothingToRedoException.class)
+                .hasMessageContaining("Nothing was discarded");
+        assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
     }
 
     // The shape a watcher and a resume could otherwise re-trigger each other on. The shard has

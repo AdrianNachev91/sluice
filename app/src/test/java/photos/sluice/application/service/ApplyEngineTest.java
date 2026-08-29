@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
 import static photos.sluice.application.service.CullPrepTestSupport.classificationJson;
 import static photos.sluice.application.service.CullPrepTestSupport.hashIndex;
+import static photos.sluice.application.service.CullPrepTestSupport.keepJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupChosenJson;
 import static photos.sluice.application.service.CullPrepTestSupport.nearDupRejectJson;
 import static photos.sluice.application.service.CullPrepTestSupport.prepDir;
@@ -718,7 +719,7 @@ class ApplyEngineTest {
         writeFile(keeper, "x");
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(keeper));
-        writeShard(prepDir, "montage-001"); // an all-keeps montage still answers with an empty shard
+        writeShard(prepDir, "montage-001", keepJson(keeper));
         Files.writeString(prepDir.resolve("montage-001.jpg"), "fake-image");
         Files.writeString(prepDir.resolve("tile-001-01.jpg"), "fake-tile");
 

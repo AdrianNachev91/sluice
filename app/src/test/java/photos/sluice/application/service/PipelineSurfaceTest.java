@@ -46,6 +46,7 @@ class PipelineSurfaceTest {
             "isWatchActive(Path)",
             "onRunsMoved(Runnable)",
             "launchPromptFor(Path)",
+            "redoRejectedAnswers(Path)",
             "stopAllWatching()",
             "stopAcceptingJobs(Duration)",
             "troubleshoot(Path)",

@@ -42,7 +42,6 @@ import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
-import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
@@ -54,6 +53,8 @@ import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.cull.Verdict.Keep;
 import photos.sluice.domain.cull.VerdictAction;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
@@ -86,9 +87,9 @@ import java.util.stream.IntStream;
  * inside the app. Each montage is one stateless request: the shared system prompt, the montage
  * JPEG, and the photo table. A structured-output schema constrains the response to a JSON verdict
  * list. The model must return a verdict for every tile. That forces a look at every photo instead
- * of skimming past faint junk, and gives a hard completeness check. Keep verdicts are stripped
- * before the shard is written, so the on-disk contract stays the external-agent one: non-keep
- * decisions only.
+ * of skimming past faint junk. Every verdict is written to the shard, keeps included, which is the
+ * same on-disk contract an external agent answers. {@link ShardValidator} is what checks the sheet
+ * is covered, so the rule holds for both routes rather than only this one.
  *
  * <p>The model references photos by tile index and filename, never by path. The response is
  * resolved index to sidecar src here. A name that does not match the sidecar entry at that index
@@ -419,7 +420,7 @@ class AnthropicCuller implements VisionCuller {
                 ordinal++;
                 final List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
                 final Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
-                if (entries == null || this.resumesExistingShard(shardPath, montage, acceptedShards,
+                if (entries == null || this.resumesExistingShard(shardPath, montage, entries, acceptedShards,
                         scopeSrcs, categoryNames)) {
                     skipped++;
                 } else if (exhausted(ceiling, apiCalls, montagesAttempted, inputTokens + outputTokens)) {
@@ -790,12 +791,14 @@ class AnthropicCuller implements VisionCuller {
      *
      * @param shardPath {@link Path} path of the montage's shard file
      * @param montage {@link String} the montage name
+     * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated on acceptance
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
      * @param categoryNames a {@link List} of {@link String}, the cull category names this run recorded
      * @return boolean true if the existing shard is valid and was accepted
      */
     private boolean resumesExistingShard(final Path shardPath, final String montage,
+                                         final List<SidecarPhotoEntry> entries,
                                          final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
                                          final List<String> categoryNames) {
         if (!Files.exists(shardPath)) {
@@ -807,7 +810,18 @@ class AnthropicCuller implements VisionCuller {
         } catch (final UncheckedIOException e) {
             return false;
         }
-        return this.acceptIfValid(montage, existing, acceptedShards, scopeSrcs, categoryNames).isEmpty();
+        return this.acceptIfValid(montage, existing, acceptedShards, srcsOf(entries), scopeSrcs,
+                categoryNames).isEmpty();
+    }
+
+    /**
+     * The source paths one montage's sidecar entries name, in the order the sheet laid them out.
+     *
+     * @param entries a {@link List} of {@link SidecarPhotoEntry}, one montage's sidecar photo entries
+     * @return a {@link List} of {@link Path}, their source paths
+     */
+    private static List<Path> srcsOf(final List<SidecarPhotoEntry> entries) {
+        return entries.stream().map(SidecarPhotoEntry::src).toList();
     }
 
     /**
@@ -830,7 +844,7 @@ class AnthropicCuller implements VisionCuller {
             return new AttemptOutcome(null, problems);
         }
         final List<String> validationProblems =
-                this.acceptIfValid(montage, shard, acceptedShards, scopeSrcs, categoryNames);
+                this.acceptIfValid(montage, shard, acceptedShards, srcsOf(entries), scopeSrcs, categoryNames);
         if (!validationProblems.isEmpty()) {
             return new AttemptOutcome(null, validationProblems);
         }
@@ -855,14 +869,15 @@ class AnthropicCuller implements VisionCuller {
      * @param montage {@link String} the montage name
      * @param shard {@link DecisionShard} the candidate shard to validate
      * @param acceptedShards a {@link List} of {@link ShardFile}, shards accepted so far, mutated by this call
+     * @param sheetSrcs a {@link List} of {@link Path}, the source paths this one montage showed
      * @param scopeSrcs a {@link List} of {@link Path}, every in-scope source path for the run
      * @param categoryNames a {@link List} of {@link String}, the cull category names this run recorded
      * @return a {@link List} of {@link String}, validation problems found, empty if the shard was accepted
      */
     private List<String> acceptIfValid(final String montage, final DecisionShard shard,
-                                       final List<ShardFile> acceptedShards, final List<Path> scopeSrcs,
-                                       final List<String> categoryNames) {
-        acceptedShards.add(new ShardFile(montage, shard));
+                                       final List<ShardFile> acceptedShards, final List<Path> sheetSrcs,
+                                       final List<Path> scopeSrcs, final List<String> categoryNames) {
+        acceptedShards.add(new ShardFile(montage, shard, sheetSrcs));
         final ValidationReport report = this.validator.validate(acceptedShards, scopeSrcs, categoryNames, List.of());
         if (!report.valid()) {
             acceptedShards.removeLast();
@@ -888,38 +903,33 @@ class AnthropicCuller implements VisionCuller {
         if (parsed == null) {
             return null;
         }
-        final var decisions = new ArrayList<Decision>();
+        final var collected = new ArrayList<Verdict>();
         final var seenIndices = new HashSet<Integer>();
         final List<@Nullable RawVerdict> verdicts = parsed.verdicts() == null ? List.of() : parsed.verdicts();
         for (final RawVerdict verdict : verdicts) {
-            collectDecision(verdict, entries, seenIndices, decisions, problems);
-        }
-        for (int index = 1; index <= entries.size(); index++) {
-            if (!seenIndices.contains(index)) {
-                problems.add("no verdict for photo " + index + " (" + entries.get(index - 1).name() + ")");
-            }
+            collectVerdict(verdict, entries, seenIndices, collected, problems);
         }
         if (!problems.isEmpty()) {
             return null;
         }
-        return new DecisionShard(montage, decisions);
+        return new DecisionShard(montage, collected);
     }
 
     /**
      * Checks one verdict's response-level contract: index in range and unseen, name matching the
-     * sidecar entry at that index. When the contract holds, the non-keep decision it maps to is
-     * collected.
+     * sidecar entry at that index. When the contract holds, the verdict it maps to is collected,
+     * a keep included.
      *
      * @param verdict {@link RawVerdict} the raw verdict to check
      * @param entries a {@link List} of {@link SidecarPhotoEntry}, the montage's sidecar photo entries
      * @param seenIndices a {@link HashSet} of {@link Integer}, indices already claimed by a verdict, mutated by this
      * call
-     * @param decisions a {@link List} of {@link Decision}, accumulator for collected decisions, mutated by this call
+     * @param collected a {@link List} of {@link Verdict}, accumulator for collected verdicts, mutated by this call
      * @param problems a {@link List} of {@link String}, accumulator for problems found, mutated by this call
      */
-    private static void collectDecision(final @Nullable RawVerdict verdict, final List<SidecarPhotoEntry> entries,
-                                        final HashSet<Integer> seenIndices, final List<Decision> decisions,
-                                        final List<String> problems) {
+    private static void collectVerdict(final @Nullable RawVerdict verdict, final List<SidecarPhotoEntry> entries,
+                                       final HashSet<Integer> seenIndices, final List<Verdict> collected,
+                                       final List<String> problems) {
         if (verdict == null) {
             problems.add("null verdict entry");
             return;
@@ -940,10 +950,8 @@ class AnthropicCuller implements VisionCuller {
             return;
         }
         final String action = orEmpty(verdict.action());
-        if (action.equals(VerdictAction.KEEP)) {
-            return;
-        }
-        decisions.add(switch (action) {
+        collected.add(switch (action) {
+            case VerdictAction.KEEP -> new Keep(entry.src());
             case VerdictAction.NEAR_DUP_CHOSEN -> new NearDupChosen(entry.src(), orEmpty(verdict.group()),
                     orEmpty(verdict.chosenReason()));
             case VerdictAction.NEAR_DUP_REJECT -> new NearDupReject(entry.src(), orEmpty(verdict.group()),
@@ -1176,9 +1184,9 @@ class AnthropicCuller implements VisionCuller {
      * <p>Every branch declares every field a verdict may carry, and the branches differ only in
      * what they pin action to and what they demand. Narrowing a branch to the fields its own action
      * needs would refuse a keep that volunteered a reason. Nothing downstream objects to that one:
-     * {@link #collectDecision} returns on a keep without reading reason, group or chosen_reason.
-     * The point here is to stop paying for refusals, so a branch that invented one would work
-     * against it.
+     * {@link #collectVerdict} builds a keep from its file alone, reading neither reason, group nor
+     * chosen_reason. The point here is to stop paying for refusals, so a branch that invented one
+     * would work against it.
      *
      * @param action a {@link Map} of {@link String} to {@link Object}, the sub-schema pinning this branch's action
      * @param alsoRequired a {@link List} of {@link String}, the fields this action needs beyond the common three

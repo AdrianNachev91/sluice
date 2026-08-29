@@ -352,7 +352,7 @@ public class RunSetupPresenter {
                 "This moves " + RunWords.counted(files, "file", "files") + " from "
                         + RunWords.listed(staged.stream().map(row -> String.valueOf(row.year())).toList())
                         + " into your library folder.",
-                "Move to library", "Cancel");
+                "Move to library", "Cancel", true);
     }
 
     /**
@@ -388,7 +388,7 @@ public class RunSetupPresenter {
         }
         return new SiftNow.Ask(new Confirmation("Sift " + year + "?",
                 whatItCovers(year, photos, justSorted) + " " + this.spendClause(photos),
-                "Sift " + year, "Cancel"));
+                "Sift " + year, "Cancel", true));
     }
 
     /**
@@ -1227,12 +1227,19 @@ public class RunSetupPresenter {
     /**
      * A question a user answers before work starts.
      *
+     * <p>Which of the two is drawn as the way on is settled here rather than by whichever screen
+     * puts the question up. The answer turns on what each choice costs the reader. That is what
+     * the question itself is about, and a screen asking two of them would otherwise weigh both the
+     * same way.
+     *
      * @param heading {@link String} what the question is about
      * @param question {@link String} the question itself, naming what is about to happen
      * @param goAhead {@link String} what the button that goes ahead says
      * @param cancel {@link String} what the button that backs out says
+     * @param goAheadLeads boolean whether going ahead is the loud choice, the one Enter lands on
      */
-    public record Confirmation(String heading, String question, String goAhead, String cancel) {
+    public record Confirmation(String heading, String question, String goAhead, String cancel,
+                               boolean goAheadLeads) {
     }
 
     /**

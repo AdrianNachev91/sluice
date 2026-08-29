@@ -25,6 +25,8 @@ import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DiscardReport;
+import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.cull.LaunchPrompt;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
@@ -562,6 +564,38 @@ public class Pipeline {
     }
 
     /**
+     * Sets a run's rejected answers aside and hands back the instructions asking for them again.
+     *
+     * <p>One call because it is one gesture. A reader who has given up on these answers wants two
+     * things: the sheets free to be answered afresh, and the words to ask with. Either one on its
+     * own is half a remedy.
+     *
+     * <p>Diagnosed here rather than trusting what the card was drawn from. That reading can be
+     * minutes old, and a watch or another window can have moved the run since. Only sheets this
+     * reading blames are set aside.
+     *
+     * <p>Not a job, so it claims no job slot and blocks nothing. The work is moving a handful of
+     * small files, and every control offering it is withheld while a job runs. What that cannot
+     * rule out is a watch resuming the run in the same moment. That resume then meets a sheet with
+     * no answer and reports the run as still waiting, which is what it now is.
+     *
+     * @param prepDir {@link Path} the run
+     * @return {@link String} the text to hand an agent
+     * @throws NothingToRedoException if the run's diagnosis blames no sheet
+     */
+    public String redoRejectedAnswers(final Path prepDir) {
+        this.requireUsableRoots();
+        final List<Finding> findings = this.prepDirDoctor.diagnose(prepDir).findings();
+        final List<String> sheets = LaunchPrompt.sheetsToRedo(findings);
+        if (sheets.isEmpty()) {
+            throw new NothingToRedoException(prepDir);
+        }
+        final String prompt = this.cullEngine.redoPromptFor(prepDir, findings);
+        this.prepDirRemedies.setAsideAnswers(prepDir, sheets);
+        return prompt;
+    }
+
+    /**
      * Whether a watcher is currently polling prepDir, which is where the waiting card's own
      * auto-apply toggle reads its position from.
      *
@@ -793,6 +827,34 @@ public class Pipeline {
         public RunAlreadyFinishedException(final Path prepDir) {
             super("That sift finished before it could be discarded, so nothing was lost. "
                     + "Clear it with the finished runs instead. Its records are at " + prepDir + ".");
+        }
+    }
+
+    /**
+     * Thrown when asking for a run's answers to be written again is refused, because a fresh
+     * reading of it blames no sheet.
+     *
+     * <p>Two ways there. The run was put right between the card being drawn and the button being
+     * pressed, by a watch or by another window. Or what is wrong with it is not a sheet's fault at
+     * all, and writing one sheet again answers none of that.
+     *
+     * <p>Carries the prep dir, and its message names both rather than guessing between them.
+     * Nothing was discarded, so nothing was lost either way.
+     *
+     * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
+     * refused needs no knowledge of this type at all.
+     */
+    public static final class NothingToRedoException extends IllegalStateException {
+
+        /**
+         * Creates the exception, naming the run.
+         *
+         * @param prepDir {@link Path} the run whose answers were to be written again
+         */
+        public NothingToRedoException(final Path prepDir) {
+            super("There is nothing to judge again in " + prepDir + ". Either the sift was "
+                    + "repaired in the meantime, or the problem is not in the sifting. Nothing was "
+                    + "discarded.");
         }
     }
 

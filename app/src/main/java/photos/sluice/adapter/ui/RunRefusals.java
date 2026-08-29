@@ -67,6 +67,7 @@ final class RunRefusals {
             // Written for the person meeting it, like the three above. A run finishing between a
             // screen being drawn and its button being pressed is the ordinary way here.
             case final Pipeline.RunAlreadyFinishedException finished -> messageOf(finished);
+            case final Pipeline.NothingToRedoException nothing -> messageOf(nothing);
             case final Pipeline.ScopeUnreadableException unreadable -> "Sluice doesn't know whether a "
                     + "sift is already running for that timeline, because " + unreadable.prepDir()
                     + " cannot be read. Most likely the folder is held by another process or not "
@@ -76,9 +77,10 @@ final class RunRefusals {
                     + "now. Point your working folder back at the one holding it, or discard the sift.";
             case final MalformedPrepJsonException _ -> "There are no instructions to copy for that "
                     + "sift, because its records are damaged.";
-            // Deliberately says nothing about which file. This arm answers for every read in the
-            // app, and only the one that failed knows what it was after.
-            case final UncheckedIOException failed -> "A file could not be read. Another program "
+            // Deliberately says nothing about which file, nor about what was being done to it.
+            // This arm answers for every file this app opens, moves or writes, and only the call
+            // that failed knows which of those it was after.
+            case final UncheckedIOException failed -> "A file could not be reached. Another program "
                     + "may have it open. If it keeps happening, report it, quoting this: "
                     + failed.getMessage();
             // Nothing here was written for a reader, so the words are the app's own and the

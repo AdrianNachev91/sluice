@@ -33,6 +33,7 @@ import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.LaunchPrompt;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
@@ -240,6 +241,17 @@ final class CullEngine {
      */
     String launchPromptFor(final Path prepDir) {
         return LaunchPrompt.forRun(this.cullPrepPort.readIndex(prepDir));
+    }
+
+    /**
+     * The instructions for writing a run's rejected answers again.
+     *
+     * @param prepDir {@link Path} the run
+     * @param findings a {@link List} of {@link Finding} what the diagnosis blamed
+     * @return {@link String} the text to hand an agent
+     */
+    String redoPromptFor(final Path prepDir, final List<Finding> findings) {
+        return LaunchPrompt.forRedo(this.cullPrepPort.readIndex(prepDir), findings);
     }
 
     /**
