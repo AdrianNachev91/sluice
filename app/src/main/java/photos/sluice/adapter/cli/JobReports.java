@@ -110,11 +110,10 @@ public class JobReports {
             this.progress.note(TypedCancel.HINT);
         }
         final T produced;
-        // Closed before the answer is read, so a line arriving while the outcome is being built
-        // cannot print a note under a run that has already finished.
-        try (final var watching = this.cancel.watch(job)) {
+        // The watch closes as this block ends, before the outcome below is built. A line arriving
+        // after that cannot print a note under a run which has already finished.
+        try (final var _ = this.cancel.watch(job)) {
             produced = job.join();
-            watching.close();
         }
         // The answer's own account rather than the handle's flag. A cancel asked for while the last
         // of the work was already finishing stopped nothing, and only the answer knows that.
