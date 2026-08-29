@@ -903,8 +903,8 @@ class ApplyEngineTest {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir) {
-            return this.delegate.move(source, destDir);
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
+            return this.delegate.move(source, destDir, stop);
         }
 
         @Override
@@ -913,15 +913,15 @@ class ApplyEngineTest {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination) {
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
             if (this.movesUntilFailure <= 0) {
                 if (this.crashPoint == CrashPoint.AFTER_THE_MOVE) {
-                    this.delegate.moveTo(source, destination);
+                    this.delegate.moveTo(source, destination, stop);
                 }
                 throw new RuntimeException("simulated crash");
             }
             this.movesUntilFailure--;
-            return this.delegate.moveTo(source, destination);
+            return this.delegate.moveTo(source, destination, stop);
         }
 
         @Override
@@ -955,13 +955,13 @@ class ApplyEngineTest {
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir) {
-            return this.delegate.copy(source, destDir);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
+            return this.delegate.copy(source, destDir, stop);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination) {
-            return this.delegate.copyTo(source, destination);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
+            return this.delegate.copyTo(source, destination, stop);
         }
 
         @Override

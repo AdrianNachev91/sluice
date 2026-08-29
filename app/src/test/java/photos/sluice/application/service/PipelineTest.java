@@ -5,8 +5,13 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
+import photos.sluice.domain.cull.AnswerSource;
+import photos.sluice.domain.cull.ChoiceAnswer;
+import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DiscardReport;
+import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
@@ -133,7 +138,7 @@ class PipelineTest {
     }
 
     // Proves cancellation reaches SortEngine's own mid-routing check through Pipeline's real
-    // handle::isCancellationRequested wiring, not just through a hand-built CancellationSignal -
+    // handle.stopSignal() wiring, not just through a hand-built CancellationSignal -
     // SortEngineTest already covers SortEngine's own cancellation semantics directly. BlockingMoves
     // synchronizes the request with the exact moment the first file's move is in flight, so it lands
     // mid-pass rather than before the pass even starts.
@@ -338,6 +343,87 @@ class PipelineTest {
 
         assertThat(report.purged()).containsExactly(prepDir.getFileName().toString());
         assertThat(Files.exists(prepDir)).isFalse();
+    }
+
+    // One case per variant, because answer()'s switch is the whole of its behaviour and an arm
+    // wired to the wrong remedy would still compile.
+    @Test
+    void everyAnswerReachesTheRemedyItNames(@TempDir final Path root) throws IOException {
+        final var pipeline = cullPipeline(root, new RecordingProgressPort());
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        final Path gone = root.resolve("Sorted/Photos/2019/06/gone.jpg");
+        final Path overlapping = root.resolve("Sorted/Photos/2019/06/overlapping.jpg");
+        final Path stray = prepDir.resolve("decisions-999.json");
+        writeFile(stray, "{}");
+
+        pipeline.answer(prepDir, new ChoiceAnswer.SkipMissingSource(gone), AnswerSource.DESKTOP);
+        pipeline.answer(prepDir, new ChoiceAnswer.ResolveOverlap(overlapping, OverlapResolution.TRUST_DECISION),
+                AnswerSource.DESKTOP);
+        pipeline.answer(prepDir, new ChoiceAnswer.ResolveCorruptSidecar("montage-001",
+                CorruptSidecarResolution.SET_ASIDE), AnswerSource.DESKTOP);
+        pipeline.answer(prepDir, new ChoiceAnswer.SetAsideStrayShard(new Finding.StrayShard("decisions-999.json")),
+                AnswerSource.DESKTOP);
+
+        final String choices = Files.readString(prepDir.resolve("choices.log"));
+        assertThat(choices).contains(gone.toString(), overlapping.toString(), "montage-001");
+        assertThat(choices.lines()).allMatch(line -> line.endsWith("DESKTOP"));
+        assertThat(Files.exists(stray)).isFalse();
+    }
+
+    @Test
+    void anAnswerLandsWhileAJobIsStillRunning(@TempDir final Path root) throws Exception {
+        writeFile(inboxOf(root).resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inboxOf(root).resolve("20210102_b.jpg"), padded("b"));
+        final var moveStarted = new CountDownLatch(1);
+        final var releaseMove = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
+        final Path prepDir = root.resolve("logs/sift-prep/2019");
+        writeFile(prepDir.resolve("index.json"), "{}");
+        final JobHandle<SortSummary> sorting = pipeline.sort(new SortScope.OldestYear());
+        moveStarted.await();
+
+        pipeline.answer(prepDir, new ChoiceAnswer.SkipMissingSource(root.resolve("Sorted/gone.jpg")),
+                AnswerSource.DESKTOP);
+
+        assertThat(Files.readString(prepDir.resolve("choices.log")).strip()).endsWith("DESKTOP");
+        releaseMove.countDown();
+        sorting.join();
+    }
+
+    @Test
+    void anUnreadableSpendLedgerIsFiledIntoTheArchivesRatherThanDeleted(@TempDir final Path root) throws IOException {
+        final Path ledger = root.resolve("logs/spend-ledger.csv");
+        writeFile(ledger, "not a ledger line at all");
+        final var pipeline = pipeline(root, new RecordingProgressPort());
+
+        final Path filed = pipeline.setAsideUnreadableSpendLedger();
+
+        assertThat(filed).isNotNull().hasParent(root.resolve("logs/archives"));
+        assertThat(filed).hasContent("not a ledger line at all");
+        assertThat(Files.exists(ledger)).isFalse();
+    }
+
+    @Test
+    void filingAwayASpendLedgerThatIsNotThereAnswersThatThereWasNone(@TempDir final Path root) {
+        assertThat(pipeline(root, new RecordingProgressPort()).setAsideUnreadableSpendLedger()).isNull();
+    }
+
+    // The repair exists for a record no parser accepts. Asked about a healthy one it has to leave
+    // it alone. This is the user's only history of what past sifts cost, and filing it away
+    // degrades every later estimate to the shipped seed.
+    @Test
+    void aSpendLedgerThatReadsIsLeftWhereItIs(@TempDir final Path root) throws IOException {
+        final String recorded = "\"2026-08-22T10:00:00Z\",\"2018\",\"anthropic\",\"claude-sonnet-5\","
+                + "\"224\",\"5\",\"28\",\"0\",\"1\",\"148231\",\"24800\",\"APPLIED\"";
+        final Path ledger = root.resolve("logs/spend-ledger.csv");
+        writeFile(ledger, recorded);
+
+        final Path filed = pipeline(root, new RecordingProgressPort()).setAsideUnreadableSpendLedger();
+
+        assertThat(filed).isNull();
+        assertThat(ledger).hasContent(recorded);
     }
 
     // Proves discard() actually runs through JobRunner and reaches PrepDirRemedies.discard().

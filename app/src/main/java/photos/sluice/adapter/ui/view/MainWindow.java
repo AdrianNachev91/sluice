@@ -15,10 +15,13 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
+import photos.sluice.adapter.ui.ScreenFailure;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 
@@ -28,6 +31,8 @@ import java.util.function.Supplier;
  * The app's main window: a sidebar over three destinations, and whichever one is showing.
  */
 final class MainWindow {
+
+    private static final Logger log = LoggerFactory.getLogger(MainWindow.class);
 
     private static final String DASHBOARD = "Dashboard";
     private static final String SETTINGS = "Settings";
@@ -184,9 +189,35 @@ final class MainWindow {
         if (current != null && screen.equals(current.getId())) {
             return;
         }
-        final Node next = draw.get();
+        final Node next = buildOrSayItFailed(screen, draw);
         next.setId(screen);
         content.getChildren().setAll(next);
+    }
+
+    /**
+     * Builds a screen, answering with a panel saying so where building it threw.
+     *
+     * <p>Catches every runtime failure rather than a named list. What can throw here is whatever a
+     * screen's construction reaches, which is most of the app, and a list would go stale on the
+     * next screen added.
+     *
+     * @param screen {@link String} the screen being asked for, named in the log
+     * @param draw {@link Supplier} of {@link Node} builds it
+     * @return {@link Node} the screen, or a panel saying it would not open
+     */
+    private static Node buildOrSayItFailed(final String screen, final Supplier<Node> draw) {
+        try {
+            return draw.get();
+        } catch (final RuntimeException e) {
+            log.error("The {} screen could not be built", screen, e);
+            // Headed by the screen that was asked for, so a reader who pressed Runs is not left
+            // working out which press this answers.
+            final var panel = headingPane(screen);
+            final var message = new Label(ScreenFailure.wouldNotOpen(e));
+            message.setWrapText(true);
+            panel.getChildren().add(message);
+            return panel;
+        }
     }
 
     /**
@@ -263,7 +294,8 @@ final class MainWindow {
         if (current != null && !DASHBOARD.equals(current.getId())) {
             return;
         }
-        final Node pane = dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, said);
+        final Node pane = buildOrSayItFailed(DASHBOARD,
+                () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, said));
         pane.setId(DASHBOARD);
         content.getChildren().setAll(pane);
     }

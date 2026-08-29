@@ -194,7 +194,7 @@ final class CullEngine {
         this.refuseIfTheProviderHasNoCredential();
         this.refuseIfScopeOccupied(scope);
         this.refuseIfScopeOverlaps(scope);
-        return this.jobRunner.submit(handle -> this.buildFreshAndDispatch(scope, handle::isCancellationRequested));
+        return this.jobRunner.submit(handle -> this.buildFreshAndDispatch(scope, handle.stopSignal()));
     }
 
     /**
@@ -229,7 +229,7 @@ final class CullEngine {
         return this.jobRunner.submit(handle -> {
             this.refuseRunOutsideTheWorkingRoot(prepDir);
             return this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
-                    handle::isCancellationRequested, null);
+                    handle.stopSignal(), null);
         });
     }
 

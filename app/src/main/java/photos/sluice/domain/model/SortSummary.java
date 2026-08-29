@@ -20,6 +20,11 @@ import java.util.Set;
  * <p>{@code warnings} carries conditions worth a human's attention that stopped nothing: today,
  * only the pairing canary firing when Takeout sidecars were present but almost none of them paired
  * to a scanned media file. Empty means nothing tripped it.
+ *
+ * <p>{@code cancelled} is the run's own account of whether it stopped short.
+ *
+ * <p>{@code leftBehind} counts the in-scope files still in the Inbox. It is zero on a run that
+ * stopped before it had a plan to route, since nothing was ever picked to move.
  */
 public record SortSummary(
         int processed,
@@ -33,7 +38,9 @@ public record SortSummary(
         List<String> lowConfidenceFiles,
         List<String> unsortedFiles,
         Set<Integer> yearsSorted,
-        List<String> warnings) {
+        List<String> warnings,
+        boolean cancelled,
+        int leftBehind) {
 
     /**
      * Validates that processed equals the six outcome buckets added together, then defensively
@@ -51,6 +58,8 @@ public record SortSummary(
      * @param unsortedFiles a {@link List} of {@link String} filenames routed to Review\Unsorted
      * @param yearsSorted a {@link Set} of {@link Integer} distinct years any file landed in this run
      * @param warnings a {@link List} of {@link String} conditions worth attention that stopped nothing
+     * @param cancelled boolean whether the run gave up before reaching the end of its scope
+     * @param leftBehind int in-scope files the routing pass did not reach, still in the Inbox
      */
     public SortSummary {
         // sidecarsDeleted is deliberately outside the sum. A sidecar is metadata, not media, and

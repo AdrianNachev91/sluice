@@ -165,7 +165,7 @@ class RunResultPaneTest {
         onFxThread(() -> mounted.fill().accept(card(offeringASift())));
         onFxThread(() -> mounted.fill().accept(card(offering())));
 
-        assertThat(((Button) mounted.node().lookup("#run-resume")).getStyleClass())
+        assertThat(mounted.node().lookup("#run-resume").getStyleClass())
                 .contains("run-cancel").doesNotContain("run-start");
     }
 
@@ -197,7 +197,7 @@ class RunResultPaneTest {
     @Test
     void aFailedRunMarksTheCardSoItsOwnSentenceCanBeDrawnToBeRead() throws Exception {
         final Parent pane = onFxThread(() -> shown(new RunResultView("Sorting stopped.", Tone.FAILED,
-                "Sluice could not do that.", List.of(), null, null, null, "Done")));
+                "Sluice could not do that.", List.of(), null, null, "Done")));
 
         assertThat(pane.getPseudoClassStates()).contains(FAILED);
     }
@@ -207,7 +207,7 @@ class RunResultPaneTest {
         final RunResultPane.Mounted mounted = onFxThread(
                 () -> RunResultPane.mount(mock(RunLauncherPresenter.class), () -> { }));
         onFxThread(() -> mounted.fill().accept(card(new RunResultView("Sorting stopped.", Tone.FAILED,
-                "Broke.", List.of(), null, null, null, "Done"))));
+                "Broke.", List.of(), null, null, "Done"))));
 
         onFxThread(() -> mounted.fill().accept(card(finished(List.of()))));
 
@@ -215,12 +215,12 @@ class RunResultPaneTest {
     }
 
     private static RunResultView finished(final List<Count> counts) {
-        return new RunResultView("Sorting finished.", Tone.FINISHED, null, counts, null, null, null,
+        return new RunResultView("Sorting finished.", Tone.FINISHED, null, counts, null, null,
                 "Done");
     }
 
     private static RunResultView with(final Warning warning) {
-        return new RunResultView("Sorting finished.", Tone.FINISHED, null, List.of(), null, warning,
+        return new RunResultView("Sorting finished.", Tone.FINISHED, null, List.of(), warning,
                 null, "Done");
     }
 
@@ -230,12 +230,12 @@ class RunResultPaneTest {
 
     private static RunResultView offeringFor(final Path prepDir) {
         return new RunResultView("Sifting stopped at its spending limit.", Tone.UNFINISHED, null,
-                List.of(), null, null,
+                List.of(), null,
                 new CardAction.ContinueRun("Continue?", "Continue sifting", prepDir), "Done");
     }
 
     private static RunResultView offeringASift() {
-        return new RunResultView("Sorting finished.", Tone.FINISHED, null, List.of(), null, null,
+        return new RunResultView("Sorting finished.", Tone.FINISHED, null, List.of(), null,
                 new CardAction.SiftNow("Sift 2019", 2019, 6), "Done");
     }
 

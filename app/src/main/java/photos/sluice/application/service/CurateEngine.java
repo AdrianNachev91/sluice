@@ -82,7 +82,7 @@ final class CurateEngine {
         }
         return this.jobRunner.submit(handle -> {
             final SortSummary sortSummary =
-                    this.sortEngine.sort(scope, handle::isCancellationRequested);
+                    this.sortEngine.sort(scope, handle.stopSignal());
             if (handle.isCancellationRequested()) {
                 return new CurateOutcome(sortSummary, null);
             }
@@ -109,7 +109,7 @@ final class CurateEngine {
                     this.cullEngine.refuseIfScopeOccupied(cullScope);
                 }
                 return new CurateOutcome(sortSummary,
-                        this.cullEngine.buildFreshAndDispatch(cullScope, handle::isCancellationRequested));
+                        this.cullEngine.buildFreshAndDispatch(cullScope, handle.stopSignal()));
             } catch (final Pipeline.ScopeOccupiedException conflict) {
                 throw new Pipeline.CurateConflictException(conflict.occupant(), sortSummary);
             }

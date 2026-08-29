@@ -1,5 +1,7 @@
 package photos.sluice.application.port.out;
 
+import photos.sluice.domain.job.CancellationSignal;
+
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 
@@ -9,17 +11,46 @@ import java.nio.file.Path;
  *
  * <p>A collaborator that never mutates should take {@link MediaReader} instead, so the mutators
  * below are simply not reachable from it.
+ *
+ * <p>Every transfer below takes a {@link CancellationSignal}, asked wherever bytes actually move.
+ * So a caller can give up on one large file instead of waiting it out. A move that turns out to be
+ * a rename has no bytes to interrupt and ignores the signal entirely, which leaves the loop around
+ * it as the only thing that stops. Answering the escalation throws
+ * {@link TransferAbandonedException}, and the destination is not left holding a prefix of the
+ * source under its own name. A caller with nothing to stop passes {@link CancellationSignal#NEVER}.
+ *
+ * <p>One form each rather than a signal-less overload beside it. An overload lets an implementation
+ * override the form nobody calls, which compiles, reads as complete, and silently does nothing.
  */
 public interface MediaStore extends MediaReader {
+
+    /** The suffix an implementation gives a transfer it has not finished writing. */
+    String INCOMPLETE_TRANSFER_SUFFIX = ".sluice-part";
+
+    /**
+     * Whether a path names a transfer that never landed, rather than a file of the user's.
+     *
+     * <p>{@link #listFiles} answers these like anything else, because a caller clearing a directory
+     * has to be handed them. A caller that would hash, move or index what it gets back asks this
+     * first. The file holds a prefix of a photo, and nothing downstream can tell by reading it.
+     *
+     * @param file {@link Path} a file a walk turned up
+     * @return boolean true where the file is a half-written transfer
+     */
+    static boolean isIncompleteTransfer(final Path file) {
+        return file.getFileName().toString().endsWith(INCOMPLETE_TRANSFER_SUFFIX);
+    }
 
     /**
      * Moves a file into a destination directory.
      *
      * @param source {@link Path} the file to move
      * @param destDir {@link Path} the destination directory
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
      * @return {@link Path} the path the file was moved to
+     * @throws TransferAbandonedException if stop escalated before the move finished
      */
-    Path move(Path source, Path destDir);
+    Path move(Path source, Path destDir, CancellationSignal stop);
 
     /**
      * The exact free path move(source, destDir) would land on, without performing the move. That is
@@ -40,28 +71,34 @@ public interface MediaStore extends MediaReader {
      *
      * @param source {@link Path} the file to move
      * @param destination {@link Path} the exact destination path
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
      * @return {@link Path} the destination path
+     * @throws TransferAbandonedException if stop escalated before the move finished
      */
-    Path moveTo(Path source, Path destination);
+    Path moveTo(Path source, Path destination, CancellationSignal stop);
 
     /**
      * Copies a file into a destination directory.
      *
      * @param source {@link Path} the file to copy
      * @param destDir {@link Path} the destination directory
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
      * @return {@link Path} the path the copy was written to
+     * @throws TransferAbandonedException if stop escalated before the copy finished
      */
-    Path copy(Path source, Path destDir);
+    Path copy(Path source, Path destDir, CancellationSignal stop);
 
     /**
      * Copies source to exactly destination.
      *
-     * @param source {@link Path}
+     * @param source {@link Path} the file to copy
      * @param destination {@link Path} must be free
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
      * @return {@link Path} the destination path
      * @throws UncheckedIOException if destination is already taken, or the copy fails
+     * @throws TransferAbandonedException if stop escalated before the copy finished
      */
-    Path copyTo(Path source, Path destination);
+    Path copyTo(Path source, Path destination, CancellationSignal stop);
 
     /**
      * Deletes a file.

@@ -2,6 +2,7 @@ package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.domain.copy.CopySummary;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
@@ -60,18 +61,26 @@ public class CopyEngine {
         // was asked to copy into. Copying nothing and creating nothing reports a success that left
         // no trace, which a caller cannot tell from a copy that never ran.
         this.mediaStore.ensureDirectory(destination);
-        final List<Path> files = this.mediaStore.listFiles(source);
+        final List<Path> files = this.mediaStore.listFiles(source).stream()
+                .filter(file -> !MediaStore.isIncompleteTransfer(file))
+                .toList();
         final int total = files.size();
         int copied = 0;
         int seen = 0;
-        for (final Path file : files) {
-            if (cancelled.isCancelled()) {
-                return new CopySummary(copied, total, true);
+        try {
+            for (final Path file : files) {
+                if (cancelled.isCancelled()) {
+                    return new CopySummary(copied, total, true);
+                }
+                if (this.copyKeepingItsPlace(source, destination, file, cancelled)) {
+                    copied++;
+                }
+                progress.tick(++seen, total);
             }
-            if (this.copyKeepingItsPlace(source, destination, file)) {
-                copied++;
-            }
-            progress.tick(++seen, total);
+        } catch (final TransferAbandonedException e) {
+            // Reported the way a stop between files is, because it is one. The abandoned file left
+            // no part-written copy behind, so a run started again lands it whole.
+            return new CopySummary(copied, total, true);
         }
         return new CopySummary(copied, total, false);
     }
@@ -96,9 +105,12 @@ public class CopyEngine {
      * @param source {@link Path} the directory being copied from
      * @param destination {@link Path} the directory being copied into
      * @param file {@link Path} the file to copy
+     * @param cancelled {@link CancellationSignal} asked while the file's bytes are moving
      * @return boolean true when this run wrote it, false when it was already there
+     * @throws TransferAbandonedException if cancelled escalated before the copy finished
      */
-    private boolean copyKeepingItsPlace(final Path source, final Path destination, final Path file) {
+    private boolean copyKeepingItsPlace(final Path source, final Path destination, final Path file,
+                                        final CancellationSignal cancelled) {
         final Path relative = source.relativize(file);
         final Path parent = relative.getParent();
         final Path targetDirectory = parent == null ? destination : destination.resolve(parent);
@@ -107,7 +119,7 @@ public class CopyEngine {
             return false;
         }
         this.mediaStore.ensureDirectory(targetDirectory);
-        this.mediaStore.copy(file, targetDirectory);
+        this.mediaStore.copy(file, targetDirectory, cancelled);
         return true;
     }
 

@@ -3,6 +3,9 @@ package photos.sluice.adapter.fs;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.domain.job.CancellationSignal;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -10,7 +13,10 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,6 +42,47 @@ class NioMediaStoreTest {
     }
 
     @Test
+    void listFilesAnswersATransferThatNeverLandedLikeAnyOtherFile(@TempDir final Path root) throws IOException {
+        Files.writeString(root.resolve("IMG_1234.jpg"), "a whole photo");
+        final Path part = root.resolve("IMG_5678.jpg.sluice-part");
+        Files.writeString(part, "half a photo");
+
+        assertThat(this.store.listFiles(root)).contains(part);
+        assertThat(MediaStore.isIncompleteTransfer(part)).isTrue();
+        assertThat(MediaStore.isIncompleteTransfer(root.resolve("IMG_1234.jpg"))).isFalse();
+    }
+
+    // TRUNCATE_EXISTING is what makes the part file a fresh one. Without it a copy appends to what
+    // an earlier abandoned run left under that name. The photo then lands with a tail.
+    @Test
+    void aCopyOverAPartFileLeftByAnEarlierRunWritesOnlyTheSourceBytes(@TempDir final Path root)
+            throws IOException {
+        final Path source = root.resolve("IMG_1234.jpg");
+        Files.writeString(source, "new", StandardCharsets.UTF_8);
+        final Path destDir = Files.createDirectories(root.resolve("dest"));
+        Files.writeString(destDir.resolve("IMG_1234.jpg.sluice-part"), "leftover bytes from before",
+                StandardCharsets.UTF_8);
+
+        final Path landed = this.store.copy(source, destDir, CancellationSignal.NEVER);
+
+        assertThat(Files.readString(landed, StandardCharsets.UTF_8)).isEqualTo("new");
+        assertThat(this.store.listFiles(destDir)).containsExactly(landed);
+    }
+
+    // The loop reads before its first check, so an empty source never enters it. Real dumps hold
+    // zero-byte files.
+    @Test
+    void aZeroByteFileStillLands(@TempDir final Path root) throws IOException {
+        final Path source = Files.createFile(root.resolve("empty.jpg"));
+        final Path destDir = Files.createDirectories(root.resolve("dest"));
+
+        final Path landed = this.store.copy(source, destDir, CancellationSignal.NEVER);
+
+        assertThat(landed).exists();
+        assertThat(Files.size(landed)).isZero();
+    }
+
+    @Test
     void listFilesOnAMissingRootWrapsIoExceptionUnchecked(@TempDir final Path root) {
         final Path missing = root.resolve("does-not-exist");
 
@@ -48,7 +95,7 @@ class NioMediaStoreTest {
         Files.writeString(source, "photo bytes", StandardCharsets.UTF_8);
         final Path destDir = root.resolve("Sorted").resolve("2019").resolve("06");
 
-        final Path dest = this.store.move(source, destDir);
+        final Path dest = this.store.move(source, destDir, CancellationSignal.NEVER);
 
         assertThat(dest).isEqualTo(destDir.resolve("IMG_1234.jpg"));
         assertThat(Files.exists(source)).isFalse();
@@ -63,7 +110,7 @@ class NioMediaStoreTest {
         final Path source = root.resolve("IMG_1234.jpg");
         Files.writeString(source, "incoming");
 
-        final Path dest = this.store.move(source, destDir);
+        final Path dest = this.store.move(source, destDir, CancellationSignal.NEVER);
 
         assertThat(dest).isEqualTo(destDir.resolve("IMG_1234 (3).jpg"));
         assertThat(Files.readString(dest)).isEqualTo("incoming");
@@ -88,8 +135,8 @@ class NioMediaStoreTest {
         final Path second = from2.resolve("PHOTO.jpg");
         Files.writeString(second, "second");
 
-        final Path firstDest = this.store.move(first, destDir);
-        final Path secondDest = this.store.move(second, destDir);
+        final Path firstDest = this.store.move(first, destDir, CancellationSignal.NEVER);
+        final Path secondDest = this.store.move(second, destDir, CancellationSignal.NEVER);
 
         assertThat(firstDest).isEqualTo(destDir.resolve("photo.jpg"));
         assertThat(secondDest).isEqualTo(destDir.resolve("PHOTO (2).jpg"));
@@ -104,7 +151,7 @@ class NioMediaStoreTest {
         final Path source = root.resolve("README");
         Files.writeString(source, "incoming");
 
-        final Path dest = this.store.move(source, destDir);
+        final Path dest = this.store.move(source, destDir, CancellationSignal.NEVER);
 
         assertThat(dest).isEqualTo(destDir.resolve("README (2)"));
     }
@@ -115,7 +162,7 @@ class NioMediaStoreTest {
         Files.writeString(source, "photo bytes");
         final Path destDir = root.resolve("dest");
 
-        final Path dest = this.store.copy(source, destDir);
+        final Path dest = this.store.copy(source, destDir, CancellationSignal.NEVER);
 
         assertThat(Files.exists(source)).isTrue();
         assertThat(Files.readString(dest)).isEqualTo("photo bytes");
@@ -128,7 +175,7 @@ class NioMediaStoreTest {
         final Path source = root.resolve("IMG_1234.jpg");
         Files.writeString(source, "incoming");
 
-        final Path dest = this.store.copy(source, destDir);
+        final Path dest = this.store.copy(source, destDir, CancellationSignal.NEVER);
 
         assertThat(dest).isEqualTo(destDir.resolve("IMG_1234 (2).jpg"));
         assertThat(Files.readString(destDir.resolve("IMG_1234.jpg"))).isEqualTo("existing");
@@ -141,7 +188,7 @@ class NioMediaStoreTest {
         final Path source = root.resolve(".gitignore");
         Files.writeString(source, "incoming");
 
-        final Path dest = this.store.move(source, destDir);
+        final Path dest = this.store.move(source, destDir, CancellationSignal.NEVER);
 
         assertThat(dest).isEqualTo(destDir.resolve(".gitignore (2)"));
     }
@@ -151,7 +198,8 @@ class NioMediaStoreTest {
         final Path missing = root.resolve("does-not-exist.jpg");
         final Path destDir = root.resolve("dest");
 
-        assertThatThrownBy(() -> this.store.move(missing, destDir)).isInstanceOf(UncheckedIOException.class);
+        assertThatThrownBy(() -> this.store.move(missing, destDir, CancellationSignal.NEVER))
+                .isInstanceOf(UncheckedIOException.class);
     }
 
     @Test
@@ -159,7 +207,8 @@ class NioMediaStoreTest {
         final Path missing = root.resolve("does-not-exist.jpg");
         final Path destDir = root.resolve("dest");
 
-        assertThatThrownBy(() -> this.store.copy(missing, destDir)).isInstanceOf(UncheckedIOException.class);
+        assertThatThrownBy(() -> this.store.copy(missing, destDir, CancellationSignal.NEVER))
+                .isInstanceOf(UncheckedIOException.class);
     }
 
     @Test
@@ -374,7 +423,7 @@ class NioMediaStoreTest {
         Files.writeString(root.resolve("holiday.jpg"), "holiday");
 
         final Path written = this.store.copyTo(root.resolve("holiday.jpg"),
-                root.resolve("2019").resolve("holiday.jpg.sluice-part"));
+                root.resolve("2019").resolve("holiday.jpg.sluice-part"), CancellationSignal.NEVER);
 
         assertThat(written).isEqualTo(root.resolve("2019").resolve("holiday.jpg.sluice-part"));
         assertThat(written).hasContent("holiday");
@@ -387,9 +436,84 @@ class NioMediaStoreTest {
         Files.writeString(root.resolve("holiday.jpg"), "the one being copied");
         Files.writeString(root.resolve("taken.jpg"), "the one already there");
 
-        assertThatThrownBy(() -> this.store.copyTo(root.resolve("holiday.jpg"), root.resolve("taken.jpg")))
+        assertThatThrownBy(() -> this.store.copyTo(root.resolve("holiday.jpg"), root.resolve("taken.jpg"),
+                CancellationSignal.NEVER))
                 .isInstanceOf(UncheckedIOException.class);
         assertThat(root.resolve("taken.jpg")).hasContent("the one already there");
+    }
+
+    @Test
+    void aCopyCarriesTheSourcesLastModifiedTimeOverToTheFileItWrites(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("holiday.jpg");
+        Files.writeString(source, "holiday");
+        final FileTime taken = FileTime.from(Instant.parse("2019-07-04T10:15:30Z"));
+        Files.setLastModifiedTime(source, taken);
+
+        final Path written = this.store.copy(source, root.resolve("dest"), CancellationSignal.NEVER);
+
+        assertThat(Files.getLastModifiedTime(written)).isEqualTo(taken);
+    }
+
+    @Test
+    void aCopySpanningManyBlocksLandsEveryByteOfIt(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("movie.mp4");
+        final byte[] bytes = bytesOfLength(3_000_000);
+        Files.write(source, bytes);
+
+        final Path written = this.store.copy(source, root.resolve("dest"), CancellationSignal.NEVER);
+
+        assertThat(Files.readAllBytes(written)).isEqualTo(bytes);
+    }
+
+    @Test
+    void aCopyAbandonedPartWayLeavesTheDestinationDirectoryEmpty(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("movie.mp4");
+        Files.write(source, bytesOfLength(3_000_000));
+        final Path destDir = root.resolve("dest");
+
+        assertThatThrownBy(() -> this.store.copy(source, destDir, abandonsAfter(1)))
+                .isInstanceOf(TransferAbandonedException.class);
+
+        try (final var landed = Files.list(destDir)) {
+            assertThat(landed).isEmpty();
+        }
+        assertThat(Files.size(source)).isEqualTo(3_000_000);
+    }
+
+    @Test
+    void aMoveAcrossFileStoresCopiesTheFileOverAndThenRemovesTheOriginal(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("holiday.jpg");
+        Files.writeString(source, "holiday");
+
+        final Path landed = acrossFileStores().moveTo(source, root.resolve("2019").resolve("holiday.jpg"),
+                CancellationSignal.NEVER);
+
+        assertThat(landed).hasContent("holiday");
+        assertThat(Files.exists(source)).isFalse();
+    }
+
+    @Test
+    void aMoveAcrossFileStoresAbandonedPartWayLeavesTheOriginalWhereItWas(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("movie.mp4");
+        Files.write(source, bytesOfLength(3_000_000));
+        final Path destination = root.resolve("2019").resolve("movie.mp4");
+
+        assertThatThrownBy(() -> acrossFileStores().moveTo(source, destination, abandonsAfter(1)))
+                .isInstanceOf(TransferAbandonedException.class);
+
+        assertThat(Files.size(source)).isEqualTo(3_000_000);
+        assertThat(Files.exists(destination)).isFalse();
+    }
+
+    @Test
+    void aMoveWithinOneFileStoreLandsEvenWhileTheSignalIsAskingToAbandon(@TempDir final Path root) throws IOException {
+        final Path source = root.resolve("holiday.jpg");
+        Files.writeString(source, "holiday");
+
+        final Path landed = this.store.moveTo(source, root.resolve("2019").resolve("holiday.jpg"), abandonsAfter(0));
+
+        assertThat(landed).hasContent("holiday");
+        assertThat(Files.exists(source)).isFalse();
     }
 
     @Test
@@ -424,5 +548,39 @@ class NioMediaStoreTest {
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    private static byte[] bytesOfLength(final int length) {
+        final byte[] bytes = new byte[length];
+        for (int i = 0; i < length; i++) {
+            bytes[i] = (byte) (i % 251);
+        }
+        return bytes;
+    }
+
+    // Answering true on the first ask would only ever prove a copy that wrote nothing at all. The
+    // count is what puts real bytes in the part file before the escalation lands on it.
+    private static CancellationSignal abandonsAfter(final int asks) {
+        final AtomicInteger asked = new AtomicInteger();
+        return new CancellationSignal() {
+            @Override
+            public boolean isCancelled() {
+                return true;
+            }
+
+            @Override
+            public boolean isAbandonRequested() {
+                return asked.getAndIncrement() >= asks;
+            }
+        };
+    }
+
+    private static NioMediaStore acrossFileStores() {
+        return new NioMediaStore() {
+            @Override
+            boolean sameFileStore(final Path source, final Path destinationDir) {
+                return false;
+            }
+        };
     }
 }

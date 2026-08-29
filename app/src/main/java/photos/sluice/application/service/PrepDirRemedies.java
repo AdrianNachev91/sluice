@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.DiscardReport;
@@ -15,6 +16,7 @@ import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 import photos.sluice.domain.cull.Verdict;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 
 import java.nio.file.Path;
@@ -82,10 +84,10 @@ public class PrepDirRemedies {
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param source {@link Path} the missing file's original source path, as named by the MissingSource finding
-     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     * @param answeredOn {@link AnswerSource} which surface the answer was given through
      */
-    public void skipMissingSource(final Path prepDirPath, final Path source, final String reason) {
-        this.moveLedger.recordSkip(prepDirPath, source, reason);
+    public void skipMissingSource(final Path prepDirPath, final Path source, final AnswerSource answeredOn) {
+        this.moveLedger.recordSkip(prepDirPath, source, answeredOn);
     }
 
     /**
@@ -97,11 +99,11 @@ public class PrepDirRemedies {
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param file {@link Path} the file this overlap concerns, as named by the DecisionUnreviewableOverlap finding
      * @param resolution {@link OverlapResolution} which listing should win
-     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     * @param answeredOn {@link AnswerSource} which surface the answer was given through
      */
     public void resolveOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution,
-                               final String reason) {
-        this.moveLedger.recordOverlap(prepDirPath, file, resolution, reason);
+                               final AnswerSource answeredOn) {
+        this.moveLedger.recordOverlap(prepDirPath, file, resolution, answeredOn);
     }
 
     /**
@@ -115,15 +117,15 @@ public class PrepDirRemedies {
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param montage {@link String} the montage id this resolution concerns, as named by the CorruptSidecar finding
      * @param resolution {@link CorruptSidecarResolution} which way the batch was resolved
-     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     * @param answeredOn {@link AnswerSource} which surface the answer was given through
      */
     public void resolveCorruptSidecar(final Path prepDirPath, final String montage,
-                                      final CorruptSidecarResolution resolution, final String reason) {
+                                      final CorruptSidecarResolution resolution, final AnswerSource answeredOn) {
         final Path sidecarPath = prepDirPath.resolve(montage + ".json");
         if (this.mediaStore.exists(sidecarPath)) {
             this.disasterDrawer.file(prepDirPath, sidecarPath, "corrupt-sidecar-" + montage);
         }
-        this.moveLedger.recordCorruptSidecar(prepDirPath, montage, resolution, reason);
+        this.moveLedger.recordCorruptSidecar(prepDirPath, montage, resolution, answeredOn);
     }
 
     /**
@@ -169,7 +171,9 @@ public class PrepDirRemedies {
         if (!unambiguous) {
             return Optional.empty();
         }
-        this.mediaStore.moveTo(strayPath, prepDirPath.resolve(MontageNaming.shardFileFor(candidate)));
+        // A shard renamed within the prep dir it already sits in. Nothing here reads a photo.
+        this.mediaStore.moveTo(strayPath, prepDirPath.resolve(MontageNaming.shardFileFor(candidate)),
+                CancellationSignal.NEVER);
         return Optional.of(candidate);
     }
 
@@ -338,7 +342,10 @@ public class PrepDirRemedies {
             if (MontageNaming.isMontageImage(name)) {
                 this.mediaStore.delete(file);
             } else {
-                this.mediaStore.moveTo(file, graveyard.resolve(prepDirPath.relativize(file)));
+                // The arm above takes every montage image, so what reaches here is shards and text
+                // records. Small files, and nothing to give up part-way through.
+                this.mediaStore.moveTo(file, graveyard.resolve(prepDirPath.relativize(file)),
+                        CancellationSignal.NEVER);
                 if (MontageNaming.isShardFile(name)) {
                     shardsSetAside++;
                 }

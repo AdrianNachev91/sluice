@@ -3,8 +3,12 @@ package photos.sluice.adapter.fs;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.domain.job.CancellationSignal;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
@@ -12,8 +16,8 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,8 +36,19 @@ import java.util.stream.Stream;
 @Component
 public class NioMediaStore implements MediaStore {
 
+    private static final String PART_SUFFIX = MediaStore.INCOMPLETE_TRANSFER_SUFFIX;
+
+    // How much of a file moves between two chances to give up on it. At the ~200 MB/s a local disk
+    // gives, that is a stop answered within about 5ms. A large photo still crosses in a few dozen
+    // reads rather than thousands.
+    private static final int TRANSFER_BLOCK_BYTES = 1024 * 1024;
+
     /**
      * Lists every regular file under a directory tree, recursively.
+     *
+     * <p>A part file left by a transfer that never landed is answered like any other. A caller that
+     * would treat one as media asks {@link MediaStore#isIncompleteTransfer}; a caller clearing a
+     * directory out has to be handed it, or the directory never empties.
      *
      * @param root {@link Path} directory to walk
      * @return a {@link List} of {@link Path}, all regular files found under root
@@ -124,18 +139,6 @@ public class NioMediaStore implements MediaStore {
     }
 
     /**
-     * Moves a file into a destination directory, resolving any name collision first.
-     *
-     * @param source {@link Path} file to move
-     * @param destDir {@link Path} destination directory
-     * @return {@link Path} the file's final path after the move
-     */
-    @Override
-    public Path move(final Path source, final Path destDir) {
-        return this.moveTo(source, this.resolveDestination(source, destDir));
-    }
-
-    /**
      * Computes the collision-free destination path a move would use, without moving anything.
      *
      * @param source {@link Path} file that would be moved
@@ -148,15 +151,43 @@ public class NioMediaStore implements MediaStore {
     }
 
     /**
-     * Moves a file to an exact destination path, creating parent directories as needed.
+     * Moves a file into a destination directory, abandoning it if the signal escalates.
+     *
+     * @param source {@link Path} file to move
+     * @param destDir {@link Path} destination directory
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @return {@link Path} the file's final path after the move
+     */
+    @Override
+    public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
+        return this.moveTo(source, this.resolveDestination(source, destDir), stop);
+    }
+
+    /**
+     * Moves a file to an exact destination path, abandoning it if the signal escalates.
+     *
+     * <p>A rename within one volume is instant and has nothing to interrupt, so it stays a rename
+     * and ignores the escalation. A move across file stores is a full read and write instead. That
+     * one becomes an interruptible copy, with the source deleted once the copy has landed.
+     *
+     * <p>Which of the two it is, is decided up front rather than by catching a failure.
+     * {@code Files.move} does the cross-volume copy itself, silently and uninterruptibly, so
+     * nothing is thrown to catch. {@code ATOMIC_MOVE} would throw, and it also overwrites an
+     * occupied destination on POSIX, which is the one thing this app never does.
      *
      * @param source {@link Path} file to move
      * @param destination {@link Path} exact target path
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
      * @return {@link Path} the destination path
      */
     @Override
-    public Path moveTo(final Path source, final Path destination) {
+    public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
         this.ensureDirectory(destination.getParent());
+        if (!this.sameFileStore(source, destination.getParent())) {
+            this.copyTo(source, destination, stop);
+            this.delete(source);
+            return destination;
+        }
         try {
             Files.move(source, destination);
         } catch (final IOException e) {
@@ -166,42 +197,30 @@ public class NioMediaStore implements MediaStore {
     }
 
     /**
-     * Copies a file into a destination directory, preserving attributes and resolving collisions.
+     * Copies a file into a destination directory, abandoning it if the signal escalates.
      *
      * @param source {@link Path} file to copy
      * @param destDir {@link Path} destination directory
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
      * @return {@link Path} the path of the copy
      */
     @Override
-    public Path copy(final Path source, final Path destDir) {
-        final Path dest = this.prepareDestination(source, destDir);
-        try {
-            // Unlike move (a rename, where attributes ride along for free), a plain copy is not
-            // required to preserve timestamps - and the date-resolution fallback chain relies on
-            // mtime, so a copied file must keep its original one.
-            Files.copy(source, dest, StandardCopyOption.COPY_ATTRIBUTES);
-        } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to copy " + source + " to " + dest, e);
-        }
-        return dest;
+    public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
+        return this.copyTo(source, this.prepareDestination(source, destDir), stop);
     }
 
     /**
-     * Copies a file to an exact destination path, creating parent directories as needed.
+     * Copies a file to an exact destination path, abandoning it if the signal escalates.
      *
-     * @param source {@link Path}
-     * @param destination {@link Path}
+     * @param source {@link Path} file to copy
+     * @param destination {@link Path} exact target path, which must be free
+     * @param stop {@link CancellationSignal} asked while the bytes are moving
      * @return {@link Path} the destination path
      */
     @Override
-    public Path copyTo(final Path source, final Path destination) {
+    public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
         this.ensureDirectory(destination.getParent());
-        try {
-            // No REPLACE_EXISTING, so a name already taken throws rather than being written over.
-            Files.copy(source, destination, StandardCopyOption.COPY_ATTRIBUTES);
-        } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to copy " + source + " to " + destination, e);
-        }
+        interruptibleCopy(source, destination, stop);
         return destination;
     }
 
@@ -420,6 +439,93 @@ public class NioMediaStore implements MediaStore {
     }
 
     /**
+     * Copies source into a part file beside destination, then renames it into place.
+     *
+     * <p>A part file rather than the destination itself. An abandoned copy then cannot leave a
+     * truncated photo under a name a later scan would read.
+     *
+     * <p>The rename at the end is within one directory, so it is a rename on every platform. It
+     * carries no REPLACE_EXISTING, which is what keeps an occupied destination a failure rather
+     * than an overwrite.
+     *
+     * <p>Timestamps are restored by hand because a block-by-block copy preserves nothing. The
+     * date-resolution chain falls back to mtime, so a copy that lost it would be filed under the
+     * date it was copied. Access and creation times ride along on the same restore call.
+     *
+     * @param source {@link Path} file to read
+     * @param destination {@link Path} exact target path
+     * @param stop {@link CancellationSignal} asked between blocks
+     */
+    private static void interruptibleCopy(final Path source, final Path destination,
+                                          final CancellationSignal stop) {
+        final Path part = destination.resolveSibling(destination.getFileName() + PART_SUFFIX);
+        try {
+            final BasicFileAttributes sourceTimes = Files.readAttributes(source, BasicFileAttributes.class);
+            try (final InputStream in = Files.newInputStream(source);
+                 final OutputStream out = Files.newOutputStream(part, StandardOpenOption.CREATE,
+                         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                final byte[] buffer = new byte[TRANSFER_BLOCK_BYTES];
+                int read = in.read(buffer);
+                while (read >= 0) {
+                    if (stop.isAbandonRequested()) {
+                        throw new AbandonedMidBlock();
+                    }
+                    out.write(buffer, 0, read);
+                    read = in.read(buffer);
+                }
+            }
+            Files.getFileAttributeView(part, BasicFileAttributeView.class)
+                    .setTimes(sourceTimes.lastModifiedTime(), sourceTimes.lastAccessTime(),
+                            sourceTimes.creationTime());
+            Files.move(part, destination);
+        } catch (final AbandonedMidBlock e) {
+            deleteIfPresent(part);
+            throw new TransferAbandonedException(source);
+        } catch (final IOException e) {
+            deleteIfPresent(part);
+            throw new UncheckedIOException("Failed to copy " + source + " to " + destination, e);
+        }
+    }
+
+    /**
+     * Whether two paths sit on the same file store, which is what decides if a move is a rename.
+     *
+     * <p>A store that cannot be read answers false, so the move takes the copy-and-delete route.
+     * That route is correct on one volume too, merely slower. Guessing the other way would hand
+     * {@code Files.move} a cross-volume copy nothing can stop.
+     *
+     * <p>Package-private so a test can override it. Nothing in one can conjure a second file store,
+     * so left private the cross-store branch would be reachable only on a machine with the right
+     * volumes attached.
+     *
+     * @param source {@link Path} the file being moved
+     * @param destinationDir {@link Path} the directory it is moving into
+     * @return boolean true when both are known to sit on one store
+     */
+    boolean sameFileStore(final Path source, final Path destinationDir) {
+        try {
+            return Files.getFileStore(source).equals(Files.getFileStore(destinationDir));
+        } catch (final IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Deletes a file that may or may not be there, and says nothing either way.
+     *
+     * <p>It only ever clears a part file on a path already reporting something else. Letting a
+     * failure here through would replace the reason the caller is being told with a reason about
+     * housekeeping.
+     *
+     * @param path {@link Path} the file to remove if it exists
+     */
+    private static void deleteIfPresent(final Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (final IOException ignored) {}
+    }
+
+    /**
      * Ensures the destination directory exists and resolves a collision-free path within it.
      *
      * @param source {@link Path} file that will be copied
@@ -474,5 +580,13 @@ public class NioMediaStore implements MediaStore {
     private static String extension(final String leaf) {
         final int dot = leaf.lastIndexOf('.');
         return dot <= 0 ? "" : leaf.substring(dot);
+    }
+
+
+    /**
+     * Unwinds the copy loop out of its try-with-resources, so both streams are closed by the time
+     * the part file is deleted. Windows refuses to delete a file it still holds open.
+     */
+    private static final class AbandonedMidBlock extends IOException {
     }
 }

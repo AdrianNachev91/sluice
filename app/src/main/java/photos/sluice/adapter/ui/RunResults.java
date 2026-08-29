@@ -47,11 +47,6 @@ final class RunResults {
             + "account balance. Continuing on sends "
             + "the sheets it had not reached, under a fresh limit.";
 
-    // Names the folder the record went to. Saying only that it was kept invites the question of
-    // where, and this is a directory the reader can open.
-    private static final String ARCHIVED = "You had already sifted this timeline. Sluice moved that "
-            + "record to %s rather than writing over it.";
-
     private static final String SHARDS_OUTSTANDING = "The sheets are ready, waiting for your "
             + "agent's decisions on them. Nothing moves until they arrive.";
 
@@ -67,6 +62,15 @@ final class RunResults {
     private static final String IMPORT_STOPPED = "Not all files were imported. Run the import "
             + "again to pick up the rest.";
 
+    // What the counts leave out. A stopped move's rows read like a finished one's, and the photos
+    // it never reached are still where they were rather than lost. "of them" rather than a bare
+    // count, because a narrowed move leaves the rest of Sorted untouched and out of this number.
+    private static final String MOVE_STOPPED = "%s of them are still in Sorted.";
+
+    // The Review folder is kept whole on a stop, markers included, so the reader can pick it up
+    // again. Nothing on the card says that otherwise.
+    private static final String RESCUE_STOPPED = "The rest is still in the Review folder.";
+
     // Its own words because the Continue offer above is not on this card. A reader told they can
     // continue would go looking for a button that is not there.
     private static final String CANCELLED_BEFORE_ANY_SHEET = "No sheets were built yet.";
@@ -77,22 +81,30 @@ final class RunResults {
     /**
      * What the card says about a job that ended without throwing.
      *
+     * <p>Whether a run stopped short is read off what it produced, never off the button. A stop
+     * asked for as the last file moved leaves nothing behind, and only the engine can tell that
+     * from a stop that did.
+     *
      * @param ran {@link RunMode} the mode the job was started in
-     * @param outcome what the job produced, which for a sift says how it ended
+     * @param outcome what the job produced, which also says how it ended
+     * @param narrowedTo what the run was narrowed to, or null where it took whatever it found. A
+     *        sort counts only what was in scope, so a full Inbox and a chosen year holding nothing
+     *        report the same thing
      * @return {@link RunResultView} the card
      */
-    static RunResultView of(final RunMode ran, final @Nullable Object outcome) {
+    static RunResultView of(final RunMode ran, final @Nullable Object outcome,
+                            final @Nullable String narrowedTo) {
         return switch (outcome) {
-            case final SortSummary sorted -> sortResult(ran, sorted);
+            case final SortSummary sorted -> sortResult(ran, sorted, narrowedTo);
             case final CommitSummary moved -> movedResult(ran, moved);
             case final CullJobOutcome sift -> siftResult(ran, sift);
             case final RescueSummary rescued -> rescueResult(ran, rescued);
             case final ImportSummary brought -> importResult(ran, brought);
-            // A mode whose engine answers with something nothing here reads yet. The heading is
-            // still true and the card still has its Done. That is what stops an unknown result
-            // stranding the screen on a page with no way off it.
+            // A mode whose engine answers with something nothing here reads yet. Headed as
+            // finished, because an outcome nothing recognises carries no way to tell. The card
+            // still has its Done, which is what stops it stranding the screen.
             case null, default -> new RunResultView(finishedHeading(ran), Tone.FINISHED, null,
-                    List.of(), null, null, null, DONE);
+                    List.of(), null, null, DONE);
         };
     }
 
@@ -104,8 +116,10 @@ final class RunResults {
      * @return {@link RunResultView} the card
      */
     static RunResultView failed(final RunMode ran, final String said) {
-        return new RunResultView(ran.verb() + " stopped.", Tone.FAILED, said,
-                List.of(), null, null, null, DONE);
+        // Not "stopped", which heads a run the reader stopped on purpose. A reader cannot be left
+        // reading one word for both, with only the colour behind it telling them which happened.
+        return new RunResultView(ran.verb() + " could not finish.", Tone.FAILED, said,
+                List.of(), null, null, DONE);
     }
 
     /**
@@ -113,11 +127,57 @@ final class RunResults {
      *
      * @param ran {@link RunMode} the mode the job was started in
      * @param sorted {@link SortSummary} what the sort did
+     * @param narrowedTo what the sort was narrowed to, or null where it took whatever it found
      * @return {@link RunResultView} the card
      */
-    private static RunResultView sortResult(final RunMode ran, final SortSummary sorted) {
-        return new RunResultView(finishedHeading(ran), Tone.FINISHED, sortedNothing(sorted),
-                sortCounts(sorted), null, canaryLine(sorted), siftNowOffer(sorted), DONE);
+    private static RunResultView sortResult(final RunMode ran, final SortSummary sorted,
+                                            final @Nullable String narrowedTo) {
+        return new RunResultView(headingFor(ran, sorted.cancelled()), toneFor(sorted.cancelled()),
+                sortNote(sorted, narrowedTo),
+                sortCounts(sorted), canaryLine(sorted), siftNowOffer(sorted), DONE);
+    }
+
+    /**
+     * How a run is headed, given whether it stopped short.
+     *
+     * @param ran {@link RunMode} the mode the job was started in
+     * @param stopped whether the run gave up before reaching the end of its scope
+     * @return {@link String} the heading
+     */
+    private static String headingFor(final RunMode ran, final boolean stopped) {
+        return stopped ? ran.verb() + " stopped." : finishedHeading(ran);
+    }
+
+    /**
+     * How a card is toned, given whether the run stopped short.
+     *
+     * <p>Never {@code FAILED}, which {@link #failed} keeps for a run that threw. A run the reader
+     * stopped did what they asked.
+     *
+     * @param stopped whether the run gave up before reaching the end of its scope
+     * @return {@link Tone} the card's tone
+     */
+    private static Tone toneFor(final boolean stopped) {
+        return stopped ? Tone.UNFINISHED : Tone.FINISHED;
+    }
+
+    /**
+     * What a sort says about itself beyond its counts.
+     *
+     * <p>A sort stopped before anything moved reports exactly what a sort over an empty Inbox
+     * reports, so the counts alone cannot tell the reader which happened to them.
+     *
+     * @param sorted {@link SortSummary} what the sort did
+     * @param narrowedTo what the sort was narrowed to, or null where it took whatever it found
+     * @return {@link String} the sentence, or null where something reached Sorted uninterrupted
+     */
+    private static @Nullable String sortNote(final SortSummary sorted, final @Nullable String narrowedTo) {
+        if (sorted.cancelled()) {
+            return sorted.processed() == 0
+                    ? "Your Inbox is unchanged."
+                    : RunWords.grouped(sorted.leftBehind()) + " of them are still in your Inbox.";
+        }
+        return sortedNothing(sorted, narrowedTo);
     }
 
     /**
@@ -128,16 +188,23 @@ final class RunResults {
      * the fault. Every file went somewhere, and the rows name where, so what is missing is the one
      * sentence tying them to the absent button.
      *
+     * <p>A sort counts only what was in scope, so a narrowed one that filed nothing reports what an
+     * empty Inbox reports. Only what was asked for tells the cases apart.
+     *
      * @param sorted {@link SortSummary} what the sort did
+     * @param narrowedTo what the sort was narrowed to, or null where it took whatever it found
      * @return {@link String} the sentence, or null where something did reach Sorted
      */
-    private static @Nullable String sortedNothing(final SortSummary sorted) {
+    private static @Nullable String sortedNothing(final SortSummary sorted, final @Nullable String narrowedTo) {
         if (!sorted.yearsSorted().isEmpty()) {
             return null;
         }
-        return sorted.processed() == 0
+        if (sorted.processed() > 0) {
+            return "Nothing ended up in Sorted, so there is nothing to sift yet. " + becauseOf(sorted);
+        }
+        return narrowedTo == null
                 ? "Nothing in your Inbox was ready to sort."
-                : "Nothing ended up in Sorted, so there is nothing to sift yet. " + becauseOf(sorted);
+                : "Nothing in " + narrowedTo + " was ready to sort.";
     }
 
     /**
@@ -213,8 +280,9 @@ final class RunResults {
      * @return {@link RunResultView} the card
      */
     private static RunResultView movedResult(final RunMode ran, final CommitSummary moved) {
-        return new RunResultView(finishedHeading(ran), Tone.FINISHED, null, movedCounts(moved),
-                null, null, null, DONE);
+        return new RunResultView(headingFor(ran, moved.cancelled()), toneFor(moved.cancelled()),
+                moved.cancelled() ? MOVE_STOPPED.formatted(RunWords.grouped(moved.leftBehind())) : null,
+                movedCounts(moved), null, null, DONE);
     }
 
     /**
@@ -269,8 +337,8 @@ final class RunResults {
         final List<Count> rows = new ArrayList<>();
         rows.add(new Count("result-rescued", "Moved to your library", RunWords.grouped(rescued.rescued())));
         addWhenAny(rows, "result-rescue-skipped", "Left behind", rescued.skipped().size());
-        return new RunResultView(finishedHeading(ran), Tone.FINISHED, null, rows, null, null, null,
-                DONE);
+        return new RunResultView(headingFor(ran, rescued.cancelled()), toneFor(rescued.cancelled()),
+                rescued.cancelled() ? RESCUE_STOPPED : null, rows, null, null, DONE);
     }
 
     /**
@@ -297,7 +365,7 @@ final class RunResults {
                 brought.cancelled() ? ran.verb() + " stopped." : importHeading(ran, brought),
                 brought.cancelled() ? Tone.UNFINISHED : Tone.FINISHED,
                 brought.cancelled() ? IMPORT_STOPPED : null,
-                rows, null, null, null, DONE);
+                rows, null, null, DONE);
     }
 
     /**
@@ -329,25 +397,23 @@ final class RunResults {
      * @return {@link RunResultView} the card
      */
     private static RunResultView siftResult(final RunMode ran, final CullJobOutcome outcome) {
-        final Path movedTo = outcome.archivedPriorRun();
-        final String archived = movedTo == null ? null : ARCHIVED.formatted(movedTo);
         return switch (outcome) {
             case CullJobOutcome.Applied(final CullReport report, final ApplyReport applied, Path _) ->
                     new RunResultView(finishedHeading(ran), Tone.FINISHED, null,
-                            siftCounts(report, applied), archived, null, null, DONE);
+                            siftCounts(report, applied), null, null, DONE);
             case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _) ->
                     new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED, waitingDetail(why),
-                            sheetCounts(job.shards()), archived, null,
+                            sheetCounts(job.shards()), null,
                             resumeOffer(why, job.prepDir()), DONE);
             case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
                     new RunResultView(ran.verb() + " stopped and needs a look.",
                             Tone.UNFINISHED, BLOCKED.formatted(FindingFamily.wentWrong(findings)),
-                            sheetCounts(job.shards()), archived, null, null, DONE);
+                            sheetCounts(job.shards()), null, null, DONE);
             // The one case with no prep dir behind it, so nothing counted the sheets. It is reached
             // only before rendering finished, which is why there are none to count.
             case CullJobOutcome.Cancelled _ ->
-                    new RunResultView(ran.verb() + " was cancelled.", Tone.UNFINISHED,
-                            CANCELLED_BEFORE_ANY_SHEET, List.of(), archived, null, null, DONE);
+                    new RunResultView(headingFor(ran, true), toneFor(true),
+                            CANCELLED_BEFORE_ANY_SHEET, List.of(), null, null, DONE);
         };
     }
 
@@ -431,7 +497,7 @@ final class RunResults {
         return switch (why) {
             case SHARDS_OUTSTANDING -> ran.verb() + " is waiting on your agent.";
             case CEILING_REACHED -> ran.verb() + " stopped at its spending limit.";
-            case CANCELLED -> ran.verb() + " was cancelled.";
+            case CANCELLED -> headingFor(ran, true);
         };
     }
 

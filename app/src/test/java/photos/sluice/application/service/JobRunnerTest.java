@@ -248,6 +248,37 @@ class JobRunnerTest {
     }
 
     @Test
+    void requestingAbandonSetsCancellationWithIt() {
+        final JobHandle<String> handle = this.runner.submit(_ -> "done");
+        handle.join();
+
+        handle.requestAbandon();
+
+        assertThat(handle.stopSignal().isAbandonRequested()).isTrue();
+        assertThat(handle.stopSignal().isCancelled()).isTrue();
+    }
+
+    @Test
+    void anOrdinaryCancelDoesNotAskToAbandonTheFileInFlight() {
+        final JobHandle<String> handle = this.runner.submit(_ -> "done");
+        handle.join();
+
+        handle.requestCancellation();
+
+        assertThat(handle.stopSignal().isCancelled()).isTrue();
+        assertThat(handle.stopSignal().isAbandonRequested()).isFalse();
+    }
+
+    @Test
+    void aJobNobodyStoppedIsAskedToAbandonNothing() {
+        final JobHandle<String> handle = this.runner.submit(_ -> "done");
+        handle.join();
+
+        assertThat(handle.stopSignal().isCancelled()).isFalse();
+        assertThat(handle.stopSignal().isAbandonRequested()).isFalse();
+    }
+
+    @Test
     void onCompleteFiresOnceTheResultIsAvailable() {
         final var received = new AtomicReference<>("");
         final JobHandle<String> handle = this.runner.submit(_ -> "result");

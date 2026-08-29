@@ -6,6 +6,7 @@ import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Finding;
@@ -289,7 +290,7 @@ class ApplyPlannerTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
-                CorruptSidecarResolution.SET_ASIDE, "nothing left to cull it against");
+                CorruptSidecarResolution.SET_ASIDE, AnswerSource.DESKTOP);
 
         final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
@@ -309,7 +310,7 @@ class ApplyPlannerTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(culled));
         writeShard(prepDir, "montage-001", classificationJson(culled, "junk", "blurry"));
         prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-002",
-                CorruptSidecarResolution.APPLY_ANYWAY, "its shard will turn up");
+                CorruptSidecarResolution.APPLY_ANYWAY, AnswerSource.DESKTOP);
 
         final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));
@@ -459,7 +460,7 @@ class ApplyPlannerTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeShard(prepDir, "montage-001", classificationJson(outside, "junk", "blurry"));
         prepDirRemedies(root, root.resolve("Library")).resolveCorruptSidecar(prepDir, "montage-001",
-                CorruptSidecarResolution.APPLY_ANYWAY, "the shard reads fine");
+                CorruptSidecarResolution.APPLY_ANYWAY, AnswerSource.DESKTOP);
 
         final ValidationReport report = applyPlanner(root)
                 .validate(prepDir, readIndex(prepDir), new ApplyOptions(true), readLedger(prepDir));

@@ -57,6 +57,17 @@ sealed interface RunScope {
     }
 
     /**
+     * What a run was narrowed to, where the user narrowed it at all.
+     *
+     * @param ran {@link RunMode} the mode being started
+     * @param scope {@link RunScope} what the field and mode come to
+     * @return {@link String} what it was narrowed to, or null where it covers whatever it finds
+     */
+    static @Nullable String narrowedTo(final RunMode ran, final RunScope scope) {
+        return scope instanceof OfYear ? describe(ran, scope) : null;
+    }
+
+    /**
      * The sort scope this one stands for.
      *
      * @param scope {@link RunScope} the parsed scope

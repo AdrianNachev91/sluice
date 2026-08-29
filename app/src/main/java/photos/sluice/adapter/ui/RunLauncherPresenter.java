@@ -61,6 +61,8 @@ public class RunLauncherPresenter {
     // started with.
     private volatile RunMode ranAs = RunMode.SORT;
     private volatile String scopeOfTheRun = "";
+    // What the run was narrowed to, where it was.
+    private volatile @Nullable String narrowedTo;
     // What a cancelled import leaves behind differs between the two kinds, and the mode alone
     // cannot say which.
     private volatile @Nullable ImportKind importing;
@@ -161,7 +163,8 @@ public class RunLauncherPresenter {
         // Read once, and everything below works from it. The progress area and the result card
         // both name the work that was started, and the mode can move under a job in flight.
         final RunMode ran = this.setup.chosenMode();
-        this.begin(ran, RunScope.describe(ran, scope), null, () -> this.submit(ran, scope));
+        this.begin(ran, RunScope.describe(ran, scope), RunScope.narrowedTo(ran, scope), null,
+                () -> this.submit(ran, scope));
     }
 
     /**
@@ -214,11 +217,11 @@ public class RunLauncherPresenter {
         if (this.running) {
             return;
         }
-        this.begin(RunMode.SIFT, scope, null, () -> this.pipeline.resume(prepDir, waiveMissing));
+        this.begin(RunMode.SIFT, scope, null, null, () -> this.pipeline.resume(prepDir, waiveMissing));
     }
 
     /**
-     * Sifts the timeline a finished sort filled, from that sort's own result card.
+     * Sifts the timeline a sort filled, from that sort's own result card.
      *
      * <p>The dialog is the caller's to put, because only a screen can open one. What it may not do
      * is decide whether one is owed.
@@ -321,7 +324,7 @@ public class RunLauncherPresenter {
      */
     private void startSift(final int year) {
         final RunScope scope = new RunScope.OfYear(year, List.of());
-        this.begin(RunMode.SIFT, RunScope.describe(RunMode.SIFT, scope), null,
+        this.begin(RunMode.SIFT, RunScope.describe(RunMode.SIFT, scope), null, null,
                 () -> this.pipeline.cull(RunScope.asCull(scope)));
     }
 
@@ -335,7 +338,7 @@ public class RunLauncherPresenter {
         if (this.running) {
             return;
         }
-        this.begin(RunMode.SIFT, scope, null, () -> this.pipeline.resume(prepDir, false));
+        this.begin(RunMode.SIFT, scope, null, null, () -> this.pipeline.resume(prepDir, false));
     }
 
     /**
@@ -350,11 +353,12 @@ public class RunLauncherPresenter {
      *
      * @param ran {@link RunMode} the mode to report this job as
      * @param scope {@link String} what this job covers, written out for the progress area
+     * @param narrowedTo {@link String} what it was narrowed to, or null where it takes what it finds
      * @param kind {@link ImportKind} null for every run that is not an import
      * @param submit a {@link Supplier} of {@link JobHandle} hands the work to the facade
      */
-    private void begin(final RunMode ran, final String scope, final @Nullable ImportKind kind,
-                       final Supplier<JobHandle<?>> submit) {
+    private void begin(final RunMode ran, final String scope, final @Nullable String narrowedTo,
+                       final @Nullable ImportKind kind, final Supplier<JobHandle<?>> submit) {
         this.report(null);
         try {
             final JobHandle<?> handle = submit.get();
@@ -365,6 +369,7 @@ public class RunLauncherPresenter {
             // have already paid for.
             this.ranAs = ran;
             this.scopeOfTheRun = scope;
+            this.narrowedTo = narrowedTo;
             this.importing = kind;
             this.ended = null;
             this.cancelRequested = false;
@@ -426,7 +431,7 @@ public class RunLauncherPresenter {
         }
         this.inFlight = null;
         this.ended = failure == null
-                ? RunResults.of(ran, outcome)
+                ? RunResults.of(ran, outcome, this.narrowedTo)
                 : RunResults.failed(ran, RunRefusals.plainly(RunRefusals.rootOf(failure)));
         this.running = false;
         this.repaint();
@@ -465,7 +470,7 @@ public class RunLauncherPresenter {
         if (this.running) {
             return;
         }
-        this.begin(RunMode.IMPORT, describe(sources), kind,
+        this.begin(RunMode.IMPORT, describe(sources), null, kind,
                 () -> this.pipeline.importFrom(sources, kind));
     }
 

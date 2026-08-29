@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
+import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
@@ -99,7 +100,9 @@ public class RescueEngine implements RescueUseCase {
         // _reasons.txt markers. The loop below only ever relocates recognized media files, never a
         // marker file, so this list's marker entries are still accurate afterward. No need to
         // re-walk the directory a second time.
-        final List<Path> allFiles = this.mediaStore.listFiles(target);
+        final List<Path> allFiles = this.mediaStore.listFiles(target).stream()
+                .filter(file -> !MediaStore.isIncompleteTransfer(file))
+                .toList();
         final int total = allFiles.size();
         int current = 0;
         final var outcome = new RescueOutcome();
@@ -110,9 +113,13 @@ public class RescueEngine implements RescueUseCase {
             // Checked after each file, so an in-flight file is never interrupted; already-rescued
             // files stay rescued, matching the no-undo model.
             while (current < total && !cancellation.isCancelled()) {
-                this.rescueOneFile(allFiles.get(current), targetLeaf, libraryRoot, outcome, session);
+                this.rescueOneFile(allFiles.get(current), targetLeaf, libraryRoot, outcome, session, cancellation);
                 progress.tick(++current, total);
             }
+        } catch (final TransferAbandonedException e) {
+            // The abandoned file is still in the Review folder and never reached the index. It also
+            // leaves current short of total, so the all-or-nothing check below reads a pass that
+            // did not finish and the folder is not dissolved under it.
         }
 
         // All-or-nothing per folder: dissolving it (and the marker files inside it) only happens
@@ -129,7 +136,7 @@ public class RescueEngine implements RescueUseCase {
             folderRemoved = !this.mediaStore.exists(target);
         }
 
-        return new RescueSummary(outcome.rescued, outcome.skipped, folderRemoved);
+        return new RescueSummary(outcome.rescued, outcome.skipped, folderRemoved, !ranToCompletion);
     }
 
     /**
@@ -142,10 +149,13 @@ public class RescueEngine implements RescueUseCase {
      * @param libraryRoot {@link Path} root of the library to move rescued files into
      * @param outcome {@link RescueOutcome} accumulator for rescued count and skipped names
      * @param session {@link HashIndexPort.Session} hash-index session to append rescued entries
+     * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void rescueOneFile(final Path file, final String targetLeaf, final Path libraryRoot,
                                final RescueOutcome outcome,
-                               final HashIndexPort.Session session) {
+                               final HashIndexPort.Session session,
+                               final CancellationSignal cancellation) {
         final Optional<MediaType> type = this.mediaTypeDetector.classify(file);
         if (type.isEmpty()) {
             return;
@@ -158,7 +168,7 @@ public class RescueEngine implements RescueUseCase {
         final Path destDir = libraryRoot.resolve(type.get() == MediaType.VIDEO ? "Videos" : "Photos")
                 .resolve(yearFolder(date.get())).resolve(monthFolder(date.get()));
         final String hash = this.sha256Port.hash(file);
-        final Path dest = this.mediaStore.move(file, destDir);
+        final Path dest = this.mediaStore.move(file, destDir, cancellation);
         session.append(new IndexEntry(hash, dest));
         outcome.rescued++;
     }

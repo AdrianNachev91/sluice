@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.application.service.MoveLedger.MoveRecord;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.OverlapResolution;
 
@@ -60,11 +61,11 @@ class MoveLedgerTest {
     void aSkipGoesToTheChoicesFile(@TempDir final Path prepDir) throws IOException {
         final Path source = prepDir.resolve("Sorted/gone.jpg");
 
-        moveLedger().recordSkip(prepDir, source, "deleted it myself");
+        moveLedger().recordSkip(prepDir, source, AnswerSource.DESKTOP);
 
         assertThat(fieldsOf(prepDir, CHOICES).getFirst())
                 .startsWith(source.toString(), "SKIPPED_BY_USER")
-                .endsWith("deleted it myself");
+                .endsWith("DESKTOP");
         assertThat(Files.exists(prepDir.resolve(MOVE_RECORDS))).isFalse();
     }
 
@@ -72,11 +73,11 @@ class MoveLedgerTest {
     void anOverlapResolutionGoesToTheChoicesFile(@TempDir final Path prepDir) throws IOException {
         final Path file = prepDir.resolve("Sorted/a.jpg");
 
-        moveLedger().recordOverlap(prepDir, file, OverlapResolution.TRUST_DECISION, "the decision is correct");
+        moveLedger().recordOverlap(prepDir, file, OverlapResolution.TRUST_DECISION, AnswerSource.DESKTOP);
 
         assertThat(fieldsOf(prepDir, CHOICES).getFirst())
                 .startsWith(file.toString(), "OVERLAP_RESOLVED", "TRUST_DECISION")
-                .endsWith("the decision is correct");
+                .endsWith("DESKTOP");
         assertThat(Files.exists(prepDir.resolve(MOVE_RECORDS))).isFalse();
     }
 
@@ -85,11 +86,11 @@ class MoveLedgerTest {
     @Test
     void aCorruptSidecarResolutionGoesToTheChoicesFileKeyedByMontage(@TempDir final Path prepDir) throws IOException {
         final MoveLedger ledger = moveLedger();
-        ledger.recordCorruptSidecar(prepDir, "montage-002", CorruptSidecarResolution.SET_ASIDE, "redo it");
+        ledger.recordCorruptSidecar(prepDir, "montage-002", CorruptSidecarResolution.SET_ASIDE, AnswerSource.DESKTOP);
 
         assertThat(fieldsOf(prepDir, CHOICES).getFirst())
                 .startsWith("montage-002", "CORRUPT_SIDECAR_RESOLVED", "SET_ASIDE")
-                .endsWith("redo it");
+                .endsWith("DESKTOP");
         assertThat(ledger.read(prepDir).corruptSidecars())
                 .containsExactly(entry("montage-002", CorruptSidecarResolution.SET_ASIDE));
         assertThat(Files.exists(prepDir.resolve(MOVE_RECORDS))).isFalse();
@@ -104,9 +105,9 @@ class MoveLedgerTest {
         final MoveLedger ledger = moveLedger();
         ledger.recordMove(prepDir, moved, prepDir.resolve("Review/junk/moved.jpg"), "hash-moved");
         ledger.recordReconstructed(prepDir, rebuilt, prepDir.resolve("Review/junk/rebuilt.jpg"), "hash-rebuilt");
-        ledger.recordSkip(prepDir, gone, "deleted it myself");
-        ledger.recordOverlap(prepDir, overlapping, OverlapResolution.TREAT_AS_UNREVIEWABLE, "leave it alone");
-        ledger.recordCorruptSidecar(prepDir, "montage-002", CorruptSidecarResolution.APPLY_ANYWAY, "shard looks fine");
+        ledger.recordSkip(prepDir, gone, AnswerSource.DESKTOP);
+        ledger.recordOverlap(prepDir, overlapping, OverlapResolution.TREAT_AS_UNREVIEWABLE, AnswerSource.DESKTOP);
+        ledger.recordCorruptSidecar(prepDir, "montage-002", CorruptSidecarResolution.APPLY_ANYWAY, AnswerSource.DESKTOP);
 
         final Ledger snapshot = ledger.read(prepDir);
 
@@ -127,7 +128,7 @@ class MoveLedgerTest {
     void aSnapshotCarriesTheChoicesFileEvenWhenNoMoveHasEverBeenRecorded(@TempDir final Path prepDir) {
         final Path gone = prepDir.resolve("Sorted/gone.jpg");
         final MoveLedger ledger = moveLedger();
-        ledger.recordSkip(prepDir, gone, "deleted it myself");
+        ledger.recordSkip(prepDir, gone, AnswerSource.DESKTOP);
 
         final Ledger snapshot = ledger.read(prepDir);
 
@@ -172,11 +173,11 @@ class MoveLedgerTest {
         final Path goneLater = prepDir.resolve("Sorted/gone-later.jpg");
         final MoveLedger ledger = moveLedger();
         ledger.recordMove(prepDir, moved, prepDir.resolve("Review/junk/moved.jpg"), "hash-moved");
-        ledger.recordSkip(prepDir, gone, "deleted it myself");
+        ledger.recordSkip(prepDir, gone, AnswerSource.DESKTOP);
         appendRaw(prepDir.resolve(MOVE_RECORDS), "half-a-line");
         appendRaw(prepDir.resolve(CHOICES), "half-a-line");
         ledger.recordMove(prepDir, movedLater, prepDir.resolve("Review/junk/moved-later.jpg"), "hash-later");
-        ledger.recordSkip(prepDir, goneLater, "this one too");
+        ledger.recordSkip(prepDir, goneLater, AnswerSource.DESKTOP);
 
         final Ledger snapshot = ledger.read(prepDir);
 
@@ -215,9 +216,9 @@ class MoveLedgerTest {
         final Path skipped = prepDir.resolve("Sorted/skipped.jpg");
         final Path overlapping = prepDir.resolve("Sorted/overlapping.jpg");
         final MoveLedger ledger = moveLedger();
-        ledger.recordSkip(prepDir, skipped, "deleted it myself");
-        ledger.recordOverlap(prepDir, overlapping, OverlapResolution.TRUST_DECISION, "the decision is correct");
-        ledger.recordCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "redo it");
+        ledger.recordSkip(prepDir, skipped, AnswerSource.DESKTOP);
+        ledger.recordOverlap(prepDir, overlapping, OverlapResolution.TRUST_DECISION, AnswerSource.DESKTOP);
+        ledger.recordCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, AnswerSource.DESKTOP);
         final String d = MoveLedger.RECORD_DELIMITER;
         // Same NUL-byte technique as the move-record test above, for the same reason.
         final String unusablePath = "bad" + (char) 0 + "path";
@@ -237,15 +238,22 @@ class MoveLedgerTest {
 
     // A move record and a skip that happen to share a field count sit in different files, so neither
     // parser ever sees the other's shape. A reconstructed move and a skip are both four fields.
+    //
+    // The line is written by hand rather than through recordSkip, and that is the whole test. A
+    // skip's fourth field is an AnswerSource, so no writer can produce the one value that collides.
+    // What is guarded here is that read() keeps the two files apart, never that the writer happens
+    // to be unable to break it.
     @Test
-    void aSkipIsNeverMistakenForAReconstructedMove(@TempDir final Path prepDir) {
+    void aChoicesLineShapedExactlyLikeAReconstructedMoveIsStillNotReadAsOne(@TempDir final Path prepDir)
+            throws IOException {
         final Path gone = prepDir.resolve("Sorted/gone.jpg");
-        final MoveLedger ledger = moveLedger();
-        ledger.recordSkip(prepDir, gone, "RECONSTRUCTED");
+        final Path dest = prepDir.resolve("Review/junk/gone.jpg");
+        final String delimiter = MoveLedger.RECORD_DELIMITER;
+        Files.writeString(prepDir.resolve(CHOICES), String.join(delimiter,
+                gone.toString(), dest.toString(), "hash-gone", "RECONSTRUCTED") + System.lineSeparator());
 
-        final Ledger snapshot = ledger.read(prepDir);
+        final Ledger snapshot = moveLedger().read(prepDir);
 
-        assertThat(snapshot.skipped()).containsExactly(gone);
         assertThat(snapshot.moves()).isEmpty();
     }
 
@@ -259,7 +267,7 @@ class MoveLedgerTest {
         final Path gone = prepDir.resolve("Sorted/gone.jpg");
         final MoveLedger ledger = moveLedger();
         ledger.recordMove(prepDir, moved, prepDir.resolve("Review/junk/moved.jpg"), "hash-moved");
-        ledger.recordSkip(prepDir, gone, "deleted it myself");
+        ledger.recordSkip(prepDir, gone, AnswerSource.DESKTOP);
         writeUndecodable(prepDir.resolve(CHOICES));
 
         final Ledger snapshot = ledger.read(prepDir);
@@ -277,7 +285,7 @@ class MoveLedgerTest {
         final Path gone = prepDir.resolve("Sorted/gone.jpg");
         final MoveLedger ledger = moveLedger();
         ledger.recordMove(prepDir, moved, prepDir.resolve("Review/junk/moved.jpg"), "hash-moved");
-        ledger.recordSkip(prepDir, gone, "deleted it myself");
+        ledger.recordSkip(prepDir, gone, AnswerSource.DESKTOP);
         writeUndecodable(prepDir.resolve(MOVE_RECORDS));
 
         final Ledger snapshot = ledger.read(prepDir);
@@ -293,7 +301,7 @@ class MoveLedgerTest {
     @Test
     void aReadFailureThatIsNotADecodeFailurePropagatesInsteadOfReportingLostAnswers(@TempDir final Path prepDir) {
         final Path gone = prepDir.resolve("Sorted/gone.jpg");
-        moveLedger().recordSkip(prepDir, gone, "deleted it myself");
+        moveLedger().recordSkip(prepDir, gone, AnswerSource.DESKTOP);
         final var locked = new LockedChoices();
         final var ledger = new MoveLedger(locked, new DisasterDrawer(locked));
 
@@ -309,11 +317,11 @@ class MoveLedgerTest {
     @Test
     void aFreshChoiceDoesNotFileAwayAChoicesFileThatMerelyFailedToOpen(@TempDir final Path prepDir) {
         final Path gone = prepDir.resolve("Sorted/gone.jpg");
-        moveLedger().recordSkip(prepDir, gone, "deleted it myself");
+        moveLedger().recordSkip(prepDir, gone, AnswerSource.DESKTOP);
         final var locked = new LockedChoices();
         final var ledger = new MoveLedger(locked, new DisasterDrawer(locked));
 
-        assertThatThrownBy(() -> ledger.recordSkip(prepDir, prepDir.resolve("Sorted/other.jpg"), "this one too"))
+        assertThatThrownBy(() -> ledger.recordSkip(prepDir, prepDir.resolve("Sorted/other.jpg"), AnswerSource.DESKTOP))
                 .isInstanceOf(UncheckedIOException.class);
         assertThat(Files.exists(prepDir.resolve("disasters"))).isFalse();
         assertThat(moveLedger().read(prepDir).skipped()).containsExactly(gone);
@@ -328,7 +336,7 @@ class MoveLedgerTest {
         final MoveLedger ledger = moveLedger();
         writeUndecodable(prepDir.resolve(CHOICES));
 
-        ledger.recordSkip(prepDir, gone, "deleted it myself");
+        ledger.recordSkip(prepDir, gone, AnswerSource.DESKTOP);
 
         final Ledger snapshot = ledger.read(prepDir);
         assertThat(snapshot.choicesUndecodable()).isFalse();

@@ -73,7 +73,7 @@ final class SpendEstimator {
     SpendEstimate estimate(final int montages, final SpendForecast forecast, final @Nullable String modelId,
                            final MontageConfig grid) {
         return switch (forecast) {
-            case final SpendForecast.NoSpend ignored -> new SpendEstimate(0, 0, true, false);
+            case final SpendForecast.NoSpend ignored -> new SpendEstimate(0, 0, true, false, false);
             case SpendForecast.Counted(final long counted) -> this.estimateFrom(montages, counted, true, modelId, grid);
             case SpendForecast.Unknown(final String reason) -> {
                 log.info("Estimating spend from the shipped seed: the provider could not count a request ({})",
@@ -107,7 +107,7 @@ final class SpendEstimator {
     SpendEstimate estimateBeforePreparing(final int photos, final boolean spends,
                                           final @Nullable String modelId, final MontageConfig grid) {
         if (!spends) {
-            return new SpendEstimate(0, 0, true, false);
+            return new SpendEstimate(0, 0, true, false, false);
         }
         final int perMontage = grid.tilesPerRow() * grid.tilesPerRow();
         final int montages = (photos + perMontage - 1) / perMontage;
@@ -126,12 +126,14 @@ final class SpendEstimator {
      */
     private SpendEstimate estimateFrom(final int montages, final long inputPerCall, final boolean exactInput,
                                        final @Nullable String modelId, final MontageConfig grid) {
-        final SpendRate rate = SpendRate.from(this.history(), modelId, grid);
+        final History history = this.history();
+        final SpendRate rate = SpendRate.from(history.entries(), modelId, grid);
         return new SpendEstimate(
                 Math.round(montages * inputPerCall * rate.callsPerMontage()),
                 montages * rate.outputTokensPerMontage(),
                 exactInput,
-                rate.fromHistory());
+                rate.fromHistory(),
+                history.unreadable());
     }
 
     /**
@@ -166,20 +168,30 @@ final class SpendEstimator {
     }
 
     /**
-     * Every run recorded so far, or none when the ledger cannot be read.
+     * Every run recorded so far, and whether the record could be read at all.
      *
      * <p>The ledger fails loud at its own boundary, and this is where that stops. A record of past
      * spend nobody can parse costs the estimate its projected half, which the estimate is built to
      * say out loud. It must not cost the user their sift.
      *
-     * @return a {@link List} of {@link SpendLedgerEntry} the recorded runs, empty if unreadable
+     * <p>Why it could not be read travels with the answer rather than only reaching the log.
+     *
+     * @return {@link History} the recorded runs, and whether reading them failed
      */
-    private List<SpendLedgerEntry> history() {
+    private History history() {
         try {
-            return this.ledger.read();
+            return new History(this.ledger.read(), false);
         } catch (final RuntimeException e) {
             log.warn("Could not read the spend ledger, so this run is estimated without history", e);
-            return List.of();
+            return new History(List.of(), true);
         }
     }
+
+    /**
+     * What one read of the spend ledger came to.
+     *
+     * @param entries a {@link List} of {@link SpendLedgerEntry} the runs it held, empty if it could not be read
+     * @param unreadable boolean whether the read failed, as opposed to finding nothing recorded
+     */
+    private record History(List<SpendLedgerEntry> entries, boolean unreadable) {}
 }

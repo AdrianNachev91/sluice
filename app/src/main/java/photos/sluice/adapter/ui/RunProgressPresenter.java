@@ -17,11 +17,11 @@ import java.util.Locale;
 class RunProgressPresenter {
 
     private static final String STARTING = "Starting...";
-    private static final String CANCEL = "Cancel";
+    private static final String STOP = "Stop";
     // The button itself reports, rather than greying and leaving a line below to say what happened
-    // to the press. A dead button still reading Cancel is a press that looks like it missed.
+    // to the press. A dead button still reading Stop is a press that looks like it missed.
     private static final String STOPPING = "Stopping...";
-    // What survives is the question a cancelled run raises, and each mode answers it differently.
+    // What survives is the question a stopped run raises, and each mode answers it differently.
     private static final String CANCELLING_A_MOVE = "What reached your library stays there.";
     private static final String CANCELLING_A_SORT = "What was sorted stays where it is.";
     // Named in the copy rather than left to a spinner. A model that has been asked a question
@@ -55,7 +55,7 @@ class RunProgressPresenter {
                          final @Nullable ImportKind importing) {
         final List<PhaseBar> bars = this.progress.phases().stream().map(RunProgressPresenter::bar).toList();
         return new RunProgressView(ran.label() + " progress", scope, bars,
-                bars.isEmpty() ? STARTING : null, cancelling ? STOPPING : CANCEL, !cancelling,
+                bars.isEmpty() ? STARTING : null, cancelling ? STOPPING : STOP, !cancelling,
                 cancelling ? cancellingLine(ran, importing) : null, ran.phases());
     }
 

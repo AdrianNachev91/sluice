@@ -555,7 +555,7 @@ public class SettingsPresenter {
     private static String wordMoveOutcome(final LibraryRootMoveOutcome outcome) {
         return switch (outcome) {
             case final LibraryRootMoveOutcome.CopiedAndMoved copied -> copiedAndMoved(copied);
-            case final LibraryRootMoveOutcome.CopyCancelled cancelled -> "The copy was cancelled after "
+            case final LibraryRootMoveOutcome.CopyCancelled cancelled -> "You stopped the copy after "
                     + cancelled.filesCopied() + " of " + cancelled.filesFound()
                     + " files. The library is still at its old folder, but the files already copied now "
                     + "also exist in your new location. Resuming the library move continues copying the "

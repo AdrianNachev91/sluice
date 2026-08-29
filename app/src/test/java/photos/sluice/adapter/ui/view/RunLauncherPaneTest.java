@@ -315,7 +315,7 @@ class RunLauncherPaneTest {
     @Test
     void aCostThisRunWillCarryIsDrawnWithWhatTheFigureIsWorth() throws Exception {
         final Pipeline pipeline = pipeline();
-        when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true));
+        when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true, false));
         final Parent pane = onFxThread(() -> built(new RunLauncherPresenter(pipeline, new FxProgressPort())));
 
         onFxThread(() -> fire(pane, "#run-mode-sift"));
@@ -458,7 +458,7 @@ class RunLauncherPaneTest {
 
     private static void sortFinishes(final Pipeline pipeline) {
         sortAnswering(pipeline, CompletableFuture.completedFuture(
-                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of())));
+                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), false, 0)));
     }
 
     @SuppressWarnings("unchecked")
@@ -561,7 +561,7 @@ class RunLauncherPaneTest {
                 new YearRow(2019, 100, 10, List.of(new MonthRow(6, 40, 10), new MonthRow(7, 30, 0),
                         new MonthRow(11, 30, 0))),
                 new YearRow(2018, 50, 0, List.of(new MonthRow(1, 50, 0))))));
-        when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false));
+        when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false, false));
         when(pipeline.configuredProviderSpends()).thenReturn(true);
         return pipeline;
     }

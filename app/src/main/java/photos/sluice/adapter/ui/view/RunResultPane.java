@@ -73,7 +73,6 @@ final class RunResultPane {
         warning.getStyleClass().add("warning-box");
         showWhile(warning, warningHeadline);
 
-        final Label archived = SettingsRows.emptyHelpLine("run-result-archived");
 
         // The question sits in the body with everything else the card has to say, and only its
         // button joins the row of actions. In that row the sentence reads as a label on Done.
@@ -111,7 +110,7 @@ final class RunResultPane {
         doneRow.getStyleClass().add("run-start-row");
         doneRow.setAlignment(Pos.CENTER_RIGHT);
 
-        final var body = new VBox(detail, question, warning, counts, archived);
+        final var body = new VBox(detail, question, warning, counts);
         body.getStyleClass().add("run-result-body");
         final ScrollPane scroll = SettingsRows.scrolling(body);
         scroll.setMinHeight(0);
@@ -129,7 +128,7 @@ final class RunResultPane {
         page.getStyleClass().add("run-result");
 
         final var controls = new Controls(page, heading, detail, counts, warningHeadline,
-                warningDetail, archived, actionQuestion, actionButton, message, done);
+                warningDetail, actionQuestion, actionButton, message, done);
         return new Mounted(page, showing -> controls.fill(showing, presenter, redraw));
     }
 
@@ -216,14 +215,13 @@ final class RunResultPane {
      * @param counts {@link VBox} the rows saying what the run did
      * @param warningHeadline {@link Label} what a reader needs to know about it, in one line
      * @param warningDetail {@link Label} what caused it and what Sluice did instead
-     * @param archived {@link Label} what happened to a previous record of this timeline
      * @param actionQuestion {@link Label} what the reader is asked before the card's own action
      * @param actionButton {@link Button} the card's own action, beside Done
      * @param message {@link Label} what a refused press on this card has to report
      * @param done {@link Button} the button back to the launcher
      */
     private record Controls(VBox page, Label heading, Label detail, VBox counts,
-                            Label warningHeadline, Label warningDetail, Label archived,
+                            Label warningHeadline, Label warningDetail,
                             Label actionQuestion, Button actionButton, Label message, Button done) {
 
         /**
@@ -242,7 +240,6 @@ final class RunResultPane {
             this.drawCounts(view.counts());
             this.warningHeadline.setText(view.warning() == null ? "" : view.warning().headline());
             this.warningDetail.setText(view.warning() == null ? "" : view.warning().detail());
-            this.archived.setText(SettingsRows.orNothing(view.archived()));
             this.drawAction(view.action(), presenter, redraw);
             this.drawMessage(showing.message());
             this.done.setText(view.doneLabel());
@@ -310,9 +307,11 @@ final class RunResultPane {
                         redraw.run();
                     });
                 }
-                // Loud, because sifting is what the reader came to do and the card is where the
-                // work carries on. What it costs is put to them in the confirm the press opens,
-                // so the weight here is about the way forward rather than about the money.
+                // Loud, because Done is a dismissal rather than a competing action, so nothing else
+                // on the card wants the weight. That reasoning holds on a stopped sort too, where
+                // the reader came to sort rather than to sift. What sifting costs is put to them in
+                // the confirm the press opens, so the weight here is about the way forward rather
+                // than about the money.
                 case final CardAction.SiftNow offer -> {
                     this.actionQuestion.setText("");
                     this.actionButton.setText(offer.label());

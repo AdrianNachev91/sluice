@@ -50,6 +50,8 @@ class PipelineSurfaceTest {
             "stopAllWatching()",
             "stopAcceptingJobs(Duration)",
             "troubleshoot(Path)",
+            "answer(Path, ChoiceAnswer, AnswerSource)",
+            "setAsideUnreadableSpendLedger()",
             "purgeCompleted()",
             "discard(Path)",
             "inboxTally()",

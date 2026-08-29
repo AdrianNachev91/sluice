@@ -439,6 +439,26 @@ class PrepDirDoctorTest {
         assertThat(Files.exists(photo)).isTrue();
     }
 
+    // The purge deletes every listed file then prunes the dir, and removeIfEmptyOfFiles walks raw.
+    // A listFiles hiding a half-written transfer leaves the dir standing while this still reports
+    // it purged.
+    @Test
+    void purgeCompletedClearsAPrepDirHoldingATransferThatNeverLanded(@TempDir final Path root) throws IOException {
+        final Path complete = prepDir(root, "complete1");
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(complete, 1, List.of("montage-001"));
+        writeSidecar(complete, "montage-001", sidecarEntry(photo));
+        writeShard(complete, "montage-001", classificationJson(photo, "junk", "blurry"));
+        Files.writeString(complete.resolve("decisions.json"), "{}");
+        writeFile(complete.resolve("montage-001.jpg.sluice-part"), "half a sheet");
+
+        final PurgeReport report = doctor(root).purgeCompleted(root.resolve("logs/sift-prep"));
+
+        assertThat(report.purged()).containsExactly("complete1");
+        assertThat(Files.exists(complete)).isFalse();
+    }
+
     // A dir holding shards but no index is exactly the run worth not overwriting, so the sweep has
     // to see it. Keyed on index.json it would be invisible here and in every other enumeration.
     @Test

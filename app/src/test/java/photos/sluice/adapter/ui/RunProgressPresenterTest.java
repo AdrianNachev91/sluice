@@ -65,7 +65,7 @@ class RunProgressPresenterTest {
 
     @Test
     void theCancelButtonReportsTheStopRatherThanGoingDeadStillOffering() {
-        assertThat(this.working().cancelLabel()).isEqualTo("Cancel");
+        assertThat(this.working().cancelLabel()).isEqualTo("Stop");
         assertThat(this.working().cancelPressable()).isTrue();
 
         assertThat(this.stopping(RunMode.SORT).cancelLabel()).isEqualTo("Stopping...");

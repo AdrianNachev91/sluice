@@ -116,7 +116,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
                                                 final JobHandle<LibraryRootMoveOutcome> handle) throws Exception {
         final CopySummary copy = this.phaseRunner.run(COPYING,
                 progress -> this.copyEngine.copyTree(movingFrom, movingTo, progress,
-                        handle::isCancellationRequested));
+                        handle.stopSignal()));
         if (copy.cancelled()) {
             return new LibraryRootMoveOutcome.CopyCancelled(copy.filesCopied(), copy.filesFound(), movingTo);
         }

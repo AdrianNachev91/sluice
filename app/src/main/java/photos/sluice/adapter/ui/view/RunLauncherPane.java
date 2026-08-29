@@ -148,8 +148,7 @@ final class RunLauncherPane {
         figure.setId("run-estimate-figure");
         figure.getStyleClass().add("run-estimate-figure");
         final Label disclaimer = SettingsRows.emptyHelpLine("run-estimate-disclaimer");
-        final Label withoutHistory = SettingsRows.emptyHelpLine("run-estimate-without-history");
-        final var estimate = new VBox(figure, disclaimer, withoutHistory);
+        final var estimate = new VBox(figure, disclaimer);
         estimate.setId("run-estimate");
         estimate.getStyleClass().add("run-estimate");
         estimate.managedProperty().bind(estimate.visibleProperty());
@@ -186,7 +185,7 @@ final class RunLauncherPane {
 
         final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, importPhotos,
                 importHint, yearRows, nothingStaged, scopeLegend, openRuns,
-                scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, withoutHistory,
+                scopeLabel, scopeField, start, hint, refusal, figure, disclaimer,
                 freeHeadline, freeDetail, message, scroll, new HashSet<>(), new HashMap<>());
         controls.buildModeRow(setup);
         scopeField.textProperty().addListener((_, _, typed) -> {
@@ -456,7 +455,6 @@ final class RunLauncherPane {
      * @param refusal {@link Label} what is wrong with what was typed
      * @param figure {@link Label} the estimated cost
      * @param disclaimer {@link Label} what that figure is worth
-     * @param withoutHistory {@link Label} the extra line where nothing backs the figure yet
      * @param freeHeadline {@link Label} the first line of the box saying this provider spends nothing
      * @param freeDetail {@link Label} why that box has no figure in it
      * @param message {@link Label} what the screen has to report
@@ -469,7 +467,7 @@ final class RunLauncherPane {
                             SettingsRows.LinkedLine scopeLegend, Hyperlink openRuns,
                             Label scopeLabel, TextField scopeField,
                             Button start, Label hint, Label refusal, Label figure, Label disclaimer,
-                            Label withoutHistory, Label freeHeadline, Label freeDetail, Label message,
+                            Label freeHeadline, Label freeDetail, Label message,
                             ScrollPane scroll, Set<VBox> unfolded, Map<VBox, Timeline> folding) {
 
         /**
@@ -1018,7 +1016,6 @@ final class RunLauncherPane {
             final Cost.Free free = cost instanceof final Cost.Free spendsNothing ? spendsNothing : null;
             this.figure.setText(figures == null ? "" : figures.figure());
             this.disclaimer.setText(figures == null ? "" : figures.disclaimer());
-            this.withoutHistory.setText(figures == null ? "" : SettingsRows.orNothing(figures.withoutHistory()));
             this.freeHeadline.setText(free == null ? "" : free.headline());
             this.freeDetail.setText(free == null ? "" : free.detail());
         }

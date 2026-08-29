@@ -110,16 +110,28 @@ public class RunSetupPresenter {
     private static final String NOTHING_STAGED =
             "Nothing is sorted yet. Sort your Inbox first, and the years will show up here.";
 
-    // The last sentence is the load-bearing one: what a reader needs is not that the number is
-    // right, but that something stops a run that outgrows it.
-    private static final String DISCLAIMER = "An estimate, not a quote. It is an average of what "
-            + "sifts like this one have cost, and a sift costs more when the model needs a second "
-            + "attempt at a sheet. Sluice will stop and ask whether to continue if the sift goes "
-            + "far past the estimate.";
+    // One paragraph in three parts, so a reader meets a single statement about the figure rather
+    // than two they have to reconcile. Only the middle varies.
+    private static final String ESTIMATE_OPENING = "An estimate, not a quote. ";
+
+    // The load-bearing part: what a reader needs is not that the number is right, but that
+    // something stops a run that outgrows it. So it closes all three.
+    private static final String ESTIMATE_CEILING = " Sluice will stop and ask whether to continue "
+            + "if the sift goes far past the estimate.";
+
+    private static final String FROM_HISTORY = "It is an average of what sifts like this one have "
+            + "cost, and a sift costs more when the model needs a second attempt at a sheet.";
 
     private static final String WITHOUT_HISTORY = "Nothing has finished a sift on this computer "
             + "yet, so this figure is Sluice's own starting guess rather than an average of your "
             + "own sifts. It starts showing your actual numbers after a sift or two.";
+
+    // The same figure as the line above, and a different thing to tell somebody. That one resolves
+    // itself on the next finished sift. This one does not, because a record nothing can read stays
+    // unreadable, and every estimate falls back to the guess until somebody deals with it.
+    private static final String HISTORY_UNREADABLE = "Sluice cannot read the record of what your "
+            + "past sifts cost, so this figure is a starting guess rather than an average of your "
+            + "own sifts. It will keep guessing until that record can be read again.";
 
     private final Pipeline pipeline;
     private final BooleanSupplier jobRunning;
@@ -763,7 +775,20 @@ public class RunSetupPresenter {
             return null;
         }
         return new Cost.Estimate("About " + RunWords.rounded(expected.totalTokens()) + " tokens",
-                DISCLAIMER, expected.historicOutput() ? null : WITHOUT_HISTORY);
+                ESTIMATE_OPENING + whereTheFigureCameFrom(expected) + ESTIMATE_CEILING);
+    }
+
+    /**
+     * What the figure rests on.
+     *
+     * @param expected {@link SpendEstimate} what the facade said about this scope
+     * @return {@link String} the middle of the disclaimer
+     */
+    private static String whereTheFigureCameFrom(final SpendEstimate expected) {
+        if (expected.historicOutput()) {
+            return FROM_HISTORY;
+        }
+        return expected.historyUnreadable() ? HISTORY_UNREADABLE : WITHOUT_HISTORY;
     }
 
     /**

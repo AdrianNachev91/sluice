@@ -436,11 +436,11 @@ class ImportEngineTest {
     private static MediaStore refusingToCopy(final String unreadable) {
         return new NioMediaStore() {
             @Override
-            public Path copyTo(final Path source, final Path destination) {
+            public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
                 if (source.getFileName().toString().equals(unreadable)) {
                     throw new UncheckedIOException(new IOException("refused " + source));
                 }
-                return super.copyTo(source, destination);
+                return super.copyTo(source, destination, stop);
             }
         };
     }

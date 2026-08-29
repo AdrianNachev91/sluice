@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.application.port.out.ApplyException;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.Finding.CorruptIndex;
 import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.Finding.StrayShard;
@@ -283,7 +284,7 @@ class TroubleshooterTest {
                 classificationJson(alreadyMoved, "junk", "blurry"),
                 classificationJson(givenUpOn, "junk", "also blurry"));
         CullPrepTestSupport.prepDirRemedies(root, root.resolve("Library"))
-                .skipMissingSource(prepDir, givenUpOn, "deleted it myself");
+                .skipMissingSource(prepDir, givenUpOn, AnswerSource.DESKTOP);
         final List<String> choicesBefore = Files.readAllLines(prepDir.resolve("choices.log"));
 
         final TroubleshootReport report = troubleshooter(root).troubleshoot(prepDir);

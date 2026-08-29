@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.vision.JsonCullPrepStore;
 import photos.sluice.application.port.out.CullPrepPort;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DecisionShard;
@@ -54,7 +55,7 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 0, 1));
 
         prepDirRemedies(root, root.resolve("Library"))
-                .resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, "the decision is right");
+                .resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, AnswerSource.DESKTOP);
 
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 1, 1));
     }

@@ -142,7 +142,7 @@ class CullPayloadsTest {
     @Test
     void anExpectationSaysHowMuchToTrustItself() {
         final CullPayloads.EstimatePayload payload = CullPayloads.estimate(
-                new SpendEstimate(9_000, 400, false, false));
+                new SpendEstimate(9_000, 400, false, false, false));
 
         assertThat(payload.exactInput()).isFalse();
         assertThat(payload.historicOutput()).isFalse();

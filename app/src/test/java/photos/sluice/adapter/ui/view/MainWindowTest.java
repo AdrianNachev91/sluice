@@ -64,6 +64,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -152,6 +153,47 @@ class MainWindowTest {
 
         assertThat(waitFor(() -> "2".equals(((Label) root.lookup("#nav-runs-count")).getText())))
                 .isTrue();
+    }
+
+    @Test
+    void aScreenThatWillNotBuildPutsAFailureUpRatherThanLeavingThePressDead() throws Exception {
+        final BorderPane root = onFxThread(() ->
+                built(new FirstRunPresenter(answersOnceThenThrows()), settingsPresenter()));
+        clickNav(root, "#nav-settings");
+
+        clickNav(root, "#nav-dashboard");
+
+        assertThat(currentScreen(root).getId()).isEqualTo("Dashboard");
+        assertThat(currentScreen(root).lookupAll(".label").stream()
+                .map(label -> ((Label) label).getText()))
+                .anySatisfy(text -> assertThat(text).isEqualTo("Dashboard"))
+                .anySatisfy(text -> assertThat(text).startsWith("This screen would not open"));
+    }
+
+    @Test
+    void theFailurePanelCarriesWhatTheReaderIsAskedToReport() throws Exception {
+        final BorderPane root = onFxThread(() ->
+                built(new FirstRunPresenter(answersOnceThenThrows()), settingsPresenter()));
+        clickNav(root, "#nav-settings");
+
+        clickNav(root, "#nav-dashboard");
+
+        assertThat(currentScreen(root).lookupAll(".label").stream()
+                .map(label -> ((Label) label).getText()))
+                .anySatisfy(text -> assertThat(text)
+                        .contains("something this screen reads is in no state to be read"));
+    }
+
+    // The Dashboard is drawn as the shell is built, before any press.
+    @Test
+    void aDashboardThatWillNotBuildAsTheWindowOpensStillLeavesAWindow() throws Exception {
+        final BorderPane root = onFxThread(() ->
+                built(new FirstRunPresenter(alwaysThrows()), settingsPresenter()));
+
+        assertThat(currentScreen(root).getId()).isEqualTo("Dashboard");
+        assertThat(currentScreen(root).lookupAll(".label").stream()
+                .map(label -> ((Label) label).getText()))
+                .anySatisfy(text -> assertThat(text).startsWith("This screen would not open"));
     }
 
     @Test
@@ -381,6 +423,39 @@ class MainWindowTest {
 
             @Override
             public List<PathViolation> violationsInForce() {
+                return List.of();
+            }
+        };
+    }
+
+    private static PathValidationUseCase alwaysThrows() {
+        return new PathValidationUseCase() {
+            @Override
+            public List<PathViolation> violations(final PathSettings candidate) {
+                return List.of();
+            }
+
+            @Override
+            public List<PathViolation> violationsInForce() {
+                throw new IllegalStateException("something this screen reads is in no state to be read");
+            }
+        };
+    }
+
+    // Answers once so the shell reaches the state this test is about, then throws on the press.
+    private static PathValidationUseCase answersOnceThenThrows() {
+        final var asked = new AtomicBoolean(false);
+        return new PathValidationUseCase() {
+            @Override
+            public List<PathViolation> violations(final PathSettings candidate) {
+                return List.of();
+            }
+
+            @Override
+            public List<PathViolation> violationsInForce() {
+                if (asked.getAndSet(true)) {
+                    throw new IllegalStateException("something this screen reads is in no state to be read");
+                }
                 return List.of();
             }
         };

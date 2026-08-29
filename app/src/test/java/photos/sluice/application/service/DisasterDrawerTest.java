@@ -123,6 +123,23 @@ class DisasterDrawerTest {
         assertThat(Files.exists(freshEntry)).isTrue();
     }
 
+    // The sweep deletes every listed file then prunes the folder, and removeIfEmptyOfFiles walks
+    // raw. A listFiles that hid a half-written transfer would leave the folder standing while this
+    // still counted it deleted.
+    @Test
+    void sweepExpiredGraveyardClearsAFolderHoldingATransferThatNeverLanded(@TempDir final Path root)
+            throws IOException {
+        final Path graveyardRoot = root.resolve("logs/archives");
+        final Path oldGraveyard = graveyardRoot.resolve("scope1-2019-01-01_00-00-00");
+        writeFile(oldGraveyard.resolve("index.json"), "{}");
+        writeFile(oldGraveyard.resolve("montage-001.jpg.sluice-part"), "half a sheet");
+
+        final int deleted = drawer().sweepExpiredGraveyard(graveyardRoot);
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(Files.exists(oldGraveyard)).isFalse();
+    }
+
     @Test
     void sweepExpiredGraveyardParsesTheTimestampEvenWhenTheScopeTagItselfContainsHyphens(@TempDir final Path root)
             throws IOException {

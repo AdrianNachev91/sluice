@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
+import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitScopeSelector;
 import photos.sluice.domain.commit.CommitSummary;
@@ -87,8 +88,18 @@ public class CommitEngine implements CommitUseCase {
         final Map<LibraryBucket, Integer> byBucket = new EnumMap<>(LibraryBucket.class);
         int committed = 0;
 
-        final List<Path> files = this.mediaStore.listFiles(sorted);
+        // A transfer that never landed holds a prefix of a photo. Moving one into the library would
+        // put it beyond reach of the next sort and index it as if it were whole.
+        final List<Path> files = this.mediaStore.listFiles(sorted).stream()
+                .filter(file -> !MediaStore.isIncompleteTransfer(file))
+                .toList();
         final int total = files.size();
+        // Counted separately from the walk, which ticks for every file so the bar reflects the work
+        // of looking. Whether a stop left anything behind is a question about the chosen scope
+        // alone, and a scoped run can walk a long out-of-scope tail after its last move.
+        final long inScope = files.stream()
+                .filter(file -> this.scopeSelector.isInScope(relativeTo(sorted, file), scope))
+                .count();
         int current = 0;
 
         // One session for the whole move loop. Each moved file's index row is written and flushed
@@ -99,10 +110,11 @@ public class CommitEngine implements CommitUseCase {
             // committed files stay committed, matching the no-undo model.
             while (current < total && !cancellation.isCancelled()) {
                 final Path file = files.get(current);
-                final String relativePath = sorted.relativize(file).toString().replace('\\', '/');
+                final String relativePath = relativeTo(sorted, file);
                 if (this.scopeSelector.isInScope(relativePath, scope)) {
                     final String hash = this.sha256Port.hash(file);
-                    final Path dest = this.mediaStore.move(file, library.resolve(relativePath).getParent());
+                    final Path dest = this.mediaStore.move(file, library.resolve(relativePath).getParent(),
+                            cancellation);
                     session.append(new IndexEntry(hash, dest));
                     // merge rather than a pre-seeded zero per bucket: a scoped commit (e.g. one
                     // year) never touches most buckets. byBucket should only ever report the
@@ -112,13 +124,29 @@ public class CommitEngine implements CommitUseCase {
                 }
                 progress.tick(++current, total);
             }
+        } catch (final TransferAbandonedException e) {
+            // The abandoned file is still in Sorted and never reached the index, since its row is
+            // appended after its own move. Every file before it is in the library and indexed, and
+            // the session closes on the way out here, so the summary below is what actually landed.
         }
 
         // Runs regardless of whether the pass above was cancelled. It only ever removes
         // directories that are genuinely empty, so a partial run leaves nothing for it to do wrong.
         this.mediaStore.removeEmptyDirectories(sorted);
 
-        return new CommitSummary(committed, byBucket);
+        return new CommitSummary(committed, (int) inScope - committed, byBucket, committed < inScope);
+    }
+
+    /**
+     * A file's path relative to Sorted, in the forward-slash form the scope selector and the
+     * library layout both read.
+     *
+     * @param sorted {@link Path} the Sorted root
+     * @param file {@link Path} a file under it
+     * @return {@link String} the relative path
+     */
+    private static String relativeTo(final Path sorted, final Path file) {
+        return sorted.relativize(file).toString().replace('\\', '/');
     }
 
     /**

@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
@@ -21,6 +22,8 @@ import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
+import photos.sluice.domain.cull.AnswerSource;
+import photos.sluice.domain.cull.ChoiceAnswer;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
@@ -87,6 +90,7 @@ public class Pipeline {
     private final PrepDirDoctor prepDirDoctor;
     private final PrepDirRemedies prepDirRemedies;
     private final PathsPort pathsPort;
+    private final SpendLedgerPort spendLedger;
     private final RootsGuard rootsGuard;
     private final MediaTallies mediaTallies;
     private final RunChanges runChanges = new RunChanges();
@@ -198,6 +202,7 @@ public class Pipeline {
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
         this.pathsPort = pathsPort;
+        this.spendLedger = spendLedger;
         this.mediaTallies = new MediaTallies(mediaStore, pathsPort);
     }
 
@@ -233,7 +238,7 @@ public class Pipeline {
     public JobHandle<SortSummary> sort(final SortScope scope) {
         this.requireUsableRoots();
         return this.jobRunner.submit(handle ->
-                this.sortEngine.sort(scope, handle::isCancellationRequested));
+                this.sortEngine.sort(scope, handle.stopSignal()));
     }
 
     /**
@@ -245,7 +250,7 @@ public class Pipeline {
     public JobHandle<CommitSummary> commit(final CommitScope scope) {
         this.requireUsableRoots();
         return this.jobRunner.submit(handle -> this.runPhase(COMMITTING,
-                progress -> this.commitEngine.commit(scope, progress, handle::isCancellationRequested)));
+                progress -> this.commitEngine.commit(scope, progress, handle.stopSignal())));
     }
 
     /**
@@ -264,7 +269,7 @@ public class Pipeline {
         this.importEngine.requireImportable(sources);
         return this.jobRunner.submit(handle -> this.runPhase(IMPORTING,
                 progress -> this.importEngine.importFrom(sources, kind, progress,
-                        handle::isCancellationRequested)));
+                        handle.stopSignal())));
     }
 
     /**
@@ -276,7 +281,7 @@ public class Pipeline {
     public JobHandle<RescueSummary> rescue(final String reviewFolder) {
         this.requireUsableRoots();
         return this.jobRunner.submit(handle -> this.runPhase(RESCUING,
-                progress -> this.rescueEngine.rescue(reviewFolder, progress, handle::isCancellationRequested)));
+                progress -> this.rescueEngine.rescue(reviewFolder, progress, handle.stopSignal())));
     }
 
     /**
@@ -358,6 +363,33 @@ public class Pipeline {
      */
     public Path archivesFolder() {
         return this.pathsPort.graveyard();
+    }
+
+    /**
+     * Files away a record of past spend that nothing can read, so the next one starts clean.
+     *
+     * <p>The only repair for a ledger with a line no parser accepts. Until it is moved every
+     * estimate falls back to the shipped seed, and nothing the user can press changes that.
+     *
+     * <p>Moved into the archives folder rather than deleted. It is still the only record of what
+     * past runs cost, and a line one version cannot parse may be readable by the next.
+     *
+     * <p>The history it holds does not come back. What the estimate loses is its projected half,
+     * which it rebuilds from the first completed run after this.
+     *
+     * <p>A ledger that reads is left where it is. Nothing about being asked makes a healthy record
+     * one to throw away, and the answer says so the same way an absent one does.
+     *
+     * @return {@link Path} where the ledger was filed, or null where there was nothing to repair
+     */
+    public @Nullable Path setAsideUnreadableSpendLedger() {
+        this.requireUsableRoots();
+        if (this.spendLedgerReads()) {
+            return null;
+        }
+        final Path destination = this.pathsPort.graveyard()
+                .resolve("spend-ledger-" + DisasterTimestamp.now() + ".csv");
+        return this.spendLedger.setAside(destination) ? destination : null;
     }
 
     /**
@@ -514,6 +546,33 @@ public class Pipeline {
     }
 
     /**
+     * Records one answer a user gave to a damaged run, and carries out whatever it settles.
+     *
+     * <p>Not a job. Each of these appends one ledger line or renames one shard, and a reader
+     * answering a finding must not be made to wait behind a running sift.
+     *
+     * @param prepDir {@link Path} the run being answered
+     * @param answer {@link ChoiceAnswer} what the user chose
+     * @param answeredOn {@link AnswerSource} which surface they chose it on
+     */
+    public void answer(final Path prepDir, final ChoiceAnswer answer, final AnswerSource answeredOn) {
+        this.requireUsableRoots();
+        switch (answer) {
+            case final ChoiceAnswer.SkipMissingSource skip ->
+                    this.prepDirRemedies.skipMissingSource(prepDir, skip.source(), answeredOn);
+            case final ChoiceAnswer.ResolveOverlap overlap ->
+                    this.prepDirRemedies.resolveOverlap(prepDir, overlap.file(), overlap.resolution(), answeredOn);
+            case final ChoiceAnswer.ResolveCorruptSidecar sidecar ->
+                    this.prepDirRemedies.resolveCorruptSidecar(prepDir, sidecar.montage(), sidecar.resolution(),
+                            answeredOn);
+            // The only answer that touches a file rather than the ledger, and the only one whose
+            // record is the rename itself.
+            case final ChoiceAnswer.SetAsideStrayShard stray ->
+                    this.prepDirRemedies.setAsideStrayShard(prepDir, stray.strayShard());
+        }
+    }
+
+    /**
      * Runs a manual, one-button purge of every completed cull run as a background job. Routing it
      * through JobRunner buys the same one-job-at-a-time discipline every other job gets. A purge can
      * then never race a re-prep of a scope it is in the middle of deleting.
@@ -661,6 +720,23 @@ public class Pipeline {
      */
     private void requireUsableRoots() {
         this.rootsGuard.requireUsable();
+    }
+
+    /**
+     * Whether the spend ledger parses, which is the condition its repair exists for.
+     *
+     * <p>The ledger fails loud at its own boundary, so reading it is the only way to ask. An absent
+     * one reads as empty rather than throwing, and needs no repair either.
+     *
+     * @return boolean true where the record can be read, false where a line defeats the parser
+     */
+    private boolean spendLedgerReads() {
+        try {
+            this.spendLedger.read();
+            return true;
+        } catch (final RuntimeException e) {
+            return false;
+        }
     }
 
     /**

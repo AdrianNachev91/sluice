@@ -43,7 +43,7 @@ import static org.mockito.Mockito.when;
 
 class RunSetupPresenterTest {
 
-    private static final SpendEstimate NOTHING = new SpendEstimate(0, 0, true, false);
+    private static final SpendEstimate NOTHING = new SpendEstimate(0, 0, true, false, false);
 
     // Comfortably past the 200ms a read is given before the screen says it is reading. The pair of
     // tests either side of it are a negative and its control, so this number is checked by them
@@ -153,7 +153,7 @@ class RunSetupPresenterTest {
 
     @Test
     void siftingFromAFinishedSortsCardAsksFirstAndNamesTheFigure() {
-        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true));
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true, false));
 
         final RunSetupPresenter.Confirmation asked = this.askedBeforeSifting(2019);
 
@@ -184,7 +184,7 @@ class RunSetupPresenterTest {
 
     @Test
     void siftingFromACardStillSaysItSpendsWhereNoFigureCanBeGiven() {
-        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false));
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false, false));
 
         assertThat(this.askedBeforeSifting(2019).question())
                 .endsWith("Sifting spends from your provider account balance.")
@@ -312,7 +312,7 @@ class RunSetupPresenterTest {
 
     @Test
     void theFigureIsRoundedRatherThanClaimingTheLastToken() {
-        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true));
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true, false));
         this.choose(RunMode.SIFT, "2019");
 
         assertThat(this.estimatedCost().figure()).isEqualTo("About 150,000 tokens");
@@ -320,23 +320,46 @@ class RunSetupPresenterTest {
 
     @Test
     void anInstallWithNoFinishedSiftBehindItSaysTheFigureIsAGuess() {
-        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false));
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, false));
         this.choose(RunMode.SIFT, "2019");
 
-        assertThat(this.estimatedCost().withoutHistory()).contains("starting guess");
+        assertThat(this.estimatedCost().disclaimer()).contains("starting guess");
     }
 
     @Test
-    void anInstallWithRunsBehindItAddsNoSuchLine() {
-        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true));
+    void aGuessedFigureIsNotAlsoCalledAnAverageOfYourOwnSifts() {
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
         this.choose(RunMode.SIFT, "2019");
 
-        assertThat(this.estimatedCost().withoutHistory()).isNull();
+        assertThat(this.estimatedCost().disclaimer())
+                .doesNotContain("It is an average of what sifts like this one have cost")
+                .contains("cannot read the record")
+                .contains("stop and ask whether to continue");
+    }
+
+    @Test
+    void aFigureRestingOnFinishedSiftsSaysItIsAnAverageOfThem() {
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true, false));
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.estimatedCost().disclaimer())
+                .contains("average of what sifts like this one have cost")
+                .contains("stop and ask whether to continue");
+    }
+
+    @Test
+    void aRecordOfPastSiftsThatCannotBeReadSaysSoRatherThanClaimingThereIsNone() {
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.estimatedCost().disclaimer())
+                .contains("cannot read the record")
+                .doesNotContain("Nothing has finished a sift");
     }
 
     @Test
     void theDisclaimerNamesTheSiftRatherThanTheRunWhereItMeansTheOneAboutToStart() {
-        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true));
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true, false));
         this.choose(RunMode.SIFT, "2019");
 
         assertThat(this.estimatedCost().disclaimer())

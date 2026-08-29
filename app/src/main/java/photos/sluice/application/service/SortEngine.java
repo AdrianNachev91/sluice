@@ -10,6 +10,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.Sha256Port;
+import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.ScopeSelector;
 import photos.sluice.domain.dedup.ByteIdenticalDedup;
@@ -69,10 +70,11 @@ public class SortEngine implements SortUseCase {
     private static final String CHECKING_COPIES = "Checking for duplicates...";
     private static final String SORTING = "Sorting...";
 
-    // Returned when cancellation lands during dating, before any file is moved, deleted, or
-    // written - a clean abort with nothing to report.
-    private static final SortSummary EMPTY_SORT_SUMMARY =
-            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of());
+    // Returned when cancellation lands during dating or hashing. Those are the two passes before
+    // anything is moved, deleted or written, so it is a clean abort with nothing to report. Its
+    // counts are what an empty Inbox also produces, and the cancelled flag is what tells them apart.
+    private static final SortSummary STOPPED_BEFORE_ANYTHING_MOVED =
+            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), true, 0);
 
     private final PathsPort pathsPort;
     private final InboxScannerPort inboxScanner;
@@ -152,20 +154,27 @@ public class SortEngine implements SortUseCase {
         final List<DatedMedia> allDated = this.phaseRunner.around(FINDING_DATES,
                 dating -> this.dateEveryFile(scanResult, cancellation, dating));
         if (allDated == null) {
-            return EMPTY_SORT_SUMMARY;
+            return STOPPED_BEFORE_ANYTHING_MOVED;
         }
         final List<DatedMedia> inScope = this.scopeSelector.select(allDated, scope);
         final Map<MediaFile, DateResult> dateByFile = new HashMap<>();
         inScope.forEach(dated -> dateByFile.put(dated.file(), dated.date()));
 
         final DedupPlan plan = this.phaseRunner.around(CHECKING_COPIES,
-                hashing -> this.dedupPlanFor(inScope, hashing));
+                hashing -> this.dedupPlanFor(inScope, hashing, cancellation));
+        // Asked again after the plan lands, because the two loops below are the first deletions of
+        // the run. A stop arriving in the gap between hashing and them still finds nothing gone.
+        if (plan == null || cancellation.isCancelled()) {
+            return STOPPED_BEFORE_ANYTHING_MOVED;
+        }
 
         plan.redundantVsLibrary().forEach(file -> this.mediaStore.delete(file.path()));
         plan.withinBatchDuplicates().forEach(file -> this.mediaStore.delete(file.path()));
 
-        final RoutingResult routing = this.phaseRunner.around(SORTING,
-                moving -> this.routeSurvivors(plan.toSort(), dateByFile, moving, cancellation));
+        // This pass has no cancelled answer: it catches the abandon and reports what it routed. The
+        // phase runner's return is nullable for the stages that do have one.
+        final RoutingResult routing = Objects.requireNonNull(this.phaseRunner.around(SORTING,
+                moving -> this.routeSurvivors(plan.toSort(), dateByFile, moving, cancellation)));
 
         // A cancelled routing pass can stop before every survivor is routed. Those unrouted files
         // never actually left the Inbox, even though scope selection picked them. This is the set
@@ -181,12 +190,27 @@ public class SortEngine implements SortUseCase {
         // before it. A file routing never reached keeps its sidecar for a future run.
         final Set<Path> consumedSidecars = this.consumeSidecars(actuallyRemoved, dateByFile, scanResult.sidecars());
 
-        this.sweepOrphanedSidecarsAndEmptyDirectories(scanResult, actuallyRemoved, consumedSidecars);
+        // A stop asked for as the last file routed still routes it, and that run left nothing in the
+        // Inbox. So this is read off the count, not off the signal, and everything below reads it
+        // rather than asking the signal a second time. The two answers differ exactly when the stop
+        // lands after the last file, and that run is finished.
+        final boolean stoppedShort = routing.routedFiles.size() < plan.toSort().size();
+
+        // The sweep below reaches files this run never touched. A sidecar already orphaned before
+        // it started, and a directory left empty. That is housekeeping rather than the run's own
+        // work, so a run that stopped short skips it and the next run takes it instead.
+        //
+        // consumeSidecars above needs no such check. It only ever spends the sidecar of a file
+        // that did leave, and a cancelled routing pass leaves the rest where they were.
+        if (!stoppedShort) {
+            this.sweepOrphanedSidecarsAndEmptyDirectories(scanResult, actuallyRemoved, consumedSidecars);
+        }
 
         return new SortSummary(actuallyRemoved.size(), plan.redundantVsLibrary().size(),
                 plan.withinBatchDuplicates().size(), routing.photosSorted, routing.videosSorted, routing.lowRes,
                 routing.unsorted, consumedSidecars.size(), routing.lowConfidenceFiles, routing.unsortedFiles,
-                routing.yearsSorted, pairingWarnings(scanResult));
+                routing.yearsSorted, pairingWarnings(scanResult), stoppedShort,
+                plan.toSort().size() - routing.routedFiles.size());
     }
 
     /**
@@ -320,15 +344,6 @@ public class SortEngine implements SortUseCase {
     }
 
     /**
-     * Routes each survivor to its destination in turn, stopping early on cancellation.
-     *
-     * @param toSort a {@link List} of {@link MediaFile} files that survived dedup and are ready to route
-     * @param dateByFile a {@link Map} of {@link MediaFile} to {@link DateResult} resolved date for each in-scope file
-     * @param progress {@link ProgressCallback} receives per-file progress ticks
-     * @param cancellation {@link CancellationSignal} checked between files to allow early stop
-     * @return {@link RoutingResult} tally of the routing outcomes
-     */
-    /**
      * Dates every scanned file, counting as it goes.
      *
      * @param scanResult {@link ScanResult} what the Inbox scan found
@@ -356,21 +371,38 @@ public class SortEngine implements SortUseCase {
     /**
      * Hashes what is in scope and plans what is already held elsewhere.
      *
+     * <p>Reads every byte of every file in scope, which on a year of media is the longest a reader
+     * waits with nothing yet moved. So it asks between files.
+     *
      * @param inScope a {@link List} of {@link DatedMedia} the files this run covers
      * @param progress {@link ProgressCallback} ticked per file hashed
-     * @return {@link DedupPlan} what to delete and what to sort
+     * @param cancellation {@link CancellationSignal} asked between files
+     * @return {@link DedupPlan} what to delete and what to sort, or null if the run was cancelled
      */
-    private DedupPlan dedupPlanFor(final List<DatedMedia> inScope, final ProgressCallback progress) {
+    private @Nullable DedupPlan dedupPlanFor(final List<DatedMedia> inScope, final ProgressCallback progress,
+                                             final CancellationSignal cancellation) {
         final Set<String> libraryHashes = this.existingLibraryHashes();
         final int total = inScope.size();
         final List<HashedMedia> hashed = new ArrayList<>();
         for (final DatedMedia dated : inScope) {
+            if (cancellation.isCancelled()) {
+                return null;
+            }
             hashed.add(new HashedMedia(dated.file(), this.sha256Port.hash(dated.file().path())));
             progress.tick(hashed.size(), total);
         }
         return this.dedup.plan(hashed, libraryHashes);
     }
 
+    /**
+     * Routes each survivor to its destination in turn, stopping early on cancellation.
+     *
+     * @param toSort a {@link List} of {@link MediaFile} files that survived dedup and are ready to route
+     * @param dateByFile a {@link Map} of {@link MediaFile} to {@link DateResult} resolved date for each in-scope file
+     * @param progress {@link ProgressCallback} receives per-file progress ticks
+     * @param cancellation {@link CancellationSignal} checked between files to allow early stop
+     * @return {@link RoutingResult} tally of the routing outcomes
+     */
     private RoutingResult routeSurvivors(final List<MediaFile> toSort, final Map<MediaFile, DateResult> dateByFile,
                                          final ProgressCallback progress, final CancellationSignal cancellation) {
         final var routing = new RoutingResult();
@@ -378,15 +410,21 @@ public class SortEngine implements SortUseCase {
         int current = 0;
         // Checked after the move so an in-flight file is never interrupted; already-moved files
         // stay moved, matching the no-undo model.
-        while (current < total && !cancellation.isCancelled()) {
-            final MediaFile file = toSort.get(current);
-            // Every file here came from inScope, and dateByFile was built from that same list. So
-            // this lookup always hits. requireNonNull asserts that invariant rather than silently
-            // trusting it.
-            final DateResult date = Objects.requireNonNull(dateByFile.get(file));
-            this.routeOneSurvivor(file, date, routing);
-            routing.routedFiles.add(file);
-            progress.tick(++current, total);
+        try {
+            while (current < total && !cancellation.isCancelled()) {
+                final MediaFile file = toSort.get(current);
+                // Every file here came from inScope, and dateByFile was built from that same list.
+                // So this lookup always hits. requireNonNull asserts that invariant rather than
+                // silently trusting it.
+                final DateResult date = Objects.requireNonNull(dateByFile.get(file));
+                this.routeOneSurvivor(file, date, routing, cancellation);
+                routing.routedFiles.add(file);
+                progress.tick(++current, total);
+            }
+        } catch (final TransferAbandonedException e) {
+            // The abandoned file is still in the Inbox, and the part the store wrote at its
+            // destination is gone. Every tally here is stepped after its own move, so the file
+            // appears in none of them and what is returned is exactly what did land.
         }
         return routing;
     }
@@ -399,12 +437,15 @@ public class SortEngine implements SortUseCase {
      * @param file {@link MediaFile} the survivor being routed
      * @param date {@link DateResult} its resolved date
      * @param routing {@link RoutingResult} tallies updated with this file's outcome
+     * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
-    private void routeOneSurvivor(final MediaFile file, final DateResult date, final RoutingResult routing) {
+    private void routeOneSurvivor(final MediaFile file, final DateResult date, final RoutingResult routing,
+                                  final CancellationSignal cancellation) {
         final String leaf = file.path().getFileName().toString();
 
         if (date.confidence() == Confidence.UNSORTABLE) {
-            this.routeToReview(file, leaf, this.pathsPort.review().resolve("Unsorted"), REASON_UNSORTED);
+            this.routeToReview(file, leaf, this.pathsPort.review().resolve("Unsorted"), REASON_UNSORTED, cancellation);
             routing.unsorted++;
             routing.unsortedFiles.add(leaf);
             return;
@@ -417,7 +458,8 @@ public class SortEngine implements SortUseCase {
         final String extension = MediaTypeDetector.extensionOf(file.path());
 
         if (!isVideo && this.isLowRes(file, type, extension)) {
-            this.routeToReview(file, leaf, this.pathsPort.review().resolve(yearMonthDash(date.when())), REASON_LOW_RES);
+            this.routeToReview(file, leaf, this.pathsPort.review().resolve(yearMonthDash(date.when())),
+                    REASON_LOW_RES, cancellation);
             routing.lowRes++;
             return;
         }
@@ -425,7 +467,7 @@ public class SortEngine implements SortUseCase {
         final String mediaFolder = isVideo ? "Videos" : "Photos";
         final Path destDir = this.pathsPort.sorted().resolve(mediaFolder)
                 .resolve(yearFolder(date.when())).resolve(monthFolder(date.when()));
-        this.mediaStore.move(file.path(), destDir);
+        this.mediaStore.move(file.path(), destDir, cancellation);
         routing.yearsSorted.add(date.when().getYear());
         if (isVideo) {
             routing.videosSorted++;
@@ -458,9 +500,12 @@ public class SortEngine implements SortUseCase {
      * @param leaf {@link String} its file name
      * @param destDir {@link Path} the Review destination folder
      * @param reason {@link String} short label recorded in the reasons file
+     * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
-    private void routeToReview(final MediaFile file, final String leaf, final Path destDir, final String reason) {
-        this.mediaStore.move(file.path(), destDir);
+    private void routeToReview(final MediaFile file, final String leaf, final Path destDir, final String reason,
+                               final CancellationSignal cancellation) {
+        this.mediaStore.move(file.path(), destDir, cancellation);
         this.mediaStore.appendLine(destDir.resolve(REASONS_FILE), leaf + " - " + reason);
     }
 

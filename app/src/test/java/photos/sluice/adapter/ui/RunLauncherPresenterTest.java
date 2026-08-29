@@ -65,7 +65,7 @@ import static org.mockito.Mockito.when;
 
 class RunLauncherPresenterTest {
 
-    private static final SpendEstimate NOTHING = new SpendEstimate(0, 0, true, false);
+    private static final SpendEstimate NOTHING = new SpendEstimate(0, 0, true, false, false);
 
     private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
 
@@ -496,20 +496,6 @@ class RunLauncherPresenterTest {
     }
 
     @Test
-    void aRunThatMovedAPreviousRecordAsideSaysSoRatherThanLettingItLookLost() {
-        final Path archived = Path.of("logs", "archives", "2019-2026-08-24_22-01-33");
-        this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Applied(mock(CullReport.class),
-                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), archived));
-
-        this.presenter.start();
-
-        assertThat(requireNonNull(this.finishedView().archived()))
-                .contains("moved that record to")
-                .contains(archived.toString());
-    }
-
-    @Test
     void aSortWhoseDateFilesBarelyPairedWarnsThatItsDatesMayBeWrong() {
         this.choose(RunMode.SORT, "");
         this.sortEndsWith(sortSummaryWith(List.of("pairing-canary")));
@@ -535,7 +521,7 @@ class RunLauncherPresenterTest {
     void aSortsCardCountsEveryBucketAnythingLandedIn() {
         this.choose(RunMode.SORT, "");
         this.sortEndsWith(new SortSummary(12, 1, 2, 5, 1, 2, 1, 0, List.of(), List.of(),
-                Set.of(2019), List.of()));
+                Set.of(2019), List.of(), false, 0));
 
         this.presenter.start();
 
@@ -559,8 +545,8 @@ class RunLauncherPresenterTest {
     @Test
     void aMoveToTheLibraryCountsEachPartOfItSeparatelyAndTogether() {
         this.choose(RunMode.MOVE_TO_LIBRARY, "2019");
-        this.moveEndsWith(new CommitSummary(9, Map.of(LibraryBucket.PHOTOS, 6,
-                LibraryBucket.VIDEOS, 2, LibraryBucket.FUNNY, 1)));
+        this.moveEndsWith(new CommitSummary(9, 0, Map.of(LibraryBucket.PHOTOS, 6,
+                LibraryBucket.VIDEOS, 2, LibraryBucket.FUNNY, 1), false));
 
         this.presenter.start();
 
@@ -998,7 +984,7 @@ class RunLauncherPresenterTest {
     }
 
     private static SortSummary sortSummaryWith(final List<String> warnings) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), Set.of(2019), warnings);
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), Set.of(2019), warnings, false, 0);
     }
 
     private void pipelineStarts() {

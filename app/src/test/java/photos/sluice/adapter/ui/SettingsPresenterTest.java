@@ -627,7 +627,7 @@ class SettingsPresenterTest {
         assertThat(settingsUseCase.saved).isNull();
         assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.NothingChanged.class);
         assertThat(outcome.message())
-                .contains("cancelled")
+                .contains("You stopped the copy")
                 .contains("still at its old folder")
                 .contains("continues copying")
                 .contains("never remove a library folder")

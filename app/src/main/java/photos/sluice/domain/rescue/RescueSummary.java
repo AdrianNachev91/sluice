@@ -10,8 +10,10 @@ import java.util.List;
  *
  * <p>{@code folderRemoved} is true only when every file rescue looked at was actually rescued, so
  * nothing was left behind to keep the folder alive.
+ *
+ * <p>{@code cancelled} is the run's own account of whether it stopped short.
  */
-public record RescueSummary(int rescued, List<String> skipped, boolean folderRemoved) {
+public record RescueSummary(int rescued, List<String> skipped, boolean folderRemoved, boolean cancelled) {
 
     /**
      * Defensively copies the skipped list.
@@ -19,6 +21,7 @@ public record RescueSummary(int rescued, List<String> skipped, boolean folderRem
      * @param rescued int count of files rescued
      * @param skipped a {@link List} of {@link String} names of files left in place, with reasons
      * @param folderRemoved boolean true if the source folder was removed
+     * @param cancelled boolean whether the run gave up before reaching every file
      */
     public RescueSummary {
         skipped = List.copyOf(skipped);

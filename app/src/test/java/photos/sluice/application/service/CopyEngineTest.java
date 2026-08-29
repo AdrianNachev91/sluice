@@ -39,6 +39,19 @@ class CopyEngineTest {
         }
 
         @Test
+        void doesNotCarryATransferThatNeverLandedIntoTheNewLibrary(@TempDir final Path from,
+                                                                   @TempDir final Path to) {
+            write(from.resolve("2019/06/holiday.jpg"), "holiday");
+            write(from.resolve("2019/06/beach.jpg.sluice-part"), "half a beach");
+
+            final CopySummary summary = copyEngine().copyTree(from, to, ProgressCallback.NO_OP,
+                    CancellationSignal.NEVER);
+
+            assertThat(to.resolve("2019/06/beach.jpg.sluice-part")).doesNotExist();
+            assertThat(summary).isEqualTo(new CopySummary(1, 1, false));
+        }
+
+        @Test
         void leavesTheSourceWhereItIs(@TempDir final Path from, @TempDir final Path to) {
             write(from.resolve("2019/06/holiday.jpg"), "holiday");
 

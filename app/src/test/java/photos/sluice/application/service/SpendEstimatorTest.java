@@ -30,7 +30,7 @@ class SpendEstimatorTest {
         final SpendEstimate estimate = estimator(workingRoot)
                 .estimate(3, new SpendForecast.NoSpend(), MODEL, SHIPPED);
 
-        assertThat(estimate).isEqualTo(new SpendEstimate(0, 0, true, false));
+        assertThat(estimate).isEqualTo(new SpendEstimate(0, 0, true, false, false));
     }
 
     @Test
@@ -85,6 +85,16 @@ class SpendEstimatorTest {
 
         assertThat(estimate.outputTokens()).isEqualTo(12_900);
         assertThat(estimate.historicOutput()).isFalse();
+        assertThat(estimate.historyUnreadable()).isTrue();
+    }
+
+    @Test
+    void anInstallWithNoRunsYetIsNotReportedAsHavingAnUnreadableRecord(@TempDir final Path workingRoot) {
+        final SpendEstimate estimate = estimator(workingRoot)
+                .estimate(3, new SpendForecast.Counted(1_000), MODEL, SHIPPED);
+
+        assertThat(estimate.historicOutput()).isFalse();
+        assertThat(estimate.historyUnreadable()).isFalse();
     }
 
     @Test
@@ -159,7 +169,7 @@ class SpendEstimatorTest {
     void aProviderThatCallsNoModelCostsNothingBeforeAnythingIsPrepared(@TempDir final Path workingRoot) {
         final SpendEstimate estimate = estimator(workingRoot).estimateBeforePreparing(500, false, MODEL, SHIPPED);
 
-        assertThat(estimate).isEqualTo(new SpendEstimate(0, 0, true, false));
+        assertThat(estimate).isEqualTo(new SpendEstimate(0, 0, true, false, false));
     }
 
     @Test

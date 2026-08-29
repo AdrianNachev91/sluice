@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Finding.MissingSource;
 import photos.sluice.domain.cull.OverlapResolution;
@@ -195,7 +196,7 @@ class ReconcileEngineTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir,
-                root.resolve("Sorted/Photos/2019/06/gone.jpg"), "deleted it myself");
+                root.resolve("Sorted/Photos/2019/06/gone.jpg"), AnswerSource.DESKTOP);
         final List<String> choicesBefore = Files.readAllLines(prepDir.resolve("choices.log"));
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
@@ -220,7 +221,7 @@ class ReconcileEngineTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(gone));
         writeShard(prepDir, "montage-001", classificationJson(gone, "junk", "blurry"));
-        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, gone, "deleted it myself");
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, gone, AnswerSource.DESKTOP);
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
@@ -240,7 +241,7 @@ class ReconcileEngineTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         writeSidecar(prepDir, "montage-001", sidecarEntry(restored));
         writeShard(prepDir, "montage-001", classificationJson(restored, "junk", "blurry"));
-        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, restored, "deleted it myself");
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, restored, AnswerSource.DESKTOP);
         writeFile(restored, "found it after all");
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
@@ -259,7 +260,7 @@ class ReconcileEngineTest {
         final Path prepDir = prepDir(root);
         final Path unreviewable = root.resolve("Sorted/Photos/2019/06/corrupt.heic"); // never written
         writeIndex(prepDir, 0, List.of(unreviewable), List.of());
-        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, unreviewable, "deleted it myself");
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, unreviewable, AnswerSource.DESKTOP);
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
@@ -283,7 +284,7 @@ class ReconcileEngineTest {
         writeShard(prepDir, "montage-001",
                 classificationJson(moved, "junk", "blurry"),
                 classificationJson(givenUpOn, "junk", "also blurry"));
-        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, givenUpOn, "deleted it myself");
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, givenUpOn, AnswerSource.DESKTOP);
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
@@ -308,7 +309,7 @@ class ReconcileEngineTest {
         writeShard(prepDir, "montage-001",
                 nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
                 nearDupRejectJson(reject, "lake-jun19", "blurred"));
-        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, chosen, "deleted it myself");
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, chosen, AnswerSource.DESKTOP);
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 
@@ -330,7 +331,7 @@ class ReconcileEngineTest {
         writeShard(prepDir, "montage-001", classificationJson(gone, "junk", "blurry"));
         // The answer this destroys. Without it the assertions below would hold for a prep dir that
         // never had a choices file at all, and prove nothing about a loss.
-        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, gone, "deleted it myself");
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, gone, AnswerSource.DESKTOP);
         writeUndecodable(prepDir.resolve("choices.log"));
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
@@ -501,7 +502,7 @@ class ReconcileEngineTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         prepDirRemedies(root, libraryRoot).resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION,
-                "the decision is correct");
+                AnswerSource.DESKTOP);
 
         final ReconcileReport report = reconcileEngine(root, libraryRoot).reconcile(prepDir);
 

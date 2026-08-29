@@ -18,8 +18,6 @@ import java.util.List;
  * @param detail a sentence about the ending where the heading needs one, or null
  * @param counts a {@link List} of {@link Count} what the run did, one row each, empty where it did
  *     nothing worth counting
- * @param archived what to say about a previous record of this scope moved aside on the way in, or
- *     null where none was
  * @param warning {@link Warning} something that stopped nothing and is still worth a reader's
  *     attention, or null
  * @param action {@link CardAction} the one thing this card offers beyond Done, or null where it
@@ -27,7 +25,7 @@ import java.util.List;
  * @param doneLabel {@link String} what the button back to the launcher says
  */
 public record RunResultView(String heading, Tone tone, @Nullable String detail, List<Count> counts,
-                            @Nullable String archived, @Nullable Warning warning,
+                            @Nullable Warning warning,
                             @Nullable CardAction action, String doneLabel) {
 
     /**
@@ -37,7 +35,6 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
      * @param tone {@link Tone} how the heading should read
      * @param detail a sentence about the ending, or null
      * @param counts a {@link List} of {@link Count} what the run did
-     * @param archived what to say about a previous record moved aside, or null
      * @param warning {@link Warning} something worth attention that stopped nothing, or null
      * @param action {@link CardAction} the one thing offered beyond Done, or null
      * @param doneLabel {@link String} what the button back to the launcher says

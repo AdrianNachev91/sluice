@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.DiscardReport;
@@ -58,7 +59,7 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.skipMissingSource(prepDir, gone, "confirmed permanently deleted by the user");
+        remedies.skipMissingSource(prepDir, gone, AnswerSource.DESKTOP);
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("scenery", 1).doesNotContainKey("junk");
@@ -76,7 +77,7 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.skipMissingSource(prepDir, gone, "confirmed permanently deleted by the user");
+        remedies.skipMissingSource(prepDir, gone, AnswerSource.DESKTOP);
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.unreviewable()).isEqualTo(1);
@@ -102,7 +103,7 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.skipMissingSource(prepDir, chosen, "confirmed the chosen photo itself is gone");
+        remedies.skipMissingSource(prepDir, chosen, AnswerSource.DESKTOP);
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.nearDupGroups()).isZero();
@@ -126,7 +127,7 @@ class PrepDirRemediesTest {
         writeSidecar(prepDir, "montage-001", sidecarEntry(restored));
         writeShard(prepDir, "montage-001", classificationJson(restored, "junk", "blurry"));
 
-        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, restored, "thought it was gone, then found it");
+        prepDirRemedies(root, libraryRoot).skipMissingSource(prepDir, restored, AnswerSource.DESKTOP);
         final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("junk", 1);
@@ -149,7 +150,7 @@ class PrepDirRemediesTest {
         final byte[] indexBefore = Files.readAllBytes(prepDir.resolve("index.json"));
         final byte[] shardBefore = Files.readAllBytes(prepDir.resolve("decisions-001.json"));
 
-        remedies.resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, "the decision is correct");
+        remedies.resolveOverlap(prepDir, photo, OverlapResolution.TRUST_DECISION, AnswerSource.DESKTOP);
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("junk", 1);
@@ -173,8 +174,7 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.resolveOverlap(prepDir, photo, OverlapResolution.TREAT_AS_UNREVIEWABLE, "the file wasn't actually " +
-                "reviewed");
+        remedies.resolveOverlap(prepDir, photo, OverlapResolution.TREAT_AS_UNREVIEWABLE, AnswerSource.DESKTOP);
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).doesNotContainKey("junk");
@@ -333,8 +333,7 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "redo this batch " +
-                "later");
+        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, AnswerSource.DESKTOP);
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).isEmpty();
@@ -354,8 +353,7 @@ class PrepDirRemediesTest {
         final PrepDirRemedies remedies = prepDirRemedies(root, libraryRoot);
         final ApplyEngine engine = applyEngine(root, libraryRoot);
 
-        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY, "trust the " +
-                "culler's own shard");
+        remedies.resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY, AnswerSource.DESKTOP);
         final ApplyReport report = engine.apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).containsEntry("junk", 1);
@@ -369,8 +367,7 @@ class PrepDirRemediesTest {
         Files.writeString(prepDir.resolve("montage-001.json"), "not valid json"); // present, but corrupt
 
         prepDirRemedies(root, root.resolve("Library"))
-                .resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, "give up on this " +
-                        "batch");
+                .resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.SET_ASIDE, AnswerSource.DESKTOP);
 
         assertThat(Files.exists(prepDir.resolve("montage-001.json"))).isFalse();
         final Path drawer = prepDir.resolve("disasters");
@@ -394,7 +391,7 @@ class PrepDirRemediesTest {
         Files.writeString(prepDir.resolve("disasters/2026-01-01_00-00-00-something.txt"), "old drawer entry");
         writeMoveRecord(prepDir, photo, root.resolve("Review/junk/a.jpg"), "hash-a");
         prepDirRemedies(root, root.resolve("Library"))
-                .skipMissingSource(prepDir, root.resolve("Sorted/Photos/2019/06/gone.jpg"), "deleted it myself");
+                .skipMissingSource(prepDir, root.resolve("Sorted/Photos/2019/06/gone.jpg"), AnswerSource.DESKTOP);
 
         final DiscardReport report = prepDirRemedies(root, root.resolve("Library")).discard(prepDir);
         final Path graveyard = report.graveyard();

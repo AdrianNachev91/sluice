@@ -15,6 +15,7 @@ import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.ExternalAgentSettings;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullRunSummary;
@@ -1734,7 +1735,7 @@ class CullEngineTest {
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
         Files.writeString(prepDir.resolve("montage-001.json"), "{ not json at all");
         prepDirRemedies(root).resolveCorruptSidecar(prepDir, "montage-001", CorruptSidecarResolution.APPLY_ANYWAY,
-                "the shard itself is fine");
+                AnswerSource.DESKTOP);
         // The tally still reads the montage as invalid - only the whole-batch pass knows to trust
         // its shard as its own scope. Readiness is what ignores that, which is the claim below.
         assertThat(listed(pipeline.cullRuns())).singleElement().satisfies(run -> {

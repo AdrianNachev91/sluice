@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.job.ProgressCallback;
 
@@ -49,12 +50,14 @@ final class PhaseRunner {
      * class's to widen. {@link SortEngine#sort} throws nothing, and making it declare
      * {@code throws Exception} to report its own phases would push that onto every caller it has.
      *
+     * <p>T may be null, which is how a stage reports that it stopped before finishing.
+     *
      * @param phase {@link String} name of the phase being run
      * @param work a {@link Function} of {@link ProgressCallback} to T the stage to bracket
      * @param <T> the type of result the stage produces
      * @return T the stage's result
      */
-    <T> T around(final String phase, final Function<ProgressCallback, T> work) {
+    <T extends @Nullable Object> T around(final String phase, final Function<ProgressCallback, T> work) {
         this.progressPort.phaseStarted(phase);
         try {
             return work.apply((current, total) -> this.progressPort.tick(phase, current, total));

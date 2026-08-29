@@ -10,6 +10,7 @@ import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.MonthRange;
 
@@ -196,8 +197,44 @@ class CommitEngineTest {
                 .commit(new CommitScope.All(), cancelAfterFirstTick, cancelled::get);
 
         assertThat(summary.committed()).isEqualTo(1);
+        assertThat(summary.cancelled()).isTrue();
+        assertThat(summary.leftBehind()).isEqualTo(1);
         assertThat(regularFileCount(root.resolve("Sorted"))).isEqualTo(1);
         assertThat(regularFileCount(libraryRoot)).isEqualTo(1);
+    }
+
+    @Test
+    void aStopAfterTheLastInScopeFileDidNotStopShort(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
+        writeFile(root.resolve("Sorted/Photos/2020/06/b.jpg"), "b");
+
+        // The double sorts its listing, so 2019 is walked before 2020 and the stop lands on the
+        // out-of-scope tail with every in-scope file already moved. NioMediaStore does not sort,
+        // so a real store here would pass on Windows and flake elsewhere.
+        final AtomicBoolean cancelled = new AtomicBoolean(false);
+        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        final CommitSummary summary = commitEngine(root, libraryRoot,
+                new CsvLibraryHashIndex(SettingsFixture.workingRoot(root)), new FailingAfterMoves(2))
+                .commit(new CommitScope.Year(2019, null), cancelAfterFirstTick, cancelled::get);
+
+        assertThat(summary.committed()).isEqualTo(1);
+        assertThat(summary.cancelled()).isFalse();
+    }
+
+    @Test
+    void aTransferThatNeverLandedIsNeverMovedIntoTheLibrary(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "a");
+        writeFile(root.resolve("Sorted/Photos/2019/06/b.jpg.sluice-part"), "half of b");
+
+        final CommitSummary summary = commitEngine(root, libraryRoot)
+                .commit(new CommitScope.All(), ProgressCallback.NO_OP, CancellationSignal.NEVER);
+
+        assertThat(summary.committed()).isEqualTo(1);
+        assertThat(regularFileCount(libraryRoot)).isEqualTo(1);
+        assertThat(root.resolve("Sorted/Photos/2019/06/b.jpg.sluice-part")).exists();
     }
 
     private static long regularFileCount(final Path root) throws IOException {
@@ -271,12 +308,12 @@ class CommitEngineTest {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir) {
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
             if (this.movesUntilFailure <= 0) {
                 throw new RuntimeException("simulated crash");
             }
             this.movesUntilFailure--;
-            return this.delegate.move(source, destDir);
+            return this.delegate.move(source, destDir, stop);
         }
 
         @Override
@@ -285,18 +322,18 @@ class CommitEngineTest {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination) {
-            return this.delegate.moveTo(source, destination);
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
+            return this.delegate.moveTo(source, destination, stop);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir) {
-            return this.delegate.copy(source, destDir);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
+            return this.delegate.copy(source, destDir, stop);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination) {
-            return this.delegate.copyTo(source, destination);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
+            return this.delegate.copyTo(source, destination, stop);
         }
 
         @Override

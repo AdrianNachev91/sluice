@@ -12,11 +12,12 @@ import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
 import photos.sluice.application.port.out.HashIndexPort;
+import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
+import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.job.CancellationSignal;
-import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
@@ -675,8 +676,147 @@ class SortEngineTest {
         assertThat(Files.exists(albumDir)).isTrue();
     }
 
+    @Test
+    void cancelWhileHashingDeletesNothingAndMovesNothing(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        final Path alreadyInTheLibrary = inbox.resolve("20210101_held.jpg");
+        writeFile(alreadyInTheLibrary, padded("held"));
+        writeFile(inbox.resolve("20210102_new.jpg"), padded("new"));
+        final HashIndexPort index = seededIndex(root, this.sha256Port.hash(alreadyInTheLibrary),
+                root.resolve("Library/Photos/2021/01/20210101_held.jpg"));
+
+        final var cancelled = new AtomicBoolean(false);
+        final SortSummary summary = this.sortEngine(root, index, cancelOnFirstFileHashed(cancelled))
+                .sort(new SortScope.OldestYear(), cancelled::get);
+
+        assertThat(summary.processed()).isZero();
+        assertThat(summary.reimportsDeleted()).isZero();
+        // These counts are what an untouched Inbox produces too, so only the flag separates them.
+        assertThat(summary.cancelled()).isTrue();
+        try (final var remaining = Files.list(inbox)) {
+            assertThat(remaining.count()).isEqualTo(2);
+        }
+        assertThat(Files.exists(root.resolve("Sorted"))).isFalse();
+    }
+
+    @Test
+    void aStoppedRunLeavesAnAlreadyOrphanedSidecarForTheNextRunToTake(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
+        final Path orphan = inbox.resolve("20200101_gone.jpg.supplemental-metadata.json");
+        writeSidecar(orphan, LocalDateTime.of(2020, 1, 1, 12, 0, 0));
+
+        final var cancelled = new AtomicBoolean(false);
+        this.sortEngine(root, cancelOnFirstFileRouted(cancelled)).sort(new SortScope.OldestYear(), cancelled::get);
+
+        assertThat(Files.exists(orphan)).isTrue();
+    }
+
+    @Test
+    void aRunStoppedWithFilesStillToRouteSaysHowManyItLeftInTheInbox(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
+
+        final var cancelled = new AtomicBoolean(false);
+        final SortSummary summary = this.sortEngine(root, cancelOnFirstFileRouted(cancelled))
+                .sort(new SortScope.OldestYear(), cancelled::get);
+
+        assertThat(summary.cancelled()).isTrue();
+        assertThat(summary.leftBehind()).isEqualTo(1);
+    }
+
+    // Reading the signal rather than the routed count would call this run stopped.
+    @Test
+    void aRunWhoseStopArrivedAfterTheLastFileRoutedDidNotStopShort(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+
+        final var cancelled = new AtomicBoolean(false);
+        final SortSummary summary = this.sortEngine(root, cancelOnFirstFileRouted(cancelled))
+                .sort(new SortScope.OldestYear(), cancelled::get);
+
+        assertThat(cancelled).isTrue();
+        assertThat(summary.photosSorted()).isEqualTo(1);
+        assertThat(summary.cancelled()).isFalse();
+    }
+
+    // The flag above decides the sweep too, so the run that did not stop short does its
+    // housekeeping. Asserting the flag alone would leave that half unpinned.
+    @Test
+    void aRunWhoseStopArrivedAfterTheLastFileRoutedStillSweepsAnOrphanedSidecar(@TempDir final Path root)
+            throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        final Path orphan = inbox.resolve("20200101_gone.jpg.supplemental-metadata.json");
+        writeSidecar(orphan, LocalDateTime.of(2020, 1, 1, 12, 0, 0));
+
+        final var cancelled = new AtomicBoolean(false);
+        this.sortEngine(root, cancelOnFirstFileRouted(cancelled)).sort(new SortScope.OldestYear(), cancelled::get);
+
+        assertThat(Files.exists(orphan)).isFalse();
+    }
+
+    @Test
+    void aTransferGivenUpOnPartWayReportsTheFilesThatDidLand(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
+        writeFile(inbox.resolve("20210103_c.jpg"), padded("c"));
+
+        final SortSummary summary = this.sortEngineOver(root, abandoningTheSecondMove())
+                .sort(new SortScope.OldestYear(), CancellationSignal.NEVER);
+
+        assertThat(summary.processed()).isEqualTo(1);
+        assertThat(summary.photosSorted()).isEqualTo(1);
+        assertThat(summary.cancelled()).isTrue();
+        try (final var remaining = Files.list(inbox)) {
+            assertThat(remaining.count()).isEqualTo(2);
+        }
+    }
+
     private static Path inboxOf(final Path root) {
         return root.resolve("Inbox");
+    }
+
+    private static ProgressPort cancelOnFirstFileHashed(final AtomicBoolean cancelled) {
+        return new ProgressPort() {
+            @Override
+            public void phaseStarted(final String phase) {
+            }
+
+            @Override
+            public void tick(final String phase, final int current, final int total) {
+                cancelled.set("Checking for duplicates...".equals(phase) && current == 1);
+            }
+
+            @Override
+            public void phaseFinished(final String phase) {
+            }
+        };
+    }
+
+    private static MediaStore abandoningTheSecondMove() {
+        return new NioMediaStore() {
+            private int moves;
+
+            @Override
+            public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
+                this.moves++;
+                if (this.moves == 2) {
+                    throw new TransferAbandonedException(source);
+                }
+                return super.move(source, destDir, stop);
+            }
+        };
+    }
+
+    private SortEngine sortEngineOver(final Path root, final MediaStore store) {
+        final var pathsConfig = SettingsFixture.pathsConfig(root, root, root.resolve("Inbox"));
+        return new SortEngine(pathsConfig, this.inboxScanner, this.dateResolver, this.sha256Port,
+                new CsvLibraryHashIndex(SettingsFixture.workingRoot(root)), this.imageDimensionsPort, store,
+                ProgressPort.NO_OP);
     }
 
     // Cancellation is hung off the routing stage's own tick, so the run stops with exactly one

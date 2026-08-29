@@ -206,16 +206,14 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
         /**
          * What a sift over the chosen scope is expected to cost, with what the figure is worth.
          *
-         * <p>The figure is never presented on its own. It is an average of past runs rather than a
-         * quote, and a run costs more when a sheet needs a second attempt.
+         * <p>The figure is never presented on its own. One paragraph carries what it is, what it
+         * rests on, and what stops a run that outgrows it.
          *
          * @param figure {@link String} the expected cost, in the terms the app measures it
-         * @param disclaimer {@link String} what the figure is and is not
-         * @param withoutHistory what to add where this install has no finished runs behind the
-         *     figure, or null where it has some
+         * @param disclaimer {@link String} what the figure is, what it rests on, and what stops a
+         *     run that outgrows it
          */
-        record Estimate(String figure, String disclaimer,
-                        @Nullable String withoutHistory) implements Cost {
+        record Estimate(String figure, String disclaimer) implements Cost {
         }
 
         /**

@@ -17,8 +17,11 @@ package photos.sluice.application.port.in;
  *        falling back to the shipped seed
  * @param historicOutput whether the output figure came from runs on this install, rather than from
  *        the shipped seed
+ * @param historyUnreadable why there is no history, where there is none. True says the record of
+ *        past runs exists and could not be read, false says nothing has been recorded yet
  */
-public record SpendEstimate(long inputTokens, long outputTokens, boolean exactInput, boolean historicOutput) {
+public record SpendEstimate(long inputTokens, long outputTokens, boolean exactInput, boolean historicOutput,
+                            boolean historyUnreadable) {
 
     /**
      * The two halves added together, which is what the ceiling's multiple applies to.

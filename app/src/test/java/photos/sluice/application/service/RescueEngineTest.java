@@ -9,6 +9,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateSource;
 import photos.sluice.domain.dating.RescueDateResolver;
+import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.rescue.RescueSummary;
 
@@ -69,6 +70,53 @@ class RescueEngineTest {
         assertThat(summary.skipped()).containsExactly("IMG_1.jpg");
         assertThat(summary.folderRemoved()).isFalse();
         assertThat(Files.exists(source)).isTrue();
+    }
+
+    @Test
+    void aRescueStoppedWithFilesStillToReachSaysItStoppedShort(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Review/Food/IMG_1.jpg"), "one");
+        writeFile(root.resolve("Review/Food/IMG_2.jpg"), "two");
+
+        final AtomicBoolean cancelled = new AtomicBoolean(false);
+        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        final RescueSummary summary = rescueEngine(root, libraryRoot, someDate(), someDate())
+                .rescue("Food", cancelAfterFirstTick, cancelled::get);
+
+        assertThat(summary.rescued()).isEqualTo(1);
+        assertThat(summary.cancelled()).isTrue();
+    }
+
+    // A stop the pass outran leaves the Review folder dissolved, where a real one keeps it whole.
+    @Test
+    void aRescueWhoseStopArrivedAfterTheLastFileDidNotStopShort(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Review/Food/IMG_1.jpg"), "one");
+
+        final AtomicBoolean cancelled = new AtomicBoolean(false);
+        final ProgressCallback cancelAfterFirstTick = (current, _) -> cancelled.set(current == 1);
+
+        final RescueSummary summary = rescueEngine(root, libraryRoot, someDate(), someDate())
+                .rescue("Food", cancelAfterFirstTick, cancelled::get);
+
+        assertThat(cancelled).isTrue();
+        assertThat(summary.rescued()).isEqualTo(1);
+        assertThat(summary.cancelled()).isFalse();
+    }
+
+    @Test
+    void aTransferThatNeverLandedIsNeverRescuedIntoTheLibrary(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Review/Food/IMG_1.jpg"), "whole");
+        final Path part = root.resolve("Review/Food/IMG_2.jpg.sluice-part");
+        writeFile(part, "half");
+
+        final RescueSummary summary = rescueEngine(root, libraryRoot, someDate(), someDate()).rescue("Food");
+
+        assertThat(summary.rescued()).isEqualTo(1);
+        assertThat(summary.cancelled()).isFalse();
+        assertThat(Files.exists(part)).isTrue();
     }
 
     @Test
@@ -215,6 +263,10 @@ class RescueEngineTest {
         return (_, _) -> Optional.empty();
     }
 
+    private static DateSource someDate() {
+        return (_, _) -> Optional.of(LocalDateTime.of(2019, 6, 15, 12, 0));
+    }
+
     private static DateSource dateForOnly(final String filename) {
         return (file, _) -> file.path().getFileName().toString().equals(filename)
                 ? Optional.of(LocalDateTime.of(2019, 6, 15, 12, 0))
@@ -290,12 +342,12 @@ class RescueEngineTest {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir) {
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
             if (this.movesUntilFailure <= 0) {
                 throw new RuntimeException("simulated crash");
             }
             this.movesUntilFailure--;
-            return this.delegate.move(source, destDir);
+            return this.delegate.move(source, destDir, stop);
         }
 
         @Override
@@ -304,18 +356,18 @@ class RescueEngineTest {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination) {
-            return this.delegate.moveTo(source, destination);
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
+            return this.delegate.moveTo(source, destination, stop);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir) {
-            return this.delegate.copy(source, destDir);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
+            return this.delegate.copy(source, destDir, stop);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination) {
-            return this.delegate.copyTo(source, destination);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
+            return this.delegate.copyTo(source, destination, stop);
         }
 
         @Override

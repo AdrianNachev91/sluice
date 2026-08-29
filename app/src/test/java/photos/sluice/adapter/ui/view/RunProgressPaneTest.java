@@ -96,7 +96,7 @@ class RunProgressPaneTest {
     @Test
     void aRunWithNoPhaseYetSaysItIsStartingRatherThanShowingAnEmptyArea() throws Exception {
         final Parent pane = onFxThread(() -> shown(new RunProgressView("Sort progress", "2019",
-                List.of(), "Starting...", "Cancel", true, null, 1)));
+                List.of(), "Starting...", "Stop", true, null, 1)));
 
         assertThat(text(pane, "#run-progress-waiting")).isEqualTo("Starting...");
     }
@@ -142,7 +142,7 @@ class RunProgressPaneTest {
 
     private static RunProgressView view(final List<PhaseBar> phases) {
         return new RunProgressView("Sift progress", "2019", phases, phases.isEmpty() ? "Starting..." : null,
-                "Cancel", true, null, 3);
+                "Stop", true, null, 3);
     }
 
     // Read off the rows rather than the labels, because a label inside a hidden row still answers

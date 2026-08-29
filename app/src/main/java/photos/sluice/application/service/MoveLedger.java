@@ -2,6 +2,7 @@ package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.OverlapResolution;
 
@@ -158,11 +159,11 @@ public class MoveLedger implements LedgerReader {
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param source {@link Path} the missing file's original source path
-     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     * @param answeredOn {@link AnswerSource} which surface the answer was given through
      */
-    void recordSkip(final Path prepDirPath, final Path source, final String reason) {
+    void recordSkip(final Path prepDirPath, final Path source, final AnswerSource answeredOn) {
         this.appendChoice(prepDirPath, source + RECORD_DELIMITER + SKIPPED_MARKER
-                + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
+                + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + answeredOn);
     }
 
     /**
@@ -228,12 +229,12 @@ public class MoveLedger implements LedgerReader {
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param file {@link Path} the file the overlap concerns
      * @param resolution {@link OverlapResolution} which listing should win
-     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     * @param answeredOn {@link AnswerSource} which surface the answer was given through
      */
     void recordOverlap(final Path prepDirPath, final Path file, final OverlapResolution resolution,
-                       final String reason) {
+                       final AnswerSource answeredOn) {
         this.appendChoice(prepDirPath, file + RECORD_DELIMITER + OVERLAP_MARKER
-                + RECORD_DELIMITER + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + reason);
+                + RECORD_DELIMITER + resolution + RECORD_DELIMITER + Instant.now() + RECORD_DELIMITER + answeredOn);
     }
 
     /**
@@ -243,13 +244,13 @@ public class MoveLedger implements LedgerReader {
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
      * @param montage {@link String} the montage id this resolution concerns
      * @param resolution {@link CorruptSidecarResolution} which way the batch was resolved
-     * @param reason {@link String} a short user-supplied reason, recorded for the audit trail
+     * @param answeredOn {@link AnswerSource} which surface the answer was given through
      */
-    void recordCorruptSidecar(final Path prepDirPath, final String montage, final CorruptSidecarResolution resolution
-            , final String reason) {
+    void recordCorruptSidecar(final Path prepDirPath, final String montage,
+                              final CorruptSidecarResolution resolution, final AnswerSource answeredOn) {
         this.appendChoice(prepDirPath, montage + RECORD_DELIMITER
                 + CORRUPT_SIDECAR_MARKER + RECORD_DELIMITER + resolution + RECORD_DELIMITER + Instant.now()
-                + RECORD_DELIMITER + reason);
+                + RECORD_DELIMITER + answeredOn);
     }
 
     /**

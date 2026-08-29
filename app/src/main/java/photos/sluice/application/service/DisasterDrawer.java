@@ -2,6 +2,7 @@ package photos.sluice.application.service;
 
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.domain.job.CancellationSignal;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -63,7 +64,10 @@ public class DisasterDrawer {
         final Path drawer = prepDir.resolve(DRAWER_DIR);
         final String extension = extensionOf(source.getFileName().toString());
         final String stamp = DisasterTimestamp.now();
-        return this.mediaStore.moveTo(source, this.uniqueName(drawer, stamp, what, extension));
+        // The drawer sits inside the prep dir this file already lives in, so the move is a rename
+        // with nothing to interrupt.
+        return this.mediaStore.moveTo(source, this.uniqueName(drawer, stamp, what, extension),
+                CancellationSignal.NEVER);
     }
 
     /**

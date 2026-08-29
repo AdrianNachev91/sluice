@@ -8,6 +8,7 @@ import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.Sha256Port;
+import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.application.service.ApplyPlanner.FileStatus;
 import photos.sluice.application.service.ApplyPlanner.Status;
 import photos.sluice.application.service.MoveLedger.Ledger;
@@ -175,27 +176,36 @@ public class ApplyEngine {
         // writeMergedDecisions() and cleanupIntermediates() - must not run, so this returns null
         // outright rather than falling through to them. No decisions.json means the prep dir still
         // reads as a waiting job (see dispatchAndApply()'s own null handling).
-        for (final Status status : statuses) {
-            if (cancellation.isCancelled()) {
-                return null;
+        try {
+            for (final Status status : statuses) {
+                if (cancellation.isCancelled()) {
+                    return null;
+                }
+                switch (status) {
+                    case final Status.Pending p ->
+                            this.apply(p.decision(), prepDirPath, nearDupGroups, nearDupAnchors, outcome, cancellation);
+                    case final Status.Done d -> this.backfillSecondaryWrite(d.decision(), d.record());
+                    case Status.Skipped _ -> {} // user gave up on this decision - nothing to do
+                    case Status.Unresolved _ -> {} // already aborted the whole run above
+                }
+                progress.tick(++current, total);
             }
-            switch (status) {
-                case final Status.Pending p -> this.apply(p.decision(), prepDirPath, nearDupGroups, nearDupAnchors, outcome);
-                case final Status.Done d -> this.backfillSecondaryWrite(d.decision(), d.record());
-                case Status.Skipped _ -> {} // user gave up on this decision - nothing to do
-                case Status.Unresolved _ -> {} // already aborted the whole run above
+            for (final FileStatus status : unreviewableStatuses) {
+                if (cancellation.isCancelled()) {
+                    return null;
+                }
+                if (status instanceof FileStatus.Pending(final Path file)) {
+                    this.recordThenMove(file, this.cullDestinations.unreviewableDir(file), prepDirPath, cancellation);
+                }
+                // Done, Skipped: nothing further to do here.
+                progress.tick(++current, total);
             }
-            progress.tick(++current, total);
-        }
-        for (final FileStatus status : unreviewableStatuses) {
-            if (cancellation.isCancelled()) {
-                return null;
-            }
-            if (status instanceof FileStatus.Pending(final Path file)) {
-                this.recordThenMove(file, this.cullDestinations.unreviewableDir(file), prepDirPath);
-            }
-            // Done, Skipped: nothing further to do here.
-            progress.tick(++current, total);
+        } catch (final TransferAbandonedException e) {
+            // Null for the same reason a cancel between decisions gives null: the finalizers must
+            // not run. The abandoned decision left a move record with nothing at its destination,
+            // which is the crash-between-record-and-move case classification already resolves by
+            // hash on the next pass.
+            return null;
         }
 
         final var report = new ApplyReport(prepDir.photos(), outcome.byCategory, unreviewableFiles.size(),
@@ -311,13 +321,18 @@ public class ApplyEngine {
      * @param nearDupAnchors a {@link Map} of {@link String} to {@link Path} each near-dup group's keeper file, by
      * group id
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     * @param cancellation {@link CancellationSignal} asked while a file's bytes are moving
+     * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void apply(final Decision decision, final Path prepDirPath, final Map<String, List<Decision>> nearDupGroups,
-                       final Map<String, Path> nearDupAnchors, final ApplyOutcome outcome) {
+                       final Map<String, Path> nearDupAnchors, final ApplyOutcome outcome,
+                       final CancellationSignal cancellation) {
         switch (decision) {
-            case final Classification c -> this.applyClassification(c, prepDirPath, outcome);
-            case final NearDupChosen c -> this.applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome);
-            case final NearDupReject reject -> this.applyNearDupReject(reject, nearDupAnchors.get(reject.group()), prepDirPath, outcome);
+            case final Classification c -> this.applyClassification(c, prepDirPath, outcome, cancellation);
+            case final NearDupChosen c ->
+                    this.applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome, cancellation);
+            case final NearDupReject reject -> this.applyNearDupReject(reject, nearDupAnchors.get(reject.group()),
+                    prepDirPath, outcome, cancellation);
         }
     }
 
@@ -333,11 +348,14 @@ public class ApplyEngine {
      * @param c {@link Classification} the classification decision
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
-    private void applyClassification(final Classification c, final Path prepDirPath, final ApplyOutcome outcome) {
+    private void applyClassification(final Classification c, final Path prepDirPath, final ApplyOutcome outcome,
+                                     final CancellationSignal cancellation) {
         outcome.byCategory.merge(c.category(), 1, Integer::sum);
         final Path destDir = this.cullDestinations.destinationDirFor(c);
-        final MoveOutcome moved = this.recordThenMove(c.file(), destDir, prepDirPath);
+        final MoveOutcome moved = this.recordThenMove(c.file(), destDir, prepDirPath, cancellation);
         if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
             this.hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
         } else {
@@ -360,15 +378,18 @@ public class ApplyEngine {
      * @param c {@link NearDupChosen} the chosen near-dup decision
      * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     * @param cancellation {@link CancellationSignal} asked while the file's bytes are copying
+     * @throws TransferAbandonedException if cancellation escalated before the copy finished
      */
-    private void applyNearDupChosen(final NearDupChosen c, final List<Decision> group, final ApplyOutcome outcome) {
+    private void applyNearDupChosen(final NearDupChosen c, final List<Decision> group, final ApplyOutcome outcome,
+                                    final CancellationSignal cancellation) {
         // A copy rather than a move, so it takes the source check directly. Every other decision
         // type picks it up from recordThenMove.
         this.cullDestinations.requireUnderSorted(c.file());
         final Path dupDir = this.cullDestinations.duplicatesDir(c.file(), c.group());
         final Path dest = dupDir.resolve(c.file().getFileName().toString());
         if (!this.mediaStore.exists(dest)) {
-            this.mediaStore.copy(c.file(), dupDir);
+            this.mediaStore.copy(c.file(), dupDir, cancellation);
         }
         this.mediaStore.write(dupDir.resolve(c.file().getFileName() + ".txt"), chosenNote(c, group));
         outcome.nearDupGroupsChosen.add(c.group());
@@ -383,10 +404,13 @@ public class ApplyEngine {
      * @param groupAnchor {@link Path} the group's chosen keeper file
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
+     * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void applyNearDupReject(final NearDupReject reject, final Path groupAnchor, final Path prepDirPath,
-                                    final ApplyOutcome outcome) {
-        this.recordThenMove(reject.file(), this.cullDestinations.duplicatesDir(groupAnchor, reject.group()), prepDirPath);
+                                    final ApplyOutcome outcome, final CancellationSignal cancellation) {
+        this.recordThenMove(reject.file(), this.cullDestinations.duplicatesDir(groupAnchor, reject.group()),
+                prepDirPath, cancellation);
         outcome.nearDupRejects++;
     }
 
@@ -401,14 +425,17 @@ public class ApplyEngine {
      * @param source {@link Path} the file to move
      * @param destDir {@link Path} the destination directory
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
+     * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
      * @return {@link MoveOutcome} the resolved destination and source hash
+     * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
-    private MoveOutcome recordThenMove(final Path source, final Path destDir, final Path prepDirPath) {
+    private MoveOutcome recordThenMove(final Path source, final Path destDir, final Path prepDirPath,
+                                       final CancellationSignal cancellation) {
         this.cullDestinations.requireUnderSorted(source);
         final Path dest = this.mediaStore.resolveDestination(source, destDir);
         final String hash = this.sha256Port.hash(source);
         this.moveLedger.recordMove(prepDirPath, source, dest, hash);
-        this.mediaStore.moveTo(source, dest);
+        this.mediaStore.moveTo(source, dest, cancellation);
         return new MoveOutcome(dest, hash);
     }
 
