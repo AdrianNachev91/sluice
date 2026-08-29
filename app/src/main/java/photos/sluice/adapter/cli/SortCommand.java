@@ -14,7 +14,6 @@ import picocli.CommandLine.Spec;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 
@@ -174,12 +173,12 @@ public class SortCommand implements Callable<Integer> {
         if (stopped) {
             lines.add(stoppedLine(sorted.leftBehind()));
         }
-        lines.add(count("Photos sorted", sorted.photosSorted()));
-        lines.add(count("Videos sorted", sorted.videosSorted()));
-        addWhenAny(lines, "Already in your library", sorted.reimportsDeleted());
-        addWhenAny(lines, "Identical copies removed", sorted.byteDupsDeleted());
-        addWhenAny(lines, "Moved to Review", sorted.lowRes());
-        addWhenAny(lines, "Could not be dated", sorted.unsorted());
+        lines.add(ResultLines.count("Photos sorted", sorted.photosSorted()));
+        lines.add(ResultLines.count("Videos sorted", sorted.videosSorted()));
+        ResultLines.addWhenAny(lines, "Already in your library", sorted.reimportsDeleted());
+        ResultLines.addWhenAny(lines, "Identical copies removed", sorted.byteDupsDeleted());
+        ResultLines.addWhenAny(lines, "Moved to Review", sorted.lowRes());
+        ResultLines.addWhenAny(lines, "Could not be dated", sorted.unsorted());
         return lines;
     }
 
@@ -199,31 +198,6 @@ public class SortCommand implements Callable<Integer> {
         if (leftBehind == 1) {
             return "Stopped. One photo or video is still in your Inbox.";
         }
-        return "Stopped. " + String.format(Locale.ROOT, "%,d", leftBehind)
-                + " photos and videos are still in your Inbox.";
-    }
-
-    /**
-     * Adds a line only where it counts something.
-     *
-     * @param lines a {@link List} of {@link String} the lines so far
-     * @param label {@link String} what it says
-     * @param counted int what it counted
-     */
-    private static void addWhenAny(final List<String> lines, final String label, final int counted) {
-        if (counted > 0) {
-            lines.add(count(label, counted));
-        }
-    }
-
-    /**
-     * One line, its count punctuated in threes.
-     *
-     * @param label {@link String} what it says
-     * @param counted int what it counted
-     * @return {@link String} the line
-     */
-    private static String count(final String label, final int counted) {
-        return label + ": " + String.format(Locale.ROOT, "%,d", counted);
+        return "Stopped. " + ResultLines.grouped(leftBehind) + " photos and videos are still in your Inbox.";
     }
 }

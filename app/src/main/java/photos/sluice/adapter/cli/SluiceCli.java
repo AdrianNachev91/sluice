@@ -23,7 +23,8 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = "sluice", description = "Sluice organises your photos and videos.",
-        subcommands = {AppCommand.class, RunsCommand.class, SortCommand.class})
+        subcommands = {AppCommand.class, RunsCommand.class, SortCommand.class, CommitCommand.class,
+                RescueCommand.class, CullCommand.class, ResumeCommand.class, ImportCommand.class})
 public class SluiceCli implements Callable<Integer> {
 
     /**

@@ -3,6 +3,7 @@ package photos.sluice.adapter.cli;
 import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.MissingCredentialException;
@@ -10,9 +11,14 @@ import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SecretStoreException;
+import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
+import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathViolation;
 
+import java.io.UncheckedIOException;
+import java.nio.file.NoSuchFileException;
 import java.util.List;
 import java.util.SequencedMap;
 import java.util.concurrent.CompletionException;
@@ -100,8 +106,86 @@ public class RefusalClassifier {
             case final JobInProgressException busy -> Refusal.of(RefusalKind.JOB_IN_PROGRESS, busy.getMessage());
             case final MissingCredentialException missing -> this.credentialMissing(missing);
             case final SecretStoreException broken -> credentialStoreFailed(broken);
+            case final Pipeline.ScopeOccupiedException occupied -> scopeOccupied(occupied);
+            case final Pipeline.ScopeOverlapsException overlapped -> scopeOverlaps(overlapped);
+            case final Pipeline.ScopeUnreadableException unreadable -> scopeUnreadable(unreadable);
+            case final Pipeline.RunOutsideWorkingRootException outside -> runOutsideWorkingRoot(outside);
+            case final ImportSourceException refused -> Refusal.of(RefusalKind.IMPORT_SOURCE_REFUSED,
+                    refused.getMessage());
+            case final UnrecognisedProviderException unrecognised -> providerUnrecognised(unrecognised);
+            case final UncheckedIOException io when io.getCause() instanceof final NoSuchFileException missing ->
+                    folderNotFound(missing);
             default -> null;
         };
+    }
+
+    /**
+     * The refusal for a folder the command was asked to work on that is not there.
+     *
+     * @param missing {@link NoSuchFileException} the read failure naming the missing folder
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal folderNotFound(final NoSuchFileException missing) {
+        final String path = missing.getFile();
+        return new Refusal(RefusalKind.FOLDER_NOT_FOUND,
+                "Sluice can't find " + path + ". Check the folder name and try again.",
+                Fields.of("path", path));
+    }
+
+    /**
+     * The refusal for a sift whose exact scope already occupies a prep dir.
+     *
+     * @param occupied {@link Pipeline.ScopeOccupiedException} the refused claim
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal scopeOccupied(final Pipeline.ScopeOccupiedException occupied) {
+        return new Refusal(RefusalKind.SCOPE_OCCUPIED, occupied.getMessage(),
+                Fields.of("occupant", CullPayloads.run(occupied.occupant())));
+    }
+
+    /**
+     * The refusal for a sift whose timeline shares months with unfinished sifts under other tags.
+     *
+     * @param overlapped {@link Pipeline.ScopeOverlapsException} the refused claim
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal scopeOverlaps(final Pipeline.ScopeOverlapsException overlapped) {
+        return new Refusal(RefusalKind.SCOPE_OVERLAPS, overlapped.getMessage(),
+                Fields.of("chosen", CullScope.tag(overlapped.chosen()),
+                        "overlapping", overlapped.across().stream().map(CullPayloads::run).toList()));
+    }
+
+    /**
+     * The refusal for a prep dir that could not be read, so whether it is occupied is unknown.
+     *
+     * @param unreadable {@link Pipeline.ScopeUnreadableException} the refused claim
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal scopeUnreadable(final Pipeline.ScopeUnreadableException unreadable) {
+        return new Refusal(RefusalKind.SCOPE_UNREADABLE, unreadable.getMessage(),
+                Fields.of("prepDir", unreadable.prepDir().toString()));
+    }
+
+    /**
+     * The refusal for a run named outside the working root now configured.
+     *
+     * @param outside {@link Pipeline.RunOutsideWorkingRootException} the refused claim
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal runOutsideWorkingRoot(final Pipeline.RunOutsideWorkingRootException outside) {
+        return new Refusal(RefusalKind.RUN_OUTSIDE_WORKING_ROOT, outside.getMessage(),
+                Fields.of("prepDir", outside.prepDir().toString()));
+    }
+
+    /**
+     * The refusal for a configured provider this build has never heard of.
+     *
+     * @param unrecognised {@link UnrecognisedProviderException} the refused lookup
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal providerUnrecognised(final UnrecognisedProviderException unrecognised) {
+        return new Refusal(RefusalKind.PROVIDER_UNRECOGNISED, unrecognised.getMessage(),
+                Fields.of("provider", unrecognised.provider(), "registered", List.copyOf(unrecognised.registered())));
     }
 
     /**

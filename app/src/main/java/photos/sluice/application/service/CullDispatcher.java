@@ -9,6 +9,7 @@ import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SpendForecast;
+import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
@@ -146,13 +147,13 @@ public class CullDispatcher {
      * Looks up the vision culler registered for the configured provider.
      *
      * @return {@link VisionCuller} the selected vision culler
+     * @throws UnrecognisedProviderException if the configured provider matches nothing registered
      */
     private VisionCuller select() {
         final String provider = this.settings.provider();
         final VisionCuller culler = this.byId.get(provider);
         if (culler == null) {
-            throw new IllegalStateException("No vision culler registered for provider '" + provider
-                    + "'. Registered: " + this.byId.keySet());
+            throw new UnrecognisedProviderException(provider, this.byId.keySet());
         }
         return culler;
     }

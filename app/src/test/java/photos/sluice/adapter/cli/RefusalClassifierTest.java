@@ -1,6 +1,7 @@
 package photos.sluice.adapter.cli;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.MissingCredentialException;
@@ -9,13 +10,24 @@ import photos.sluice.application.port.out.SecretHolding.Holding;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStatus;
 import photos.sluice.application.port.out.SecretStoreException;
+import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
+import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullRunSummary;
+import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.PrepDirHealth;
+import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
 import photos.sluice.domain.paths.PathViolation.Overlap;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.SequencedMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -169,6 +181,102 @@ class RefusalClassifierTest {
     @Test
     void aWrapperWithNothingInsideItIsNotARefusal() {
         assertThat(this.classifier.refusalFor(new CompletionException("empty", null))).isNull();
+    }
+
+    @Test
+    void anOccupiedScopeNamesTheRunAlreadyThere() {
+        final CullRunSummary occupant = new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+                new PrepDirHealth(PrepDirHealth.State.WAITING, List.of()), new ShardTally(1, 0, 2),
+                Instant.parse("2026-08-20T10:15:30Z"));
+
+        final Refusal refusal = this.classifier.refusalFor(new Pipeline.ScopeOccupiedException(occupant));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_OCCUPIED);
+        assertThat(refusal.sentence()).contains("2019").contains("WAITING");
+        assertThat(refusal.detail()).containsOnlyKeys("occupant");
+    }
+
+    @Test
+    void overlappingScopesNameTheChosenTimelineAndEveryRunInTheWay() {
+        final CullRunSummary blocking = new CullRunSummary("2019-06", Path.of("logs", "sift-prep", "2019-06"),
+                new PrepDirHealth(PrepDirHealth.State.READY, List.of()), new ShardTally(1, 1, 1),
+                Instant.parse("2026-08-20T10:15:30Z"));
+
+        final Refusal refusal = this.classifier.refusalFor(
+                new Pipeline.ScopeOverlapsException(new CullScope.Year(2019, null), List.of(blocking)));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_OVERLAPS);
+        assertThat(refusal.detail()).containsEntry("chosen", "2019");
+        assertThat((List<?>) refusal.detail().get("overlapping")).hasSize(1);
+    }
+
+    @Test
+    void anUnreadablePrepDirNamesTheFolderThatCouldNotBeRead() {
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+
+        final Refusal refusal = this.classifier.refusalFor(
+                new Pipeline.ScopeUnreadableException(prepDir, new UncheckedIOException(
+                        new IOException("access denied"))));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_UNREADABLE);
+        assertThat(refusal.detail()).containsEntry("prepDir", prepDir.toString());
+    }
+
+    @Test
+    void aRunOutsideTheWorkingRootNamesItsFolder() {
+        final Path prepDir = Path.of("D:", "Elsewhere", "2019");
+
+        final Refusal refusal = this.classifier.refusalFor(new Pipeline.RunOutsideWorkingRootException(prepDir));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.RUN_OUTSIDE_WORKING_ROOT);
+        assertThat(refusal.detail()).containsEntry("prepDir", prepDir.toString());
+    }
+
+    @Test
+    void anImportSourceRefusalCarriesTheSentenceWritingForThePersonWhoChoseIt() {
+        final Refusal refusal = this.classifier.refusalFor(
+                new ImportSourceException("Sluice can't import from that: it no longer exists."));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.IMPORT_SOURCE_REFUSED);
+        assertThat(refusal.sentence()).isEqualTo("Sluice can't import from that: it no longer exists.");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void anUnrecognisedProviderNamesWhatIsConfiguredAndWhatIsRegistered() {
+        final Refusal refusal = this.classifier.refusalFor(
+                new UnrecognisedProviderException("ollama", Set.of("anthropic", "external-agent")));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.PROVIDER_UNRECOGNISED);
+        assertThat(refusal.sentence()).contains("ollama");
+        assertThat(refusal.detail()).containsEntry("provider", "ollama");
+        assertThat((List<String>) refusal.detail().get("registered")).containsExactlyInAnyOrder("anthropic",
+                "external-agent");
+    }
+
+    @Test
+    void aFolderThatIsNotThereIsRefusedRatherThanLeakingTheReadFailure() {
+        final Path missing = Path.of("D:", "Photos", "Review", "DoesNotExist");
+
+        final Refusal refusal = this.classifier.refusalFor(
+                new UncheckedIOException(new NoSuchFileException(missing.toString())));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.FOLDER_NOT_FOUND);
+        assertThat(refusal.sentence()).contains(missing.toString());
+        assertThat(refusal.detail()).containsEntry("path", missing.toString());
+    }
+
+    @Test
+    void anUncheckedIoFailureWithADifferentCauseIsNotThisRefusal() {
+        assertThat(this.classifier.refusalFor(new UncheckedIOException(new IOException("disk is unplugged"))))
+                .isNull();
     }
 
     @Test

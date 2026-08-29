@@ -55,6 +55,32 @@ public record CommandOutcome(CommandStatus status, @Nullable Object payload,
     }
 
     /**
+     * A run that paused with work left.
+     *
+     * @param payload {@link Object} what the document says
+     * @param resultLines a {@link List} of {@link String} the same answer, for a person
+     * @param noteLines a {@link List} of {@link String} what is worth reading but is not the answer
+     * @return {@link CommandOutcome} the outcome
+     */
+    public static CommandOutcome waiting(final @Nullable Object payload, final List<String> resultLines,
+                                         final List<String> noteLines) {
+        return new CommandOutcome(CommandStatus.WAITING, payload, resultLines, noteLines);
+    }
+
+    /**
+     * A run whose inputs were all present, and which was refused anyway.
+     *
+     * @param payload {@link Object} what the document says
+     * @param resultLines a {@link List} of {@link String} the same answer, for a person
+     * @param noteLines a {@link List} of {@link String} what is worth reading but is not the answer
+     * @return {@link CommandOutcome} the outcome
+     */
+    public static CommandOutcome blocked(final @Nullable Object payload, final List<String> resultLines,
+                                         final List<String> noteLines) {
+        return new CommandOutcome(CommandStatus.BLOCKED, payload, resultLines, noteLines);
+    }
+
+    /**
      * The same answer, reported as a run the caller stopped.
      *
      * <p>A stopped run still says what it did before it stopped, so nothing is dropped here. Only

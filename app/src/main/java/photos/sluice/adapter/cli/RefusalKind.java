@@ -69,5 +69,40 @@ public enum RefusalKind {
     /**
      * The address given names no sift on disk.
      */
-    RUN_NOT_FOUND
+    RUN_NOT_FOUND,
+
+    /**
+     * A sift for the exact scope asked for already occupies its prep dir.
+     */
+    SCOPE_OCCUPIED,
+
+    /**
+     * A sift's timeline shares months with one or more unfinished sifts under a different tag.
+     */
+    SCOPE_OVERLAPS,
+
+    /**
+     * A prep dir could not be read, so whether it is occupied is unknown.
+     */
+    SCOPE_UNREADABLE,
+
+    /**
+     * The run named sits outside the working root now configured.
+     */
+    RUN_OUTSIDE_WORKING_ROOT,
+
+    /**
+     * What was chosen to import cannot be imported.
+     */
+    IMPORT_SOURCE_REFUSED,
+
+    /**
+     * The configured vision provider names no provider this build has.
+     */
+    PROVIDER_UNRECOGNISED,
+
+    /**
+     * A folder the command was asked to work on is not there.
+     */
+    FOLDER_NOT_FOUND
 }

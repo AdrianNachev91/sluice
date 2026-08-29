@@ -37,6 +37,11 @@ final class CliHarness {
         final List<Object> commands = new ArrayList<>(List.of(driven));
         commands.add(new RunsCommand(mock(Pipeline.class), mock(CommandReports.class)));
         commands.add(new SortCommand(mock(Pipeline.class), mock(JobReports.class)));
+        commands.add(new CommitCommand(mock(Pipeline.class), mock(JobReports.class)));
+        commands.add(new RescueCommand(mock(Pipeline.class), mock(JobReports.class)));
+        commands.add(new CullCommand(mock(Pipeline.class), mock(JobReports.class), mock(ConsoleProgressPort.class)));
+        commands.add(new ResumeCommand(mock(Pipeline.class), mock(JobReports.class), mock(RunAddress.class)));
+        commands.add(new ImportCommand(mock(Pipeline.class), mock(JobReports.class)));
         return SluiceCli.parser(new SluiceCli(), supplying(commands.toArray()));
     }
 
