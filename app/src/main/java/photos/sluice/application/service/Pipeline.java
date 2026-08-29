@@ -539,10 +539,14 @@ public class Pipeline {
      *
      * @param prepDir {@link Path} the cull prep directory to troubleshoot
      * @return a {@link JobHandle} of {@link TroubleshootReport} a handle to the running job
+     * @throws RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      */
     public JobHandle<TroubleshootReport> troubleshoot(final Path prepDir) {
         this.requireUsableRoots();
-        return this.jobRunner.submit(_ -> this.troubleshooter.troubleshoot(prepDir));
+        return this.jobRunner.submit(_ -> {
+            this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
+            return this.troubleshooter.troubleshoot(prepDir);
+        });
     }
 
     /**
@@ -596,10 +600,12 @@ public class Pipeline {
      *
      * @param prepDir {@link Path} the cull prep directory to discard
      * @return a {@link JobHandle} of {@link DiscardReport} a handle to the running job
+     * @throws RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      */
     public JobHandle<DiscardReport> discard(final Path prepDir) {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
+            this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
             if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new RunAlreadyFinishedException(prepDir);
             }

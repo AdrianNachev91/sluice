@@ -324,6 +324,26 @@ class PipelineTest {
         assertThat(report.reconcile()).isNull();
     }
 
+    // Mirrors CullEngineTest's resumeRefusesARunOutsideTheWorkingRootInForce: a prep dir built
+    // under one working root is handed to a pipeline configured against another. Nothing is read
+    // and nothing moves, so the run stays exactly as it was.
+    @Test
+    void troubleshootRefusesARunOutsideTheWorkingRootInForce(@TempDir final Path root, @TempDir final Path movedTo)
+            throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var preparing = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) preparing.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+        final var moved = cullPipeline(movedTo, new RecordingProgressPort());
+
+        assertThatThrownBy(() -> moved.troubleshoot(prepDir).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(Pipeline.RunOutsideWorkingRootException.class);
+        assertThat(prepDir.resolve("decisions.json")).doesNotExist();
+    }
+
     // Proves purgeCompleted() actually runs through JobRunner and reaches PrepDirDoctor, rather
     // than being wired to nothing. PrepDirDoctorTest already covers purgeCompleted()'s own
     // diagnose/delete logic in full, so this only needs one completed run to prove the wiring
@@ -460,6 +480,24 @@ class PipelineTest {
         assertThatThrownBy(() -> pipeline.discard(prepDir).join())
                 .isInstanceOf(CompletionException.class)
                 .hasCauseInstanceOf(IllegalStateException.class);
+        assertThat(Files.exists(prepDir)).isTrue();
+    }
+
+    // Mirrors CullEngineTest's resumeRefusesARunOutsideTheWorkingRootInForce: a prep dir built
+    // under one working root is handed to a pipeline configured against another. Nothing is read
+    // and nothing moves, so the run stays exactly as it was.
+    @Test
+    void discardRefusesARunOutsideTheWorkingRootInForce(@TempDir final Path root, @TempDir final Path movedTo)
+            throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var preparing = cullPipeline(root, new RecordingProgressPort());
+        final var waiting = (CullJobOutcome.Waiting) preparing.cull(new CullScope.Year(2019, null)).join();
+        final Path prepDir = waiting.job().prepDir();
+        final var moved = cullPipeline(movedTo, new RecordingProgressPort());
+
+        assertThatThrownBy(() -> moved.discard(prepDir).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(Pipeline.RunOutsideWorkingRootException.class);
         assertThat(Files.exists(prepDir)).isTrue();
     }
 

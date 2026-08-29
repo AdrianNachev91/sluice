@@ -475,26 +475,25 @@ final class CullEngine {
     }
 
     /**
-     * Refuses a resume whose prep dir does not sit under the sift-prep root in force.
+     * Refuses an address whose prep dir does not sit under the sift-prep root in force.
      *
-     * <p>Both callers can reach this. A watcher parked on the job slot behind a root-moving save is
-     * admitted the moment that save releases it. It then carries a prep dir under the root that
-     * save has just left. A person reaches it by resuming from a screen listing runs surveyed
-     * before the same save.
+     * <p>Checked again here rather than trusted from the caller's own check. Every caller submits a
+     * job that can queue or wait before it runs. A root-moving save reaching in during that gap
+     * leaves the caller's own check answering for roots that have since changed.
      *
-     * <p>The roots are re-checked first, and not only for symmetry with the caller's own check. A
-     * save that cleared the working root leaves nothing to resolve a sift-prep root from. Asking
-     * where the prep dir sits has no answer at all until that case is ruled out.
+     * <p>The roots are re-checked first, and not only for that reason. A save that cleared the
+     * working root leaves nothing to resolve a sift-prep root from. Asking where the prep dir sits
+     * has no answer at all until that case is ruled out.
      *
      * <p>Refusing costs the run nothing. Nothing has been read or moved at this point, and the run
      * stays on disk exactly as it was. Pointing the working root back at its folder makes it
-     * resumable again.
+     * reachable again.
      *
-     * @param prepDir {@link Path} the prep dir this resume was asked for
+     * @param prepDir {@link Path} the prep dir this call was asked for
      * @throws PathsMisconfiguredException if the folder roots stopped being usable during the wait
      * @throws Pipeline.RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      */
-    private void refuseRunOutsideTheWorkingRoot(final Path prepDir) {
+    void refuseRunOutsideTheWorkingRoot(final Path prepDir) {
         this.rootsGuard.requireUsable();
         if (!Containment.strictlyUnder(this.cullPrepRoot(), prepDir)) {
             throw new Pipeline.RunOutsideWorkingRootException(prepDir);
