@@ -7,7 +7,10 @@ import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
+import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.LiveSettings;
+import photos.sluice.application.port.out.WatchingChangedListener;
+import photos.sluice.domain.job.WatchMode;
 import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
@@ -255,7 +258,7 @@ class SettingsServiceTest {
         final var service = new SettingsService(live, new RecordingStore(), new RecordingLock(),
                 new JobRunner(), new PathValidationService(new NioMediaStore(), live), new NioMediaStore(),
                 property -> "sluice.paths.library-root".equals(property) ? Optional.of(override) : Optional.empty(),
-                List.of());
+                List.of(), List.of());
 
         assertThat(service.overriddenAboveTheConfigFile("sluice.paths.library-root")).contains(override);
         assertThat(service.overriddenAboveTheConfigFile("sluice.paths.inbox")).isEmpty();
@@ -408,6 +411,63 @@ class SettingsServiceTest {
         assertThat(live.current()).isEqualTo(settings(after));
     }
 
+    @Test
+    void aSaveThatTurnsWatchingOffSaysSoAndOneThatLeavesItOffSaysNothing(@TempDir final Path root) {
+        final var told = new RecordingWatchListener();
+        final var live = new RecordingLive(watching(root, WatchMode.WATCH));
+        final var service = watchService(live, told);
+
+        service.save(watching(root, WatchMode.MANUAL));
+        assertThat(told.told).containsExactly(false);
+
+        service.save(watching(root, WatchMode.MANUAL));
+        assertThat(told.told).containsExactly(false);
+    }
+
+    // The radio button promises a watch a save alone cannot arm, so the announcement goes both
+    // ways. Without this one, turning watching back on does nothing until the next launch.
+    @Test
+    void aSaveThatTurnsWatchingOnSaysSoAndOneThatLeavesItOnSaysNothing(@TempDir final Path root) {
+        final var told = new RecordingWatchListener();
+        final var live = new RecordingLive(watching(root, WatchMode.MANUAL));
+        final var service = watchService(live, told);
+
+        service.save(watching(root, WatchMode.WATCH));
+        assertThat(told.told).containsExactly(true);
+
+        service.save(watching(root, WatchMode.WATCH));
+        assertThat(told.told).containsExactly(true);
+    }
+
+    // The two announcements sit in different branches of the save, so a save that also moves a
+    // folder root has to reach this one as well.
+    @Test
+    void aSaveThatMovesAFolderRootAndTurnsWatchingOffStillSaysSo(
+            @TempDir final Path before, @TempDir final Path after) {
+        final var told = new RecordingWatchListener();
+        final var live = new RecordingLive(watching(before, WatchMode.WATCH));
+
+        watchService(live, told).save(watching(after, WatchMode.MANUAL));
+
+        assertThat(told.told).containsExactly(false);
+    }
+
+    @Test
+    void aWatchListenerThatThrowsDoesNotFailTheSave(@TempDir final Path root) {
+        final var live = new RecordingLive(watching(root, WatchMode.WATCH));
+        final Settings saved = watching(root, WatchMode.MANUAL);
+        final var service = new SettingsService(live, new RecordingStore(), new RecordingLock(),
+                new JobRunner(), new PathValidationService(new NioMediaStore(), live),
+                new NioMediaStore(), _ -> Optional.empty(), List.of(),
+                List.of(_ -> {
+                    throw new StackOverflowError();
+                }));
+
+        service.save(saved);
+
+        assertThat(live.current()).isEqualTo(saved);
+    }
+
     // Blank is what a config file with the key present and empty binds to, and it names no folder
     // any more than an absent key does.
     @Test
@@ -523,7 +583,7 @@ class SettingsServiceTest {
         final Settings candidate = settings(after);
         final var service = new SettingsService(live, store, lock, new JobRunner(),
                 new PathValidationService(refusingToResolve(library), live), refusingToResolve(library),
-                _ -> Optional.empty(), List.of());
+                _ -> Optional.empty(), List.of(), List.of());
 
         assertThatThrownBy(() -> service.save(candidate))
                 .isInstanceOfSatisfying(PathsMisconfiguredException.class, e -> assertThat(e.violations())
@@ -855,7 +915,7 @@ class SettingsServiceTest {
                                                    final List<FolderRootsChangeListener> listeners) {
         return new SettingsService(live, store, lock, jobRunner,
                 new PathValidationService(new NioMediaStore(), live), new NioMediaStore(),
-                _ -> Optional.empty(), listeners);
+                _ -> Optional.empty(), listeners, List.of());
     }
 
     // The real store everywhere except the one call the failure is about. Every other root in the
@@ -871,7 +931,7 @@ class SettingsServiceTest {
         final var store = new RecordingStore();
         final var service = new SettingsService(live, store, new RecordingLock(), new JobRunner(),
                 new PathValidationService(bothNaming(alias, sharedLibrary), live),
-                bothNaming(alias, sharedLibrary), _ -> Optional.empty(), List.of());
+                bothNaming(alias, sharedLibrary), _ -> Optional.empty(), List.of(), List.of());
 
         service.save(settingsWithLibrary(root, alias));
 
@@ -887,7 +947,7 @@ class SettingsServiceTest {
         final var lock = new RecordingLock();
         final var service = new SettingsService(live, new RecordingStore(), lock, new JobRunner(),
                 new PathValidationService(bothNaming(alias, root), live), bothNaming(alias, root),
-                _ -> Optional.empty(), List.of());
+                _ -> Optional.empty(), List.of(), List.of());
 
         service.save(settings(alias));
 
@@ -947,6 +1007,29 @@ class SettingsServiceTest {
     private static Settings settingsWithLibrary(final Path root, final Path library) {
         return SettingsFixture.settings(new PathSettings(root.toString(), library.toString(),
                 createDirectory(root.resolve("Inbox")).toString()));
+    }
+
+    private static SettingsService watchService(final LiveSettings live,
+                                                final WatchingChangedListener told) {
+        return new SettingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner(),
+                new PathValidationService(new NioMediaStore(), live), new NioMediaStore(),
+                _ -> Optional.empty(), List.of(), List.of(told));
+    }
+
+    private static Settings watching(final Path root, final WatchMode mode) {
+        final Settings base = settings(root);
+        return new Settings(base.paths(), base.provider(), base.providerSettingsById(),
+                base.categories(), new ExternalAgentSettings(mode), base.montage(), base.theme());
+    }
+
+    private static final class RecordingWatchListener implements WatchingChangedListener {
+
+        private final List<Boolean> told = new ArrayList<>();
+
+        @Override
+        public void watchingChanged(final boolean watching) {
+            this.told.add(watching);
+        }
     }
 
     // The two folders are made real, the way a real install's are. A fixture naming folders nobody

@@ -6,8 +6,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.scene.shape.SVGPath;
-import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesView;
 import photos.sluice.adapter.ui.PhotoCategoriesView.CardRefusal;
@@ -262,30 +260,7 @@ final class PhotoCategoriesPane {
      * @return {@link Button} the way back
      */
     private static Button backButton(final Runnable onBack) {
-        final var back = new Button("Back to Settings");
-        back.setId("photo-categories-back");
-        back.getStyleClass().add("button-quiet");
-        back.setGraphic(uTurnGlyph());
-        back.setOnAction(_ -> onBack.run());
-        return back;
-    }
-
-    /**
-     * The arrow on the way back: a band turning through 180 degrees, with the head pointing down at
-     * the far end.
-     *
-     * <p>Drawn as one filled outline rather than a stroked line, because a stroke on an
-     * {@link SVGPath} contributes nothing: the shape is filled. Its own coordinates run 0 to 16, and
-     * the stylesheet scales it to the size a button's text sits at.
-     *
-     * @return {@link SVGPath} the glyph
-     */
-    private static SVGPath uTurnGlyph() {
-        final var glyph = new SVGPath();
-        glyph.setContent("M12.2 14 L12.2 7 A3.2 3.2 0 0 0 5.8 7 L5.8 9 L8.2 9 L4.9 14 L1.6 9 "
-                + "L4 9 L4 7 A5 5 0 0 1 14 7 L14 14 Z");
-        glyph.getStyleClass().add("u-turn-glyph");
-        return glyph;
+        return WayBack.to("photo-categories-back", "Back to Settings", onBack);
     }
 
 }

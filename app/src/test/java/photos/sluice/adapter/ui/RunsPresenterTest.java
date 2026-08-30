@@ -39,7 +39,6 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -81,15 +80,13 @@ class RunsPresenterTest {
                 .containsExactly("Finish this sift", "Discard");
     }
 
-    // The press attempts the same thing whatever state the run is in, so one label covers all of
-    // them. A waiting run that cannot get there says so on the card it lands on.
     @Test
-    void carryingARunOnSaysTheSameThingWhateverStateItIsIn() {
+    void aWaitingRunAnAgentJudgesSaysThePressLooksAgainBeforeItFinishes() {
         final RunsPresenter waiting = presenterOver(run("2019", State.WAITING));
         final RunsPresenter ready = presenterOver(run("2018", State.READY));
 
         assertThat(waiting.view().unfinished().getFirst().actions()).extracting(Action::label)
-                .containsExactly("Finish this sift", "Discard");
+                .containsExactly("Check and finish", "Finish without the missing sheets", "Discard");
         assertThat(ready.view().unfinished().getFirst().actions()).extracting(Action::label)
                 .containsExactly("Finish this sift", "Discard");
     }
@@ -111,7 +108,44 @@ class RunsPresenterTest {
                 run("2018", State.DAMAGED));
 
         assertThat(presenter.view().unfinished()).allSatisfy(card ->
-                assertThat(card.actions()).extracting(Action::kind).containsExactly(Kind.DISCARD));
+                assertThat(card.actions()).extracting(Action::kind)
+                        .doesNotContain(Kind.CONTINUE, Kind.CONTINUE_WITHOUT_THE_MISSING));
+    }
+
+    @Test
+    void onlyABlockedRunIsOfferedTheWayIntoWhatIsWrongWithIt() {
+        final RunsPresenter presenter = presenterOver(run("2019", State.BLOCKED),
+                run("2018", State.DAMAGED));
+
+        assertThat(cardFor(presenter, "2019").actions()).extracting(Action::kind)
+                .containsExactly(Kind.TROUBLESHOOT, Kind.DISCARD);
+        assertThat(cardFor(presenter, "2018").actions()).extracting(Action::kind)
+                .containsExactly(Kind.DISCARD);
+    }
+
+    @Test
+    void theWayIntoWhatIsWrongLeadsAndThrowingAwayDoesNot() {
+        final RunsPresenter presenter = presenterOver(run("2019", State.BLOCKED));
+
+        assertThat(presenter.view().unfinished().getFirst().actions())
+                .extracting(Action::label, Action::leading)
+                .containsExactly(tuple("Troubleshoot", true), tuple("Discard", false));
+    }
+
+    @Test
+    void pressingItOpensThatScreenForTheRunTheCardNamed() {
+        final RunsPresenter presenter = presenterOver(run("2019", State.BLOCKED));
+        final var opened = new AtomicReference<@Nullable Path>();
+        final var named = new AtomicReference<@Nullable String>();
+        presenter.setOpenTroubleshoot((prepDir, scope) -> {
+            opened.set(prepDir);
+            named.set(scope);
+        });
+
+        presenter.press(onlyActionOfKind(presenter, Kind.TROUBLESHOOT));
+
+        assertThat(opened.get()).isEqualTo(Path.of("logs", "sift-prep", "2019"));
+        assertThat(named.get()).isEqualTo("2019");
     }
 
     @Test
@@ -531,7 +565,7 @@ class RunsPresenterTest {
     }
 
     @Test
-    void aWaitingRunOnAnAgentOffersTheFolderTheInstructionsAndTheToggle() {
+    void aWaitingRunOnAnAgentOffersTheFolderAndTheInstructions() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
         when(pipeline.configuredProviderSpends()).thenReturn(false);
@@ -542,22 +576,22 @@ class RunsPresenterTest {
 
         assertThat(waiting.folder()).isEqualTo(Path.of("logs", "sift-prep", "2019"));
         assertThat(waiting.copyPrompt()).isNotNull();
-        assertThat(waiting.autoApply()).isNotNull();
     }
 
     @Test
-    void aWaitingRunOnAProviderThatSpendsIsOfferedNoWatchToggleAndNoInstructions() {
+    void aWaitingRunOnAProviderThatSpendsIsOfferedNoInstructionsAndNoWayPastTheMissingSheets() {
         final Pipeline pipeline = pipeline();
         when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
         when(pipeline.configuredProviderSpends()).thenReturn(true);
         final var presenter = runsPresenter(pipeline);
         presenter.refresh();
 
-        final RunsView.Waiting waiting = requireNonNull(presenter.view().unfinished().getFirst().waiting());
+        final RunCard card = presenter.view().unfinished().getFirst();
 
-        assertThat(waiting.autoApply()).isNull();
-        assertThat(waiting.copyPrompt()).isNull();
-        assertThat(waiting.note()).contains("provider account balance");
+        assertThat(requireNonNull(card.waiting()).copyPrompt()).isNull();
+        assertThat(requireNonNull(card.waiting()).note()).contains("provider account balance");
+        assertThat(card.actions()).extracting(Action::kind)
+                .doesNotContain(Kind.CONTINUE_WITHOUT_THE_MISSING);
     }
 
     @Test
@@ -570,46 +604,6 @@ class RunsPresenterTest {
     }
 
     @Test
-    void theToggleSitsWhereTheEngineSaysTheWatchIsRatherThanWhereItWasLeft() {
-        final Pipeline pipeline = pipeline();
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
-        when(pipeline.isWatchActive(any())).thenReturn(true);
-        final var presenter = runsPresenter(pipeline);
-        presenter.refresh();
-
-        assertThat(requireNonNull(requireNonNull(
-                presenter.view().unfinished().getFirst().waiting()).autoApply()).on()).isTrue();
-    }
-
-    @Test
-    void turningTheToggleOnArmsThatRunsWatchAndTurningItOffRetiresIt() {
-        final Pipeline pipeline = pipeline();
-        final var presenter = runsPresenter(pipeline);
-        final Path prepDir = Path.of("logs", "sift-prep", "2019");
-
-        presenter.setAutoApply(prepDir, true);
-        presenter.setAutoApply(prepDir, false);
-
-        verify(pipeline).startWatching(prepDir);
-        verify(pipeline).stopWatching(prepDir);
-    }
-
-    @Test
-    void aWatchThatCouldNotBeChangedSaysWhyRatherThanFailingSilently() {
-        final Pipeline pipeline = pipeline();
-        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
-        doThrow(new JobInProgressException("Something else is running."))
-                .when(pipeline).startWatching(any());
-        final var presenter = runsPresenter(pipeline);
-        presenter.refresh();
-
-        presenter.setAutoApply(Path.of("logs", "sift-prep", "2019"), true);
-
-        assertThat(requireNonNull(presenter.view().message()).text())
-                .isEqualTo("Something else is running.");
-    }
-
-    @Test
     void goingOnWithoutTheMissingSheetsIsWhatTheFacadeIsAskedFor() {
         final Pipeline pipeline = pipeline();
         final Path prepDir = Path.of("logs", "sift-prep", "2019");
@@ -618,11 +612,41 @@ class RunsPresenterTest {
         when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
         final var presenter = runsPresenter(pipeline);
         presenter.refresh();
-        presenter.setWaiveMissing(prepDir, true);
 
-        presenter.press(presenter.view().unfinished().getFirst().actions().getFirst());
+        presenter.press(onlyActionOfKind(presenter, Kind.CONTINUE_WITHOUT_THE_MISSING));
 
         verify(pipeline).resume(prepDir, true);
+    }
+
+    @Test
+    void finishingWaitsForEverySheetUnlessTheOtherButtonIsPressed() {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        final JobHandle<CullJobOutcome> job = neverFinishes();
+        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        presenter.press(onlyActionOfKind(presenter, Kind.CONTINUE));
+
+        verify(pipeline).resume(prepDir, false);
+    }
+
+    // A run with every sheet in can still be waiting, and the press would then do what Finish does
+    // under a name saying otherwise.
+    @Test
+    void thereIsNoWayPastTheMissingSheetsOnceNoneAreMissing() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+                new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
+                        new PrepDirHealth(State.WAITING, List.of()), new ShardTally(4, 4, 4),
+                        Instant.now()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().actions()).extracting(Action::kind)
+                .doesNotContain(Kind.CONTINUE_WITHOUT_THE_MISSING);
     }
 
     @Test
@@ -655,7 +679,9 @@ class RunsPresenterTest {
 
         assertThat(presenter.instructionsFor(Path.of("logs", "sift-prep", "2019"), false)).isNull();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .doesNotContain("MalformedPrepJsonException");
+                .isEqualTo("There are no instructions to copy for that sift, because its records "
+                        + "are damaged.")
+                .doesNotContain(MalformedPrepJsonException.class.getName());
     }
 
     @Test
@@ -741,6 +767,21 @@ class RunsPresenterTest {
     }
 
     @Test
+    void aBlockedRunWhoseSheetsAreAllInAndAllSoundSaysNothingAboutThem() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(new CullRunSummary("2019",
+                Path.of("logs", "sift-prep", "2019"),
+                new PrepDirHealth(State.BLOCKED, List.of(new Finding.MissingSource(
+                        Path.of("Sorted", "Photos", "2019", "06", "gone.jpg"),
+                        Path.of("logs", "sift-prep", "2019", "moves.csv")))),
+                new ShardTally(1, 1, 1), Instant.now()))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        assertThat(presenter.view().unfinished().getFirst().sheets()).isNull();
+    }
+
+    @Test
     void aTallyStillOwedSheetsSaysSoWithoutNamingAnythingWrong() {
         final RunsPresenter presenter = presenterOver(run("2019", State.WAITING));
 
@@ -789,6 +830,25 @@ class RunsPresenterTest {
         assertThat(requireNonNull(card.redo()).leading()).isTrue();
         assertThat(card.actions()).extracting(Action::label, Action::leading)
                 .containsExactly(tuple("Finish this sift", false), tuple("Discard", false));
+    }
+
+    // A CorruptShard finding gives FindingWords no answer, so Troubleshoot would open onto a
+    // screen with nothing to press. The redo control clears the run outright and is the way on.
+    @Test
+    void onAProviderThatSpendsARunASheetAloneBlamesLeadsWithTheWayBackNotTroubleshoot() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.configuredProviderSpends()).thenReturn(true);
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(
+                run("2019", State.BLOCKED,
+                        List.of(new Finding.CorruptShard("montage-002", "decisions-002.json"))))));
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+
+        final RunCard card = presenter.view().unfinished().getFirst();
+
+        assertThat(requireNonNull(card.redo()).leading()).isTrue();
+        assertThat(card.actions()).extracting(Action::kind, Action::leading)
+                .contains(tuple(Kind.TROUBLESHOOT, false));
     }
 
     // Redoing the sheets cannot clear a photo that has gone from disk, so a press that spends is
@@ -968,10 +1028,12 @@ class RunsPresenterTest {
 
         assertThat(blamed.view().unfinished().getFirst().actions())
                 .extracting(Action::label, Action::leading)
-                .containsExactly(tuple("Finish this sift", false), tuple("Discard", false));
+                .containsExactly(tuple("Check and finish", false),
+                        tuple("Finish without the missing sheets", false), tuple("Discard", false));
         assertThat(clean.view().unfinished().getFirst().actions())
                 .extracting(Action::label, Action::leading)
-                .containsExactly(tuple("Finish this sift", false), tuple("Discard", false));
+                .containsExactly(tuple("Check and finish", false),
+                        tuple("Finish without the missing sheets", false), tuple("Discard", false));
     }
 
     // The provider's own waiting card keeps its fill, nothing there waiting on anybody outside.
@@ -1042,6 +1104,55 @@ class RunsPresenterTest {
 
         assertThat(requireNonNull(presenter.view().unfinished().getFirst().waiting()).copyPrompt())
                 .isEqualTo("Copy a follow-up for your agent");
+    }
+
+    @Test
+    void aRunMovingInTheBackgroundLeavesTheCopiedLabelStanding() throws Exception {
+        final Pipeline pipeline = pipeline();
+        final Path prepDir = Path.of("logs", "sift-prep", "2019");
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(
+                List.of(runWithRejectedAnswers("2019", State.WAITING))));
+        when(pipeline.redoRejectedAnswers(any())).thenReturn("write them again");
+        final var listener = new AtomicReference<@Nullable Runnable>(null);
+        doAnswer(call -> {
+            listener.set(call.getArgument(0));
+            return null;
+        }).when(pipeline).onRunsMoved(any());
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+        presenter.instructionsFor(prepDir, true);
+        final var redrawn = new CountDownLatch(1);
+        presenter.setRedrawCards(redrawn::countDown);
+
+        requireNonNull(listener.get()).run();
+        assertThat(redrawn.await(5, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(requireNonNull(presenter.view().unfinished().getFirst().waiting()).copyPrompt())
+                .isEqualTo("Copied");
+    }
+
+    @Test
+    void aRunMovingInTheBackgroundLeavesThePressesOwnMessageStanding() throws Exception {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        final JobHandle<DiscardReport> job = failing(new JobInProgressException("Something else is running."));
+        when(pipeline.discard(any())).thenReturn(job);
+        final var listener = new AtomicReference<@Nullable Runnable>(null);
+        doAnswer(call -> {
+            listener.set(call.getArgument(0));
+            return null;
+        }).when(pipeline).onRunsMoved(any());
+        final var presenter = runsPresenter(pipeline);
+        presenter.refresh();
+        presenter.press(presenter.view().unfinished().getFirst().actions().getLast());
+        final var redrawn = new CountDownLatch(1);
+        presenter.setRedrawCards(redrawn::countDown);
+
+        requireNonNull(listener.get()).run();
+        assertThat(redrawn.await(5, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(requireNonNull(presenter.view().message()).text())
+                .isEqualTo("Something else is running.");
     }
 
     // A press that freed nothing leaves the card describing the run correctly, so a second reading
@@ -1253,6 +1364,25 @@ class RunsPresenterTest {
 
     private static RunLauncherPresenter dashboard(final Pipeline pipeline) {
         return new RunLauncherPresenter(pipeline, new FxProgressPort(Runnable::run));
+    }
+
+    // By scope rather than by position. The cards are sorted by timeline, so which one is first
+    // turns on what the other runs in the fixture are called.
+    private static RunCard cardFor(final RunsPresenter presenter, final String scope) {
+        return presenter.view().unfinished().stream()
+                .filter(card -> card.scope().equals(scope))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    // By kind rather than by position, so a button added beside it does not silently re-point the
+    // press at a different one.
+    private static Action onlyActionOfKind(final RunsPresenter presenter, final Kind kind) {
+        final List<Action> matching = presenter.view().unfinished().getFirst().actions().stream()
+                .filter(action -> action.kind() == kind)
+                .toList();
+        assertThat(matching).hasSize(1);
+        return matching.getFirst();
     }
 
     private static CullRunSummary run(final String scope, final State state) {

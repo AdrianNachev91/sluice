@@ -713,8 +713,9 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(this.reported().text())
-                .contains("not inside the folders Sluice is set up with now")
-                .contains("discard the sift");
+                .isEqualTo("That sift is at D:\\old\\sift-prep\\2019, which is not inside the "
+                        + "folders Sluice is set up with now. Point your working folder back at "
+                        + "the one holding it to work on it again.");
     }
 
     @Test

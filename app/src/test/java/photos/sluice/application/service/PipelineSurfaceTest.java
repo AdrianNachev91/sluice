@@ -41,6 +41,7 @@ class PipelineSurfaceTest {
             "curate(SortScope)",
             "resume(Path, boolean)",
             "cullRuns()",
+            "cullRun(Path)",
             "startWatching(Path)",
             "stopWatching(Path)",
             "isWatchActive(Path)",
@@ -64,11 +65,11 @@ class PipelineSurfaceTest {
     // The methods that must run whatever the roots say. Named rather than detected, because what
     // exempts one is what its caller is doing, which no property of the method reveals.
     //
-    // stopAllWatching's callers are a folder root that just moved, and an app that is closing.
-    // Refusing the first would strand every watcher on a folder nothing is working in, for the life
-    // of the process. stopAcceptingJobs is the closing half of that same caller. An install whose
-    // roots are unusable is the one most likely to be closed. Refused there, its exit path could
-    // never learn whether anything was still moving files.
+    // stopAllWatching's callers are a folder root that just moved, an app that is closing, and a
+    // save that turned watching off. Refusing the first would strand every watcher on a folder
+    // nothing is working in, for the life of the process. stopAcceptingJobs is the closing half of
+    // that same caller. An install whose roots are unusable is the one most likely to be closed.
+    // Refused there, its exit path could never learn whether anything was still moving files.
     //
     // estimateFor takes a photo count rather than a scope, so no folder appears in the question it
     // answers. It does reach one path of its own, the spend ledger. An unusable root there degrades
@@ -87,8 +88,8 @@ class PipelineSurfaceTest {
     // could not be worded at all, and the roots being unusable is not what it is about.
     //
     // isWatchActive looks one path up in a map of the watchers this process has armed. It resolves
-    // nothing and reads nothing. A waiting card asks it while drawing, to know where to put its own
-    // toggle. Refused here, that card could not draw a control it already has.
+    // nothing and reads nothing, so the roots have no bearing on the answer. A caller asking which
+    // of this process's own watchers are live is asking about this process, not about a folder.
     //
     // onRunsMoved takes no path at all. It adds a listener to a list, which is a question about this
     // process rather than about any folder.

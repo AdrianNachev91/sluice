@@ -477,9 +477,12 @@
     -fx-border-width: 0 1px 1px 1px;
 }
 
-/* The trace itself, once the disclosure is open. Monospace and read-only, so it renders the way a
-   stack trace is meant to be read and cannot be edited by an accidental keystroke. */
+/* The trace itself, wherever a reader is asked to hand one on. Monospace and read-only, so it
+   renders the way a stack trace is meant to be read and cannot be edited by an accidental
+   keystroke. A field's skin brings the text cursor with it, which offers an edit that is refused,
+   so the pointer says nothing instead. The text stays selectable, which is what it is here for. */
 .trace-text {
+    -fx-cursor: default;
     -fx-font-family: "Monospaced";
     -fx-font-size: 11px;
     -fx-pref-height: 240px;
@@ -488,6 +491,7 @@
 
 .trace-text .content {
     -fx-background-color: -sluice-surface;
+    -fx-cursor: default;
 }
 
 .trace-text .scroll-bar:horizontal, .trace-text .scroll-bar:vertical {
@@ -1081,6 +1085,18 @@
     -fx-border-color: -sluice-border;
 }
 
+/* What answering a problem settled, in place of the buttons that offered the answers. Quieter than
+   the lines above it, since it is a record of something already done rather than something to act
+   on. */
+.troubleshoot-outcome {
+    -fx-fill: -sluice-text-muted;
+    -fx-text-fill: -sluice-text-muted;
+}
+
+.troubleshoot-detail {
+    -fx-spacing: 8px;
+}
+
 /* The way back, drawn as a band turning through 180 degrees. Filled with the button's own text
    colour so it reads as part of the label rather than as artwork beside it. Scaled from the 16
    units the path is drawn at down to the size a button's text sits at. */
@@ -1477,6 +1493,13 @@
 .run-estimate-figure {
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text;
+}
+
+/* The box saying the record behind the figure is broken. Wider inside than the 4px that holds a
+   figure to the sentence explaining it, because the second thing here is a button rather than more
+   text, and a button pressed up against a paragraph reads as part of it. */
+.run-estimate-warning {
+    -fx-spacing: 8px;
 }
 
 /* The headline of the box shown where the chosen provider spends nothing. Weighted like the cost

@@ -27,8 +27,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 /**
@@ -76,16 +75,20 @@ public class RunsPresenter {
     private static final String JUDGE_AGAIN_NOTE = "Any sheets still missing are judged too. That "
             + "spends from your provider account balance.";
 
-    // One label for that press whatever state the run is in. What it attempts is the same in all of
-    // them, and the card's own tally already says whether it can get there.
     private static final String FINISH = "Finish this sift";
 
-    private static final String AUTO_APPLY = "Move the photos as soon as every sheet is judged";
+    // What the press does on a waiting run an agent judges. It looks at the folder again, and
+    // finishes only if everything landed since the card was drawn. Where the app judges the sheets
+    // itself the press dispatches them, spends, and finishes, so that route keeps the plainer
+    // label.
+    private static final String CHECK_AND_FINISH = "Check and finish";
 
-    private static final String WAIVE_MISSING = "Go on without the sheets that are still missing";
+    private static final String TROUBLESHOOT = "Troubleshoot";
 
-    // Says nothing about what happens afterwards. The toggle under it answers that, and answers it
-    // two ways, so a sentence here would contradict one of them.
+    private static final String FINISH_WITHOUT_THE_MISSING = "Finish without the missing sheets";
+
+    // Says nothing about what happens once shards arrive back. Whether they are picked up
+    // automatically is Settings' watch mode, global rather than a choice this card makes.
     private static final String WAITING_ON_AN_AGENT = "Copy the instructions for your own agent. "
             + "They prompt it to write its decisions back into the folder below.";
 
@@ -115,16 +118,12 @@ public class RunsPresenter {
     private volatile boolean working;
     private volatile @Nullable Runnable repaint;
     private volatile @Nullable Runnable openDashboard;
+    private volatile @Nullable BiConsumer<Path, String> openTroubleshoot;
     // The two halves a run moving on its own has to reach, held apart because they outlive each
     // other. The badge is in the shell and lives as long as the window. The cards are rebuilt on
     // every visit, and the one written here draws whichever screen is current.
     private volatile @Nullable Runnable redrawCount;
     private volatile @Nullable Runnable redrawCards;
-
-    // Which runs a reader has said to go on without their missing sheets. Concurrent because a
-    // redraw reads it off the thread that paints while a press writes it. Nothing prunes it:
-    // filling it would take thousands of discarded and re-sifted scopes in one sitting.
-    private final Set<Path> waiveMissing = ConcurrentHashMap.newKeySet();
 
     // Which run's copy control last handed something over, so the card draws it as Copied. Held
     // here rather than on the button because the press that fills it also files sheets away, and
@@ -204,6 +203,19 @@ public class RunsPresenter {
     }
 
     /**
+     * Says how the screen opens the troubleshoot page for one run.
+     *
+     * <p>Told which run and what it covers, so the page that opens names it the way the card the
+     * reader just pressed named it.
+     *
+     * @param openTroubleshoot a {@link BiConsumer} of {@link Path} and {@link String} shows that
+     *     page for a run. Called on the thread that paints
+     */
+    public void setOpenTroubleshoot(final BiConsumer<Path, String> openTroubleshoot) {
+        this.openTroubleshoot = openTroubleshoot;
+    }
+
+    /**
      * Reads every run on disk again.
      *
      * <p>A walk of the whole sift-prep root, reading every sidecar and shard of every run. Slow
@@ -221,24 +233,9 @@ public class RunsPresenter {
         // A press reports against the run as it stood then. This reading may find a different one,
         // and a sentence about the old state reads as a claim about the new.
         this.message = null;
-        try {
-            this.runs = this.pipeline.cullRuns();
-            // Cleared on the way through, so a read that fails once and works after does not leave
-            // its sentence pinned under cards that are now fine.
-            this.readFailure = null;
-        } catch (final PathsMisconfiguredException unset) {
-            // Its message and no trace. An install nobody has configured yet meets this on every
-            // start and every press. That is what a first run is, rather than anything going wrong.
-            // A trace here fills the log a reader would send about something else.
-            log.info("Could not read the runs: {}", unset.getMessage());
-            this.runs = new CullRuns.Listed(List.of());
-            this.readFailure = new Message(RunRefusals.plainly(unset), true);
-        } catch (final RuntimeException e) {
-            log.info("Could not read the runs", e);
-            this.runs = new CullRuns.Listed(List.of());
-            this.readFailure = new Message(RunRefusals.plainly(e), true);
-        }
+        this.reread();
     }
+
 
     /**
      * What the screen shows right now.
@@ -294,7 +291,9 @@ public class RunsPresenter {
      */
     public void press(final Action action) {
         switch (action.kind()) {
-            case CONTINUE -> this.carryOn(action.prepDir(), action.scope());
+            case CONTINUE -> this.carryOn(action.prepDir(), action.scope(), false);
+            case CONTINUE_WITHOUT_THE_MISSING -> this.carryOn(action.prepDir(), action.scope(), true);
+            case TROUBLESHOOT -> this.troubleshoot(action.prepDir(), action.scope());
             case DISCARD -> this.start("discard " + action.prepDir(),
                     () -> this.pipeline.discard(action.prepDir()));
         }
@@ -388,44 +387,9 @@ public class RunsPresenter {
             this.message = new Message(RunRefusals.plainly(e), true);
             return null;
         }
-        this.carryOn(prepDir, scope);
+        // The freed sheets are what this press exists to judge, so it never goes on without them.
+        this.carryOn(prepDir, scope, false);
         return null;
-    }
-
-    /**
-     * Turns one run's auto-apply on or off.
-     *
-     * <p>Says nothing back. Where it worked, the toggle's next draw reads the engine and shows it;
-     * where it did not, the same draw shows the toggle back where it started.
-     *
-     * @param prepDir {@link Path} the run
-     * @param on boolean where the reader put the toggle
-     */
-    public void setAutoApply(final Path prepDir, final boolean on) {
-        try {
-            if (on) {
-                this.pipeline.startWatching(prepDir);
-            } else {
-                this.pipeline.stopWatching(prepDir);
-            }
-        } catch (final RuntimeException e) {
-            log.info("Could not change the watch on {}", prepDir, e);
-            this.message = new Message(RunRefusals.plainly(e), true);
-        }
-    }
-
-    /**
-     * Records whether carrying this run on means carrying it on without the sheets still owed.
-     *
-     * @param prepDir {@link Path} the run
-     * @param on boolean where the reader put the control
-     */
-    public void setWaiveMissing(final Path prepDir, final boolean on) {
-        if (on) {
-            this.waiveMissing.add(prepDir);
-        } else {
-            this.waiveMissing.remove(prepDir);
-        }
     }
 
     /**
@@ -464,6 +428,20 @@ public class RunsPresenter {
     }
 
     /**
+     * Opens the screen that says what is wrong with one run and what can be done about it.
+     *
+     * @param prepDir {@link Path} the run
+     * @param scope {@link String} what it covers, in the words this screen's card used
+     */
+    private void troubleshoot(final Path prepDir, final String scope) {
+        this.message = null;
+        final BiConsumer<Path, String> open = this.openTroubleshoot;
+        if (open != null) {
+            open.accept(prepDir, scope);
+        }
+    }
+
+    /**
      * Carries one run on, and takes the reader to where that job reports itself.
      *
      * <p>Handed to the dashboard rather than run from here. A sift moving a reader's photos shows a
@@ -475,10 +453,11 @@ public class RunsPresenter {
      *
      * @param prepDir {@link Path} the run to carry on
      * @param scope {@link String} what it covers, in the words this screen's card used
+     * @param withoutTheMissing boolean whether to go on without the sheets still owed
      */
-    private void carryOn(final Path prepDir, final String scope) {
+    private void carryOn(final Path prepDir, final String scope, final boolean withoutTheMissing) {
         this.message = null;
-        this.launcher.continueRunFromRuns(prepDir, scope, this.waiveMissing.contains(prepDir));
+        this.launcher.continueRunFromRuns(prepDir, scope, withoutTheMissing);
         final Runnable open = this.openDashboard;
         if (open != null) {
             open.run();
@@ -499,7 +478,7 @@ public class RunsPresenter {
      */
     private void runsMovedElsewhere() {
         Thread.ofVirtual().start(() -> {
-            this.refresh();
+            this.reread();
             final Runnable badge = this.redrawCount;
             if (badge != null) {
                 badge.run();
@@ -606,7 +585,8 @@ public class RunsPresenter {
         final boolean redoLeads = anythingToRedo && itJudgesThemItself
                 && findings.stream().allMatch(finding -> LaunchPrompt.sheetOf(finding) != null);
         final boolean waitingOnAnAgent = state == State.WAITING && !itJudgesThemItself;
-        final List<Action> actions = this.actions(run, state, blamesASheet || waitingOnAnAgent);
+        final List<Action> actions =
+                this.actions(run, state, blamesASheet || waitingOnAnAgent, redoLeads);
         // Counted off the row, so the two cannot disagree about whether this card offers a way to
         // finish the run. Null where an agent judges. The offer sits with the card's text there,
         // which is where the waiting block puts it, so one press does not move the control.
@@ -614,7 +594,7 @@ public class RunsPresenter {
                 ? (int) actions.stream().filter(action -> action.kind() == Kind.CONTINUE).count()
                 : null;
         return new RunCard("run-card-" + run.scope(), run.scope(), this.headline(state),
-                this.detail(run, state), sheets(run.shards()), age(run.since()),
+                this.detail(run, state), sheets(run.shards(), state), age(run.since()),
                 this.waiting(run, state, blamesASheet),
                 anythingToRedo ? this.redo(run, findings, redoLeads, redoAt) : null, actions);
     }
@@ -687,21 +667,11 @@ public class RunsPresenter {
      * What a card carries while its run is still short of judged sheets.
      *
      * <p>Only a waiting run has any of it. A ready run is owed nothing, so there is no folder to
-     * point anybody at, nothing to waive, and nothing for a watch to notice arriving.
+     * point anybody at, and nothing for a watch to notice arriving.
      *
      * <p>Which shape it takes turns on whether the configured provider judges the sheets itself. A
      * provider that does needs no instructions handed out, since nobody outside the app is being
      * handed anything.
-     *
-     * <p>It is offered no way to go on without the missing sheets either, and that one is a money
-     * question rather than a tidiness one. Going on dispatches every sheet still lacking an answer
-     * whatever this says, so a control promising to skip them would charge for them instead. There
-     * is nothing to go on without when the thing that judges them is the app.
-     *
-     * <p>The toggle is drawn wherever a watch could be turned off, which is not the same as
-     * wherever one could be turned on. The engine arms only for the manual provider, and it checks
-     * that as the arm is made. A reader who armed one and then configured a paying provider still
-     * has a watcher polling, and taking the control away would leave them no way to stop it.
      *
      * <p>Reads the provider now rather than what the run was started under. Nothing on disk records
      * that, and the question this answers is what going on would do today.
@@ -721,20 +691,13 @@ public class RunsPresenter {
             return null;
         }
         final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
-        final boolean watched = this.pipeline.isWatchActive(run.prepDir());
         final boolean corrects = !itJudgesThemItself && !this.working()
                 && anAgentLeftItUnfinished(run, state);
-        final RunsView.Switch autoApply = itJudgesThemItself && !watched
-                ? null
-                : new RunsView.Switch("run-auto-apply-" + run.scope(), AUTO_APPLY, watched);
         final String asks = run.prepDir().equals(this.justCopied)
                 ? COPIED
                 : corrects ? COPY_FOLLOW_UP : COPY_PROMPT;
         return new RunsView.Waiting(run.prepDir(),
-                itJudgesThemItself ? null : asks, corrects, autoApply,
-                itJudgesThemItself ? null
-                        : new RunsView.Switch("run-waive-missing-" + run.scope(), WAIVE_MISSING,
-                                this.waiveMissing.contains(run.prepDir())),
+                itJudgesThemItself ? null : asks, corrects,
                 itJudgesThemItself
                         ? blamesASheet ? WAITING_ON_A_PROVIDER_BLAMED : WAITING_ON_A_PROVIDER
                         : corrects ? FOLLOW_UP_NOTE : WAITING_ON_AN_AGENT);
@@ -771,6 +734,10 @@ public class RunsPresenter {
      * damaged one has said nothing about itself. Throwing away is the one thing that works whatever
      * state a run is in.
      *
+     * <p>A blocked run is the one with something to look at, so it is the one offered the way in to
+     * that. A damaged one established nothing, so it has no findings to act on. Reading it again is
+     * what the screen already does on every visit.
+     *
      * <p>A finished run offers nothing. Clearing them is one button at the top of the section, and
      * clearing exactly one while keeping the rest has no story behind it.
      *
@@ -784,21 +751,63 @@ public class RunsPresenter {
      * @param run {@link CullRunSummary} the run
      * @param state {@link State} its state
      * @param blamesASheet boolean whether any finding is one a sheet could answer for
+     * @param redoLeads boolean whether the card's own way back is already drawn as the way on, so
+     *     Troubleshoot does not draw as a second one beside it
      * @return a {@link List} of {@link Action} the buttons
      */
     private List<Action> actions(final CullRunSummary run, final State state,
-                                 final boolean blamesASheet) {
+                                 final boolean blamesASheet, final boolean redoLeads) {
         if (state == State.COMPLETE || this.working()) {
             return List.of();
         }
         final List<Action> actions = new ArrayList<>();
         if (state == State.READY || state == State.WAITING) {
-            actions.add(new Action("run-continue-" + run.scope(), FINISH, Kind.CONTINUE,
-                    !blamesASheet, run.prepDir(), run.scope(), null));
+            actions.add(new Action("run-continue-" + run.scope(), this.finishLabel(state),
+                    Kind.CONTINUE, !blamesASheet, run.prepDir(), run.scope(), null));
+        }
+        if (this.canGoOnWithoutTheMissing(run, state)) {
+            actions.add(new Action("run-continue-partial-" + run.scope(), FINISH_WITHOUT_THE_MISSING,
+                    Kind.CONTINUE_WITHOUT_THE_MISSING, false, run.prepDir(), run.scope(), null));
+        }
+        if (state == State.BLOCKED) {
+            actions.add(new Action("run-troubleshoot-" + run.scope(), TROUBLESHOOT,
+                    Kind.TROUBLESHOOT, !redoLeads, run.prepDir(), run.scope(), null));
         }
         actions.add(new Action("run-discard-" + run.scope(), "Discard", Kind.DISCARD, false,
                 run.prepDir(), run.scope(), this.discardConfirm(run)));
         return actions;
+    }
+
+    /**
+     * What the press that carries a run on says.
+     *
+     * <p>A waiting run an agent judges cannot be dispatched from here. The press re-reads the
+     * folder and gets through only where every sheet has landed since the card was drawn, so the
+     * label says both halves. Anywhere else the press finishes the run outright.
+     *
+     * @param state {@link State} the run's state
+     * @return {@link String} the label
+     */
+    private String finishLabel(final State state) {
+        return state == State.WAITING && !this.pipeline.configuredProviderSpends()
+                ? CHECK_AND_FINISH
+                : FINISH;
+    }
+
+    /**
+     * Whether this run can be finished without waiting for the sheets nobody has answered.
+     *
+     * <p>False where the configured provider judges the sheets itself. Answering true there would
+     * spend the reader's money rather than skip anything.
+     *
+     * @param run {@link CullRunSummary} the run
+     * @param state {@link State} its state
+     * @return boolean whether to offer it
+     */
+    private boolean canGoOnWithoutTheMissing(final CullRunSummary run, final State state) {
+        final ShardTally sheets = run.shards();
+        return state == State.WAITING && !this.pipeline.configuredProviderSpends()
+                && sheets != null && sheets.present() < sheets.total();
     }
 
     /**
@@ -897,10 +906,16 @@ public class RunsPresenter {
      * line naming only what was judged leaves them subtracting to find out whether the rest are
      * late or turned away, and those are different problems with different next steps.
      *
+     * <p>Withheld from a stopped run whose sheets are all in and all sound. The tally counts what
+     * arrived and parsed, which is narrower than the run being well. Where the sheets are not what
+     * stopped it, the line calls them healthy under a heading saying the run needs a decision. Both
+     * are true, and the reader is left to reconcile them.
+     *
      * @param sheets {@link ShardTally} what the prep dir holds, or null where nothing counted them
-     * @return {@link String} the count, or null where there is none
+     * @param state {@link State} the run's state
+     * @return {@link String} the count, or null where there is none to give
      */
-    private static @Nullable String sheets(final @Nullable ShardTally sheets) {
+    private static @Nullable String sheets(final @Nullable ShardTally sheets, final State state) {
         if (sheets == null) {
             return null;
         }
@@ -915,7 +930,10 @@ public class RunsPresenter {
         if (missing > 0) {
             rest.add(RunWords.grouped(missing) + (missing == 1 ? " is" : " are") + " still missing");
         }
-        return rest.isEmpty() ? judged : judged + " " + String.join(" and ", rest) + ".";
+        if (rest.isEmpty()) {
+            return state == State.BLOCKED ? null : judged;
+        }
+        return judged + " " + String.join(" and ", rest) + ".";
     }
 
     /**
@@ -988,5 +1006,31 @@ public class RunsPresenter {
             return;
         }
         this.justCopied = null;
+    }
+
+    /**
+     * The reading half of {@link #refresh}, without either of its two agings-out.
+     *
+     * <p>A tally moving as a watched run gains a shard is not a reader leaving this screen and
+     * coming back to it, which is what the two agings-out are about.
+     */
+    private void reread() {
+        try {
+            this.runs = this.pipeline.cullRuns();
+            // Cleared on the way through, so a read that fails once and works after does not leave
+            // its sentence pinned under cards that are now fine.
+            this.readFailure = null;
+        } catch (final PathsMisconfiguredException unset) {
+            // Its message and no trace. An install nobody has configured yet meets this on every
+            // start and every press. That is what a first run is, rather than anything going wrong.
+            // A trace here fills the log a reader would send about something else.
+            log.info("Could not read the runs: {}", unset.getMessage());
+            this.runs = new CullRuns.Listed(List.of());
+            this.readFailure = new Message(RunRefusals.plainly(unset), true);
+        } catch (final RuntimeException e) {
+            log.info("Could not read the runs", e);
+            this.runs = new CullRuns.Listed(List.of());
+            this.readFailure = new Message(RunRefusals.plainly(e), true);
+        }
     }
 }

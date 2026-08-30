@@ -16,6 +16,8 @@ import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingsSources;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.application.port.out.FolderRootsChangeListener;
+import photos.sluice.application.port.out.WatchingChangedListener;
+import photos.sluice.domain.job.WatchMode;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
@@ -79,6 +81,7 @@ public class SettingsService implements SettingsUseCase {
     private final MediaReader media;
     private final SettingsSources settingsSources;
     private final List<FolderRootsChangeListener> folderRootsListeners;
+    private final List<WatchingChangedListener> watchingChangedListeners;
 
     /**
      * Creates the settings service.
@@ -94,13 +97,16 @@ public class SettingsService implements SettingsUseCase {
      * @param settingsSources {@link SettingsSources} says what outranks the user's config file
      * @param folderRootsListeners a {@link List} of {@link FolderRootsChangeListener} told once a
      *         save has moved any folder root, empty in a process that wants none
+     * @param watchingChangedListeners a {@link List} of {@link WatchingChangedListener} told once a
+     *         save has turned watching on or off, empty in a process that wants none
      */
     public SettingsService(final LiveSettings live, final SettingsStore store,
                            final WorkingRootLock workingRootLock, final JobRunner jobRunner,
                            final PathValidationUseCase pathValidation,
                            final MediaReader media,
                            final SettingsSources settingsSources,
-                           final List<FolderRootsChangeListener> folderRootsListeners) {
+                           final List<FolderRootsChangeListener> folderRootsListeners,
+                           final List<WatchingChangedListener> watchingChangedListeners) {
         this.live = live;
         this.store = store;
         this.workingRootLock = workingRootLock;
@@ -109,6 +115,7 @@ public class SettingsService implements SettingsUseCase {
         this.media = media;
         this.settingsSources = settingsSources;
         this.folderRootsListeners = List.copyOf(folderRootsListeners);
+        this.watchingChangedListeners = List.copyOf(watchingChangedListeners);
     }
 
     /**
@@ -143,6 +150,7 @@ public class SettingsService implements SettingsUseCase {
             final Settings previous = this.live.current();
             if (settings.paths().equals(previous.paths())) {
                 this.writeAndApply(settings);
+                this.announceWatchingChanged(previous, settings);
                 return;
             }
             this.requireUsableRoots(settings.paths());
@@ -151,6 +159,7 @@ public class SettingsService implements SettingsUseCase {
             if (!this.jobRunner.runIfIdle(() -> {
                 this.moveRoots(settings, previous);
                 this.announceFolderRootsChange(workingRootMoved);
+                this.announceWatchingChanged(previous, settings);
             })) {
                 throw new JobInProgressException(
                         "Sluice is running a job. Finish it before changing where its folders are.");
@@ -384,6 +393,43 @@ public class SettingsService implements SettingsUseCase {
                 log.warn("A folder-roots change listener failed after the save had already landed", t);
             }
         });
+    }
+
+    /**
+     * Tells whoever is polling that a save has changed whether Sluice watches.
+     *
+     * <p>Says nothing where the save leaves the mode as it found it. A listener arms or retires
+     * every watcher this process has, which is work to repeat on every unrelated save.
+     *
+     * <p>Announced after the folder-roots listeners rather than before them, since one of those
+     * arms watchers against the new roots. It reads the mode now in force, so this then brings
+     * whatever is polling into line with the mode rather than fighting it.
+     *
+     * @param previous {@link Settings} what was in force
+     * @param settings {@link Settings} what this save puts in force
+     */
+    private void announceWatchingChanged(final Settings previous, final Settings settings) {
+        final boolean now = watches(settings);
+        if (watches(previous) == now) {
+            return;
+        }
+        this.watchingChangedListeners.forEach(listener -> {
+            try {
+                listener.watchingChanged(now);
+            } catch (final Throwable t) {
+                log.warn("A watching-changed listener failed after the save had already landed", t);
+            }
+        });
+    }
+
+    /**
+     * Whether settings have Sluice watching for answers as they arrive.
+     *
+     * @param settings {@link Settings} the settings to read
+     * @return boolean true where they do
+     */
+    private static boolean watches(final Settings settings) {
+        return settings.externalAgent().mode() == WatchMode.WATCH;
     }
 
     /**

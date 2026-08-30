@@ -324,6 +324,25 @@ class RunLauncherPaneTest {
         assertThat(pane.lookup("#run-estimate").isManaged()).isTrue();
         assertThat(text(pane, "#run-estimate-figure")).isEqualTo("About 150,000 tokens");
         assertThat(text(pane, "#run-estimate-disclaimer")).contains("An estimate, not a quote");
+        assertThat(pane.lookup("#run-estimate-warning-box").isManaged()).isFalse();
+    }
+
+    @Test
+    void aBrokenSpendRecordIsSaidOnItsOwnGroundWithTheWayOutInsideIt() throws Exception {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
+        final Parent pane = onFxThread(() -> built(new RunLauncherPresenter(pipeline, new FxProgressPort())));
+
+        onFxThread(() -> fire(pane, "#run-mode-sift"));
+        onFxThread(() -> type(pane, "2019"));
+
+        final Node box = pane.lookup("#run-estimate-warning-box");
+        assertThat(box.isManaged()).isTrue();
+        assertThat(box.getStyleClass()).contains("warning-box");
+        assertThat(text(pane, "#run-estimate-warning"))
+                .contains("The record of what your past sifts cost is broken");
+        assertThat(((Button) pane.lookup("#run-estimate-repair")).getText())
+                .isEqualTo("Start a fresh record");
     }
 
     @Test

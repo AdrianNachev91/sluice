@@ -123,11 +123,11 @@ class ShardTallyCalculatorTest {
         final ShardTallyCalculator calculator = shardTallyCalculator(root);
 
         writeFile(prepDir.resolve("decisions-001.json"), "{ \"montage\": \"montage-001\", \"decis");
-        assertThat(calculator.isReadyToResume(prepDir)).isFalse();
+        assertThat(calculator.poll(prepDir).readyToResume()).isFalse();
 
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        assertThat(calculator.isReadyToResume(prepDir)).isTrue();
+        assertThat(calculator.poll(prepDir).readyToResume()).isTrue();
     }
 
     // The shard is absent entirely rather than unreadable. That is the ordinary "agent has not got
@@ -137,7 +137,7 @@ class ShardTallyCalculatorTest {
         final Path prepDir = prepDir(root);
         writeIndex(prepDir, 1, List.of("montage-001"));
 
-        assertThat(shardTallyCalculator(root).isReadyToResume(prepDir)).isFalse();
+        assertThat(shardTallyCalculator(root).poll(prepDir).readyToResume()).isFalse();
     }
 
     // A non-I/O RuntimeException from hasShard(), read inside the same guard as the shard read and
@@ -154,7 +154,7 @@ class ShardTallyCalculatorTest {
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 0, 1));
     }
 
-    // The same failure, at isReadyToResume()'s own entry point. It answers not ready rather than
+    // The same failure, reached through the poll a watcher makes. It answers not ready rather than
     // propagating, matching the tolerance its own Javadoc already claims for a transiently
     // unreadable index.
     @Test
@@ -164,7 +164,7 @@ class ShardTallyCalculatorTest {
         writeIndex(prepDir, 1, List.of("montage-001"));
         final ShardTallyCalculator calculator = shardTallyCalculator(root, new ThrowingHasShard());
 
-        assertThat(calculator.isReadyToResume(prepDir)).isFalse();
+        assertThat(calculator.poll(prepDir).readyToResume()).isFalse();
     }
 
     // The ledger read tally() itself makes, sitting outside every other guard in this class until a
@@ -184,6 +184,36 @@ class ShardTallyCalculatorTest {
                 });
 
         assertThat(calculator.tally(readIndex(prepDir))).isEqualTo(new ShardTally(1, 1, 1));
+    }
+
+    @Test
+    void onePollAnswersBothReadinessAndTheTally(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        writeFile(photo, "x");
+        writeIndex(prepDir, 1, List.of("montage-001", "montage-002"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(photo));
+        writeSidecar(prepDir, "montage-002", sidecarEntry(photo));
+        writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        final ShardTallyCalculator.Reading reading = shardTallyCalculator(root).poll(prepDir);
+
+        assertThat(reading.readyToResume()).isFalse();
+        assertThat(reading.tally()).isEqualTo(new ShardTally(1, 1, 2));
+    }
+
+    // A prep dir nobody could read has no tally rather than a tally of nothing. The two are the
+    // opposite answer to a caller watching for the number to move, and zeroes would read as sheets
+    // going away.
+    @Test
+    void aPrepDirThatCouldNotBeReadHasNoTallyAtAll(@TempDir final Path root) throws IOException {
+        final Path prepDir = prepDir(root);
+        writeFile(prepDir.resolve("index.json"), "{ \"scope\": ");
+
+        final ShardTallyCalculator.Reading reading = shardTallyCalculator(root).poll(prepDir);
+
+        assertThat(reading.readyToResume()).isFalse();
+        assertThat(reading.tally()).isNull();
     }
 
     private static ShardTallyCalculator shardTallyCalculator(final Path root) {

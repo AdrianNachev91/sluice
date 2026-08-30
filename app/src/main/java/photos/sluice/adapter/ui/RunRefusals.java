@@ -4,6 +4,7 @@ import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
+import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretStoreException;
@@ -72,11 +73,17 @@ final class RunRefusals {
                     + "sift is already running for that timeline, because " + unreadable.prepDir()
                     + " cannot be read. Most likely the folder is held by another process or not "
                     + "there anymore.";
+            // Names no way out but the working folder. Several calls raise this, discarding among
+            // them, so offering a discard here would name the press that just refused.
             case final Pipeline.RunOutsideWorkingRootException outside -> "That sift is at "
                     + outside.prepDir() + ", which is not inside the folders Sluice is set up with "
-                    + "now. Point your working folder back at the one holding it, or discard the sift.";
+                    + "now. Point your working folder back at the one holding it to work on it again.";
             case final MalformedPrepJsonException _ -> "There are no instructions to copy for that "
                     + "sift, because its records are damaged.";
+            // Says nothing about which answer is wrong. What this carries is the engine's own list,
+            // written for a report rather than for a reader.
+            case final ApplyException _ -> "Sluice could not work on this sift, because the answers "
+                    + "in it do not hold together.";
             // Deliberately says nothing about which file, nor about what was being done to it.
             // This arm answers for every file this app opens, moves or writes, and only the call
             // that failed knows which of those it was after.

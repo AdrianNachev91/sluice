@@ -1,38 +1,24 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.animation.Interpolator;
-import javafx.animation.KeyFrame;
-import javafx.animation.KeyValue;
-import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Polygon;
-import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
-import photos.sluice.adapter.ui.RunLauncherView.Message;
-import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.RunsView;
 import photos.sluice.adapter.ui.RunsView.Action;
 import photos.sluice.adapter.ui.RunsView.RunCard;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -48,10 +34,6 @@ final class RunsPane {
 
     // Worn by whichever of this screen's two report lines is carrying a refusal.
     private static final String CAUTION = "runs-report-caution";
-
-    // How long the finished section takes to open or shut. The launcher folds its own rows at the
-    // same figure, so the two do not read as different controls.
-    private static final Duration FOLD_TRAVEL = Duration.millis(160);
 
     private RunsPane() {
     }
@@ -99,8 +81,6 @@ final class RunsPane {
         completedCards.setId("runs-completed-cards");
         completedCards.getStyleClass().add("runs-cards");
 
-        // Shut before anything draws, since the gate below only acts on a fold that has to turn.
-        Controls.settle(completedCards, false);
         final var completed = new VBox(completedToggle, completedCards);
         completed.setId("runs-completed");
         completed.getStyleClass().add("runs-completed");
@@ -115,7 +95,8 @@ final class RunsPane {
         page.getStyleClass().add("runs");
 
         final var controls = new Controls(heading, clear, unreadable, nothingYet, message, cards,
-                completedToggle, completedCards, completed, scroll, new ArrayList<>(), new HashSet<>());
+                completedToggle, completedCards, completed,
+                new SectionFold(completedCards, completed, scroll));
         final Runnable redraw = new Runnable() {
             @Override
             public void run() {
@@ -181,17 +162,11 @@ final class RunsPane {
      * @param completedToggle {@link Button} folds the finished runs open and shut
      * @param completedCards {@link VBox} one card per finished run
      * @param completed {@link VBox} the whole folded section
-     * @param scroll {@link ScrollPane} the pane the body sits in, moved so an opening fold ends up
-     *     on screen
-     * @param folding a {@link List} of {@link Timeline} the travel in flight, empty when the fold
-     *     is at rest. At most one, since the screen has one fold
-     * @param unfolded a {@link Set} of {@link VBox} where the fold is headed, holding the section
-     *     while it is open. What a travel is toward, not what is on screen this instant
+     * @param fold {@link SectionFold} opens and shuts that section
      */
     private record Controls(Label heading, Button clear, Label unreadable, Label nothingYet,
                             Label message, VBox cards, Button completedToggle,
-                            VBox completedCards, VBox completed, ScrollPane scroll,
-                            List<Timeline> folding, Set<VBox> unfolded) {
+                            VBox completedCards, VBox completed, SectionFold fold) {
 
         /**
          * Wires the controls that never change what they do.
@@ -224,14 +199,7 @@ final class RunsPane {
             this.clear.setDisable(!view.canClearCompleted());
             this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
             this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
-            // Only a refusal wears the caution colour. A sweep that worked is an ordinary report,
-            // and the class comes off again so the next one is not dressed as the last.
-            final Message said = view.message();
-            this.message.setText(said == null ? "" : said.text());
-            this.message.getStyleClass().remove(CAUTION);
-            if (said != null && said.refused()) {
-                this.message.getStyleClass().add(CAUTION);
-            }
+            SettingsRows.report(this.message, view.message(), CAUTION);
             this.draw(this.cards, view.unfinished(), presenter, redraw);
             this.completedToggle.setText(view.completedHeading());
             pointing(this.completedToggle, view.completedShown());
@@ -241,7 +209,7 @@ final class RunsPane {
             // Shut where the section itself is gone. A sweep leaves nothing to fold, and a travel
             // over a subtree the screen is no longer laying out reads its own geometry off bounds
             // nothing has updated.
-            this.fold(view.completedShown() && !view.completed().isEmpty());
+            this.fold.to(view.completedShown() && !view.completed().isEmpty());
         }
 
         /**
@@ -259,158 +227,6 @@ final class RunsPane {
             into.getChildren().setAll(drawn);
         }
 
-        /**
-         * Opens or shuts the finished section, travelling rather than jumping.
-         *
-         * <p>The pane travels with it, so a section opening below the fold ends up on screen
-         * instead of leaving the reader to go and find it.
-         *
-         * <p>A fold nobody can watch takes its end state and starts no travel. That covers the
-         * screen being built, where the page is not in a scene yet. It also covers a render, which
-         * would otherwise capture whichever frame the travel happened to be on.
-         *
-         * @param open boolean whether the section should end up showing
-         */
-        private void fold(final boolean open) {
-            // A fold already going where it is being asked to go has nothing to do. Without this,
-            // every redraw travels again, and every travel carries the pane with it. A press on any
-            // card, or a job ending, would then throw a reader who had scrolled back up to the foot
-            // of the open section.
-            if (this.unfolded.contains(this.completedCards) == open) {
-                return;
-            }
-            if (open) {
-                this.unfolded.add(this.completedCards);
-            } else {
-                this.unfolded.remove(this.completedCards);
-            }
-            this.folding.forEach(Timeline::stop);
-            this.folding.clear();
-            if (this.completedCards.getScene() == null || this.completedCards.getWidth() <= 0) {
-                settle(this.completedCards, open);
-                return;
-            }
-            // The height it is about to travel to is read off a laid-out page. A press arrives
-            // between pulses, so the layout that reading wants can still be pending.
-            layOut(this.scroll.getContent());
-            this.completedCards.setVisible(true);
-            this.completedCards.setMinHeight(0);
-            this.completedCards.setMaxHeight(this.completedCards.getHeight());
-            final double to = open
-                    ? this.completedCards.prefHeight(this.completedCards.getWidth())
-                    : 0;
-            final List<KeyValue> frames = new ArrayList<>(List.of(
-                    new KeyValue(this.completedCards.maxHeightProperty(), to, Interpolator.EASE_BOTH),
-                    new KeyValue(this.completedCards.opacityProperty(), open ? 1 : 0,
-                            Interpolator.EASE_BOTH)));
-            final KeyValue following = open
-                    ? this.following(to - this.completedCards.getHeight())
-                    : null;
-            if (following != null) {
-                frames.add(following);
-            }
-            final var travel = new Timeline(new KeyFrame(FOLD_TRAVEL,
-                    frames.toArray(new KeyValue[0])));
-            travel.setOnFinished(_ -> {
-                this.folding.clear();
-                settle(this.completedCards, open);
-                if (open) {
-                    Platform.runLater(this::arrive);
-                }
-            });
-            this.folding.add(travel);
-            travel.play();
-        }
-
-        /**
-         * Where the pane has to end up for the opening section to be on screen, as a frame it can
-         * travel through.
-         *
-         * <p>Without it the pane holds a fraction of a page that is growing under it, so the rows
-         * already on screen slide while the section opens. The reader sees that as the page
-         * jumping rather than as the section arriving.
-         *
-         * <p>Only opening asks for this. A section closing is either in front of the reader already
-         * or one they never opened, and travelling toward either shows them nothing.
-         *
-         * @param growth double how much taller the page is about to be
-         * @return {@link KeyValue} the frame, or null where the page cannot scroll at all
-         */
-        private @Nullable KeyValue following(final double growth) {
-            if (!(this.scroll.getContent() instanceof final Parent laidOut)) {
-                return null;
-            }
-            final double viewport = this.scroll.getViewportBounds().getHeight();
-            final double now = laidOut.getLayoutBounds().getHeight();
-            final double scrollable = now + growth - viewport;
-            if (scrollable <= 0) {
-                return null;
-            }
-            final double top = this.scroll.getVvalue() / this.scroll.getVmax()
-                    * Math.max(now - viewport, 0);
-            final double foot = laidOut
-                    .sceneToLocal(this.completed.localToScene(this.completed.getLayoutBounds()))
-                    .getMaxY() + growth;
-            return new KeyValue(this.scroll.vvalueProperty(),
-                    Math.clamp(Math.max(top, foot - viewport), 0, scrollable)
-                            / scrollable * this.scroll.getVmax(), Interpolator.EASE_BOTH);
-        }
-
-        /**
-         * Moves the pane so the section that just opened ends on screen.
-         *
-         * <p>Deferred a pulse by its caller, and that is the whole of it. Lifting a box's ceiling
-         * only gives it its real height on the layout pass after. A reading taken as the travel
-         * ends answers for the page as it stood before the section grew.
-         */
-        private void arrive() {
-            // The fold can have been shut again in the pulse this waited out, and travelling
-            // toward a section that is closing shows the reader nothing.
-            if (!this.unfolded.contains(this.completedCards)
-                    || !(this.scroll.getContent() instanceof final Parent laidOut)) {
-                return;
-            }
-            layOut(laidOut);
-            final double viewport = this.scroll.getViewportBounds().getHeight();
-            final double scrollable = laidOut.getLayoutBounds().getHeight() - viewport;
-            if (scrollable <= 0) {
-                return;
-            }
-            final double foot = laidOut
-                    .sceneToLocal(this.completed.localToScene(this.completed.getLayoutBounds()))
-                    .getMaxY();
-            final double top = this.scroll.getVvalue() / this.scroll.getVmax() * scrollable;
-            this.scroll.setVvalue(Math.clamp(Math.max(top, foot - viewport), 0, scrollable)
-                    / scrollable * this.scroll.getVmax());
-        }
-
-        /**
-         * Where the fold rests, once nothing is moving it.
-         *
-         * @param section {@link VBox} the folded section
-         * @param open boolean whether it is showing
-         */
-        private static void settle(final VBox section, final boolean open) {
-            // A ceiling on its own does nothing here. A box asks for its computed height as a
-            // minimum, and a minimum outranks a maximum, so the cards would keep their room and the
-            // page would scroll for a section nobody has opened.
-            section.setMinHeight(0);
-            section.setMaxHeight(open ? Region.USE_COMPUTED_SIZE : 0);
-            section.setOpacity(open ? 1 : 0);
-            section.setVisible(open);
-        }
-
-        /**
-         * Brings a subtree's layout up to date, so what is read off it is where things end up.
-         *
-         * @param node {@link Node} the subtree, ignored where it is not one
-         */
-        private static void layOut(final Node node) {
-            if (node instanceof final Parent parent) {
-                parent.applyCss();
-                parent.layout();
-            }
-        }
 
         /**
          * Turns a fold's marker to say which way it is.
@@ -508,17 +324,6 @@ final class RunsPane {
                 copyRow.getStyleClass().add("runs-card-copies");
                 block.getChildren().add(copyRow);
             }
-            if (waiting.autoApply() != null) {
-                block.getChildren().add(switchBox(waiting.autoApply(), on -> {
-                    presenter.setAutoApply(waiting.folder(), on);
-                    redraw.run();
-                }));
-            }
-            final RunsView.Switch waive = waiting.waiveMissing();
-            if (waive != null) {
-                block.getChildren().add(switchBox(waive,
-                        on -> presenter.setWaiveMissing(waiting.folder(), on)));
-            }
             return block;
         }
 
@@ -541,12 +346,10 @@ final class RunsPane {
             button.setId(redo.id());
             button.getStyleClass().add(redo.leading() ? "run-start" : "run-cancel");
             button.setOnAction(_ -> {
-                if (agreed(redo.confirm())) {
+                if (Dialogs.agreed(redo.confirm())) {
                     final String text = presenter.judgeAgain(redo.prepDir(), redo.scope());
                     if (text != null) {
-                        final var content = new ClipboardContent();
-                        content.putString(text);
-                        Clipboard.getSystemClipboard().setContent(content);
+                        CopyableTrace.putOnTheClipboard(text);
                     }
                     redraw.run();
                 }
@@ -584,30 +387,10 @@ final class RunsPane {
                     redraw.run();
                     return;
                 }
-                final var content = new ClipboardContent();
-                content.putString(copied);
-                Clipboard.getSystemClipboard().setContent(content);
+                CopyableTrace.putOnTheClipboard(copied);
                 button.setText(done);
             });
             return button;
-        }
-
-        /**
-         * One control a reader turns on and off.
-         *
-         * @param control {@link RunsView.Switch} what it says and where it sits
-         * @param changed a {@link Consumer} of boolean told where the reader put it
-         * @return {@link Node} the control
-         */
-        private static Node switchBox(final RunsView.Switch control, final Consumer<Boolean> changed) {
-            final var box = new CheckBox(control.label());
-            box.setId(control.id());
-            box.setSelected(control.on());
-            // A check box does not wrap on its own, and these labels are sentences rather than
-            // words. Without this one clips at the card's edge on a narrow window.
-            box.setWrapText(true);
-            box.setOnAction(_ -> changed.accept(box.isSelected()));
-            return box;
         }
 
         /**
@@ -659,33 +442,11 @@ final class RunsPane {
          */
         private static Button button(final Action action, final RunsPresenter presenter,
                                      final Runnable redraw) {
-            final var button = new Button(action.label());
-            button.setId(action.id());
-            // Carrying a run on is the way forward from a card, and throwing it away is not, so
-            // only the first wears the fill. The result card deliberately does the opposite: there
-            // the choice between going on and stopping is the reader's to make unprompted.
-            button.getStyleClass().add(action.leading() ? "run-start" : "run-cancel");
-            button.setOnAction(_ -> {
-                if (agreed(action.confirm())) {
-                    presenter.press(action);
-                    redraw.run();
-                }
-            });
-            return button;
-        }
-
-        /**
-         * Whether a reader agreed to what an action is about to do.
-         *
-         * @param confirm {@link Confirmation} what to ask, or null where nothing needs asking
-         * @return boolean true where the action should go ahead
-         */
-        private static boolean agreed(final @Nullable Confirmation confirm) {
-            return confirm == null || Dialogs.ask(confirm.heading(), confirm.question(),
-                    new Dialogs.Choice(confirm.goAhead(), Dialogs.Role.GO_AHEAD,
-                            Dialogs.Emphasis.of(confirm.goAheadLeads())),
-                    new Dialogs.Choice(confirm.cancel(), Dialogs.Role.CANCEL,
-                            Dialogs.Emphasis.of(!confirm.goAheadLeads()))).isPresent();
+            return SettingsRows.actionButton(action.id(), action.label(), action.leading(),
+                    action.confirm(), () -> {
+                        presenter.press(action);
+                        redraw.run();
+                    });
         }
 
         /**

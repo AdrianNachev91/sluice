@@ -38,9 +38,6 @@ public interface SpendLedgerPort {
      * <p>Moved rather than deleted. A ledger nothing can parse is still the only record of what
      * past runs cost, so a caller picks somewhere it will be found again.
      *
-     * <p>No shipped surface reaches this yet. Until one does, a ledger with a bad line degrades
-     * every estimate to the shipped seed and says so only in the log.
-     *
      * @param destination {@link Path} where the ledger is moved to, its parents created as needed
      * @return boolean true when there was a ledger to move
      */

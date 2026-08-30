@@ -1,6 +1,7 @@
 package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
+import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -212,8 +213,37 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
          * @param figure {@link String} the expected cost, in the terms the app measures it
          * @param disclaimer {@link String} what the figure is, what it rests on, and what stops a
          *     run that outgrows it
+         * @param warning what is holding the figure back and the way out of it, or null where
+         *     nothing is
          */
-        record Estimate(String figure, String disclaimer) implements Cost {
+        record Estimate(String figure, String disclaimer,
+                        @Nullable Warning warning) implements Cost {
+        }
+
+        /**
+         * Something wrong with what the figure rests on, and the way out of it.
+         *
+         * <p>Apart from the disclaimer because it is a different kind of statement. The disclaimer
+         * is true of every estimate this screen draws. This is a state the reader can leave.
+         *
+         * @param problem {@link String} what is wrong and what it costs the figure
+         * @param repair {@link Repair} the way out
+         */
+        record Warning(String problem, Repair repair) {
+        }
+
+        /**
+         * The way out of a record of past spend that nothing can read.
+         *
+         * <p>The problem beside it says the figure will keep guessing until that record is
+         * replaced. Nothing else in the app makes that true, so without this the sentence names
+         * something the reader cannot reach.
+         *
+         * @param id {@link String} the button's id, for the screen to set on it
+         * @param label {@link String} what the button says
+         * @param confirm {@link Confirmation} what to ask before it goes ahead
+         */
+        record Repair(String id, String label, Confirmation confirm) {
         }
 
         /**

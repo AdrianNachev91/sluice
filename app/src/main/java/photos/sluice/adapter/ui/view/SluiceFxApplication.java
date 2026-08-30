@@ -11,6 +11,7 @@ import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.TroubleshootPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.adapter.ui.StartupSequence;
 import photos.sluice.adapter.ui.UiBootstrap;
@@ -134,7 +135,8 @@ public class SluiceFxApplication extends Application {
                     built.getBean(VisionProviderPresenter.class),
                     built.getBean(PhotoCategoriesPresenter.class),
                     built.getBean(RunLauncherPresenter.class),
-                    built.getBean(RunsPresenter.class)));
+                    built.getBean(RunsPresenter.class),
+                    built.getBean(TroubleshootPresenter.class)));
             return;
         }
         final var presenter = UiBootstrap.reportAndPresent(startupFailure);

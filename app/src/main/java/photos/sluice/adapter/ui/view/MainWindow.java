@@ -23,6 +23,7 @@ import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.ScreenFailure;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.TroubleshootPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 
 import java.util.function.Supplier;
@@ -39,6 +40,7 @@ final class MainWindow {
     private static final String REVIEW = "Review";
     private static final String RUNS = "Runs";
     private static final String PHOTO_CATEGORIES = "Photo categories";
+    private static final String TROUBLESHOOT = "Troubleshoot";
 
     // What the count on the Runs entry means, for a reader who meets a number beside a word and no
     // explanation. The screen it leads to says the same thing per run.
@@ -55,8 +57,8 @@ final class MainWindow {
     /**
      * Builds the shell: the sidebar on the left, Dashboard showing on the right.
      *
-     * <p>Building the shell also starts the check below, so a caller that only wants a scene is
-     * still spending a call to whichever provider is configured.
+     * <p>Building the shell also starts the configured provider's model check, so a caller that
+     * only wants a scene is still spending a call to that provider.
      *
      * @param presenter {@link FirstRunPresenter} says whether the dashboard opens on the first-run card
      * @param settingsPresenter {@link SettingsPresenter} supplies and drives the Settings pane
@@ -66,13 +68,16 @@ final class MainWindow {
      * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the run launcher
      * @param runsPresenter {@link RunsPresenter} supplies and drives the runs screen, and answers
      *         the count its sidebar entry carries
+     * @param troubleshootPresenter {@link TroubleshootPresenter} supplies and drives the
+     *         troubleshoot screen one run's card opens
      * @return {@link Scene} the shell scene, styled by the base stylesheet
      */
     static Scene scene(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter,
                        final VisionProviderPresenter visionProviderPresenter,
                        final PhotoCategoriesPresenter photoCategoriesPresenter,
                        final RunLauncherPresenter runLauncherPresenter,
-                       final RunsPresenter runsPresenter) {
+                       final RunsPresenter runsPresenter,
+                       final TroubleshootPresenter troubleshootPresenter) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
         final var settings = navEntry(group, "nav-settings", SETTINGS);
@@ -125,6 +130,19 @@ final class MainWindow {
         });
         runs.setOnAction(_ -> show(content, RUNS,
                 () -> filling(RunsPane.pane(runsPresenter, drawCount))));
+        // A screen without a sidebar entry. Runs stays the destination it was reached from and
+        // stays marked as current, and Back is what leaves it. Pointed at its run
+        // before it is shown, so the screen draws the one the reader pressed rather than the one
+        // before it.
+        runsPresenter.setOpenTroubleshoot((prepDir, scope) -> {
+            troubleshootPresenter.open(prepDir, scope);
+            show(content, TROUBLESHOOT, () -> filling(TroubleshootPane.pane(troubleshootPresenter)));
+        });
+        // Hopped, unlike the wirings around it. A discard that works hands the reader back from the
+        // job's own completion callback, which is not the thread that paints. Firing a sidebar
+        // button from there leaves the page it was meant to close still standing.
+        troubleshootPresenter.setOpenRuns(() -> Platform.runLater(runs::fire));
+        troubleshootPresenter.setOpenDashboard(dashboard::fire);
         // The launcher's own way out of a timeline whose unfinished sift it cannot carry on. Set on
         // the presenter rather than passed to the pane, so the several places that redraw the
         // Dashboard need know nothing about it.
@@ -201,6 +219,9 @@ final class MainWindow {
      * screen's construction reaches, which is most of the app, and a list would go stale on the
      * next screen added.
      *
+     * <p>The failure is folded away rather than shown. Its frames name paths from the reader's own
+     * machine, and revealing those is their press to make.
+     *
      * @param screen {@link String} the screen being asked for, named in the log
      * @param draw {@link Supplier} of {@link Node} builds it
      * @return {@link Node} the screen, or a panel saying it would not open
@@ -213,9 +234,11 @@ final class MainWindow {
             // Headed by the screen that was asked for, so a reader who pressed Runs is not left
             // working out which press this answers.
             final var panel = headingPane(screen);
-            final var message = new Label(ScreenFailure.wouldNotOpen(e));
+            final var message = new Label(ScreenFailure.wouldNotOpen());
             message.setWrapText(true);
-            panel.getChildren().add(message);
+            panel.getChildren().addAll(message, CopyableTrace.fold("screen-failure",
+                    ScreenFailure.showTheDetails(), ScreenFailure.copy(), ScreenFailure.copied(),
+                    ScreenFailure.trace(e)));
             return panel;
         }
     }

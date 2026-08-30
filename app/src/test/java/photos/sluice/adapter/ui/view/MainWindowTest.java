@@ -6,6 +6,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Priority;
@@ -22,6 +23,7 @@ import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
+import photos.sluice.adapter.ui.TroubleshootPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
@@ -178,10 +180,49 @@ class MainWindowTest {
 
         clickNav(root, "#nav-dashboard");
 
-        assertThat(currentScreen(root).lookupAll(".label").stream()
-                .map(label -> ((Label) label).getText()))
-                .anySatisfy(text -> assertThat(text)
-                        .contains("something this screen reads is in no state to be read"));
+        assertThat(((TextArea) currentScreen(root).lookup("#screen-failure-text")).getText())
+                .contains("something this screen reads is in no state to be read");
+    }
+
+    @Test
+    void theFailureCanBeSelectedAndCopied() throws Exception {
+        final BorderPane root = onFxThread(() ->
+                built(new FirstRunPresenter(alwaysThrows()), settingsPresenter()));
+
+        final var trace = (TextArea) currentScreen(root).lookup("#screen-failure-text");
+
+        assertThat(trace.isEditable()).isFalse();
+        assertThat(trace.isDisabled()).isFalse();
+        assertThat(currentScreen(root).lookup("#screen-failure-copy")).isNotNull();
+    }
+
+    // The frames name paths from the reader's own machine, and the panel asks them to quote this
+    // into a bug report. Revealing that is their press, not something the screen does for them.
+    @Test
+    void theFailureStartsFoldedAwayAndTheReaderOpensIt() throws Exception {
+        final BorderPane root = onFxThread(() ->
+                built(new FirstRunPresenter(alwaysThrows()), settingsPresenter()));
+        final var trace = (TextArea) currentScreen(root).lookup("#screen-failure-text");
+        assertThat(trace.isVisible()).isFalse();
+
+        onFxThread(() -> {
+            ((Button) currentScreen(root).lookup("#screen-failure-toggle")).fire();
+            return root;
+        });
+
+        assertThat(trace.isVisible()).isTrue();
+    }
+
+    // Copy works without opening the fold first, so handing the failure to somebody who can read
+    // it never requires reading it yourself.
+    @Test
+    void copyingTheFailureDoesNotNeedTheFoldOpen() throws Exception {
+        final BorderPane root = onFxThread(() ->
+                built(new FirstRunPresenter(alwaysThrows()), settingsPresenter()));
+        final var copy = (Button) currentScreen(root).lookup("#screen-failure-copy");
+
+        assertThat(copy.isDisabled()).isFalse();
+        assertThat(currentScreen(root).lookup("#screen-failure-text").isVisible()).isFalse();
     }
 
     // The Dashboard is drawn as the shell is built, before any press.
@@ -315,7 +356,7 @@ class MainWindowTest {
     private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters,
                                     final RunsPresenter runs) {
         final Scene scene = MainWindow.scene(presenter, presenters.settings(), presenters.vision(),
-                photoCategoriesPresenter(), runLauncherPresenter(), runs);
+                photoCategoriesPresenter(), runLauncherPresenter(), runs, troubleshootPresenter());
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();
@@ -354,6 +395,12 @@ class MainWindowTest {
 
     private static RunsPresenter runsPresenter(final Pipeline pipeline) {
         return new RunsPresenter(pipeline, new RunLauncherPresenter(pipeline, new FxProgressPort()));
+    }
+
+    private static TroubleshootPresenter troubleshootPresenter() {
+        final Pipeline pipeline = mock(Pipeline.class);
+        return new TroubleshootPresenter(pipeline,
+                new RunLauncherPresenter(pipeline, new FxProgressPort()));
     }
 
     private static FirstRunPresenter firstRunPresenter(final boolean unfinished) {

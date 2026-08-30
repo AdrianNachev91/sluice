@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.application.port.out.CullPrepPort;
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Computes a waiting cull job's present/valid shard counts from its prep dir, and answers whether
@@ -72,6 +74,44 @@ final class ShardTallyCalculator {
      * @return {@link ShardTally} present/valid/total shard counts
      */
     ShardTally tally(final PrepDir prep) {
+        // Never null on this route. A reading only answers null where the index could not be read,
+        // and this one is handed the index already read.
+        return Objects.requireNonNull(this.readingOf(prep).tally());
+    }
+
+    /**
+     * Both answers about one prep dir, from a single walk of it.
+     *
+     * <p>A watcher wants readiness and a card wants the tally, and asking separately would open
+     * every shard twice per poll. The two share every read. Whether a shard is there and parses is
+     * what readiness is, and it is also the first half of what the tally counts.
+     *
+     * @param prepDir {@link Path} the prep dir to read
+     * @return {@link Reading} whether it is worth resuming, and how far through its sheets it is
+     */
+    Reading poll(final Path prepDir) {
+        try {
+            return this.readingOf(this.cullPrepPort.readIndex(prepDir));
+        } catch (final RuntimeException e) {
+            log.warn("Could not read {}, reporting it as not ready", prepDir, e);
+            return new Reading(false, null);
+        }
+    }
+
+    /**
+     * What one prep dir's own index says about it.
+     *
+     * <p>Readiness is that every sheet has an answer that parses. It promises nothing about whether
+     * those answers are any good, which is apply's own gate to decide. This reads raw disk, where a
+     * user's answer to a finding still looks like the finding.
+     *
+     * <p>Parsing is the one content check, and it tells a finished shard from one being written
+     * right now. A file exists from the moment the agent opens it.
+     *
+     * @param prep {@link PrepDir} the prep dir, already read
+     * @return {@link Reading} whether it is worth resuming, and how far through its sheets it is
+     */
+    private Reading readingOf(final PrepDir prep) {
         // Held per montage as well as flattened. A verdict's file is judged against the whole run's
         // set; whether a shard covers its sheet is judged against that one sheet's.
         final Map<String, List<Path>> srcsByMontage = new LinkedHashMap<>();
@@ -89,61 +129,8 @@ final class ShardTallyCalculator {
                 .toList();
         final int present = (int) statuses.stream().filter(MontageShardStatus::present).count();
         final int valid = (int) statuses.stream().filter(MontageShardStatus::valid).count();
-        return new ShardTally(present, valid, prep.entries().size());
-    }
-
-    /**
-     * Whether anything more is still arriving for prepDir, which is the only question a
-     * {@link CullWatcher} needs answered. Every montage has a shard, and every one of those shards
-     * parses. The culling agent has then said everything it is going to say, so the run is worth a
-     * resume attempt.
-     *
-     * <p>Whether those shards are any good is not asked here, deliberately. Judging that would mean
-     * a second validator alongside apply's own gate. This one reads raw disk state, where a user's
-     * answer to a finding still looks like the finding. Worse, a problem it could see would be a
-     * problem it never fires on. The run would poll on unresolved forever instead of resuming once
-     * and settling on Blocked, where the findings are actually in front of somebody.
-     *
-     * <p>Parsing is the one content check, and it is here to tell a finished shard from a shard
-     * being written right now. A file exists from the moment the agent opens it. Without this check
-     * a poll landing mid-write would fire on a truncated shard and block the run over nothing.
-     *
-     * <p>Deliberately not the whole resume path. This stays read-only and claims no job slot, so a
-     * poll costs nothing when the answer is no. A transiently unreadable index (mid-write by a
-     * concurrent process) degrades to "not ready yet" rather than propagating - the same tolerance
-     * readWaitingJob() already gives this case.
-     *
-     * @param prepDir {@link Path} the prep dir to check
-     * @return boolean true if every montage has a shard and every shard parses
-     */
-    boolean isReadyToResume(final Path prepDir) {
-        try {
-            final PrepDir prep = this.cullPrepPort.readIndex(prepDir);
-            return prep.entries().stream().allMatch(montage -> this.shardIsFinished(prep, montage));
-        } catch (final RuntimeException e) {
-            log.warn("Could not check readiness of {}, reporting it as not ready", prepDir, e);
-            return false;
-        }
-    }
-
-    /**
-     * Whether one montage's shard is on disk and readable end to end.
-     *
-     * @param prep {@link PrepDir} the prep dir being checked
-     * @param montage {@link String} the montage id to check
-     * @return boolean true if the shard exists and parses
-     */
-    private boolean shardIsFinished(final PrepDir prep, final String montage) {
-        try {
-            if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
-                return false;
-            }
-            this.cullPrepPort.readShard(prep.prepDir(), montage);
-            return true;
-        } catch (final RuntimeException e) {
-            log.warn("Could not check {}'s shard in {}, reporting it as not finished", montage, prep.prepDir(), e);
-            return false;
-        }
+        return new Reading(statuses.stream().allMatch(MontageShardStatus::parsed),
+                new ShardTally(present, valid, prep.entries().size()));
     }
 
     /**
@@ -198,25 +185,42 @@ final class ShardTallyCalculator {
                                                   final List<Path> unreviewable) {
         try {
             if (!this.cullPrepPort.hasShard(prep.prepDir(), montage)) {
-                return new MontageShardStatus(false, false);
+                return new MontageShardStatus(false, false, false);
             }
             final var shardFile = new ShardFile(montage, this.cullPrepPort.readShard(prep.prepDir(), montage),
                     sheetSrcs);
             final var report = this.shardValidator.validate(List.of(shardFile), sidecarSrcs, prep.categoryNames(),
                     unreviewable);
-            return new MontageShardStatus(true, report.valid());
+            return new MontageShardStatus(true, true, report.valid());
         } catch (final RuntimeException e) {
             // Present but unparseable, or its own presence could not even be confirmed - either way
             // not valid, and never reported as absent, since an unconfirmed shard is not a missing one.
             log.warn("Could not check {}'s shard status in {}, reporting it as invalid", montage, prep.prepDir(), e);
-            return new MontageShardStatus(true, false);
+            return new MontageShardStatus(true, false, false);
         }
     }
 
     /**
-     * One montage's shard status: whether its shard file exists at all, and whether it parses and
-     * validates against the prep dir's own sidecars and recorded categories.
+     * One pass over a prep dir, answering both questions asked of it.
+     *
+     * @param readyToResume boolean whether every sheet has an answer that could be read
+     * @param tally {@link ShardTally} how far through its sheets it is, or null where the prep dir
+     *     could not be read at all
      */
-    private record MontageShardStatus(boolean present, boolean valid) {
+    record Reading(boolean readyToResume, @Nullable ShardTally tally) {
+    }
+
+    /**
+     * One montage's shard status.
+     *
+     * <p>Parsing and validating are separate because a shard that parses has said everything it is
+     * going to say, whatever it says. Nothing further arrives for it, so a run whose every shard
+     * parses is one to attempt rather than one to keep waiting on.
+     *
+     * @param present boolean whether the shard file is there
+     * @param parsed boolean whether it could be read into decisions
+     * @param valid boolean whether those decisions hold up on their own
+     */
+    private record MontageShardStatus(boolean present, boolean parsed, boolean valid) {
     }
 }

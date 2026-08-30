@@ -34,6 +34,8 @@ import javafx.scene.text.TextFlow;
 import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
+import photos.sluice.adapter.ui.RunLauncherView.Message;
+import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.SettingsView;
 
 import java.io.File;
@@ -176,6 +178,50 @@ final class SettingsRows {
         line.getStyleClass().add("settings-help");
         showWhileItSaysSomething(line);
         return line;
+    }
+
+    /**
+     * Puts what a screen has to report on the line it reports from.
+     *
+     * <p>Only a refusal wears the caution colour, and the class comes off again on every fill. A
+     * report that worked would otherwise be dressed as whatever the last refusal was.
+     *
+     * @param line {@link Label} the screen's own report line
+     * @param said {@link Message} what to report, or null for nothing
+     * @param caution {@link String} the style class a refusal wears on this screen
+     */
+    static void report(final Label line, final @Nullable Message said, final String caution) {
+        line.setText(said == null ? "" : said.text());
+        line.getStyleClass().remove(caution);
+        if (said != null && said.refused()) {
+            line.getStyleClass().add(caution);
+        }
+    }
+
+    /**
+     * A button that asks before it acts.
+     *
+     * <p>The question is asked before anything happens, so a reader who backs out leaves what the
+     * press was about exactly as it was.
+     *
+     * @param id {@link String} the button's own id
+     * @param label {@link String} what it says
+     * @param leading boolean whether this is the way on, drawn to be reached for
+     * @param confirm {@link Confirmation} what to ask first, or null where it needs no asking
+     * @param press {@link Runnable} what a reader who agreed asked for
+     * @return {@link Button} the button
+     */
+    static Button actionButton(final String id, final String label, final boolean leading,
+                               final @Nullable Confirmation confirm, final Runnable press) {
+        final var button = new Button(label);
+        button.setId(id);
+        button.getStyleClass().add(leading ? "run-start" : "run-cancel");
+        button.setOnAction(_ -> {
+            if (Dialogs.agreed(confirm)) {
+                press.run();
+            }
+        });
+        return button;
     }
 
     /**

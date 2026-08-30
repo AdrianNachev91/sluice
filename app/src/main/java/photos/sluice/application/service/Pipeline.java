@@ -349,6 +349,26 @@ public class Pipeline {
     }
 
     /**
+     * One run on disk, diagnosed.
+     *
+     * <p>Reads one prep dir rather than the whole sift-prep root. A caller working on one run does
+     * not pay for every other run to answer a question about that one.
+     *
+     * <p>Never throws whatever state the dir is in, the contract {@link #cullRuns} already carries
+     * per run. A dir that could not be read answers DAMAGED with a null tally.
+     *
+     * <p>Not routed through {@link JobRunner}: it only reads, so it does not compete for the single
+     * job slot. That is what lets it answer while a sift is running.
+     *
+     * @param prepDir {@link Path} the run to diagnose
+     * @return {@link CullRunSummary} that run's scope, diagnosis, tally and age
+     */
+    public CullRunSummary cullRun(final Path prepDir) {
+        this.requireUsableRoots();
+        return this.prepDirDoctor.summaryOf(prepDir);
+    }
+
+    /**
      * Where a discarded run's records are filed.
      *
      * <p>Named before a discard rather than after it, so the question asked beforehand can say
@@ -459,12 +479,15 @@ public class Pipeline {
     }
 
     /**
-     * Turns one waiting run's auto-resume on, whatever the configured mode is. The two halves of
-     * the waiting card's "auto-apply when shards arrive" toggle are this and
-     * {@link #stopWatching}. Neither touches the run itself: it stays Waiting, stays listed, and
-     * still blocks a re-cull of its scope either way. A run belonging to an automated provider is
-     * left alone, since its shards never arrive from outside the app and the toggle is absent from
-     * its card.
+     * Turns one waiting run's auto-resume on, whatever the configured mode is. This and
+     * {@link #stopWatching} are the two halves of watching a single run. Neither touches the run
+     * itself: it stays Waiting, stays listed, and still blocks a re-cull of its scope either way. A
+     * run belonging to an automated provider is left alone, since its shards never arrive from
+     * outside the app.
+     *
+     * <p>No shipped surface reaches this or its other half, watching being turned on and off for
+     * the install rather than per run. {@code PipelineSurfaceTest} pins both, so a later deletion
+     * is a decision rather than a tidy-up.
      *
      * @param prepDir {@link Path} the cull prep directory to watch
      */
@@ -486,16 +509,19 @@ public class Pipeline {
     /**
      * Retires every poller this process has armed. No run is started, stopped or altered by it.
      *
-     * <p>Two callers need it. One has just moved the working root. Every armed watcher polls a prep
+     * <p>Three callers need it. One has just moved the working root. Every armed watcher polls a prep
      * dir under {@code logs/sift-prep}, which hangs off that root. So for that one move, "armed
      * under the old root" and "armed at all" name the same set. A watcher left behind would poll a folder
      * outside the working root in force, for as long as the process lives. A library or inbox move
      * strands nothing and must not come here, since this would also retire a watch a user turned on
      * by hand.
      *
-     * <p>The other is the app closing, where every watcher is stale for the same reason: there will
+     * <p>The second is the app closing, where every watcher is stale for the same reason: there will
      * be no process left to poll in. That caller retires them first, so nothing is still deciding to
      * start a job while the next step is settling what is still running.
+     *
+     * <p>The third is a save that turned watching off. The mode is read when a watch is armed and
+     * never again, so without this a reader who turns it off still has every watcher polling.
      *
      * <p>Retiring a watcher does not reach into a poll already running. A watcher whose thread is
      * mid-attempt when this arrives still finishes that attempt, resume included. What this
@@ -661,17 +687,15 @@ public class Pipeline {
     }
 
     /**
-     * Whether a watcher is currently polling prepDir, which is where the waiting card's own
-     * auto-apply toggle reads its position from.
+     * Whether a watcher is currently polling prepDir.
      *
-     * <p>Asked afresh each time the card is drawn rather than remembered from the press that set
-     * it. A watcher retires itself on several occasions the screen never hears about: a resume
-     * going in, a working-root move, the app closing. A remembered position would keep showing a
-     * run as watched long after nothing was watching it.
+     * <p>A live read rather than a remembered answer. A watcher retires itself on several occasions
+     * nothing outside is told about: a resume going in, a working-root move, the app closing, and a
+     * save that turns watching off. Anything remembering the answer would keep reporting a run as
+     * watched long after nothing was.
      *
-     * <p>One window exists where an arm is undone by a resume it raced. A live read is what makes
-     * that show as a toggle falling back rather than a press that did nothing. The arm and disarm
-     * contract in {@code cull-engine.md} carries the full reasoning.
+     * <p>No shipped surface reaches this. {@code PipelineSurfaceTest} pins it so a later deletion
+     * is a decision rather than a tidy-up.
      *
      * @param prepDir {@link Path} the cull prep directory to check
      * @return boolean true if a watcher is currently polling it
@@ -978,8 +1002,8 @@ public class Pipeline {
     }
 
     /**
-     * Thrown when a resume is refused because its prep dir does not sit under the working root now
-     * in force. The run belongs to a folder this app has moved off, so resuming it would work a
+     * Thrown when work on a run is refused because its prep dir does not sit under the working root
+     * now in force. The run belongs to a folder this app has moved off, so working it would touch a
      * tree the current settings do not name.
      *
      * <p>Raised from inside the job rather than at the call, because the folder roots can move while
@@ -995,12 +1019,14 @@ public class Pipeline {
         /**
          * Creates the exception, naming the prep dir that sits outside the roots in force.
          *
-         * @param prepDir {@link Path} the prep dir that could not be resumed
+         * <p>Names no verb and offers no discard. Several calls raise this, discarding among them,
+         * so a message wording either would be wrong on most of them.
+         *
+         * @param prepDir {@link Path} the prep dir that could not be worked
          */
         public RunOutsideWorkingRootException(final Path prepDir) {
-            super("The sift at " + prepDir + " is not inside the working root Sluice is set up with now, "
-                    + "so it was not resumed - point the working root back at the folder holding it, "
-                    + "or discard the sift.");
+            super("The sift at " + prepDir + " is not inside the working root Sluice is set up with "
+                    + "now. Point the working root back at the folder holding it to work on it again.");
             this.prepDir = prepDir;
         }
 

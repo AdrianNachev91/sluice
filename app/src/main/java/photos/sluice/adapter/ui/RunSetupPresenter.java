@@ -110,9 +110,9 @@ public class RunSetupPresenter {
     private static final String NOTHING_STAGED =
             "Nothing is sorted yet. Sort your Inbox first, and the years will show up here.";
 
-    // One paragraph in three parts, so a reader meets a single statement about the figure rather
-    // than two they have to reconcile. Only the middle varies.
-    private static final String ESTIMATE_OPENING = "An estimate, not a quote. ";
+    // One paragraph, so a reader meets a single statement about the figure rather than two they
+    // have to reconcile. Only the middle varies, and it is absent where the warning box says it.
+    private static final String ESTIMATE_OPENING = "An estimate, not a quote.";
 
     // The load-bearing part: what a reader needs is not that the number is right, but that
     // something stops a run that outgrows it. So it closes all three.
@@ -127,11 +127,19 @@ public class RunSetupPresenter {
             + "own sifts. It starts showing your actual numbers after a sift or two.";
 
     // The same figure as the line above, and a different thing to tell somebody. That one resolves
-    // itself on the next finished sift. This one does not, because a record nothing can read stays
-    // unreadable, and every estimate falls back to the guess until somebody deals with it.
-    private static final String HISTORY_UNREADABLE = "Sluice cannot read the record of what your "
-            + "past sifts cost, so this figure is a starting guess rather than an average of your "
-            + "own sifts. It will keep guessing until that record can be read again.";
+    // itself on the next finished sift. This one does not, because a broken record stays broken,
+    // and every estimate falls back to the guess until somebody deals with it.
+    private static final String HISTORY_UNREADABLE = "The record of what your past sifts cost is "
+            + "broken, so this figure is a starting guess rather than an average of your own "
+            + "sifts. It will keep guessing until that record is replaced.";
+
+    private static final String FRESH_RECORD = "Start a fresh record";
+
+    private static final String FRESH_RECORD_STARTED = "The old record is discarded. Your next "
+            + "finished sift starts the new one.";
+
+    private static final String RECORD_READS_AFTER_ALL = "The record is now healthy, so it has "
+            + "been left where it is.";
 
     private final Pipeline pipeline;
     private final BooleanSupplier jobRunning;
@@ -554,6 +562,27 @@ public class RunSetupPresenter {
     }
 
     /**
+     * Files away a record of past spend that nothing can read, so the next one starts clean.
+     *
+     * <p>The held estimate goes with it. The figure beside the button is then worked out again from
+     * what the app can read now, rather than from the answer that produced the button.
+     *
+     * <p>A record that turns out to read is left alone, and the reader is told so. The button is
+     * drawn from a reading that can be minutes old on a screen nobody has touched.
+     */
+    public void startAFreshSpendRecord() {
+        this.lastEstimate = null;
+        try {
+            this.message = this.pipeline.setAsideUnreadableSpendLedger() == null
+                    ? new Message(RECORD_READS_AFTER_ALL, false)
+                    : new Message(FRESH_RECORD_STARTED, false);
+        } catch (final RuntimeException e) {
+            log.info("Could not file the unreadable spend record away", e);
+            this.message = new Message(RunRefusals.plainly(e), true);
+        }
+    }
+
+    /**
      * The buttons across the top, in the order they are drawn.
      *
      * @return a {@link List} of {@link ModeChoice} one per mode
@@ -774,21 +803,43 @@ public class RunSetupPresenter {
         if (expected.totalTokens() == 0) {
             return null;
         }
+        final String rests = whereTheFigureCameFrom(expected);
         return new Cost.Estimate("About " + RunWords.rounded(expected.totalTokens()) + " tokens",
-                ESTIMATE_OPENING + whereTheFigureCameFrom(expected) + ESTIMATE_CEILING);
+                ESTIMATE_OPENING + (rests == null ? "" : " " + rests) + ESTIMATE_CEILING,
+                expected.historyUnreadable() ? this.brokenRecord() : null);
+    }
+
+    /**
+     * The broken record of past spend, and the way out of it.
+     *
+     * <p>Offered only where the record is the thing holding the figure back. An install that has
+     * simply not finished a sift yet has nothing to put right. A control there would invite a
+     * reader to throw away a record that is fine.
+     *
+     * @return {@link Cost.Warning} what is wrong and the control that ends it
+     */
+    private Cost.Warning brokenRecord() {
+        return new Cost.Warning(HISTORY_UNREADABLE, new Cost.Repair("run-estimate-repair",
+                FRESH_RECORD,
+                new Confirmation("Start a fresh record of what your sifts cost?",
+                        "The broken record is kept in " + this.pipeline.archivesFolder()
+                                + ", and a new one starts from your next finished sift. What the "
+                                + "old one holds does not come back, so the estimate stays a "
+                                + "starting guess until a sift or two have finished.",
+                        "Start fresh", "Cancel", false)));
     }
 
     /**
      * What the figure rests on.
      *
      * @param expected {@link SpendEstimate} what the facade said about this scope
-     * @return {@link String} the middle of the disclaimer
+     * @return the middle of the disclaimer, or null where the warning box carries it instead
      */
-    private static String whereTheFigureCameFrom(final SpendEstimate expected) {
+    private static @Nullable String whereTheFigureCameFrom(final SpendEstimate expected) {
         if (expected.historicOutput()) {
             return FROM_HISTORY;
         }
-        return expected.historyUnreadable() ? HISTORY_UNREADABLE : WITHOUT_HISTORY;
+        return expected.historyUnreadable() ? null : WITHOUT_HISTORY;
     }
 
     /**

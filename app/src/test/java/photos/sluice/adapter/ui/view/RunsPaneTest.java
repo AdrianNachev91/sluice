@@ -4,7 +4,6 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
@@ -38,7 +37,6 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 // What only a built scene graph can be wrong about. Which cards the screen draws, what each one
@@ -186,24 +184,21 @@ class RunsPaneTest {
     }
 
     @Test
-    void turningAutoApplyOnArmsThatRunsWatch() throws Exception {
-        final Pipeline pipeline = waitingPipeline();
-        final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
+    void aWaitingRunOnAnAgentDrawsTheInstructionsAndTheWayPastTheMissingSheets() throws Exception {
+        final Parent pane = onFxThread(() -> built(runsPresenter(waitingPipeline())));
 
-        onFxThread(() -> select(pane, "#run-auto-apply-2019"));
-
-        verify(pipeline).startWatching(Path.of("logs", "sift-prep", "2019"));
+        assertThat(pane.lookup("#run-copy-prompt")).isNotNull();
+        assertThat(pane.lookup("#run-continue-partial-2019")).isNotNull();
     }
 
     @Test
-    void aWaitingRunOnAProviderThatJudgesForItselfDrawsNoToggleAndNoInstructions() throws Exception {
+    void aWaitingRunOnAProviderThatJudgesForItselfDrawsNeither() throws Exception {
         final Pipeline pipeline = waitingPipeline();
         when(pipeline.configuredProviderSpends()).thenReturn(true);
         final Parent pane = onFxThread(() -> built(runsPresenter(pipeline)));
 
-        assertThat(pane.lookup("#run-auto-apply-2019")).isNull();
         assertThat(pane.lookup("#run-copy-prompt")).isNull();
-        assertThat(pane.lookup("#run-waive-missing-2019")).isNull();
+        assertThat(pane.lookup("#run-continue-partial-2019")).isNull();
         assertThat(textsIn(pane, "#run-card-2019"))
                 .contains(Path.of("logs", "sift-prep", "2019").toString());
     }
@@ -213,7 +208,7 @@ class RunsPaneTest {
         final Parent pane = onFxThread(() -> built(run("2019", State.READY)));
 
         assertThat(pane.lookup("#run-copy-prompt")).isNull();
-        assertThat(pane.lookup("#run-waive-missing-2019")).isNull();
+        assertThat(pane.lookup("#run-continue-partial-2019")).isNull();
     }
 
     @Test
@@ -277,14 +272,6 @@ class RunsPaneTest {
                 .thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
         when(pipeline.archivesFolder()).thenReturn(Path.of("logs", "archives"));
         return pipeline;
-    }
-
-    // A check box's own fire() flips it and then raises the action, so this is a press rather than
-    // a value written past the control.
-    private static Node select(final Parent pane, final String id) {
-        final var box = (CheckBox) pane.lookup(id);
-        box.fire();
-        return box;
     }
 
     private static CullRunSummary run(final String scope, final State state) {

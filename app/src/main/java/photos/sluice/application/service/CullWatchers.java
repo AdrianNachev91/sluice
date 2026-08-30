@@ -8,6 +8,7 @@ import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
@@ -41,6 +42,11 @@ final class CullWatchers {
     private final Function<Path, JobHandle<CullJobOutcome>> resume;
     private final RunChanges runChanges;
     private final Map<Path, CullWatcher> activeWatches = new ConcurrentHashMap<>();
+    // What each watched run's tally read as on the last poll, so a poll can tell a sheet arriving
+    // from a folder that has not changed. Written and read on the watcher's own polling thread,
+    // one watcher per prep dir. Cleared both when a watch is armed and when one is retired, so a
+    // fresh watch never compares against a reading it did not take.
+    private final Map<Path, ShardTally> lastSeenTally = new ConcurrentHashMap<>();
 
     /**
      * Creates the watch lifecycle owner.
@@ -69,9 +75,9 @@ final class CullWatchers {
 
     /**
      * Whether a watcher is currently polling prepDir, without reaching into the private
-     * activeWatches map. The waiting card's auto-apply toggle reads its position from this. A test
-     * proves disarmWatch()'s own claim with it: that any dispatchAndApply() call retires an existing
-     * watcher, not just the watcher's own auto-resume trigger.
+     * activeWatches map. A test proves disarmWatch()'s own claim with it: that any
+     * dispatchAndApply() call retires an existing watcher, not just the watcher's own auto-resume
+     * trigger.
      *
      * @param prepDir {@link Path} the prep dir to check
      * @return boolean whether a watcher is currently active for it
@@ -83,15 +89,14 @@ final class CullWatchers {
 
     /**
      * Starts polling a prep dir for an auto-resume whatever the configured mode says, so one run's
-     * watch can be turned on by itself. That is what the waiting card's own "auto-apply when shards
-     * arrive" toggle switches, with disarmWatch() as its off position. A no-op when a watcher is
-     * already active for that prep dir, rather than a competing second poller.
+     * watch can be turned on by itself. disarmWatch() is its off position. A no-op when a watcher
+     * is already active for that prep dir, rather than a competing second poller.
      *
      * <p>The provider check stays even here, where the user asked for this explicitly. Watch mode
      * exists to notice when the user's own separate culling agent, running outside this app, drops
      * a shard. An automated provider's shards never arrive that way, so its waiting run has nothing
      * to notice. A run that already looks ready would only trigger an unasked-for, API-spending
-     * resume. The toggle is absent from an automated provider's card for the same reason.
+     * resume.
      *
      * @param prepDir {@link Path} the prep dir to watch
      */
@@ -106,8 +111,13 @@ final class CullWatchers {
             if (existing != null && existing.isActive()) {
                 return existing;
             }
+            // Cleared here as well as on retire. The commonest way a watch ends does not go
+            // through retire at all: a watcher stops itself once its auto-resume goes in, leaving
+            // its last tally behind. Without this, a re-armed watch compares its first poll
+            // against the previous watch's reading and announces a change nothing made.
+            this.lastSeenTally.remove(prepDir);
             final var watcher = new CullWatcher(this.watchPollInterval,
-                    () -> this.shardTallyCalculator.isReadyToResume(prepDir), () -> this.tryAutoResume(prepDir));
+                    () -> this.pollAndAnnounce(prepDir), () -> this.tryAutoResume(prepDir));
             watcher.start();
             armed.set(true);
             return watcher;
@@ -139,9 +149,8 @@ final class CullWatchers {
      * still-waiting job must stop it from ever auto-resuming a prep dir that is about to be filed
      * into the graveyard. So this is package-private rather than private: dispatchAndApply()'s own
      * call site isn't the only place that needs to retire a watcher. It is also armWatch()'s
-     * opposite, and so the off position of the waiting card's own per-run watch toggle. Turning
-     * that off leaves the run exactly as it is: still Waiting, still listed, still blocking a
-     * re-cull of its scope.
+     * opposite. Retiring one leaves the run exactly as it is: still Waiting, still listed, still
+     * blocking a re-cull of its scope.
      *
      * @param prepDir {@link Path} the prep dir whose watcher should stop
      */
@@ -182,7 +191,37 @@ final class CullWatchers {
             return false;
         }
         watcher.stop();
+        // After the stop rather than before it. Stopping does not wait for a poll already running,
+        // so this cannot close the window entirely, but it does stop a new poll opening one.
+        this.lastSeenTally.remove(prepDir);
         return true;
+    }
+
+    /**
+     * One poll: whether the run is worth resuming, and whether its sheets have moved since the last
+     * one.
+     *
+     * <p>The tally is what a card shows about a run being answered a sheet at a time. Without an
+     * announcement here, a reader watching their own agent work sees that line stand still until
+     * the run finishes, then jump.
+     *
+     * <p>The first poll after arming announces nothing, having nothing to compare against.
+     * {@link #armWatch} clears the last-seen tally to keep that true across a re-arm.
+     *
+     * @param prepDir {@link Path} the run being watched
+     * @return boolean whether every sheet has an answer that could be read
+     */
+    private boolean pollAndAnnounce(final Path prepDir) {
+        final ShardTallyCalculator.Reading reading = this.shardTallyCalculator.poll(prepDir);
+        final ShardTally now = reading.tally();
+        if (now == null) {
+            return reading.readyToResume();
+        }
+        final ShardTally before = this.lastSeenTally.put(prepDir, now);
+        if (before != null && !before.equals(now)) {
+            this.runChanges.moved();
+        }
+        return reading.readyToResume();
     }
 
     /**

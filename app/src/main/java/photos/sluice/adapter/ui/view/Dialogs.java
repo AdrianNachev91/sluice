@@ -8,6 +8,8 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 import javafx.stage.Stage;
+import org.jspecify.annotations.Nullable;
+import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -93,6 +95,22 @@ final class Dialogs {
      * Prevents instantiation of this static factory class.
      */
     private Dialogs() {
+    }
+
+    /**
+     * Whether a reader agreed to what a press is about to do.
+     *
+     * <p>An action carrying no question goes ahead unasked, so a caller with an optional
+     * confirmation hands it straight over rather than branching on it.
+     *
+     * @param confirm {@link Confirmation} what to ask, or null where nothing needs asking
+     * @return boolean true where the press should go ahead
+     */
+    static boolean agreed(final @Nullable Confirmation confirm) {
+        return confirm == null || ask(confirm.heading(), confirm.question(),
+                new Choice(confirm.goAhead(), Role.GO_AHEAD, Emphasis.of(confirm.goAheadLeads())),
+                new Choice(confirm.cancel(), Role.CANCEL, Emphasis.of(!confirm.goAheadLeads())))
+                .isPresent();
     }
 
     /**

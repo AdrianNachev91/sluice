@@ -88,8 +88,7 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
 
     /**
      * The card's own control for getting a sheet answered again, or nothing where the card offers
-     * none. A waiting run driven by an agent outside the app carries that offer in its waiting
-     * block instead.
+     * none.
      *
      * @param id {@link String} the control's id, for the screen to set on it
      * @param label {@link String} what the button says
@@ -119,24 +118,10 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
      *     the app is doing the judging
      * @param promptCorrects boolean whether that press discards the answers that came back unusable
      *     before writing the instructions, which moves the run
-     * @param autoApply the control deciding whether answers are acted on as they arrive, or null
-     *     where nothing arrives from outside
-     * @param waiveMissing whether going on means going on without the sheets still owed, or null
-     *     where going on would judge them rather than skip them
      * @param note {@link String} what happens next, in the words that state fits
      */
     public record Waiting(Path folder, @Nullable String copyPrompt, boolean promptCorrects,
-                          @Nullable Switch autoApply, @Nullable Switch waiveMissing, String note) {
-    }
-
-    /**
-     * One control a reader turns on and off.
-     *
-     * @param id {@link String} the control's id, for the screen to set on it
-     * @param label {@link String} what it says
-     * @param on boolean where it currently sits
-     */
-    public record Switch(String id, String label, boolean on) {
+                          String note) {
     }
 
     /**
@@ -169,6 +154,12 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
 
         /** Picks the run back up from where it stopped. */
         CONTINUE,
+
+        /** Picks it back up without waiting for the sheets that have not arrived. */
+        CONTINUE_WITHOUT_THE_MISSING,
+
+        /** Opens the screen that says what is wrong with the run and what can be done about it. */
+        TROUBLESHOOT,
 
         /** Gives up on the run, archiving its records. */
         DISCARD

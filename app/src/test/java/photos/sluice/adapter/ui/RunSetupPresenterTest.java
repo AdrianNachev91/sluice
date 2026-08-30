@@ -3,6 +3,8 @@ package photos.sluice.adapter.ui;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
+import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
+import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.application.port.in.InboxTally;
@@ -326,15 +328,104 @@ class RunSetupPresenterTest {
         assertThat(this.estimatedCost().disclaimer()).contains("starting guess");
     }
 
+    // Compared against what the from-history state actually renders, rather than against a phrase
+    // copied out of it. A reword there cannot quietly disarm this.
     @Test
     void aGuessedFigureIsNotAlsoCalledAnAverageOfYourOwnSifts() {
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, true, false));
+        this.choose(RunMode.SIFT, "2018");
+        final String fromHistory = this.estimatedCost().disclaimer();
         when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
         this.choose(RunMode.SIFT, "2019");
 
         assertThat(this.estimatedCost().disclaimer())
-                .doesNotContain("It is an average of what sifts like this one have cost")
-                .contains("cannot read the record")
+                .isNotEqualTo(fromHistory)
                 .contains("stop and ask whether to continue");
+        assertThat(requireNonNull(this.estimatedCost().warning()).problem())
+                .contains("The record of what your past sifts cost is broken")
+                .contains("a starting guess rather than an average of your own sifts");
+    }
+
+    @Test
+    void onlyAnUnreadableRecordIsOfferedAWayToStartAFreshOne() {
+        when(this.pipeline.estimateFor(anyInt()))
+                .thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(requireNonNull(this.estimatedCost().warning()).repair().label())
+                .isEqualTo("Start a fresh record");
+    }
+
+    @Test
+    void anInstallWithNothingWrongWithItsRecordIsOfferedNothingToPutRight() {
+        when(this.pipeline.estimateFor(anyInt()))
+                .thenReturn(new SpendEstimate(148_231, 6_402, false, false, false));
+        this.choose(RunMode.SIFT, "2019");
+
+        assertThat(this.estimatedCost().warning()).isNull();
+    }
+
+    @Test
+    void theQuestionBeforeStartingAFreshRecordNamesWhereTheOldOneGoes() {
+        final Path archives = Path.of("logs", "archives");
+        when(this.pipeline.archivesFolder()).thenReturn(archives);
+        when(this.pipeline.estimateFor(anyInt()))
+                .thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
+        this.choose(RunMode.SIFT, "2019");
+
+        final Confirmation asked = requireNonNull(this.estimatedCost().warning()).repair().confirm();
+
+        assertThat(asked.question()).contains(archives.toString())
+                .contains("does not come back");
+        assertThat(asked.goAheadLeads()).isFalse();
+    }
+
+    @Test
+    void startingAFreshRecordFilesTheOldOneAwayAndSaysSo() {
+        when(this.pipeline.setAsideUnreadableSpendLedger()).thenReturn(Path.of("logs", "archives", "old.csv"));
+
+        this.presenter.startAFreshSpendRecord();
+
+        verify(this.pipeline).setAsideUnreadableSpendLedger();
+        assertThat(requireNonNull(this.presenter.view().message()).text())
+                .isEqualTo("The old record is discarded. Your next finished sift starts the new one.");
+    }
+
+    @Test
+    void aRecordThatReadsAfterAllIsLeftWhereItIs() {
+        when(this.pipeline.setAsideUnreadableSpendLedger()).thenReturn(null);
+
+        this.presenter.startAFreshSpendRecord();
+
+        assertThat(requireNonNull(this.presenter.view().message()).text())
+                .isEqualTo("The record is now healthy, so it has been left where it is.");
+    }
+
+    @Test
+    void aRefusedRepairSaysWhyRatherThanFailingSilently() {
+        when(this.pipeline.setAsideUnreadableSpendLedger())
+                .thenThrow(new JobInProgressException("Something else is running."));
+
+        this.presenter.startAFreshSpendRecord();
+
+        final RunLauncherView.Message said = requireNonNull(this.presenter.view().message());
+        assertThat(said.text()).isEqualTo("Something else is running.");
+        assertThat(said.refused()).isTrue();
+    }
+
+    @Test
+    void theFigureIsWorkedOutAgainOnceTheRecordHasBeenFiledAway() {
+        when(this.pipeline.estimateFor(anyInt()))
+                .thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
+        this.choose(RunMode.SIFT, "2019");
+        assertThat(this.estimatedCost().warning()).isNotNull();
+        when(this.pipeline.setAsideUnreadableSpendLedger()).thenReturn(Path.of("logs", "archives", "old.csv"));
+        when(this.pipeline.estimateFor(anyInt()))
+                .thenReturn(new SpendEstimate(148_231, 6_402, false, false, false));
+
+        this.presenter.startAFreshSpendRecord();
+
+        assertThat(this.estimatedCost().warning()).isNull();
     }
 
     @Test
@@ -347,14 +438,20 @@ class RunSetupPresenterTest {
                 .contains("stop and ask whether to continue");
     }
 
+    // The second half compares against what the no-history state actually renders rather than
+    // against a phrase copied out of it. Reword that line and this still holds; delete the branch
+    // and it fails, which is the point.
     @Test
-    void aRecordOfPastSiftsThatCannotBeReadSaysSoRatherThanClaimingThereIsNone() {
+    void aBrokenRecordOfPastSiftsSaysSoRatherThanClaimingThereIsNone() {
         when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, true));
         this.choose(RunMode.SIFT, "2019");
+        final String broken = requireNonNull(this.estimatedCost().warning()).problem();
+        final String brokenDisclaimer = this.estimatedCost().disclaimer();
+        when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, false));
+        this.choose(RunMode.SIFT, "2018");
 
-        assertThat(this.estimatedCost().disclaimer())
-                .contains("cannot read the record")
-                .doesNotContain("Nothing has finished a sift");
+        assertThat(broken).contains("The record of what your past sifts cost is broken");
+        assertThat(brokenDisclaimer).isNotEqualTo(this.estimatedCost().disclaimer());
     }
 
     @Test

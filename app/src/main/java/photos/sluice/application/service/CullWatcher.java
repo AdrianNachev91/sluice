@@ -21,8 +21,8 @@ import java.util.function.BooleanSupplier;
  * that gap somewhere less visible. A short poll interval costs nothing a human dropping files by
  * hand would ever notice.
  *
- * <p>{@code isReady} is a cheap status check ({@link CullEngine}'s own shard tally, via
- * {@link ShardTallyCalculator}). {@code attemptConsume} is the heavier action, a real resume
+ * <p>{@code isReady} reads the prep dir, opening every sidecar and every shard in it
+ * ({@link ShardTallyCalculator}). {@code attemptConsume} is heavier still, a real resume
  * attempt, run only once {@code isReady} says so. It returns whether this watcher has anything
  * left to do. False means the job runner was busy with something else, so this watcher keeps
  * polling and retries later rather than giving up. True means this watcher's job is done, whether
@@ -31,9 +31,10 @@ import java.util.function.BooleanSupplier;
  * check and the real validation. When that happens, the same {@link CullEngine} call that produces
  * that outcome arms a fresh watcher. This instance does not loop on its own.
  *
- * <p>There is no time limit on the polling. A watch that never fires costs one cheap tally read per
- * interval, and a watch that does fire either completes the run or lands it Blocked and stops. So
- * the only thing a deadline could add is giving up on a run the user is still waiting for.
+ * <p>There is no time limit on the polling. A watch that does fire either completes the run or
+ * lands it Blocked and stops. So the only thing a deadline could add is giving up on a run the user
+ * is still waiting for. One that never fires spends a read of that one prep dir per interval, on a
+ * thread of its own.
  */
 final class CullWatcher {
 
