@@ -81,7 +81,7 @@ class CommitCommandTest {
         final CliHarness.Result result = this.run(root, "commit", "2019");
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.DONE.exitCode());
-        assertThat(result.out().lines()).containsExactly("Moved to your library: 10", "Photos: 7", "Videos: 3");
+        assertThat(result.out().lines()).containsExactly("Moved to your Library: 10", "Photos: 7", "Videos: 3");
     }
 
     @Test
@@ -106,7 +106,7 @@ class CommitCommandTest {
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.CANCELLED.exitCode());
         assertThat(result.out().lines()).containsExactly(
-                "Stopped. 4 photos and videos are still in Sorted.", "Moved to your library: 2", "Photos: 2");
+                "Stopped. 4 photos and videos are still in Sorted.", "Moved to your Library: 2", "Photos: 2");
     }
 
     @Test

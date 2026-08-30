@@ -35,7 +35,11 @@ public enum CommandStatus {
     WAITING(4),
 
     /**
-     * Everything was present and validation refused anyway.
+     * The run needs a look before it can go on, and it left something behind to look at.
+     *
+     * <p>Two shapes reach it. Every sheet came back and validation refused them anyway. Or the
+     * provider gave up part way, having already been billed for what it did send. Both leave a run
+     * on disk in a state a reader has to decide about, which is what separates this from a refusal.
      */
     BLOCKED(5),
 

@@ -14,6 +14,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,7 +31,7 @@ import java.util.concurrent.Callable;
  */
 @Component
 @Profile("cli")
-@Command(name = ImportCommand.VERB, description = "Bring chosen folders and files into the Inbox.")
+@Command(name = ImportCommand.VERB, description = "Bring folders and files into your Inbox.")
 public class ImportCommand implements Callable<Integer> {
 
     /**
@@ -50,11 +51,11 @@ public class ImportCommand implements Callable<Integer> {
     // falls back correctly, but not silently: it logs on every real invocation. An array needs no
     // such fallback.
     @Parameters(index = "0..*", paramLabel = "SOURCE", arity = "1..*",
-            description = "Folders or files to bring into the Inbox.")
+            description = "Folders or files to bring into your Inbox.")
     @SuppressWarnings("unused")
     private String @Nullable [] sources;
 
-    @Option(names = "--move", description = "Delete each original once its bytes are confirmed in the Inbox.")
+    @Option(names = "--move", description = "Delete each original once the file is in your Inbox.")
     @SuppressWarnings("unused")
     private boolean move;
 
@@ -90,7 +91,27 @@ public class ImportCommand implements Callable<Integer> {
     private List<Path> sources() {
         return Arrays.stream(Objects.requireNonNull(this.sources,
                         "picocli refuses a missing positional before this runs"))
-                .map(Path::of).toList();
+                .map(ImportCommand::pathOf).toList();
+    }
+
+    /**
+     * One typed source as a path.
+     *
+     * <p>Which characters a name may hold is the platform's own rule, so the same argument can be
+     * a path on one and not on another.
+     *
+     * @param source {@link String} the path as it was typed
+     * @return {@link Path} the path it names
+     * @throws ImportSourceException where no path can be read from it
+     */
+    private static Path pathOf(final String source) {
+        try {
+            return Path.of(source);
+        } catch (final InvalidPathException notAPath) {
+            throw new ImportSourceException("Not a file path: " + Refusal.shown(source)
+                    + ". Check it for a typo, and put quotes around a path with spaces in it.",
+                    notAPath);
+        }
     }
 
     /**
@@ -159,7 +180,7 @@ public class ImportCommand implements Callable<Integer> {
      */
     private static String stoppedLine(final int leftBehind) {
         if (leftBehind == 0) {
-            return "Stopped. Everything found was brought in.";
+            return "Stopped. Everything found was imported.";
         }
         return "Stopped. Run the import again to pick up the rest.";
     }

@@ -2,6 +2,7 @@ package photos.sluice.adapter.cli;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import photos.sluice.application.port.out.CullException;
 import picocli.CommandLine;
 import picocli.CommandLine.Model.CommandSpec;
 import tools.jackson.databind.json.JsonMapper;
@@ -90,12 +91,18 @@ public class CommandReports {
      * asked about their command, and the first is the one that stopped it. The second rides along
      * as a suppressed exception, so whoever reads the trace still finds both.
      *
+     * <p>A {@link CullException} is read before the classifier is asked, because it is not a
+     * refusal.
+     *
      * @param failure {@link Throwable} what the command raised
      * @param classifier {@link RefusalClassifier} says whether that was a refusal
      * @return {@link CommandOutcome} the outcome to report
      */
     private static CommandOutcome reading(final RuntimeException failure, final RefusalClassifier classifier) {
         try {
+            if (RefusalClassifier.unwrapped(failure) instanceof final CullException incomplete) {
+                return CullOutcomeReport.incomplete(incomplete);
+            }
             final Refusal refusal = classifier.refusalFor(failure);
             return refusal == null ? CommandOutcome.failed(failure) : CommandOutcome.refused(refusal);
         } catch (final RuntimeException unreadable) {

@@ -78,7 +78,7 @@ public class DiscardCommand implements Callable<Integer> {
     public Integer call() {
         final CommandSpec running = Objects.requireNonNull(this.spec,
                 "the parser fills this in before it runs a command");
-        return this.reports.report(running, VERB, this::folder, this.pipeline::discard, _ -> false,
+        return this.reports.reportUninterruptible(running, VERB, this::folder, this.pipeline::discard,
                 DiscardCommand::discarded);
     }
 
@@ -96,7 +96,7 @@ public class DiscardCommand implements Callable<Integer> {
                         + (report.shardsSetAside() == 1 ? "" : "s") + " are set aside with it. ";
         final List<String> lines = List.of("Discarded. " + setAside + "Its records are archived in "
                 + report.graveyard() + " for 30 days.");
-        return CommandOutcome.done(report, lines);
+        return CommandOutcome.done(RecoveryPayloads.discarded(report), lines);
     }
 
     /**

@@ -6,6 +6,9 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.ShuttingDownException;
+import photos.sluice.application.port.out.ApplyException;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretId;
@@ -14,6 +17,7 @@ import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathViolation;
 
@@ -23,6 +27,7 @@ import java.util.List;
 import java.util.SequencedMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 /**
  * Says whether a failure is something the app refused, and if so which refusal it was.
@@ -34,6 +39,10 @@ import java.util.concurrent.ExecutionException;
  * <p>Some branches do go on to use the message, once the type has settled what the refusal is.
  * That is the sentence being carried through rather than read. Those exceptions word themselves
  * for a person to see, and rewriting them here would leave two versions to keep in step.
+ *
+ * <p>The rest compose their own, and each says why in its own place. What decides it is who the
+ * exception's message was written for: one written for a log, or for a screen this surface has
+ * not got, is replaced rather than carried.
  *
  * <p>One arm classifies nothing. A scope argument a verb refused already carries its own refusal,
  * worked out where the rule that refused it lives. It comes through here so that a caller meets it
@@ -103,7 +112,9 @@ public class RefusalClassifier {
             case final ScopeRefusedException scope -> scope.refusal();
             case final PathsMisconfiguredException paths -> foldersUnusable(paths);
             case final WorkingRootBusyException busy -> workingRootBusy(busy);
-            case final JobInProgressException busy -> Refusal.of(RefusalKind.JOB_IN_PROGRESS, busy.getMessage());
+            // The condition is what every site raising this shares, and all a caller here can act on.
+            case final JobInProgressException _ -> Refusal.of(RefusalKind.JOB_IN_PROGRESS,
+                    "Something else is running. Wait for it to finish, then start this one.");
             case final MissingCredentialException missing -> this.credentialMissing(missing);
             case final SecretStoreException broken -> credentialStoreFailed(broken);
             case final Pipeline.ScopeOccupiedException occupied -> scopeOccupied(occupied);
@@ -121,10 +132,52 @@ public class RefusalClassifier {
             case final ImportSourceException refused -> Refusal.of(RefusalKind.IMPORT_SOURCE_REFUSED,
                     refused.getMessage());
             case final UnrecognisedProviderException unrecognised -> providerUnrecognised(unrecognised);
+            case final ApplyException _ -> Refusal.of(RefusalKind.ANSWERS_DO_NOT_HOLD,
+                    "This sift's answers do not hold together, so nothing was moved. Run "
+                            + "'troubleshoot' on it to see what is wrong.");
+            case final ShuttingDownException _ -> Refusal.of(RefusalKind.SHUTTING_DOWN,
+                    "Shutdown in progress. This was not started.");
+            // These three are one type family, most specific first. All three are an
+            // UncheckedIOException, so a broader arm placed above a narrower one swallows it.
+            case final MalformedPrepJsonException malformed -> runRecordsUnreadable(malformed);
             case final UncheckedIOException io when io.getCause() instanceof final NoSuchFileException missing ->
                     folderNotFound(missing);
+            case final UncheckedIOException io -> fileUnreachable(io);
             default -> null;
         };
+    }
+
+    /**
+     * The refusal for a run whose own records could not be read.
+     *
+     * <p>Named as a record rather than as a folder. The path is a file inside a run, and nothing a
+     * caller typed, so advice about checking a folder name sends them to the wrong place.
+     *
+     * @param malformed {@link MalformedPrepJsonException} the read that could not be made sense of
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal runRecordsUnreadable(final MalformedPrepJsonException malformed) {
+        return new Refusal(RefusalKind.RUN_RECORDS_UNREADABLE,
+                "This sift's own records could not be read, so how far it got is unknown. "
+                        + "Often another program has them open. Run 'troubleshoot' on it to see what "
+                        + "can be repaired.",
+                Fields.of("problem", String.valueOf(malformed.getMessage())));
+    }
+
+    /**
+     * The refusal for a file the command could not reach, for a reason other than its absence.
+     *
+     * <p>A permission the process does not hold, and a drive that stopped answering, are the two
+     * this meets. Neither is something the caller did, and both clear on their own.
+     *
+     * @param unreachable {@link UncheckedIOException} the read or write that could not be done
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal fileUnreachable(final UncheckedIOException unreachable) {
+        return new Refusal(RefusalKind.FILE_UNREACHABLE,
+                "A file could not be reached. Another program may have it open, or a drive may not be "
+                        + "reachable.",
+                Fields.of("problem", String.valueOf(unreachable.getMessage())));
     }
 
     /**
@@ -136,7 +189,7 @@ public class RefusalClassifier {
     private static Refusal folderNotFound(final NoSuchFileException missing) {
         final String path = missing.getFile();
         return new Refusal(RefusalKind.FOLDER_NOT_FOUND,
-                "Sluice can't find " + path + ". Check the folder name and try again.",
+                "No such folder: " + path + ". Check the folder name and try again.",
                 Fields.of("path", path));
     }
 
@@ -147,7 +200,9 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal
      */
     private static Refusal scopeOccupied(final Pipeline.ScopeOccupiedException occupied) {
-        return new Refusal(RefusalKind.SCOPE_OCCUPIED, occupied.getMessage(),
+        return new Refusal(RefusalKind.SCOPE_OCCUPIED,
+                "A sift of " + occupied.occupant().scope() + " has not finished. Resume, troubleshoot or "
+                        + "discard it before starting another for the same scope.",
                 Fields.of("occupant", CullPayloads.run(occupied.occupant())));
     }
 
@@ -158,7 +213,12 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal
      */
     private static Refusal scopeOverlaps(final Pipeline.ScopeOverlapsException overlapped) {
-        return new Refusal(RefusalKind.SCOPE_OVERLAPS, overlapped.getMessage(),
+        final List<String> tags = overlapped.across().stream().map(CullRunSummary::scope).sorted().toList();
+        final String them = tags.size() == 1 ? "it" : "them";
+        return new Refusal(RefusalKind.SCOPE_OVERLAPS,
+                CullScope.tag(overlapped.chosen()) + " covers months already in " + String.join(", ", tags)
+                        + ", which " + (tags.size() == 1 ? "has" : "have") + " not finished. Finish or "
+                        + "discard " + them + " first.",
                 Fields.of("chosen", CullScope.tag(overlapped.chosen()),
                         "overlapping", overlapped.across().stream().map(CullPayloads::run).toList()));
     }
@@ -170,7 +230,10 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal
      */
     private static Refusal scopeUnreadable(final Pipeline.ScopeUnreadableException unreadable) {
-        return new Refusal(RefusalKind.SCOPE_UNREADABLE, unreadable.getMessage(),
+        return new Refusal(RefusalKind.SCOPE_UNREADABLE,
+                "Whether a sift is already running for that scope is unknown, because "
+                        + unreadable.prepDir() + " cannot be read. Try again once whatever is holding "
+                        + "it clears.",
                 Fields.of("prepDir", unreadable.prepDir().toString()));
     }
 
@@ -181,29 +244,42 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal
      */
     private static Refusal runOutsideWorkingRoot(final Pipeline.RunOutsideWorkingRootException outside) {
-        return new Refusal(RefusalKind.RUN_OUTSIDE_WORKING_ROOT, outside.getMessage(),
+        return new Refusal(RefusalKind.RUN_OUTSIDE_WORKING_ROOT,
+                "This sift is at " + outside.prepDir() + ", which is not inside the folders currently set "
+                        + "up. Point sluice.paths.repo-root back at the folder holding it to work on it "
+                        + "again.",
                 Fields.of("prepDir", outside.prepDir().toString()));
     }
 
     /**
      * The refusal for a configured provider this build has never heard of.
      *
+     * <p>Worded here rather than taken from the exception, whose own message is written for a log.
+     *
      * @param unrecognised {@link UnrecognisedProviderException} the refused lookup
      * @return {@link Refusal} the refusal
      */
     private static Refusal providerUnrecognised(final UnrecognisedProviderException unrecognised) {
-        return new Refusal(RefusalKind.PROVIDER_UNRECOGNISED, unrecognised.getMessage(),
-                Fields.of("provider", unrecognised.provider(), "registered", List.copyOf(unrecognised.registered())));
+        final List<String> registered = unrecognised.registered().stream().sorted().toList();
+        return new Refusal(RefusalKind.PROVIDER_UNRECOGNISED,
+                "There is no vision provider called '" + unrecognised.provider() + "'. Set sluice.cull.provider "
+                        + "to one of: " + String.join(", ", registered) + ".",
+                Fields.of("provider", unrecognised.provider(), "registered", registered));
     }
 
     /**
      * The refusal for folder roots the app cannot work in.
      *
+     * <p>Opened here rather than taken from the exception, whose own opening is written for a log.
+     * The clauses after it are the exception's own.
+     *
      * @param paths {@link PathsMisconfiguredException} what the facade refused on
      * @return {@link Refusal} the refusal
      */
     private static Refusal foldersUnusable(final PathsMisconfiguredException paths) {
-        return new Refusal(RefusalKind.FOLDERS_UNUSABLE, paths.getMessage(),
+        return new Refusal(RefusalKind.FOLDERS_UNUSABLE,
+                "Unusable folder settings. " + paths.violations().stream()
+                        .map(PathsMisconfiguredException::clause).collect(Collectors.joining(" ")),
                 Fields.of("violations", paths.violations().stream().map(RefusalClassifier::violation).toList()));
     }
 
@@ -250,6 +326,8 @@ public class RefusalClassifier {
      * <p>The places are reported alongside, because "nothing holds one" and "the one place that
      * could hold one refused the question" send somebody to different work.
      *
+     * <p>The words are composed here rather than taken from the exception.
+     *
      * @param missing {@link MissingCredentialException} the provider's own refusal
      * @return {@link Refusal} the refusal
      */
@@ -257,8 +335,8 @@ public class RefusalClassifier {
         final SecretId id = missing.id();
         final List<SecretHolding> places = this.secrets.holdings(id);
         return new Refusal(RefusalKind.CREDENTIAL_MISSING,
-                Refusal.sentences(List.of(missing.getMessage(),
-                        "Set " + id.environmentVariable() + ", or store a key in Settings.")),
+                "No key is stored for the '" + id.provider() + "' vision provider. Set "
+                        + id.environmentVariable() + ", or store a key in Settings.",
                 Fields.of("provider", id.provider(),
                         "environmentVariable", id.environmentVariable(),
                         "places", places.stream().map(RefusalClassifier::place).toList()));
@@ -282,7 +360,11 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal
      */
     private static Refusal credentialStoreFailed(final SecretStoreException broken) {
-        return new Refusal(RefusalKind.CREDENTIAL_STORE_FAILED, broken.getMessage(),
+        return new Refusal(RefusalKind.CREDENTIAL_STORE_FAILED,
+                Refusal.sentences(List.of("Your key could not be read, and nothing else you have "
+                        + "configured is affected.", "Set the provider's environment variable to get past "
+                        + "it. If it keeps happening, report this as a bug, quoting: "
+                        + broken.getMessage())),
                 Fields.of("tier", broken.tier()));
     }
 }

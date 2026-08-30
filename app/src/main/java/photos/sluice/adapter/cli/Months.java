@@ -75,7 +75,7 @@ final class Months {
         final int to = months.getLast();
         if (months.size() != to - from + 1) {
             throw new ScopeRefusedException(new Refusal(RefusalKind.MONTHS_NOT_A_SPAN,
-                    "Sluice can't narrow " + verb + " to " + Refusal.shown(text) + ". " + verb
+                    "Not a span: " + Refusal.shown(text) + ". " + verb
                             + " narrows a year by a span of months, so write one, like 6-8.",
                     Fields.of("verb", verb, "value", text, "months", months)));
         }
@@ -123,10 +123,15 @@ final class Months {
      */
     private static int month(final String part, final String text) {
         final String trimmed = part.trim();
-        if (trimmed.isEmpty() || !trimmed.chars().allMatch(Character::isDigit)) {
+        if (!AsciiDigits.only(trimmed)) {
             throw refused(text);
         }
-        final int month = Integer.parseInt(trimmed);
+        final int month;
+        try {
+            month = Integer.parseInt(trimmed);
+        } catch (final NumberFormatException tooManyDigits) {
+            throw refused(text);
+        }
         if (month < FIRST || month > LAST) {
             throw refused(text);
         }
@@ -141,7 +146,7 @@ final class Months {
      */
     private static ScopeRefusedException refused(final String text) {
         return new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
-                "Sluice can't read " + Refusal.shown(text) + " as months. Write either a span, like 6-8, "
+                "Not months: " + Refusal.shown(text) + ". Write either a span, like 6-8, "
                         + "or a list, like 6,8,11, never the two together.",
                 Fields.of("option", "--months", "value", text)));
     }

@@ -16,9 +16,6 @@ import java.util.concurrent.Callable;
 /**
  * The command a user types. Every verb hangs off this one as a subcommand, so a single parser
  * covers the whole surface. Its help text generates from the same annotations that parser reads.
- *
- * <p>Reached whenever this process is not opening the window, which includes the empty invocation:
- * that arrives here as a request for help.
  */
 @Component
 @Profile("cli")
@@ -27,7 +24,7 @@ import java.util.concurrent.Callable;
         subcommands = {AppCommand.class, RunsCommand.class, SortCommand.class, CommitCommand.class,
                 RescueCommand.class, CullCommand.class, ResumeCommand.class, ImportCommand.class,
                 TroubleshootCommand.class, AnswerCommand.class, DiscardCommand.class, PurgeCommand.class,
-                RedoCommand.class})
+                RedoCommand.class, SkillCommand.class})
 public class SluiceCli implements Callable<Integer> {
 
     /**
@@ -78,9 +75,7 @@ public class SluiceCli implements Callable<Integer> {
     @SuppressWarnings("unused")
     private boolean documentAsked;
 
-    // Inherited, so it reads the same before the verb as after it. That reaches the verbs which
-    // report no progress too, where it does nothing. A caller would otherwise have to know which
-    // verbs are long-running before deciding where the flag goes.
+    // Inherited, so it reads the same before the verb as after it.
     @Option(names = "--quiet", scope = ScopeType.INHERIT, arity = "0",
             description = "Report no progress while the command runs. The result is unaffected.")
     @SuppressWarnings("unused")
@@ -88,8 +83,6 @@ public class SluiceCli implements Callable<Integer> {
 
     /**
      * Builds the parser for this surface, configured the one way every verb inherits.
-     *
-     * <p>Here rather than at the launcher, so a test drives the same parser a user does.
      *
      * @param root {@link SluiceCli} the command every verb hangs off
      * @param factory {@link CommandLine.IFactory} builds each subcommand

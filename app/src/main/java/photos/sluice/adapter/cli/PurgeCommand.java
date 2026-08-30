@@ -30,7 +30,7 @@ import java.util.concurrent.Callable;
  */
 @Component
 @Profile("cli")
-@Command(name = PurgeCommand.VERB, description = "Hard-delete the records of every finished run, with no way back.")
+@Command(name = PurgeCommand.VERB, description = "Delete the records of every finished run, with no way back.")
 public class PurgeCommand implements Callable<Integer> {
 
     /**
@@ -45,7 +45,7 @@ public class PurgeCommand implements Callable<Integer> {
     @SuppressWarnings("unused")
     private @Nullable CommandSpec spec;
 
-    @Option(names = "--yes", description = "Confirm hard-deleting the finished runs.")
+    @Option(names = "--yes", description = "Confirm deleting the finished runs.")
     @SuppressWarnings("unused")
     private boolean yes;
 
@@ -69,8 +69,8 @@ public class PurgeCommand implements Callable<Integer> {
     public Integer call() {
         final CommandSpec running = Objects.requireNonNull(this.spec,
                 "the parser fills this in before it runs a command");
-        return this.reports.report(running, VERB, this::confirmed, _ -> this.pipeline.purgeCompleted(), _ -> false,
-                PurgeCommand::purged);
+        return this.reports.reportUninterruptible(running, VERB, this::confirmed,
+                _ -> this.pipeline.purgeCompleted(), PurgeCommand::purged);
     }
 
     /**
@@ -81,7 +81,7 @@ public class PurgeCommand implements Callable<Integer> {
      */
     private static CommandOutcome purged(final JobReports.Finished<PurgeReport> finished) {
         final PurgeReport report = finished.answer();
-        return CommandOutcome.done(report, lines(report));
+        return CommandOutcome.done(RecoveryPayloads.purged(report), lines(report));
     }
 
     /**
@@ -92,8 +92,7 @@ public class PurgeCommand implements Callable<Integer> {
      */
     private static List<String> lines(final PurgeReport report) {
         if (report.unlistableRoot() != null) {
-            return List.of("Nothing was cleared, because " + report.unlistableRoot() + " cannot be read. "
-                    + "Most likely the folder is held by another process or not there anymore.");
+            return List.of("Nothing was cleared. " + RunsRefusals.unreadable(report.unlistableRoot()).sentence());
         }
         final List<String> lines = new ArrayList<>();
         lines.add(report.purged().isEmpty()

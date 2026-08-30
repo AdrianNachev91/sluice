@@ -30,7 +30,7 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = SortCommand.VERB,
-        description = "File the Inbox into Sorted, under the year each photo or video was taken.")
+        description = "File what is in your Inbox into Sorted, under the year each photo or video was taken.")
 public class SortCommand implements Callable<Integer> {
 
     /**
@@ -46,7 +46,7 @@ public class SortCommand implements Callable<Integer> {
     private @Nullable CommandSpec spec;
 
     @Parameters(index = "0", arity = "0..1", paramLabel = "YEAR",
-            description = "The year to sort. Left out, the oldest year in your Inbox.")
+            description = "The year to sort. Default is the oldest year in your Inbox.")
     @SuppressWarnings("unused")
     private @Nullable String year;
 
@@ -175,7 +175,7 @@ public class SortCommand implements Callable<Integer> {
         }
         lines.add(ResultLines.count("Photos sorted", sorted.photosSorted()));
         lines.add(ResultLines.count("Videos sorted", sorted.videosSorted()));
-        ResultLines.addWhenAny(lines, "Already in your library", sorted.reimportsDeleted());
+        ResultLines.addWhenAny(lines, "Already in your Library", sorted.reimportsDeleted());
         ResultLines.addWhenAny(lines, "Identical copies removed", sorted.byteDupsDeleted());
         ResultLines.addWhenAny(lines, "Moved to Review", sorted.lowRes());
         ResultLines.addWhenAny(lines, "Could not be dated", sorted.unsorted());

@@ -103,7 +103,7 @@ class TypedCancelTest {
             job.join();
         }
 
-        assertThat(this.said()).contains("Stopping.").contains("finishes the file it is on");
+        assertThat(this.said()).contains("Stopping.").contains("finishes what it is on");
     }
 
     // The job waits for the input to run out as well as for the cancel, so both lines have been
@@ -125,7 +125,7 @@ class TypedCancelTest {
         }
 
         assertThat(this.said().lines()).containsExactly(
-                "Stopping. Sluice finishes the file it is on, then says what it did.",
+                "Stopping. It finishes what it is on, then says what it did.",
                 "Stopping now. A file still being copied is abandoned rather than finished.");
     }
 

@@ -163,6 +163,12 @@ class ScopeArgumentsTest {
     }
 
     @Test
+    void aYearWrittenInAnotherScriptIsRefusedRatherThanDecodedToADifferentOne() {
+        assertThat(refusalOf(() -> year("٠٠١٩").cullScope("sift")).kind())
+                .isEqualTo(RefusalKind.SCOPE_VALUE_REFUSED);
+    }
+
+    @Test
     void aYearWhoseFolderNameCouldNotBeReadBackIsRefusedBeforeItReachesAScope() {
         assertThat(refusalOf(() -> year("0019").cullScope("sift")).kind())
                 .isEqualTo(RefusalKind.SCOPE_VALUE_REFUSED);

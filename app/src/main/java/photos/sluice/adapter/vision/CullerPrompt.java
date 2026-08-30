@@ -8,7 +8,6 @@ import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -209,7 +208,8 @@ class CullerPrompt {
             }
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         } catch (final IOException e) {
-            throw new UncheckedIOException("Failed to read bundled prompt template " + TEMPLATE_RESOURCE, e);
+            throw new IllegalStateException("Bundled prompt template " + TEMPLATE_RESOURCE
+                    + " could not be read", e);
         }
     }
 }

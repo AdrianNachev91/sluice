@@ -65,8 +65,6 @@ public class ImportEngine {
     /**
      * Refuses a set of sources this could not be run over.
      *
-     * <p>Apart from the import so a caller can refuse before a job exists.
-     *
      * <p>A folder holding no files is not one of them. It runs, and brings nothing in.
      *
      * @param sources a {@link List} of {@link Path}
@@ -74,13 +72,13 @@ public class ImportEngine {
      */
     public void requireImportable(final List<Path> sources) {
         if (sources.isEmpty()) {
-            throw new ImportSourceException("Sluice was asked to import nothing at all.");
+            throw new ImportSourceException("No folder or file was given to import.");
         }
         final Path inbox = this.paths.inbox();
         for (final Path source : sources) {
             if (!this.mediaStore.exists(source)) {
-                throw new ImportSourceException("Sluice could not find " + source
-                        + " any more. Check it is still there, and try again.");
+                throw new ImportSourceException(source
+                        + " could not be found. Check it is still there, and try again.");
             }
             requireOutsideTheInbox(source, inbox);
         }
@@ -183,8 +181,8 @@ public class ImportEngine {
                             new Arrival(this.mediaStore.realFile(source), inbox));
                 }
             } catch (final UncheckedIOException e) {
-                throw new ImportSourceException("Sluice could not read " + source + " any more. If "
-                        + "it is a card or a drive, check it is still plugged in.", e);
+                throw new ImportSourceException(source + " could not be read. If it is a card or a "
+                        + "drive, check it is still plugged in.", e);
             }
         }
         return new Gathered(arrivalsSoFar, unreadablePlaces);
@@ -328,11 +326,11 @@ public class ImportEngine {
         final Path to = inbox.toAbsolutePath().normalize();
         if (from.equals(to) || Containment.strictlyUnder(to, from)) {
             throw new ImportSourceException("Everything in " + from + " is already in your Inbox, "
-                    + "so there is nothing to bring in.");
+                    + "so there is nothing to import.");
         }
         if (Containment.strictlyUnder(from, to)) {
-            throw new ImportSourceException("Sluice cannot import from " + from
-                    + ", because your Inbox is inside it.");
+            throw new ImportSourceException(from
+                    + " could not be imported, because your Inbox is inside it.");
         }
     }
 

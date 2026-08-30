@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,17 +22,22 @@ class CullOutcomeReportTest {
 
     private static final Instant SINCE = Instant.parse("2026-08-20T10:15:30Z");
 
+    private static final Path DUPLICATES = Path.of("Duplicates");
+
+    private static final Function<Path, String> INSTRUCTIONS = prepDir -> "Judge the sheets in " + prepDir + ".";
+
     @Test
     void aCompletedRunReportsWhatApplyMovedAndExitsDone() {
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(
                 new CullReport(4, 0, 6, TokenSpend.none("external-agent"), false),
                 new ApplyReport(10, Map.of("Junk", 3), 1, 2, 5, List.of()), null);
 
-        final CommandOutcome outcome = CullOutcomeReport.of(applied);
+        final CommandOutcome outcome = CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS);
 
         assertThat(outcome.status()).isEqualTo(CommandStatus.DONE);
         assertThat(outcome.resultLines()).containsExactly("Photos looked at: 10", "Sheets judged: 4",
-                "Calls to your provider: 6", "Junk: 3", "Near-duplicate groups: 2", "Copies set aside: 5",
+                "Calls to your provider: 6", "Junk: 3", "Near-duplicate groups: 2",
+                "Copies moved to Duplicates: 5",
                 "Could not be judged: 1");
     }
 
@@ -40,7 +46,7 @@ class CullOutcomeReportTest {
         final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019"), WaitingReason.CANCELLED,
                 zeroReport(), null);
 
-        final CommandOutcome outcome = CullOutcomeReport.of(waiting);
+        final CommandOutcome outcome = CullOutcomeReport.of(waiting, DUPLICATES, INSTRUCTIONS);
 
         assertThat(outcome.status()).isEqualTo(CommandStatus.WAITING);
         assertThat(outcome.resultLines()).containsExactly(
@@ -52,11 +58,37 @@ class CullOutcomeReportTest {
         final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019-06"),
                 WaitingReason.SHARDS_OUTSTANDING, zeroReport(), null);
 
-        final CommandOutcome outcome = CullOutcomeReport.of(waiting);
+        final CommandOutcome outcome = CullOutcomeReport.of(waiting, DUPLICATES, INSTRUCTIONS);
 
         assertThat(outcome.status()).isEqualTo(CommandStatus.WAITING);
         assertThat(outcome.resultLines()).containsExactly("The sheets are ready, waiting for your agent's "
-                + "decisions on them. Nothing moves until they arrive.");
+                + "decisions on them. Nothing moves until those decisions arrive.",
+                "", "Judge the sheets in " + Path.of("logs", "sift-prep", "2019-06") + ".");
+    }
+
+    @Test
+    void aRunWaitingOnAnAgentHandsOverTheInstructionsForJudgingIt() {
+        final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019"),
+                WaitingReason.SHARDS_OUTSTANDING, zeroReport(), null);
+
+        final CommandOutcome outcome = CullOutcomeReport.of(waiting, DUPLICATES, INSTRUCTIONS);
+
+        assertThat(outcome.payload()).isInstanceOfSatisfying(CullPayloads.OutcomePayload.class,
+                payload -> assertThat(payload.instructions()).isEqualTo("Judge the sheets in "
+                        + Path.of("logs", "sift-prep", "2019") + "."));
+    }
+
+    @Test
+    void anEndingThatIsNotWaitingOnAnAgentAsksForNoInstructions() {
+        final CullJobOutcome.Waiting cancelled = new CullJobOutcome.Waiting(job("2019"),
+                WaitingReason.CANCELLED, zeroReport(), null);
+
+        final CommandOutcome outcome = CullOutcomeReport.of(cancelled, DUPLICATES, _ -> {
+            throw new AssertionError("asked for instructions on an ending with no agent waiting");
+        });
+
+        assertThat(outcome.payload()).isInstanceOfSatisfying(CullPayloads.OutcomePayload.class,
+                payload -> assertThat(payload.instructions()).isNull());
     }
 
     @Test
@@ -64,11 +96,11 @@ class CullOutcomeReportTest {
         final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019"),
                 WaitingReason.CEILING_REACHED, zeroReport(), null);
 
-        final CommandOutcome outcome = CullOutcomeReport.of(waiting);
+        final CommandOutcome outcome = CullOutcomeReport.of(waiting, DUPLICATES, INSTRUCTIONS);
 
         assertThat(outcome.status()).isEqualTo(CommandStatus.WAITING);
-        assertThat(outcome.resultLines()).containsExactly("Sluice stopped this sift because it went far past "
-                + "what it was expected to cost. Nothing more has been spent from your provider account "
+        assertThat(outcome.resultLines()).containsExactly("Sift stopped because it went far past what it "
+                + "was expected to cost. Nothing more has been spent from your provider account "
                 + "balance. Run 'resume 2019' to continue under a fresh limit.");
     }
 
@@ -80,19 +112,21 @@ class CullOutcomeReportTest {
                 List.of(new Finding.CorruptSidecar("montage-001"), new Finding.CorruptSidecar("montage-002")),
                 zeroReport(), null);
 
-        final CommandOutcome outcome = CullOutcomeReport.of(oneFinding);
+        final CommandOutcome outcome = CullOutcomeReport.of(oneFinding, DUPLICATES, INSTRUCTIONS);
 
         assertThat(outcome.status()).isEqualTo(CommandStatus.BLOCKED);
         assertThat(outcome.resultLines()).containsExactly(
-                "Sifting stopped and needs a look. Run 'troubleshoot 2019' to see what went wrong.");
-        assertThat(CullOutcomeReport.of(twoFindings).resultLines()).isEqualTo(outcome.resultLines());
+                "Every sheet came back, but there are problems with some. Nothing was moved. Run "
+                        + "'troubleshoot 2019' to see what went wrong.");
+        assertThat(CullOutcomeReport.of(twoFindings, DUPLICATES, INSTRUCTIONS).resultLines())
+                .isEqualTo(outcome.resultLines());
     }
 
     @Test
     void aRunCancelledBeforeAnyMontageRenderedExitsCancelled() {
         final CullJobOutcome.Cancelled cancelled = new CullJobOutcome.Cancelled(zeroReport(), null);
 
-        final CommandOutcome outcome = CullOutcomeReport.of(cancelled);
+        final CommandOutcome outcome = CullOutcomeReport.of(cancelled, DUPLICATES, INSTRUCTIONS);
 
         assertThat(outcome.status()).isEqualTo(CommandStatus.CANCELLED);
         assertThat(outcome.resultLines()).containsExactly(
@@ -105,7 +139,8 @@ class CullOutcomeReportTest {
                 new CullReport(2, 0, 3, new TokenSpend(1000, 500, "anthropic", "claude-sonnet-5"), false),
                 new ApplyReport(2, Map.of(), 0, 0, 0, List.of()), null);
 
-        assertThat(CullOutcomeReport.of(applied).noteLines()).containsExactly("Spent: 1,500 tokens across 3 calls.");
+        assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines())
+                .containsExactly("Spent: 1,500 tokens across 3 calls.");
     }
 
     @Test
@@ -113,7 +148,7 @@ class CullOutcomeReportTest {
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(zeroReport(),
                 new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), null);
 
-        assertThat(CullOutcomeReport.of(applied).noteLines()).isEmpty();
+        assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines()).isEmpty();
     }
 
     @Test
@@ -122,7 +157,8 @@ class CullOutcomeReportTest {
                 new CullReport(1, 0, 1, new TokenSpend(10, 5, "anthropic", "claude-sonnet-5"), false),
                 new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), null);
 
-        assertThat(CullOutcomeReport.of(applied).noteLines()).containsExactly("Spent: 15 tokens across 1 call.");
+        assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines())
+                .containsExactly("Spent: 15 tokens across 1 call.");
     }
 
     @Test
@@ -131,7 +167,7 @@ class CullOutcomeReportTest {
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(zeroReport(),
                 new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), graveyard);
 
-        assertThat(CullOutcomeReport.of(applied).noteLines()).containsExactly(
+        assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines()).containsExactly(
                 "A previous sift of this scope was moved to " + graveyard + ".");
     }
 
@@ -142,8 +178,9 @@ class CullOutcomeReportTest {
                 new CullReport(1, 0, 1, new TokenSpend(10, 5, "anthropic", "claude-sonnet-5"), false),
                 new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), graveyard);
 
-        assertThat(CullOutcomeReport.of(applied).noteLines()).containsExactly("Spent: 15 tokens across 1 call.",
-                "A previous sift of this scope was moved to " + graveyard + ".");
+        assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines())
+                .containsExactly("Spent: 15 tokens across 1 call.",
+                        "A previous sift of this scope was moved to " + graveyard + ".");
     }
 
     private static CullReport zeroReport() {

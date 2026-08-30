@@ -68,7 +68,7 @@ public record CommandOutcome(CommandStatus status, @Nullable Object payload,
     }
 
     /**
-     * A run whose inputs were all present, and which was refused anyway.
+     * A run that needs a look before it can go on, and left something behind to look at.
      *
      * @param payload {@link Object} what the document says
      * @param resultLines a {@link List} of {@link String} the same answer, for a person
@@ -128,6 +128,7 @@ public record CommandOutcome(CommandStatus status, @Nullable Object payload,
      * @param failure {@link Throwable} the failure to render
      * @return {@link String} the rendered trace
      */
+    @SuppressWarnings("DuplicatedCode")
     private static String trace(final Throwable failure) {
         final var text = new StringWriter();
         try (final var writer = new PrintWriter(text)) {

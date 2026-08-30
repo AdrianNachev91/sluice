@@ -38,6 +38,12 @@ class MonthsTest {
     }
 
     @Test
+    void aNumberTooLargeToHoldIsRefusedRatherThanOverflowingTheParse() {
+        assertThat(refusalOf(() -> Months.of("99999999999")).kind())
+                .isEqualTo(RefusalKind.SCOPE_VALUE_REFUSED);
+    }
+
+    @Test
     void aNumberOutsideTheCalendarIsNotAMonth() {
         assertThat(refusalOf(() -> Months.of("0")).kind()).isEqualTo(RefusalKind.SCOPE_VALUE_REFUSED);
         assertThat(refusalOf(() -> Months.of("13")).kind()).isEqualTo(RefusalKind.SCOPE_VALUE_REFUSED);

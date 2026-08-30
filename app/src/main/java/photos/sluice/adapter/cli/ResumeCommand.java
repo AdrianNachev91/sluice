@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import picocli.CommandLine.Command;
@@ -35,6 +36,7 @@ public class ResumeCommand implements Callable<Integer> {
     private final Pipeline pipeline;
     private final JobReports reports;
     private final RunAddress address;
+    private final PathsPort paths;
 
     @Spec
     @SuppressWarnings("unused")
@@ -45,7 +47,7 @@ public class ResumeCommand implements Callable<Integer> {
     @SuppressWarnings("unused")
     private @Nullable String run;
 
-    @Option(names = "--allow-partial", description = "Apply what has been judged, leaving unjudged photos unreviewed.")
+    @Option(names = "--allow-partial", description = "Apply what has been judged, and leave the rest where it is.")
     @SuppressWarnings("unused")
     private boolean allowPartial;
 
@@ -55,11 +57,14 @@ public class ResumeCommand implements Callable<Integer> {
      * @param pipeline {@link Pipeline} the facade that resumes the sift
      * @param reports {@link JobReports} runs the job and writes whatever came of it
      * @param address {@link RunAddress} turns what was typed into the run's own folder
+     * @param paths {@link PathsPort} resolves the Duplicates root the result names
      */
-    public ResumeCommand(final Pipeline pipeline, final JobReports reports, final RunAddress address) {
+    public ResumeCommand(final Pipeline pipeline, final JobReports reports, final RunAddress address,
+                         final PathsPort paths) {
         this.pipeline = pipeline;
         this.reports = reports;
         this.address = address;
+        this.paths = paths;
     }
 
     /**
@@ -72,7 +77,8 @@ public class ResumeCommand implements Callable<Integer> {
         final CommandSpec running = Objects.requireNonNull(this.spec,
                 "the parser fills this in before it runs a command");
         return this.reports.report(running, VERB, this::folder, this::submit, _ -> false,
-                finished -> CullOutcomeReport.of(finished.answer()));
+                finished -> CullOutcomeReport.of(finished.answer(), this.paths.duplicates(),
+                        this.pipeline::launchPromptFor));
     }
 
     /**

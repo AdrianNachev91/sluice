@@ -66,6 +66,19 @@ class DiscardCommandTest {
     }
 
     @Test
+    void theArchivedFolderIsWrittenAsAPathRatherThanAUri() {
+        when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
+        final var graveyard = Path.of("D:", "Sift", "archives", "2019-graveyard");
+        when(this.pipeline.discard(eq(PREP_DIR)))
+                .thenAnswer(_ -> this.runner.submit(_ -> new DiscardReport(graveyard, 3)));
+
+        final CliHarness.Result result = this.run("discard", "2019", "--yes", "--json");
+
+        assertThat(result.out()).doesNotContain("file:/").contains("2019-graveyard")
+                .contains("\"shardsSetAside\":3");
+    }
+
+    @Test
     void aRunWithNoShardsYetIsNotAskedToConfirmMoney() {
         when(this.address.folderFor(eq("2019"))).thenReturn(PREP_DIR);
         when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(runWith(0))));
@@ -85,7 +98,7 @@ class DiscardCommandTest {
 
         final CliHarness.Result result = this.run("discard", "2019");
 
-        assertThat(result.err()).contains("could not confirm how many paid sheet decisions").contains("--yes");
+        assertThat(result.err()).contains("The number of paid sheet decisions is unknown").contains("--yes");
     }
 
     private static CullRunSummary runWith(final int validShards) {

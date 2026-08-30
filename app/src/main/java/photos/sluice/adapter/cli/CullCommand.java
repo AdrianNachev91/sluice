@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SpendEstimate;
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullScope;
@@ -29,7 +30,7 @@ import java.util.concurrent.Callable;
  */
 @Component
 @Profile("cli")
-@Command(name = CullCommand.VERB, description = "Sift what is staged in Sorted, judged by your configured provider.")
+@Command(name = CullCommand.VERB, description = "Sift what is in Sorted, judged by your configured provider.")
 public class CullCommand implements Callable<Integer> {
 
     /**
@@ -37,9 +38,16 @@ public class CullCommand implements Callable<Integer> {
      */
     static final String VERB = "sift";
 
+    /**
+     * Printed instead of a figure when the count behind it could not be read.
+     */
+    private static final String ESTIMATE_UNAVAILABLE =
+            "No cost estimate for this sift. It is running anyway.";
+
     private final Pipeline pipeline;
     private final JobReports reports;
     private final ConsoleProgressPort progress;
+    private final PathsPort paths;
 
     @Spec
     @SuppressWarnings("unused")
@@ -67,11 +75,14 @@ public class CullCommand implements Callable<Integer> {
      * @param pipeline {@link Pipeline} the facade that runs the sift
      * @param reports {@link JobReports} runs the job and writes whatever came of it
      * @param progress {@link ConsoleProgressPort} where the pre-run estimate is written
+     * @param paths {@link PathsPort} resolves the Duplicates root the result names
      */
-    public CullCommand(final Pipeline pipeline, final JobReports reports, final ConsoleProgressPort progress) {
+    public CullCommand(final Pipeline pipeline, final JobReports reports, final ConsoleProgressPort progress,
+                       final PathsPort paths) {
         this.pipeline = pipeline;
         this.reports = reports;
         this.progress = progress;
+        this.paths = paths;
     }
 
     /**
@@ -84,7 +95,8 @@ public class CullCommand implements Callable<Integer> {
         final CommandSpec running = Objects.requireNonNull(this.spec,
                 "the parser fills this in before it runs a command");
         return this.reports.report(running, VERB, this::scope, this::submit, _ -> false,
-                finished -> CullOutcomeReport.of(finished.answer()));
+                finished -> CullOutcomeReport.of(finished.answer(), this.paths.duplicates(),
+                        this.pipeline::launchPromptFor));
     }
 
     /**
@@ -103,6 +115,10 @@ public class CullCommand implements Callable<Integer> {
      * <p>Read after {@link Pipeline#cull} returns rather than before it is called. A call refused
      * before it starts throws from here rather than returning, so no figure is printed for work
      * that was never going to happen.
+     *
+     * <p>Nothing the estimate does may throw once that call has returned. The job is already
+     * running by then, and nothing else holds the handle. A throw here would leave it with no way
+     * to be joined or stopped.
      *
      * @param scope {@link CullScope} what to sift
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
@@ -124,9 +140,13 @@ public class CullCommand implements Callable<Integer> {
         if (SluiceCli.quietAsked(Objects.requireNonNull(this.spec)) || !this.pipeline.configuredProviderSpends()) {
             return;
         }
-        final int photos = photosFor(scope, this.pipeline.sortedTally());
-        final SpendEstimate estimate = this.pipeline.estimateFor(photos);
-        this.progress.note(estimateLine(photos, estimate));
+        try {
+            final int photos = photosFor(scope, this.pipeline.sortedTally());
+            final SpendEstimate estimate = this.pipeline.estimateFor(photos);
+            this.progress.note(estimateLine(photos, estimate));
+        } catch (final RuntimeException couldNotEstimate) {
+            this.progress.note(ESTIMATE_UNAVAILABLE);
+        }
     }
 
     /**
@@ -141,10 +161,11 @@ public class CullCommand implements Callable<Integer> {
      */
     private static String estimateLine(final int photos, final SpendEstimate estimate) {
         final String trust = estimate.exactInput() ? "" : "an estimate, ";
-        final String basis = estimate.historicOutput() ? "based on runs already on this install"
-                : "based on the figures Sluice ships with";
+        final String basis = estimate.historicOutput() ? "based on your previous runs"
+                : "based on default estimates";
         return "Sifting " + ResultLines.grouped(photos) + " photos is expected to spend about "
-                + ResultLines.grouped(estimate.totalTokens()) + " tokens (" + trust + basis + ").";
+                + ResultLines.rounded(estimate.totalTokens()) + " tokens (" + trust + basis + "). It stops "
+                + "on its own if it goes far past that.";
     }
 
     /**

@@ -107,6 +107,26 @@ public enum RefusalKind {
     FOLDER_NOT_FOUND,
 
     /**
+     * A run's own records could not be read, so how far it got is unknown.
+     */
+    RUN_RECORDS_UNREADABLE,
+
+    /**
+     * A file could not be reached, for a reason other than its absence.
+     */
+    FILE_UNREACHABLE,
+
+    /**
+     * A sift's answers contradict each other, so none of them was applied.
+     */
+    ANSWERS_DO_NOT_HOLD,
+
+    /**
+     * The app is closing down, so no new job was accepted.
+     */
+    SHUTTING_DOWN,
+
+    /**
      * A discard was asked for a run that had already finished.
      */
     RUN_ALREADY_FINISHED,

@@ -27,7 +27,7 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = RedoCommand.VERB,
-        description = "Set aside a run's rejected answers, and get fresh instructions to judge them again.")
+        description = "Free a run's rejected sheets to be judged again, and print fresh instructions for them.")
 public class RedoCommand implements Callable<Integer> {
 
     /**

@@ -35,7 +35,13 @@
   -->
   <logger name="org.springframework.boot.SpringApplication" level="${sluice.log.startupFailure:-ERROR}"/>
 
-  <root level="INFO">
+  <!--
+    What the app's own logging says by default. A surface that answers in its own words sets this
+    quiet, so a running command's message stream carries its progress and its refusals rather than
+    a class name and a thread. A caller raises it for one run by passing logging.level.root as an
+    argument, which Spring applies over this file.
+  -->
+  <root level="${sluice.log.level:-INFO}">
     <appender-ref ref="CONSOLE"/>
   </root>
 

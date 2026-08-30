@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretHolding;
 import photos.sluice.application.port.out.SecretHolding.Holding;
@@ -63,6 +64,17 @@ class RefusalClassifierTest {
     }
 
     @Test
+    void unusableFolderRootsOpenInThisSurfacesOwnWordsAndThenNameEverySettingAtFault() {
+        final Refusal refusal = this.classifier.refusalFor(new PathsMisconfiguredException(
+                List.of(new NotConfigured(PathRole.WORKING_ROOT),
+                        new Overlap(PathRole.LIBRARY_ROOT, PathRole.INBOX))));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.sentence()).isEqualTo("Unusable folder settings. sluice.paths.repo-root is "
+                + "not set. sluice.paths.library-root and sluice.paths.inbox must not contain each other.");
+    }
+
+    @Test
     void everyViolationNamesTheSettingToEditAsWellAsTheRoleItPlays() {
         final Refusal refusal = this.classifier.refusalFor(new PathsMisconfiguredException(
                 List.of(new NotConfigured(PathRole.LIBRARY_ROOT))));
@@ -109,13 +121,15 @@ class RefusalClassifierTest {
     }
 
     @Test
-    void aSecondJobIsRefusedWithTheSentenceTheCallerAlreadyWrote() {
+    void aSecondJobIsRefusedInThisSurfacesOwnWordsRatherThanTheCallersMessage() {
         final Refusal refusal = this.classifier.refusalFor(
-                new JobInProgressException("A sort is running: wait for it and start again."));
+                new JobInProgressException("Sluice is running a job. Finish it before changing "
+                        + "where its folders are."));
 
         assertThat(refusal).isNotNull();
         assertThat(refusal.kind()).isEqualTo(RefusalKind.JOB_IN_PROGRESS);
-        assertThat(refusal.sentence()).isEqualTo("A sort is running: wait for it and start again.");
+        assertThat(refusal.sentence())
+                .isEqualTo("Something else is running. Wait for it to finish, then start this one.");
     }
 
     @Test
@@ -184,7 +198,7 @@ class RefusalClassifierTest {
     }
 
     @Test
-    void anOccupiedScopeNamesTheRunAlreadyThere() {
+    void anOccupiedScopeNamesTheRunAlreadyThereWithoutItsInternalState() {
         final CullRunSummary occupant = new CullRunSummary("2019", Path.of("logs", "sift-prep", "2019"),
                 new PrepDirHealth(PrepDirHealth.State.WAITING, List.of()), new ShardTally(1, 0, 2),
                 Instant.parse("2026-08-20T10:15:30Z"));
@@ -193,7 +207,7 @@ class RefusalClassifierTest {
 
         assertThat(refusal).isNotNull();
         assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_OCCUPIED);
-        assertThat(refusal.sentence()).contains("2019").contains("WAITING");
+        assertThat(refusal.sentence()).contains("2019").doesNotContain("WAITING");
         assertThat(refusal.detail()).containsOnlyKeys("occupant");
     }
 
@@ -316,9 +330,23 @@ class RefusalClassifierTest {
     }
 
     @Test
-    void anUncheckedIoFailureWithADifferentCauseIsNotThisRefusal() {
-        assertThat(this.classifier.refusalFor(new UncheckedIOException(new IOException("disk is unplugged"))))
-                .isNull();
+    void anUncheckedIoFailureWithADifferentCauseIsAFileNothingCouldReach() {
+        final Refusal refusal = this.classifier.refusalFor(
+                new UncheckedIOException(new IOException("disk is unplugged")));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.FILE_UNREACHABLE);
+        assertThat(refusal.detail()).containsEntry("problem", "java.io.IOException: disk is unplugged");
+    }
+
+    @Test
+    void aRunWhoseOwnRecordsCannotBeReadIsNamedAsRecordsRatherThanAsAFolder() {
+        final Refusal refusal = this.classifier.refusalFor(new MalformedPrepJsonException(
+                "index.json is not readable JSON", new NoSuchFileException("index.json")));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.RUN_RECORDS_UNREADABLE);
+        assertThat(refusal.sentence()).doesNotContain("folder name");
     }
 
     @Test

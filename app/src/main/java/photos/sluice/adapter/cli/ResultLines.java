@@ -47,4 +47,18 @@ final class ResultLines {
     static String grouped(final long counted) {
         return String.format(Locale.ROOT, "%,d", counted);
     }
+
+    /**
+     * A figure kept to two significant digits, for a number that is an estimate.
+     *
+     * <p>Written out to its last digit, an estimate claims a precision no part of it holds. A
+     * counted result is exact and uses {@link #grouped} instead.
+     *
+     * @param estimated long the figure
+     * @return {@link String} it, rounded and grouped
+     */
+    static String rounded(final long estimated) {
+        final long scale = (long) Math.pow(10, Math.max(0, String.valueOf(estimated).length() - 2));
+        return grouped(Math.round((double) estimated / scale) * scale);
+    }
 }

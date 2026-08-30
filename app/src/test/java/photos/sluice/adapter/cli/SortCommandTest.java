@@ -82,7 +82,7 @@ class SortCommandTest {
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.DONE.exitCode());
         assertThat(result.out().lines()).containsExactly("Photos sorted: 5", "Videos sorted: 1",
-                "Already in your library: 2", "Identical copies removed: 1", "Moved to Review: 1");
+                "Already in your Library: 2", "Identical copies removed: 1", "Moved to Review: 1");
     }
 
     @Test
@@ -90,7 +90,7 @@ class SortCommandTest {
         this.answering(new SortSummary(2, 2, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), false, 0));
 
         assertThat(this.run(root, "sort", "2019").out().lines())
-                .containsExactly("Photos sorted: 0", "Videos sorted: 0", "Already in your library: 2");
+                .containsExactly("Photos sorted: 0", "Videos sorted: 0", "Already in your Library: 2");
     }
 
     @Test
@@ -221,7 +221,7 @@ class SortCommandTest {
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.REFUSED.exitCode());
         assertThat(result.out()).isEmpty();
-        assertThat(result.err()).contains("Sluice is already working on something.");
+        assertThat(result.err()).contains("Something else is running.");
     }
 
     @Test

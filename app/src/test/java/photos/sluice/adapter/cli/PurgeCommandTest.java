@@ -73,9 +73,33 @@ class PurgeCommandTest {
                 "1 run has not finished, so nothing from it was touched.");
     }
 
-    // Matches every other read of cullRuns() in this adapter (RunAddress, AnswerCommand). A root
-    // that cannot be read is a refusal, not a count of zero, and purgeCompleted() must never even
-    // be asked, since what it would delete is unknown.
+    // Built watched on purpose. The hint reaches only a console being redrawn. Through the ordinary
+    // unwatched harness a purge stays silent whether or not the offer is guarded.
+    @Test
+    void aPurgeOffersNoStopBecauseItCannotHonourOne() {
+        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(complete("2019"))));
+        when(this.pipeline.purgeCompleted()).thenAnswer(_ -> this.runner.submit(_ ->
+                new PurgeReport(List.of("2019"), Map.of(), Map.of(), null)));
+        final var reported = new ByteArrayOutputStream();
+
+        this.runWatched(reported, "purge", "--yes");
+
+        assertThat(reported.toString(StandardCharsets.UTF_8)).doesNotContain(TypedCancel.HINT);
+    }
+
+    @Test
+    void anOrdinarySweepLeavesTheUnreadableRootOutRatherThanWritingItAsNull() {
+        when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(complete("2019"))));
+        when(this.pipeline.purgeCompleted()).thenAnswer(_ -> this.runner.submit(_ ->
+                new PurgeReport(List.of("2019"), Map.of(), Map.of(), null)));
+
+        final CliHarness.Result result = this.run("purge", "--yes", "--json");
+
+        assertThat(result.out()).doesNotContain("unlistableRoot").contains("\"purged\":[\"2019\"]");
+    }
+
+    // A root that cannot be read is a refusal, not a count of zero. purgeCompleted() must never
+    // even be asked, since what it would delete is unknown.
     @Test
     void anUnreadableRootIsRefusedRatherThanReportingAnEmptyCount() {
         final var root = Path.of("D:", "Sift", "logs", "sift-prep");
@@ -101,8 +125,8 @@ class PurgeCommandTest {
         final CliHarness.Result result = this.run("purge");
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.DONE.exitCode());
-        assertThat(result.out().lines()).containsExactly("Nothing was cleared, because " + root + " cannot be "
-                + "read. Most likely the folder is held by another process or not there anymore.");
+        assertThat(result.out()).contains("Nothing was cleared.").contains(root.toString())
+                .contains("No Sluice process is holding it");
     }
 
     private static CullRunSummary complete(final String scope) {
@@ -113,6 +137,17 @@ class PurgeCommandTest {
     private static CullRunSummary blocked(final String scope) {
         return new CullRunSummary(scope, PREP_DIR.resolveSibling(scope),
                 new PrepDirHealth(PrepDirHealth.State.BLOCKED, List.of()), null, Instant.EPOCH);
+    }
+
+    private void runWatched(final ByteArrayOutputStream reported, final String... args) {
+        final Path root = Path.of("D:", "Sift");
+        final var reports = new CommandReports(new RefusalClassifier(new NoSecrets()));
+        final var start = new MutatingCommandStart(mock(WorkingRootLock.class),
+                SettingsFixture.workingRoot(root), this.pipeline, new UsableRoots());
+        final var progress = new ConsoleProgressPort(new PrintStream(reported, true, StandardCharsets.UTF_8), true);
+        final InputStream typed = new ByteArrayInputStream(new byte[0]);
+        final var jobs = new JobReports(reports, start, new TypedCancel(typed, progress), progress);
+        CliHarness.run(CliHarness.parser(new PurgeCommand(this.pipeline, jobs)), args);
     }
 
     private CliHarness.Result run(final String... args) {

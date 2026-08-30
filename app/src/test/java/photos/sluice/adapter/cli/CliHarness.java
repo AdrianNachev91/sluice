@@ -1,5 +1,6 @@
 package photos.sluice.adapter.cli;
 
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.service.Pipeline;
 import picocli.CommandLine;
 
@@ -39,8 +40,10 @@ final class CliHarness {
         commands.add(new SortCommand(mock(Pipeline.class), mock(JobReports.class)));
         commands.add(new CommitCommand(mock(Pipeline.class), mock(JobReports.class)));
         commands.add(new RescueCommand(mock(Pipeline.class), mock(JobReports.class)));
-        commands.add(new CullCommand(mock(Pipeline.class), mock(JobReports.class), mock(ConsoleProgressPort.class)));
-        commands.add(new ResumeCommand(mock(Pipeline.class), mock(JobReports.class), mock(RunAddress.class)));
+        commands.add(new CullCommand(mock(Pipeline.class), mock(JobReports.class),
+                mock(ConsoleProgressPort.class), mock(PathsPort.class)));
+        commands.add(new ResumeCommand(mock(Pipeline.class), mock(JobReports.class), mock(RunAddress.class),
+                mock(PathsPort.class)));
         commands.add(new ImportCommand(mock(Pipeline.class), mock(JobReports.class)));
         commands.add(new TroubleshootCommand(mock(Pipeline.class), mock(JobReports.class), mock(RunAddress.class)));
         commands.add(new AnswerCommand(mock(Pipeline.class), mock(CommandReports.class), mock(RunAddress.class),
@@ -50,6 +53,7 @@ final class CliHarness {
         commands.add(new PurgeCommand(mock(Pipeline.class), mock(JobReports.class)));
         commands.add(new RedoCommand(mock(Pipeline.class), mock(CommandReports.class), mock(RunAddress.class),
                 mock(MutatingCommandStart.class)));
+        commands.add(new SkillCommand(mock(CommandReports.class)));
         return SluiceCli.parser(new SluiceCli(), supplying(commands.toArray()));
     }
 

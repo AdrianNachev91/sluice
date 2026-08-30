@@ -56,11 +56,22 @@ class RescueCommandTest {
     }
 
     @Test
+    void reviewItselfIsNotAFolderInReview(@TempDir final Path root) {
+        for (final String naming : new String[] {"", ".", "./", "2019-06/.."}) {
+            final CliHarness.Result result = this.run(root, "rescue", naming);
+
+            assertThat(result.exitCode()).isEqualTo(CommandStatus.REFUSED.exitCode());
+            assertThat(result.err()).contains("Not a folder in Review");
+        }
+        verifyNoInteractions(this.pipeline);
+    }
+
+    @Test
     void nothingReadyIsReportedRatherThanAZeroCount(@TempDir final Path root) {
         this.answering("Food", nothingRescued());
 
         assertThat(this.run(root, "rescue", "Food").out().lines())
-                .containsExactly("Nothing in this folder was ready to rescue.");
+                .containsExactly("Nothing in this folder was ready to move to your Library.");
     }
 
     @Test
@@ -70,7 +81,7 @@ class RescueCommandTest {
         final CliHarness.Result result = this.run(root, "rescue", "2019-06");
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.DONE.exitCode());
-        assertThat(result.out().lines()).containsExactly("Moved to your library: 4", "Left behind: 1",
+        assertThat(result.out().lines()).containsExactly("Moved to your Library: 4", "Left behind: 1",
                 "The folder is still there.");
     }
 
@@ -108,8 +119,8 @@ class RescueCommandTest {
         final CliHarness.Result result = this.run(root, "rescue", "2019-06");
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.CANCELLED.exitCode());
-        assertThat(result.out().lines()).containsExactly("Stopped before this folder was finished.",
-                "Moved to your library: 1", "The folder is still there.");
+        assertThat(result.out().lines()).containsExactly("Stopped. The rest is still in the Review folder.",
+                "Moved to your Library: 1", "The folder is still there.");
     }
 
     @Test
@@ -129,6 +140,15 @@ class RescueCommandTest {
         this.run(root, "rescue", "Food");
 
         verify(this.lock).acquire(root);
+    }
+
+    @Test
+    void aFolderNameThatClimbsOutOfReviewIsRefusedRatherThanReachingTheEngine(@TempDir final Path root) {
+        final CliHarness.Result result = this.run(root, "rescue", "../..");
+
+        assertThat(result.exitCode()).isEqualTo(CommandStatus.REFUSED.exitCode());
+        assertThat(result.err()).doesNotContain("IllegalArgumentException");
+        verifyNoInteractions(this.pipeline);
     }
 
     private void answering(final String folder, final RescueSummary summary) {

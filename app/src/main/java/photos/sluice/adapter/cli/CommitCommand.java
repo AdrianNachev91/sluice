@@ -30,7 +30,7 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = CommitCommand.VERB,
-        description = "Move what is staged in Sorted into the library, under a year or " + CommitCommand.ALL + ".")
+        description = "Move what is in Sorted into your Library, under a year or " + CommitCommand.ALL + ".")
 public class CommitCommand implements Callable<Integer> {
 
     /**
@@ -39,7 +39,7 @@ public class CommitCommand implements Callable<Integer> {
     static final String VERB = "commit";
 
     /**
-     * The word standing for the whole library.
+     * The word standing for everything in Sorted.
      */
     static final String ALL = ScopeArguments.ALL;
 
@@ -51,7 +51,7 @@ public class CommitCommand implements Callable<Integer> {
     private @Nullable CommandSpec spec;
 
     @Parameters(index = "0", arity = "0..1", paramLabel = "YEAR|" + ALL,
-            description = "The year to move, or " + ALL + " for the whole library.")
+            description = "The year to move, or " + ALL + " for everything in Sorted.")
     @SuppressWarnings("unused")
     private @Nullable String year;
 
@@ -116,14 +116,14 @@ public class CommitCommand implements Callable<Integer> {
     private static List<String> lines(final CommitSummary committed, final boolean stopped) {
         if (committed.committed() == 0) {
             return stopped
-                    ? List.of("Stopped before anything was moved to the library. Your Sorted folder is unchanged.")
+                    ? List.of("Stopped before anything was moved to your Library. Your Sorted folder is unchanged.")
                     : List.of("Nothing to move for this scope.");
         }
         final List<String> lines = new ArrayList<>();
         if (stopped) {
             lines.add(stoppedLine(committed.leftBehind()));
         }
-        lines.add(ResultLines.count("Moved to your library", committed.committed()));
+        lines.add(ResultLines.count("Moved to your Library", committed.committed()));
         for (final LibraryBucket bucket : LibraryBucket.values()) {
             ResultLines.addWhenAny(lines, label(bucket), committed.byBucket().getOrDefault(bucket, 0));
         }
@@ -157,7 +157,7 @@ public class CommitCommand implements Callable<Integer> {
             case PHOTOS -> "Photos";
             case VIDEOS -> "Videos";
             case FUNNY -> "Funny";
-            case OTHER -> "Elsewhere in your library";
+            case OTHER -> "Elsewhere in your Library";
         };
     }
 }

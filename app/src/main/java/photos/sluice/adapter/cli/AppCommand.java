@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.ParameterException;
+import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 
 import java.util.Objects;
@@ -30,6 +31,13 @@ public class AppCommand implements Callable<Integer> {
     @Spec
     @SuppressWarnings("unused")
     private @Nullable CommandSpec spec;
+
+    // Claims the strays so they reach this class. Unclaimed, the parser refuses a positional before
+    // the command runs, as "Unmatched argument at index 1" rather than the sentence below. Hidden,
+    // so the usage help does not advertise an argument this verb has no use for.
+    @Parameters(index = "0..*", hidden = true)
+    @SuppressWarnings("unused")
+    private String @Nullable [] strays;
 
     /**
      * Refuses the invocation that got here.

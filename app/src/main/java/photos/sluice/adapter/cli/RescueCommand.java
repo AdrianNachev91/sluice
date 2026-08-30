@@ -10,6 +10,8 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,7 +26,8 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = RescueCommand.VERB,
-        description = "Promote what is left in a Review folder, then remove it once nothing is left.")
+        description = "Move what is left in a Review folder into your Library, and remove the folder if it "
+                + "ends up empty.")
 public class RescueCommand implements Callable<Integer> {
 
     /**
@@ -40,7 +43,7 @@ public class RescueCommand implements Callable<Integer> {
     private @Nullable CommandSpec spec;
 
     @Parameters(index = "0", paramLabel = "FOLDER",
-            description = "The Review subfolder to promote, e.g. 2019-06 or Food.")
+            description = "The folder inside Review, e.g. 2019-06 or Food.")
     @SuppressWarnings("unused")
     private @Nullable String folder;
 
@@ -72,9 +75,37 @@ public class RescueCommand implements Callable<Integer> {
      * Which folder this run was asked to promote.
      *
      * @return {@link String} the folder
+     * @throws ScopeRefusedException where the name is not one folder under Review
      */
     private String folder() {
-        return Objects.requireNonNull(this.folder, "picocli refuses a missing positional before this runs");
+        final String name = Objects.requireNonNull(this.folder,
+                "picocli refuses a missing positional before this runs");
+        if (!withinReview(name)) {
+            throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
+                    "Not a folder in Review: " + Refusal.shown(name) + ". Name one folder, "
+                            + "like 2019-06 or Food.",
+                    Fields.of("parameter", "FOLDER", "value", name)));
+        }
+        return name;
+    }
+
+    /**
+     * Whether a name stays inside Review once resolved.
+     *
+     * <p>Judged against a stand-in root rather than the configured one. The answer is the same for
+     * either, and reading the configured one would refuse before the folders have been checked.
+     *
+     * @param name {@link String} the folder name as it was typed
+     * @return boolean true when it names something inside Review
+     */
+    private static boolean withinReview(final String name) {
+        final Path review = Path.of("Review");
+        try {
+            final Path resolved = review.resolve(name).normalize();
+            return resolved.startsWith(review) && !resolved.equals(review);
+        } catch (final InvalidPathException notAPath) {
+            return false;
+        }
     }
 
     /**
@@ -98,13 +129,15 @@ public class RescueCommand implements Callable<Integer> {
      */
     private static List<String> lines(final RescueSummary rescued, final boolean stopped) {
         if (rescued.rescued() == 0 && rescued.skipped().isEmpty()) {
-            return List.of(stopped ? "Stopped before anything was rescued." : "Nothing in this folder was ready to rescue.");
+            return List.of(stopped
+                    ? "Stopped before anything was moved to your Library."
+                    : "Nothing in this folder was ready to move to your Library.");
         }
         final List<String> lines = new ArrayList<>();
         if (stopped) {
-            lines.add("Stopped before this folder was finished.");
+            lines.add("Stopped. The rest is still in the Review folder.");
         }
-        ResultLines.addWhenAny(lines, "Moved to your library", rescued.rescued());
+        ResultLines.addWhenAny(lines, "Moved to your Library", rescued.rescued());
         ResultLines.addWhenAny(lines, "Left behind", rescued.skipped().size());
         lines.add(rescued.folderRemoved() ? "The folder was removed." : "The folder is still there.");
         return lines;

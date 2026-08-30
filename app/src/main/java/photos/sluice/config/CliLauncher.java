@@ -69,6 +69,17 @@ public final class CliLauncher {
     private static final String SILENT = "OFF";
 
     /**
+     * Names the level the app's own logging starts at.
+     */
+    private static final String LOG_LEVEL_PROPERTY = "sluice.log.level";
+
+    /**
+     * The level that keeps the message stream to this surface's own progress and refusals. A
+     * caller who wants the detail of one run asks for it with {@code --logging.level.root=INFO}.
+     */
+    private static final String QUIET = "WARN";
+
+    /**
      * Prevents instantiation of this static utility class.
      */
     private CliLauncher() {
@@ -77,11 +88,11 @@ public final class CliLauncher {
     /**
      * Runs the command the arguments name, or reports why nothing could run.
      *
-     * <p>Both properties are set before anything else happens, because the earliest failure here
-     * happens before the framework initialises logging at all. By then the logging configuration
-     * has already read them.
+     * <p>The three properties are set before anything else happens, because the earliest failure
+     * here happens before the framework initialises logging at all. By then the logging
+     * configuration has already read them.
      *
-     * <p>Both are set for the whole process and never put back. A command runs once and exits, so
+     * <p>They are set for the whole process and never put back. A command runs once and exits, so
      * there is nothing after it to put them back for. Anything that drives this method more than
      * once in one process is on its own.
      *
@@ -92,6 +103,7 @@ public final class CliLauncher {
     public static int run(final Path configFile, final String[] args) {
         System.setProperty(LOG_STREAM_PROPERTY, ERROR_STREAM);
         System.setProperty(STARTUP_FAILURE_LEVEL_PROPERTY, SILENT);
+        System.setProperty(LOG_LEVEL_PROPERTY, QUIET);
         final ConfigurableApplicationContext context;
         try {
             context = new SpringApplicationBuilder(SluiceApplication.class)

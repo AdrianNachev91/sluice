@@ -361,7 +361,7 @@ class RunsPresenterTest {
 
         assertThat(presenter.view().message()).isNotNull();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .startsWith("That sift finished before it could be discarded");
+                .startsWith("This sift finished before it could be discarded");
     }
 
     @Test

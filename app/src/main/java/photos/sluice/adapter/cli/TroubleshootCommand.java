@@ -27,7 +27,7 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = TroubleshootCommand.VERB,
-        description = "Repair what a sift can fix on its own, and report what is still open.")
+        description = "Repair what can be repaired without asking you, and report what is still open.")
 public class TroubleshootCommand implements Callable<Integer> {
 
     /**
@@ -70,7 +70,7 @@ public class TroubleshootCommand implements Callable<Integer> {
     public Integer call() {
         final CommandSpec running = Objects.requireNonNull(this.spec,
                 "the parser fills this in before it runs a command");
-        return this.reports.report(running, VERB, this::folder, this.pipeline::troubleshoot, _ -> false,
+        return this.reports.reportUninterruptible(running, VERB, this::folder, this.pipeline::troubleshoot,
                 this::troubleshot);
     }
 
@@ -127,8 +127,7 @@ public class TroubleshootCommand implements Callable<Integer> {
     }
 
     /**
-     * What one open finding tells a person, without the validator prose {@link Finding#describe()}
-     * carries for the aggregated exception it was written for.
+     * What one open finding tells a person.
      *
      * @param finding {@link Finding} the open finding
      * @return {@link String} the line
@@ -136,7 +135,7 @@ public class TroubleshootCommand implements Callable<Integer> {
     private static String humanLine(final Finding finding) {
         final String key = AnswerVocabulary.keyFor(finding);
         if (key == null) {
-            return "A problem with this sift's own records. See --json for the detail.";
+            return "Not answerable here. Run this again with --json to see what it is.";
         }
         return "Needs an answer: " + key + ". Run 'answer <run> " + key + " <option>', option one of "
                 + String.join(", ", AnswerVocabulary.optionsFor(finding)) + ".";
@@ -154,7 +153,7 @@ public class TroubleshootCommand implements Callable<Integer> {
             case READY -> "Every sheet was judged. Run 'resume' to move the photos.";
             case WAITING -> "Waiting for the rest of the sheets to come back.";
             case BLOCKED -> "Something is still wrong with this sift, but nothing further could be found.";
-            case DAMAGED -> "Sluice could not read this sift's own records. Often another program has it open.";
+            case DAMAGED -> "This sift's own records could not be read. Often another program has them open.";
         };
     }
 }

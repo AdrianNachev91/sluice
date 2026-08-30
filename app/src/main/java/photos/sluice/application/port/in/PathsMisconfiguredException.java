@@ -72,23 +72,12 @@ public final class PathsMisconfiguredException extends IllegalStateException {
     }
 
     /**
-     * Words the violations for a log.
-     *
-     * @param violations a {@link List} of {@link PathViolation} the violations to word
-     * @return {@link String} the message
-     */
-    private static String render(final List<PathViolation> violations) {
-        return "Sluice cannot work with these folder settings: "
-                + violations.stream().map(PathsMisconfiguredException::render).collect(Collectors.joining(" "));
-    }
-
-    /**
-     * Words one violation for a log.
+     * Words one violation, as a sentence on its own.
      *
      * @param violation {@link PathViolation} the violation to word
      * @return {@link String} the sentence for it
      */
-    private static String render(final PathViolation violation) {
+    public static String clause(final PathViolation violation) {
         return switch (violation) {
             case final NotConfigured v -> property(v.role()) + " is not set.";
             case final NotAPath v -> property(v.role()) + " (" + v.value() + ") is not a usable folder path.";
@@ -97,5 +86,16 @@ public final class PathsMisconfiguredException extends IllegalStateException {
             case final Overlap v -> property(v.first()) + " and " + property(v.second())
                     + " must not contain each other.";
         };
+    }
+
+    /**
+     * Words the violations for a log.
+     *
+     * @param violations a {@link List} of {@link PathViolation} the violations to word
+     * @return {@link String} the message
+     */
+    private static String render(final List<PathViolation> violations) {
+        return "Sluice cannot work with these folder settings: "
+                + violations.stream().map(PathsMisconfiguredException::clause).collect(Collectors.joining(" "));
     }
 }

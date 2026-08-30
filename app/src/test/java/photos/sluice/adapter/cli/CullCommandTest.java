@@ -8,8 +8,10 @@ import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.port.in.WaitingReason;
+import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.PathSettings;
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.JobRunner;
@@ -31,6 +33,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -98,8 +101,8 @@ class CullCommandTest {
         final CliHarness.Result result = this.run(root, "sift", "2019");
 
         assertThat(result.exitCode()).isEqualTo(CommandStatus.DONE.exitCode());
-        assertThat(result.out().lines()).containsExactly("Photos looked at: 10", "Sheets judged: 0",
-                "Calls to your provider: 0", "Junk: 3", "Could not be judged: 1");
+        assertThat(result.out().lines()).containsExactly("Photos looked at: 10", "Junk: 3",
+                "Could not be judged: 1");
     }
 
     @Test
@@ -145,6 +148,19 @@ class CullCommandTest {
     }
 
     @Test
+    void aSiftTheProviderCouldNotFinishIsBlockedRatherThanRefusedOrFailed(@TempDir final Path root) {
+        when(this.pipeline.cull(any())).thenAnswer(_ -> this.runner.submit(_ -> {
+            throw new CompletionException(new CullException("montage-003 came back with no decisions"));
+        }));
+
+        final CliHarness.Result result = this.run(root, "sift", "2019");
+
+        assertThat(result.exitCode()).isEqualTo(CommandStatus.BLOCKED.exitCode());
+        assertThat(result.out()).contains("montage-003 came back with no decisions");
+        assertThat(result.err()).doesNotContain("CullException");
+    }
+
+    @Test
     void aRunCancelledBeforeAnyMontageRenderedExitsCancelled(@TempDir final Path root) {
         this.answering(new CullJobOutcome.Cancelled(zeroReport(), null));
 
@@ -184,14 +200,14 @@ class CullCommandTest {
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(
                 List.of(new SortedTally.YearRow(2019, 187, 0, List.of()))));
-        when(this.pipeline.estimateFor(187)).thenReturn(new SpendEstimate(50_000, 4_000, false, false, false));
+        when(this.pipeline.estimateFor(187)).thenReturn(new SpendEstimate(50_000, 4_321, false, false, false));
         this.answering(applied());
 
         this.run(root, "sift", "2019");
 
         assertThat(this.reported.toString(StandardCharsets.UTF_8))
                 .contains("Sifting 187 photos is expected to spend about 54,000 tokens")
-                .contains("an estimate, based on the figures Sluice ships with");
+                .contains("an estimate, based on default estimates");
     }
 
     @Test
@@ -258,7 +274,8 @@ class CullCommandTest {
         final var start = new MutatingCommandStart(this.lock, SettingsFixture.workingRoot(root), this.pipeline,
                 new UsableRoots());
         final var jobs = new JobReports(reports, start, new TypedCancel(this.typed, this.progress), this.progress);
-        return CliHarness.run(CliHarness.parser(new CullCommand(this.pipeline, jobs, this.progress)), args);
+        return CliHarness.run(CliHarness.parser(
+                new CullCommand(this.pipeline, jobs, this.progress, mock(PathsPort.class))), args);
     }
 
     private record UsableRoots() implements PathValidationUseCase {

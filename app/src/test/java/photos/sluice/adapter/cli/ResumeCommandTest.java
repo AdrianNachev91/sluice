@@ -9,6 +9,7 @@ import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.WorkingRootLock;
 import photos.sluice.application.service.JobRunner;
+import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
@@ -129,8 +130,8 @@ class ResumeCommandTest {
         final var progress = new ConsoleProgressPort(new PrintStream(new ByteArrayOutputStream(), true,
                 StandardCharsets.UTF_8), false);
         final var jobs = new JobReports(reports, start, new TypedCancel(this.typed, progress), progress);
-        return CliHarness.run(CliHarness.parser(new ResumeCommand(this.pipeline, jobs, new RunAddress(this.pipeline))),
-                args);
+        return CliHarness.run(CliHarness.parser(new ResumeCommand(this.pipeline, jobs,
+                new RunAddress(this.pipeline), mock(PathsPort.class))), args);
     }
 
     private record UsableRoots() implements PathValidationUseCase {

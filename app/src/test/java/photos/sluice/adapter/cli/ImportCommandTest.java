@@ -25,11 +25,17 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class ImportCommandTest {
+
+    // A NUL is the one character every platform's own path parser rejects, so it is what a test can
+    // assert on all three. What a user actually types is a character Windows reserves, such as * or
+    // ?, which no shell expands and which reaches the parser exactly as typed.
+    private static final String NOT_A_PATH = "photos" + (char) 0 + "gone";
 
     private final Pipeline pipeline = mock(Pipeline.class);
     private final JobRunner runner = new JobRunner();
@@ -155,6 +161,30 @@ class ImportCommandTest {
         this.run(root, "import", source.toString());
 
         verify(this.lock).acquire(root);
+    }
+
+    @Test
+    void aSourceNoPlatformCanReadAsAPathIsRefusedRatherThanCrashing(@TempDir final Path root) {
+        final CliHarness.Result result = this.run(root, "import", NOT_A_PATH);
+
+        assertThat(result.exitCode()).isEqualTo(CommandStatus.REFUSED.exitCode());
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err()).doesNotContain("InvalidPathException");
+    }
+
+    @Test
+    void aSourceThatIsNotAPathIsNamedBackToTheCallerWhoTypedIt(@TempDir final Path root) {
+        final CliHarness.Result result = this.run(root, "--json", "import", NOT_A_PATH);
+
+        assertThat(result.out()).contains("\"kind\":\"IMPORT_SOURCE_REFUSED\"");
+        assertThat(result.err()).contains(NOT_A_PATH);
+    }
+
+    @Test
+    void aSourceThatIsNotAPathTakesNoClaimOnTheWorkingRoot(@TempDir final Path root) {
+        this.run(root, "import", NOT_A_PATH);
+
+        verify(this.lock, never()).acquire(root);
     }
 
     private void answering(final List<Path> sources, final ImportKind kind, final ImportSummary summary) {

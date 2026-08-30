@@ -342,7 +342,7 @@ class ImportEngineTest {
             assertThatThrownBy(() -> engine.importFrom(List.of(card), ImportKind.COPY,
                     ProgressCallback.NO_OP, CancellationSignal.NEVER))
                     .isInstanceOf(ImportSourceException.class)
-                    .hasMessageContaining("could not read")
+                    .hasMessageContaining("could not be read")
                     .hasMessageContaining("still plugged in");
         }
 
@@ -388,7 +388,7 @@ class ImportEngineTest {
 
             assertThatThrownBy(() -> importEngine(root).requireImportable(List.of(root)))
                     .isInstanceOf(ImportSourceException.class)
-                    .hasMessageContaining("your Inbox is inside it");
+                    .hasMessageContaining("because your Inbox is inside it");
         }
 
         @Test
@@ -396,7 +396,7 @@ class ImportEngineTest {
             assertThatThrownBy(() -> importEngine(root)
                     .requireImportable(List.of(root.resolve("a-card-that-was-pulled-out"))))
                     .isInstanceOf(ImportSourceException.class)
-                    .hasMessageContaining("could not find");
+                    .hasMessageContaining("could not be found");
         }
 
         @Test

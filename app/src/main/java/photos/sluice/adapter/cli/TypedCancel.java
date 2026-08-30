@@ -49,11 +49,10 @@ public class TypedCancel {
      */
     private static final String BYTE_ORDER_MARK = Character.toString(0xFEFF);
 
-    // The first names a file, which every pass of a run is asked to stop between. That has to hold
-    // for all of them. A pass checking only once it has finished would leave this promising a wait
-    // of one file, where the real one is every file left.
+    // Names no unit, because every verb routed through here stops between a different one. Naming
+    // the file would promise a wait of one file on a run whose real wait is far longer.
     private static final String STOPPING =
-            "Stopping. Sluice finishes the file it is on, then says what it did.";
+            "Stopping. It finishes what it is on, then says what it did.";
 
     private static final String STOPPING_NOW =
             "Stopping now. A file still being copied is abandoned rather than finished.";

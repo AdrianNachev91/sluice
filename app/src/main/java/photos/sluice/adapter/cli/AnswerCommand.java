@@ -67,7 +67,7 @@ public class AnswerCommand implements Callable<Integer> {
     @SuppressWarnings("unused")
     private @Nullable String option;
 
-    @Option(names = "--yes", description = "Confirm, where the option chosen discards the run.")
+    @Option(names = "--yes", description = "Needed when the option you choose discards the run.")
     @SuppressWarnings("unused")
     private boolean yes;
 
@@ -206,7 +206,7 @@ public class AnswerCommand implements Callable<Integer> {
                     .findFirst()
                     .map(candidate -> candidate.health().findings())
                     .orElseThrow(() -> new ScopeRefusedException(new Refusal(RefusalKind.RUN_NOT_FOUND,
-                            "Sluice can't find a sift at " + prepDir + ".",
+                            "No sift at " + prepDir + ".",
                             Fields.of("prepDir", prepDir.toString()))));
             case CullRuns.Unlistable(final Path root) -> throw new ScopeRefusedException(
                     RunsRefusals.unreadable(root));

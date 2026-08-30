@@ -24,8 +24,7 @@ import java.util.List;
  * written twice.
  *
  * <p>A path is passed on untouched, because what may be worked on is the facade's ruling rather
- * than this adapter's. Every verb the facade guards refuses a folder outside the working root on
- * its own; a new one owes that refusal itself rather than trusting this class to have checked.
+ * than this adapter's.
  */
 @Component
 @Profile("cli")
@@ -113,10 +112,10 @@ public class RunAddress {
      */
     private static ScopeRefusedException notFound(final String tag, final List<CullRunSummary> runs) {
         final List<String> tags = runs.stream().map(CullRunSummary::scope).toList();
-        final String remedy = tags.isEmpty() ? "It has none yet."
-                : "It has these: " + String.join(", ", tags) + ".";
+        final String remedy = tags.isEmpty() ? "There are none yet."
+                : "These are on disk: " + String.join(", ", tags) + ".";
         return new ScopeRefusedException(new Refusal(RefusalKind.RUN_NOT_FOUND,
-                "Sluice can't find a sift called " + Refusal.shown(tag) + ". " + remedy,
+                "No sift called " + Refusal.shown(tag) + ". " + remedy,
                 Fields.of("address", tag, "known", tags)));
     }
 }

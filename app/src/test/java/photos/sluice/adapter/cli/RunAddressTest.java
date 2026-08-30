@@ -80,7 +80,7 @@ class RunAddressTest {
         when(this.pipeline.cullRuns()).thenReturn(this.listed());
 
         assertThat(refusalOf(() -> this.addresses.folderFor("2019")).sentence())
-                .isEqualTo("Sluice can't find a sift called 2019. It has none yet.");
+                .isEqualTo("No sift called 2019. There are none yet.");
     }
 
     @Test

@@ -63,7 +63,32 @@ public class JobReports {
                              final Function<S, JobHandle<T>> submit, final Predicate<T> stoppedShort,
                              final Function<Finished<T>, CommandOutcome> answered) {
         return this.reports.report(spec, command,
-                () -> this.run(spec, asked, submit, stoppedShort, answered));
+                () -> this.run(spec, asked, submit, stoppedShort, answered, true));
+    }
+
+    /**
+     * Reads what a verb was asked for, starts its job, waits, and writes what it produced, where
+     * that job runs to the end once started.
+     *
+     * <p>Whether a job reads the cancellation signal is the work's own choice, so nothing about the
+     * handle can answer it and the caller states it here. A job that does not read it must not be
+     * offered a cancel. The offer is unanswerable, and a second request would report a file
+     * abandoned mid-copy over a run that finishes normally.
+     *
+     * @param <S> what the verb was asked to work on
+     * @param <T> what the job answers with
+     * @param spec {@link CommandSpec} the running command, which carries its own two streams
+     * @param command {@link String} the verb's name, as the document reports it
+     * @param asked a {@link Supplier} reads the arguments, refusing what this verb cannot take
+     * @param submit a {@link Function} starts the job over what was asked for
+     * @param answered a {@link Function} reads what the job answered into an outcome
+     * @return int the code the process leaves with
+     */
+    public <S, T> int reportUninterruptible(final CommandSpec spec, final String command, final Supplier<S> asked,
+                                            final Function<S, JobHandle<T>> submit,
+                                            final Function<Finished<T>, CommandOutcome> answered) {
+        return this.reports.report(spec, command,
+                () -> this.run(spec, asked, submit, _ -> false, answered, false));
     }
 
     /**
@@ -95,24 +120,30 @@ public class JobReports {
      * @param submit a {@link Function} starts the job over what was asked for
      * @param stoppedShort a {@link Predicate} reads the job's own account of whether it gave up
      * @param answered a {@link Function} reads what the job answered into an outcome
+     * @param interruptible boolean whether this job reads the cancellation signal
      * @return {@link CommandOutcome} what the job produced
      */
     private <S, T> CommandOutcome run(final CommandSpec spec, final Supplier<S> asked,
                                       final Function<S, JobHandle<T>> submit,
                                       final Predicate<T> stoppedShort,
-                                      final Function<Finished<T>, CommandOutcome> answered) {
+                                      final Function<Finished<T>, CommandOutcome> answered,
+                                      final boolean interruptible) {
         final boolean quiet = SluiceCli.quietAsked(spec);
         this.progress.quiet(quiet);
         final S scope = asked.get();
         this.start.claimAndSweep();
         final JobHandle<T> job = submit.apply(scope);
-        if (!quiet && this.progress.watched()) {
+        if (interruptible && !quiet && this.progress.watched()) {
             this.progress.note(TypedCancel.HINT);
         }
         final T produced;
-        // The watch closes as this block ends, before the outcome below is built. A line arriving
-        // after that cannot print a note under a run which has already finished.
-        try (final var _ = this.cancel.watch(job)) {
+        if (interruptible) {
+            // The watch closes as this block ends, before the outcome below is built. A line
+            // arriving after that cannot print a note under a run which has already finished.
+            try (final var _ = this.cancel.watch(job)) {
+                produced = job.join();
+            }
+        } else {
             produced = job.join();
         }
         // The answer's own account rather than the handle's flag. A cancel asked for while the last

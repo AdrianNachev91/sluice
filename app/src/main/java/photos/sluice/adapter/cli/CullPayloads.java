@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * The wire shapes for everything a sift produces, and the readings that build them.
@@ -137,12 +138,29 @@ public final class CullPayloads {
      *        nothing did
      * @param applied {@link ApplyPayload} what was moved, or null when nothing was
      * @param archivedPriorRun {@link String} where a previous run of this scope was set aside, or null
+     * @param instructions {@link String} what to hand an agent to judge the sheets, or null on an
+     *        ending that is not waiting for them
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record OutcomePayload(String outcome, ReportPayload report, @Nullable String scope,
                                  @Nullable String prepDir, @Nullable ShardsPayload shards,
                                  @Nullable WaitingReason reason, @Nullable List<FindingPayload> findings,
-                                 @Nullable ApplyPayload applied, @Nullable String archivedPriorRun) {
+                                 @Nullable ApplyPayload applied, @Nullable String archivedPriorRun,
+                                 @Nullable String instructions) {
+    }
+
+    /**
+     * A sift the provider raised out of rather than returning from.
+     *
+     * <p>No scope or prep dir. The provider raises this without them, and inventing either would
+     * hand a caller an address to act on that nothing produced.
+     *
+     * @param problems {@link String} the provider's own account of what it could not do
+     * @param report {@link ReportPayload} what it judged and consumed first, or null where the
+     *        provider counts nothing
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record IncompletePayload(String problems, @Nullable ReportPayload report) {
     }
 
     /**
@@ -163,17 +181,29 @@ public final class CullPayloads {
      * @return {@link OutcomePayload} its machine-readable shape
      */
     public static OutcomePayload outcome(final CullJobOutcome outcome) {
+        return outcome(outcome, null);
+    }
+
+    /**
+     * Reads how a sift ended onto the wire, carrying the instructions where there are any.
+     *
+     * @param outcome {@link CullJobOutcome} how the run ended
+     * @param instructions {@link String} what to hand an agent, or null where nothing is waiting
+     *        on one
+     * @return {@link OutcomePayload} its machine-readable shape
+     */
+    public static OutcomePayload outcome(final CullJobOutcome outcome, final @Nullable String instructions) {
         final ReportPayload report = report(outcome.cullReport());
         final String archived = text(outcome.archivedPriorRun());
         return switch (outcome) {
             case final CullJobOutcome.Applied done -> new OutcomePayload("Applied", report, null, null, null,
-                    null, null, applied(done.applyReport()), archived);
-            case final CullJobOutcome.Waiting waiting -> waiting(waiting, report, archived);
+                    null, null, applied(done.applyReport()), archived, null);
+            case final CullJobOutcome.Waiting waiting -> waiting(waiting, report, archived, instructions);
             case final CullJobOutcome.Blocked blocked -> new OutcomePayload("Blocked", report,
                     blocked.job().scope(), text(blocked.job().prepDir()), shards(blocked.job().shards()),
-                    null, findings(blocked.findings()), null, archived);
+                    null, findings(blocked.findings()), null, archived, null);
             case final CullJobOutcome.Cancelled ignored -> new OutcomePayload("Cancelled", report, null, null,
-                    null, null, null, null, archived);
+                    null, null, null, null, archived, null);
         };
     }
 
@@ -183,13 +213,15 @@ public final class CullPayloads {
      * @param waiting {@link CullJobOutcome.Waiting} the paused run
      * @param report {@link ReportPayload} what it consumed before pausing
      * @param archived {@link String} where a previous run of this scope was set aside, or null
+     * @param instructions {@link String} what to hand an agent, or null where nothing is waiting on one
      * @return {@link OutcomePayload} its machine-readable shape
      */
     private static OutcomePayload waiting(final CullJobOutcome.Waiting waiting, final ReportPayload report,
-                                          final @Nullable String archived) {
+                                          final @Nullable String archived,
+                                          final @Nullable String instructions) {
         final WaitingCullJob job = waiting.job();
         return new OutcomePayload("Waiting", report, job.scope(), text(job.prepDir()), shards(job.shards()),
-                waiting.reason(), null, null, archived);
+                waiting.reason(), null, null, archived, instructions);
     }
 
     /**
@@ -231,8 +263,19 @@ public final class CullPayloads {
      * @return {@link ApplyPayload} its machine-readable shape
      */
     public static ApplyPayload applied(final ApplyReport report) {
-        return new ApplyPayload(report.reviewed(), report.byCategory(), report.unreviewable(),
+        return new ApplyPayload(report.reviewed(), new TreeMap<>(report.byCategory()), report.unreviewable(),
                 report.nearDupGroups(), report.nearDupRejects(), report.heals());
+    }
+
+    /**
+     * Reads a sift the provider could not finish onto the wire.
+     *
+     * @param problems {@link String} the provider's own account of what it could not do
+     * @param report {@link CullReport} what the abandoned run judged and consumed, or null
+     * @return {@link IncompletePayload} its machine-readable shape
+     */
+    public static IncompletePayload incomplete(final @Nullable String problems, final @Nullable CullReport report) {
+        return new IncompletePayload(String.valueOf(problems), report == null ? null : report(report));
     }
 
     /**

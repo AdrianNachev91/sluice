@@ -15,14 +15,13 @@ final class RunsRefusals {
      * window open behind it, so an unnamed holder points them at their own app. Both shapes are
      * named because the command line is Sluice too.
      *
-     * <p>The claim is about holding rather than causing. Nothing Sluice does holds this folder,
-     * and a working root another Sluice does hold refuses with its own message.
+     * <p>The claim is about holding rather than causing. Nothing Sluice does holds this folder.
      *
      * <p>A folder that is simply gone answers as a root with no runs, so it never reaches here.
      */
-    private static final String UNREADABLE = "Sluice doesn't know what sifts are in %s because it "
-            + "cannot be read. No Sluice process is holding it, not the desktop app and not "
-            + "another Sluice command. Look for another program, or a drive that isn't reachable.";
+    private static final String UNREADABLE = "Unreadable sift folder: %s. No Sluice process is "
+            + "holding it, not the desktop app and not another Sluice command. Look for another "
+            + "program, or a drive that isn't reachable.";
 
     /**
      * Prevents instantiation of this static utility class.

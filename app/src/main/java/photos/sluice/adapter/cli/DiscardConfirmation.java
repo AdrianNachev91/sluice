@@ -37,8 +37,8 @@ public class DiscardConfirmation {
      */
     String messageFor(final Path prepDir) {
         final Optional<CullRunSummary> run = this.runAt(prepDir);
-        final String paidFor = run.map(this::paidFor).orElse("Sluice could not confirm how many paid sheet "
-                + "decisions this includes. ");
+        final String paidFor = run.map(this::paidFor)
+                .orElse("The number of paid sheet decisions is unknown. ");
         return paidFor + "Discarding this run's records will archive them. They will stay on disk in "
                 + this.pipeline.archivesFolder() + " for 30 days. Run this again with --yes to continue.";
     }

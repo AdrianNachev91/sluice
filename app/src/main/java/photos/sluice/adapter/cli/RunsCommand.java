@@ -36,7 +36,7 @@ import java.util.stream.IntStream;
  */
 @Component
 @Profile("cli")
-@Command(name = "runs", description = "List the sift runs on disk and how far each one has got.")
+@Command(name = "runs", description = "List the sift runs on disk and their progress.")
 public class RunsCommand implements Callable<Integer> {
 
     /**

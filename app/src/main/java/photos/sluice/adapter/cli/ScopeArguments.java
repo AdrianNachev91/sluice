@@ -36,7 +36,7 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
     public static final String OLDEST = "--oldest";
 
     /**
-     * The word standing for the whole library where a verb takes one.
+     * The word standing for every year at once, where a verb takes one.
      */
     public static final String ALL = "all";
 
@@ -166,13 +166,9 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
     /**
      * The year some text names.
      *
-     * <p>Four digits, and no leading zero. What rests on that is the guard against sifting the same
-     * months twice. A sift's folder is named for its scope, and
-     * {@link CullScope#yearScopeOf(String)} reads a year back out of that name to compare one
-     * timeline against another. It reads four digits alone, and a year is written into the name
-     * with its leading zeros dropped. So {@code 0019} would name a folder no comparison could read,
-     * and a second sift covering the same months would be neither noticed nor refused. It would
-     * build its sheets and spend for them again.
+     * <p>Four digits, and no leading zero. A year written any other way cannot be read back out of
+     * the folder name its own sift produces, so a second sift of the same months would be neither
+     * noticed nor refused, and would spend for them again.
      *
      * @param text {@link String} what was typed in the year's position
      * @param alsoAccepted {@link String} what else this verb takes in that position, or null where
@@ -181,10 +177,9 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      * @throws ScopeRefusedException when it is not four digits, or carries a leading zero
      */
     private static int yearOf(final String text, final @Nullable String alsoAccepted) {
-        if (text.length() != YEAR_DIGITS || !text.chars().allMatch(Character::isDigit)
-                || text.startsWith(LEADING_ZERO)) {
-            final String said = "Sluice can't read " + Refusal.shown(text)
-                    + " as a year. A year is four digits with no leading zero, like 2019.";
+        if (text.length() != YEAR_DIGITS || !AsciiDigits.only(text) || text.startsWith(LEADING_ZERO)) {
+            final String said = "Not a year: " + Refusal.shown(text)
+                    + ". A year is four digits with no leading zero, like 2019.";
             throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
                     alsoAccepted == null ? said : Refusal.sentences(List.of(said, alsoAccepted)),
                     Fields.of("parameter", "year", "value", text)));
@@ -202,7 +197,7 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
     private static int count(final Integer asked) {
         if (asked < FEWEST) {
             throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
-                    "Sluice can't work on " + asked + " photos. " + OLDEST + " needs at least 1.",
+                    "Not a photo count: " + asked + ". " + OLDEST + " needs at least 1.",
                     Fields.of("option", OLDEST, "value", asked)));
         }
         return asked;
@@ -217,7 +212,7 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      */
     private static ScopeRefusedException missing(final String verb, final String remedy) {
         return new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_MISSING,
-                "Sluice doesn't know which photos to " + verb + ". " + remedy, Fields.of("verb", verb)));
+                "Missing scope. " + remedy, Fields.of("verb", verb)));
     }
 
     /**
@@ -229,6 +224,6 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      */
     private static ScopeRefusedException conflicting(final String verb, final String why) {
         return new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_CONFLICTING,
-                "Sluice can't tell which photos you mean. " + why, Fields.of("verb", verb)));
+                "Unclear scope. " + why, Fields.of("verb", verb)));
     }
 }
