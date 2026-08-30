@@ -70,6 +70,11 @@ public class PhotoCategoriesPresenter {
     private static final String NO_DESCRIPTION = "Say what belongs in this category, so the vision "
             + "provider doing the sifting knows the criteria for sifting to it.";
 
+    // Staying is the loud choice, because leaving is the one of the two the app cannot put back.
+    // What a reader writes into a category is several sentences of their own.
+    //
+    // The body says what is lost rather than that a redraw loses it. A redraw is not something the
+    // reader can watch happen, and the loss is.
     private final SettingsUseCase settingsUseCase;
 
     /**
@@ -152,6 +157,27 @@ public class PhotoCategoriesPresenter {
     }
 
     /**
+     * Whether the cards on screen say anything a save would store differently.
+     *
+     * <p>Judged against what a save would write rather than against the characters typed. Names and
+     * descriptions are stored stripped, and a blank line in an examples box is stored as nothing. So
+     * a trailing space is not a change, and neither is an empty row somebody tabbed through.
+     *
+     * <p>Order counts, because a save writes the cards back in the order they are drawn. Moving one
+     * is a change even where every card still says exactly what it said.
+     *
+     * @param onScreen a {@link List} of {@link CategoryEdit} the cards as they stand now
+     * @return boolean true where leaving would lose something
+     */
+    public boolean hasUnsavedEdits(final List<CategoryEdit> onScreen) {
+        final List<CategoryEdit> stored = this.view().categories().stream()
+                .map(row -> new CategoryEdit(row.name(), row.description(), row.examples(), row.enabled()))
+                .map(PhotoCategoriesPresenter::asItWouldBeStored)
+                .toList();
+        return !stored.equals(onScreen.stream().map(PhotoCategoriesPresenter::asItWouldBeStored).toList());
+    }
+
+    /**
      * Whether a card carrying this switch is the last one still on, so no control that would take
      * the count to zero may be offered on it.
      *
@@ -183,6 +209,18 @@ public class PhotoCategoriesPresenter {
      */
     public boolean isTheSetFull(final int cardsOnScreen) {
         return cardsOnScreen >= Settings.maxCategories();
+    }
+
+    /**
+     * One card reduced to what a save would actually write from it.
+     *
+     * @param edit {@link CategoryEdit} the card as it stands
+     * @return {@link CategoryEdit} the same card, stripped and with its blank examples dropped
+     */
+    private static CategoryEdit asItWouldBeStored(final CategoryEdit edit) {
+        return new CategoryEdit(edit.name().strip(), edit.description().strip(),
+                edit.examples().stream().map(String::strip).filter(example -> !example.isEmpty()).toList(),
+                edit.enabled());
     }
 
     /**

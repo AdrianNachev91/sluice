@@ -217,6 +217,25 @@ public class JobRunner {
     }
 
     /**
+     * Asks the job in flight to give up on the file it is writing, rather than finish it.
+     *
+     * <p>Marks the job cancelled with it, since {@link JobHandle#requestAbandon} does both. So this
+     * is an escalation of a stop rather than a second kind of one.
+     *
+     * <p>Says nothing about whether anything was running. A press landing just after a job ended has
+     * nothing to escalate, and that is the same answer as one landing on a job that stops instantly.
+     *
+     * <p>Read without the slot, unlike {@link #shutdown}. Nothing here waits on what it reads, so the
+     * worst a stale answer costs is a stop asked of a job that has already ended.
+     */
+    public void abandonInFlight() {
+        final JobHandle<?> running = this.inFlight.get();
+        if (running != null) {
+            running.requestAbandon();
+        }
+    }
+
+    /**
      * Whether a job's work is currently executing, nothing more. It says nothing about whether the
      * most recent job succeeded or failed - that's only ever knowable through that job's own
      * JobHandle. A caller can observe this go false a moment before that job's own join()/

@@ -10,6 +10,8 @@ import photos.sluice.adapter.ui.SettingsPresenter.SaveOutcome;
 import photos.sluice.adapter.ui.SettingsView;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -41,16 +43,69 @@ final class SettingsPane {
      * @param visionProvider {@link VisionProviderPresenter} the VISION PROVIDER card's credential,
      *         model catalogue and connection check
      * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
-     * @return {@link Node} the settings pane
+     * @return {@link Mounted} the pane, and the way to ask whether leaving would lose anything
      */
-    static Node pane(final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
-                     final Runnable onOpenPhotoCategories) {
+    static Mounted pane(final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
+                        final Runnable onOpenPhotoCategories) {
         final var container = new VBox();
         container.getStyleClass().add("settings-pane");
         final PageHeader.Result header = PageHeader.build("Settings", "settings-save-button", null);
-        refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, null);
+        // Replaced on every draw, since a save rebuilds every card. Whatever asks about unsaved work
+        // has to read the controls standing now rather than the ones this page opened with.
+        final var onScreen = new AtomicReference<@Nullable OnScreen>(null);
+        refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, null, onScreen);
 
-        return PageHeader.pinnedOver(header, container);
+        return new Mounted(PageHeader.pinnedOver(header, container),
+                () -> hasUnsavedEdits(presenter, onScreen.get()));
+    }
+
+    /**
+     * The pane, and the one question anything outside it needs to ask.
+     *
+     * @param node {@link Node} the pane itself
+     * @param hasUnsavedEdits {@link BooleanSupplier} whether leaving would lose what was typed
+     */
+    record Mounted(Node node, BooleanSupplier hasUnsavedEdits) {
+    }
+
+    /**
+     * The controls a draw put up, held so the unsaved-work question can read them later.
+     *
+     * @param folders {@link FoldersCard.Result} the three path fields
+     * @param provider {@link VisionProviderCard.Result} the provider choice and its own fields
+     * @param montage {@link PhotoSheetsCard.Result} the sheet's two numbers
+     */
+    private record OnScreen(FoldersCard.Result folders, VisionProviderCard.Result provider,
+                            PhotoSheetsCard.Result montage) {
+    }
+
+    /**
+     * Whether leaving would lose something typed or picked here.
+     *
+     * <p>Answers false before the first draw has put any control up, which is the only state where
+     * there is nothing to read and nothing could have been typed either.
+     *
+     * @param presenter {@link SettingsPresenter} compares what is on screen against what is stored
+     * @param onScreen {@link OnScreen} the controls the last draw put up, or null before it ran
+     * @return boolean true where leaving would lose something
+     */
+    private static boolean hasUnsavedEdits(final SettingsPresenter presenter,
+                                           final @Nullable OnScreen onScreen) {
+        if (onScreen == null) {
+            return false;
+        }
+        final VisionProviderCard.ProviderFieldControls controls =
+                VisionProviderCard.controlsOf(onScreen.provider().providerFields());
+        return presenter.hasUnsavedEdits(new SettingsPresenter.SettingsEdits(
+                onScreen.folders().workingRoot().field().getText(),
+                onScreen.folders().libraryRoot().field().getText(),
+                onScreen.folders().inbox().field().getText(),
+                VisionProviderCard.providerChoiceOf(onScreen.provider().providerBox()).id(),
+                VisionProviderCard.selectedModelId(controls.model()),
+                controls.endpoint().getText(),
+                VisionProviderCard.watchAutomaticallyOf(onScreen.provider().watchRow()),
+                onScreen.montage().tileSize().getValue(),
+                onScreen.montage().tilesPerRow().getValue()));
     }
 
     /**
@@ -65,17 +120,21 @@ final class SettingsPane {
      *         model catalogue and connection check
      * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
      * @param banner what to say above the screen about what just happened, or null for nothing
+     * @param onScreen an {@link AtomicReference} the controls this draw builds are published to,
+     *     so the unsaved-work question reads the ones standing rather than an earlier draw's
      */
     private static void refresh(final VBox container, final PageHeader.Result header,
                                 final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
                                 final Runnable onOpenPhotoCategories,
-                                final @Nullable String banner) {
+                                final @Nullable String banner,
+                                final AtomicReference<@Nullable OnScreen> onScreen) {
         header.clearStatus();
         final SettingsView view = presenter.view();
         final FoldersCard.Result folders = FoldersCard.build(view);
         final VisionProviderCard.Result provider = VisionProviderCard.build(view, visionProvider);
         final PhotoSheetsCard.Result montage = PhotoSheetsCard.build(view);
         final AppearanceCard.Result appearance = AppearanceCard.build(view, presenter);
+        onScreen.set(new OnScreen(folders, provider, montage));
 
         final Label status = header.status();
 
@@ -111,7 +170,8 @@ final class SettingsPane {
                 VisionProviderCard.providerChoiceOf(provider.providerBox()), provider.providerFields(),
                 VisionProviderCard.watchAutomaticallyOf(provider.watchRow()), montage.tileSize().getValue(),
                 montage.tilesPerRow().getValue(), AppearanceCard.themeChoiceOf(appearance.themeBox()), status,
-                said -> refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, said)));
+                said -> refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, said,
+                        onScreen)));
 
         // The secret card belongs to the provider card, not here. A node named in two parents lands
         // in whichever claimed it last, so adding it would quietly lift it out of the provider card.
@@ -167,7 +227,7 @@ final class SettingsPane {
                 showRefusal(container, status, refused.message(), refused.warning());
             }
             case final SaveOutcome.NeedsLibraryRootResolution needsResolution ->
-                    LibraryRootMoveDialog.resolve(presenter, needsResolution,
+                    LibraryRootMoveDialog.resolve(container, presenter, needsResolution,
                             said -> working(status, said),
                             moveOutcome -> reportTheMove(container, moveOutcome, status, showBanner));
         }

@@ -65,6 +65,43 @@ class PhotoCategoriesPaneTest {
     }
 
     @Test
+    void aPageNobodyHasTypedIntoHasNothingToLose() throws Exception {
+        final PhotoCategoriesPane.Mounted mounted = onFxThread(() -> mounted(store()));
+
+        assertThat(mounted.hasUnsavedEdits().getAsBoolean()).isFalse();
+    }
+
+    @Test
+    void aDescriptionTypedIntoIsSomethingToLose() throws Exception {
+        final PhotoCategoriesPane.Mounted mounted = onFxThread(() -> mounted(store()));
+
+        runOnFxThread(() -> typeIntoTheDescription(mounted));
+
+        assertThat(mounted.hasUnsavedEdits().getAsBoolean()).isTrue();
+    }
+
+    // Add builds its card straight onto the live list rather than redrawing, so an answer taken from
+    // the cards this page opened with would miss it.
+    @Test
+    void aCardAddedAndNotSavedIsSomethingToLose() throws Exception {
+        final PhotoCategoriesPane.Mounted mounted = onFxThread(() -> mounted(store()));
+
+        runOnFxThread(() -> press(mounted, "#photo-categories-add"));
+
+        assertThat(mounted.hasUnsavedEdits().getAsBoolean()).isTrue();
+    }
+
+    @Test
+    void aSaveThatTookLeavesNothingToLose() throws Exception {
+        final PhotoCategoriesPane.Mounted mounted = onFxThread(() -> mounted(store()));
+        runOnFxThread(() -> typeIntoTheDescription(mounted));
+
+        runOnFxThread(() -> press(mounted, "#photo-categories-save"));
+
+        assertThat(mounted.hasUnsavedEdits().getAsBoolean()).isFalse();
+    }
+
+    @Test
     void aCardOpensHoldingWhatIsConfigured() throws Exception {
         final Parent pane = onFxThread(() -> built(store()));
 
@@ -365,14 +402,34 @@ class PhotoCategoriesPaneTest {
         });
     }
 
+    private static void typeIntoTheDescription(final PhotoCategoriesPane.Mounted mounted) {
+        ((TextArea) ordinaryCard((Parent) mounted.node()).lookup("#category-description"))
+                .setText("Not worth keeping at all");
+    }
+
+    private static void press(final PhotoCategoriesPane.Mounted mounted, final String id) {
+        ((Button) mounted.node().lookup(id)).fire();
+    }
+
     private static Parent built(final RecordingSettings store) {
         return built(store, () -> { });
     }
 
     private static Parent built(final RecordingSettings store, final Runnable onBack) {
+        return (Parent) mounted(store, onBack).node();
+    }
+
+    private static PhotoCategoriesPane.Mounted mounted(final RecordingSettings store) {
+        return mounted(store, () -> { });
+    }
+
+    private static PhotoCategoriesPane.Mounted mounted(final RecordingSettings store,
+                                                       final Runnable onBack) {
         // The whole page rather than the scrolling half, so a lookup reaches the header that now
         // sits outside it as well as the cards inside.
-        final var page = (Parent) PhotoCategoriesPane.pane(new PhotoCategoriesPresenter(store), onBack);
+        final PhotoCategoriesPane.Mounted built =
+                PhotoCategoriesPane.pane(new PhotoCategoriesPresenter(store), onBack);
+        final var page = (Parent) built.node();
         final var scene = new Scene(new StackPane(page), 900, 800);
         scene.getStylesheets().add(
                 Objects.requireNonNull(PhotoCategoriesPaneTest.class.getResource("/ui/sluice.css"),
@@ -382,7 +439,7 @@ class PhotoCategoriesPaneTest {
         stage.show();
         scene.getRoot().applyCss();
         scene.getRoot().layout();
-        return page;
+        return built;
     }
 
     private static RecordingSettings store() {

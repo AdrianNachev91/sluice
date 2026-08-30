@@ -559,6 +559,23 @@ public class Pipeline {
     }
 
     /**
+     * Asks the job in flight to give up on the file it is writing, rather than finish it.
+     *
+     * <p>An escalation of a stop already asked for. A stop between files is answered in an instant,
+     * and one that lands inside a large file waits out the rest of its bytes. This ends that wait,
+     * at the cost of the file having to be transferred again later.
+     *
+     * <p>Nothing half-written survives it: a transfer given up on leaves the source where it was and
+     * the destination free.
+     *
+     * <p>No roots check. A reader stopping a run may not be blocked by an install whose folders have
+     * since gone.
+     */
+    public void abandonTheFileInFlight() {
+        this.jobRunner.abandonInFlight();
+    }
+
+    /**
      * Runs a troubleshoot pass over prepDir as a background job. Routing it through JobRunner buys
      * the same one-job-at-a-time discipline every other job gets. A reconcile's move-log rewrite can
      * then never race a concurrent apply/cull/commit against the same prep dir.

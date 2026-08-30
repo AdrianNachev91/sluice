@@ -55,7 +55,7 @@ final class RunsPane {
         clear.setId("runs-clear-completed");
         clear.getStyleClass().add("run-cancel");
 
-        final var headerRow = new HBox(heading, spacer(), clear);
+        final var headerRow = new HBox(heading);
         headerRow.setAlignment(Pos.CENTER_LEFT);
         headerRow.getStyleClass().add("runs-header");
 
@@ -81,7 +81,15 @@ final class RunsPane {
         completedCards.setId("runs-completed-cards");
         completedCards.getStyleClass().add("runs-cards");
 
-        final var completed = new VBox(completedToggle, completedCards);
+        // Beside the fold's own control rather than in the page header. It acts on what the fold
+        // holds, so it belongs where they are, and it travels down with them as they open. In the
+        // header it sat in the page's most prominent spot for the one press this screen steers a
+        // reader away from once its confirm is up.
+        final var completedRow = new HBox(completedToggle, spacer(), clear);
+        completedRow.setAlignment(Pos.CENTER_LEFT);
+        completedRow.getStyleClass().add("runs-completed-row");
+
+        final var completed = new VBox(completedRow, completedCards);
         completed.setId("runs-completed");
         completed.getStyleClass().add("runs-completed");
 
@@ -175,9 +183,13 @@ final class RunsPane {
          * @param redraw {@link Runnable} draws the screen again once it has been told
          */
         private void wire(final RunsPresenter presenter, final Runnable redraw) {
+            // The question is read now rather than from the fill that drew the button. So it names
+            // the runs that are finished at the moment of the press.
             this.clear.setOnAction(_ -> {
-                presenter.clearCompleted();
-                redraw.run();
+                if (Dialogs.agreed(this.clear, presenter.view().clearConfirm())) {
+                    presenter.clearCompleted();
+                    redraw.run();
+                }
             });
             this.completedToggle.setOnAction(_ -> {
                 presenter.toggleCompleted();
@@ -346,7 +358,7 @@ final class RunsPane {
             button.setId(redo.id());
             button.getStyleClass().add(redo.leading() ? "run-start" : "run-cancel");
             button.setOnAction(_ -> {
-                if (Dialogs.agreed(redo.confirm())) {
+                if (Dialogs.agreed(button, redo.confirm())) {
                     final String text = presenter.judgeAgain(redo.prepDir(), redo.scope());
                     if (text != null) {
                         CopyableTrace.putOnTheClipboard(text);

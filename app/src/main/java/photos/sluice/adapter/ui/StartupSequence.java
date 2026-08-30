@@ -20,6 +20,7 @@ import photos.sluice.domain.paths.PathViolation.Unreadable;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The work the desktop app does once its Spring context is up: claim the working root, then run the
@@ -44,7 +45,7 @@ public class StartupSequence {
 
     private static final Logger log = LoggerFactory.getLogger(StartupSequence.class);
 
-    // How long a close waits for a running job to stop before giving up on it.
+    // How long an unattended close waits for a running job to stop before giving up on it.
     //
     // Cancellation is cooperative, so what is being waited for is the job reaching its next stage
     // boundary. In sort, commit and rescue that boundary is between two files, so the wait only has
@@ -52,11 +53,20 @@ public class StartupSequence {
     // slow disk.
     //
     // A cull sitting inside a vision call is the case no value here fixes. Its next boundary is a
-    // whole montage away. Blocking a window close for that long is worse than giving up, so that
-    // job is abandoned at process exit. Doing better means showing the wait and letting the user
-    // force-quit out of it. That cannot live here: by the time this runs, the window it would have
-    // to appear in is already gone.
+    // whole montage away. This path has nothing on screen to explain such a wait, and a window that
+    // hangs unexplained is worse than a job given up on.
     private static final Duration DRAIN_WAIT = Duration.ofSeconds(5);
+
+    /**
+     * How long a close the reader answered for themselves waits for the job it stopped.
+     *
+     * <p>Sized for the one wait no cancellation shortens, which is a sift inside a call to a model.
+     * Nothing polls a stop until that call comes back.
+     *
+     */
+    public static final Duration ATTENDED_DRAIN_WAIT = Duration.ofSeconds(90);
+
+    private final AtomicBoolean woundDown = new AtomicBoolean();
 
     private final WorkingRootLock workingRootLock;
     private final PathsPort paths;
@@ -121,14 +131,40 @@ public class StartupSequence {
      * two processes in one folder is not.
      */
     public void shutdown() {
+        this.windDownWithin(DRAIN_WAIT);
+    }
+
+    /**
+     * The same wind-down on a budget the caller chooses, answering whether it drained cleanly.
+     *
+     * <p>What a quit the reader answered calls, from a thread that is not the one painting. It can
+     * afford a far longer wait than {@link #shutdown} because a window is up describing it.
+     *
+     * <p>A budget of zero asks the job to stop and does not wait at all. That is what a reader
+     * pressing past the wait gets. The root stays claimed, which strands nothing: the process exits
+     * next, and the kernel drops the claim with it.
+     *
+     * <p>Runs once. Whichever call arrives first decides, and every later one answers true without
+     * touching anything. That matters because both paths fire in one close: the quit flow winds
+     * down, then the toolkit calls {@link #shutdown} on the way out. A second drain would queue for
+     * the runner's slot and spend its whole budget on a job the first already gave up on.
+     *
+     * @param wait {@link Duration} how long to wait for a running job to stop
+     * @return boolean true when nothing of this app's was still executing
+     */
+    public boolean windDownWithin(final Duration wait) {
+        if (!this.woundDown.compareAndSet(false, true)) {
+            return true;
+        }
         this.pipeline.stopAllWatching();
-        if (!this.pipeline.stopAcceptingJobs(DRAIN_WAIT)) {
+        if (!this.pipeline.stopAcceptingJobs(wait)) {
             // Two things reach here and the message has to fit both: a job that outran the wait, and
             // a settings save still holding the job slot. Neither is safe to hand a folder away from.
             log.warn("Work was still in progress at exit, so the working root stays claimed until this process ends");
-            return;
+            return false;
         }
         this.workingRootLock.releaseAll();
+        return true;
     }
 
     /**

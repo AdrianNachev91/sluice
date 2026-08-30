@@ -62,6 +62,11 @@ public class RunsPresenter {
 
     private static final String CLEAR_COMPLETED = "Clear finished runs";
 
+    // How many scopes the clear question spells out before it falls back to the count above it. A
+    // scope can be as long as "2019 6,8,11", and a list of eight of those buries the two sentences
+    // the reader actually has to weigh.
+    private static final int NAMED_IN_A_CLEAR = 4;
+
     private static final String COPY_PROMPT = "Copy instructions for your agent";
 
     private static final String COPY_FOLLOW_UP = "Copy a follow-up for your agent";
@@ -264,7 +269,8 @@ public class RunsPresenter {
         return new RunsView(HEADING, unreadable, unfinished,
                 found.isEmpty() && unreadable == null ? NOTHING_YET : null,
                 completedHeading(completed.size()), completed, this.completedShown,
-                CLEAR_COMPLETED, !completed.isEmpty() && !this.working(), said);
+                CLEAR_COMPLETED, !completed.isEmpty() && !this.working(),
+                completed.isEmpty() ? null : clearConfirm(completed), said);
     }
 
     /**
@@ -957,6 +963,35 @@ public class RunsPresenter {
             return "Last activity: " + RunWords.counted((int) ago.toHours(), "hour", "hours") + " ago";
         }
         return "Last activity: " + RunWords.counted((int) ago.toDays(), "day", "days") + " ago";
+    }
+
+    /**
+     * What to ask before the records of every finished run go.
+     *
+     * <p>Asked at all because this is the one press on the screen with no way back. A discard files
+     * what it takes into the archives folder for thirty days. This deletes outright.
+     *
+     * <p>Names them up to a handful, because a count alone leaves a reader working out which runs
+     * are finished from a section that may be folded shut. Past that the list is longer than the
+     * sentence around it and the heading's own count is the better answer.
+     *
+     * <p>Keeping is the loud choice, since deleting is the one of the two this app cannot undo.
+     *
+     * <p>Nothing here contrasts it with archiving. Archive is a word this app teaches on the
+     * discard confirm, and a reader who has only ever pressed this button has never met it.
+     *
+     * @param completed a {@link List} of {@link RunCard} the finished runs the sweep would take
+     * @return {@link Confirmation} the question
+     */
+    private static Confirmation clearConfirm(final List<RunCard> completed) {
+        final List<String> scopes = completed.stream().map(RunCard::scope).toList();
+        return new Confirmation("Clear the records of "
+                + RunWords.counted(completed.size(), "finished run", "finished runs") + "?",
+                (scopes.size() > NAMED_IN_A_CLEAR ? "This deletes everything kept about them."
+                        : "This deletes everything kept about " + RunWords.listed(scopes) + ".")
+                        + " Your photos are not touched, and neither is any run you have not "
+                        + "finished. There is no way back to them.",
+                "Clear them", "Keep them", false);
     }
 
     /**

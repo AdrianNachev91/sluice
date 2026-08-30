@@ -246,8 +246,88 @@ class PhotoCategoriesPresenterTest {
         assertThat(store.saved.categories()).extracting(CullCategory::name).containsExactly("junk");
     }
 
+    @Test
+    void cardsMatchingWhatIsStoredHaveNothingToLose() {
+        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+
+        assertThat(presenter.hasUnsavedEdits(asEdits(presenter))).isFalse();
+    }
+
+    @Test
+    void aChangedDescriptionIsSomethingToLose() {
+        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+        final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
+        final CategoryEdit first = typed.getFirst();
+        typed.set(0, new CategoryEdit(first.name(), first.description() + " and a bit more",
+                first.examples(), first.enabled()));
+
+        assertThat(presenter.hasUnsavedEdits(typed)).isTrue();
+    }
+
+    @Test
+    void aCardSwitchedOffIsSomethingToLose() {
+        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+        final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
+        final CategoryEdit last = typed.getLast();
+        typed.set(typed.size() - 1,
+                new CategoryEdit(last.name(), last.description(), last.examples(), !last.enabled()));
+
+        assertThat(presenter.hasUnsavedEdits(typed)).isTrue();
+    }
+
+    @Test
+    void reorderedCardsAreSomethingToLose() {
+        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY,
+                CullCategory.of("food", "Meals and menus"));
+        final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
+        typed.add(typed.remove(1));
+
+        assertThat(presenter.hasUnsavedEdits(typed)).isTrue();
+    }
+
+    @Test
+    void aTrailingSpaceIsNothingToLose() {
+        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+        final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
+        final CategoryEdit first = typed.getFirst();
+        typed.set(0, new CategoryEdit(first.name() + " ", "  " + first.description(),
+                first.examples(), first.enabled()));
+
+        assertThat(presenter.hasUnsavedEdits(typed)).isFalse();
+    }
+
+    @Test
+    void anEmptyRowInAnExamplesBoxIsNothingToLose() {
+        final PhotoCategoriesPresenter presenter =
+                presenterOver(FUNNY, new CullCategory("junk", "Not worth keeping", List.of("blurry"), true));
+        final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
+        final CategoryEdit last = typed.getLast();
+        typed.set(typed.size() - 1, new CategoryEdit(last.name(), last.description(),
+                List.of("blurry", "   ", ""), last.enabled()));
+
+        assertThat(presenter.hasUnsavedEdits(typed)).isFalse();
+    }
+
+    @Test
+    void anAddedExampleIsSomethingToLose() {
+        final PhotoCategoriesPresenter presenter =
+                presenterOver(FUNNY, new CullCategory("junk", "Not worth keeping", List.of("blurry"), true));
+        final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
+        final CategoryEdit last = typed.getLast();
+        typed.set(typed.size() - 1, new CategoryEdit(last.name(), last.description(),
+                List.of("blurry", "screenshots"), last.enabled()));
+
+        assertThat(presenter.hasUnsavedEdits(typed)).isTrue();
+    }
+
     private static List<CardRefusal> refusalsOf(final SaveOutcome outcome) {
         return ((SaveOutcome.Refused) outcome).cards();
+    }
+
+    private static List<CategoryEdit> asEdits(final PhotoCategoriesPresenter presenter) {
+        return presenter.view().categories().stream()
+                .map(row -> new CategoryEdit(row.name(), row.description(), row.examples(), row.enabled()))
+                .toList();
     }
 
     private static PhotoCategoriesPresenter presenterOver(final CullCategory... cards) {

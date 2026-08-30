@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.adapter.ui.FirstRunPresenter;
+import photos.sluice.adapter.ui.LeavingUnsaved;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
@@ -26,6 +27,8 @@ import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.TroubleshootPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -70,6 +73,10 @@ final class MainWindow {
      *         the count its sidebar entry carries
      * @param troubleshootPresenter {@link TroubleshootPresenter} supplies and drives the
      *         troubleshoot screen one run's card opens
+     * @param leavingLosesWork an {@link AtomicReference} to whether the screen on show holds work
+     *         nobody has saved. Written here as each screen is drawn. Held by the caller so the
+     *         quit question can ask it too, since closing the window leaves a screen as surely as
+     *         pressing a sidebar entry does
      * @return {@link Scene} the shell scene, styled by the base stylesheet
      */
     static Scene scene(final FirstRunPresenter presenter, final SettingsPresenter settingsPresenter,
@@ -77,7 +84,8 @@ final class MainWindow {
                        final PhotoCategoriesPresenter photoCategoriesPresenter,
                        final RunLauncherPresenter runLauncherPresenter,
                        final RunsPresenter runsPresenter,
-                       final TroubleshootPresenter troubleshootPresenter) {
+                       final TroubleshootPresenter troubleshootPresenter,
+                       final AtomicReference<BooleanSupplier> leavingLosesWork) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
         final var settings = navEntry(group, "nav-settings", SETTINGS);
@@ -91,6 +99,7 @@ final class MainWindow {
 
         final var content = new VBox();
         content.getStyleClass().add("shell-content");
+        final var leaving = new Leaving(leavingLosesWork);
         drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter, null);
         // A ToggleGroup lets its own selected toggle be clicked back to unselected, unlike a radio
         // group. Clicking the active nav entry would otherwise leave the sidebar showing none of
@@ -102,15 +111,35 @@ final class MainWindow {
         });
         dashboard.setSelected(true);
 
-        dashboard.setOnAction(_ -> show(content, DASHBOARD,
-                () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, null)));
+        // Settings is the entry marked while Photo categories is up, and nothing else on the sidebar
+        // can be current then. So that is where the mark goes back to when a reader asked about
+        // unsaved work chooses to stay.
+        final Runnable markStaysWhereItWas = () -> settings.setSelected(true);
+        dashboard.setOnAction(_ -> {
+            if (!show(content, DASHBOARD, leaving,
+                    () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, null))) {
+                markStaysWhereItWas.run();
+            }
+        });
         // A screen without a sidebar entry. Settings stays the destination it was reached from and
         // stays marked as current, and Back is what leaves it.
-        final Runnable openPhotoCategories = () -> show(content, PHOTO_CATEGORIES,
-                () -> filling(PhotoCategoriesPane.pane(photoCategoriesPresenter, openSettings)));
-        settings.setOnAction(_ -> show(content, SETTINGS,
-                () -> filling(SettingsPane.pane(settingsPresenter, visionProviderPresenter, openPhotoCategories))));
-        review.setOnAction(_ -> show(content, REVIEW, () -> headingPane(REVIEW)));
+        final Runnable openPhotoCategories = () -> show(content, PHOTO_CATEGORIES, leaving, () -> {
+            final PhotoCategoriesPane.Mounted mounted =
+                    PhotoCategoriesPane.pane(photoCategoriesPresenter, openSettings);
+            leaving.loseWork().set(mounted.hasUnsavedEdits());
+            return filling(mounted.node());
+        });
+        settings.setOnAction(_ -> show(content, SETTINGS, leaving, () -> {
+            final SettingsPane.Mounted mounted =
+                    SettingsPane.pane(settingsPresenter, visionProviderPresenter, openPhotoCategories);
+            leaving.loseWork().set(mounted.hasUnsavedEdits());
+            return filling(mounted.node());
+        }));
+        review.setOnAction(_ -> {
+            if (!show(content, REVIEW, leaving, () -> headingPane(REVIEW))) {
+                markStaysWhereItWas.run();
+            }
+        });
 
         // Two of them, and the difference is who has already read the folder. The runs screen reads
         // it as it draws, so its own recount only has to put that number on the badge. Every other
@@ -128,15 +157,18 @@ final class MainWindow {
             final String outstanding = countOf(runsPresenter);
             Platform.runLater(() -> runsCount.setText(outstanding));
         });
-        runs.setOnAction(_ -> show(content, RUNS,
-                () -> filling(RunsPane.pane(runsPresenter, drawCount))));
+        runs.setOnAction(_ -> {
+            if (!show(content, RUNS, leaving, () -> filling(RunsPane.pane(runsPresenter, drawCount)))) {
+                markStaysWhereItWas.run();
+            }
+        });
         // A screen without a sidebar entry. Runs stays the destination it was reached from and
         // stays marked as current, and Back is what leaves it. Pointed at its run
         // before it is shown, so the screen draws the one the reader pressed rather than the one
         // before it.
         runsPresenter.setOpenTroubleshoot((prepDir, scope) -> {
             troubleshootPresenter.open(prepDir, scope);
-            show(content, TROUBLESHOOT, () -> filling(TroubleshootPane.pane(troubleshootPresenter)));
+            show(content, TROUBLESHOOT, leaving, () -> filling(TroubleshootPane.pane(troubleshootPresenter)));
         });
         // Hopped, unlike the wirings around it. A discard that works hands the reader back from the
         // job's own completion callback, which is not the thread that paints. Firing a sidebar
@@ -198,18 +230,43 @@ final class MainWindow {
      * <p>Which screen is showing is read off the screen itself rather than tracked beside it. A
      * second record of that would be a thing to keep in step.
      *
+     * <p>A screen holding work nobody has saved asks before it is replaced. Refusing there leaves
+     * the content area exactly as it was, and the caller puts the sidebar's mark back.
+     *
      * @param content {@link VBox} the content area, holding exactly the screen on show
      * @param screen {@link String} the name of the screen being asked for
+     * @param leaving {@link Leaving} what has to be answered before the screen on show is replaced
      * @param draw {@link Supplier} of {@link Node} builds it, called only if it is not up already
+     * @return boolean false where the reader chose to stay where they were
      */
-    private static void show(final VBox content, final String screen, final Supplier<Node> draw) {
+    private static boolean show(final VBox content, final String screen, final Leaving leaving,
+                                final Supplier<Node> draw) {
         final Node current = content.getChildren().isEmpty() ? null : content.getChildren().getFirst();
         if (current != null && screen.equals(current.getId())) {
-            return;
+            return true;
         }
+        if (leaving.loseWork().get().getAsBoolean()
+                && !Dialogs.agreed(content, LeavingUnsaved.question())) {
+            return false;
+        }
+        // Cleared before the draw and set again by it, so the guard belongs to the screen going up
+        // rather than to the one coming down.
+        leaving.loseWork().set(() -> false);
         final Node next = buildOrSayItFailed(screen, draw);
         next.setId(screen);
         content.getChildren().setAll(next);
+        return true;
+    }
+
+    /**
+     * What has to be answered before the screen on show is replaced.
+     *
+     * <p>Cleared as each screen is drawn, and set again by those that can lose work. A screen added
+     * later therefore inherits no guard it never asked for.
+     *
+     * @param loseWork an {@link AtomicReference} to whether the screen up now holds unsaved work
+     */
+    private record Leaving(AtomicReference<BooleanSupplier> loseWork) {
     }
 
     /**

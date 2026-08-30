@@ -2,6 +2,7 @@ package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.RunsView.Action;
 import photos.sluice.adapter.ui.RunsView.Kind;
 import photos.sluice.adapter.ui.RunsView.RunCard;
@@ -437,6 +438,38 @@ class RunsPresenterTest {
     void clearingIsOfferedOnlyWhileSomethingHasFinished() {
         assertThat(presenterOver(run("2019", State.WAITING)).view().canClearCompleted()).isFalse();
         assertThat(presenterOver(run("2019", State.COMPLETE)).view().canClearCompleted()).isTrue();
+    }
+
+    @Test
+    void clearingAsksFirstAndNamesEveryRunItWouldTake() {
+        final RunsView view = presenterOver(run("2019", State.COMPLETE),
+                run("2018", State.COMPLETE), run("2020", State.WAITING)).view();
+
+        final Confirmation asked = requireNonNull(view.clearConfirm());
+        assertThat(asked.heading()).isEqualTo("Clear the records of 2 finished runs?");
+        assertThat(asked.question()).contains("2019").contains("2018").doesNotContain("2020");
+        assertThat(asked.goAhead()).isEqualTo("Clear them");
+        assertThat(asked.cancel()).isEqualTo("Keep them");
+    }
+
+    @Test
+    void keepingIsTheChoiceTheQuestionLeadsWith() {
+        final RunsView view = presenterOver(run("2019", State.COMPLETE)).view();
+
+        assertThat(requireNonNull(view.clearConfirm()).goAheadLeads()).isFalse();
+    }
+
+    @Test
+    void theQuestionSaysWhatIsNotTouched() {
+        final RunsView view = presenterOver(run("2019", State.COMPLETE)).view();
+
+        assertThat(requireNonNull(view.clearConfirm()).question())
+                .contains("Your photos are not touched");
+    }
+
+    @Test
+    void thereIsNothingToAskAboutWhereNothingHasFinished() {
+        assertThat(presenterOver(run("2019", State.WAITING)).view().clearConfirm()).isNull();
     }
 
     @Test

@@ -42,8 +42,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.answerDialog;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.built;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.mounted;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.oneStoredKey;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onFxThread;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.presenterStoringOn;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.runOnFxThread;
+import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.visionProviderPresenterOn;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.onlyRefusingOneFolder;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportIsARefusal;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.reportText;
@@ -65,6 +69,55 @@ class SettingsPaneTest {
     @AfterEach
     void closeStages() throws Exception {
         FxToolkit.cleanupStages();
+    }
+
+    @Test
+    void aScreenDrawnFromDiskHasNothingToLose() throws Exception {
+        final SettingsPane.Mounted screen =
+                onFxThread(() -> mounted(presenterStoringOn("anthropic"), visionProviderPresenterOn("anthropic")));
+
+        assertThat(onFxThread(() -> screen.hasUnsavedEdits().getAsBoolean())).isFalse();
+    }
+
+    @Test
+    void aTypedFolderPathIsSomethingToLose() throws Exception {
+        final SettingsPane.Mounted screen =
+                onFxThread(() -> mounted(presenterStoringOn("anthropic"), visionProviderPresenterOn("anthropic")));
+
+        runOnFxThread(() -> ((TextField) screen.node().lookup("#settings-inbox")).setText("D:\\somewhere-else"));
+
+        assertThat(onFxThread(() -> screen.hasUnsavedEdits().getAsBoolean())).isTrue();
+    }
+
+    // A save rebuilds every card, so the question has to reach the controls that draw put up. The
+    // edit has to come after the save: the fields the save replaced hold exactly what it stored, so
+    // reading those instead would agree with disk and report nothing to lose either way.
+    @Test
+    void anEditAfterASaveIsStillSomethingToLose() throws Exception {
+        final SettingsPane.Mounted screen =
+                onFxThread(() -> mounted(presenterStoringOn("anthropic"), visionProviderPresenterOn("anthropic")));
+        final var pane = (Parent) screen.node();
+
+        runOnFxThread(() -> ((Button) pane.lookup("#settings-save-button")).fire());
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> reportText(pane).contains("saved"));
+        runOnFxThread(() -> ((TextField) pane.lookup("#settings-inbox")).setText("D:\\typed-after-the-save"));
+
+        assertThat(onFxThread(() -> screen.hasUnsavedEdits().getAsBoolean())).isTrue();
+    }
+
+    @Test
+    void aSaveLeavesNothingToLose() throws Exception {
+        final SettingsPane.Mounted screen =
+                onFxThread(() -> mounted(presenterStoringOn("anthropic"), visionProviderPresenterOn("anthropic")));
+        final var pane = (Parent) screen.node();
+
+        runOnFxThread(() -> {
+            ((TextField) pane.lookup("#settings-inbox")).setText("D:\\somewhere-else");
+            ((Button) pane.lookup("#settings-save-button")).fire();
+        });
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> reportText(pane).contains("saved"));
+
+        assertThat(onFxThread(() -> screen.hasUnsavedEdits().getAsBoolean())).isFalse();
     }
 
     // A save that would move the library root raises a dialog, and only after it is answered does

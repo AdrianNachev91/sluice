@@ -131,7 +131,7 @@ public class FxProgressPort implements ProgressPort {
     public void phaseStarted(final String phase) {
         this.change(before -> {
             final List<ProgressPhase> after = new ArrayList<>(before);
-            after.add(new ProgressPhase(phase, 0, 0, false));
+            after.add(new ProgressPhase(phase, 0, 0, false, 0));
             return List.copyOf(after);
         });
     }
@@ -146,18 +146,37 @@ public class FxProgressPort implements ProgressPort {
     @Override
     public void tick(final String phase, final int current, final int total) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), current, total, found.finished())));
+                found -> new ProgressPhase(found.label(), current, total, found.finished(), 0)));
+    }
+
+    /**
+     * Records how far into the file now being written the phase has reached, and redraws.
+     *
+     * @param phase {@link String} short human-readable label for the phase
+     * @param current int units completed before this one
+     * @param total int total units in the phase
+     * @param partDone double how much of the current unit is done, from 0 to 1
+     */
+    @Override
+    public void tickWithin(final String phase, final int current, final int total,
+                           final double partDone) {
+        this.change(before -> replaceLast(before, phase,
+                found -> new ProgressPhase(found.label(), current, total, found.finished(), partDone)));
     }
 
     /**
      * Records a phase ending and redraws.
+     *
+     * <p>The part reading goes with it. A phase that ended part-way through a file ended because
+     * that file was abandoned, and the store deleted what it had written. So the whole units are
+     * the only thing left to describe.
      *
      * @param phase {@link String} short human-readable label for the phase
      */
     @Override
     public void phaseFinished(final String phase) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), found.current(), found.total(), true)));
+                found -> new ProgressPhase(found.label(), found.current(), found.total(), true, 0)));
     }
 
     /**

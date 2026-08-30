@@ -591,8 +591,8 @@ public class VisionProviderPresenter {
             return null;
         }
         final boolean anyUnaskable = holdings.stream().anyMatch(h -> h.holding() == Holding.COULD_NOT_BE_ASKED);
-        return "More than one place on this computer holds a key for this provider. Remove clears "
-                + "every one Sluice can reach."
+        return "More than one place on this computer holds a key for this provider. \"Remove\" "
+                + "clears every one Sluice can reach."
                 + (anyUnaskable ? " One place did not answer, so there may be another beyond these." : "");
     }
 

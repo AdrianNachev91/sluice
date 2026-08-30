@@ -23,12 +23,15 @@ import java.util.List;
  * @param completedShown boolean whether that section is folded open
  * @param clearCompleted {@link String} what the button clearing them says
  * @param canClearCompleted boolean whether that button is live
+ * @param clearConfirm {@link Confirmation} what to ask before clearing, or null where there is
+ *     nothing to clear and so nothing to ask about
  * @param message {@link Message} what the screen has to report, or null where it has nothing
  */
 public record RunsView(String heading, @Nullable String unreadable, List<RunCard> unfinished,
                        @Nullable String nothingYet, String completedHeading,
                        List<RunCard> completed, boolean completedShown,
                        String clearCompleted, boolean canClearCompleted,
+                       @Nullable Confirmation clearConfirm,
                        @Nullable Message message) {
 
     /**
@@ -43,6 +46,7 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
      * @param completedShown boolean whether that section is folded open
      * @param clearCompleted {@link String} what the button clearing them says
      * @param canClearCompleted boolean whether that button is live
+     * @param clearConfirm {@link Confirmation} what to ask before clearing, or null
      * @param message {@link Message} what the screen has to report
      */
     public RunsView {

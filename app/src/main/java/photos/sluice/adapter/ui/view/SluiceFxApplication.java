@@ -8,6 +8,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import photos.sluice.SluiceApplication;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
+import photos.sluice.adapter.ui.QuitPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
@@ -17,6 +18,8 @@ import photos.sluice.adapter.ui.StartupSequence;
 import photos.sluice.adapter.ui.UiBootstrap;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 /**
  * The desktop window's own lifecycle, wrapped around the Spring context it needs.
@@ -93,6 +96,27 @@ public class SluiceFxApplication extends Application {
     }
 
     /**
+     * Puts the quit question in the way of the window's own close button.
+     *
+     * <p>Here rather than in {@link #stop}, which the toolkit calls once the last window has already
+     * gone. A question needs a window to appear in, and by then there is none.
+     *
+     * <p>Every way out of the app arrives here. The close button, the platform's own quit key and
+     * the window manager all raise this one request. So there is one place the question is put, and
+     * one wind-down behind it.
+     *
+     * @param stage {@link Stage} the window being closed
+     * @param quitting {@link QuitFlow} puts the questions and carries out the answers
+     */
+    private void askBeforeClosing(final Stage stage, final QuitFlow quitting) {
+        stage.setOnCloseRequest(request -> {
+            if (!quitting.mayClose(stage)) {
+                request.consume();
+            }
+        });
+    }
+
+    /**
      * Builds the Spring context and runs the startup sequence against it, recording whatever
      * stopped either one rather than letting it escape. Shared by {@code init()}'s own first
      * attempt and a config repair's retry. Both have to redo the whole thing, since a context that
@@ -116,6 +140,11 @@ public class SluiceFxApplication extends Application {
      * Shows whichever scene the app's current state calls for: the shell when nothing stopped it,
      * the failure screen otherwise.
      *
+     * <p>The quit question is installed and taken away here rather than once at launch, because a
+     * repair swaps the shell in on a stage that was showing the failure screen. Installed at launch
+     * it would be absent on exactly that path, and closing the window over a running job would take
+     * the unattended exit with nothing on screen to say so.
+     *
      * @param stage {@link Stage} the stage to draw into
      */
     private void present(final Stage stage) {
@@ -130,15 +159,24 @@ public class SluiceFxApplication extends Application {
         final Throwable startupFailure = this.failure;
         if (startupFailure == null) {
             final var built = Objects.requireNonNull(this.context, "no failure means a context was built");
+            // Shared with the quit flow, so closing the window asks about typed work the same way
+            // walking off the screen does.
+            final var leavingLosesWork = new AtomicReference<BooleanSupplier>(() -> false);
             stage.setScene(MainWindow.scene(built.getBean(FirstRunPresenter.class),
                     built.getBean(SettingsPresenter.class),
                     built.getBean(VisionProviderPresenter.class),
                     built.getBean(PhotoCategoriesPresenter.class),
                     built.getBean(RunLauncherPresenter.class),
                     built.getBean(RunsPresenter.class),
-                    built.getBean(TroubleshootPresenter.class)));
+                    built.getBean(TroubleshootPresenter.class),
+                    leavingLosesWork));
+            this.askBeforeClosing(stage, new QuitFlow(built.getBean(QuitPresenter.class),
+                    leavingLosesWork));
             return;
         }
+        // Taken away rather than left, since a stage that showed the shell can come back here on a
+        // repair that itself failed. The failure screen holds no running work and nothing typed.
+        stage.setOnCloseRequest(null);
         final var presenter = UiBootstrap.reportAndPresent(startupFailure);
         stage.setScene(StartupFailureWindow.scene(presenter, new StartupFailureActions(
                 () -> this.retryRun(stage),

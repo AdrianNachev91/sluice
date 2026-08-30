@@ -50,6 +50,7 @@ class PipelineSurfaceTest {
             "redoRejectedAnswers(Path)",
             "stopAllWatching()",
             "stopAcceptingJobs(Duration)",
+            "abandonTheFileInFlight()",
             "troubleshoot(Path)",
             "answer(Path, ChoiceAnswer, AnswerSource)",
             "setAsideUnreadableSpendLedger()",
@@ -70,6 +71,10 @@ class PipelineSurfaceTest {
     // nothing is working in, for the life of the process. stopAcceptingJobs is the closing half of
     // that same caller. An install whose roots are unusable is the one most likely to be closed.
     // Refused there, its exit path could never learn whether anything was still moving files.
+    //
+    // abandonTheFileInFlight is a stop the reader has already asked for, escalated. It sets a flag on
+    // the running job and resolves nothing. Refused while the roots are unusable, a reader could not
+    // stop a run writing into a folder they have since moved. That is when they most want to.
     //
     // estimateFor takes a photo count rather than a scope, so no folder appears in the question it
     // answers. It does reach one path of its own, the spend ledger. An unusable root there degrades
@@ -94,8 +99,8 @@ class PipelineSurfaceTest {
     // onRunsMoved takes no path at all. It adds a listener to a list, which is a question about this
     // process rather than about any folder.
     private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK =
-            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "estimateFor(int)",
-                    "configuredProviderSpends()", "archivesFolder()", "isBusy()",
+            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "abandonTheFileInFlight()",
+                    "estimateFor(int)", "configuredProviderSpends()", "archivesFolder()", "isBusy()",
                     "isWatchActive(Path)", "onRunsMoved(Runnable)");
 
     // The facade is where every driving adapter passes through, so it is where the folder-root check

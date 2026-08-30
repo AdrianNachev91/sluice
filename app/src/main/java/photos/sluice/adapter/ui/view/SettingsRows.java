@@ -217,7 +217,7 @@ final class SettingsRows {
         button.setId(id);
         button.getStyleClass().add(leading ? "run-start" : "run-cancel");
         button.setOnAction(_ -> {
-            if (Dialogs.agreed(confirm)) {
+            if (Dialogs.agreed(button, confirm)) {
                 press.run();
             }
         });

@@ -6,6 +6,7 @@ import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.DecisionShard;
@@ -173,7 +174,7 @@ public class PrepDirRemedies {
         }
         // A shard renamed within the prep dir it already sits in. Nothing here reads a photo.
         this.mediaStore.moveTo(strayPath, prepDirPath.resolve(MontageNaming.shardFileFor(candidate)),
-                CancellationSignal.NEVER);
+                CancellationSignal.NEVER, TransferProgress.NONE);
         return Optional.of(candidate);
     }
 
@@ -345,7 +346,7 @@ public class PrepDirRemedies {
                 // The arm above takes every montage image, so what reaches here is shards and text
                 // records. Small files, and nothing to give up part-way through.
                 this.mediaStore.moveTo(file, graveyard.resolve(prepDirPath.relativize(file)),
-                        CancellationSignal.NEVER);
+                        CancellationSignal.NEVER, TransferProgress.NONE);
                 if (MontageNaming.isShardFile(name)) {
                     shardsSetAside++;
                 }

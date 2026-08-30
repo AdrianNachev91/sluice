@@ -301,7 +301,7 @@ final class VisionProviderCard {
             final VisionProviderPresenter.SecretRemoval removal = visionProvider.secretRemoval(providerId);
             // Backing out leads, because this asks about the one thing on the card the app cannot
             // put back.
-            if (Dialogs.ask(removal.heading(), removal.question(),
+            if (Dialogs.ask(removeButton, removal.heading(), removal.question(),
                     new Dialogs.Choice("Remove key", Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET),
                     new Dialogs.Choice("Keep it", Dialogs.Role.CANCEL, Dialogs.Emphasis.LOUD)).isEmpty()) {
                 return;

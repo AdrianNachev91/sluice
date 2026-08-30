@@ -47,7 +47,7 @@ class FxProgressPortTest {
     void aStartedPhaseIsListedWithNothingDoneYet() {
         this.port.phaseStarted("Sorting...");
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, false));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, false, 0));
     }
 
     @Test
@@ -58,8 +58,8 @@ class FxProgressPortTest {
         this.port.tick("Sorting...", 850, 1204);
 
         assertThat(this.port.phases()).containsExactly(
-                new ProgressPhase("Sorting...", 850, 1204, false),
-                new ProgressPhase("Sifting...", 0, 0, false));
+                new ProgressPhase("Sorting...", 850, 1204, false, 0),
+                new ProgressPhase("Sifting...", 0, 0, false, 0));
     }
 
     @Test
@@ -72,8 +72,40 @@ class FxProgressPortTest {
         this.port.tick("Applying decisions...", 12, 28);
 
         assertThat(this.port.phases()).containsExactly(
-                new ProgressPhase("Applying decisions...", 3, 28, true),
-                new ProgressPhase("Applying decisions...", 12, 28, false));
+                new ProgressPhase("Applying decisions...", 3, 28, true, 0),
+                new ProgressPhase("Applying decisions...", 12, 28, false, 0));
+    }
+
+    @Test
+    void aPartialReadingCountsAgainstTheUnitAfterTheOnesAlreadyDone() {
+        this.port.phaseStarted("Moving to library...");
+
+        this.port.tickWithin("Moving to library...", 3, 8, 0.45);
+
+        assertThat(this.port.phases())
+                .containsExactly(new ProgressPhase("Moving to library...", 3, 8, false, 0.45));
+    }
+
+    @Test
+    void thePartialReadingGoesBackToNothingOnTheNextWholeUnit() {
+        this.port.phaseStarted("Moving to library...");
+        this.port.tickWithin("Moving to library...", 3, 8, 0.45);
+
+        this.port.tick("Moving to library...", 4, 8);
+
+        assertThat(this.port.phases())
+                .containsExactly(new ProgressPhase("Moving to library...", 4, 8, false, 0));
+    }
+
+    @Test
+    void aPhaseEndingPartWayThroughAFileKeepsOnlyItsWholeUnits() {
+        this.port.phaseStarted("Moving to library...");
+        this.port.tickWithin("Moving to library...", 3, 8, 0.45);
+
+        this.port.phaseFinished("Moving to library...");
+
+        assertThat(this.port.phases())
+                .containsExactly(new ProgressPhase("Moving to library...", 3, 8, true, 0));
     }
 
     @Test
@@ -83,7 +115,7 @@ class FxProgressPortTest {
         this.port.tick("Rescuing...", 1, 2);
         this.port.tick("Sorting...", 1, 2);
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, false));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, false, 0));
     }
 
     @Test
@@ -92,11 +124,11 @@ class FxProgressPortTest {
         this.port.tick("Sorting...", 1, 2);
 
         this.port.phaseFinished("Rescuing...");
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, false));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, false, 0));
 
         this.port.phaseFinished("Sorting...");
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, true));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, true, 0));
     }
 
     @Test
@@ -105,7 +137,7 @@ class FxProgressPortTest {
 
         this.port.phaseFinished("Sorting...");
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, true));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, true, 0));
     }
 
     @Test
@@ -185,7 +217,7 @@ class FxProgressPortTest {
         this.port.tick("Sorting...", 3, 3);
         this.runWhatTheToolkitWasHanded();
 
-        assertThat(drawn).containsExactly(new ProgressPhase("Sorting...", 3, 3, false));
+        assertThat(drawn).containsExactly(new ProgressPhase("Sorting...", 3, 3, false, 0));
     }
 
     @Test
@@ -238,7 +270,7 @@ class FxProgressPortTest {
 
         assertThatCode(() -> noToolkit.phaseStarted("Sorting...")).doesNotThrowAnyException();
 
-        assertThat(noToolkit.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, false));
+        assertThat(noToolkit.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, false, 0));
     }
 
     @Test

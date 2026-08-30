@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.domain.job.CancellationSignal;
 
 import java.io.IOException;
@@ -156,11 +157,13 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to move
      * @param destDir {@link Path} destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the file's final path after the move
      */
     @Override
-    public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
-        return this.moveTo(source, this.resolveDestination(source, destDir), stop);
+    public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                     final TransferProgress watching) {
+        return this.moveTo(source, this.resolveDestination(source, destDir), stop, watching);
     }
 
     /**
@@ -178,13 +181,15 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to move
      * @param destination {@link Path} exact target path
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      */
     @Override
-    public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
+    public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                       final TransferProgress watching) {
         this.ensureDirectory(destination.getParent());
         if (!this.sameFileStore(source, destination.getParent())) {
-            this.copyTo(source, destination, stop);
+            this.copyTo(source, destination, stop, watching);
             this.delete(source);
             return destination;
         }
@@ -202,11 +207,13 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to copy
      * @param destDir {@link Path} destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the path of the copy
      */
     @Override
-    public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
-        return this.copyTo(source, this.prepareDestination(source, destDir), stop);
+    public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
+                     final TransferProgress watching) {
+        return this.copyTo(source, this.prepareDestination(source, destDir), stop, watching);
     }
 
     /**
@@ -215,12 +222,14 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to copy
      * @param destination {@link Path} exact target path, which must be free
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      */
     @Override
-    public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
+    public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                       final TransferProgress watching) {
         this.ensureDirectory(destination.getParent());
-        interruptibleCopy(source, destination, stop);
+        interruptibleCopy(source, destination, stop, watching);
         return destination;
     }
 
@@ -452,25 +461,34 @@ public class NioMediaStore implements MediaStore {
      * date-resolution chain falls back to mtime, so a copy that lost it would be filed under the
      * date it was copied. Access and creation times ride along on the same restore call.
      *
+     * <p>Progress is reported per block written, so a file produces one reading per megabyte. Fine
+     * enough for any bar, and far too coarse to be worth throttling.
+     *
      * @param source {@link Path} file to read
      * @param destination {@link Path} exact target path
      * @param stop {@link CancellationSignal} asked between blocks
+     * @param watching {@link TransferProgress} told how much has been written
      */
     private static void interruptibleCopy(final Path source, final Path destination,
-                                          final CancellationSignal stop) {
+                                          final CancellationSignal stop,
+                                          final TransferProgress watching) {
         final Path part = destination.resolveSibling(destination.getFileName() + PART_SUFFIX);
         try {
             final BasicFileAttributes sourceTimes = Files.readAttributes(source, BasicFileAttributes.class);
+            final long size = sourceTimes.size();
             try (final InputStream in = Files.newInputStream(source);
                  final OutputStream out = Files.newOutputStream(part, StandardOpenOption.CREATE,
                          StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
                 final byte[] buffer = new byte[TRANSFER_BLOCK_BYTES];
+                long written = 0;
                 int read = in.read(buffer);
                 while (read >= 0) {
                     if (stop.isAbandonRequested()) {
                         throw new AbandonedMidBlock();
                     }
                     out.write(buffer, 0, read);
+                    written += read;
+                    watching.moved(written, size);
                     read = in.read(buffer);
                 }
             }

@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitScopeSelector;
 import photos.sluice.domain.commit.CommitSummary;
@@ -114,7 +115,7 @@ public class CommitEngine implements CommitUseCase {
                 if (this.scopeSelector.isInScope(relativePath, scope)) {
                     final String hash = this.sha256Port.hash(file);
                     final Path dest = this.mediaStore.move(file, library.resolve(relativePath).getParent(),
-                            cancellation);
+                            cancellation, TransferProgress.within(progress, current, total));
                     session.append(new IndexEntry(hash, dest));
                     // merge rather than a pre-seeded zero per bucket: a scoped commit (e.g. one
                     // year) never touches most buckets. byBucket should only ever report the

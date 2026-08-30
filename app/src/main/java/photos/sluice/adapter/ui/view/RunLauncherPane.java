@@ -220,9 +220,9 @@ final class RunLauncherPane {
         final var dashboard = new StackPane(launcher, progress.node(), result.node());
         final Runnable draw = () -> show(presenter, setup, controls, launcher, progress, result);
         redraw.becomes(draw);
-        start.setOnAction(_ -> onStart(presenter, draw));
+        start.setOnAction(_ -> onStart(presenter, start, draw));
         importPhotos.setOnAction(_ -> onImportPressed(presenter, importPhotos, draw));
-        repair.setOnAction(_ -> onRepairPressed(setup, draw));
+        repair.setOnAction(_ -> onRepairPressed(setup, repair, draw));
         acceptDroppedFolders(launcher, presenter, draw);
 
         // Two routes in, and they differ by the thread they arrive on. A job reports its ending from
@@ -296,11 +296,13 @@ final class RunLauncherPane {
      * same draw puts the refusal on it.
      *
      * @param presenter {@link RunLauncherPresenter} decides everything this screen shows
+     * @param opensOver {@link Node} something on the window any question opens over
      * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
      */
-    private static void onStart(final RunLauncherPresenter presenter, final Runnable redraw) {
+    private static void onStart(final RunLauncherPresenter presenter, final Node opensOver,
+                                final Runnable redraw) {
         final RunSetupPresenter.Confirmation asked = presenter.setup().confirmationNeeded();
-        if (asked != null && Dialogs.ask(asked.heading(), asked.question(),
+        if (asked != null && Dialogs.ask(opensOver, asked.heading(), asked.question(),
                 new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD,
                         Dialogs.Emphasis.of(asked.goAheadLeads())),
                 new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL,
@@ -318,14 +320,16 @@ final class RunLauncherPane {
      * the button. Nothing else holds a second copy of it to go stale.
      *
      * @param setup {@link RunSetupPresenter} holds the question and does the filing
+     * @param opensOver {@link Node} something on the window the question opens over
      * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
      */
-    private static void onRepairPressed(final RunSetupPresenter setup, final Runnable redraw) {
+    private static void onRepairPressed(final RunSetupPresenter setup, final Node opensOver,
+                                        final Runnable redraw) {
         if (!(setup.view().cost() instanceof final Cost.Estimate estimate)) {
             return;
         }
         final Cost.Warning wrong = estimate.warning();
-        if (wrong == null || !Dialogs.agreed(wrong.repair().confirm())) {
+        if (wrong == null || !Dialogs.agreed(opensOver, wrong.repair().confirm())) {
             return;
         }
         setup.startAFreshSpendRecord();
@@ -339,14 +343,14 @@ final class RunLauncherPane {
      * card, a phone folder or an export.
      *
      * @param presenter {@link RunLauncherPresenter} starts the import
-     * @param owner {@link Node} the button the dialog opens over
+     * @param opensOver {@link Node} the button the dialog opens over
      * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
      */
-    private static void onImportPressed(final RunLauncherPresenter presenter, final Node owner,
+    private static void onImportPressed(final RunLauncherPresenter presenter, final Node opensOver,
                                         final Runnable redraw) {
-        final File chosen = new DirectoryChooser().showDialog(owner.getScene().getWindow());
+        final File chosen = new DirectoryChooser().showDialog(opensOver.getScene().getWindow());
         if (chosen != null) {
-            askThenImport(presenter, List.of(chosen.toPath()), redraw);
+            askThenImport(presenter, opensOver, List.of(chosen.toPath()), redraw);
         }
     }
 
@@ -394,7 +398,7 @@ final class RunLauncherPane {
             event.setDropCompleted(carriedFiles);
             event.consume();
             if (carriedFiles) {
-                Platform.runLater(() -> askThenImport(presenter, dropped, redraw));
+                Platform.runLater(() -> askThenImport(presenter, launcher, dropped, redraw));
             }
         });
     }
@@ -416,15 +420,16 @@ final class RunLauncherPane {
      * almost every import wants.
      *
      * @param presenter {@link RunLauncherPresenter} starts the import
+     * @param opensOver {@link Node} something on the window the question opens over
      * @param sources a {@link List} of {@link Path} the folders and files chosen
      * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
      */
-    private static void askThenImport(final RunLauncherPresenter presenter, final List<Path> sources,
-                                      final Runnable redraw) {
+    private static void askThenImport(final RunLauncherPresenter presenter, final Node opensOver,
+                                      final List<Path> sources, final Runnable redraw) {
         final RunSetupPresenter.ImportQuestion asked = presenter.setup().importQuestion(sources);
         final var copy = new Dialogs.Choice(asked.copy(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD);
         final var move = new Dialogs.Choice(asked.move(), Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET);
-        final Optional<Dialogs.Choice> taken = Dialogs.ask(asked.heading(), asked.question(), copy, move,
+        final Optional<Dialogs.Choice> taken = Dialogs.ask(opensOver, asked.heading(), asked.question(), copy, move,
                 new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET));
         if (taken.isEmpty()) {
             return;

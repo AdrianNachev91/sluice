@@ -281,19 +281,28 @@
               <goal>check</goal>
             </goals>
             <configuration>
+              <!-- The JavaFX classes themselves. Logic lives in presenters one package up, which
+                   stay inside this rule; what is left here constructs controls and binds them.
+                   Driving all of that through the toolkit to 95% instruction coverage would buy a
+                   slower, more brittle suite and no more confidence, and check-view holds its own,
+                   lower floor instead.
+
+                   At the execution's file set rather than plugin-wide, because the classes still
+                   need real instrumentation for check-view to read. And here rather than inside the
+                   rule, because a BUNDLE-element rule ignores its own includes and excludes: one
+                   written there is dead, and the rule silently measures everything.
+
+                   Appended rather than stated outright, because an execution's own list otherwise
+                   replaces the plugin's. Replacing it puts the native keyring bindings back into
+                   this rule's file set, and those carry no probes at all: prepare-agent reads the
+                   plugin-level list and never instrumented them. They would analyse as nothing
+                   covered and drag the ratio down by two points. -->
+              <excludes combine.children="append">
+                <exclude>photos/sluice/adapter/ui/view/**</exclude>
+              </excludes>
               <rules>
                 <rule>
                   <element>BUNDLE</element>
-                  <!-- The JavaFX classes themselves. Logic lives in presenters one package up,
-                       which stay inside this rule; what is left here constructs controls and binds
-                       them. Driving all of that through the toolkit to 95% instruction coverage
-                       would buy a slower, more brittle suite and no more confidence, and
-                       check-view holds its own, lower floor instead. A rule-level exclude rather
-                       than the plugin-level one above: the classes still need real instrumentation
-                       for that other rule to read. -->
-                  <excludes>
-                    <exclude>photos.sluice.adapter.ui.view.*</exclude>
-                  </excludes>
                   <limits>
                     <limit>
                       <counter>INSTRUCTION</counter>

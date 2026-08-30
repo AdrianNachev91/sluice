@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JobRunnerTest {
@@ -267,6 +268,31 @@ class JobRunnerTest {
 
         assertThat(handle.stopSignal().isCancelled()).isTrue();
         assertThat(handle.stopSignal().isAbandonRequested()).isFalse();
+    }
+
+    @Test
+    void abandonInFlightReachesTheJobTheRunnerIsHolding() throws InterruptedException {
+        final var started = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final var observed = new AtomicReference<>(false);
+        final JobHandle<String> handle = this.runner.submit(stop -> {
+            started.countDown();
+            release.await();
+            observed.set(stop.isAbandonRequested());
+            return "done";
+        });
+        started.await();
+
+        this.runner.abandonInFlight();
+        release.countDown();
+        handle.join();
+
+        assertThat(observed.get()).isTrue();
+    }
+
+    @Test
+    void abandonInFlightWithNothingRunningIsSilent() {
+        assertThatCode(this.runner::abandonInFlight).doesNotThrowAnyException();
     }
 
     @Test

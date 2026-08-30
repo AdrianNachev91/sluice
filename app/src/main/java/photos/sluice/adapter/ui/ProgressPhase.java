@@ -9,10 +9,15 @@ package photos.sluice.adapter.ui;
  * inferred from the counts. A sort with nothing to move and a sort still on its first file both
  * read 0 of 0 otherwise.
  *
+ * <p>{@code partDone} describes the unit after {@code current}, which is the one being worked on.
+ * It is the only reading that moves while a single large file is written. It drops back to zero as
+ * that file lands and the count steps.
+ *
  * @param label {@link String} the phase's name, as the engine that reported it wrote it
  * @param current int units done so far
  * @param total int units the phase said it had, zero until it first ticks
  * @param finished boolean whether the phase has ended
+ * @param partDone double how much of the unit now being worked on is done, from 0 to 1
  */
-public record ProgressPhase(String label, int current, int total, boolean finished) {
+public record ProgressPhase(String label, int current, int total, boolean finished, double partDone) {
 }

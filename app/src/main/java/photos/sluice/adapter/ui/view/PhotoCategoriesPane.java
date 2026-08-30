@@ -15,6 +15,8 @@ import photos.sluice.adapter.ui.PhotoCategoriesView.SaveOutcome;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 /**
  * The Photo categories screen: the categories photos are sifted into, and what each one is for.
@@ -37,9 +39,9 @@ final class PhotoCategoriesPane {
      *
      * @param presenter {@link PhotoCategoriesPresenter} supplies what to show and carries out a save
      * @param onBack {@link Runnable} returns to the screen this was opened from
-     * @return {@link Node} the photo categories pane
+     * @return {@link Mounted} the pane, and the way to ask whether leaving would lose anything
      */
-    static Node pane(final PhotoCategoriesPresenter presenter, final Runnable onBack) {
+    static Mounted pane(final PhotoCategoriesPresenter presenter, final Runnable onBack) {
         final var container = new VBox();
         container.getStyleClass().add("settings-pane");
         // The header sits outside what scrolls, so the way back and Save both stay reachable from
@@ -47,8 +49,21 @@ final class PhotoCategoriesPane {
         // the body.
         final PageHeader.Result header =
                 PageHeader.build("Photo categories", "photo-categories-save", backButton(onBack));
-        refresh(container, header, presenter, onBack);
-        return PageHeader.pinnedOver(header, container);
+        // Replaced on every draw, since a save rebuilds every card. Whatever asks about unsaved work
+        // has to read the cards standing now rather than the ones this page opened with.
+        final var onScreen = new AtomicReference<List<CategoryCard.Result>>(List.of());
+        refresh(container, header, presenter, onBack, onScreen);
+        return new Mounted(PageHeader.pinnedOver(header, container),
+                () -> presenter.hasUnsavedEdits(editsOf(onScreen.get())));
+    }
+
+    /**
+     * The pane, and the one question anything outside it needs to ask.
+     *
+     * @param node {@link Node} the pane itself
+     * @param hasUnsavedEdits {@link BooleanSupplier} whether leaving would lose what was typed
+     */
+    record Mounted(Node node, BooleanSupplier hasUnsavedEdits) {
     }
 
     /**
@@ -59,12 +74,15 @@ final class PhotoCategoriesPane {
      * to fix, and rebuilding would take it away from them.
      *
      * @param container {@link VBox} the pane's own body
+     * @param header {@link PageHeader.Result} the pinned bar, which outlives every redraw
      * @param presenter {@link PhotoCategoriesPresenter} supplies the state and takes the actions
      * @param onBack {@link Runnable} returns to the screen this was opened from
+     * @param onScreen an {@link AtomicReference} to the cards now drawn, replaced by this draw
      */
     private static void refresh(final VBox container, final PageHeader.Result header,
                                 final PhotoCategoriesPresenter presenter,
-                                final Runnable onBack) {
+                                final Runnable onBack,
+                                final AtomicReference<List<CategoryCard.Result>> onScreen) {
         final PhotoCategoriesView view = presenter.view();
         header.clearStatus();
         container.getChildren().clear();
@@ -91,8 +109,22 @@ final class PhotoCategoriesPane {
         });
         // The summary lives in the pinned header beside Save, where the Settings screen puts its own.
         // A refused save reads the same way on both, and it is next to the button that produced it.
-        header.save().setOnAction(_ -> onSave(presenter, container, header, onBack, built, summary));
+        header.save().setOnAction(_ -> onSave(presenter, container, header, onBack, built, summary, onScreen));
         container.getChildren().addAll(cards, actions(add));
+        onScreen.set(built);
+    }
+
+    /**
+     * The cards on screen, as the values a save would be handed.
+     *
+     * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
+     * @return a {@link List} of {@link CategoryEdit} what each card holds right now
+     */
+    private static List<CategoryEdit> editsOf(final List<CategoryCard.Result> built) {
+        return built.stream()
+                .map(card -> new CategoryEdit(card.name().getText(), card.description().getText(),
+                        CategoryCard.linesOf(card.examples()), card.enabled().isSelected()))
+                .toList();
     }
 
     /**
@@ -179,19 +211,18 @@ final class PhotoCategoriesPane {
      * @param onBack {@link Runnable} returns to the screen this was opened from
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
      * @param summary {@link Label} the bar's own line, where a refusal lands
+     * @param onScreen an {@link AtomicReference} to the cards now drawn, replaced by a save that took
      */
     private static void onSave(final PhotoCategoriesPresenter presenter, final VBox container,
                                final PageHeader.Result header,
                                final Runnable onBack, final List<CategoryCard.Result> built,
-                               final Label summary) {
-        final List<CategoryEdit> edits = built.stream()
-                .map(card -> new CategoryEdit(card.name().getText(), card.description().getText(),
-                        CategoryCard.linesOf(card.examples()), card.enabled().isSelected()))
-                .toList();
+                               final Label summary,
+                               final AtomicReference<List<CategoryCard.Result>> onScreen) {
+        final List<CategoryEdit> edits = editsOf(built);
         clearRefusal(built, summary);
         switch (presenter.save(edits)) {
             case SaveOutcome.Saved _ -> {
-                refresh(container, header, presenter, onBack);
+                refresh(container, header, presenter, onBack, onScreen);
                 SettingsRows.report(container, null, SAVED, true);
                 // Save is this page's default button, so Enter fires it with the caret still in a
                 // card. The rebuild takes that field out of the scene, focus goes to whatever the

@@ -36,7 +36,7 @@ final class PhaseRunner {
     <T> T run(final String phase, final PhaseWork<T> work) throws Exception {
         this.progressPort.phaseStarted(phase);
         try {
-            return work.run((current, total) -> this.progressPort.tick(phase, current, total));
+            return work.run(this.reporting(phase));
         } finally {
             this.progressPort.phaseFinished(phase);
         }
@@ -60,10 +60,34 @@ final class PhaseRunner {
     <T extends @Nullable Object> T around(final String phase, final Function<ProgressCallback, T> work) {
         this.progressPort.phaseStarted(phase);
         try {
-            return work.apply((current, total) -> this.progressPort.tick(phase, current, total));
+            return work.apply(this.reporting(phase));
         } finally {
             this.progressPort.phaseFinished(phase);
         }
+    }
+
+    /**
+     * The callback one phase's work reports through.
+     *
+     * <p>An anonymous class rather than a lambda, and it has to stay one. {@link ProgressCallback}
+     * carries {@code partOf} as a default, so a lambda compiles, satisfies the interface, and
+     * silently reports no partial readings at all.
+     *
+     * @param phase {@link String} name of the phase being run
+     * @return {@link ProgressCallback} what the work ticks
+     */
+    private ProgressCallback reporting(final String phase) {
+        return new ProgressCallback() {
+            @Override
+            public void tick(final int current, final int total) {
+                PhaseRunner.this.progressPort.tick(phase, current, total);
+            }
+
+            @Override
+            public void partOf(final int current, final int total, final double partDone) {
+                PhaseRunner.this.progressPort.tickWithin(phase, current, total, partDone);
+            }
+        };
     }
 
     /**

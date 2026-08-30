@@ -1,6 +1,7 @@
 package photos.sluice.adapter.ui.view;
 
 import javafx.concurrent.Task;
+import javafx.scene.Node;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import photos.sluice.adapter.ui.SettingsPresenter;
@@ -34,6 +35,7 @@ final class LibraryRootMoveDialog {
      * <p>Returns as soon as the dialog is answered. A copy runs for as long as the library takes,
      * so what it did is reported through the callbacks rather than returned.
      *
+     * @param opensOver {@link Node} something on the window the question opens over
      * @param presenter {@link SettingsPresenter} carries out whichever resolution was chosen
      * @param needsResolution {@link SaveOutcome.NeedsLibraryRootResolution} the refused save, with
      *     the question already worded
@@ -46,7 +48,7 @@ final class LibraryRootMoveDialog {
     // and closed by whichever of the task's two handlers ends it. There is no block for a
     // try-with-resources to wrap.
     @SuppressWarnings("resource")
-    static void resolve(final SettingsPresenter presenter,
+    static void resolve(final Node opensOver, final SettingsPresenter presenter,
                         final SaveOutcome.NeedsLibraryRootResolution needsResolution,
                         final Consumer<String> working,
                         final Consumer<SettingsPresenter.MoveOutcome> report) {
@@ -56,7 +58,7 @@ final class LibraryRootMoveDialog {
                 Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD);
         final var startFresh = new Dialogs.Choice("Start the record fresh",
                 Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET);
-        final Optional<Dialogs.Choice> chosen = Dialogs.ask("Moving the library root",
+        final Optional<Dialogs.Choice> chosen = Dialogs.ask(opensOver, "Moving the library root",
                 needsResolution.message(), copyAndKeep, startFresh,
                 new Dialogs.Choice("Cancel", Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET));
         if (chosen.isEmpty()) {

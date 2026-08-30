@@ -9,6 +9,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.domain.imports.ImportKind;
 import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.job.CancellationSignal;
@@ -108,7 +109,8 @@ public class ImportEngine {
                 if (cancelled.isCancelled()) {
                     return counts.summary(total, gathered.unreadablePlaces(), true);
                 }
-                counts = this.bringInTolerating(arrival, kind, counts, cancelled);
+                counts = this.bringInTolerating(arrival, kind, counts, cancelled,
+                        TransferProgress.within(progress, seen, total));
                 progress.tick(++seen, total);
             }
         } catch (final TransferAbandonedException e) {
@@ -128,13 +130,15 @@ public class ImportEngine {
      * @param kind {@link ImportKind} whether the original stays where it is
      * @param counts {@link Counts}
      * @param cancelled {@link CancellationSignal} asked while a file's bytes are moving
+     * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @return {@link Counts} the same, with this file counted
      * @throws TransferAbandonedException if cancelled escalated before the file landed
      */
     private Counts bringInTolerating(final Arrival arrival, final ImportKind kind,
-                                     final Counts counts, final CancellationSignal cancelled) {
+                                     final Counts counts, final CancellationSignal cancelled,
+                                     final TransferProgress watching) {
         try {
-            return this.bringIn(arrival, kind, counts, cancelled);
+            return this.bringIn(arrival, kind, counts, cancelled, watching);
         } catch (final UncheckedIOException e) {
             // Only the filesystem refusing. Anything else is a fault here, and still ends the run.
             log.warn("Could not bring in {}", arrival.file(), e);
@@ -220,11 +224,12 @@ public class ImportEngine {
      * @param kind {@link ImportKind} whether the original stays where it is
      * @param counts {@link Counts}
      * @param cancelled {@link CancellationSignal} asked while the file's bytes are moving
+     * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @return {@link Counts} the same, with this file counted
      * @throws TransferAbandonedException if cancelled escalated before the file landed
      */
     private Counts bringIn(final Arrival arrival, final ImportKind kind, final Counts counts,
-                           final CancellationSignal cancelled) {
+                           final CancellationSignal cancelled, final TransferProgress watching) {
         if (this.alreadySameFile(arrival)) {
             if (kind == ImportKind.MOVE) {
                 // On the strength of the byte comparison alreadySameFile just made.
@@ -232,7 +237,7 @@ public class ImportEngine {
             }
             return counts.oneMoreAlreadyThere();
         }
-        return this.copyItIn(arrival, kind, counts, cancelled);
+        return this.copyItIn(arrival, kind, counts, cancelled, watching);
     }
 
     /**
@@ -245,23 +250,25 @@ public class ImportEngine {
      * @param kind {@link ImportKind} whether the original stays where it is
      * @param counts {@link Counts}
      * @param cancelled {@link CancellationSignal} asked while the file's bytes are moving
+     * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @return {@link Counts} the same, with this file counted
      * @throws TransferAbandonedException if cancelled escalated before the copy finished
      */
     private Counts copyItIn(final Arrival arrival, final ImportKind kind, final Counts counts,
-                            final CancellationSignal cancelled) {
+                            final CancellationSignal cancelled, final TransferProgress watching) {
         final Path landing = this.mediaStore.resolveDestination(arrival.file(), arrival.destination());
         // A free name, not a composed one. An earlier crash between copy and rename leaves a whole
         // photo under that name, and its card may be gone. Writing over it can lose the only copy.
         final Path part = this.mediaStore.resolveDestination(Path.of(landing + PART_SUFFIX),
                 arrival.destination());
-        this.mediaStore.copyTo(arrival.file(), part, cancelled);
+        this.mediaStore.copyTo(arrival.file(), part, cancelled, watching);
         if (kind == ImportKind.MOVE && !this.sameBytes(arrival.file(), part)) {
             this.mediaStore.delete(part);
             return counts.oneMoreUnverified();
         }
-        // Part and landing sit in one directory, so this is a rename with nothing to interrupt.
-        this.mediaStore.moveTo(part, landing, CancellationSignal.NEVER);
+        // Part and landing sit in one directory, so this is a rename with nothing to interrupt and
+        // nothing to report.
+        this.mediaStore.moveTo(part, landing, CancellationSignal.NEVER, TransferProgress.NONE);
         if (kind == ImportKind.MOVE) {
             this.mediaStore.delete(arrival.file());
         }

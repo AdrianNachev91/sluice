@@ -9,6 +9,7 @@ import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.imports.ImportKind;
 import photos.sluice.domain.imports.ImportSummary;
@@ -436,11 +437,12 @@ class ImportEngineTest {
     private static MediaStore refusingToCopy(final String unreadable) {
         return new NioMediaStore() {
             @Override
-            public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
+            public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                    final TransferProgress watching) {
                 if (source.getFileName().toString().equals(unreadable)) {
                     throw new UncheckedIOException(new IOException("refused " + source));
                 }
-                return super.copyTo(source, destination, stop);
+                return super.copyTo(source, destination, stop, watching);
             }
         };
     }

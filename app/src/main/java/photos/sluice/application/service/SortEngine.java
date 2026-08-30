@@ -11,6 +11,7 @@ import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.ScopeSelector;
 import photos.sluice.domain.dedup.ByteIdenticalDedup;
@@ -417,7 +418,8 @@ public class SortEngine implements SortUseCase {
                 // So this lookup always hits. requireNonNull asserts that invariant rather than
                 // silently trusting it.
                 final DateResult date = Objects.requireNonNull(dateByFile.get(file));
-                this.routeOneSurvivor(file, date, routing, cancellation);
+                this.routeOneSurvivor(file, date, routing, cancellation,
+                        TransferProgress.within(progress, current, total));
                 routing.routedFiles.add(file);
                 progress.tick(++current, total);
             }
@@ -438,14 +440,16 @@ public class SortEngine implements SortUseCase {
      * @param date {@link DateResult} its resolved date
      * @param routing {@link RoutingResult} tallies updated with this file's outcome
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void routeOneSurvivor(final MediaFile file, final DateResult date, final RoutingResult routing,
-                                  final CancellationSignal cancellation) {
+                                  final CancellationSignal cancellation, final TransferProgress watching) {
         final String leaf = file.path().getFileName().toString();
 
         if (date.confidence() == Confidence.UNSORTABLE) {
-            this.routeToReview(file, leaf, this.pathsPort.review().resolve("Unsorted"), REASON_UNSORTED, cancellation);
+            this.routeToReview(file, leaf, this.pathsPort.review().resolve("Unsorted"), REASON_UNSORTED,
+                    cancellation, watching);
             routing.unsorted++;
             routing.unsortedFiles.add(leaf);
             return;
@@ -459,7 +463,7 @@ public class SortEngine implements SortUseCase {
 
         if (!isVideo && this.isLowRes(file, type, extension)) {
             this.routeToReview(file, leaf, this.pathsPort.review().resolve(yearMonthDash(date.when())),
-                    REASON_LOW_RES, cancellation);
+                    REASON_LOW_RES, cancellation, watching);
             routing.lowRes++;
             return;
         }
@@ -467,7 +471,7 @@ public class SortEngine implements SortUseCase {
         final String mediaFolder = isVideo ? "Videos" : "Photos";
         final Path destDir = this.pathsPort.sorted().resolve(mediaFolder)
                 .resolve(yearFolder(date.when())).resolve(monthFolder(date.when()));
-        this.mediaStore.move(file.path(), destDir, cancellation);
+        this.mediaStore.move(file.path(), destDir, cancellation, watching);
         routing.yearsSorted.add(date.when().getYear());
         if (isVideo) {
             routing.videosSorted++;
@@ -501,11 +505,12 @@ public class SortEngine implements SortUseCase {
      * @param destDir {@link Path} the Review destination folder
      * @param reason {@link String} short label recorded in the reasons file
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void routeToReview(final MediaFile file, final String leaf, final Path destDir, final String reason,
-                               final CancellationSignal cancellation) {
-        this.mediaStore.move(file.path(), destDir, cancellation);
+                               final CancellationSignal cancellation, final TransferProgress watching) {
+        this.mediaStore.move(file.path(), destDir, cancellation, watching);
         this.mediaStore.appendLine(destDir.resolve(REASONS_FILE), leaf + " - " + reason);
     }
 

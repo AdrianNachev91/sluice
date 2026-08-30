@@ -56,6 +56,7 @@ public class RunLauncherPresenter {
     // RunResults builds out of what the run produced and nothing else.
     private volatile @Nullable Message cardMessage;
     private volatile boolean cancelRequested;
+    private volatile boolean abandonRequested;
     // What the running or just-ended job was started as, and what it covers. The mode buttons and
     // the field can both move while a job works, so neither can be asked afterwards what it was
     // started with.
@@ -100,7 +101,7 @@ public class RunLauncherPresenter {
     public RunStage stage() {
         if (this.running) {
             return new RunStage.Running(this.progress.view(this.ranAs, this.scopeOfTheRun,
-                    this.cancelRequested, this.importing));
+                    this.cancelRequested, this.abandonRequested, this.importing));
         }
         final RunResultView done = this.ended;
         return done == null ? new RunStage.Setup() : new RunStage.Finished(done, this.cardMessage);
@@ -258,21 +259,42 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * Asks the running job to stop.
+     * Asks the running job to stop, and on a second press gives up on the file in flight.
      *
-     * <p>Cooperative rather than an interruption: a stage already in flight finishes first. On a
-     * sift that is one call to a model, which is what the screen warns can take about a minute.
+     * <p>The first press is cooperative rather than an interruption: a stage already in flight
+     * finishes first. On a sift that is one call to a model, which is what the screen warns can take
+     * about a minute. On anything moving files it is the rest of the file being written. Over a slow
+     * connection that is long enough to read as a button that missed.
      *
-     * <p>Asking twice changes nothing, and the button goes dead on the first press, so the second
-     * would have to come from somewhere other than this screen.
+     * <p>The second press is what ends that wait. It throws away the part already written rather
+     * than finishing it, so the file stays where it was and nothing half-written is left behind.
+     *
+     * <p>Pressing again after that changes nothing, there being nothing further to escalate to.
      */
     public void cancel() {
         final JobHandle<?> handle = this.inFlight;
         if (handle == null) {
             return;
         }
+        if (this.cancelRequested) {
+            this.abandonRequested = true;
+            handle.requestAbandon();
+            return;
+        }
         this.cancelRequested = true;
         handle.requestCancellation();
+    }
+
+    /**
+     * What the run now on the dashboard was started as, or null where the dashboard started none.
+     *
+     * <p>Null does not mean nothing is running. A watcher resuming a sift of its own starts a job
+     * this presenter never saw, and a caller asking what is running has to allow for that.
+     *
+     * @return {@link RunMode} the mode of the run in flight, or null
+     */
+    public @Nullable RunMode runningMode() {
+        return this.running ? this.ranAs : null;
     }
 
     /**
@@ -373,6 +395,7 @@ public class RunLauncherPresenter {
             this.importing = kind;
             this.ended = null;
             this.cancelRequested = false;
+            this.abandonRequested = false;
             // The port holds whatever the last job reported until somebody says a new one has
             // begun. It is told about phases and never about jobs, so this is the only place that
             // boundary is known.

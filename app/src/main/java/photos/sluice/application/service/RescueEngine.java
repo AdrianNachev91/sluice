@@ -7,6 +7,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
@@ -113,7 +114,8 @@ public class RescueEngine implements RescueUseCase {
             // Checked after each file, so an in-flight file is never interrupted; already-rescued
             // files stay rescued, matching the no-undo model.
             while (current < total && !cancellation.isCancelled()) {
-                this.rescueOneFile(allFiles.get(current), targetLeaf, libraryRoot, outcome, session, cancellation);
+                this.rescueOneFile(allFiles.get(current), targetLeaf, libraryRoot, outcome, session,
+                        cancellation, TransferProgress.within(progress, current, total));
                 progress.tick(++current, total);
             }
         } catch (final TransferAbandonedException e) {
@@ -150,12 +152,14 @@ public class RescueEngine implements RescueUseCase {
      * @param outcome {@link RescueOutcome} accumulator for rescued count and skipped names
      * @param session {@link HashIndexPort.Session} hash-index session to append rescued entries
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
+     * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void rescueOneFile(final Path file, final String targetLeaf, final Path libraryRoot,
                                final RescueOutcome outcome,
                                final HashIndexPort.Session session,
-                               final CancellationSignal cancellation) {
+                               final CancellationSignal cancellation,
+                               final TransferProgress watching) {
         final Optional<MediaType> type = this.mediaTypeDetector.classify(file);
         if (type.isEmpty()) {
             return;
@@ -168,7 +172,7 @@ public class RescueEngine implements RescueUseCase {
         final Path destDir = libraryRoot.resolve(type.get() == MediaType.VIDEO ? "Videos" : "Photos")
                 .resolve(yearFolder(date.get())).resolve(monthFolder(date.get()));
         final String hash = this.sha256Port.hash(file);
-        final Path dest = this.mediaStore.move(file, destDir, cancellation);
+        final Path dest = this.mediaStore.move(file, destDir, cancellation, watching);
         session.append(new IndexEntry(hash, dest));
         outcome.rescued++;
     }

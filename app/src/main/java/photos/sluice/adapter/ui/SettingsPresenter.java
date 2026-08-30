@@ -171,6 +171,41 @@ public class SettingsPresenter {
     }
 
     /**
+     * Whether leaving now would lose something typed or picked on this screen.
+     *
+     * <p>Compared against what {@link #view()} draws from disk, so a field the reader edited and
+     * put back is not a change. Blank stands for the saved value on a field the screen leaves
+     * empty, since a provider with no model or endpoint draws nothing there.
+     *
+     * <p>Theme is not among these. {@link #chooseTheme} writes it the moment a radio is picked, so
+     * there is never a theme change waiting to be lost.
+     *
+     * @param onScreen {@link SettingsEdits} every value the save would send, as it stands now
+     * @return boolean true where leaving would lose something
+     */
+    public boolean hasUnsavedEdits(final SettingsEdits onScreen) {
+        return !this.savedEdits().equals(onScreen);
+    }
+
+    /**
+     * Every Settings value that waits for Save, in the terms the screen holds them.
+     *
+     * @param workingRoot {@link String} the working-root path as typed
+     * @param libraryRoot {@link String} the library-root path as typed
+     * @param inbox {@link String} the inbox path as typed
+     * @param provider {@link String} the id of the provider chosen
+     * @param model {@link String} the model id selected, or blank where the provider takes none
+     * @param endpoint {@link String} the endpoint as typed, or blank where the provider takes none
+     * @param watchAutomatically boolean whether a waiting sift resumes itself
+     * @param tileSize int the sheet's tile size
+     * @param tilesPerRow int how many tiles a sheet row holds
+     */
+    public record SettingsEdits(String workingRoot, String libraryRoot, String inbox, String provider,
+                                String model, String endpoint, boolean watchAutomatically,
+                                int tileSize, int tilesPerRow) {
+    }
+
+    /**
      * Puts a theme in force and saves it, the moment it is picked.
      *
      * <p>Every other field on this screen waits for Save. A theme reads as a display setting
@@ -1022,5 +1057,20 @@ public class SettingsPresenter {
      */
     private static String counted(final int value) {
         return String.format(Locale.UK, "%,d", value);
+    }
+
+    /**
+     * What {@link #hasUnsavedEdits} compares against: the same values, as they are on disk.
+     *
+     * @return {@link SettingsEdits} the saved side
+     */
+    private SettingsEdits savedEdits() {
+        final SettingsView view = this.view();
+        final String model = view.model() instanceof final SettingsView.ModelPicker.Options options
+                ? options.selected() : "";
+        return new SettingsEdits(view.workingRoot().value(), view.libraryRoot().value(),
+                view.inbox().value(), view.provider(), model,
+                view.endpoint() == null ? "" : view.endpoint(), view.watchAutomatically(),
+                view.tileSize(), view.tilesPerRow());
     }
 }

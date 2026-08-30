@@ -29,6 +29,7 @@ import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
@@ -218,6 +219,16 @@ class RunsPaneTest {
         assertThat(pane.lookup("#runs-clear-completed").isDisabled()).isTrue();
     }
 
+    // It clears what the fold holds, so it belongs with them: it travels as they open and scrolls
+    // away with them. A pinned header would keep it on screen above every unfinished run it does
+    // not touch.
+    @Test
+    void clearingSitsInsideTheFinishedSection() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2018", State.COMPLETE)));
+
+        assertThat(ancestorIds(pane.lookup("#runs-clear-completed"))).contains("runs-completed");
+    }
+
     @Test
     void anInstallWithNoRunsSaysSoRatherThanDrawingAnEmptyList() throws Exception {
         final Parent pane = onFxThread(RunsPaneTest::built);
@@ -328,5 +339,15 @@ class RunsPaneTest {
         final T result = WaitForAsyncUtils.asyncFx(work).get();
         WaitForAsyncUtils.waitForFxEvents();
         return result;
+    }
+
+    private static List<String> ancestorIds(final Node node) {
+        final var ids = new ArrayList<String>();
+        for (Node walking = node.getParent(); walking != null; walking = walking.getParent()) {
+            if (walking.getId() != null) {
+                ids.add(walking.getId());
+            }
+        }
+        return ids;
     }
 }

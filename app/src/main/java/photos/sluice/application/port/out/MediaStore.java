@@ -19,8 +19,14 @@ import java.nio.file.Path;
  * {@link TransferAbandonedException}, and the destination is not left holding a prefix of the
  * source under its own name. A caller with nothing to stop passes {@link CancellationSignal#NEVER}.
  *
- * <p>One form each rather than a signal-less overload beside it. An overload lets an implementation
- * override the form nobody calls, which compiles, reads as complete, and silently does nothing.
+ * <p>Every transfer also takes a {@link TransferProgress}, told at intervals how much of the file
+ * has been written. It is the only reading that moves while one large file crosses, since the
+ * caller's own count cannot advance until that file lands. A rename reports nothing through it,
+ * having written no bytes. A caller with nothing watching passes {@link TransferProgress#NONE}.
+ *
+ * <p>One form each rather than an overload beside it taking neither. An overload lets an
+ * implementation override the form nobody calls, which compiles, reads as complete, and silently
+ * does nothing.
  */
 public interface MediaStore extends MediaReader {
 
@@ -47,10 +53,11 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to move
      * @param destDir {@link Path} the destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the path the file was moved to
      * @throws TransferAbandonedException if stop escalated before the move finished
      */
-    Path move(Path source, Path destDir, CancellationSignal stop);
+    Path move(Path source, Path destDir, CancellationSignal stop, TransferProgress watching);
 
     /**
      * The exact free path move(source, destDir) would land on, without performing the move. That is
@@ -72,10 +79,11 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to move
      * @param destination {@link Path} the exact destination path
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      * @throws TransferAbandonedException if stop escalated before the move finished
      */
-    Path moveTo(Path source, Path destination, CancellationSignal stop);
+    Path moveTo(Path source, Path destination, CancellationSignal stop, TransferProgress watching);
 
     /**
      * Copies a file into a destination directory.
@@ -83,10 +91,11 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to copy
      * @param destDir {@link Path} the destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the path the copy was written to
      * @throws TransferAbandonedException if stop escalated before the copy finished
      */
-    Path copy(Path source, Path destDir, CancellationSignal stop);
+    Path copy(Path source, Path destDir, CancellationSignal stop, TransferProgress watching);
 
     /**
      * Copies source to exactly destination.
@@ -94,11 +103,12 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to copy
      * @param destination {@link Path} must be free
      * @param stop {@link CancellationSignal} asked while the bytes are moving
+     * @param watching {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      * @throws UncheckedIOException if destination is already taken, or the copy fails
      * @throws TransferAbandonedException if stop escalated before the copy finished
      */
-    Path copyTo(Path source, Path destination, CancellationSignal stop);
+    Path copyTo(Path source, Path destination, CancellationSignal stop, TransferProgress watching);
 
     /**
      * Deletes a file.

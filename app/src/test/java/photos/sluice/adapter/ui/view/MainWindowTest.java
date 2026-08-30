@@ -67,6 +67,7 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -356,7 +357,8 @@ class MainWindowTest {
     private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters,
                                     final RunsPresenter runs) {
         final Scene scene = MainWindow.scene(presenter, presenters.settings(), presenters.vision(),
-                photoCategoriesPresenter(), runLauncherPresenter(), runs, troubleshootPresenter());
+                photoCategoriesPresenter(), runLauncherPresenter(), runs, troubleshootPresenter(),
+                new AtomicReference<>(() -> false));
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();

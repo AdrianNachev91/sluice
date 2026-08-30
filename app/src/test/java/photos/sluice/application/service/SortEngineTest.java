@@ -15,6 +15,7 @@ import photos.sluice.application.port.out.HashIndexPort;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.job.CancellationSignal;
@@ -802,12 +803,13 @@ class SortEngineTest {
             private int moves;
 
             @Override
-            public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
+            public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                    final TransferProgress watching) {
                 this.moves++;
                 if (this.moves == 2) {
                     throw new TransferAbandonedException(source);
                 }
-                return super.move(source, destDir, stop);
+                return super.move(source, destDir, stop, watching);
             }
         };
     }

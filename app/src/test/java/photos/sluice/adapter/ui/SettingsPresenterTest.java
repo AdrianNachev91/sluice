@@ -795,6 +795,48 @@ class SettingsPresenterTest {
         assertThat(said).containsExactly("Moving the library...");
     }
 
+    @Test
+    void aScreenShowingWhatIsStoredHasNothingToLose() {
+        final var presenter = presenterOver(settings("/repo", "/library", "/inbox"),
+                new FixedSecretStore(new Absent()));
+
+        assertThat(presenter.hasUnsavedEdits(drawnBy(presenter))).isFalse();
+    }
+
+    @Test
+    void aTypedFolderPathIsSomethingToLose() {
+        final var presenter = presenterOver(settings("/repo", "/library", "/inbox"),
+                new FixedSecretStore(new Absent()));
+        final SettingsPresenter.SettingsEdits typed = drawnBy(presenter);
+
+        assertThat(presenter.hasUnsavedEdits(new SettingsPresenter.SettingsEdits("/somewhere-else",
+                typed.libraryRoot(), typed.inbox(), typed.provider(), typed.model(), typed.endpoint(),
+                typed.watchAutomatically(), typed.tileSize(), typed.tilesPerRow()))).isTrue();
+    }
+
+    @Test
+    void aSheetNumberNudgedIsSomethingToLose() {
+        final var presenter = presenterOver(settings("/repo", "/library", "/inbox"),
+                new FixedSecretStore(new Absent()));
+        final SettingsPresenter.SettingsEdits typed = drawnBy(presenter);
+
+        assertThat(presenter.hasUnsavedEdits(new SettingsPresenter.SettingsEdits(typed.workingRoot(),
+                typed.libraryRoot(), typed.inbox(), typed.provider(), typed.model(), typed.endpoint(),
+                typed.watchAutomatically(), typed.tileSize(), typed.tilesPerRow() + 1))).isTrue();
+    }
+
+    // Built from view() the way the screen's controls are filled from it. So what this compares is
+    // the round trip a reader who changes nothing would make.
+    private static SettingsPresenter.SettingsEdits drawnBy(final SettingsPresenter presenter) {
+        final SettingsView view = presenter.view();
+        final String model = view.model() instanceof final SettingsView.ModelPicker.Options options
+                ? options.selected() : "";
+        return new SettingsPresenter.SettingsEdits(view.workingRoot().value(), view.libraryRoot().value(),
+                view.inbox().value(), view.provider(), model,
+                view.endpoint() == null ? "" : view.endpoint(), view.watchAutomatically(),
+                view.tileSize(), view.tilesPerRow());
+    }
+
     private static SettingsPresenter presenterOver(final Settings settings, final SecretStore secretStore) {
         return presenterOver(settings, secretStore, noViolations());
     }

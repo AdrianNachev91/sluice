@@ -66,15 +66,16 @@ final class SettingsPaneTestSupport {
 
     private SettingsPaneTestSupport() {}
 
-    private static Parent built(final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
-                                final int windowHeight) {
+    private static SettingsPane.Mounted mounted(final SettingsPresenter presenter,
+                                                final VisionProviderPresenter visionProvider,
+                                                final int windowHeight) {
         // A destination that does nothing is enough here. The button only has to go somewhere, so
         // the card renders and Settings lays out as it really does.
-        final Parent pane = (Parent) SettingsPane.pane(presenter, visionProvider, () -> { });
+        final SettingsPane.Mounted built = SettingsPane.pane(presenter, visionProvider, () -> { });
         // In a scene and laid out before anything is looked up. A ScrollPane holds its content
         // through a skin, and the skin is built when CSS is applied, so a lookup before that finds
         // nothing inside it.
-        final var scene = new Scene(new StackPane(pane), 900, windowHeight);
+        final var scene = new Scene(new StackPane(built.node()), 900, windowHeight);
         // Shown, because focus is a window's to give. A scene with no window on screen has nobody
         // to take focus from, so requesting it moves nothing and anything driven by losing it never
         // happens.
@@ -83,11 +84,18 @@ final class SettingsPaneTestSupport {
         stage.show();
         scene.getRoot().applyCss();
         scene.getRoot().layout();
-        return pane;
+        return built;
     }
 
     static Parent built(final SettingsPresenter presenter, final VisionProviderPresenter visionProvider) {
-        return built(presenter, visionProvider, 700);
+        return (Parent) mounted(presenter, visionProvider, 700).node();
+    }
+
+    // The pane and the question about unsaved work together, for the tests that press a control and
+    // then ask. Everything else only needs the pane.
+    static SettingsPane.Mounted mounted(final SettingsPresenter presenter,
+                                        final VisionProviderPresenter visionProvider) {
+        return mounted(presenter, visionProvider, 700);
     }
 
     // A window short enough that most of the page is off screen. At the height the other tests use,
@@ -95,7 +103,7 @@ final class SettingsPaneTestSupport {
     // about bringing something into view cannot be made either way.
     static Parent builtInAWindowThatScrolls(final SettingsPresenter presenter,
                                             final VisionProviderPresenter visionProvider) {
-        return built(presenter, visionProvider, 300);
+        return (Parent) mounted(presenter, visionProvider, 300).node();
     }
 
     // The body that scrolls, inside the page that pins a header over it.
@@ -180,6 +188,37 @@ final class SettingsPaneTestSupport {
         };
     }
 
+    // Keeps what it is given, unlike the refusing double above. A screen that redraws from disk
+    // after a save shows the saved values only against a seam that actually stored them.
+    static SettingsUseCase storingSettingsUseCase(final Settings initial) {
+        return new SettingsUseCase() {
+
+            private Settings held = initial;
+
+            @Override
+            public Settings settings() {
+                return this.held;
+            }
+
+            @Override
+            public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+                return Optional.empty();
+            }
+
+            @Override
+            public void save(final Settings toSave) {
+                this.held = toSave;
+            }
+        };
+    }
+
+    static SettingsPresenter presenterStoringOn(final String provider) {
+        final SettingsUseCase settingsUseCase = storingSettingsUseCase(settingsFor(provider));
+        final var visionProvider = new VisionProviderPresenter(oneStoredKey(), threeProviders(), settingsUseCase);
+        return new SettingsPresenter(settingsUseCase, refusingLibraryRootUseCase(), noRefusals(),
+                threeProviders(), visionProvider, new FxProgressPort());
+    }
+
     static LibraryRootUseCase refusingLibraryRootUseCase() {
         return (_, _) -> {
             throw new AssertionError("no test here moves the library root");
@@ -231,6 +270,22 @@ final class SettingsPaneTestSupport {
                 return REFUSED_FOLDER.equals(candidate.libraryRoot())
                         ? List.of(new NotADirectory(PathRole.LIBRARY_ROOT, Path.of(REFUSED_FOLDER)))
                         : List.of();
+            }
+
+            @Override
+            public List<PathViolation> violationsInForce() {
+                return List.of();
+            }
+        };
+    }
+
+    // Every folder usable, including the one a test types. A save that has to land cannot be run
+    // through the sibling above, which refuses one path on purpose.
+    static PathValidationUseCase noRefusals() {
+        return new PathValidationUseCase() {
+            @Override
+            public List<PathViolation> violations(final PathSettings candidate) {
+                return List.of();
             }
 
             @Override

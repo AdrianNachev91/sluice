@@ -60,6 +60,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -285,7 +286,7 @@ class RunLauncherPresenterTest {
         this.presenter.cancel();
 
         assertThat(((RunStage.Running) this.presenter.stage()).progress().cancelling())
-                .isEqualTo("What was sorted stays where it is.");
+                .startsWith("What was sorted stays where it is.");
     }
 
     @Test
@@ -631,9 +632,39 @@ class RunLauncherPresenterTest {
     }
 
     @Test
-    void cancelGoesDeadOnceItHasBeenPressed() {
+    void aSecondPressGivesUpOnTheFileTheRunIsWriting() {
         this.choose(RunMode.SORT, "");
         this.aSortStillRunning();
+        this.presenter.start();
+        final JobHandle<Object> handle = requireNonNull(this.held);
+        this.presenter.cancel();
+        assertThat(this.runningView().cancelPressable()).isTrue();
+
+        this.presenter.cancel();
+
+        verify(handle).requestAbandon();
+        assertThat(this.runningView().cancelPressable()).isFalse();
+    }
+
+    @Test
+    void pressingAgainAfterGivingUpOnTheFileChangesNothing() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+        this.presenter.start();
+        final JobHandle<Object> handle = requireNonNull(this.held);
+        this.presenter.cancel();
+        this.presenter.cancel();
+
+        this.presenter.cancel();
+
+        verify(handle, times(2)).requestAbandon();
+        assertThat(this.runningView().cancelLabel()).isEqualTo("Stopping now...");
+    }
+
+    @Test
+    void aStoppedSiftGoesDeadOnTheFirstPress() {
+        this.choose(RunMode.SIFT, "2019");
+        this.aSiftStillRunning();
         this.presenter.start();
         assertThat(this.runningView().cancelPressable()).isTrue();
 

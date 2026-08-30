@@ -38,6 +38,7 @@ import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.application.port.out.TokenSpend;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.config.PathsConfig;
@@ -355,8 +356,9 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.move(source, destDir, stop);
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.move(source, destDir, stop, watching);
         }
 
         @Override
@@ -365,18 +367,21 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.moveTo(source, destination, stop);
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.moveTo(source, destination, stop, watching);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.copy(source, destDir, stop);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copy(source, destDir, stop, watching);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.copyTo(source, destination, stop);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copyTo(source, destination, stop, watching);
         }
 
         @Override
@@ -714,7 +719,8 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
             throw new RuntimeException("simulated crash");
         }
 
@@ -724,18 +730,21 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.moveTo(source, destination, stop);
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.moveTo(source, destination, stop, watching);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.copy(source, destDir, stop);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copy(source, destDir, stop, watching);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.copyTo(source, destination, stop);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copyTo(source, destination, stop, watching);
         }
 
         @Override
@@ -828,7 +837,8 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
             this.moveStarted.countDown();
             try {
                 this.releaseMove.await();
@@ -836,7 +846,7 @@ final class PipelineTestSupport {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return this.delegate.move(source, destDir, stop);
+            return this.delegate.move(source, destDir, stop, watching);
         }
 
         @Override
@@ -845,18 +855,21 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.moveTo(source, destination, stop);
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.moveTo(source, destination, stop, watching);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.copy(source, destDir, stop);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copy(source, destDir, stop, watching);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.copyTo(source, destination, stop);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copyTo(source, destination, stop, watching);
         }
 
         @Override
@@ -958,8 +971,9 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.move(source, destDir, stop);
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.move(source, destDir, stop, watching);
         }
 
         @Override
@@ -968,18 +982,21 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.moveTo(source, destination, stop);
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.moveTo(source, destination, stop, watching);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.copy(source, destDir, stop);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copy(source, destDir, stop, watching);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.copyTo(source, destination, stop);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copyTo(source, destination, stop, watching);
         }
 
         @Override
@@ -1073,8 +1090,9 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.move(source, destDir, stop);
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.move(source, destDir, stop, watching);
         }
 
         @Override
@@ -1083,7 +1101,8 @@ final class PipelineTestSupport {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
             this.moveStarted.countDown();
             try {
                 this.releaseMove.await();
@@ -1091,17 +1110,19 @@ final class PipelineTestSupport {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return this.delegate.moveTo(source, destination, stop);
+            return this.delegate.moveTo(source, destination, stop, watching);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.copy(source, destDir, stop);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copy(source, destDir, stop, watching);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.copyTo(source, destination, stop);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copyTo(source, destination, stop, watching);
         }
 
         @Override

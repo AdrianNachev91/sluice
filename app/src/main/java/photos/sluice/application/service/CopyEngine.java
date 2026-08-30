@@ -3,6 +3,7 @@ package photos.sluice.application.service;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.TransferAbandonedException;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.domain.copy.CopySummary;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
@@ -72,7 +73,8 @@ public class CopyEngine {
                 if (cancelled.isCancelled()) {
                     return new CopySummary(copied, total, true);
                 }
-                if (this.copyKeepingItsPlace(source, destination, file, cancelled)) {
+                if (this.copyKeepingItsPlace(source, destination, file, cancelled,
+                        TransferProgress.within(progress, seen, total))) {
                     copied++;
                 }
                 progress.tick(++seen, total);
@@ -106,11 +108,13 @@ public class CopyEngine {
      * @param destination {@link Path} the directory being copied into
      * @param file {@link Path} the file to copy
      * @param cancelled {@link CancellationSignal} asked while the file's bytes are moving
+     * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @return boolean true when this run wrote it, false when it was already there
      * @throws TransferAbandonedException if cancelled escalated before the copy finished
      */
     private boolean copyKeepingItsPlace(final Path source, final Path destination, final Path file,
-                                        final CancellationSignal cancelled) {
+                                        final CancellationSignal cancelled,
+                                        final TransferProgress watching) {
         final Path relative = source.relativize(file);
         final Path parent = relative.getParent();
         final Path targetDirectory = parent == null ? destination : destination.resolve(parent);
@@ -119,7 +123,7 @@ public class CopyEngine {
             return false;
         }
         this.mediaStore.ensureDirectory(targetDirectory);
-        this.mediaStore.copy(file, targetDirectory, cancelled);
+        this.mediaStore.copy(file, targetDirectory, cancelled, watching);
         return true;
     }
 

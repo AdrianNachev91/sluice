@@ -6,6 +6,7 @@ import photos.sluice.adapter.fs.CsvLibraryHashIndex;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
@@ -308,12 +309,13 @@ class CommitEngineTest {
         }
 
         @Override
-        public Path move(final Path source, final Path destDir, final CancellationSignal stop) {
+        public Path move(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
             if (this.movesUntilFailure <= 0) {
                 throw new RuntimeException("simulated crash");
             }
             this.movesUntilFailure--;
-            return this.delegate.move(source, destDir, stop);
+            return this.delegate.move(source, destDir, stop, watching);
         }
 
         @Override
@@ -322,18 +324,21 @@ class CommitEngineTest {
         }
 
         @Override
-        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.moveTo(source, destination, stop);
+        public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.moveTo(source, destination, stop, watching);
         }
 
         @Override
-        public Path copy(final Path source, final Path destDir, final CancellationSignal stop) {
-            return this.delegate.copy(source, destDir, stop);
+        public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copy(source, destDir, stop, watching);
         }
 
         @Override
-        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop) {
-            return this.delegate.copyTo(source, destination, stop);
+        public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
+                final TransferProgress watching) {
+            return this.delegate.copyTo(source, destination, stop, watching);
         }
 
         @Override

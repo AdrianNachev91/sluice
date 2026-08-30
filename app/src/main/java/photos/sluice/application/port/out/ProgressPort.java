@@ -46,6 +46,22 @@ public interface ProgressPort {
     void tick(String phase, int current, int total);
 
     /**
+     * How far into the unit now being worked on the phase has reached.
+     *
+     * <p>Ignored unless an implementation takes it up. Falling back to {@link #tick} would be worse
+     * than silence: the unit reports itself when it finishes, so each partial reading would arrive
+     * as a second announcement of a unit that has not moved.
+     *
+     * @param phase {@link String} short human-readable label for the phase
+     * @param current int units completed before this one
+     * @param total int total units in the phase
+     * @param partDone double how much of the current unit is done, from 0 to 1
+     */
+    default void tickWithin(final String phase, final int current, final int total,
+                            final double partDone) {
+    }
+
+    /**
      * Signals that a phase has finished.
      *
      * @param phase {@link String} short human-readable label for the phase

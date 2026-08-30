@@ -14,8 +14,10 @@ import photos.sluice.domain.paths.PathViolation.NotConfigured;
 import photos.sluice.domain.paths.PathViolation.Overlap;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
@@ -120,6 +122,42 @@ class StartupSequenceTest {
 
         verify(this.pipeline).stopAllWatching();
         verify(lock, never()).releaseAll();
+    }
+
+    @Test
+    void anAttendedWindDownWaitsFarLongerThanAnUnattendedOne(@TempDir final Path root) {
+        when(this.pipeline.stopAcceptingJobs(any())).thenReturn(true);
+
+        new StartupSequence(mock(WorkingRootLock.class), paths(root), this.pipeline, usableRoots())
+                .windDownWithin(StartupSequence.ATTENDED_DRAIN_WAIT);
+
+        verify(this.pipeline).stopAcceptingJobs(StartupSequence.ATTENDED_DRAIN_WAIT);
+        assertThat(StartupSequence.ATTENDED_DRAIN_WAIT).isGreaterThan(Duration.ofSeconds(60));
+    }
+
+    @Test
+    void aWindDownGivenNoTimeAtAllKeepsTheWorkingRoot(@TempDir final Path root) {
+        final var lock = mock(WorkingRootLock.class);
+        when(this.pipeline.stopAcceptingJobs(Duration.ZERO)).thenReturn(false);
+        final var sequence = new StartupSequence(lock, paths(root), this.pipeline, usableRoots());
+
+        assertThat(sequence.windDownWithin(Duration.ZERO)).isFalse();
+
+        verify(this.pipeline).stopAllWatching();
+        verify(lock, never()).releaseAll();
+    }
+
+    @Test
+    void theToolkitsOwnShutdownAfterAQuitFlowDrainsNothingASecondTime(@TempDir final Path root) {
+        when(this.pipeline.stopAcceptingJobs(any())).thenReturn(false);
+        final var sequence = new StartupSequence(mock(WorkingRootLock.class), paths(root),
+                this.pipeline, usableRoots());
+        sequence.windDownWithin(Duration.ZERO);
+
+        sequence.shutdown();
+
+        verify(this.pipeline).stopAllWatching();
+        verify(this.pipeline).stopAcceptingJobs(any());
     }
 
     private static PathsPort paths(final Path root) {

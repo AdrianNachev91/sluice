@@ -142,23 +142,25 @@ final class RunResultPane {
      * card exactly as it was.
      *
      * @param presenter {@link RunLauncherPresenter} takes the press
+     * @param opensOver {@link Node} something on the window the question opens over
      * @param offer {@link CardAction.SiftNow} what the card offered
      * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
      */
-    private static void onSiftNow(final RunLauncherPresenter presenter,
+    private static void onSiftNow(final RunLauncherPresenter presenter, final Node opensOver,
                                   final CardAction.SiftNow offer, final Runnable redraw) {
-        presenter.siftNow(offer, RunResultPane::agreed);
+        presenter.siftNow(offer, asked -> agreed(opensOver, asked));
         redraw.run();
     }
 
     /**
      * Puts one question and answers whether the reader agreed.
      *
+     * @param opensOver {@link Node} something on the window the question opens over
      * @param asked {@link RunSetupPresenter.Confirmation} what to ask
      * @return boolean true where they chose to go ahead
      */
-    private static boolean agreed(final RunSetupPresenter.Confirmation asked) {
-        return Dialogs.ask(asked.heading(), asked.question(),
+    private static boolean agreed(final Node opensOver, final RunSetupPresenter.Confirmation asked) {
+        return Dialogs.ask(opensOver, asked.heading(), asked.question(),
                 new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD,
                         Dialogs.Emphasis.of(asked.goAheadLeads())),
                 new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL,
@@ -316,7 +318,7 @@ final class RunResultPane {
                     this.actionQuestion.setText("");
                     this.actionButton.setText(offer.label());
                     weigh(this.actionButton, "run-start");
-                    this.actionButton.setOnAction(_ -> onSiftNow(presenter, offer, redraw));
+                    this.actionButton.setOnAction(_ -> onSiftNow(presenter, this.actionButton, offer, redraw));
                 }
             }
         }
