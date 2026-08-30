@@ -110,6 +110,14 @@ public class RefusalClassifier {
             case final Pipeline.ScopeOverlapsException overlapped -> scopeOverlaps(overlapped);
             case final Pipeline.ScopeUnreadableException unreadable -> scopeUnreadable(unreadable);
             case final Pipeline.RunOutsideWorkingRootException outside -> runOutsideWorkingRoot(outside);
+            case final Pipeline.RunAlreadyFinishedException finished ->
+                    Refusal.of(RefusalKind.RUN_ALREADY_FINISHED, finished.getMessage());
+            case final Pipeline.NothingToRedoException nothing ->
+                    Refusal.of(RefusalKind.NOTHING_TO_REDO, nothing.getMessage());
+            case final ConfirmationRequiredException unconfirmed ->
+                    Refusal.of(RefusalKind.CONFIRMATION_REQUIRED, unconfirmed.getMessage());
+            case final AnswerNotApplicableException notApplicable ->
+                    Refusal.of(RefusalKind.ANSWER_NOT_APPLICABLE, notApplicable.getMessage());
             case final ImportSourceException refused -> Refusal.of(RefusalKind.IMPORT_SOURCE_REFUSED,
                     refused.getMessage());
             case final UnrecognisedProviderException unrecognised -> providerUnrecognised(unrecognised);

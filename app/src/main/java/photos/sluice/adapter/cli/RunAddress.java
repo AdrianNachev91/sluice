@@ -24,8 +24,8 @@ import java.util.List;
  * written twice.
  *
  * <p>A path is passed on untouched, because what may be worked on is the facade's ruling rather
- * than this adapter's. A resume refuses a folder outside the working root. Troubleshooting one and
- * discarding one do not, so a verb built on either owes that refusal itself.
+ * than this adapter's. Every verb the facade guards refuses a folder outside the working root on
+ * its own; a new one owes that refusal itself rather than trusting this class to have checked.
  */
 @Component
 @Profile("cli")

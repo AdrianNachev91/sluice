@@ -23,8 +23,11 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = "sluice", description = "Sluice organises your photos and videos.",
+        versionProvider = SluiceVersionProvider.class,
         subcommands = {AppCommand.class, RunsCommand.class, SortCommand.class, CommitCommand.class,
-                RescueCommand.class, CullCommand.class, ResumeCommand.class, ImportCommand.class})
+                RescueCommand.class, CullCommand.class, ResumeCommand.class, ImportCommand.class,
+                TroubleshootCommand.class, AnswerCommand.class, DiscardCommand.class, PurgeCommand.class,
+                RedoCommand.class})
 public class SluiceCli implements Callable<Integer> {
 
     /**
@@ -43,9 +46,9 @@ public class SluiceCli implements Callable<Integer> {
     @SuppressWarnings("unused")
     private @Nullable CommandSpec spec;
 
-    // Declared rather than taken from the parser's standard mixin, which pairs --help with a
-    // --version that has no version to print until the packaged build supplies one. The parser
-    // turns --help into help before this class is reached, so nothing here ever reads the field.
+    // Declared rather than taken from the parser's standard mixin, which pairs the two flags as one
+    // unit with no choice over either's behaviour. The parser turns --help into help before this
+    // class is reached, so nothing here ever reads the field.
     //
     // Inherited, so every verb answers it. The two-line refusal a verb gives an unknown option ends
     // by naming that verb's own --help. A verb that does not take one therefore offers a remedy
@@ -54,6 +57,14 @@ public class SluiceCli implements Callable<Integer> {
             description = "Show this message.")
     @SuppressWarnings("unused")
     private boolean helpRequested;
+
+    // Not inherited, unlike --help. The version strings come from this command's own
+    // versionProvider, an attribute a verb's own @Command does not carry down from here. Inheriting
+    // the flag without inheriting that would make "sort --version" succeed with nothing printed,
+    // which reads worse than a verb refusing an option it does not take.
+    @Option(names = "--version", versionHelp = true, description = "Show which build this is.")
+    @SuppressWarnings("unused")
+    private boolean versionRequested;
 
     // Inherited, so it reads the same before the verb as after it. A caller that has to remember
     // where a global flag goes gets it wrong from a shell history entry sooner or later.

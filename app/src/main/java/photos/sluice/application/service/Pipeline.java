@@ -672,10 +672,12 @@ public class Pipeline {
      *
      * @param prepDir {@link Path} the run
      * @return {@link String} the text to hand an agent
+     * @throws RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      * @throws NothingToRedoException if the run's diagnosis blames no sheet
      */
     public String redoRejectedAnswers(final Path prepDir) {
         this.requireUsableRoots();
+        this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
         final List<Finding> findings = this.prepDirDoctor.diagnose(prepDir).findings();
         final List<String> sheets = LaunchPrompt.sheetsToRedo(findings);
         if (sheets.isEmpty()) {

@@ -237,6 +237,48 @@ class RefusalClassifierTest {
     }
 
     @Test
+    void aDiscardOnAFinishedRunCarriesTheFacadesOwnSentence() {
+        final Path prepDir = Path.of("D:", "Sift", "2019");
+
+        final Refusal refusal = this.classifier.refusalFor(new Pipeline.RunAlreadyFinishedException(prepDir));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.RUN_ALREADY_FINISHED);
+        assertThat(refusal.sentence()).contains(prepDir.toString());
+    }
+
+    @Test
+    void aRedoWithNothingToJudgeAgainCarriesTheFacadesOwnSentence() {
+        final Path prepDir = Path.of("D:", "Sift", "2019");
+
+        final Refusal refusal = this.classifier.refusalFor(new Pipeline.NothingToRedoException(prepDir));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.NOTHING_TO_REDO);
+        assertThat(refusal.sentence()).contains(prepDir.toString());
+    }
+
+    @Test
+    void aDestructiveCommandWithoutYesCarriesWhatWouldBeLost() {
+        final Refusal refusal = this.classifier.refusalFor(
+                new ConfirmationRequiredException("2 sheet decisions are set aside with it."));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.CONFIRMATION_REQUIRED);
+        assertThat(refusal.sentence()).isEqualTo("2 sheet decisions are set aside with it.");
+    }
+
+    @Test
+    void aKeyAndOptionAnsweringNothingOpenCarriesWhatWasNamed() {
+        final Refusal refusal = this.classifier.refusalFor(
+                new AnswerNotApplicableException("Nothing open on this sift answers to montage-001 with SET_ASIDE."));
+
+        assertThat(refusal).isNotNull();
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.ANSWER_NOT_APPLICABLE);
+        assertThat(refusal.sentence()).contains("montage-001", "SET_ASIDE");
+    }
+
+    @Test
     void anImportSourceRefusalCarriesTheSentenceWritingForThePersonWhoChoseIt() {
         final Refusal refusal = this.classifier.refusalFor(
                 new ImportSourceException("Sluice can't import from that: it no longer exists."));

@@ -85,6 +85,31 @@ class SluiceCliTest {
     }
 
     @Test
+    void versionIsAskedForRatherThanStumbledInto() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "--version");
+
+        assertThat(result.exitCode()).isEqualTo(CommandLine.ExitCode.OK);
+        assertThat(result.out()).contains("Sluice");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void aRunFromSourceWordsTheAbsentVersionRatherThanPrintingNothing() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "--version");
+
+        assertThat(result.out()).contains("running from source");
+    }
+
+    @Test
+    void versionIsNotAVerbsToAnswer() {
+        final CliHarness.Result result = CliHarness.run(this.commandLine, "sort", "--version");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err()).contains("Unknown option: '--version'");
+    }
+
+    @Test
     void helpIsAskedForRatherThanStumbledInto() {
         final CliHarness.Result result = CliHarness.run(this.commandLine, "--help");
 

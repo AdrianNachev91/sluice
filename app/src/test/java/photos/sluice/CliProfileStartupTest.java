@@ -66,7 +66,7 @@ class CliProfileStartupTest {
     void everyVerbTheSurfaceCarriesCanBeBuilt() {
         assertThat(SluiceCli.parser(this.context.getBean(SluiceCli.class), this.context.getBean(IFactory.class))
                 .getSubcommands()).containsOnlyKeys("app", "runs", "sort", "commit", "rescue", "sift", "resume",
-                "import");
+                "import", "troubleshoot", "answer", "discard", "purge", "redo");
     }
 
     @Test

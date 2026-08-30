@@ -104,5 +104,25 @@ public enum RefusalKind {
     /**
      * A folder the command was asked to work on is not there.
      */
-    FOLDER_NOT_FOUND
+    FOLDER_NOT_FOUND,
+
+    /**
+     * A discard was asked for a run that had already finished.
+     */
+    RUN_ALREADY_FINISHED,
+
+    /**
+     * A fresh reading of the run blames no sheet, so there is nothing to redo.
+     */
+    NOTHING_TO_REDO,
+
+    /**
+     * The key and option named answer no open finding on the run.
+     */
+    ANSWER_NOT_APPLICABLE,
+
+    /**
+     * A destructive command was run without the flag that confirms it.
+     */
+    CONFIRMATION_REQUIRED
 }
