@@ -18,8 +18,7 @@ import java.util.Objects;
 
 /**
  * Computes a waiting cull job's present/valid shard counts from its prep dir, and answers whether
- * that prep dir is worth resuming yet. Not a Spring bean. {@link CullEngine} owns the one instance
- * it needs, built from the collaborators it already receives.
+ * that prep dir is worth resuming yet.
  *
  * <p>Neither answer is a verdict on shard content. {@link ApplyPlanner#validate} is the only thing
  * that judges that, and it does so once, at the apply itself. The tally here is a display number,

@@ -340,11 +340,11 @@ final class SettingsPaneTestSupport {
                 .toList();
     }
 
-    // Polls from the test thread, since the FX thread is inside the dialog's own nested event loop
-    // and cannot itself answer a lookup. A Platform.runLater task queued from any thread still runs
-    // during that loop, which is what lets this method reach in and press one of its buttons.
+    // Every read here goes through the FX thread, including the poll. A task queued from any thread
+    // still runs while the dialog's own nested event loop is up. That is what lets this reach in
+    // and press one of its buttons.
     static void answerDialog(final String buttonText) throws Exception {
-        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> currentDialogPane().isPresent());
+        WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> onFxThread(() -> currentDialogPane().isPresent()));
         runOnFxThread(() -> {
             final DialogPane dialogPane = currentDialogPane().orElseThrow();
             dialogPane.applyCss();
@@ -358,6 +358,8 @@ final class SettingsPaneTestSupport {
         });
     }
 
+    // FX thread only. Window.getWindows() is a live list the FX thread rebuilds as a dialog opens,
+    // so iterating it anywhere else reads a size that changes underneath.
     private static Optional<DialogPane> currentDialogPane() {
         return Window.getWindows().stream()
                 .filter(Window::isShowing)

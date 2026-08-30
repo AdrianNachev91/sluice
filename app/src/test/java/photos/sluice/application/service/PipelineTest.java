@@ -15,6 +15,7 @@ import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.imports.ImportKind;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -130,11 +132,35 @@ class PipelineTest {
         pipeline(root, progress).sort(new SortScope.OldestYear()).join();
 
         assertThat(progress.events).containsExactly(
+                "planned:Finding dates..., Checking for duplicates..., Sorting...",
                 "started:Finding dates...", "tick:Finding dates...:1/2", "tick:Finding dates...:2/2",
                 "finished:Finding dates...",
                 "started:Checking for duplicates...", "tick:Checking for duplicates...:1/2",
                 "tick:Checking for duplicates...:2/2", "finished:Checking for duplicates...",
                 "started:Sorting...", "tick:Sorting...:1/2", "tick:Sorting...:2/2", "finished:Sorting...");
+    }
+
+    @Test
+    void importAnnouncesItsOnePhaseAndThenReportsIt(@TempDir final Path root, @TempDir final Path source)
+            throws IOException {
+        final var progress = new RecordingProgressPort();
+        writeFile(source.resolve("20210315_photo.jpg"), padded("keeper"));
+
+        pipeline(root, progress).importFrom(List.of(source), ImportKind.COPY).join();
+
+        assertThat(progress.events).containsExactly(
+                "planned:Importing...", "started:Importing...", "tick:Importing...:1/1", "finished:Importing...");
+    }
+
+    @Test
+    void aListenerRegisteredOnTheFacadeIsToldWhenAJobFinishes(@TempDir final Path root) throws Exception {
+        final var told = new CountDownLatch(1);
+        final var pipeline = pipeline(root, new RecordingProgressPort());
+        pipeline.onJobFinished(told::countDown);
+
+        pipeline.sort(new SortScope.OldestYear()).join();
+
+        assertThat(told.await(30, TimeUnit.SECONDS)).isTrue();
     }
 
     // Proves cancellation reaches SortEngine's own mid-routing check through Pipeline's real
@@ -186,6 +212,7 @@ class PipelineTest {
         pipeline(root, progress).commit(new CommitScope.All()).join();
 
         assertThat(progress.events).containsExactly(
+                "planned:Moving to library...",
                 "started:Moving to library...", "tick:Moving to library...:1/2", "tick:Moving to library...:2/2", "finished:Moving to library...");
     }
 
@@ -210,6 +237,7 @@ class PipelineTest {
         pipeline(root, progress).rescue("2019-06").join();
 
         assertThat(progress.events).containsExactly(
+                "planned:Rescuing...",
                 "started:Rescuing...", "tick:Rescuing...:1/2", "tick:Rescuing...:2/2", "finished:Rescuing...");
     }
 
@@ -225,7 +253,8 @@ class PipelineTest {
         final var handle = pipeline(root, progress, new FailingMoves()).rescue("2019-06");
 
         assertThatThrownBy(handle::join).isInstanceOf(CompletionException.class);
-        assertThat(progress.events).containsExactly("started:Rescuing...", "finished:Rescuing...");
+        assertThat(progress.events)
+                .containsExactly("planned:Rescuing...", "started:Rescuing...", "finished:Rescuing...");
     }
 
     @Test
@@ -324,6 +353,22 @@ class PipelineTest {
         assertThat(report.reconcile()).isNull();
     }
 
+    @Test
+    void troubleshootAnnouncesThatItReportsNoPhaseAtAll(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+        pipeline.resume(waiting.job().prepDir(), false).join();
+        progress.events.clear();
+
+        pipeline.troubleshoot(waiting.job().prepDir()).join();
+
+        assertThat(progress.events).containsExactly("planned:");
+    }
+
     // Mirrors CullEngineTest's resumeRefusesARunOutsideTheWorkingRootInForce: a prep dir built
     // under one working root is handed to a pipeline configured against another. Nothing is read
     // and nothing moves, so the run stays exactly as it was.
@@ -363,6 +408,22 @@ class PipelineTest {
 
         assertThat(report.purged()).containsExactly(prepDir.getFileName().toString());
         assertThat(Files.exists(prepDir)).isFalse();
+    }
+
+    @Test
+    void purgeAnnouncesThatItReportsNoPhaseAtAll(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+        pipeline.resume(waiting.job().prepDir(), false).join();
+        progress.events.clear();
+
+        pipeline.purgeCompleted().join();
+
+        assertThat(progress.events).containsExactly("planned:");
     }
 
     // One case per variant, because answer()'s switch is the whole of its behaviour and an arm
@@ -462,6 +523,22 @@ class PipelineTest {
         assertThat(report.graveyard().getParent()).isEqualTo(root.resolve("logs/archives"));
         assertThat(Files.exists(report.graveyard().resolve("index.json"))).isTrue();
         assertThat(Files.exists(prepDir)).isFalse();
+    }
+
+    @Test
+    void discardAnnouncesItsOnePhaseAndThenReportsIt(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = cullPipeline(root, progress);
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+        progress.events.clear();
+
+        pipeline.discard(waiting.job().prepDir()).join();
+
+        assertThat(progress.events).containsExactly(
+                "planned:Discarding...", "started:Discarding...",
+                "tick:Discarding...:1/3", "tick:Discarding...:2/3", "tick:Discarding...:3/3",
+                "finished:Discarding...");
     }
 
     // Refusing a COMPLETE run is the gate PrepDirRemedies.discard() itself deliberately doesn't apply -

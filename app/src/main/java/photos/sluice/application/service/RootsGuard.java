@@ -9,13 +9,8 @@ import java.util.List;
 /**
  * Refuses work whose folder roots are not usable: unset, missing, or sitting inside each other.
  *
- * <p>A class of its own rather than a method on {@link Pipeline}. Two callers need this refusal and
- * only one of them is a facade entry point. {@link Pipeline} runs it in front of every call that
- * resolves a path. {@link CullEngine#resume} runs it too, since a watcher's auto-resume reaches
- * that method without passing the facade at all.
- *
- * <p>Not a Spring bean. {@link Pipeline} builds the one instance it needs and hands it on, the same
- * way it builds {@link CullEngine} itself.
+ * <p>A class of its own rather than a method on {@link Pipeline}, because a watcher's auto-resume
+ * needs the same refusal without passing the facade at all.
  */
 final class RootsGuard {
 

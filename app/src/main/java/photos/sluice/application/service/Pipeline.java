@@ -196,7 +196,7 @@ public class Pipeline {
                 mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
                 prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, secretStore, watchPollInterval,
                 this.runChanges);
-        this.curateEngine = new CurateEngine(sortEngine, jobRunner, this.cullEngine);
+        this.curateEngine = new CurateEngine(sortEngine, jobRunner, this.cullEngine, this.phaseRunner);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
         this.prepDirDoctor = prepDirDoctor;
@@ -207,9 +207,9 @@ public class Pipeline {
     }
 
     /**
-     * Delegates to CullEngine, which does the real work - see its own doc. A driving adapter that
-     * stays open calls this itself, once its process owns the working root. A one-shot caller that
-     * only reads never calls it at all, and so never arms pollers it is about to kill.
+     * Arms a watch on every run that could still be resumed. Called once a process owns the working
+     * root. A one-shot caller that only reads leaves it alone, and so never arms pollers it is
+     * about to kill.
      */
     public void armWatchesForResumableRuns() {
         this.requireUsableRoots();
@@ -237,8 +237,10 @@ public class Pipeline {
      */
     public JobHandle<SortSummary> sort(final SortScope scope) {
         this.requireUsableRoots();
-        return this.jobRunner.submit(handle ->
-                this.sortEngine.sort(scope, handle.stopSignal()));
+        return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(SortEngine.PHASES);
+            return this.sortEngine.sort(scope, handle.stopSignal());
+        });
     }
 
     /**
@@ -249,8 +251,11 @@ public class Pipeline {
      */
     public JobHandle<CommitSummary> commit(final CommitScope scope) {
         this.requireUsableRoots();
-        return this.jobRunner.submit(handle -> this.runPhase(COMMITTING,
-                progress -> this.commitEngine.commit(scope, progress, handle.stopSignal())));
+        return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(List.of(COMMITTING));
+            return this.runPhase(COMMITTING,
+                    progress -> this.commitEngine.commit(scope, progress, handle.stopSignal()));
+        });
     }
 
     /**
@@ -267,9 +272,12 @@ public class Pipeline {
     public JobHandle<ImportSummary> importFrom(final List<Path> sources, final ImportKind kind) {
         this.requireUsableRoots();
         this.importEngine.requireImportable(sources);
-        return this.jobRunner.submit(handle -> this.runPhase(IMPORTING,
-                progress -> this.importEngine.importFrom(sources, kind, progress,
-                        handle.stopSignal())));
+        return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(List.of(IMPORTING));
+            return this.runPhase(IMPORTING,
+                    progress -> this.importEngine.importFrom(sources, kind, progress,
+                            handle.stopSignal()));
+        });
     }
 
     /**
@@ -280,8 +288,11 @@ public class Pipeline {
      */
     public JobHandle<RescueSummary> rescue(final String reviewFolder) {
         this.requireUsableRoots();
-        return this.jobRunner.submit(handle -> this.runPhase(RESCUING,
-                progress -> this.rescueEngine.rescue(reviewFolder, progress, handle.stopSignal())));
+        return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(List.of(RESCUING));
+            return this.runPhase(RESCUING,
+                    progress -> this.rescueEngine.rescue(reviewFolder, progress, handle.stopSignal()));
+        });
     }
 
     /**
@@ -537,7 +548,7 @@ public class Pipeline {
 
     /**
      * Shuts the job runner for good and drains the job that may be running. Answers whether anything
-     * of the app's is still executing by the time it returns.
+     * of the app's is still reaching files by the time it returns.
      *
      * <p>What an exit path calls once its window has gone, after {@link #stopAllWatching}. A false
      * answer means a job ran past the wait and is still touching files. The caller then keeps hold of
@@ -552,7 +563,7 @@ public class Pipeline {
      * be able to close as cleanly as one whose roots are fine.
      *
      * @param timeout {@link Duration} how long to wait for a running job to stop
-     * @return boolean true when no job is still executing
+     * @return boolean true when no job is still reaching files
      */
     public boolean stopAcceptingJobs(final Duration timeout) {
         return this.jobRunner.shutdown(timeout);
@@ -587,6 +598,7 @@ public class Pipeline {
     public JobHandle<TroubleshootReport> troubleshoot(final Path prepDir) {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
+            this.phaseRunner.planned(List.of());
             this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
             return this.troubleshooter.troubleshoot(prepDir);
         });
@@ -628,7 +640,10 @@ public class Pipeline {
      */
     public JobHandle<PurgeReport> purgeCompleted() {
         this.requireUsableRoots();
-        return this.jobRunner.submit(_ -> this.prepDirDoctor.purgeCompleted(this.pathsPort.cullPrep()));
+        return this.jobRunner.submit(_ -> {
+            this.phaseRunner.planned(List.of());
+            return this.prepDirDoctor.purgeCompleted(this.pathsPort.cullPrep());
+        });
     }
 
     /**
@@ -648,6 +663,7 @@ public class Pipeline {
     public JobHandle<DiscardReport> discard(final Path prepDir) {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
+            this.phaseRunner.planned(List.of(DISCARDING));
             this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
             if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new RunAlreadyFinishedException(prepDir);
@@ -736,16 +752,24 @@ public class Pipeline {
     }
 
     /**
+     * Asks to be told each time the job that was running finishes.
+     *
+     * <p>Says nothing about which job it was or how it went, and does not promise the runner is
+     * still idle by the time the listener runs.
+     *
+     * @param listener {@link Runnable} what to run, on the finished job's own thread rather than
+     *     the caller's
+     */
+    public void onJobFinished(final Runnable listener) {
+        this.jobRunner.onJobFinished(listener);
+    }
+
+    /**
      * Whether a job's work is currently executing.
      *
-     * <p>A screen holding a start control asks this as it draws. One drawn again while a job it
-     * started earlier is still running would otherwise offer a second. The refusal for that arrives
-     * only once the button has been pressed.
-     *
-     * <p>Also a test seam. A test that starts a background job it holds no handle to waits on this
-     * going false. That is the only point at which the job's file work is known to be over. Waiting
-     * on any effect the job produces instead leaves whatever the job does afterwards racing the
-     * test's own teardown.
+     * <p>Going false is the point at which a job's file work is known to be over. Any effect the
+     * job produces lands earlier, so waiting on one of those instead leaves whatever the job does
+     * afterwards still running.
      *
      * <p>False on its own says nothing, since it is also false before the job ever starts. A caller
      * asking whether some particular work has finished pairs it with a signal that the work

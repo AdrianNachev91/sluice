@@ -150,7 +150,7 @@ public class StartupSequence {
      * the runner's slot and spend its whole budget on a job the first already gave up on.
      *
      * @param wait {@link Duration} how long to wait for a running job to stop
-     * @return boolean true when nothing of this app's was still executing
+     * @return boolean true when nothing of this app's was still reaching files
      */
     public boolean windDownWithin(final Duration wait) {
         if (!this.woundDown.compareAndSet(false, true)) {

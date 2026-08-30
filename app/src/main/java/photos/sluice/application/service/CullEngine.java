@@ -55,11 +55,6 @@ import java.util.Optional;
  * and the rules that decide whether a fresh run may start at all. The watch-mode lifecycle itself
  * lives in {@link CullWatchers}. The dispatch step is conditional, not a fixed stage: it runs only
  * while a montage still lacks a shard.
- *
- * <p>Not a Spring bean. {@link Pipeline} builds the one instance it needs, the same way it builds
- * the {@link CullWatchers} this engine delegates to. Whichever members {@link CurateEngine}'s own
- * cull stage reuses stay package-private rather than private, so it shares them rather than
- * duplicating them.
  */
 final class CullEngine {
 
@@ -68,6 +63,12 @@ final class CullEngine {
     private static final String PREPPING = "Reading photos...";
     private static final String CULLING = "Sifting...";
     private static final String APPLYING = "Applying decisions...";
+
+    // What a sift reports, in order.
+    static final List<String> FRESH_PHASES = List.of(PREPPING, CULLING, APPLYING);
+
+    // A resume enters a prep dir that has already been read, so it never reports the first of them.
+    static final List<String> RESUME_PHASES = List.of(CULLING, APPLYING);
 
     private final MontageRenderer montageRenderer;
     private final CullDispatcher cullDispatcher;
@@ -194,7 +195,10 @@ final class CullEngine {
         this.refuseIfTheProviderHasNoCredential();
         this.refuseIfScopeOccupied(scope);
         this.refuseIfScopeOverlaps(scope);
-        return this.jobRunner.submit(handle -> this.buildFreshAndDispatch(scope, handle.stopSignal()));
+        return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(FRESH_PHASES);
+            return this.buildFreshAndDispatch(scope, handle.stopSignal());
+        });
     }
 
     /**
@@ -227,6 +231,7 @@ final class CullEngine {
     JobHandle<CullJobOutcome> resume(final Path prepDir, final boolean allowPartial) {
         this.rootsGuard.requireUsable();
         return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(RESUME_PHASES);
             this.refuseRunOutsideTheWorkingRoot(prepDir);
             return this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
                     handle.stopSignal(), null);

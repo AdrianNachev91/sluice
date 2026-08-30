@@ -20,17 +20,15 @@ import java.util.concurrent.locks.ReentrantLock;
  * Runs one job at a time so a driving caller (a desktop UI, or a future CLI) can start work
  * without blocking. It gets a typed {@link JobHandle} back right away.
  *
- * <p>A UI is expected to disable its own start control while a job runs. The slot is enforced here
- * too, not just at the UI layer. A second {@link #submit} while one job is still in flight throws,
- * rather than letting two engines move the same tree at once.
+ * <p>A second {@link #submit} while one job is still in flight throws, rather than letting two
+ * engines move the same tree at once.
  *
  * <p>Every wait on the slot is bounded. Taking it can mean queueing behind a {@link #runIfIdle}
  * caller, whose work is arbitrary and can reach a folder that never answers. That is a narrow way
- * in: one caller holds the slot like that, and only while saving settings that move a folder root.
- * What makes it worth closing is the cost once opened, not how often it opens. An unbounded wait
- * there would take the whole process with it and stay taken, with nothing on screen to say why. So
- * the slot is a {@link ReentrantLock} rather than a monitor, and a caller that cannot have it is
- * refused rather than parked.
+ * in, and what makes it worth closing is the cost once opened rather than how often it opens. An
+ * unbounded wait there would take the whole process with it and stay taken, with nothing on screen
+ * to say why. So the slot is a {@link ReentrantLock} rather than a monitor, and a caller that
+ * cannot have it is refused rather than parked.
  *
  * <p>Virtual threads are always daemon threads, so the executor needs no explicit shutdown for
  * the process to exit cleanly. {@link #shutdown} exists for the opposite reason: to give a job that
@@ -56,6 +54,7 @@ public class JobRunner {
 
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final AtomicBoolean busy = new AtomicBoolean(false);
+    private final JobCompletions completions = new JobCompletions();
     // Held across taking the slot, and across any work that must see the slot stay as it found it.
     // Jobs start from more than one thread: a screen's button, and a watcher polling a prep dir.
     private final ReentrantLock slot = new ReentrantLock();
@@ -83,9 +82,7 @@ public class JobRunner {
     }
 
     /**
-     * Test seam: production wiring always goes through the public constructor above, which fixes the
-     * wait at DEFAULT_SLOT_WAIT. A test proving that a held slot ends in a refusal rather than a
-     * park passes a much shorter one here. The proof then takes milliseconds instead of seconds.
+     * Test seam: a wait short enough that proving a refusal takes milliseconds rather than seconds.
      *
      * @param slotWait {@link Duration} how long a caller waits for the slot before being refused
      */
@@ -170,7 +167,12 @@ public class JobRunner {
 
     /**
      * Stops taking work on for good, asks the job in flight to stop, and waits up to timeout for it
-     * to do so. Answers whether nothing of this runner's is still executing by the time it returns.
+     * to do so. Answers whether nothing here is still reaching files by the time it returns.
+     *
+     * <p>That is narrower than nothing running at all. A job's own {@link #onJobFinished} listeners
+     * are not waited for, and run after a true answer has been given. They are the caller's own
+     * code and touch no file of the job's, so what the caller acts on here is unaffected. Waiting
+     * for them would put arbitrary listener code inside a budget this method exists to bound.
      *
      * <p>The two halves are one method because either alone is worthless. A wait with nothing shut
      * returns an answer that a poller can falsify a microsecond later. A shut with no wait leaves the
@@ -192,7 +194,7 @@ public class JobRunner {
      * never reached the slot queues for it again, for the same budget.
      *
      * @param timeout {@link Duration} the whole budget, covering both taking the slot and the wait
-     * @return boolean true when no job of this runner's is still executing
+     * @return boolean true when no job of this runner's is still reaching files
      */
     public boolean shutdown(final Duration timeout) {
         final long deadline = System.nanoTime() + timeout.toNanos();
@@ -249,6 +251,22 @@ public class JobRunner {
     }
 
     /**
+     * Asks to be told each time the job that was running finishes.
+     *
+     * <p>Says nothing about which job, or how it went. Either is knowable only through that job's
+     * own {@link JobHandle}.
+     *
+     * <p>Nor does it promise the runner is still idle when the listener runs. The slot frees before
+     * the announcement, so a successor can already have been admitted.
+     *
+     * @param listener {@link Runnable} what to run, on the finished job's own thread rather than
+     *     the caller's
+     */
+    public void onJobFinished(final Runnable listener) {
+        this.completions.onFinished(listener);
+    }
+
+    /**
      * Which refusal a caller that could not take the slot deserves.
      *
      * <p>Both conditions can hold at once, since the exit path shuts the runner and then queues for
@@ -277,8 +295,8 @@ public class JobRunner {
      * @param wait {@link Duration} how long to wait for the slot
      * @return boolean true when the slot is now held by this thread
      */
-    // Every caller happens to act on the false side. The name still has to say this takes the slot,
-    // since that is its effect, and inverting it would hide that from all three.
+    // The name has to say this takes the slot, since that is its effect. Inverting it to match how
+    // the answer is read would hide that.
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private boolean takeSlotWithin(final Duration wait) {
         try {
@@ -346,5 +364,10 @@ public class JobRunner {
         // successor's handle. A shutdown reading null here has read a runner with nothing left
         // running, which is the same answer.
         this.inFlight.compareAndSet(handle, null);
+        // Last, so a listener finds this job's result delivered and nothing of it still named as in
+        // flight. Not that the runner is free: the slot went at busy.set(false) above, so a
+        // successor can already be running by the time a listener reads anything. Announced even
+        // for a job that failed, since what a listener acts on is that this one has stopped.
+        this.completions.finished();
     }
 }

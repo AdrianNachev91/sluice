@@ -353,6 +353,7 @@ class CullEngineTest {
         cullPipeline(root, progress).cull(new CullScope.Year(2019, null)).join();
 
         assertThat(progress.events).containsExactly(
+                "planned:Reading photos..., Sifting..., Applying decisions...",
                 "started:Reading photos...", "tick:Reading photos...:1/1", "finished:Reading photos...",
                 "started:Sifting...", "finished:Sifting...");
     }
@@ -867,6 +868,7 @@ class CullEngineTest {
         pipeline.resume(prepDir, false).join();
 
         assertThat(progress.events).containsExactly(
+                "planned:Sifting..., Applying decisions...",
                 "started:Applying decisions...", "tick:Applying decisions...:1/1", "finished:Applying decisions...");
     }
 

@@ -1,17 +1,20 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.ShuttingDownException;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -95,6 +98,68 @@ class JobRunnerTest {
 
         release.countDown();
         first.join();
+    }
+
+    @Test
+    void aListenerIsToldWhenTheRunningJobFinishes() throws InterruptedException {
+        final var told = new CountDownLatch(1);
+        this.runner.onJobFinished(told::countDown);
+
+        this.runner.submit(_ -> "done").join();
+
+        assertThat(told.await(GENEROUS.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+    }
+
+    @Test
+    void aListenerIsToldAboutAJobThatFailedAsWellAsOneThatSucceeded() throws InterruptedException {
+        final var told = new CountDownLatch(1);
+        this.runner.onJobFinished(told::countDown);
+
+        final JobHandle<String> handle = this.runner.submit(_ -> {
+            throw new IllegalStateException("the folder went away");
+        });
+
+        assertThatThrownBy(handle::join).isInstanceOf(CompletionException.class);
+        assertThat(told.await(GENEROUS.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+    }
+
+    // The job is held open until its handle has been stored. One that finished before submit()
+    // returned would leave the listener nothing to read the result through.
+    @Test
+    void aListenerFindsTheFinishedJobNoLongerRunningAndItsResultDelivered() throws Exception {
+        final var handleStored = new CountDownLatch(1);
+        final var handle = new AtomicReference<@Nullable JobHandle<String>>();
+        final var busyWhenTold = new AtomicBoolean(true);
+        final var resultWhenTold = new AtomicReference<@Nullable String>();
+        final var told = new CountDownLatch(1);
+        this.runner.onJobFinished(() -> {
+            busyWhenTold.set(this.runner.isBusy());
+            final CompletableFuture<String> result =
+                    Objects.requireNonNull(handle.get()).onComplete().toCompletableFuture();
+            resultWhenTold.set(result.isDone() ? result.join() : null);
+            told.countDown();
+        });
+
+        handle.set(this.runner.submit(_ -> {
+            handleStored.await();
+            return "done";
+        }));
+        handleStored.countDown();
+        Objects.requireNonNull(handle.get()).join();
+
+        assertThat(told.await(GENEROUS.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+        assertThat(busyWhenTold).isFalse();
+        assertThat(resultWhenTold).hasValue("done");
+    }
+
+    @Test
+    void workRunWithTheSlotHeldShutTellsNobodyAJobFinished() {
+        final var told = new AtomicInteger();
+        this.runner.onJobFinished(told::incrementAndGet);
+
+        assertThat(this.runner.runIfIdle(() -> {})).isTrue();
+
+        assertThat(told).hasValue(0);
     }
 
     @Test

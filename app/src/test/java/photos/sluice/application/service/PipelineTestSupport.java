@@ -658,6 +658,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public void phasesPlanned(final List<String> phases) {
+            this.events.add("planned:" + String.join(", ", phases));
+        }
+
+        @Override
         public void phaseStarted(final String phase) {
             this.events.add("started:" + phase);
         }

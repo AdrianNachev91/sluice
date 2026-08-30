@@ -4,12 +4,12 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.domain.job.ProgressCallback;
 
+import java.util.List;
 import java.util.function.Function;
 
 /**
- * Brackets a phase's progress events, {@code phaseStarted} then ticks then {@code phaseFinished},
- * around one engine call. Not a Spring bean. {@link Pipeline} and {@link CullEngine} each own their
- * own instance, built from the same {@link ProgressPort} they already receive.
+ * Announces the phases a job will report, then brackets each one it runs, {@code phaseStarted} then
+ * ticks then {@code phaseFinished}, around one engine call.
  */
 final class PhaseRunner {
 
@@ -22,6 +22,15 @@ final class PhaseRunner {
      */
     PhaseRunner(final ProgressPort progressPort) {
         this.progressPort = progressPort;
+    }
+
+    /**
+     * Announces the phases a job means to run, ahead of its first bracket.
+     *
+     * @param phases a {@link List} of {@link String} the phase labels, in order
+     */
+    void planned(final List<String> phases) {
+        this.progressPort.phasesPlanned(phases);
     }
 
     /**
@@ -45,10 +54,8 @@ final class PhaseRunner {
     /**
      * The same bracket around work that throws nothing checked.
      *
-     * <p>Apart from {@link #run} because of what the caller can declare. A stage inside an engine
-     * is reported by that engine, and its own method signature is the product's rather than this
-     * class's to widen. {@link SortEngine#sort} throws nothing, and making it declare
-     * {@code throws Exception} to report its own phases would push that onto every caller it has.
+     * <p>Apart from {@link #run} so that a stage throwing nothing checked need not declare
+     * {@code throws Exception} to report its own phases.
      *
      * <p>T may be null, which is how a stage reports that it stopped before finishing.
      *
@@ -91,11 +98,10 @@ final class PhaseRunner {
     }
 
     /**
-     * The engine call {@link PhaseRunner#run} brackets with progress events. A plain
-     * {@code Function<ProgressCallback, T>} cannot wrap a call like {@code cullDispatcher.cull()}
-     * or {@code applyEngine.apply()}, since both declare checked exceptions. This declares
-     * {@code throws Exception} instead, the same shape {@link JobWork} already uses for the same
-     * reason. A lambda that throws nothing still satisfies it.
+     * The engine call {@link PhaseRunner#run} brackets with progress events. Declares
+     * {@code throws Exception} so that it can wrap an engine call declaring a checked one, which a
+     * plain {@code Function<ProgressCallback, T>} cannot. A lambda that throws nothing still
+     * satisfies it.
      *
      * @param <T> the type of result the engine call produces
      */

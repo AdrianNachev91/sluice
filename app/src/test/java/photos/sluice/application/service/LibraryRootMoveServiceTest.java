@@ -102,7 +102,18 @@ class LibraryRootMoveServiceTest {
             fixture.move(newLibrary, LibraryRootResolution.COPY_AND_KEEP_INDEX);
 
             assertThat(fixture.progress.events)
-                    .containsExactly("started", "tick 1/1", "finished");
+                    .containsExactly("planned:Copying the library...", "started", "tick 1/1", "finished");
+        }
+
+        @Test
+        void aFreshIndexMoveAnnouncesThatItReportsNoPhaseAtAll(@TempDir final Path root,
+                                                              @TempDir final Path newLibrary) {
+            final var fixture = new Fixture(root);
+            write(fixture.library.resolve("holiday.jpg"), "holiday");
+
+            fixture.move(newLibrary, LibraryRootResolution.START_A_FRESH_INDEX);
+
+            assertThat(fixture.progress.events).containsExactly("planned:");
         }
 
         // The engine is stubbed rather than cancelled for real. Two small files copy in
@@ -374,6 +385,11 @@ class LibraryRootMoveServiceTest {
     private static final class RecordingProgress implements ProgressPort {
 
         private final List<String> events = new ArrayList<>();
+
+        @Override
+        public void phasesPlanned(final List<String> phases) {
+            this.events.add("planned:" + String.join(", ", phases));
+        }
 
         @Override
         public void phaseStarted(final String phase) {

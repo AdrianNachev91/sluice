@@ -71,6 +71,9 @@ public class SortEngine implements SortUseCase {
     private static final String CHECKING_COPIES = "Checking for duplicates...";
     private static final String SORTING = "Sorting...";
 
+    // What a sort reports, in order.
+    static final List<String> PHASES = List.of(FINDING_DATES, CHECKING_COPIES, SORTING);
+
     // Returned when cancellation lands during dating or hashing. Those are the two passes before
     // anything is moved, deleted or written, so it is a clean abort with nothing to report. Its
     // counts are what an empty Inbox also produces, and the cancelled flag is what tells them apart.

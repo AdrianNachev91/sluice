@@ -100,8 +100,11 @@ class DialogsWaitingTest {
                 .orElseThrow(() -> new AssertionError("the waiting dialog drew no way out of the wait"));
     }
 
-    private static boolean isShowing(final Shown shown) {
-        return Window.getWindows().stream().anyMatch(window -> window != shown.owner && window.isShowing());
+    // Read on the FX thread. Window.getWindows() is a live list the FX thread rebuilds as a dialog
+    // opens or closes, so iterating it anywhere else reads a size that changes underneath.
+    private static boolean isShowing(final Shown shown) throws Exception {
+        return onFxThread(() -> Window.getWindows().stream()
+                .anyMatch(window -> window != shown.owner && window.isShowing()));
     }
 
     private static <T> T onFxThread(final Callable<T> work) throws Exception {

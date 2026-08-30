@@ -67,6 +67,8 @@ class CurateEngineTest {
         // Untouched: AutoApproveCuller's shard keeps it, and a keep moves nothing.
         assertThat(Files.exists(sorted)).isTrue();
         assertThat(progress.events).containsExactly(
+                "planned:Finding dates..., Checking for duplicates..., Sorting..., "
+                        + "Reading photos..., Sifting..., Applying decisions...",
                 "started:Finding dates...", "tick:Finding dates...:1/1", "finished:Finding dates...",
                 "started:Checking for duplicates...", "tick:Checking for duplicates...:1/1",
                 "finished:Checking for duplicates...",

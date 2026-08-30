@@ -9,20 +9,25 @@ import photos.sluice.domain.model.SortSummary;
 
 import java.util.List;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
- * Sorts a scope, then culls whatever that sort just populated, as one job. Not a Spring bean.
- * {@link Pipeline} builds the one instance it needs, wiring it to the same {@link CullEngine} it
- * builds for its own {@code cull}/{@code resume}.
+ * Sorts a scope, then culls whatever that sort just populated, as one job.
  *
  * <p>No surface offers this, so nothing outside the tests reaches it. It is kept whole and tested
  * against the day one does, rather than deleted and written again from scratch.
  */
 final class CurateEngine {
 
+    // Letting each engine announce its own as it is reached would open the job's reporting twice,
+    // and the second announcement replaces the first.
+    private static final List<String> PHASES =
+            Stream.concat(SortEngine.PHASES.stream(), CullEngine.FRESH_PHASES.stream()).toList();
+
     private final SortEngine sortEngine;
     private final JobRunner jobRunner;
     private final CullEngine cullEngine;
+    private final PhaseRunner phaseRunner;
 
     /**
      * Creates the engine, wiring it to the given collaborators.
@@ -30,43 +35,38 @@ final class CurateEngine {
      * @param sortEngine {@link SortEngine} performs the sort phase
      * @param jobRunner {@link JobRunner} submits the combined sort+cull job
      * @param cullEngine {@link CullEngine} performs the cull phase
+     * @param phaseRunner {@link PhaseRunner} announces what the combined job will report
      */
     CurateEngine(final SortEngine sortEngine, final JobRunner jobRunner,
-                 final CullEngine cullEngine) {
+                 final CullEngine cullEngine, final PhaseRunner phaseRunner) {
         this.sortEngine = sortEngine;
         this.jobRunner = jobRunner;
         this.cullEngine = cullEngine;
+        this.phaseRunner = phaseRunner;
     }
 
     /**
      * Sort scope, then cull whatever that sort just populated, as one job. Sequential Java calls
-     * inside this one JobWork - never two chained submit() calls (JobHandle's own doc explains why
-     * no job depends on another's future).
+     * inside this one JobWork, never two chained submit() calls.
      *
      * <p>The target CullScope mirrors scope directly wherever that's knowable up front: an explicit
      * Year maps straight across, and OldestN carries the same n through to CullScope.OldestN. Sort
      * itself is never narrowed to fit cull's shape - it always runs its own normal, complete job.
      *
      * <p>An OldestN sort can still land files across more than one year. Cull's own OldestN ordering
-     * is by raw mtime, not resolved date (see CullScope's own doc) - exactly what a standalone
-     * cull() call already does with that scope. Nothing new here.
+     * is by raw mtime, not resolved date, exactly what a standalone cull() call already does with
+     * that scope. Nothing new here.
      *
-     * <p>Only OldestYear can't be mapped ahead of time - its year isn't decided until the sort itself
-     * resolves it. knownCullScope() returns null for it; the real mapping happens after the sort
-     * runs, from SortSummary.yearsSorted().
+     * <p>Only OldestYear can't be mapped ahead of time, its year not being decided until the sort
+     * itself resolves it. knownCullScope() returns null for it. The real mapping happens after the
+     * sort runs, from SortSummary.yearsSorted().
      *
      * <p>A known target CullScope gets the same synchronous, pre-submit refuseIfScopeOccupied()
      * cull() gets - failing before the sort even starts. OldestYear can't be checked that early.
      * Its only guard is the same check running again once its year is resolved, after the sort has
      * already moved real files. That failure can't be a plain ScopeOccupiedException like the
-     * pre-submit one is - the caller would lose the SortSummary describing what already moved. See
-     * Pipeline.CurateConflictException's own doc for how that's carried forward instead.
-     *
-     * <p>isCancellationRequested() is checked here at the sort/cull boundary. It's also checked
-     * inside SortEngine's own dating and routing passes via its CancellationSignal overload.
-     * The cull stage's own render/dispatch/apply passes check it too, via buildFreshAndDispatch()'s
-     * and dispatchAndApply()'s own checks. A large sort or cull responds promptly throughout, not
-     * only at this one stage boundary.
+     * pre-submit one is - the caller would lose the SortSummary describing what already moved. It
+     * raises CurateConflictException, which carries that summary forward.
      *
      * @param scope {@link SortScope} the sort scope to sort and then cull
      * @return a {@link JobHandle} of {@link CurateOutcome} handle for the combined sort+cull job
@@ -81,6 +81,7 @@ final class CurateEngine {
             this.cullEngine.refuseIfScopeOccupied(known);
         }
         return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(PHASES);
             final SortSummary sortSummary =
                     this.sortEngine.sort(scope, handle.stopSignal());
             if (handle.isCancellationRequested()) {

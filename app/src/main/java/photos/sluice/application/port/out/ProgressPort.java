@@ -1,9 +1,15 @@
 package photos.sluice.application.port.out;
 
+import java.util.List;
+
 /**
  * The effect boundary a running job uses to report what it's doing, so a driving adapter (the
  * desktop dashboard, a console logger) can render it without polling. Only one job is active at a
  * time, so no event carries a job id; every event describes the current job's own progress.
+ *
+ * <p>{@link #phasesPlanned} opens a job's reporting, ahead of every other event here. Each job
+ * announces once, so a listener holding the previous job's list replaces it rather than adding to
+ * it.
  *
  * <p>{@link #phaseStarted} and {@link #phaseFinished} always bracket a phase. That holds even when
  * a phase's total is zero and it never ticks. A listener can then tell "not started yet" from
@@ -27,6 +33,23 @@ public interface ProgressPort {
         public void phaseFinished(final String phase) {
         }
     };
+
+    /**
+     * The phases this job means to report, in the order it means to report them, announced before
+     * it starts the first one.
+     *
+     * <p>What it promises is the order, not that every entry is reached. A job stopped part way
+     * through, or one that finds a phase has nothing to do, simply never starts the rest. So an
+     * entry here that never arrives at {@link #phaseStarted} is an ordinary end to a job, and the
+     * list is never revised to drop it.
+     *
+     * <p>The list is empty for a job that reports no phases at all, which is how such a job says
+     * so. Silence would leave a listener showing the phases of the job before it.
+     *
+     * @param phases a {@link List} of {@link String} the phase labels, in order
+     */
+    default void phasesPlanned(final List<String> phases) {
+    }
 
     /**
      * Signals that a phase has begun.

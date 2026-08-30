@@ -93,9 +93,15 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
         this.settings.requireLibraryRootIsUsable(movingTo);
         this.requireEveryRunHasFinished();
         final Path movingFrom = this.paths.library();
-        return this.jobRunner.submit(handle -> switch (resolution) {
-            case COPY_AND_KEEP_INDEX -> this.copyThenMove(movingFrom, movingTo, handle);
-            case START_A_FRESH_INDEX -> this.fileTheIndexAsideThenMove(movingTo);
+        return this.jobRunner.submit(handle -> {
+            this.phaseRunner.planned(switch (resolution) {
+                case COPY_AND_KEEP_INDEX -> List.of(COPYING);
+                case START_A_FRESH_INDEX -> List.of();
+            });
+            return switch (resolution) {
+                case COPY_AND_KEEP_INDEX -> this.copyThenMove(movingFrom, movingTo, handle);
+                case START_A_FRESH_INDEX -> this.fileTheIndexAsideThenMove(movingTo);
+            };
         });
     }
 

@@ -21,10 +21,7 @@ import java.util.function.Predicate;
 
 /**
  * Owns the watch lifecycle for waiting cull jobs: which prep dirs currently have a
- * {@link CullWatcher} polling them, and the arm/disarm/auto-resume rules around that. A separate
- * class from {@link CullEngine}, since the watch lifecycle is an independently-testable concern of
- * its own, alongside prep/dispatch/apply orchestration. Not a Spring bean; {@link CullEngine} owns
- * the one instance it needs.
+ * {@link CullWatcher} polling them, and the arm/disarm/auto-resume rules around that.
  */
 final class CullWatchers {
 
