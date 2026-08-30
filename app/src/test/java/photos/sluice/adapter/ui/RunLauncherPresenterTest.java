@@ -706,14 +706,15 @@ class RunLauncherPresenterTest {
 
     @Test
     void aSiftOutsideTheFoldersInForceSaysWhereItIsAndWhatToDo() {
+        // The path is rendered rather than spelled out, since its separator is the platform's.
+        final Path outside = Path.of("D:", "old", "sift-prep", "2019");
         this.choose(RunMode.SIFT, "2019");
-        doThrow(new Pipeline.RunOutsideWorkingRootException(Path.of("D:", "old", "sift-prep", "2019")))
-                .when(this.pipeline).cull(any());
+        doThrow(new Pipeline.RunOutsideWorkingRootException(outside)).when(this.pipeline).cull(any());
 
         this.presenter.start();
 
         assertThat(this.reported().text())
-                .isEqualTo("That sift is at D:\\old\\sift-prep\\2019, which is not inside the "
+                .isEqualTo("That sift is at " + outside + ", which is not inside the "
                         + "folders Sluice is set up with now. Point your working folder back at "
                         + "the one holding it to work on it again.");
     }

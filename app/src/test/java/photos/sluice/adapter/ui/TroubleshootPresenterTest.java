@@ -319,9 +319,11 @@ class TroubleshootPresenterTest {
     // call that starts it. This is the arm carrying the refusals a reader actually meets.
     @Test
     void aDiscardRefusedInsideTheJobSaysWhyAndLeavesTheReaderWhereTheyAre() {
+        // The path is rendered rather than spelled out, since its separator is the platform's.
+        final Path outside = Path.of("D:", "old", "2019");
         final Pipeline pipeline = pipelineReporting(State.BLOCKED, List.of());
         final JobHandle<DiscardReport> job = failing(
-                new Pipeline.RunOutsideWorkingRootException(Path.of("D:", "old", "2019")));
+                new Pipeline.RunOutsideWorkingRootException(outside));
         when(pipeline.discard(any())).thenReturn(job);
         final TroubleshootPresenter presenter = opened(pipeline);
         final var left = new AtomicInteger();
@@ -332,7 +334,7 @@ class TroubleshootPresenterTest {
         assertThat(left.get()).isZero();
         assertThat(presenter.working()).isFalse();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .isEqualTo("That sift is at D:\\old\\2019, which is not inside the folders Sluice "
+                .isEqualTo("That sift is at " + outside + ", which is not inside the folders Sluice "
                         + "is set up with now. Point your working folder back at the one holding "
                         + "it to work on it again.")
                 .doesNotContain(Pipeline.RunOutsideWorkingRootException.class.getName());
