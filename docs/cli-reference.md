@@ -1,8 +1,8 @@
 # Sluice on the command line
 
 Sluice organises photos and videos. It files a dump of media into folders by year and
-month, and sets junk and near-duplicates aside. The keepers move into a Library folder you
-keep for good.
+month, and can look at the photos themselves and set junk and near-copies aside. What you
+keep moves into a Library folder you keep for good.
 
 Everything the desktop application does is also a command. This page is for people who
 would rather type than click, and for anyone setting Sluice up on a machine with no
@@ -107,13 +107,29 @@ Nothing above needs a vision model, an account, or a key.
 ## Sifting
 
 Sifting is the part that looks at your photos. Sluice builds contact sheets of a year's
-sorted photos, has each sheet judged, and files each photo by the judgement.
+sorted photos, has each sheet judged, and moves anything it does not keep out of `Sorted`.
+One kind of keeper leaves too, and that is `funny`, below.
 
-The categories are yours: you set them in your settings file, and Sluice ships with junk,
-scenery, food and funny to start from. Each becomes a folder under `Review` for you to
-look through. **`funny` is the exception, and it goes straight into your Library.** So a
-sift reaches your Library without a `commit`, for that one category. Anything the sift
-could not judge goes to `Unreviewable`.
+Junk is always on and is not a card you configure. The rest of the categories are yours:
+you set them in your settings file, and Sluice ships with scenery, food and funny to start
+from. Each becomes a folder under `Review` for you to look through. **`funny` is the
+exception, and it goes straight into your Library.** So a sift reaches your Library without
+a `commit`, for that one category.
+
+A sift decides two more things that are not categories. Photos that look like near-copies
+of each other are grouped under `Duplicates`, one folder per group. That lets you compare
+them before throwing any away. And anything the sift could not judge at all goes to
+`Unreviewable`.
+
+**Everything else stays in Sorted, where `commit` will find it.** So the three things that
+put photos in your Library take different photos. `commit` takes what a sift left in
+Sorted, plus anything you never sifted. `rescue` takes one `Review` folder, once you have
+been through it and thrown away what you did not want. And a sift itself takes `funny`.
+
+Sifting is optional. The three commands above it file your media by year and month and
+move it into your Library, and that is a complete way to use Sluice. Sift when you also
+want the photos themselves looked at, and the ones it decides against moved out of
+`Sorted`.
 
 Two providers do the judging, and you choose which in your settings.
 
