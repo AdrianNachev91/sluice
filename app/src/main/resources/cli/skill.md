@@ -209,7 +209,7 @@ the settings file by design, so that file boundary is the boundary to respect.
 | `sort`         | Files the Inbox into `Sorted`, under the year each file was taken                  |
 | `commit`       | Moves what is in `Sorted` into the Library                                         |
 | `rescue`       | Moves a `Review` folder's files into the Library, then removes the folder if empty |
-| `sift`         | Judges what is in `Sorted`, and files each photo by the judgement                  |
+| `sift`         | Judges what is in `Sorted`, and moves anything it does not keep out of it          |
 | `resume`       | Continues a sift that is waiting                                                   |
 | `import`       | Brings folders and files into the Inbox                                            |
 | `troubleshoot` | Repairs what can be repaired without asking, and reports what is still open        |
@@ -300,14 +300,16 @@ Ctrl-C is not caught and kills the process outright, which leaves no report.
 
 ## Sifting, end to end
 
-A sift builds contact sheets of the sorted photos, has them judged, and files each photo
-by the judgement. On `external-agent` the judging is you, or another agent on this machine
-you hand it to.
+A sift builds contact sheets of the sorted photos, has them judged, and moves anything it
+does not keep out of `Sorted`. `funny` leaves too, and where each kind lands is below. On
+`external-agent` the judging is you, or another agent on this machine you hand it to.
 
 Where each photo lands: a judged category becomes a folder under `Review`, one per
 category, for the user to look through. The exception is `funny`, which a sift moves
 straight into the Library. So a sift reaches the Library without a `commit`, for that one
-category. Anything the sift could not judge goes to `Unreviewable`.
+category. Photos that look like near-copies of each other go to `Duplicates`, one folder
+per group, with the kept one copied in beside them. Anything the sift could not judge goes
+to `Unreviewable`.
 
 ```
 sluice sift 2019                    # builds the sheets

@@ -1,0 +1,518 @@
+package photos.sluice.adapter.ui;
+
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+import photos.sluice.adapter.ui.ReviewView.Action;
+import photos.sluice.adapter.ui.ReviewView.FolderCard;
+import photos.sluice.adapter.ui.ReviewView.Group;
+import photos.sluice.adapter.ui.ReviewView.Kind;
+import photos.sluice.adapter.ui.ReviewView.Notes;
+import photos.sluice.adapter.ui.RunLauncherView.Message;
+import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
+import photos.sluice.application.port.in.ReviewListing;
+import photos.sluice.application.port.in.ReviewListing.FiledBy;
+import photos.sluice.application.port.in.ReviewListing.Folder;
+import photos.sluice.application.port.in.ReviewListing.Root;
+import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.cull.JunkCategory;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
+
+/**
+ * Decides what the review screen shows and what a press on it does.
+ *
+ * <p>Holds the last reading of the three folders, and the words that reading comes to. The screen
+ * keeps the controls, asks here after every change, and hands the presses it cannot carry out itself
+ * straight back.
+ *
+ * <p>The reading is taken by calling {@link #refresh}, which walks all three roots and blocks while
+ * it does. The caller runs it off whatever thread paints.
+ */
+@Component
+@Profile("!cli")
+public class ReviewPresenter {
+
+    private static final Logger log = LoggerFactory.getLogger(ReviewPresenter.class);
+
+    private static final String HEADING = "Review";
+
+    private static final String NOTHING_YET = "Nothing is waiting for you. When a sort or a sift "
+            + "puts photos somewhere for you to look at, they show here.";
+
+    private static final String UNREADABLE = "What is waiting in %s is unknown, because it cannot "
+            + "be read. Opening it yourself is the quickest way to find out why.";
+
+    private static final String OPEN = "Open folder";
+
+    private static final String MOVE_TO_LIBRARY = RunMode.RESCUE.label();
+
+    private static final String SHOW_NOTES = "Why these are here";
+
+    private static final String LOOKING = "Looking at what is waiting...";
+
+    private static final String NOTHING_WRITTEN = "Nothing was written about this folder.";
+
+    private static final String ALREADY_RUNNING = "Something else started running just now, and "
+            + "only one job runs at a time. Nothing was moved. Try again once it finishes.";
+
+    private static final String NOTES_UNREADABLE = "What was written about this folder could not be "
+            + "read.";
+
+    // Every movable section says it, since any of them can be the first one read.
+    private static final String WEED_THEN_MOVE = " Open a folder, throw away what you don't want, "
+            + "then move what is left into your library.";
+
+    private static final String GENERAL_JUNK_HEADING = "General junk";
+
+    private static final String GENERAL_JUNK_EXPLAINED = "A sift judged these worthless and gave no "
+            + "reason beyond that." + WEED_THEN_MOVE;
+
+    private static final String CATEGORY_JUNK_HEADING = "Junk by category";
+
+    // Says what the folders are for, because a reader who wanted these photos is owed the reason a
+    // sift disagreed.
+    private static final String CATEGORY_JUNK_EXPLAINED = "A sift decided against keeping these. "
+            + "Each folder is one of the reasons you set up." + WEED_THEN_MOVE;
+
+    private static final String NEVER_SIFTED_HEADING = "A sift never sees these";
+
+    // Names both of a sort's own destinations, because their folder names say when rather than why.
+    private static final String NEVER_SIFTED_EXPLAINED = "A sort would not put these in Sorted, "
+            + "which is the only place a sift looks. A dated folder holds photos whose file size or "
+            + "resolution is under what a sift looks at, and Unsorted holds whatever a sort could "
+            + "not date." + WEED_THEN_MOVE;
+
+    private static final String DUPLICATES_HEADING = "Near-copies";
+
+    // Says the keeper here is a copy, or a reader keeps it and ends up holding that photo twice.
+    private static final String DUPLICATES_EXPLAINED = "Each folder holds the photos that looked "
+            + "like near-copies of one that was kept. A copy of the kept one is in there too, with "
+            + "a note saying why. The original is safe in Sorted, so once you have compared them "
+            + "the whole folder can go.";
+
+    private static final String UNREVIEWABLE_HEADING = "A sift could not judge these";
+
+    // Neither half of this says a thumbnail failed. A photo lands here when the tile is unusable,
+    // which covers a decode that failed and a source too small to read, so the picture often
+    // exists. And a sift moved these out of Sorted rather than leaving them where it found them.
+    private static final String UNREVIEWABLE_EXPLAINED = "These were never judged, because they "
+            + "could not be seen clearly enough. They keep the year and month a sift found them "
+            + "under.";
+
+    // A fold inside a card on a scrolling page. Past a couple of hundred lines nobody is reading
+    // one, they are looking for a name, and the file manager does that better than a VBox.
+    private static final int MOST_LINES_DRAWN = 200;
+
+    private static final Predicate<String> ANY_NAME = _ -> true;
+
+    // The order the sections are drawn in. The three a reader can act on lead, and the two offering
+    // only Open follow.
+    private static final List<Section> SECTIONS = List.of(
+            new Section(Root.REVIEW, FiledBy.A_SIFT, JunkCategory::claims, "general-junk",
+                    GENERAL_JUNK_HEADING, GENERAL_JUNK_EXPLAINED),
+            new Section(Root.REVIEW, FiledBy.A_SIFT, name -> !JunkCategory.claims(name),
+                    "category-junk", CATEGORY_JUNK_HEADING, CATEGORY_JUNK_EXPLAINED),
+            new Section(Root.REVIEW, FiledBy.A_SORT, ANY_NAME, "never-sifted",
+                    NEVER_SIFTED_HEADING, NEVER_SIFTED_EXPLAINED),
+            new Section(Root.DUPLICATES, FiledBy.A_SIFT, ANY_NAME, "duplicates",
+                    DUPLICATES_HEADING, DUPLICATES_EXPLAINED),
+            new Section(Root.UNREVIEWABLE, FiledBy.A_SIFT, ANY_NAME, "unreviewable",
+                    UNREVIEWABLE_HEADING, UNREVIEWABLE_EXPLAINED));
+
+    private final Pipeline pipeline;
+    private final RunLauncherPresenter launcher;
+
+    // Volatile throughout. The reading is taken off the thread that paints, and the screen draws
+    // from it on the thread that does.
+    private volatile ReviewListing listing = new ReviewListing(List.of(), List.of());
+    // False until a read has landed. The screen draws once before the first one, off the empty
+    // listing above, and an unread root and an empty one are the same value.
+    private volatile boolean read;
+    private volatile @Nullable Message message;
+    // Every fold that is drawn, by the folder it is over.
+    private final Map<Path, Fold> folds = new ConcurrentHashMap<>();
+    // The folders a press has asked to open, whether or not their reads have landed.
+    private final Set<Path> asked = ConcurrentHashMap.newKeySet();
+    // Held while a press decides what it means and while a read publishes. The thread that paints
+    // takes neither, reading both collections above without it.
+    private final Object foldLock = new Object();
+    private volatile @Nullable Runnable openDashboard;
+
+    /**
+     * Creates the presenter over the facade it reads and the launcher it hands work to.
+     *
+     * @param pipeline {@link Pipeline} reads the three folders and runs the move
+     * @param launcher {@link RunLauncherPresenter} runs the move and reports it, as it does every
+     *     other job
+     */
+    public ReviewPresenter(final Pipeline pipeline, final RunLauncherPresenter launcher) {
+        this.pipeline = pipeline;
+        this.launcher = launcher;
+    }
+
+    /**
+     * Says where to send a reader once a move has been started.
+     *
+     * <p>Moving what is left in a folder takes them to the dashboard, because that is where a running
+     * job reports itself.
+     *
+     * @param openDashboard {@link Runnable} shows the dashboard. Called on the thread that paints
+     */
+    public void setOpenDashboard(final Runnable openDashboard) {
+        this.openDashboard = openDashboard;
+    }
+
+    /**
+     * Reads the three folders again.
+     *
+     * <p>Blocks for three tree walks. The caller runs it off whatever thread paints.
+     */
+    public void refresh() {
+        try {
+            this.listing = this.pipeline.reviewListing();
+            this.message = null;
+        } catch (final RuntimeException e) {
+            log.info("Could not read what is waiting for review", e);
+            // Dropped rather than left standing. Cards from the last reading would otherwise sit
+            // under a line saying the folders cannot be read. Each would still offer to move a
+            // count nothing can vouch for.
+            this.listing = new ReviewListing(List.of(), List.of());
+            this.message = new Message(RunRefusals.plainly(e), true);
+        }
+        this.read = true;
+        this.closeNotes();
+    }
+
+    /**
+     * What the screen shows now.
+     *
+     * @return {@link ReviewView} everything on it, in display-ready words
+     */
+    public ReviewView view() {
+        final ReviewListing listed = this.listing;
+        final Message said = this.message;
+        final List<Group> groups = new ArrayList<>();
+        for (final Section section : SECTIONS) {
+            this.group(listed, section).ifPresent(groups::add);
+        }
+        if (!this.read) {
+            return new ReviewView(HEADING, null, LOOKING, List.of(), null);
+        }
+        // Asked of the reading rather than of the sections built from it. A folder no section
+        // claimed would otherwise put this line over folders that are there.
+        //
+        // A read that failed establishes nothing, so it cannot also report that nothing is waiting.
+        final boolean nothingWaiting =
+                listed.folders().isEmpty() && listed.unreadable().isEmpty() && said == null;
+        return new ReviewView(HEADING, unreadableLine(listed), nothingWaiting ? NOTHING_YET : null,
+                groups, said);
+    }
+
+    /**
+     * Opens or shuts one folder's notes, reading them where it opens.
+     *
+     * <p>Walks the folder and reads every note in it, so the caller runs it off whatever thread
+     * paints.
+     *
+     * <p>Every other card's fold is left as it was.
+     *
+     * <p>A read publishes only where its folder is still one the reader has asked for, so a press
+     * shutting a fold mid-read leaves that read with nothing to say.
+     *
+     * @param folder {@link Path} the folder whose notes were pressed
+     */
+    public void toggleNotes(final Path folder) {
+        synchronized (this.foldLock) {
+            // Shut covers a fold already drawn and one still being read for.
+            if (!this.asked.add(folder)) {
+                this.asked.remove(folder);
+                this.folds.remove(folder);
+                return;
+            }
+        }
+        Fold read;
+        try {
+            read = new Fold(capped(this.pipeline.reviewNotes(folder)), null);
+        } catch (final RuntimeException e) {
+            log.info("Could not read the notes in {}", folder, e);
+            read = new Fold(List.of(), NOTES_UNREADABLE);
+        }
+        synchronized (this.foldLock) {
+            if (this.asked.contains(folder)) {
+                this.folds.put(folder, read);
+            }
+        }
+    }
+
+    /**
+     * What one folder's fold holds now, or null where no card carries that folder.
+     *
+     * <p>Answered on its own so a screen can fill one fold after its read lands, rather than
+     * drawing every card again.
+     *
+     * @param folder {@link Path} the folder whose fold is asked about
+     * @return {@link Notes} what that fold holds, or null
+     */
+    public @Nullable Notes notesOn(final Path folder) {
+        return this.view().groups().stream()
+                .flatMap(group -> group.folders().stream())
+                .filter(card -> card.path().equals(folder))
+                .findFirst()
+                .map(FolderCard::notes)
+                .orElse(null);
+    }
+
+    /**
+     * Moves what is left in one folder into the library.
+     *
+     * <p>Handed to the launcher rather than run here, so it reports, cancels and refuses exactly as
+     * every other job does. A refusal lands on the dashboard, which is where the reader is sent.
+     *
+     * <p>A job taken between this screen drawing its buttons and the press landing leaves the
+     * reader here, told so. A dashboard showing somebody else's run answers nothing they asked.
+     *
+     * @param action {@link Action} the button that was pressed
+     */
+    public void moveToLibrary(final Action action) {
+        if (!this.launcher.moveToLibraryFromReview(action.folder(), action.named())) {
+            this.message = new Message(ALREADY_RUNNING, true);
+            return;
+        }
+        this.message = null;
+        final Runnable open = this.openDashboard;
+        if (open != null) {
+            open.run();
+        }
+    }
+
+    /**
+     * One section, or nothing where none of its folders is waiting.
+     *
+     * @param read {@link ReviewListing} the one reading this whole view is drawn from. Asking the
+     *     field again would answer about a second moment, since a fresh reading lands from a thread
+     *     of its own
+     * @param section {@link Section} which section
+     * @return an {@link Optional} of {@link Group} the section
+     */
+    private Optional<Group> group(final ReviewListing read, final Section section) {
+        final List<FolderCard> cards = read.folders().stream()
+                .filter(folder -> folder.root() == section.root()
+                        && folder.filedBy() == section.filedBy()
+                        && section.named().test(folder.name()))
+                .map(this::card)
+                .toList();
+        return cards.isEmpty()
+                ? Optional.empty()
+                : Optional.of(new Group(section.id(), section.heading(), section.explained(), cards));
+    }
+
+    /**
+     * One heading on the screen, and which of the listing's folders belong under it.
+     *
+     * @param root {@link Root} the root its folders sit under
+     * @param filedBy {@link FiledBy} the job that filed them
+     * @param named a {@link Predicate} of {@link String} which of that root's folder names belong
+     *     here
+     * @param id {@link String} the section's own id, for the screen to set on it
+     * @param heading {@link String} what the section is called
+     * @param explained {@link String} what put these photos here and what to do about them
+     */
+    private record Section(Root root, FiledBy filedBy, Predicate<String> named, String id,
+                           String heading, String explained) {
+    }
+
+    /**
+     * One folder's card.
+     *
+     * @param folder {@link Folder} the folder as the facade described it
+     * @return {@link FolderCard} the card
+     */
+    private FolderCard card(final Folder folder) {
+        final Fold open = this.folds.get(folder.path());
+        final boolean shown = open != null;
+        final String failed = shown ? open.failed() : null;
+        final List<String> written = shown ? open.lines() : List.of();
+        final Notes notes = writesNotes(folder.root())
+                ? new Notes(idFor(folder, "notes"), SHOW_NOTES, shown,
+                        shown && failed == null ? written : List.of(),
+                        shown ? nothingIn(failed, written) : null)
+                : null;
+        return new FolderCard(idFor(folder, "card"), folder.path(), folder.name(),
+                RunWords.held(folder.photos(), folder.videos()),
+                Instant.EPOCH.equals(folder.changed())
+                        ? "When it last changed is not known"
+                        : "Last changed " + RunWords.howLongAgo(folder.changed()),
+                notes, this.actions(folder));
+    }
+
+    /**
+     * Whether Sluice writes anything beside the photos it puts under this root.
+     *
+     * <p>Nothing does under the unreviewable root. A sift that could not judge a photo moves it and
+     * writes no line about it. A fold there could only ever open on the sentence saying there is
+     * nothing to show, and the section's own explanation already answers what it asks.
+     *
+     * @param root {@link Root} which of the three
+     * @return boolean true where a folder under it can carry a note
+     */
+    private static boolean writesNotes(final Root root) {
+        return root != Root.UNREVIEWABLE;
+    }
+
+    /**
+     * The note's lines, cut to what the fold will draw.
+     *
+     * <p>A line is written per photo a folder ever took, and the fold draws one wrapping label per
+     * line. A junk folder off a large backlog carries thousands, which is a page nobody reads and a
+     * scene graph that costs to build. Past the cut the reader is pointed at the file itself.
+     *
+     * @param lines a {@link List} of {@link String} every line the folder's notes hold
+     * @return a {@link List} of {@link String} what to draw
+     */
+    private static List<String> capped(final List<String> lines) {
+        if (lines.size() <= MOST_LINES_DRAWN) {
+            return lines;
+        }
+        final List<String> cut = new ArrayList<>(lines.subList(0, MOST_LINES_DRAWN));
+        cut.add(RunWords.counted(lines.size() - MOST_LINES_DRAWN, "more line is", "more lines are")
+                + " in the folder's own note file.");
+        return cut;
+    }
+
+    /**
+     * What to show under an opened fold in place of the lines, or null where there are lines.
+     *
+     * @param failed what went wrong reading them, or null where nothing did
+     * @param written a {@link List} of {@link String} what the read came back with
+     * @return {@link String} the line to show instead, or null
+     */
+    private static @Nullable String nothingIn(final @Nullable String failed,
+                                              final List<String> written) {
+        if (failed != null) {
+            return failed;
+        }
+        return written.isEmpty() ? NOTHING_WRITTEN : null;
+    }
+
+    /**
+     * What can be done about one folder.
+     *
+     * <p>Only a folder under Review can be moved into the library. That is the one tree
+     * {@code RescueUseCase.rescue} resolves a name inside.
+     *
+     * <p>The move is withheld while anything is running. The app takes one job at a time, so
+     * offering the button then would put a question whose answer is a refusal.
+     *
+     * @param folder {@link Folder} the folder
+     * @return a {@link List} of {@link Action} its buttons, in the order drawn
+     */
+    private List<Action> actions(final Folder folder) {
+        final boolean canMove = folder.root() == Root.REVIEW && !this.pipeline.isBusy();
+        final Action open = new Action(idFor(folder, "open"), OPEN, Kind.OPEN, true,
+                folder.name(), folder.name(), folder.path(), null);
+        if (!canMove) {
+            return List.of(open);
+        }
+        return List.of(open, new Action(idFor(folder, "move"), MOVE_TO_LIBRARY,
+                Kind.MOVE_TO_LIBRARY, false, folder.name(), folder.name(), folder.path(),
+                moveQuestion(folder)));
+    }
+
+    /**
+     * What to ask before a folder's photos go into the library.
+     *
+     * <p>Asked because the library is where this app treats photos as final. A reader who has not
+     * weeded the folder yet would be putting everything Sluice set aside into the place they keep
+     * what they chose.
+     *
+     * <p>Claims neither a count nor the folder's removal, and both were tried. A rescue leaves
+     * behind anything it cannot date, so the count is an upper bound and the folder stays wherever
+     * one file is left. Promising either would be a sentence the engine can make false.
+     *
+     * @param folder {@link Folder} the folder about to be moved
+     * @return {@link Confirmation} the question
+     */
+    private static Confirmation moveQuestion(final Folder folder) {
+        return new Confirmation("Move " + folder.name() + " to your library?",
+                "Anything you don't want there has to come out first.",
+                "Move to library", "Cancel", false);
+    }
+
+    /**
+     * What to say where a root could not be read.
+     *
+     * @param read {@link ReviewListing} the reading this view is drawn from
+     * @return {@link String} the line, or null where all three were read
+     */
+    private static @Nullable String unreadableLine(final ReviewListing read) {
+        final List<Path> failed = read.unreadable();
+        if (failed.isEmpty()) {
+            return null;
+        }
+        return UNREADABLE.formatted(RunWords.listed(failed.stream().map(Path::toString).toList()));
+    }
+
+    /**
+     * Forgets every fold.
+     *
+     * <p>A reading is what says which folders are there. A fold left open over one that has since
+     * gone would draw its lines under a card the fresh reading does not carry.
+     */
+    private void closeNotes() {
+        synchronized (this.foldLock) {
+            this.asked.clear();
+            this.folds.clear();
+        }
+    }
+
+    /**
+     * What is drawn under one open fold.
+     *
+     * @param lines a {@link List} of {@link String} what was written there, cut to what is drawn
+     * @param failed {@link String} what to say instead where the read failed, or null where it did
+     *     not
+     */
+    private record Fold(List<String> lines, @Nullable String failed) {
+    }
+
+    /**
+     * One of a card's control ids.
+     *
+     * <p>Built from the folder's own name, so a test and a render can name the control that acts on
+     * a known folder. A name can hold anything a filesystem allows, so everything outside a plain
+     * word is flattened to one dash.
+     *
+     * @param folder {@link Folder} the folder the control belongs to
+     * @param part {@link String} which control
+     * @return {@link String} the id
+     */
+    private static String idFor(final Folder folder, final String part) {
+        return "review-" + part + "-" + idOf(folder.root()) + "-"
+                + folder.name().toLowerCase(Locale.UK).replaceAll("[^a-z0-9]+", "-");
+    }
+
+    /**
+     * The part of a control's id that says which root its folder is under.
+     *
+     * <p>The root rather than the section, so the two sections under Review do not give one folder
+     * two possible ids.
+     *
+     * @param root {@link Root} which root
+     * @return {@link String} the id
+     */
+    private static String idOf(final Root root) {
+        return root.name().toLowerCase(Locale.UK);
+    }
+}

@@ -11,6 +11,7 @@ import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.domain.cull.CategoryName;
 import photos.sluice.domain.cull.CullCategory;
+import photos.sluice.domain.cull.JunkCategory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,16 +38,18 @@ import java.util.Set;
 public class PhotoCategoriesPresenter {
 
     // Says what a category does before saying what one may be called. That is the part a reader
-    // cannot change, and the part they would otherwise assume. The carve-out is named outright and
-    // sits against the sentence it qualifies, since the built-in card contradicts an unqualified
-    // "a category sets photos aside".
-    private static final String DISPOSITION = "A category you add sets photos aside in a folder of "
-            + "its own, for you to look through afterwards. The one exception is the built-in "
-            + "category at the top, whose photos are moved straight to your library.";
+    // cannot change, and the part they would otherwise assume.
+    private static final String DISPOSITION = "A sift always takes out the plainly worthless, and "
+            + "those photos go to a junk folder under Review. A category you add gives one of those "
+            + "photos a better home: where it matches a category, it goes to that folder instead, "
+            + "so you can look through one reason at a time. The one exception is the built-in "
+            + "category at the top, whose photos are moved straight to your library. It is also "
+            + "the only one judged on what a photo is rather than on how good it is.";
 
     private static final String FIXED_NOTE = "Built in. This is the one category moved straight to "
-            + "your library rather than set aside. It cannot be renamed or deleted. You can switch "
-            + "it off, and edit what belongs in it.";
+            + "your library rather than to Review, and the one judged on what a photo is rather "
+            + "than on how good it is. It cannot be renamed or deleted. You can switch it off, and "
+            + "edit what belongs in it.";
 
     // The same sentence the Settings screen says for the same thing, down to the wording. It names
     // no direction: the marks are on the cards, and this line sits under the last of them.
@@ -59,22 +62,17 @@ public class PhotoCategoriesPresenter {
             CategoryName.maxLength(), CullCategory.maxDescription(),
             CullCategory.maxExamples() * CullCategory.maxExample());
 
-    private static final String NOTHING_LEFT_ON = "Sluice sifts by moving your photos into their own "
-            + "categories. Therefore it needs at least one category switched on.";
-
     private static final String TOO_MANY = "Sluice holds at most " + Settings.maxCategories()
             + " photo categories. Remove some before saving.";
 
     private static final String NO_NAME = "Give this category a name.";
 
+    private static final String SUPPLIED_NAME = "A built-in category is already called this, and it "
+            + "is always on. Choose another name.";
+
     private static final String NO_DESCRIPTION = "Say what belongs in this category, so the vision "
             + "provider doing the sifting knows the criteria for sifting to it.";
 
-    // Staying is the loud choice, because leaving is the one of the two the app cannot put back.
-    // What a reader writes into a category is several sentences of their own.
-    //
-    // The body says what is lost rather than that a redraw loses it. A redraw is not something the
-    // reader can watch happen, and the loss is.
     private final SettingsUseCase settingsUseCase;
 
     /**
@@ -135,11 +133,6 @@ public class PhotoCategoriesPresenter {
         if (missingBuiltIn != null) {
             return new SaveOutcome.Refused(missingBuiltIn, refusals);
         }
-        // Refused here rather than left to surface later: the run would prep every montage at full
-        // cost first, and only fail once the prompt was assembled.
-        if (edits.stream().noneMatch(CategoryEdit::enabled)) {
-            return new SaveOutcome.Refused(NOTHING_LEFT_ON, refusals);
-        }
         // Refused here as well as in Settings, because reaching that one throws out of a button
         // press rather than answering the screen.
         if (edits.size() > Settings.maxCategories()) {
@@ -175,26 +168,6 @@ public class PhotoCategoriesPresenter {
                 .map(PhotoCategoriesPresenter::asItWouldBeStored)
                 .toList();
         return !stored.equals(onScreen.stream().map(PhotoCategoriesPresenter::asItWouldBeStored).toList());
-    }
-
-    /**
-     * Whether a card carrying this switch is the last one still on, so no control that would take
-     * the count to zero may be offered on it.
-     *
-     * <p>One question rather than two, because switching that card off and deleting it reach the
-     * same state. The screen disables both on the card this answers true for, and offers both again
-     * as soon as a second card is on. A card already off is deletable whatever this says: it is
-     * contributing nothing to the count.
-     *
-     * <p>The rule is stated here and applied there. The count it runs on is what the screen holds
-     * right now, edits included, which is a thing only the screen knows.
-     *
-     * @param enabledOnScreen int how many cards are switched on at this moment
-     * @param thisOneIsOn boolean whether the card being drawn is one of them
-     * @return boolean true when this card is the last one holding the set above the floor
-     */
-    public boolean isTheLastOneOn(final int enabledOnScreen, final boolean thisOneIsOn) {
-        return thisOneIsOn && enabledOnScreen == 1;
     }
 
     /**
@@ -297,6 +270,11 @@ public class PhotoCategoriesPresenter {
                     + "'. Each one needs a name of its own, because the name is its folder.",
                     descriptionProblem, examplesProblem);
         }
+        // Marked here as well as refused in Settings, because reaching that one throws out of a
+        // button press rather than answering the screen.
+        if (JunkCategory.claims(name)) {
+            return new CardRefusal(SUPPLIED_NAME, descriptionProblem, examplesProblem);
+        }
         final String shape = CategoryName.problemWith(name);
         return new CardRefusal(shape == null ? null : "This name " + shape + ".", descriptionProblem,
                 examplesProblem);
@@ -365,8 +343,8 @@ public class PhotoCategoriesPresenter {
     private static String nameRule() {
         return "A category's name becomes a folder name, so it takes lower-case letters and digits "
                 + "only, joined by hyphens, up to " + CategoryName.maxLength() + " characters. A "
-                + "few words are refused too, some reserved by the operating system and some "
-                + "Sluice uses for its own photo decisions.";
+                + "few names are refused too: ones the operating system reserves, and ones already "
+                + "taken by a folder or a decision of the app's own.";
     }
 
 }

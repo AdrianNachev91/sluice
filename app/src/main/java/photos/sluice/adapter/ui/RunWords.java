@@ -4,6 +4,8 @@ import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.cull.CullScope;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.Month;
 import java.time.format.TextStyle;
 import java.util.List;
@@ -17,6 +19,12 @@ import java.util.Locale;
  * all separate their thousands through {@link #grouped}.
  */
 final class RunWords {
+
+    // Nominal lengths, for reading an age aloud rather than for arithmetic anyone relies on.
+    private static final int DAYS_IN_A_MONTH = 30;
+    private static final int DAYS_IN_TWO_MONTHS = 60;
+    private static final int DAYS_IN_A_YEAR = 365;
+    private static final int DAYS_IN_TWO_YEARS = 730;
 
     private RunWords() {
     }
@@ -46,6 +54,35 @@ final class RunWords {
      */
     static String counted(final int count, final String one, final String many) {
         return grouped(count) + " " + (count == 1 ? one : many);
+    }
+
+    /**
+     * How long ago something happened, at the coarsest honest precision.
+     *
+     * <p>A thing nobody could stat is dated as the epoch. That reads here as not known, rather than
+     * as a date in 1970.
+     *
+     * @param since {@link Instant} when it happened
+     * @return {@link String} how long ago, as a reader would say it
+     */
+    static String howLongAgo(final Instant since) {
+        if (Instant.EPOCH.equals(since)) {
+            return "not known";
+        }
+        final Duration ago = Duration.between(since, Instant.now());
+        if (ago.toHours() < 1) {
+            return "less than an hour ago";
+        }
+        if (ago.toDays() < 1) {
+            return counted((int) ago.toHours(), "hour", "hours") + " ago";
+        }
+        if (ago.toDays() < DAYS_IN_TWO_MONTHS) {
+            return counted((int) ago.toDays(), "day", "days") + " ago";
+        }
+        if (ago.toDays() < DAYS_IN_TWO_YEARS) {
+            return counted((int) (ago.toDays() / DAYS_IN_A_MONTH), "month", "months") + " ago";
+        }
+        return counted((int) (ago.toDays() / DAYS_IN_A_YEAR), "year", "years") + " ago";
     }
 
     /**
@@ -93,7 +130,7 @@ final class RunWords {
     }
 
     /**
-     * What a year or one of its months says it holds.
+     * What a timeline or a folder says it holds.
      *
      * @param photos int the photos in it
      * @param videos int the videos in it

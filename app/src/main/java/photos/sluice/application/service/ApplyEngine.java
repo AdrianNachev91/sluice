@@ -37,6 +37,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Carries a prep directory's culling decisions out against the filesystem. This is the only class
@@ -450,19 +451,23 @@ public class ApplyEngine {
     }
 
     /**
-     * Builds the note text recording which file was chosen and why, plus its rejects.
+     * Builds the note text recording which file was kept and why, plus its rejects.
+     *
+     * <p>One photo per line, the kept one first, which is how every other note in these folders
+     * reads and how a screen drawing them draws each.
      *
      * @param chosen {@link NearDupChosen} the chosen near-dup decision
      * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
      * @return {@link String} the note's text
      */
     private static String chosenNote(final NearDupChosen chosen, final List<Decision> group) {
-        final String rejects = group.stream()
-                .filter(NearDupReject.class::isInstance)
-                .map(NearDupReject.class::cast)
-                .map(reject -> reject.file().getFileName() + " - " + reject.reason())
-                .collect(Collectors.joining("; "));
-        return "Chose " + chosen.file().getFileName() + " - " + chosen.chosenReason() + ". Rejects: " + rejects;
+        return Stream.concat(
+                Stream.of("Kept " + chosen.file().getFileName() + " - " + chosen.chosenReason()),
+                group.stream()
+                        .filter(NearDupReject.class::isInstance)
+                        .map(NearDupReject.class::cast)
+                        .map(reject -> reject.file().getFileName() + " - " + reject.reason()))
+                .collect(Collectors.joining(System.lineSeparator()));
     }
 
     /**

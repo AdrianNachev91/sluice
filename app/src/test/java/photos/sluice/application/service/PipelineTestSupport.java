@@ -211,8 +211,7 @@ final class PipelineTestSupport {
     }
 
     static CullSettings autoApproveCullSettings() {
-        return new FixedSettings("auto-approve", List.of(CullCategory.of("junk", "objectively worthless shots")),
-                new ExternalAgentSettings(WatchMode.MANUAL));
+        return new FixedSettings("auto-approve", List.of(), new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
     // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
@@ -535,14 +534,12 @@ final class PipelineTestSupport {
     }
 
     static CullSettings defaultCullSettings() {
-        return new FixedSettings(MANUAL_PROVIDER_ID,
-                List.of(CullCategory.of("junk", "objectively worthless shots")),
+        return new FixedSettings(MANUAL_PROVIDER_ID, List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
     static CullSettings watchCullSettings() {
-        return new FixedSettings(MANUAL_PROVIDER_ID,
-                List.of(CullCategory.of("junk", "objectively worthless shots")),
+        return new FixedSettings(MANUAL_PROVIDER_ID, List.of(),
                 new ExternalAgentSettings(WatchMode.WATCH));
     }
 

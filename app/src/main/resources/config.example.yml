@@ -69,10 +69,10 @@ sluice:
     # sift already started records the cards it was prepped under, so it keeps judging by those.
     # A sift whose index has to be rebuilt after damage is the exception: nothing on disk remembers
     # its set, so the configured cards are substituted.
+    #
+    # Junk is not a card you configure, and one of that name is refused here. It is supplied and
+    # always on.
     categories:
-      - name: junk
-        enabled: true
-        description: Blurry, duplicate, or otherwise not worth keeping.
       - name: scenery
         enabled: true
         description: Landscapes and scenery worth a second look before deciding.

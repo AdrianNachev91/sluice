@@ -237,8 +237,9 @@ class PipelineTest {
         pipeline(root, progress).rescue("2019-06").join();
 
         assertThat(progress.events).containsExactly(
-                "planned:Rescuing...",
-                "started:Rescuing...", "tick:Rescuing...:1/2", "tick:Rescuing...:2/2", "finished:Rescuing...");
+                "planned:Moving to library...", "started:Moving to library...",
+                "tick:Moving to library...:1/2", "tick:Moving to library...:2/2",
+                "finished:Moving to library...");
     }
 
     // The ProgressPort doc says phaseStarted/phaseFinished always bracket a phase. This proves that
@@ -254,7 +255,8 @@ class PipelineTest {
 
         assertThatThrownBy(handle::join).isInstanceOf(CompletionException.class);
         assertThat(progress.events)
-                .containsExactly("planned:Rescuing...", "started:Rescuing...", "finished:Rescuing...");
+                .containsExactly("planned:Moving to library...", "started:Moving to library...",
+                        "finished:Moving to library...");
     }
 
     @Test

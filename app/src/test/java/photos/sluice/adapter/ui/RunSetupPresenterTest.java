@@ -122,14 +122,6 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void choosingRescueRefusesNothing() {
-        this.choose(RunMode.RESCUE, "2019");
-
-        assertThat(this.presenter.view().canStart()).isFalse();
-        assertThat(this.presenter.view().scopeRefusal()).isNull();
-    }
-
-    @Test
     void aBareMoveToTheLibraryAsksFirstAndNamesEveryYearAndFileGoing() {
         this.choose(RunMode.MOVE_TO_LIBRARY, "");
 
@@ -585,14 +577,6 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void theButtonIsDeadForAModeWithNothingBehindItYet() {
-        this.choose(RunMode.RESCUE, "");
-
-        assertThat(this.presenter.view().canStart()).isFalse();
-        assertThat(this.presenter.view().scopeHint()).contains("arrives with the Review screen");
-    }
-
-    @Test
     void theButtonIsDeadUntilTheCountsHaveLanded() {
         final RunSetupPresenter counting = this.launcher();
 
@@ -708,15 +692,15 @@ class RunSetupPresenterTest {
         assertThat(said).containsExactly(
                 "Reads the dates on what is in your Inbox and moves it into Sorted, by year and "
                         + "month. Takes the oldest year in your Inbox.",
-                "Sifts through your sorted photos and organises them into categories.",
-                "Moves what is in Sorted into your library.",
-                "Moves what is left in a Review folder into your library.");
+                "Looks at your sorted photos and moves anything it does not keep out of Sorted.",
+                "Moves what is in Sorted into your library. That is the photos a sift left alone, "
+                        + "plus any it has not seen.");
     }
 
     @Test
-    void theRowOffersEveryModeButImport() {
+    void theRowOffersTheThreeModesStartedFromAScope() {
         assertThat(this.modesInTheRow()).containsExactly(RunMode.SORT, RunMode.SIFT,
-                RunMode.MOVE_TO_LIBRARY, RunMode.RESCUE);
+                RunMode.MOVE_TO_LIBRARY);
     }
 
     @Test
@@ -770,8 +754,7 @@ class RunSetupPresenterTest {
             labels.add(this.presenter.view().startLabel());
         }
 
-        assertThat(labels).containsExactly("Run Sort", "Run Sift", "Run Move to library",
-                "Run Rescue");
+        assertThat(labels).containsExactly("Run Sort", "Run Sift", "Run Move to library");
     }
 
     @Test
@@ -1046,7 +1029,7 @@ class RunSetupPresenterTest {
     @Test
     void everyModeGetsAButtonAndTheyReadInTheOrderTheyAreOffered() {
         assertThat(this.presenter.view().modes()).extracting(RunLauncherView.ModeChoice::label)
-                .containsExactly("Sort", "Sift", "Move to library", "Rescue");
+                .containsExactly("Sort", "Sift", "Move to library");
     }
 
     @Test

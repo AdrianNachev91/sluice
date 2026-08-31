@@ -29,18 +29,19 @@ class CullerPromptLiveSettingsTest {
 
     @Test
     void aSavedCategoryCardLeavesAnAlreadyPreppedRunsPromptUnchanged() {
-        final var recorded = List.of(CullCategory.of("junk", "worthless shots"));
+        final var recorded = List.of(CullCategory.of("scenery", "landscapes with nobody in them"));
         final var holder = new SettingsHolder(settings(recorded, MontageConfig.defaults()));
         final var prompt = new CullerPrompt(holder);
 
         holder.apply(settings(List.of(CullCategory.of("receipts", "paper receipts")), MontageConfig.defaults()));
 
-        assertThat(prompt.systemPrompt(recorded)).contains("worthless shots").doesNotContain("paper receipts");
+        assertThat(prompt.systemPrompt(recorded))
+                .contains("landscapes with nobody in them").doesNotContain("paper receipts");
     }
 
     @Test
     void aSavedMontageGridIsInTheNextPromptWithNothingRestarted() {
-        final var cards = List.of(CullCategory.of("junk", "worthless shots"));
+        final var cards = List.of(CullCategory.of("scenery", "landscapes with nobody in them"));
         final var holder = new SettingsHolder(settings(cards, new MontageConfig(224, 5)));
         final var prompt = new CullerPrompt(holder);
         assertThat(userTurn(prompt)).contains("rows of 5");

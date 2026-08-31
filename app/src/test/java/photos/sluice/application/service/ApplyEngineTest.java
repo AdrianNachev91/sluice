@@ -181,7 +181,7 @@ class ApplyEngineTest {
         assertThat(Files.exists(dupDir.resolve("a.jpg"))).isTrue();
         assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
-                .contains("Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
+                .contains("Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred");
     }
 
     // The group's own folder is derived from the CHOSEN file's month, not the reject's. Otherwise a
@@ -209,7 +209,7 @@ class ApplyEngineTest {
         assertThat(Files.exists(dupDir.resolve("a.jpg"))).isTrue();
         assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
-                .contains("Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
+                .contains("Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred");
         // No second, July-derived folder was ever created for this group.
         assertThat(Files.exists(root.resolve("Duplicates/2019-07_lake-jun19"))).isFalse();
     }
@@ -567,7 +567,7 @@ class ApplyEngineTest {
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
-                .contains("Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
+                .contains("Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred");
     }
 
     @Test
@@ -589,14 +589,14 @@ class ApplyEngineTest {
         final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
         writeFile(dupDir.resolve("a.jpg"), "already-copied");
         Files.writeString(dupDir.resolve("a.jpg.txt"),
-                "Chose a.jpg - sharpest. Rejects: b.jpg - blurred" + System.lineSeparator());
+                "Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred" + System.lineSeparator());
 
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(Files.exists(dupDir.resolve("a (2).jpg"))).isFalse();
         assertThat(Files.readString(dupDir.resolve("a.jpg"))).isEqualTo("already-copied");
         assertThat(Files.readAllLines(dupDir.resolve("a.jpg.txt"))).containsExactly(
-                "Chose a.jpg - sharpest. Rejects: b.jpg - blurred");
+                "Kept a.jpg - sharpest", "b.jpg - blurred");
     }
 
     @Test

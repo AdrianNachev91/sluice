@@ -1,6 +1,7 @@
 package photos.sluice.application.port.out;
 
 import photos.sluice.domain.cull.CullCategory;
+import photos.sluice.domain.cull.JunkCategory;
 import photos.sluice.domain.cull.MontageConfig;
 
 import java.util.List;
@@ -73,6 +74,10 @@ public record Settings(PathSettings paths, String provider,
         if (!duplicates.isEmpty()) {
             throw new IllegalArgumentException(
                     "Photo categories contain duplicate name(s): " + String.join(", ", duplicates));
+        }
+        if (categories.stream().map(CullCategory::name).anyMatch(JunkCategory::claims)) {
+            throw new IllegalArgumentException("Photo categories may not hold one called '"
+                    + JunkCategory.NAME + "'. Sluice supplies that one itself, and it is always on.");
         }
     }
 

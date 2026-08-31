@@ -43,7 +43,7 @@ class SettingsHolderTest {
 
         assertThat(holder.current().paths()).isEqualTo(PATHS);
         assertThat(holder.provider()).isEqualTo("external-agent");
-        assertThat(holder.categories()).containsExactly(CullCategory.of("junk", "junk description"));
+        assertThat(holder.categories()).containsExactly(CullCategory.of("scenery", "scenery description"));
         assertThat(holder.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
         assertThat(holder.providerSettings().model()).isNull();
     }
@@ -54,15 +54,28 @@ class SettingsHolderTest {
                 cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         holder.apply(new Settings(PATHS, "anthropic", Map.of(),
-                List.of(CullCategory.of("junk", "junk description"),
+                List.of(CullCategory.of("scenery", "scenery description"),
                         new CullCategory("food", "food description", List.of(), Boolean.FALSE),
                         CullCategory.of("funny", "funny description")),
                 new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(224, 5), ThemeChoice.SYSTEM));
 
         assertThat(holder.activeCategories()).extracting(CullCategory::name)
-                .containsExactly("junk", "funny");
+                .containsExactly("scenery", "funny", "junk");
         assertThat(holder.categories()).extracting(CullCategory::name)
-                .containsExactly("junk", "food", "funny");
+                .containsExactly("scenery", "food", "funny");
+    }
+
+    @Test
+    void junkJoinsTheActiveSetLastAndNeverTheConfiguredOne() {
+        final var holder = new SettingsHolder(new PathsProperties("repo", "library", "inbox"),
+                cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
+
+        holder.apply(new Settings(PATHS, "anthropic", Map.of(), List.of(),
+                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(224, 5), ThemeChoice.SYSTEM));
+
+        assertThat(holder.activeCategories()).extracting(CullCategory::name).containsExactly("junk");
+        assertThat(holder.categoriesForRepair()).extracting(CullCategory::name).containsExactly("junk");
+        assertThat(holder.categories()).isEmpty();
     }
 
     @Test
@@ -116,7 +129,8 @@ class SettingsHolderTest {
 
     private static CullConfig cullConfig() {
         return new CullConfig("external-agent", Map.of(),
-                List.of(CullCategory.of("junk", "junk description")), new ExternalAgentSettings(WatchMode.MANUAL));
+                List.of(CullCategory.of("scenery", "scenery description")),
+                new ExternalAgentSettings(WatchMode.MANUAL));
     }
 
     // Every properties class SettingsHolder takes. One missing makes the context fail to build, and

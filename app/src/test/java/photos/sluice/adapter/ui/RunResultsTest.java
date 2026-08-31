@@ -154,7 +154,7 @@ class RunResultsTest {
         final RunResultView card = card(RunMode.RESCUE,
                 new RescueSummary(7, List.of(), false, true));
 
-        assertThat(card.heading()).isEqualTo("Rescuing stopped.");
+        assertThat(card.heading()).isEqualTo("Moving to library stopped.");
         assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
         assertThat(card.detail())
                 .isEqualTo("The rest is still in the Review folder.");
@@ -240,7 +240,7 @@ class RunResultsTest {
         final RunResultView card = card(RunMode.RESCUE,
                 new RescueSummary(12, List.of("a.jpg", "b.jpg"), true, false));
 
-        assertThat(card.heading()).isEqualTo("Rescuing finished.");
+        assertThat(card.heading()).isEqualTo("Moving to library finished.");
         assertThat(labelled(card, "Moved to your library")).isEqualTo("12");
         assertThat(labelled(card, "Left behind")).isEqualTo("2");
     }

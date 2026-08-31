@@ -221,7 +221,6 @@ class ApplyEngineRealDataParityTest {
 
     private static CullSettings fixedSettings() {
         return new FixedSettings("external-agent", List.of(
-                CullCategory.of("junk", "junk description"),
                 CullCategory.of("scenery", "scenery description"),
                 CullCategory.of("food", "food description"),
                 CullCategory.of("funny", "funny description")));

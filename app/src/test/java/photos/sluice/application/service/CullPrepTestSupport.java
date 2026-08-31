@@ -69,8 +69,8 @@ final class CullPrepTestSupport {
         writeIndex(prepDir, fixedCategories(), photos, unreviewable, entries);
     }
 
-    // The category set an index records, defaulted to the one fixedSettings() configures so the two
-    // agree unless a test deliberately pulls them apart.
+    // The category set an index records, defaulted to the one fixedSettings() prepares a run under
+    // so the two agree unless a test deliberately pulls them apart.
     static void writeIndex(final Path prepDir, final List<CullCategory> categories, final int photos,
                            final List<Path> unreviewable, final List<String> entries) {
         new PrepIndexWriter().write(prepDir.resolve("index.json"),
@@ -79,7 +79,7 @@ final class CullPrepTestSupport {
     }
 
     static List<CullCategory> fixedCategories() {
-        return fixedSettings().categories();
+        return fixedSettings().activeCategories();
     }
 
     // For a test whose subject is which names a run recorded. The description is filled in so the
@@ -152,7 +152,6 @@ final class CullPrepTestSupport {
 
     static CullSettings fixedSettings() {
         return new FixedSettings("external-agent", List.of(
-                CullCategory.of("junk", "junk description"),
                 CullCategory.of("scenery", "scenery description"),
                 CullCategory.of("food", "food description"),
                 CullCategory.of("funny", "funny description")));

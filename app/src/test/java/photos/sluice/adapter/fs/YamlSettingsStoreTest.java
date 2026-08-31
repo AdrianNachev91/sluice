@@ -51,7 +51,7 @@ class YamlSettingsStoreTest {
                 .contains("model: claude-sonnet-5")
                 .contains("max-retries: 4")
                 .contains("mode: watch")
-                .contains("name: junk");
+                .contains("name: receipts");
     }
 
     @Test
@@ -336,7 +336,7 @@ class YamlSettingsStoreTest {
         return new Settings(new PathSettings("/photos/work", "/photos/library", "/photos/work/Inbox"),
                 "anthropic", Map.of("anthropic",
                         new CullProviderSettings("claude-sonnet-5", "https://example.invalid", 4)),
-                List.of(CullCategory.of("junk", "objectively worthless shots"),
+                List.of(CullCategory.of("receipts", "photographed paperwork"),
                         new CullCategory("food", "meals and menus", List.of("plates", "menus"), Boolean.TRUE),
                         new CullCategory("scenery", "landscapes", List.of(), Boolean.FALSE)),
                 new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK);

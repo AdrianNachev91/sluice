@@ -22,7 +22,6 @@ import photos.sluice.domain.cull.PurgeReport;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -943,26 +942,13 @@ public class RunsPresenter {
     }
 
     /**
-     * How long ago a run was last written to, at the coarsest honest precision.
-     *
-     * <p>A prep dir nobody could stat is aged as the epoch. That reads here as not known, rather
-     * than as a date in 1970.
+     * How long ago a run was last written to.
      *
      * @param since {@link Instant} when it was last written to
      * @return {@link String} how long ago, as a reader would say it
      */
     private static String age(final Instant since) {
-        if (Instant.EPOCH.equals(since)) {
-            return "Last activity: not known";
-        }
-        final Duration ago = Duration.between(since, Instant.now());
-        if (ago.toHours() < 1) {
-            return "Last activity: less than an hour ago";
-        }
-        if (ago.toDays() < 1) {
-            return "Last activity: " + RunWords.counted((int) ago.toHours(), "hour", "hours") + " ago";
-        }
-        return "Last activity: " + RunWords.counted((int) ago.toDays(), "day", "days") + " ago";
+        return "Last activity: " + RunWords.howLongAgo(since);
     }
 
     /**

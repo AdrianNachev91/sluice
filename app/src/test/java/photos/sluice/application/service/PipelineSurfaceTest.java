@@ -59,6 +59,8 @@ class PipelineSurfaceTest {
             "discard(Path)",
             "inboxTally()",
             "sortedTally()",
+            "reviewListing()",
+            "reviewNotes(Path)",
             "estimateFor(int)",
             "configuredProviderSpends()",
             "archivesFolder()",

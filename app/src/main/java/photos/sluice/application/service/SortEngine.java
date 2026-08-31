@@ -31,6 +31,7 @@ import photos.sluice.domain.model.ScanResult;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.TakeoutSidecar;
+import photos.sluice.domain.paths.SortFolderNames;
 import photos.sluice.domain.scan.MediaTypeDetector;
 import photos.sluice.domain.scan.SidecarSweep;
 
@@ -57,8 +58,10 @@ import java.util.stream.Collectors;
 public class SortEngine implements SortUseCase {
 
     private static final String SIDECAR_SOURCE = "sidecar";
-    private static final String REASON_UNSORTED = "unsorted-implausible-date";
-    private static final String REASON_LOW_RES = "low-res";
+    // Read by whoever opens the folder, so these are words rather than slugs. Short, because one is
+    // repeated on every line of a note.
+    private static final String REASON_UNSORTED = "no date could be read";
+    private static final String REASON_LOW_RES = "too small to sift";
     private static final String REASONS_FILE = "_reasons.txt";
 
     // The pairing canary's threshold. Google's own sidecar naming scheme changes at export time,
@@ -451,8 +454,8 @@ public class SortEngine implements SortUseCase {
         final String leaf = file.path().getFileName().toString();
 
         if (date.confidence() == Confidence.UNSORTABLE) {
-            this.routeToReview(file, leaf, this.pathsPort.review().resolve("Unsorted"), REASON_UNSORTED,
-                    cancellation, watching);
+            this.routeToReview(file, leaf, this.pathsPort.review().resolve(SortFolderNames.UNDATED),
+                    REASON_UNSORTED, cancellation, watching);
             routing.unsorted++;
             routing.unsortedFiles.add(leaf);
             return;
@@ -506,7 +509,7 @@ public class SortEngine implements SortUseCase {
      * @param file {@link MediaFile} the file being set aside
      * @param leaf {@link String} its file name
      * @param destDir {@link Path} the Review destination folder
-     * @param reason {@link String} short label recorded in the reasons file
+     * @param reason {@link String} why it is here, as the reasons file says it to a reader
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
      * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed

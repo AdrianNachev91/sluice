@@ -294,7 +294,7 @@ class SortEngineTest {
         assertThat(summary.photosSorted()).isEqualTo(0);
         assertThat(Files.exists(root.resolve("Review/2019-06/20190615_tiny.jpg"))).isTrue();
         assertThat(Files.readString(root.resolve("Review/2019-06/_reasons.txt")))
-                .contains("20190615_tiny.jpg - low-res");
+                .contains("20190615_tiny.jpg - too small to sift");
     }
 
     @Test
@@ -333,7 +333,7 @@ class SortEngineTest {
         assertThat(summary.unsortedFiles()).containsExactly("nodatepattern.jpg");
         assertThat(Files.exists(root.resolve("Review/Unsorted/nodatepattern.jpg"))).isTrue();
         assertThat(Files.readString(root.resolve("Review/Unsorted/_reasons.txt")))
-                .contains("nodatepattern.jpg - unsorted-implausible-date");
+                .contains("nodatepattern.jpg - no date could be read");
     }
 
     @Test

@@ -37,22 +37,11 @@ class CullConfigTest {
     }
 
     @Test
-    void bundledDefaultCategoriesAreTheStandardFourCards() {
+    void bundledDefaultCategoriesAreTheStandardThreeCards() {
         this.runner.run(context -> {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories()).extracting(CullCategory::name)
-                    .containsExactly("junk", "scenery", "food", "funny");
-        });
-    }
-
-    @Test
-    void bundledJunkCardKeepsThePhotoOfAScreenEmphasis() {
-        // Photos of screens are the single most-missed junk class; the bundled card's description
-        // is what teaches an automated provider to catch them. Guard the phrase so a future
-        // rewording of the defaults can't silently drop the emphasis.
-        this.runner.run(context -> {
-            final CullConfig config = context.getBean(CullConfig.class);
-            assertThat(config.categories().getFirst().description()).contains("photo of a screen");
+                    .containsExactly("scenery", "food", "funny");
         });
     }
 

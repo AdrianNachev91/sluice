@@ -9,6 +9,7 @@ import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.ReviewListing;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SpendEstimate;
@@ -66,7 +67,7 @@ import java.util.List;
 public class Pipeline {
 
     private static final String COMMITTING = "Moving to library...";
-    private static final String RESCUING = "Rescuing...";
+    private static final String RESCUING = "Moving to library...";
     private static final String DISCARDING = "Discarding...";
     private static final String IMPORTING = "Importing...";
 
@@ -93,6 +94,7 @@ public class Pipeline {
     private final SpendLedgerPort spendLedger;
     private final RootsGuard rootsGuard;
     private final MediaTallies mediaTallies;
+    private final ReviewFolders reviewFolders;
     private final RunChanges runChanges = new RunChanges();
 
     /**
@@ -204,6 +206,7 @@ public class Pipeline {
         this.pathsPort = pathsPort;
         this.spendLedger = spendLedger;
         this.mediaTallies = new MediaTallies(mediaStore, pathsPort);
+        this.reviewFolders = new ReviewFolders(mediaStore, pathsPort);
     }
 
     /**
@@ -449,6 +452,36 @@ public class Pipeline {
     public SortedTally sortedTally() {
         this.requireUsableRoots();
         return this.mediaTallies.sorted();
+    }
+
+    /**
+     * Every folder holding photos somebody still has to look at.
+     *
+     * <p>Three tree walks, one per root, so its cost grows with what is in them. A caller that would
+     * block a window on it runs it off whatever thread paints. Not routed through {@link JobRunner}:
+     * it only reads, so it does not compete for the single job slot.
+     *
+     * @return {@link ReviewListing} the folders, and any of the three roots that could not be read
+     */
+    public ReviewListing reviewListing() {
+        this.requireUsableRoots();
+        return this.reviewFolders.list();
+    }
+
+    /**
+     * What Sluice wrote beside the photos in one of those folders.
+     *
+     * <p>Taken folder by folder rather than with the listing above. A note names every photo in its
+     * folder. Reading all of them to draw the list would read the whole of what a reader has so far
+     * asked to see none of.
+     *
+     * @param folder {@link Path} a folder {@link #reviewListing} named
+     * @return a {@link List} of {@link String} the lines, empty where nothing was written
+     * @throws IllegalArgumentException if folder is not under one of the three roots
+     */
+    public List<String> reviewNotes(final Path folder) {
+        this.requireUsableRoots();
+        return this.reviewFolders.notesIn(folder);
     }
 
     /**

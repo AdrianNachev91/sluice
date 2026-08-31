@@ -79,8 +79,8 @@ class ApplyPlannerTest {
     }
 
     // The pair below is why a prep dir records its own category set. Both run against the standard
-    // fixedSettings() wiring, whose categories are junk/scenery/food/funny. Each index deliberately
-    // disagrees with that set, and the index is what decides.
+    // fixedSettings() wiring, which preps under scenery/food/funny plus junk. Each index
+    // deliberately disagrees with that set, and the index is what decides.
     //
     // Here the shard names a category nobody has configured. It applies anyway, because the run was
     // prepped under a set that had it. Editing a category cannot strand a run that already named it.
@@ -100,8 +100,8 @@ class ApplyPlannerTest {
         assertThat(Files.exists(root.resolve("Review/receipts/a.jpg"))).isTrue();
     }
 
-    // The mirror. junk IS configured, and the run was not prepped under it, so it is refused. A
-    // planner still consulting config would let this through.
+    // The mirror. junk is one every run gets, and this one was not prepped under it, so it is
+    // refused. A planner still consulting config would let this through.
     @Test
     void aConfiguredCategoryThePrepDirNeverRecordedIsRefused(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");

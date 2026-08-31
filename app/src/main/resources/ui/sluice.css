@@ -1179,9 +1179,9 @@
     -fx-fill: -sluice-danger;
 }
 
-/* The card holding the set above the floor cannot be deleted, and the glyph says so rather than the
-   button silently doing nothing. Muted rather than left to JavaFX's own dimming, which fades a
-   control whole and loses a mark this small into the card. */
+/* The built-in card cannot be deleted, and the glyph says so rather than the button silently doing
+   nothing. Muted rather than left to JavaFX's own dimming, which fades a control whole and loses a
+   mark this small into the card. */
 /*noinspection CssInvalidPseudoSelector*/
 .category-delete:disabled .bin-glyph {
     -fx-fill: -sluice-text-muted;
@@ -1204,10 +1204,19 @@
     -fx-spacing: 14px;
 }
 
-/* Five buttons meant to read as one control. The spacing is tight enough that they group, and wide
-   enough that a press lands on the one being aimed at. */
+/* Buttons meant to read as one control. The spacing is tight enough that they group, and wide
+   enough that a press lands on the one being aimed at.
+   Centred, because the arrows between the buttons are shorter than the buttons are. Left to the
+   default they would sit against the top of the row. */
 .run-mode-row {
     -fx-spacing: 6px;
+    -fx-alignment: center-left;
+}
+
+/* The arrow in each gap, drawing the order the buttons run in. Muted, so the row still reads as its
+   button labels first. */
+.run-mode-arrow {
+    -fx-fill: -sluice-text-muted;
 }
 
 /* Outlined rather than filled, chosen or not. Start is the one filled button on this screen. A
@@ -1256,7 +1265,7 @@
 }
 
 /* What the chosen mode does, under the row that chose it. Bigger and bolder than the muted help
-   lines below it, keeping their colour, so the one sentence explaining the page's five actions is
+   lines below it, keeping their colour, so the one sentence explaining what the chosen mode does is
    not the faintest thing on it. */
 .run-mode-hint {
     -fx-font-size: 12px;
@@ -1763,9 +1772,9 @@
     -fx-spacing: 8px;
 }
 
-/* The marker on the finished-runs fold. Rotated rather than swapped for a second shape, so the
-   two states cannot drift apart. */
-.runs-fold-marker {
+/* The marker on a fold. Rotated rather than swapped for a second shape, so the two states cannot
+   drift apart. */
+.fold-marker {
     -fx-fill: -sluice-text-muted;
 }
 
@@ -1789,12 +1798,118 @@
 }
 
 /*noinspection CssInvalidPseudoSelector*/
-.runs-section-toggle:hover .runs-fold-marker {
+.runs-section-toggle:hover .fold-marker,
+.review-notes-toggle:hover .fold-marker {
     -fx-fill: -sluice-text;
 }
 
 .runs-completed {
     -fx-spacing: 10px;
+}
+
+/* The review screen: a pinned header over a body that scrolls. */
+.review {
+    -fx-spacing: 16px;
+    -fx-padding: 24px 0 24px 24px;
+}
+
+.review-header {
+    -fx-spacing: 12px;
+    -fx-padding: 0 12px 0 0;
+}
+
+.review-body {
+    -fx-spacing: 16px;
+    -fx-padding: 0 12px 0 0;
+}
+
+/* A refusal this screen reports, on the help line it shares with the ordinary reports. Said past
+   both single selectors, so this one wins. */
+.review-report-caution {
+    -fx-text-fill: -sluice-caution;
+    -fx-font-weight: bold;
+}
+
+/* The sections, and the cards inside one. Wider apart than the cards are, so a reader scanning down
+   sees where one section ends and the next begins. */
+.review-groups {
+    -fx-spacing: 24px;
+}
+
+.review-group {
+    -fx-spacing: 6px;
+}
+
+.review-cards {
+    -fx-spacing: 12px;
+    -fx-padding: 6px 0 0 0;
+}
+
+.review-group-heading {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+.review-group-explained {
+    -fx-text-fill: -sluice-text-muted;
+}
+
+.review-card-lines {
+    -fx-spacing: 2px;
+}
+
+/* The folder's own name, which is what a reader scans a stack of these for. */
+.review-card-name {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -sluice-text;
+}
+
+.review-card-held {
+    -fx-text-fill: -sluice-text;
+    -fx-font-weight: bold;
+    -fx-padding: -2px 0 0 0;
+}
+
+.review-card-age {
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-size: 11px;
+}
+
+/* Tighter than the gap above a card's buttons, because the fold belongs to the lines above it
+   rather than sitting between them and the row of controls. */
+.review-notes {
+    -fx-spacing: 4px;
+    -fx-padding: 2px 0 0 0;
+}
+
+/* The fold over what Sluice wrote. A plain label, since it opens a section rather than doing
+   anything, and a raised button would claim more than that. */
+.review-notes-toggle {
+    -fx-background-color: transparent;
+    -fx-text-fill: -sluice-text-muted;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+    -fx-padding: 4px 0;
+    -fx-cursor: hand;
+}
+
+.review-notes-toggle:hover {
+    -fx-opacity: 1.0;
+    -fx-text-fill: -sluice-text;
+}
+
+.review-notes-lines {
+    -fx-spacing: 2px;
+}
+
+/* One written line. Monospaced because each names a file, which is the thing a reader compares
+   against what their file manager shows them. */
+.review-note-line {
+    -fx-font-family: "Monospaced";
+    -fx-font-size: 11px;
+    -fx-text-fill: -sluice-text-muted;
 }
 
 /* The mark on a timeline row whose sift has not finished, and the same mark opening the legend

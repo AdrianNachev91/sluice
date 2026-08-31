@@ -152,42 +152,11 @@ final class PhotoCategoriesPane {
         self[0] = CategoryCard.build(row, limits, () -> {
             cards.getChildren().remove(self[0].card());
             built.remove(self[0]);
-            keepOneSwitchedOn(presenter, built);
             add.setDisable(presenter.isTheSetFull(built.size()));
         });
         cards.getChildren().add(self[0].card());
         built.add(self[0]);
-        self[0].enabled().selectedProperty()
-                .addListener((_, _, _) -> keepOneSwitchedOn(presenter, built));
-        keepOneSwitchedOn(presenter, built);
         add.setDisable(presenter.isTheSetFull(built.size()));
-    }
-
-    /**
-     * Takes away every control that would leave the page with nothing switched on.
-     *
-     * <p>One rule over two controls. Switching the last card off and deleting it reach the same
-     * state, so the card holding the set above the floor offers neither. Both come back as soon as a
-     * second card is on. A card already off keeps its Delete: it is contributing nothing to the
-     * count.
-     *
-     * <p>Re-run on every toggle, add and delete, since all three move the count. The count is read
-     * off the controls rather than off saved settings. What it answers for is the page as it
-     * stands, unsaved edits included.
-     *
-     * @param presenter {@link PhotoCategoriesPresenter} owns the floor and judges each card against it
-     * @param built a {@link List} of {@link CategoryCard.Result} every card on the page
-     */
-    private static void keepOneSwitchedOn(final PhotoCategoriesPresenter presenter,
-                                          final List<CategoryCard.Result> built) {
-        final int on = (int) built.stream().filter(card -> card.enabled().isSelected()).count();
-        for (final CategoryCard.Result card : built) {
-            final boolean holdingItUp = presenter.isTheLastOneOn(on, card.enabled().isSelected());
-            card.enabled().setDisable(holdingItUp);
-            if (card.delete() != null) {
-                card.delete().setDisable(holdingItUp);
-            }
-        }
     }
 
     /**
@@ -243,10 +212,11 @@ final class PhotoCategoriesPane {
      * position right rather than convenient. A name is one of the things a save can refuse.
      * Matching a message back to its card by name would fail on exactly the cards that need it.
      *
-     * <p>The page is not moved and the cursor is not taken anywhere. Save is pinned, so the reader
-     * is already looking at the summary this fills. Focusing the field at fault would scroll the
-     * page to it, since a scrolling pane travels to whatever holds focus.
+     * <p>The page travels to the first card at fault, since the summary says a card below is marked
+     * and the marks are what the reader has to act on. The cursor is not taken there: focus would
+     * scroll the page itself, and a card at fault has three fields that could hold it.
      *
+     * @param container {@link VBox} the page, which carries the banner
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
      * @param summary {@link Label} the page-level message
      * @param refused {@link SaveOutcome.Refused} what came back
@@ -256,12 +226,19 @@ final class PhotoCategoriesPane {
         summary.setText("");
         summary.getStyleClass().setAll("settings-save-status");
         SettingsRows.report(container, "settings-banner-violation", refused.summary(), false);
+        CategoryCard.Result firstAtFault = null;
         for (int i = 0; i < built.size() && i < refused.cards().size(); i++) {
             final CardRefusal refusal = refused.cards().get(i);
             final CategoryCard.Result card = built.get(i);
             SettingsRows.say(card.nameViolation(), refusal.name());
             SettingsRows.say(card.descriptionViolation(), refusal.description());
             SettingsRows.say(card.examplesViolation(), refusal.examples());
+            if (firstAtFault == null && refusal.isAtFault()) {
+                firstAtFault = card;
+            }
+        }
+        if (firstAtFault != null) {
+            SettingsRows.bringIntoView(firstAtFault.card());
         }
     }
 

@@ -67,9 +67,20 @@ class RunLauncherPaneTest {
         final Parent pane = onFxThread(() -> built(presenter()));
 
         assertThat(modeButtons(pane)).extracting(ToggleButton::getText)
-                .containsExactly("Sort", "Sift", "Move to library", "Rescue");
+                .containsExactly("Sort", "Sift", "Move to library");
         assertThat(modeButtons(pane)).filteredOn(ToggleButton::isSelected)
                 .extracting(ToggleButton::getText).containsExactly("Sort");
+    }
+
+    // The arrows say the three buttons run in the order they are drawn in. Asserted on the row's own
+    // children rather than by a lookup, since where each one sits is the whole claim.
+    @Test
+    void anArrowSitsInEveryGapBetweenTheModeButtons() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenter()));
+
+        assertThat(((HBox) pane.lookup(".run-mode-row")).getChildren())
+                .extracting(node -> node.getStyleClass().contains("run-mode-arrow"))
+                .containsExactly(false, true, false, true, false);
     }
 
     @Test
@@ -488,8 +499,10 @@ class RunLauncherPaneTest {
         when(pipeline.sort(any())).thenReturn(handle);
     }
 
+    // Filtered rather than cast, because the row also holds the arrows drawn between the buttons.
     private static List<ToggleButton> modeButtons(final Parent pane) {
         return ((HBox) pane.lookup(".run-mode-row")).getChildren().stream()
+                .filter(ToggleButton.class::isInstance)
                 .map(ToggleButton.class::cast)
                 .toList();
     }

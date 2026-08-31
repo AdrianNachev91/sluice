@@ -1,9 +1,11 @@
 package photos.sluice.application.port.out;
 
 import photos.sluice.domain.cull.CullCategory;
+import photos.sluice.domain.cull.JunkCategory;
 import photos.sluice.domain.cull.MontageConfig;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * The effect boundary the application layer and vision adapters use to read the cull
@@ -38,14 +40,29 @@ public interface CullSettings {
      * the recorded set rather than live configuration. So a card switched off after a run was
      * prepped stays valid for that run, and one switched on does not join it.
      *
-     * <p>A repair reads {@link #categories()} instead, deliberately. It is reconstructing a lost
-     * index for work already done, and filtering there would invalidate a decision written under a
-     * card the user has since switched off.
+     * <p>A repair reads {@link #categoriesForRepair()} instead, deliberately. It is reconstructing
+     * a lost index for work already done, and filtering there would invalidate a decision written
+     * under a card the user has since switched off.
      *
-     * @return a {@link List} of {@link CullCategory} the enabled cards, in configured order
+     * <p>Junk is appended last, so a reader of the prompt meets the configured cards first.
+     *
+     * @return a {@link List} of {@link CullCategory} the enabled cards then junk, in configured
+     *     order
      */
     default List<CullCategory> activeCategories() {
-        return this.categories().stream().filter(CullCategory::enabled).toList();
+        return withJunkLast(this.categories().stream().filter(CullCategory::enabled));
+    }
+
+    /**
+     * Every card a decision in an existing run could have been written under.
+     *
+     * <p>Unfiltered, so a decision written under a card since switched off still validates. For
+     * rebuilding a lost index over work already done.
+     *
+     * @return a {@link List} of {@link CullCategory} every configured card then junk
+     */
+    default List<CullCategory> categoriesForRepair() {
+        return withJunkLast(this.categories().stream());
     }
 
     /**
@@ -86,4 +103,18 @@ public interface CullSettings {
      * @return {@link MontageConfig} the montage grid configuration
      */
     MontageConfig montage();
+
+    /**
+     * The given cards, then junk, and junk exactly once.
+     *
+     * <p>Any card already carrying junk's name is dropped in favour of the supplied one, so the
+     * promise holds whoever implements this port.
+     *
+     * @param cards a {@link Stream} of {@link CullCategory} the configured cards to take
+     * @return a {@link List} of {@link CullCategory} those cards, then junk
+     */
+    private static List<CullCategory> withJunkLast(final Stream<CullCategory> cards) {
+        return Stream.concat(cards.filter(card -> !JunkCategory.claims(card.name())),
+                Stream.of(JunkCategory.card())).toList();
+    }
 }

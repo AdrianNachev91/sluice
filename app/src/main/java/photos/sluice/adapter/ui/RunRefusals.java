@@ -13,6 +13,7 @@ import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -84,18 +85,33 @@ final class RunRefusals {
             // written for a report rather than for a reader.
             case final ApplyException _ -> "Sluice could not work on this sift, because the answers "
                     + "in it do not hold together.";
-            // Deliberately says nothing about which file, nor about what was being done to it.
-            // This arm answers for every file this app opens, moves or writes, and only the call
-            // that failed knows which of those it was after.
-            case final UncheckedIOException failed -> "A file could not be reached. Another program "
-                    + "may have it open. If it keeps happening, report it, quoting this: "
-                    + failed.getMessage();
+            case final UncheckedIOException failed -> fileOutOfReach(failed.getMessage());
+            // The same fault one level down. A job's failure arrives here through rootOf, which
+            // answers with a throwable's cause, and an UncheckedIOException always has one. Without
+            // this arm every filesystem failure a job reports falls to the default below and
+            // reaches the reader as a Java class name.
+            case final IOException failed -> fileOutOfReach(failed.toString());
             // Nothing here was written for a reader, so the words are the app's own and the
             // technical text rides along verbatim. Quoting it is what makes the bug report worth
             // filing, and the dashboard is where the user can copy it from.
             default -> "Sluice could not do that, and has no plain words for why. "
                     + "Report this as a bug in Sluice, quoting this: " + failure;
         };
+    }
+
+    /**
+     * What to say where the filesystem would not answer.
+     *
+     * <p>Says nothing about which file, nor about what was being done to it. This sentence answers
+     * for every file this app opens, moves or writes, and only the call that failed knows which of
+     * those it was after.
+     *
+     * @param quoting {@link String} the technical text worth putting in a bug report
+     * @return {@link String} the sentence to show
+     */
+    private static String fileOutOfReach(final String quoting) {
+        return "A file could not be reached. Another program may have it open, or it is not there "
+                + "anymore. If it keeps happening, report it, quoting this: " + quoting;
     }
 
     /**

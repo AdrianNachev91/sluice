@@ -1097,8 +1097,7 @@ class CullEngineTest {
     void cullPropagatesAFailureFromAnAutomatedProviderInsteadOfReturningWaiting(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final var progress = new RecordingProgressPort();
-        final var settings = new FixedSettings("anthropic", List.of(CullCategory.of("junk", "objectively worthless " +
-                "shots")),
+        final var settings = new FixedSettings("anthropic", List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL));
         final var pipeline = cullPipeline(root, progress, settings, List.of(new ThrowingCuller("anthropic")));
 
@@ -1125,7 +1124,7 @@ class CullEngineTest {
         final var firstShardWritten = new CountDownLatch(1);
         final var releaseCull = new CountDownLatch(1);
         final var settings = new FixedSettings("auto-approve",
-                List.of(CullCategory.of("junk", "objectively worthless shots")),
+                List.of(),
                 new ExternalAgentSettings(WatchMode.WATCH));
         final var pipeline = cullPipeline(root, new RecordingProgressPort(), settings,
                 List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
@@ -1163,7 +1162,7 @@ class CullEngineTest {
         final var firstShardWritten = new CountDownLatch(1);
         final var releaseCull = new CountDownLatch(1);
         final var manualSettings = new FixedSettings("auto-approve",
-                List.of(CullCategory.of("junk", "objectively worthless shots")),
+                List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL));
         final var manualPipeline = cullPipeline(root, new RecordingProgressPort(), manualSettings,
                 List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
@@ -1176,7 +1175,7 @@ class CullEngineTest {
         final Path prepDir = waiting.job().prepDir();
 
         final var watchSettings = new FixedSettings("auto-approve",
-                List.of(CullCategory.of("junk", "objectively worthless shots")),
+                List.of(),
                 new ExternalAgentSettings(WatchMode.WATCH));
         final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchSettings, List.of(),
                 Duration.ofMillis(20));
@@ -1230,7 +1229,7 @@ class CullEngineTest {
         final var releaseMove = new CountDownLatch(1);
         final var mediaStore = new BlockingMoveTo(moveStarted, releaseMove);
         final var settings = new FixedSettings("auto-approve",
-                List.of(CullCategory.of("junk", "objectively worthless shots")),
+                List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL));
         final var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, settings,
                 List.of(new JunkEverythingCuller()));
@@ -1415,7 +1414,7 @@ class CullEngineTest {
         final var firstShardWritten = new CountDownLatch(1);
         final var releaseCull = new CountDownLatch(1);
         final var settings = new FixedSettings("auto-approve",
-                List.of(CullCategory.of("junk", "objectively worthless shots")),
+                List.of(),
                 new ExternalAgentSettings(WatchMode.MANUAL));
         final var pipeline = watchPipeline(root, new RecordingProgressPort(), settings,
                 List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)), Duration.ofMillis(20));

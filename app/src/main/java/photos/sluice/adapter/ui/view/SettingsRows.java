@@ -28,6 +28,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
@@ -55,8 +56,8 @@ final class SettingsRows {
     // because it is a state the control is in rather than a kind of control it is.
     private static final PseudoClass REFUSED = PseudoClass.getPseudoClass("refused");
 
-    // Marks the scrolling body on the body itself, so a refusal raised deep in a page can find what
-    // scrolls it without every layer in between having to pass it down.
+    // Marks the scrolling body on the body itself. A refusal raised deep in a page can then find
+    // what scrolls it, without every layer in between having to pass it down.
     private static final String SCROLL = "scroll";
 
     // Long enough to read as travel rather than a jump, short enough that a reader adding several
@@ -110,7 +111,7 @@ final class SettingsRows {
      * <p>A spinner reports itself as holding focus in both cases, never its editor, so nothing about
      * the focus owner separates them. It has to remember which the reader last reached for.
      *
-     * <p>A press inside the text puts the caret there, which is enough on its own: the reader is in
+     * <p>A press inside the text puts the caret there, which is enough on its own. The reader is in
      * the field whether or not they have typed a character yet. A press on an arrow, or either
      * arrow key, is the other case, and the value it lands on is whole at every step.
      *
@@ -196,6 +197,33 @@ final class SettingsRows {
         if (said != null && said.refused()) {
             line.getStyleClass().add(caution);
         }
+    }
+
+    /**
+     * Turns a fold's marker to say which way it is, putting one on the first time it is asked.
+     *
+     * <p>A fold's control is a plain label, and nothing about a label says it can be pressed. The
+     * marker is the whole of that affordance.
+     *
+     * @param toggle {@link Button} the fold's own control
+     * @param open boolean whether the section below it is showing
+     */
+    static void pointing(final Button toggle, final boolean open) {
+        if (toggle.getGraphic() == null) {
+            toggle.setGraphic(foldMarker());
+        }
+        toggle.getGraphic().setRotate(open ? 90 : 0);
+    }
+
+    /**
+     * The marker on a fold: a triangle, drawn rather than typed so no font has to carry it.
+     *
+     * @return {@link Polygon} the triangle, pointing right
+     */
+    private static Polygon foldMarker() {
+        final var triangle = new Polygon(0, 0, 0, 8, 6, 4);
+        triangle.getStyleClass().add("fold-marker");
+        return triangle;
     }
 
     /**
@@ -399,9 +427,9 @@ final class SettingsRows {
      * different screen appearing.
      *
      * <p>Nothing puts the reader back where they were first. A scrolling pane keeps its own place
-     * across a rebuild, adjusting what it holds so the same contents stay in view, and it clamps
-     * to the end when the new page is too short to reach the old position. Both are what a reader
-     * would expect, so the movement starts from where they actually are.
+     * across a rebuild, adjusting what it holds so the same contents stay in view. It clamps to the
+     * end where the new page is too short to reach the old position. Both are what a reader would
+     * expect, so the movement starts from where they actually are.
      *
      * @param body {@link VBox} the page's own scrolling body
      */
@@ -501,8 +529,8 @@ final class SettingsRows {
      * Stops a control taking more characters than the value behind it will accept.
      *
      * <p>The field refuses the keystroke, so the reader cannot reach a value a save would then
-     * refuse. It is the other half of a bound the value type also holds, not a replacement for it:
-     * a config file reaches that type without passing any control.
+     * refuse. It is the other half of a bound the value type also holds, never a replacement for it.
+     * A config file reaches that type without passing any control.
      *
      * <p>A paste that would cross the ceiling is truncated to what fits rather than dropped whole.
      * Losing the tail of a long paste is a visible outcome the reader can act on. Losing the paste

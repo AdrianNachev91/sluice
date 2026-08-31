@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.LeavingUnsaved;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
+import photos.sluice.adapter.ui.ReviewPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.ScreenFailure;
@@ -73,6 +74,7 @@ final class MainWindow {
      *         the count its sidebar entry carries
      * @param troubleshootPresenter {@link TroubleshootPresenter} supplies and drives the
      *         troubleshoot screen one run's card opens
+     * @param reviewPresenter {@link ReviewPresenter} supplies and drives the review screen
      * @param leavingLosesWork an {@link AtomicReference} to whether the screen on show holds work
      *         nobody has saved. Written here as each screen is drawn. Held by the caller so the
      *         quit question can ask it too, since closing the window leaves a screen as surely as
@@ -85,6 +87,7 @@ final class MainWindow {
                        final RunLauncherPresenter runLauncherPresenter,
                        final RunsPresenter runsPresenter,
                        final TroubleshootPresenter troubleshootPresenter,
+                       final ReviewPresenter reviewPresenter,
                        final AtomicReference<BooleanSupplier> leavingLosesWork) {
         final var group = new ToggleGroup();
         final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
@@ -136,10 +139,12 @@ final class MainWindow {
             return filling(mounted.node());
         }));
         review.setOnAction(_ -> {
-            if (!show(content, REVIEW, leaving, () -> headingPane(REVIEW))) {
+            if (!show(content, REVIEW, leaving, () -> filling(ReviewPane.pane(reviewPresenter)))) {
                 markStaysWhereItWas.run();
             }
         });
+        // Moving a folder into the library is a job like any other, so it reports on the dashboard.
+        reviewPresenter.setOpenDashboard(dashboard::fire);
 
         // Two of them, and the difference is who has already read the folder. The runs screen reads
         // it as it draws, so its own recount only has to put that number on the badge. Every other
@@ -414,7 +419,7 @@ final class MainWindow {
     /**
      * Reads how many runs are unfinished, away from the thread that paints, then draws the number.
      *
-     * <p>The read walks every run in the folder and opens every sidecar and shard of each, which is
+     * <p>The read walks every run in the folder and opens every sidecar and shard of each. That is
      * long enough that a sidebar press has to stay responsive through it.
      *
      * @param presenter {@link RunsPresenter} does the reading

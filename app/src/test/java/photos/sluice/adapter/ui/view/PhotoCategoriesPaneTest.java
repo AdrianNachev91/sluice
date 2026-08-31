@@ -106,7 +106,7 @@ class PhotoCategoriesPaneTest {
         final Parent pane = onFxThread(() -> built(store()));
 
         final Node ordinary = ordinaryCard(pane);
-        assertThat(((TextField) ordinary.lookup("#category-name")).getText()).isEqualTo("junk");
+        assertThat(((TextField) ordinary.lookup("#category-name")).getText()).isEqualTo("blurry");
         assertThat(((TextArea) ordinary.lookup("#category-description")).getText())
                 .isEqualTo("Not worth keeping");
         assertThat(((TextArea) ordinary.lookup("#category-examples")).getText())
@@ -133,14 +133,14 @@ class PhotoCategoriesPaneTest {
     }
 
     @Test
-    void theLastCardStillOnCanBeNeitherSwitchedOffNorDeleted() throws Exception {
+    void theLastCardStillOnCanBeSwitchedOffAndDeletedLikeAnyOther() throws Exception {
         final Parent pane = onFxThread(() -> built(store()));
 
         switchOff(pane, builtInCard(pane));
 
         final Node last = ordinaryCard(pane);
-        assertThat(last.lookup("#category-enabled").isDisabled()).isTrue();
-        assertThat(last.lookup("#category-delete").isDisabled()).isTrue();
+        assertThat(last.lookup("#category-enabled").isDisabled()).isFalse();
+        assertThat(last.lookup("#category-delete").isDisabled()).isFalse();
     }
 
     // A pointer offering an edit the field refuses. The stylesheet is what carries this, so the
@@ -241,18 +241,16 @@ class PhotoCategoriesPaneTest {
         assertThat(ordinaryCard(pane).lookup("#category-delete").isDisabled()).isFalse();
     }
 
-    // Deleting is the route the switch rule alone leaves open. Switch every card but one off, then
-    // delete the one still on, and the page reaches zero by a control the first half never touched.
     @Test
-    void deletingCannotTakeTheLastCardStillOnEither() throws Exception {
+    void deletingTheLastCardStillOnIsOfferedLikeAnyOther() throws Exception {
         final Parent pane = onFxThread(() -> built(threeOrdinaryCards()));
 
         switchOff(pane, cards(pane).get(0));
         switchOff(pane, cards(pane).get(1));
 
         final Node stillOn = cards(pane).get(2);
-        assertThat(stillOn.lookup("#category-delete").isDisabled()).isTrue();
-        assertThat(stillOn.lookup("#category-enabled").isDisabled()).isTrue();
+        assertThat(stillOn.lookup("#category-delete").isDisabled()).isFalse();
+        assertThat(stillOn.lookup("#category-enabled").isDisabled()).isFalse();
         assertThat(cards(pane).getFirst().lookup("#category-delete").isDisabled()).isFalse();
     }
 
@@ -295,7 +293,7 @@ class PhotoCategoriesPaneTest {
 
         assertThat(store.saved).isNotNull();
         assertThat(store.saved.categories().getLast())
-                .isEqualTo(new CullCategory("junk", "Blurry shots",
+                .isEqualTo(new CullCategory("blurry", "Blurry shots",
                         List.of("pocket shots", "ceiling shots"), Boolean.FALSE));
     }
 
@@ -336,7 +334,7 @@ class PhotoCategoriesPaneTest {
         press(pane, "#photo-categories-save");
 
         runOnFxThread(() ->
-                ((TextField) ordinaryCard(pane).lookup("#category-name")).setText("junk"));
+                ((TextField) ordinaryCard(pane).lookup("#category-name")).setText("blurry"));
         press(pane, "#photo-categories-save");
 
         assertThat(store.saved).isNull();
@@ -353,7 +351,7 @@ class PhotoCategoriesPaneTest {
         press(pane, "#photo-categories-save");
 
         runOnFxThread(() ->
-                ((TextField) ordinaryCard(pane).lookup("#category-name")).setText("junk"));
+                ((TextField) ordinaryCard(pane).lookup("#category-name")).setText("blurry"));
         press(pane, "#photo-categories-save");
 
         assertThat(store.saved).isNotNull();
@@ -444,7 +442,7 @@ class PhotoCategoriesPaneTest {
 
     private static RecordingSettings store() {
         return new RecordingSettings(
-                new CullCategory("junk", "Not worth keeping",
+                new CullCategory("blurry", "Not worth keeping",
                         List.of("pocket shots", "ceiling shots"), Boolean.TRUE),
                 CullCategory.of("funny", "Worth a laugh later"));
     }
@@ -453,7 +451,7 @@ class PhotoCategoriesPaneTest {
     // list can shift under a button without the undeletable card standing in for the rule.
     private static RecordingSettings threeOrdinaryCards() {
         return new RecordingSettings(
-                CullCategory.of("junk", "Not worth keeping"),
+                CullCategory.of("blurry", "Not worth keeping"),
                 CullCategory.of("scenery", "Worth a second look"),
                 CullCategory.of("food", "Meals and menus"));
     }

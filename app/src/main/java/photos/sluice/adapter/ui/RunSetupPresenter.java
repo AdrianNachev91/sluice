@@ -530,7 +530,7 @@ public class RunSetupPresenter {
      * @return boolean true when there is something to start
      */
     boolean canStart(final RunScope scope) {
-        return !this.jobRunning.getAsBoolean() && !this.counting && this.chosen != RunMode.RESCUE
+        return !this.jobRunning.getAsBoolean() && !this.counting
                 && RunScope.startable(scope) && !this.pipeline.isBusy()
                 && this.overlapRefusal(scope) == null;
     }
@@ -585,14 +585,16 @@ public class RunSetupPresenter {
     /**
      * The buttons across the top, in the order they are drawn.
      *
-     * @return a {@link List} of {@link ModeChoice} one per mode
+     * <p>The order is the order the work runs in. So a mode added here is a claim that it belongs at
+     * that point in the sequence.
+     *
+     * @return a {@link List} of {@link ModeChoice} one per mode with a button
      */
     private List<ModeChoice> modes() {
         return List.of(
                 this.modeChoice(RunMode.SORT, "run-mode-sort"),
                 this.modeChoice(RunMode.SIFT, "run-mode-sift"),
-                this.modeChoice(RunMode.MOVE_TO_LIBRARY, "run-mode-move"),
-                this.modeChoice(RunMode.RESCUE, "run-mode-rescue"));
+                this.modeChoice(RunMode.MOVE_TO_LIBRARY, "run-mode-move"));
     }
 
     /**
@@ -926,8 +928,8 @@ public class RunSetupPresenter {
             // field is where a sift starts rather than something gone wrong, and the hint under it
             // already says to pick a year.
             //
-            // Import is here because the field is never about it: it has no button in the row, and
-            // what it covers is the folders that were picked.
+            // Import and rescue are here because the field is never about either: neither has a
+            // button in the row, and each already knows what it covers.
             case SIFT, RESCUE, IMPORT -> new RunScope.Nothing();
         };
     }
@@ -940,9 +942,6 @@ public class RunSetupPresenter {
      * @return {@link RunScope} the scope it stands for, or a refusal where the mode cannot take it
      */
     private RunScope yearScope(final int year, final List<Integer> months) {
-        if (this.chosen == RunMode.RESCUE) {
-            return new RunScope.Nothing();
-        }
         if (this.readsSorted() && this.countsAreIn()
                 && this.stagedYears().stream().noneMatch(row -> row.year() == year)) {
             return new RunScope.Refused("Nothing is sorted for " + year + ".");
@@ -1093,17 +1092,10 @@ public class RunSetupPresenter {
     /**
      * What is wrong with the scope, where anything is.
      *
-     * <p>A mode with nothing behind it yet says so in its hint and nowhere else. Its refusal is the
-     * same sentence, and showing both puts one statement on the screen twice. The second copy would
-     * carry the colour that means the user typed something wrong. Nothing they typed is wrong.
-     *
      * @param scope {@link RunScope} what the field and mode come to
      * @return {@link String} the refusal, or null while nothing is wrong
      */
     private @Nullable String refusalOf(final RunScope scope) {
-        if (this.chosen == RunMode.RESCUE) {
-            return null;
-        }
         if (scope instanceof RunScope.Refused(final String reason)) {
             return reason;
         }

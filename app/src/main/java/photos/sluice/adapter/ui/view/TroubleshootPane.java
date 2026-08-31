@@ -243,7 +243,7 @@ final class TroubleshootPane {
                 return;
             }
             this.detailToggle.setText(detail.label());
-            CopyableTrace.pointing(this.detailToggle, this.unfolded.contains(this.detail));
+            SettingsRows.pointing(this.detailToggle, this.unfolded.contains(this.detail));
             this.detailCopy.setText(presenter.detailCopied() ? detail.copied() : detail.copy());
             this.detailCopy.setOnAction(_ -> {
                 final String text = presenter.detail();

@@ -44,8 +44,8 @@ class YamlConfigFileRepairTest {
                     tile-size: many
                   cull:
                     categories:
-                      - name: junk
-                        description: objectively worthless shots
+                      - name: receipts
+                        description: photographed paperwork
                 unrelated:
                   kept: true
                 """);
@@ -54,8 +54,8 @@ class YamlConfigFileRepairTest {
 
         assertThat(Files.readString(file))
                 .contains("repo-root: /photos/work")
-                .contains("name: junk")
-                .contains("description: objectively worthless shots")
+                .contains("name: receipts")
+                .contains("description: photographed paperwork")
                 .contains("kept: true");
     }
 
@@ -120,7 +120,7 @@ class YamlConfigFileRepairTest {
                 sluice:
                   cull:
                     categories:
-                      - name: junk
+                      - name: receipts
                 """;
         Files.writeString(file, original);
 

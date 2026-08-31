@@ -289,7 +289,8 @@ public class PrepDirRemedies {
         if (this.mediaStore.exists(indexPath)) {
             this.disasterDrawer.file(prepDirPath, indexPath, "index-json");
         }
-        final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(), this.cullSettings.categories(),
+        final var rebuilt = new PrepDir(prepDirPath.getFileName().toString(),
+                this.cullSettings.categoriesForRepair(),
                 commonParent(allSrcs), photos, List.of(), entries.size(), prepDirPath, entries);
         this.cullPrepPort.writeIndex(prepDirPath, rebuilt);
         return Optional.of(rebuilt);

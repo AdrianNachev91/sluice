@@ -10,7 +10,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-import javafx.scene.shape.Polygon;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -107,7 +106,7 @@ final class CopyableTrace {
         toggle.setId(idPrefix + "-toggle");
         toggle.getStyleClass().add("runs-section-toggle");
         final TextArea body = area(idPrefix + "-text", text);
-        pointing(toggle, false);
+        SettingsRows.pointing(toggle, false);
 
         final var gap = new Region();
         HBox.setHgrow(gap, Priority.ALWAYS);
@@ -122,23 +121,9 @@ final class CopyableTrace {
             final boolean showing = !open.get();
             open.set(showing);
             travel.to(showing);
-            pointing(toggle, showing);
+            SettingsRows.pointing(toggle, showing);
         });
         return whole;
     }
 
-    /**
-     * Turns a fold's marker to say which way it is.
-     *
-     * @param toggle {@link Button} the fold's own control
-     * @param open boolean whether what it holds is showing
-     */
-    static void pointing(final Button toggle, final boolean open) {
-        if (toggle.getGraphic() == null) {
-            final var triangle = new Polygon(0, 0, 0, 8, 6, 4);
-            triangle.getStyleClass().add("runs-fold-marker");
-            toggle.setGraphic(triangle);
-        }
-        toggle.getGraphic().setRotate(open ? 90 : 0);
-    }
 }

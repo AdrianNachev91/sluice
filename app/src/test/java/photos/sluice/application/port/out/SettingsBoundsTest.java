@@ -83,6 +83,15 @@ class SettingsBoundsTest {
         assertThat(settingsWith(atTheLimit).categories()).hasSize(Settings.maxCategories());
     }
 
+    @Test
+    void aCategoryCalledJunkIsRefusedWhereverItWasWritten() {
+        assertThatThrownBy(() -> settingsWith(List.of(CullCategory.of("junk", "mine"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("may not hold one called 'junk'");
+        assertThat(settingsWith(List.of(CullCategory.of("junky", "not that one"))).categories())
+                .hasSize(1);
+    }
+
     private static Settings settingsWith(final List<CullCategory> categories) {
         return new Settings(ROOTS, "anthropic", Map.of(), categories,
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);

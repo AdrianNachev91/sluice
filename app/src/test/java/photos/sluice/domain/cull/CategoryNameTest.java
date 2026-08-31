@@ -70,10 +70,24 @@ class CategoryNameTest {
     }
 
     @Test
+    void refusesTheTwoFolderNamesASortFillsByItself() {
+        assertThat(CategoryName.problemWith("unsorted")).contains("a sort fills by itself");
+        assertThat(CategoryName.problemWith("2019-06")).contains("a sort fills by itself");
+        assertThat(CategoryName.problemWith("1999-12")).contains("a sort fills by itself");
+    }
+
+    @Test
+    void acceptsANameThatOnlyResemblesOneASortFills() {
+        assertThat(CategoryName.problemWith("unsorted-later")).isNull();
+        assertThat(CategoryName.problemWith("2019-6")).isNull();
+        assertThat(CategoryName.problemWith("2019-06-01")).isNull();
+    }
+
+    @Test
     void refusesANameAVerdictAlreadyUses() {
-        assertThat(CategoryName.problemWith("keep")).contains("Sluice's own photo decisions");
-        assertThat(CategoryName.problemWith("near-dup-chosen")).contains("Sluice's own photo decisions");
-        assertThat(CategoryName.problemWith("near-dup-reject")).contains("Sluice's own photo decisions");
+        assertThat(CategoryName.problemWith("keep")).contains("the app's own photo decisions");
+        assertThat(CategoryName.problemWith("near-dup-chosen")).contains("the app's own photo decisions");
+        assertThat(CategoryName.problemWith("near-dup-reject")).contains("the app's own photo decisions");
     }
 
     @Test

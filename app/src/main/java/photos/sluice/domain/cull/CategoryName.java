@@ -2,6 +2,7 @@ package photos.sluice.domain.cull;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.paths.ReservedDeviceNames;
+import photos.sluice.domain.paths.SortFolderNames;
 
 import java.util.regex.Pattern;
 
@@ -76,7 +77,12 @@ public final class CategoryName {
             return "is reserved by the operating system and cannot become a folder";
         }
         if (VerdictAction.isVerdictWord(name)) {
-            return "is already one of Sluice's own photo decisions";
+            return "is already one of the app's own photo decisions";
+        }
+        // A sort files into the Review root as well. A category taking one of its two names would
+        // be handed a folder already holding photos nothing classified.
+        if (SortFolderNames.writtenByASort(name)) {
+            return "names a folder a sort fills by itself";
         }
         return null;
     }

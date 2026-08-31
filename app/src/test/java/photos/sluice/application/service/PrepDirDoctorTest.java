@@ -333,7 +333,7 @@ class PrepDirDoctorTest {
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
-                new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny"));
+                new InvalidCategory("montage-001", 1, "meme", "allowed: scenery, food, funny, junk"));
         assertThat(health.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.NONE);
     }
 
@@ -411,7 +411,7 @@ class PrepDirDoctorTest {
 
         assertThat(health.state()).isEqualTo(State.BLOCKED);
         assertThat(health.findings()).containsExactly(
-                new InvalidCategory("montage-001", 1, "meme", "allowed: junk, scenery, food, funny"));
+                new InvalidCategory("montage-001", 1, "meme", "allowed: scenery, food, funny, junk"));
     }
 
     @Test

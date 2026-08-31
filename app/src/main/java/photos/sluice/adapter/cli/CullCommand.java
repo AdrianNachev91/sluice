@@ -30,7 +30,9 @@ import java.util.concurrent.Callable;
  */
 @Component
 @Profile("cli")
-@Command(name = CullCommand.VERB, description = "Sift what is in Sorted, judged by your configured provider.")
+@Command(name = CullCommand.VERB,
+        description = "Have your configured provider judge what is in Sorted, and move anything it "
+                + "does not keep out of it.")
 public class CullCommand implements Callable<Integer> {
 
     /**

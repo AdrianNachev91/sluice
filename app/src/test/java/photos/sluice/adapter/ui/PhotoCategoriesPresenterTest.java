@@ -27,29 +27,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PhotoCategoriesPresenterTest {
 
-    private static final CullCategory JUNK = CullCategory.of("junk", "Not worth keeping");
+    private static final CullCategory BLURRY = CullCategory.of("blurry", "Not worth keeping");
     private static final CullCategory FUNNY = CullCategory.of("funny", "Worth a laugh later");
 
     @Test
     void drawsTheBuiltInCardFirstWhereverItIsConfigured() {
-        final PhotoCategoriesView view = presenterOver(JUNK, FUNNY).view();
+        final PhotoCategoriesView view = presenterOver(BLURRY, FUNNY).view();
 
-        assertThat(view.categories()).extracting(CategoryRow::name).containsExactly("funny", "junk");
+        assertThat(view.categories()).extracting(CategoryRow::name).containsExactly("funny", "blurry");
     }
 
     @Test
     void everyOtherCardKeepsTheOrderItIsConfiguredIn() {
         final PhotoCategoriesView view = presenterOver(
                 CullCategory.of("scenery", "Worth a second look"), FUNNY,
-                CullCategory.of("food", "Meals and menus"), JUNK).view();
+                CullCategory.of("food", "Meals and menus"), BLURRY).view();
 
         assertThat(view.categories()).extracting(CategoryRow::name)
-                .containsExactly("funny", "scenery", "food", "junk");
+                .containsExactly("funny", "scenery", "food", "blurry");
     }
 
     @Test
     void theLibraryCategoryIsTheOnlyOneDrawnAsFixed() {
-        final PhotoCategoriesView view = presenterOver(JUNK, FUNNY).view();
+        final PhotoCategoriesView view = presenterOver(BLURRY, FUNNY).view();
 
         assertThat(view.categories().getFirst().fixed()).contains("library");
         assertThat(view.categories().getLast().fixed()).isNull();
@@ -57,14 +57,14 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void theNameRuleQuotesTheLengthTheDomainActuallyEnforces() {
-        final PhotoCategoriesView view = presenterOver(JUNK).view();
+        final PhotoCategoriesView view = presenterOver(BLURRY).view();
 
         assertThat(view.nameRule()).contains("24 characters");
     }
 
     @Test
     void aNewCardOpensEmptyAndSwitchedOn() {
-        final CategoryRow blank = presenterOver(JUNK).blankCard();
+        final CategoryRow blank = presenterOver(BLURRY).blankCard();
 
         assertThat(blank.name()).isEmpty();
         assertThat(blank.description()).isEmpty();
@@ -75,17 +75,17 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void savingWritesTheEditedCardsAndLeavesEverySettingBesideThemAlone() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
+        final var store = new RecordingSettings(BLURRY, FUNNY);
         final var presenter = new PhotoCategoriesPresenter(store);
 
         final SaveOutcome outcome = presenter.save(List.of(
-                new CategoryEdit("junk", "Blurry and accidental", List.of("pocket shots"), false),
+                new CategoryEdit("blurry", "Blurry and accidental", List.of("pocket shots"), false),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
 
         assertThat(outcome).isInstanceOf(SaveOutcome.Saved.class);
         assertThat(store.saved).isNotNull();
         assertThat(store.saved.categories()).containsExactly(
-                new CullCategory("junk", "Blurry and accidental", List.of("pocket shots"), Boolean.FALSE),
+                new CullCategory("blurry", "Blurry and accidental", List.of("pocket shots"), Boolean.FALSE),
                 new CullCategory("funny", "Worth a laugh later", List.of(), Boolean.TRUE));
         assertThat(store.saved.provider()).isEqualTo("anthropic");
         assertThat(store.saved.montage()).isEqualTo(new MontageConfig(224, 5));
@@ -94,7 +94,7 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aCardWithNoNameIsRefusedAndNothingIsWritten() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
+        final var store = new RecordingSettings(BLURRY, FUNNY);
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
                 new CategoryEdit("  ", "Something", List.of(), true),
@@ -107,7 +107,7 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aNameThatCouldNotBecomeAFolderIsRefusedInTheDomainsOwnWords() {
-        final SaveOutcome outcome = presenterOver(JUNK, FUNNY).save(List.of(
+        final SaveOutcome outcome = presenterOver(BLURRY, FUNNY).save(List.of(
                 new CategoryEdit("Receipts", "Paperwork", List.of(), true),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
 
@@ -115,8 +115,18 @@ class PhotoCategoriesPresenterTest {
     }
 
     @Test
+    void aCardNamedJunkIsMarkedOnTheScreenRatherThanThrowingOutOfTheSaveButton() {
+        final SaveOutcome outcome = presenterOver(BLURRY, FUNNY).save(List.of(
+                new CategoryEdit("junk", "Worthless", List.of(), true),
+                new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
+
+        assertThat(outcome).isInstanceOf(SaveOutcome.Refused.class);
+        assertThat(refusalsOf(outcome).getFirst().name()).contains("A built-in category is already called this");
+    }
+
+    @Test
     void aBlankDescriptionIsRefused() {
-        final SaveOutcome outcome = presenterOver(JUNK, FUNNY).save(List.of(
+        final SaveOutcome outcome = presenterOver(BLURRY, FUNNY).save(List.of(
                 new CategoryEdit("receipts", "   ", List.of(), true),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
 
@@ -127,7 +137,7 @@ class PhotoCategoriesPresenterTest {
     // outright. Caught here instead, because a refusal has to say which card to fix.
     @Test
     void twoCardsUnderOneNameAreBothMarkedRatherThanThrowing() {
-        final SaveOutcome outcome = presenterOver(JUNK, FUNNY).save(List.of(
+        final SaveOutcome outcome = presenterOver(BLURRY, FUNNY).save(List.of(
                 new CategoryEdit("receipts", "Paperwork", List.of(), true),
                 new CategoryEdit("receipts", "More paperwork", List.of(), true),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
@@ -139,7 +149,7 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void everyCardAtFaultIsMarkedInOnePassRatherThanTheFirstOne() {
-        final SaveOutcome outcome = presenterOver(JUNK, FUNNY).save(List.of(
+        final SaveOutcome outcome = presenterOver(BLURRY, FUNNY).save(List.of(
                 new CategoryEdit("", "Paperwork", List.of(), true),
                 new CategoryEdit("Receipts", "", List.of(), true),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
@@ -151,10 +161,10 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aSaveThatDropsTheLibraryCategoryIsRefused() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
+        final var store = new RecordingSettings(BLURRY, FUNNY);
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store)
-                .save(List.of(new CategoryEdit("junk", "Not worth keeping", List.of(), true)));
+                .save(List.of(new CategoryEdit("blurry", "Not worth keeping", List.of(), true)));
 
         assertThat(store.saved).isNull();
         assertThat(((SaveOutcome.Refused) outcome).summary()).contains("cannot be renamed or deleted");
@@ -162,7 +172,7 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aSaveOfMoreCardsThanOneInstallMayHoldIsRefused() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
+        final var store = new RecordingSettings(BLURRY, FUNNY);
         final List<CategoryEdit> tooMany = new ArrayList<>(
                 IntStream.range(0, 20).mapToObj(i -> new CategoryEdit("card-" + i, "d" + i, List.of(), true))
                         .toList());
@@ -176,10 +186,10 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aSaveWithAnExamplePastItsCeilingIsRefused() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
+        final var store = new RecordingSettings(BLURRY, FUNNY);
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
-                new CategoryEdit("junk", "Not worth keeping",
+                new CategoryEdit("blurry", "Not worth keeping",
                         List.of("x".repeat(CullCategory.maxExample() + 1)), true),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
 
@@ -189,12 +199,12 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aSaveWithMoreExamplesThanACardMayCarryIsRefused() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
+        final var store = new RecordingSettings(BLURRY, FUNNY);
         final List<String> tooMany = IntStream.rangeClosed(0, CullCategory.maxExamples())
                 .mapToObj(i -> "example " + i).toList();
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
-                new CategoryEdit("junk", "Not worth keeping", tooMany, true),
+                new CategoryEdit("blurry", "Not worth keeping", tooMany, true),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
 
         assertThat(store.saved).isNull();
@@ -202,60 +212,41 @@ class PhotoCategoriesPresenterTest {
     }
 
     @Test
-    void aSaveWithEveryCardSwitchedOffIsRefused() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
+    void everyCardSwitchedOffSavesAndLeavesTheSiftWithJunkAlone() {
+        final var store = new RecordingSettings(BLURRY, FUNNY);
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
-                new CategoryEdit("junk", "Not worth keeping", List.of(), false),
+                new CategoryEdit("blurry", "Not worth keeping", List.of(), false),
                 new CategoryEdit("funny", "Worth a laugh later", List.of(), false)));
 
-        assertThat(store.saved).isNull();
-        assertThat(((SaveOutcome.Refused) outcome).summary()).contains("at least one category");
-    }
-
-    @Test
-    void oneCardLeftOnIsEnoughToSave() {
-        final var store = new RecordingSettings(JUNK, FUNNY);
-
-        final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
-                new CategoryEdit("junk", "Not worth keeping", List.of(), false),
-                new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
-
         assertThat(outcome).isInstanceOf(SaveOutcome.Saved.class);
-    }
-
-    @Test
-    void onlyTheCardThatIsOnIsHoldingTheSetUpWhenItIsTheLastOne() {
-        final var presenter = presenterOver(JUNK, FUNNY);
-
-        assertThat(presenter.isTheLastOneOn(1, true)).isTrue();
-        assertThat(presenter.isTheLastOneOn(1, false)).isFalse();
-        assertThat(presenter.isTheLastOneOn(2, true)).isFalse();
-        assertThat(presenter.isTheLastOneOn(0, false)).isFalse();
+        assertThat(store.saved).isNotNull();
+        assertThat(store.saved.categories()).extracting(CullCategory::enabled)
+                .containsExactly(false, false);
     }
 
     @Test
     void anInstallThatNeverConfiguredTheLibraryCategoryCanStillSave() {
-        final var store = new RecordingSettings(JUNK);
+        final var store = new RecordingSettings(BLURRY);
 
         final SaveOutcome outcome = new PhotoCategoriesPresenter(store)
-                .save(List.of(new CategoryEdit("junk", "Not worth keeping", List.of(), true)));
+                .save(List.of(new CategoryEdit("blurry", "Not worth keeping", List.of(), true)));
 
         assertThat(outcome).isInstanceOf(SaveOutcome.Saved.class);
         assertThat(store.saved).isNotNull();
-        assertThat(store.saved.categories()).extracting(CullCategory::name).containsExactly("junk");
+        assertThat(store.saved.categories()).extracting(CullCategory::name).containsExactly("blurry");
     }
 
     @Test
     void cardsMatchingWhatIsStoredHaveNothingToLose() {
-        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+        final PhotoCategoriesPresenter presenter = presenterOver(BLURRY, FUNNY);
 
         assertThat(presenter.hasUnsavedEdits(asEdits(presenter))).isFalse();
     }
 
     @Test
     void aChangedDescriptionIsSomethingToLose() {
-        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+        final PhotoCategoriesPresenter presenter = presenterOver(BLURRY, FUNNY);
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         final CategoryEdit first = typed.getFirst();
         typed.set(0, new CategoryEdit(first.name(), first.description() + " and a bit more",
@@ -266,7 +257,7 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aCardSwitchedOffIsSomethingToLose() {
-        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+        final PhotoCategoriesPresenter presenter = presenterOver(BLURRY, FUNNY);
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         final CategoryEdit last = typed.getLast();
         typed.set(typed.size() - 1,
@@ -277,7 +268,7 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void reorderedCardsAreSomethingToLose() {
-        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY,
+        final PhotoCategoriesPresenter presenter = presenterOver(BLURRY, FUNNY,
                 CullCategory.of("food", "Meals and menus"));
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         typed.add(typed.remove(1));
@@ -287,7 +278,7 @@ class PhotoCategoriesPresenterTest {
 
     @Test
     void aTrailingSpaceIsNothingToLose() {
-        final PhotoCategoriesPresenter presenter = presenterOver(JUNK, FUNNY);
+        final PhotoCategoriesPresenter presenter = presenterOver(BLURRY, FUNNY);
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         final CategoryEdit first = typed.getFirst();
         typed.set(0, new CategoryEdit(first.name() + " ", "  " + first.description(),
@@ -299,7 +290,7 @@ class PhotoCategoriesPresenterTest {
     @Test
     void anEmptyRowInAnExamplesBoxIsNothingToLose() {
         final PhotoCategoriesPresenter presenter =
-                presenterOver(FUNNY, new CullCategory("junk", "Not worth keeping", List.of("blurry"), true));
+                presenterOver(FUNNY, new CullCategory("blurry", "Not worth keeping", List.of("blurry"), true));
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         final CategoryEdit last = typed.getLast();
         typed.set(typed.size() - 1, new CategoryEdit(last.name(), last.description(),
@@ -311,7 +302,7 @@ class PhotoCategoriesPresenterTest {
     @Test
     void anAddedExampleIsSomethingToLose() {
         final PhotoCategoriesPresenter presenter =
-                presenterOver(FUNNY, new CullCategory("junk", "Not worth keeping", List.of("blurry"), true));
+                presenterOver(FUNNY, new CullCategory("blurry", "Not worth keeping", List.of("blurry"), true));
         final List<CategoryEdit> typed = new ArrayList<>(asEdits(presenter));
         final CategoryEdit last = typed.getLast();
         typed.set(typed.size() - 1, new CategoryEdit(last.name(), last.description(),

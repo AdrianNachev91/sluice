@@ -10,7 +10,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-import javafx.scene.shape.Polygon;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.RunsView;
@@ -214,7 +213,7 @@ final class RunsPane {
             SettingsRows.report(this.message, view.message(), CAUTION);
             this.draw(this.cards, view.unfinished(), presenter, redraw);
             this.completedToggle.setText(view.completedHeading());
-            pointing(this.completedToggle, view.completedShown());
+            SettingsRows.pointing(this.completedToggle, view.completedShown());
             this.completed.setVisible(!view.completed().isEmpty());
             this.completed.setManaged(!view.completed().isEmpty());
             this.draw(this.completedCards, view.completed(), presenter, redraw);
@@ -239,30 +238,6 @@ final class RunsPane {
             into.getChildren().setAll(drawn);
         }
 
-
-        /**
-         * Turns a fold's marker to say which way it is.
-         *
-         * @param toggle {@link Button} the fold's own control
-         * @param open boolean whether the section below it is showing
-         */
-        private static void pointing(final Button toggle, final boolean open) {
-            if (toggle.getGraphic() == null) {
-                toggle.setGraphic(foldMarker());
-            }
-            toggle.getGraphic().setRotate(open ? 90 : 0);
-        }
-
-        /**
-         * The marker on a fold: a triangle, drawn rather than typed so no font has to carry it.
-         *
-         * @return {@link Polygon} the triangle, pointing right
-         */
-        private static Polygon foldMarker() {
-            final var triangle = new Polygon(0, 0, 0, 8, 6, 4);
-            triangle.getStyleClass().add("runs-fold-marker");
-            return triangle;
-        }
 
         /**
          * One run's card.

@@ -30,7 +30,8 @@ import java.util.concurrent.Callable;
 @Component
 @Profile("cli")
 @Command(name = CommitCommand.VERB,
-        description = "Move what is in Sorted into your Library, under a year or " + CommitCommand.ALL + ".")
+        description = "Move what is in Sorted into your Library, under a year or " + CommitCommand.ALL
+                + ". That is what a sift left there, plus anything you never sifted.")
 public class CommitCommand implements Callable<Integer> {
 
     /**

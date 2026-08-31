@@ -20,6 +20,7 @@ import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.FxProgressPort;
+import photos.sluice.adapter.ui.ReviewPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
@@ -27,6 +28,7 @@ import photos.sluice.adapter.ui.TroubleshootPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
+import photos.sluice.application.port.in.ReviewListing;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
@@ -358,7 +360,7 @@ class MainWindowTest {
                                     final RunsPresenter runs) {
         final Scene scene = MainWindow.scene(presenter, presenters.settings(), presenters.vision(),
                 photoCategoriesPresenter(), runLauncherPresenter(), runs, troubleshootPresenter(),
-                new AtomicReference<>(() -> false));
+                reviewPresenter(), new AtomicReference<>(() -> false));
         final var stage = new Stage();
         stage.setScene(scene);
         stage.show();
@@ -397,6 +399,15 @@ class MainWindowTest {
 
     private static RunsPresenter runsPresenter(final Pipeline pipeline) {
         return new RunsPresenter(pipeline, new RunLauncherPresenter(pipeline, new FxProgressPort()));
+    }
+
+    // A mock answers reviewListing() with null, so it is given an empty one instead. The review
+    // screen then draws its real nothing-here state.
+    private static ReviewPresenter reviewPresenter() {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.reviewListing()).thenReturn(new ReviewListing(List.of(), List.of()));
+        return new ReviewPresenter(pipeline,
+                new RunLauncherPresenter(pipeline, new FxProgressPort()));
     }
 
     private static TroubleshootPresenter troubleshootPresenter() {
@@ -532,7 +543,7 @@ class MainWindowTest {
     // drawn inside it.
     private static PhotoCategoriesPresenter photoCategoriesPresenter() {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
-                "anthropic", Map.of(), List.of(CullCategory.of("junk", "Not worth keeping")),
+                "anthropic", Map.of(), List.of(CullCategory.of("blurry", "Not worth keeping")),
                 new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return new PhotoCategoriesPresenter(new SettingsUseCase() {
             @Override

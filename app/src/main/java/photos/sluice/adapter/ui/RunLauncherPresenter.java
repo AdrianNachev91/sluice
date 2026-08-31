@@ -222,6 +222,24 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Moves what is left in one Review folder into the library, from the review screen's own row.
+     *
+     * <p>The caller names the folder, because the launcher has no field that could.
+     *
+     * @param folder {@link String} the folder's name below the Review root
+     * @param named {@link String} that folder as its own row named it. The reader has just crossed
+     *     from one screen to the other, so the two naming it differently would read as two folders
+     * @return boolean false where a job already holds the slot and nothing was started
+     */
+    public boolean moveToLibraryFromReview(final String folder, final String named) {
+        if (this.running) {
+            return false;
+        }
+        this.begin(RunMode.RESCUE, named, null, null, () -> this.pipeline.rescue(folder));
+        return true;
+    }
+
+    /**
      * Sifts the timeline a sort filled, from that sort's own result card.
      *
      * <p>The dialog is the caller's to put, because only a screen can open one. What it may not do
@@ -418,7 +436,7 @@ public class RunLauncherPresenter {
      * <p>A card still standing is the face they pressed from, since it covers the launcher entirely.
      *
      * <p>Clearing goes to both faces whatever is up. A press that starts something can take the
-     * card off the screen, so the face that held the last refusal is not always the one still
+     * card off the screen. So the face that held the last refusal is not always the one still
      * showing when the next one is drawn.
      *
      * @param message {@link Message} what to report, or null to clear both faces
@@ -473,9 +491,7 @@ public class RunLauncherPresenter {
             case SORT -> this.pipeline.sort(RunScope.asSort(scope));
             case SIFT -> this.pipeline.cull(RunScope.asCull(scope));
             case MOVE_TO_LIBRARY -> this.pipeline.commit(RunScope.asCommit(scope));
-            case RESCUE -> throw new IllegalStateException("Rescue cannot be started from here yet");
-            // An import takes folders rather than a timeline, so it arrives through startImport
-            // rather than the start button.
+            case RESCUE -> throw new IllegalStateException("A rescue is not started from a scope");
             case IMPORT -> throw new IllegalStateException("An import is not started from a scope");
         };
     }

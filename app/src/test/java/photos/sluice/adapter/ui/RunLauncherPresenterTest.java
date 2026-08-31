@@ -330,6 +330,36 @@ class RunLauncherPresenterTest {
                 .doesNotContain("sluice.paths");
     }
 
+    // Started from a folder's own row on another screen, so nothing on the launcher was pressed and
+    // nothing there could have refused it first. Every refusal the facade raises has to arrive here
+    // in words, on the face the reader is sent to.
+    @Test
+    void aMoveStartedFromTheReviewScreenReportsItsRefusalInPlainWords() {
+        doThrow(new PathsMisconfiguredException(
+                List.of(new NotADirectory(PathRole.LIBRARY_ROOT, Path.of("gone")))))
+                .when(this.pipeline).rescue("Food");
+
+        this.presenter.moveToLibraryFromReview("Food", "Food");
+
+        assertThat(this.reported().text())
+                .contains(PathRoleLabels.of(PathRole.LIBRARY_ROOT))
+                .doesNotContain("sluice.paths");
+    }
+
+    // The reader crossed from one screen to another, so the run has to still be named by the folder
+    // whose button they pressed.
+    @SuppressWarnings("unchecked")
+    @Test
+    void aMoveStartedFromTheReviewScreenIsNamedByThatFolderWhileItRuns() {
+        final JobHandle<Object> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(new CompletableFuture<>());
+        when(this.pipeline.rescue("Food")).thenReturn(retyped(handle));
+
+        this.presenter.moveToLibraryFromReview("Food", "Food");
+
+        assertThat(((RunStage.Running) this.presenter.stage()).progress().scope()).isEqualTo("Food");
+    }
+
     @Test
     void theModeButtonsGoDeadWhileAJobIsInFlightAndComeBackAfterIt() {
         this.choose(RunMode.SORT, "2019");

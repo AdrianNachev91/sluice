@@ -21,6 +21,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
@@ -512,17 +513,23 @@ final class RunLauncherPane {
                             ScrollPane scroll, Set<VBox> unfolded, Map<VBox, Timeline> folding) {
 
         /**
-         * Builds the five mode buttons, once.
+         * Builds the mode buttons, once, with an arrow drawn in every gap.
          *
          * <p>The row never changes, so it is built here and only re-selected afterwards. Building it
          * again on each fill would replace the button whose press caused the fill.
+         *
+         * <p>An arrow goes in every gap rather than in chosen ones, so nothing here judges which
+         * modes follow which.
          *
          * @param setup {@link RunSetupPresenter} takes the press
          */
         private void buildModeRow(final RunSetupPresenter setup) {
             final var group = new ToggleGroup();
-            final List<Node> buttons = new ArrayList<>();
+            final List<Node> row = new ArrayList<>();
             for (final ModeChoice mode : setup.view().modes()) {
+                if (!row.isEmpty()) {
+                    row.add(flowArrow());
+                }
                 final var button = new ToggleButton(mode.label());
                 button.setId(mode.id());
                 button.setToggleGroup(group);
@@ -532,9 +539,23 @@ final class RunLauncherPane {
                     setup.setMode(mode.mode());
                     this.fillFrom(setup.view());
                 });
-                buttons.add(button);
+                row.add(button);
             }
-            this.modeRow.getChildren().setAll(buttons);
+            this.modeRow.getChildren().setAll(row);
+        }
+
+        /**
+         * One arrow between two mode buttons, drawn rather than typed so no font has to carry it.
+         *
+         * <p>A shaft and a filled head, 14 by 10, with the shaft 4 thick. Solid at that size where
+         * a glyph at the row's font size reads as punctuation.
+         *
+         * @return {@link Polygon} the arrow, pointing right
+         */
+        private static Polygon flowArrow() {
+            final var arrow = new Polygon(0, 3, 8, 3, 8, 0, 14, 5, 8, 10, 8, 7, 0, 7);
+            arrow.getStyleClass().add("run-mode-arrow");
+            return arrow;
         }
 
         /**
@@ -878,12 +899,12 @@ final class RunLauncherPane {
          * <p>Deferred a pulse rather than run as the travel ends, and that is what makes it work at
          * all. {@link #settle} lifts a box's ceiling, and the box takes its real height on the
          * layout pass after. Reading here without waiting for that pass gives a box of no height
-         * and a viewport that has not been sized, which is the same guess this exists to replace.
+         * and a viewport nothing has sized. That is the same guess this exists to replace.
          *
          * <p>Reads the pane's own position rather than the target it was given: a fold this one
-         * interrupted leaves the pane wherever it got to. A box no longer open by the time this
-         * runs belongs to a fold that has since been replaced, so the fold that replaced it owns
-         * the destination.
+         * interrupted leaves the pane wherever it got to. A box already shut by the time this runs
+         * belongs to a fold that has since been replaced. The fold that replaced it owns the
+         * destination.
          *
          * @param turns a {@link List} of {@link Turn} everything this fill moved, in row order
          */

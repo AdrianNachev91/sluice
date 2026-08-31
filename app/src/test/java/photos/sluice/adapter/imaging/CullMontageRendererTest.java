@@ -11,6 +11,7 @@ import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullScope;
+import photos.sluice.domain.cull.JunkCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
@@ -46,7 +47,7 @@ class CullMontageRendererTest {
     private static final int PHOTO_HEIGHT = 600;
 
     private static final List<CullCategory> CATEGORIES = List.of(
-            CullCategory.of("junk", "objectively worthless shots"),
+            CullCategory.of("food", "meals and menus"),
             CullCategory.of("scenery", "landscapes with nobody in them"));
 
     @Test
@@ -105,15 +106,17 @@ class CullMontageRendererTest {
         assertThat(index).isEqualToIgnoringWhitespace("""
                 {
                   "scope": "2019",
-                  "categories": [{ "name": "junk", "description": "objectively worthless shots" },
-                                 { "name": "scenery", "description": "landscapes with nobody in them" }],
+                  "categories": [{ "name": "food", "description": "meals and menus" },
+                                 { "name": "scenery", "description": "landscapes with nobody in them" },
+                                 { "name": "junk", "description": "%s" }],
                   "basePath": "%s",
                   "photos": 5,
                   "unreviewable": ["%s"],
                   "montages": 2,
                   "entries": ["montage-001", "montage-002"]
                 }
-                """.formatted(jsonEscaped(result.basePath()), jsonEscaped(corrupt)));
+                """.formatted(JunkCategory.card().description(), jsonEscaped(result.basePath()),
+                jsonEscaped(corrupt)));
     }
 
     @Test
@@ -350,10 +353,13 @@ class CullMontageRendererTest {
         final PrepDir result = renderer(pathsConfig, configured)
                 .build(new CullScope.Year(2019, null), new MontageConfig(64, 2));
 
-        assertThat(result.categories()).containsExactlyElementsOf(configured);
+        assertThat(result.categories()).containsExactly(configured.get(0), configured.get(1),
+                JunkCategory.card());
         assertThat(Files.readString(result.prepDir().resolve("index.json"), StandardCharsets.UTF_8))
                 .contains("\"categories\":[{\"name\":\"blurry\",\"description\":\"out of focus\"},"
-                        + "{\"name\":\"receipts\",\"description\":\"photographed paperwork\"}]");
+                        + "{\"name\":\"receipts\",\"description\":\"photographed paperwork\"},"
+                        + "{\"name\":\"junk\",\"description\":\""
+                        + JunkCategory.card().description() + "\"}]");
     }
 
     private static PathsConfig pathsConfig(final Path root) {

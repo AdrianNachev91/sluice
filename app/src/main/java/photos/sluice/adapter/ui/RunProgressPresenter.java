@@ -222,13 +222,13 @@ class RunProgressPresenter {
     private static String whatSurvives(final RunMode ran, final @Nullable ImportKind importing) {
         return switch (ran) {
             case SIFT -> CANCELLING_A_SIFT;
-            case MOVE_TO_LIBRARY -> CANCELLING_A_MOVE;
+            // A rescue also puts photos into the library, one Review folder at a time. So a stopped
+            // one leaves behind exactly what a stopped move leaves.
+            case MOVE_TO_LIBRARY, RESCUE -> CANCELLING_A_MOVE;
             // The copy's line for an import whose kind never arrived, being the one of the two that
             // claims nothing about the folder the photos came from.
             case IMPORT -> importing == ImportKind.MOVE ? CANCELLING_A_MOVE_IN : CANCELLING_A_COPY;
-            // Rescue cannot be started yet, so nothing reaches this arm through it. Answered with
-            // the sort's line because both move files out of a folder into another one.
-            case SORT, RESCUE -> CANCELLING_A_SORT;
+            case SORT -> CANCELLING_A_SORT;
         };
     }
 }

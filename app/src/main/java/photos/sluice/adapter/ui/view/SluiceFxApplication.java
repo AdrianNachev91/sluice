@@ -9,6 +9,7 @@ import photos.sluice.SluiceApplication;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.QuitPresenter;
+import photos.sluice.adapter.ui.ReviewPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
@@ -68,6 +69,8 @@ public class SluiceFxApplication extends Application {
         // Set here because this class is the only one holding the services that can open one. What
         // a screen does with an address is then the screen's, and how it reaches a browser is not.
         ExternalBrowser.openWith(this.getHostServices()::showDocument);
+        FileManager.openWith(folder ->
+                Thread.ofVirtual().start(() -> FileManager.inTheSystemFileManager(folder)));
         this.present(stage);
         stage.show();
     }
@@ -125,6 +128,11 @@ public class SluiceFxApplication extends Application {
     private void buildContextAndRun() {
         try {
             final var built = new SpringApplicationBuilder(SluiceApplication.class)
+                    // Spring sets java.awt.headless true before the context starts, and
+                    // GraphicsEnvironment latches it on first read. That leaves Desktop reporting
+                    // itself unsupported, which is what opens a folder in the file manager. Left
+                    // to the environment, a machine with no display still answers headless.
+                    .headless(false)
                     .run(this.getParameters().getRaw().toArray(String[]::new));
             this.context = built;
             final var sequence = built.getBean(StartupSequence.class);
@@ -169,6 +177,7 @@ public class SluiceFxApplication extends Application {
                     built.getBean(RunLauncherPresenter.class),
                     built.getBean(RunsPresenter.class),
                     built.getBean(TroubleshootPresenter.class),
+                    built.getBean(ReviewPresenter.class),
                     leavingLosesWork));
             this.askBeforeClosing(stage, new QuitFlow(built.getBean(QuitPresenter.class),
                     leavingLosesWork));

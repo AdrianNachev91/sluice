@@ -20,9 +20,9 @@ public enum RunMode {
             // it twice leaves two sentences to keep in step.
             "", 3),
 
-    /** Has a vision provider look at what is in Sorted and sort it into the photo categories. */
+    /** Has a vision provider look at what is in Sorted and set aside what it will not keep. */
     SIFT("Sift", "Sifting",
-            "Sifts through your sorted photos and organises them into categories.",
+            "Looks at your sorted photos and moves anything it does not keep out of Sorted.",
             "Type a year, or click one below. Add a run of months after it like 2019 6-8, or pick "
                     + "months out like 2019 6,8,11.", 3),
 
@@ -33,26 +33,27 @@ public enum RunMode {
      * progress area shows is "Moving to library...", which is the phrase that table names.
      */
     MOVE_TO_LIBRARY("Move to library", "Moving to library",
-            "Moves what is in Sorted into your library.",
+            "Moves what is in Sorted into your library. That is the photos a sift left alone, plus "
+                    + "any it has not seen.",
             "Leave this empty to move everything in Sorted. Or type a year, and a run of months "
                     + "after it if you want less, like 2019 6-8.", 1),
 
     /**
-     * Moves what is left in a Review folder into the library.
+     * Moves what is left in one Review folder into the library.
      *
-     * <p>Its hint is a placeholder rather than an answer. It names the missing screen rather than an
-     * empty result, so that a Review folder holding files is never called empty.
+     * <p>Named with the same words as {@link #MOVE_TO_LIBRARY} deliberately. Both put photos into
+     * the library, and that is what a reader would call either.
+     *
+     * <p>The two fields a row would read are empty, since this mode has no button in the row.
      */
-    RESCUE("Rescue", "Rescuing",
-            "Moves what is left in a Review folder into your library.",
-            "Rescue arrives with the Review screen.", 1),
+    RESCUE("Move to library", "Moving to library", "", "", 1),
 
     /**
      * Brings photos into the Inbox from folders and files outside it.
      *
-     * <p>The one kind of work with no button in the row: it starts from the Inbox card, or from
-     * folders dropped on the dashboard. Each of those already names what is coming in, so the two
-     * fields the row would read are empty.
+     * <p>No button in the row: it starts from the Inbox card, or from folders dropped on the
+     * dashboard. Each of those already names what is coming in, so the two fields the row would read
+     * are empty.
      */
     IMPORT("Import", "Importing", "", "", 1);
 
@@ -118,9 +119,9 @@ public enum RunMode {
     /**
      * What this mode does to somebody's photos, in one sentence.
      *
-     * <p>The button row names four actions and says nothing about any of them. A name alone tells a
-     * reader which one they picked, never what it is about to do. Two of the four move files out of
-     * a folder they will not think to look in afterwards.
+     * <p>The button row names its actions and says nothing about any of them. A name alone tells a
+     * reader which one they picked, never what it is about to do. Sort and Move to library both take
+     * files out of a folder they will not think to look in afterwards.
      *
      * @return {@link String} what it does
      */
