@@ -203,6 +203,25 @@ class RunResultPaneTest {
     }
 
     @Test
+    void aFailedRunPutsItsOwnSentenceOnItsOwnGround() throws Exception {
+        final Parent pane = onFxThread(() -> shown(new RunResultView("Rescuing could not finish.",
+                Tone.FAILED, "That file holds something other than the text Sluice wrote there.",
+                List.of(), null, null, "Done")));
+
+        assertThat(pane.lookup("#run-result-detail-box").getStyleClass()).contains("warning-box");
+    }
+
+    @Test
+    void anEndingThatIsNotAFailureLeavesItsSentenceWhereEveryOtherLineSits() throws Exception {
+        final Parent pane = onFxThread(() -> shown(new RunResultView("Sorting stopped.",
+                Tone.UNFINISHED, "205 of them are still in your Inbox.", List.of(), null, null,
+                "Done")));
+
+        assertThat(pane.lookup("#run-result-detail-box").getStyleClass())
+                .doesNotContain("warning-box");
+    }
+
+    @Test
     void aCardThatShowedAFailureDropsTheFailureMarkWhenTheNextRunEndsWell() throws Exception {
         final RunResultPane.Mounted mounted = onFxThread(
                 () -> RunResultPane.mount(mock(RunLauncherPresenter.class), () -> { }));

@@ -31,6 +31,7 @@ import photos.sluice.adapter.ui.RunLauncherView;
 import photos.sluice.adapter.ui.RunLauncherView.Cost;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
+import photos.sluice.adapter.ui.RunLauncherView.UndatedChoice;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.adapter.ui.RunProgressView;
 import photos.sluice.adapter.ui.RunSetupPresenter;
@@ -74,6 +75,10 @@ final class RunLauncherPane {
     // presenter, which spells the same glyph, and RunLauncherPaneTest pins the two together.
     private static final String UNFINISHED_MARK = "*";
 
+    // A box carrying padding takes that height whether or not anything is in it. So the gap above
+    // the undated row sits on the box only while it holds one.
+    private static final String UNDATED_FILLED = "run-undated-rows-filled";
+
     private RunLauncherPane() {
     }
 
@@ -111,13 +116,15 @@ final class RunLauncherPane {
 
         final var yearRows = new VBox();
         yearRows.getStyleClass().add("run-year-rows");
+        final var undatedRow = new VBox();
+        undatedRow.getStyleClass().add("run-undated-rows");
         final Label nothingStaged = SettingsRows.emptyHelpLine("run-nothing-staged");
         final Hyperlink openRuns = SettingsRows.inAppLink("run-scope-legend-link", presenter::showRuns);
         final SettingsRows.LinkedLine scopeLegend =
                 SettingsRows.linkedHelpLine("run-scope-legend", openRuns);
         final HBox scopeLegendRow = SettingsRows.markedHelpLine(scopeLegend.flow(), UNFINISHED_MARK,
                 "run-unfinished-mark", "run-legend-mark");
-        final VBox sortedCard = SettingsRows.card("SORTED", null, yearRows, nothingStaged,
+        final VBox sortedCard = SettingsRows.card("SORTED", null, yearRows, undatedRow, nothingStaged,
                 scopeLegendRow);
 
         final var body = new VBox(inboxCard, sortedCard);
@@ -196,10 +203,10 @@ final class RunLauncherPane {
         scroll.setMinHeight(0);
 
         final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, importPhotos,
-                importHint, yearRows, nothingStaged, scopeLegend, openRuns,
+                importHint, yearRows, undatedRow, nothingStaged, scopeLegend, openRuns,
                 scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, warning, repair,
                 freeHeadline, freeDetail, message, scroll, new HashSet<>(), new HashMap<>());
-        controls.buildModeRow(setup);
+        controls.buildModeRow(setup, presenter::showReview);
         scopeField.textProperty().addListener((_, _, typed) -> {
             setup.setScope(typed);
             controls.fillFrom(setup.view());
@@ -484,6 +491,8 @@ final class RunLauncherPane {
      * @param importPhotos {@link Button}
      * @param importHint {@link Label} the line naming the drop as the other way in
      * @param yearRows {@link VBox} the Sorted card's rows
+     * @param undatedRow {@link VBox} holds the row for what is sorted without a date, empty where
+     *     nothing is
      * @param nothingStaged {@link Label} what the Sorted card says with no rows to show
      * @param scopeLegend {@link SettingsRows.LinkedLine} what a mark on one of those rows means
      * @param openRuns {@link Hyperlink} the word inside it that opens the runs screen
@@ -504,7 +513,8 @@ final class RunLauncherPane {
      * @param folding a {@link Map} of {@link VBox} to {@link Timeline} the folds still running
      */
     private record Controls(HBox modeRow, Label modeHint, Label inboxHeadline, Label inboxDetail,
-                            Button importPhotos, Label importHint, VBox yearRows, Label nothingStaged,
+                            Button importPhotos, Label importHint, VBox yearRows, VBox undatedRow,
+                            Label nothingStaged,
                             SettingsRows.LinkedLine scopeLegend, Hyperlink openRuns,
                             Label scopeLabel, TextField scopeField,
                             Button start, Label hint, Label refusal, Label figure, Label disclaimer,
@@ -521,10 +531,15 @@ final class RunLauncherPane {
          * <p>An arrow goes in every gap rather than in chosen ones, so nothing here judges which
          * modes follow which.
          *
+         * <p>The link stays out of the {@link ToggleGroup}. A member of it clears whichever mode
+         * was chosen, and this one starts nothing.
+         *
          * @param setup {@link RunSetupPresenter} takes the press
+         * @param openReview {@link Runnable} shows the review screen
          */
-        private void buildModeRow(final RunSetupPresenter setup) {
+        private void buildModeRow(final RunSetupPresenter setup, final Runnable openReview) {
             final var group = new ToggleGroup();
+            final RunLauncherView.RowLink link = setup.view().rowLink();
             final List<Node> row = new ArrayList<>();
             for (final ModeChoice mode : setup.view().modes()) {
                 if (!row.isEmpty()) {
@@ -540,8 +555,26 @@ final class RunLauncherPane {
                     this.fillFrom(setup.view());
                 });
                 row.add(button);
+                if (mode.mode() == link.after()) {
+                    row.add(flowArrow());
+                    row.add(rowLink(link, openReview));
+                }
             }
             this.modeRow.getChildren().setAll(row);
+        }
+
+        /**
+         * The row's one step that leads somewhere instead of starting a run.
+         *
+         * @param link {@link RunLauncherView.RowLink} what it says and what it is found by
+         * @param press {@link Runnable} where it goes
+         * @return {@link Hyperlink} the link
+         */
+        private static Hyperlink rowLink(final RunLauncherView.RowLink link, final Runnable press) {
+            final Hyperlink node = SettingsRows.inAppLink(link.id(), press);
+            node.setText(link.label());
+            node.getStyleClass().add("run-mode-link");
+            return node;
         }
 
         /**
@@ -595,7 +628,27 @@ final class RunLauncherPane {
                 rows.add(this.yearRow(year, group, setup));
             }
             this.yearRows.getChildren().setAll(rows);
+            this.drawUndated(view.undated(), setup);
             this.fillFrom(view);
+        }
+
+        /**
+         * Builds or clears the row for what is sorted without a date.
+         *
+         * @param undated {@link UndatedChoice} the row to draw, or null where there is none
+         * @param setup {@link RunSetupPresenter} takes the press
+         */
+        private void drawUndated(final @Nullable UndatedChoice undated, final RunSetupPresenter setup) {
+            this.undatedRow.getStyleClass().remove(UNDATED_FILLED);
+            if (undated == null) {
+                this.undatedRow.getChildren().clear();
+                return;
+            }
+            this.undatedRow.getStyleClass().add(UNDATED_FILLED);
+            final ToggleButton row = this.scopeRow(undated.id(), "run-year-row",
+                    rowInside("run-year-label", undated.label(), undated.counts(), null, null),
+                    undated.chosen(), setup::pressUndated, setup);
+            this.undatedRow.getChildren().setAll(row);
         }
 
         /**
@@ -619,6 +672,7 @@ final class RunLauncherPane {
             this.importHint.setText(view.inbox().importHint());
             this.importPhotos.setDisable(!view.inbox().canImport());
             this.selectYear(view.years(), view.scopeNamesTheRun());
+            this.selectUndated(view.undated());
             this.scopeField.setDisable(!view.scopeNamesTheRun());
             this.nothingStaged.setText(SettingsRows.orNothing(view.nothingStaged()));
             this.scopeLegend.before().setText(SettingsRows.orNothing(view.scopeLegend()));
@@ -636,6 +690,20 @@ final class RunLauncherPane {
             this.start.setText(view.startLabel());
             this.start.setDisable(!view.canStart());
             this.drawMessage(view.message());
+        }
+
+        /**
+         * Marks the undated row where the scope names it, and greys it where a press would do
+         * nothing.
+         *
+         * @param undated {@link UndatedChoice} the row and its state, or null where there is none
+         */
+        private void selectUndated(final @Nullable UndatedChoice undated) {
+            if (undated != null
+                    && this.undatedRow.lookup("#" + undated.id()) instanceof final ToggleButton row) {
+                row.setSelected(undated.chosen());
+                row.setDisable(!undated.pressable());
+            }
         }
 
         /**

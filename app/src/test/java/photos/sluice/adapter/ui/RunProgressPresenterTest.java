@@ -101,6 +101,12 @@ class RunProgressPresenterTest {
     }
 
     @Test
+    void aCancelledRescueNamesSortedRatherThanTheLibrary() {
+        assertThat(this.stopping(RunMode.RESCUE).cancelling())
+                .startsWith("What reached Sorted stays there.");
+    }
+
+    @Test
     void theStopButtonReportsTheStopRatherThanGoingDeadStillOffering() {
         assertThat(this.working().cancelLabel()).isEqualTo("Stop");
         assertThat(this.working().cancelPressable()).isTrue();

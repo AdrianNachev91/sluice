@@ -1,29 +1,44 @@
 package photos.sluice.domain.rescue;
 
-import java.util.List;
-
 /**
  * Outcome counters from one rescue run.
  *
- * <p>A file with no plausible date is left in place and counted in {@code skipped} rather than
- * {@code rescued}. It takes no action the user didn't ask for.
+ * <p>{@code rescued} and {@code undated} are disjoint, and both count a file that moved. A file
+ * something could date lands under its year and month. One nothing could date lands flat in the
+ * undated folder, so a rescue leaves nothing behind for want of a date.
  *
- * <p>{@code folderRemoved} is true only when every file rescue looked at was actually rescued, so
- * nothing was left behind to keep the folder alive.
+ * <p>{@code alreadyInSorted} is disjoint from both, and counts a file that was deleted rather than
+ * moved, its own bytes having been found at the destination first. A near-copy group is where they
+ * come from: it holds a byte copy of the photo it kept, whose original never left Sorted.
+ *
+ * <p>{@code leftBehind} counts the media files the run never reached, still in the folder it was
+ * given. The notes and non-media beside them are not in it. Those are not what a reader sees left
+ * behind, and a finished run leaves them too.
+ *
+ * <p>{@code folderRemoved} is true only where the pass reached every file. A folder still holding
+ * something a rescue does not move, such as a stray file that is not media, survives it.
  *
  * <p>{@code cancelled} is the run's own account of whether it stopped short.
+ *
+ * @param rescued int files moved under a year and month
+ * @param undated int files moved into the undated folder, nothing having dated them
+ * @param alreadyInSorted int files deleted, their own bytes already at the destination
+ * @param leftBehind int media files the run never reached, still in the folder
+ * @param folderRemoved boolean whether the source folder was removed
+ * @param cancelled boolean whether the run gave up before reaching every file
  */
-public record RescueSummary(int rescued, List<String> skipped, boolean folderRemoved, boolean cancelled) {
+public record RescueSummary(int rescued, int undated, int alreadyInSorted, int leftBehind,
+                            boolean folderRemoved, boolean cancelled) {
 
     /**
-     * Defensively copies the skipped list.
+     * Every file this run moved, wherever it landed.
      *
-     * @param rescued int count of files rescued
-     * @param skipped a {@link List} of {@link String} names of files left in place, with reasons
-     * @param folderRemoved boolean true if the source folder was removed
-     * @param cancelled boolean whether the run gave up before reaching every file
+     * <p>What was already in Sorted is not among them. Nothing was carried anywhere for those, and
+     * a reader counting what arrived would be counting one photo twice.
+     *
+     * @return int the dated and undated files together
      */
-    public RescueSummary {
-        skipped = List.copyOf(skipped);
+    public int moved() {
+        return this.rescued + this.undated;
     }
 }

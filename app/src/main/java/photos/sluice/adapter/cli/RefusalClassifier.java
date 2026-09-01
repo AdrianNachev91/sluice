@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.NoteIsNotTextException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.ApplyException;
@@ -137,6 +138,7 @@ public class RefusalClassifier {
                             + "'troubleshoot' on it to see what is wrong.");
             case final ShuttingDownException _ -> Refusal.of(RefusalKind.SHUTTING_DOWN,
                     "Shutdown in progress. This was not started.");
+            case final NoteIsNotTextException note -> noteIsNotText(note);
             // These three are one type family, most specific first. All three are an
             // UncheckedIOException, so a broader arm placed above a narrower one swallows it.
             case final MalformedPrepJsonException malformed -> runRecordsUnreadable(malformed);
@@ -178,6 +180,22 @@ public class RefusalClassifier {
                 "A file could not be reached. Another program may have it open, or a drive may not be "
                         + "reachable.",
                 Fields.of("problem", String.valueOf(unreachable.getMessage())));
+    }
+
+    /**
+     * The refusal for a note whose bytes are not the text this app wrote there.
+     *
+     * <p>Names the file, which the sentence above cannot: it answers for every file this app reads,
+     * and a folder can hold several notes.
+     *
+     * @param note {@link NoteIsNotTextException} the read that came back as something else
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal noteIsNotText(final NoteIsNotTextException note) {
+        return new Refusal(RefusalKind.NOTE_IS_NOT_TEXT,
+                note.file() + " holds something other than the text Sluice wrote there. Open it to "
+                        + "see what is in it, and delete it if it is not worth keeping.",
+                Fields.of("file", note.file().toString()));
     }
 
     /**

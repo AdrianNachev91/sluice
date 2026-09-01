@@ -18,6 +18,9 @@ import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.MalformedInputException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -64,7 +67,7 @@ class ApplyEngineTest {
         assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
         assertThat(Files.readString(root.resolve("Review/junk/_reasons.txt")))
-                .contains("IMG_1.jpg - phone photo of a monitor");
+                .contains("IMG_1.jpg (2019-06) - phone photo of a monitor");
     }
 
     // Exercises recordThenMove()'s own resolveDestination-then-moveTo pair, not just the media
@@ -181,7 +184,7 @@ class ApplyEngineTest {
         assertThat(Files.exists(dupDir.resolve("a.jpg"))).isTrue();
         assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
-                .contains("Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred");
+                .contains("a.jpg (2019-06) - kept, sharpest" + System.lineSeparator() + "b.jpg (2019-06) - blurred");
     }
 
     // The group's own folder is derived from the CHOSEN file's month, not the reject's. Otherwise a
@@ -209,9 +212,40 @@ class ApplyEngineTest {
         assertThat(Files.exists(dupDir.resolve("a.jpg"))).isTrue();
         assertThat(Files.exists(dupDir.resolve("b.jpg"))).isTrue();
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
-                .contains("Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred");
+                .contains("a.jpg (2019-06) - kept, sharpest" + System.lineSeparator() + "b.jpg (2019-07) - blurred");
         // No second, July-derived folder was ever created for this group.
         assertThat(Files.exists(root.resolve("Duplicates/2019-07_lake-jun19"))).isFalse();
+    }
+
+    // Camera filenames repeat across months, so two members of one group can want the same name in
+    // the folder they share. The second lands as a " (2)", and a note naming it otherwise would send
+    // a rescue looking up a photo nothing on disk answers to.
+    @Test
+    void twoRejectsWantingOneNameAreEachListedUnderTheNameTheyLandedWith(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path chosen = root.resolve("Sorted/Photos/2019/06/a.jpg");
+        final Path june = root.resolve("Sorted/Photos/2019/06/IMG_1234.jpg");
+        final Path march = root.resolve("Sorted/Photos/2020/03/IMG_1234.jpg");
+        writeFile(chosen, "sharp");
+        writeFile(june, "one");
+        writeFile(march, "two");
+        writeIndex(prepDir, 3, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(chosen), sidecarEntry(june), sidecarEntry(march));
+        writeShard(prepDir, "montage-001",
+                nearDupChosenJson(chosen, "lake-jun19", "sharpest"),
+                nearDupRejectJson(june, "lake-jun19", "blurred"),
+                nearDupRejectJson(march, "lake-jun19", "darker"));
+
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
+        assertThat(Files.readAllLines(dupDir.resolve("a.jpg.txt"))).containsExactly(
+                "a.jpg (2019-06) - kept, sharpest",
+                "IMG_1234.jpg (2019-06) - blurred",
+                "IMG_1234 (2).jpg (2020-03) - darker");
+        assertThat(Files.exists(dupDir.resolve("IMG_1234 (2).jpg"))).isTrue();
     }
 
     @Test
@@ -468,7 +502,7 @@ class ApplyEngineTest {
         final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(report.byCategory()).isEmpty();
-        assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt"))).containsExactly("a.jpg - blurry");
+        assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt"))).containsExactly("a.jpg (2019-06) - blurry");
     }
 
     @Test
@@ -543,7 +577,7 @@ class ApplyEngineTest {
         // The resumed run proves the move from the record alone, since the source is long gone. It
         // backfills only the reasons line the crash cost, and counts no work of its own.
         assertThat(report.byCategory()).isEmpty();
-        assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt"))).containsExactly("a.jpg - blurry");
+        assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt"))).containsExactly("a.jpg (2019-06) - blurry");
     }
 
     @Test
@@ -567,7 +601,7 @@ class ApplyEngineTest {
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(Files.readString(dupDir.resolve("a.jpg.txt")))
-                .contains("Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred");
+                .contains("a.jpg (2019-06) - kept, sharpest" + System.lineSeparator() + "b.jpg (2019-06) - blurred");
     }
 
     @Test
@@ -588,15 +622,15 @@ class ApplyEngineTest {
         // always reprocesses it - it must converge on the same end state rather than compounding.
         final Path dupDir = root.resolve("Duplicates/2019-06_lake-jun19");
         writeFile(dupDir.resolve("a.jpg"), "already-copied");
-        Files.writeString(dupDir.resolve("a.jpg.txt"),
-                "Kept a.jpg - sharpest" + System.lineSeparator() + "b.jpg - blurred" + System.lineSeparator());
+        Files.writeString(dupDir.resolve("a.jpg.txt"), "a.jpg (2019-06) - kept, sharpest" + System.lineSeparator()
+                + "b.jpg (2019-06) - blurred" + System.lineSeparator());
 
         applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
 
         assertThat(Files.exists(dupDir.resolve("a (2).jpg"))).isFalse();
         assertThat(Files.readString(dupDir.resolve("a.jpg"))).isEqualTo("already-copied");
         assertThat(Files.readAllLines(dupDir.resolve("a.jpg.txt"))).containsExactly(
-                "Kept a.jpg - sharpest", "b.jpg - blurred");
+                "a.jpg (2019-06) - kept, sharpest", "b.jpg (2019-06) - blurred");
     }
 
     @Test
@@ -634,6 +668,8 @@ class ApplyEngineTest {
         assertThat(report.unreviewable()).isEqualTo(1);
         assertThat(Files.exists(undecodable)).isFalse();
         assertThat(Files.exists(root.resolve("Unreviewable/2019/06/corrupt.heic"))).isTrue();
+        assertThat(Files.readAllLines(root.resolve("Unreviewable/2019/06/_reasons.txt")))
+                .containsExactly("corrupt.heic (2019-06) - could not be seen clearly enough to judge");
     }
 
     // Its control: the same fixture shape moves the file when the entry is inside Sorted.
@@ -668,6 +704,87 @@ class ApplyEngineTest {
 
         assertThat(report.unreviewable()).isEqualTo(1);
         assertThat(Files.readString(dest)).isEqualTo("already-moved");
+        assertThat(Files.readAllLines(root.resolve("Unreviewable/2019/06/_reasons.txt")))
+                .containsExactly("corrupt.heic (2019-06) - could not be seen clearly enough to judge");
+    }
+
+    // A half-finished apply is what an abort here would leave, which is worth more than the line.
+    @Test
+    void aNoteWhoseBytesAreNotTextLosesTheLineRatherThanTheRun(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        final Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
+        writeFile(dest, "already-moved");
+        Files.writeString(root.resolve("Unreviewable/2019/06/_reasons.txt"), "something unreadable");
+        writeMoveRecord(prepDir, alreadyMoved, dest, new Sha256Hasher().hash(dest));
+        writeIndex(prepDir, 0, List.of(alreadyMoved), List.of());
+        final var store = new UnreadableNote(new UncheckedIOException(new MalformedInputException(1)));
+
+        final ApplyReport report = applyEngine(root, libraryRoot, hashIndex(root), store)
+                .apply(prepDir, new ApplyOptions(false));
+
+        assertThat(report.unreviewable()).isEqualTo(1);
+        assertThat(Files.exists(prepDir.resolve("decisions.json"))).isTrue();
+    }
+
+    @Test
+    void aNoteNobodyCouldReadStopsTheRunRatherThanAppendingToItBlind(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        final Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
+        writeFile(dest, "already-moved");
+        Files.writeString(root.resolve("Unreviewable/2019/06/_reasons.txt"), "something unreadable");
+        writeMoveRecord(prepDir, alreadyMoved, dest, new Sha256Hasher().hash(dest));
+        writeIndex(prepDir, 0, List.of(alreadyMoved), List.of());
+        final var store = new UnreadableNote(new UncheckedIOException(new AccessDeniedException("_reasons.txt")));
+
+        assertThatThrownBy(() -> applyEngine(root, libraryRoot, hashIndex(root), store)
+                .apply(prepDir, new ApplyOptions(false)))
+                .isInstanceOf(UncheckedIOException.class);
+    }
+
+    // Windows names a duplicate this way, so the separator reaches a real filename.
+    @Test
+    void aFilenameHoldingTheSeparatorIsFoundInTheNoteRatherThanListedTwice(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/IMG_1 - Copy.jpg");
+        final Path dest = root.resolve("Review/junk/IMG_1 - Copy.jpg");
+        writeFile(dest, "already-moved");
+        Files.writeString(root.resolve("Review/junk/_reasons.txt"),
+                "IMG_1 - Copy.jpg - blurry" + System.lineSeparator());
+        writeMoveRecord(prepDir, alreadyMoved, dest, new Sha256Hasher().hash(dest));
+        writeIndex(prepDir, 1, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(alreadyMoved));
+        writeShard(prepDir, "montage-001", classificationJson(alreadyMoved, "junk", "blurry"));
+
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt")))
+                .containsExactly("IMG_1 - Copy.jpg - blurry");
+    }
+
+    @Test
+    void aResumedRunDoesNotListAnUnreviewableFileItsNoteAlreadyNames(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path alreadyMoved = root.resolve("Sorted/Photos/2019/06/corrupt.heic");
+        final Path dest = root.resolve("Unreviewable/2019/06/corrupt.heic");
+        writeFile(dest, "already-moved");
+        Files.writeString(root.resolve("Unreviewable/2019/06/_reasons.txt"),
+                "corrupt.heic - could not be seen clearly enough to judge" + System.lineSeparator());
+        writeMoveRecord(prepDir, alreadyMoved, dest, new Sha256Hasher().hash(dest));
+        writeIndex(prepDir, 0, List.of(alreadyMoved), List.of());
+
+        applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false));
+
+        assertThat(Files.readAllLines(root.resolve("Unreviewable/2019/06/_reasons.txt")))
+                .containsExactly("corrupt.heic - could not be seen clearly enough to judge");
     }
 
     @Test
@@ -770,7 +887,7 @@ class ApplyEngineTest {
         assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
         assertThat(Files.exists(funnyDest)).isTrue();
         assertThat(Files.readString(root.resolve("Review/junk/_reasons.txt")).lines().toList())
-                .containsExactly("a.jpg - blurry");
+                .containsExactly("a.jpg (2019-06) - blurry");
         assertThat(hashIndex.load()).containsOnlyKeys(new Sha256Hasher().hash(funnyDest));
     }
 
@@ -873,6 +990,25 @@ class ApplyEngineTest {
             return Files.exists(dir.resolve("CASE_PROBE.TMP"));
         } finally {
             Files.delete(lower);
+        }
+    }
+
+    // A real store in every respect but one: a folder's note cannot be read. Which failure it
+    // reports is the whole point, the port's contract splitting damaged bytes from a file nobody
+    // reached. Scoped to the note so the move ledger, read the same way, still answers.
+    private static final class UnreadableNote extends NioMediaStore {
+        private final UncheckedIOException failure;
+
+        UnreadableNote(final UncheckedIOException failure) {
+            this.failure = failure;
+        }
+
+        @Override
+        public List<String> readLines(final Path file) {
+            if (file.getFileName().toString().equals("_reasons.txt")) {
+                throw this.failure;
+            }
+            return super.readLines(file);
         }
     }
 

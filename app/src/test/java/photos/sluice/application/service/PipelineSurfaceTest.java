@@ -35,7 +35,7 @@ class PipelineSurfaceTest {
             "sweepExpiredDisasterDrawers()",
             "sort(SortScope)",
             "commit(CommitScope)",
-            "rescue(String)",
+            "rescue(RescueRoot, String)",
             "importFrom(List, ImportKind)",
             "cull(CullScope)",
             "curate(SortScope)",

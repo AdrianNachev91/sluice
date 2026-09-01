@@ -7,6 +7,7 @@ import photos.sluice.adapter.ui.ReviewView.Group;
 import photos.sluice.adapter.ui.ReviewView.Kind;
 import photos.sluice.adapter.ui.ReviewView.Notes;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.application.port.in.ReviewListing;
 import photos.sluice.application.port.in.ReviewListing.FiledBy;
 import photos.sluice.application.port.in.ReviewListing.Folder;
@@ -124,70 +125,78 @@ class ReviewPresenterTest {
     }
 
     @Test
-    void onlyAFolderUnderReviewCanBeMovedIntoTheLibrary() {
+    void everyRootOffersTheRescue() {
         final ReviewPresenter presenter = over(folder(Root.REVIEW, "Food"), heldBack("Unsorted"),
                 folder(Root.DUPLICATES, "2019-06_beach"), folder(Root.UNREVIEWABLE, "2019/06"));
 
-        assertThat(kindsOffered(presenter, 0)).containsExactly(Kind.OPEN, Kind.MOVE_TO_LIBRARY);
-        assertThat(kindsOffered(presenter, 1)).containsExactly(Kind.OPEN, Kind.MOVE_TO_LIBRARY);
-        assertThat(kindsOffered(presenter, 2)).containsExactly(Kind.OPEN);
-        assertThat(kindsOffered(presenter, 3)).containsExactly(Kind.OPEN);
+        assertThat(kindsOffered(presenter, 0)).containsExactly(Kind.OPEN, Kind.RESCUE);
+        assertThat(kindsOffered(presenter, 1)).containsExactly(Kind.OPEN, Kind.RESCUE);
+        assertThat(kindsOffered(presenter, 2)).containsExactly(Kind.OPEN, Kind.RESCUE);
+        assertThat(kindsOffered(presenter, 3)).containsExactly(Kind.OPEN, Kind.RESCUE);
     }
 
     @Test
-    void openFolderIsTheWayOnFromEveryCardWhateverElseItOffers() {
+    void eachRescueCarriesTheRootItsOwnFolderSitsUnder() {
+        final ReviewPresenter presenter = over(folder(Root.REVIEW, "Food"),
+                folder(Root.DUPLICATES, "2019-06_beach"), folder(Root.UNREVIEWABLE, "2019/06"));
+
+        assertThat(actionsOn(presenter, 0).getLast().root()).isEqualTo(RescueRoot.REVIEW);
+        assertThat(actionsOn(presenter, 1).getLast().root()).isEqualTo(RescueRoot.DUPLICATES);
+        assertThat(actionsOn(presenter, 2).getLast().root()).isEqualTo(RescueRoot.UNREVIEWABLE);
+    }
+
+    @Test
+    void openFolderIsTheWayOnFromACardAndTheRescueIsNot() {
         final ReviewPresenter presenter = over(folder(Root.REVIEW, "Food"),
                 folder(Root.DUPLICATES, "2019-06_beach"));
 
         assertThat(actionsOn(presenter, 0)).extracting(Action::kind, Action::leading)
-                .containsExactly(tuple(Kind.OPEN, true), tuple(Kind.MOVE_TO_LIBRARY, false));
-        assertThat(actionsOn(presenter, 1)).extracting(Action::leading).containsExactly(true);
+                .containsExactly(tuple(Kind.OPEN, true), tuple(Kind.RESCUE, false));
+        assertThat(actionsOn(presenter, 1)).extracting(Action::kind, Action::leading)
+                .containsExactly(tuple(Kind.OPEN, true), tuple(Kind.RESCUE, false));
     }
 
-    // A rescue leaves behind anything it cannot date, and keeps the folder wherever one file is
-    // left. A question promising a count or the removal is one the engine can make false.
     @Test
-    void theQuestionBeforeAMoveNamesTheFolderAndPromisesNoCountAndNoRemoval() {
+    void theQuestionBeforeARescueNamesTheFolderAndPromisesNoCountAndNoRemoval() {
         final ReviewPresenter presenter = over(new Folder(Root.REVIEW, FiledBy.A_SIFT, "Food",
                 WORKING_ROOT.resolve("Review").resolve("Food"), 9, 0, Instant.now()));
 
         final Action move = actionsOn(presenter, 0).getLast();
 
-        assertThat(requireNonNull(move.confirm()).heading()).isEqualTo("Move Food to your library?");
+        assertThat(requireNonNull(move.confirm()).heading()).isEqualTo("Rescue Food to Sorted?");
         assertThat(requireNonNull(move.confirm()).question())
-                .isEqualTo("Anything you don't want there has to come out first.")
-                .doesNotContain("9")
-                .doesNotContain("removes");
+                .isEqualTo("The photos and videos still in it go back into Sorted. A photo Sorted "
+                        + "already holds is deleted from the folder rather than put back twice.");
     }
 
     @Test
     void movingAFolderHandsTheFolderToTheFacadeAndTakesTheReaderToTheDashboard() {
         final Pipeline pipeline = pipeline();
         final JobHandle<RescueSummary> started = handle();
-        doReturn(started).when(pipeline).rescue("Food");
+        doReturn(started).when(pipeline).rescue(RescueRoot.REVIEW, "Food");
         final ReviewPresenter presenter = over(pipeline, folder(Root.REVIEW, "Food"));
         final var opened = new AtomicInteger();
         presenter.setOpenDashboard(opened::incrementAndGet);
 
-        presenter.moveToLibrary(actionsOn(presenter, 0).getLast());
+        presenter.rescue(actionsOn(presenter, 0).getLast());
 
-        verify(pipeline).rescue("Food");
+        verify(pipeline).rescue(RescueRoot.REVIEW, "Food");
         assertThat(opened).hasValue(1);
     }
 
     @Test
     void aMoveThatCouldNotStartSaysSoAndLeavesTheReaderOnThisScreen() {
         final Pipeline pipeline = pipeline();
-        doReturn(handle()).when(pipeline).rescue(any());
+        doReturn(handle()).when(pipeline).rescue(any(), any());
         final ReviewPresenter presenter = over(pipeline, folder(Root.REVIEW, "Food"),
                 folder(Root.REVIEW, "junk"));
         final var opened = new AtomicInteger();
         presenter.setOpenDashboard(opened::incrementAndGet);
         // The launcher takes one job at a time, so the first press occupies it and the second is
         // the window the screen's own button gate cannot see.
-        presenter.moveToLibrary(actionsOn(presenter, 0).getLast());
+        presenter.rescue(actionsOn(presenter, 0).getLast());
 
-        presenter.moveToLibrary(actionsOn(presenter, 1).getLast());
+        presenter.rescue(actionsOn(presenter, 1).getLast());
 
         assertThat(opened).hasValue(1);
         assertThat(requireNonNull(presenter.view().message()).text())
@@ -204,16 +213,16 @@ class ReviewPresenterTest {
         final var firstJob = new CompletableFuture<RescueSummary>();
         final JobHandle<RescueSummary> running = mock(JobHandle.class);
         when(running.onComplete()).thenReturn(firstJob);
-        doReturn(running).when(pipeline).rescue(any());
+        doReturn(running).when(pipeline).rescue(any(), any());
         final ReviewPresenter presenter = over(pipeline, folder(Root.REVIEW, "Food"),
                 folder(Root.REVIEW, "junk"));
         presenter.setOpenDashboard(() -> { });
-        presenter.moveToLibrary(actionsOn(presenter, 0).getLast());
-        presenter.moveToLibrary(actionsOn(presenter, 1).getLast());
+        presenter.rescue(actionsOn(presenter, 0).getLast());
+        presenter.rescue(actionsOn(presenter, 1).getLast());
         assertThat(presenter.view().message()).isNotNull();
 
-        firstJob.complete(new RescueSummary(1, List.of(), true, false));
-        presenter.moveToLibrary(actionsOn(presenter, 1).getLast());
+        firstJob.complete(new RescueSummary(1, 0, 0, 0, true, false));
+        presenter.rescue(actionsOn(presenter, 1).getLast());
 
         assertThat(presenter.view().message()).isNull();
     }
@@ -244,12 +253,21 @@ class ReviewPresenterTest {
     // The app takes one job at a time whoever started it, so the press would be refused after its
     // question had already been answered.
     @Test
-    void noFolderOffersAMoveWhileSomethingElseIsRunning() {
+    void aFolderStillShowsItsMoveWhileSomethingElseIsRunning() {
         final Pipeline pipeline = pipeline();
         when(pipeline.isBusy()).thenReturn(true);
         final ReviewPresenter presenter = over(pipeline, folder(Root.REVIEW, "Food"));
 
-        assertThat(kindsOffered(presenter, 0)).containsExactly(Kind.OPEN);
+        assertThat(kindsOffered(presenter, 0)).containsExactly(Kind.OPEN, Kind.RESCUE);
+        assertThat(actionsOn(presenter, 0)).extracting(Action::kind, Action::live)
+                .containsExactly(tuple(Kind.OPEN, true), tuple(Kind.RESCUE, false));
+    }
+
+    @Test
+    void bothOfAFoldersButtonsArePressableWhileNothingIsRunning() {
+        final ReviewPresenter presenter = over(folder(Root.REVIEW, "Food"));
+
+        assertThat(actionsOn(presenter, 0)).extracting(Action::live).containsOnly(true);
     }
 
     @Test
@@ -276,13 +294,11 @@ class ReviewPresenterTest {
         assertThat(presenter.view().groups()).isEmpty();
     }
 
-    // Nothing writes a note beside a photo no sift could judge, so the fold could only ever open on
-    // the line saying there is nothing to show.
     @Test
-    void aFolderUnderTheRootNobodyWritesNotesInCarriesNoFold() {
+    void aFolderNoSiftCouldJudgeCarriesTheSameFoldAsEveryOtherRoot() {
         final ReviewPresenter presenter = over(folder(Root.UNREVIEWABLE, "2019/06"));
 
-        assertThat(onlyCard(presenter).notes()).isNull();
+        assertThat(onlyCard(presenter).notes()).isNotNull();
     }
 
     @Test
@@ -487,11 +503,10 @@ class ReviewPresenterTest {
     }
 
     @Test
-    void theButtonMovingAFolderIsCalledTheSameThingAsTheModeThatMovesSortedPhotos() {
+    void theButtonRescuingAFolderIsCalledWhateverTheRescueModeIsCalled() {
         final ReviewPresenter presenter = over(folder(Root.REVIEW, "Food"));
 
-        assertThat(actionsOn(presenter, 0).getLast().label())
-                .isEqualTo(RunMode.MOVE_TO_LIBRARY.label());
+        assertThat(actionsOn(presenter, 0).getLast().label()).isEqualTo(RunMode.RESCUE.label());
     }
 
     private static List<Kind> kindsOffered(final ReviewPresenter presenter, final int group) {

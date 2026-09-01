@@ -117,6 +117,11 @@ public enum RefusalKind {
     FILE_UNREACHABLE,
 
     /**
+     * A note Sluice wrote beside a folder's photos holds something other than text.
+     */
+    NOTE_IS_NOT_TEXT,
+
+    /**
      * A sift's answers contradict each other, so none of them was applied.
      */
     ANSWERS_DO_NOT_HOLD,

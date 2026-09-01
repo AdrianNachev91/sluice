@@ -136,6 +136,30 @@ class MediaTalliesTest {
     }
 
     @Test
+    void aSortedTreeWithNoUndatedFolderHasNothingUndated() {
+        this.staged("Photos/2019/06/a.jpg");
+
+        assertThat(this.tallies().sorted().undated()).isZero();
+    }
+
+    @Test
+    void mediaDirectlyInTheUndatedFolderIsCountedThereAndInNoYearRow() {
+        this.staged("Unsorted/a.jpg", "Unsorted/b.jpg", "Photos/2019/06/c.jpg");
+
+        final SortedTally tally = this.tallies().sorted();
+
+        assertThat(tally.undated()).isEqualTo(2);
+        assertThat(tally.years()).extracting(YearRow::year).containsExactly(2019);
+    }
+
+    @Test
+    void theUndatedCountCoversBothPhotosAndVideosAsOneNumber() {
+        this.staged("Unsorted/a.jpg", "Unsorted/b.mp4");
+
+        assertThat(this.tallies().sorted().undated()).isEqualTo(2);
+    }
+
+    @Test
     void aMonthFolderThatIsNotAMonthLeavesItsPhotoCountedForTheYearOnly() {
         this.staged("Photos/2019/13/a.jpg", "Photos/2019/00/b.jpg");
 

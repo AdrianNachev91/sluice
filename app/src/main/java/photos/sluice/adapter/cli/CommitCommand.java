@@ -158,6 +158,7 @@ public class CommitCommand implements Callable<Integer> {
             case PHOTOS -> "Photos";
             case VIDEOS -> "Videos";
             case FUNNY -> "Funny";
+            case UNDATED -> "Unsorted";
             case OTHER -> "Elsewhere in your Library";
         };
     }

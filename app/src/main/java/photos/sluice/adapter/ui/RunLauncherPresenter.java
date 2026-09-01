@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
+import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.imports.ImportKind;
@@ -45,6 +46,7 @@ public class RunLauncherPresenter {
     private volatile @Nullable Runnable repaint;
     private volatile @Nullable Runnable recount;
     private volatile @Nullable Runnable openRuns;
+    private volatile @Nullable Runnable openReview;
 
     // The job now running, held so that Cancel has something to ask. Null between runs, which is
     // what a Cancel arriving after one ended reads to decide it has nothing to do.
@@ -121,6 +123,15 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Says how the screen goes to the review list.
+     *
+     * @param openReview {@link Runnable} shows the review screen
+     */
+    public void setOpenReview(final Runnable openReview) {
+        this.openReview = openReview;
+    }
+
+    /**
      * Takes a press on the button under the scope field.
      *
      * <p>What that button does depends on what the chosen timeline already holds, and the launcher
@@ -147,6 +158,18 @@ public class RunLauncherPresenter {
      */
     public void showRuns() {
         final Runnable open = this.openRuns;
+        if (open != null) {
+            open.run();
+        }
+    }
+
+    /**
+     * Shows the review screen, which is where a rescue is started from.
+     *
+     * <p>Does nothing while the shell has yet to say how, which is the window still being built.
+     */
+    public void showReview() {
+        final Runnable open = this.openReview;
         if (open != null) {
             open.run();
         }
@@ -222,20 +245,21 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * Moves what is left in one Review folder into the library, from the review screen's own row.
+     * Moves what is left in one waiting folder back into Sorted, from the review screen's own row.
      *
-     * <p>The caller names the folder, because the launcher has no field that could.
+     * <p>The caller names the folder and its root, because the launcher has no field that could.
      *
-     * @param folder {@link String} the folder's name below the Review root
+     * @param root {@link RescueRoot} which root the folder sits under
+     * @param folder {@link String} the folder's name below that root
      * @param named {@link String} that folder as its own row named it. The reader has just crossed
      *     from one screen to the other, so the two naming it differently would read as two folders
      * @return boolean false where a job already holds the slot and nothing was started
      */
-    public boolean moveToLibraryFromReview(final String folder, final String named) {
+    public boolean rescueFromReview(final RescueRoot root, final String folder, final String named) {
         if (this.running) {
             return false;
         }
-        this.begin(RunMode.RESCUE, named, null, null, () -> this.pipeline.rescue(folder));
+        this.begin(RunMode.RESCUE, named, null, null, () -> this.pipeline.rescue(root, folder));
         return true;
     }
 

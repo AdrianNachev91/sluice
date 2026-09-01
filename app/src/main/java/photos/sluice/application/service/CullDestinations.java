@@ -10,9 +10,12 @@ import photos.sluice.domain.paths.Containment;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Where a culled file ends up. One decision maps to exactly one destination directory, and this is
@@ -110,6 +113,23 @@ public class CullDestinations {
     Path unreviewableDir(final Path file) {
         final String[] yearMonth = yearMonthOf(file).split("-", 2);
         return under(this.pathsPort.unreviewable(), yearMonth[0], yearMonth[1]);
+    }
+
+    /**
+     * The month a file was filed under in Sorted, for the note written where it lands next.
+     *
+     * <p>A month rather than a day, because the path is all there is to read here. What resolved
+     * the day is long gone by the time a cull runs.
+     *
+     * @param file {@link Path} the file about to be moved out of Sorted
+     * @return an {@link Optional} {@link YearMonth}, empty where the path names no real month
+     */
+    Optional<YearMonth> monthFiledUnder(final Path file) {
+        try {
+            return Optional.of(YearMonth.parse(yearMonthOf(file)));
+        } catch (final DateTimeParseException _) {
+            return Optional.empty();
+        }
     }
 
     /**

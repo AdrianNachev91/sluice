@@ -8,6 +8,7 @@ import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.domain.model.MediaType;
 import photos.sluice.domain.model.Numerals;
+import photos.sluice.domain.paths.SortFolderNames;
 import photos.sluice.domain.scan.MediaTypeDetector;
 
 import java.nio.file.Path;
@@ -34,7 +35,6 @@ import java.util.TreeMap;
  */
 final class MediaTallies {
 
-    // Where a sort files each kind. Named here as the reader of the two folders SortEngine writes.
     private static final String PHOTOS = "Photos";
     private static final String VIDEOS = "Videos";
 
@@ -102,7 +102,26 @@ final class MediaTallies {
         this.gather(root.resolve(VIDEOS), MediaType.VIDEO, byYear);
         return new SortedTally(byYear.entrySet().stream()
                 .map(year -> year.getValue().asRow(year.getKey()))
-                .toList());
+                .toList(),
+                this.undated(root.resolve(SortFolderNames.UNDATED)));
+    }
+
+    /**
+     * How much media is waiting in the undated folder.
+     *
+     * <p>Both kinds together, and read whatever depth it sits at. A rescue writes into this folder
+     * flat, and a folder somebody arranged by hand inside it still holds media a move would take.
+     *
+     * @param root {@link Path} the undated folder under Sorted
+     * @return int how many photos and videos are under it
+     */
+    private int undated(final Path root) {
+        if (!this.media.exists(root)) {
+            return 0;
+        }
+        return (int) this.media.listFiles(root).stream()
+                .filter(file -> this.mediaTypeDetector.classify(file).isPresent())
+                .count();
     }
 
     /**
@@ -225,8 +244,7 @@ final class MediaTallies {
          * How a scope writes this folder's name for a given number.
          *
          * <p>The two sit together rather than one beside each constant, because what matters is
-         * that they differ and how. {@code CullScopeSelector} resolves a year by its own digits and
-         * a month padded to a fixed width, and these are those two rules read back.
+         * that they differ and how. A year is its own digits; a month is padded to a fixed width.
          *
          * @param value int the number the folder names
          * @return {@link String} the name a scope would resolve

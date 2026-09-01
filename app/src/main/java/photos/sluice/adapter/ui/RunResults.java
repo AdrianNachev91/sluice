@@ -38,6 +38,10 @@ final class RunResults {
     private static final String PHOTOS_SORTED = "Photos sorted";
     private static final String VIDEOS_SORTED = "Videos sorted";
 
+    // Opens on "of those" because it counts some of the row it sits under, which the indent shows
+    // and the words have to survive without.
+    private static final String LOW_CONFIDENCE_DATES = "of those, low confidence date";
+
     private static final String DONE = "Done";
 
     private static final String CONTINUE = "Continue sifting";
@@ -67,9 +71,17 @@ final class RunResults {
     // count, because a narrowed move leaves the rest of Sorted untouched and out of this number.
     private static final String MOVE_STOPPED = "%s of them are still in Sorted.";
 
-    // The Review folder is kept whole on a stop, markers included, so the reader can pick it up
-    // again. Nothing on the card says that otherwise.
-    private static final String RESCUE_STOPPED = "The rest is still in the Review folder.";
+    // Names what it counts, where the line above says "of them". A rescue cannot be narrowed, so
+    // there is no in-scope subset for "them" to point back at.
+    private static final String RESCUE_STOPPED = "%s photos and videos are still in the folder you "
+            + "started from.";
+
+    private static final String RESCUE_STOPPED_ONE = "One photo or video is still in the folder you "
+            + "started from.";
+
+    // Reachable: a stop after the last photo, with only notes or non-media left in the tail.
+    private static final String RESCUE_STOPPED_NONE = "No photos or videos are left in the folder "
+            + "you started from.";
 
     // Its own words because the Continue offer above is not on this card. A reader told they can
     // continue would go looking for a button that is not there.
@@ -262,14 +274,35 @@ final class RunResults {
      * @return a {@link List} of {@link Count} the rows
      */
     private static List<Count> sortCounts(final SortSummary sorted) {
+        final SortSummary.Guessed guessed = sorted.guessed();
         final List<Count> rows = new ArrayList<>();
         rows.add(new Count("result-photos-sorted", PHOTOS_SORTED, RunWords.grouped(sorted.photosSorted())));
+        addGuessed(rows, "result-photos-sorted-guessed", guessed.photosSorted());
         rows.add(new Count("result-videos-sorted", VIDEOS_SORTED, RunWords.grouped(sorted.videosSorted())));
+        addGuessed(rows, "result-videos-sorted-guessed", guessed.videosSorted());
         addWhenAny(rows, "result-reimports", "Already in your library", sorted.reimportsDeleted());
         addWhenAny(rows, "result-byte-dups", "Identical copies removed", sorted.byteDupsDeleted());
         addWhenAny(rows, "result-low-res", "Set aside for review", sorted.lowRes());
+        addGuessed(rows, "result-low-res-guessed", guessed.lowRes());
         addWhenAny(rows, "result-unsorted", "Could not be dated", sorted.unsorted());
         return rows;
+    }
+
+    /**
+     * Adds the part of the row above whose date came off the file rather than off the photo.
+     *
+     * <p>Under the row it belongs to rather than among them. These files are already counted there,
+     * so a row of their own would be a seventh destination on a card whose other rows each name
+     * one.
+     *
+     * @param rows a {@link List} of {@link Count} the rows so far, appended to
+     * @param id {@link String} the row's own id
+     * @param guessed int how many of the row above were dated that way
+     */
+    private static void addGuessed(final List<Count> rows, final String id, final int guessed) {
+        if (guessed > 0) {
+            rows.add(new Count(id, LOW_CONFIDENCE_DATES, RunWords.grouped(guessed), true));
+        }
     }
 
     /**
@@ -319,6 +352,7 @@ final class RunResults {
             case PHOTOS -> "Photos";
             case VIDEOS -> "Videos";
             case FUNNY -> "Funny";
+            case UNDATED -> "Unsorted";
             // Nothing in the pipeline files anything here, and the bucket exists because a first
             // path segment has to land somewhere. A card meeting one says what it can rather than
             // dropping the count.
@@ -335,10 +369,28 @@ final class RunResults {
      */
     private static RunResultView rescueResult(final RunMode ran, final RescueSummary rescued) {
         final List<Count> rows = new ArrayList<>();
-        rows.add(new Count("result-rescued", "Moved to your library", RunWords.grouped(rescued.rescued())));
-        addWhenAny(rows, "result-rescue-skipped", "Left behind", rescued.skipped().size());
+        rows.add(new Count("result-rescued", "Moved to Sorted", RunWords.grouped(rescued.rescued())));
+        addWhenAny(rows, "result-rescue-undated", "Moved to Unsorted", rescued.undated());
+        addWhenAny(rows, "result-rescue-already", "Deleted: already in Sorted",
+                rescued.alreadyInSorted());
         return new RunResultView(headingFor(ran, rescued.cancelled()), toneFor(rescued.cancelled()),
-                rescued.cancelled() ? RESCUE_STOPPED : null, rows, null, null, DONE);
+                rescued.cancelled() ? rescueStopped(rescued.leftBehind()) : null, rows, null, null, DONE);
+    }
+
+    /**
+     * What a stopped rescue says above its counts.
+     *
+     * @param leftBehind int photos and videos still in the folder the run was given
+     * @return {@link String} the sentence
+     */
+    private static String rescueStopped(final int leftBehind) {
+        if (leftBehind == 0) {
+            return RESCUE_STOPPED_NONE;
+        }
+        if (leftBehind == 1) {
+            return RESCUE_STOPPED_ONE;
+        }
+        return RESCUE_STOPPED.formatted(RunWords.grouped(leftBehind));
     }
 
     /**

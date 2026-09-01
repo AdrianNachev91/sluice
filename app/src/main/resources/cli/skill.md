@@ -18,7 +18,7 @@ you run anything.
 
 ## What Sluice does to files
 
-**It never deletes media unless the same bytes already exist somewhere else.** Four
+**It never deletes media unless the same bytes already exist somewhere else.** Five
 deletions are allowed:
 
 - A file in the Inbox whose bytes are already in the Library. That is a re-import, and the
@@ -26,6 +26,8 @@ deletions are allowed:
 - Byte-identical copies inside one batch, keeping one.
 - The original of an `import --move`, deleted only after its bytes are read back and
   hashed in the Inbox.
+- A file `rescue` would put back where `Sorted` already holds it, at the same name and
+  size and with the same bytes. Those bytes are read at the destination first.
 - A spent `.json` sidecar, which is metadata rather than media.
 
 Everything else is a move or a copy. A media name collision gets a ` (2)` suffix rather
@@ -201,23 +203,23 @@ the settings file by design, so that file boundary is the boundary to respect.
 
 ## The verbs
 
-| Command        | What it does                                                                       |
-|----------------|------------------------------------------------------------------------------------|
-| `sluice`       | On its own, prints help at exit 0. Arguments naming no verb are a usage error      |
-| `app`          | Opens the desktop application. Takes no arguments                                  |
-| `runs`         | Lists the sifts on disk and their progress. Reads only                             |
-| `sort`         | Files the Inbox into `Sorted`, under the year each file was taken                  |
-| `commit`       | Moves what is in `Sorted` into the Library                                         |
-| `rescue`       | Moves a `Review` folder's files into the Library, then removes the folder if empty |
-| `sift`         | Judges what is in `Sorted`, and moves anything it does not keep out of it          |
-| `resume`       | Continues a sift that is waiting                                                   |
-| `import`       | Brings folders and files into the Inbox                                            |
-| `troubleshoot` | Repairs what can be repaired without asking, and reports what is still open        |
-| `answer`       | Resolves one open finding, by its key and one of its option ids                    |
-| `redo`         | Frees a run's rejected sheets and returns fresh instructions to judge them         |
-| `discard`      | Gives up on a run, archiving its records for 30 days                               |
-| `purge`        | Deletes the records of every finished run, with no way back                        |
-| `skill`        | Prints these instructions                                                          |
+| Command        | What it does                                                                        |
+|----------------|-------------------------------------------------------------------------------------|
+| `sluice`       | On its own, prints help at exit 0. Arguments naming no verb are a usage error       |
+| `app`          | Opens the desktop application. Takes no arguments                                   |
+| `runs`         | Lists the sifts on disk and their progress. Reads only                              |
+| `sort`         | Files the Inbox into `Sorted`, under the year each file was taken                   |
+| `commit`       | Moves what is in `Sorted` into the Library                                          |
+| `rescue`       | Moves a waiting folder's files back into `Sorted`, then removes the folder if empty |
+| `sift`         | Judges what is in `Sorted`, and moves anything it does not keep out of it           |
+| `resume`       | Continues a sift that is waiting                                                    |
+| `import`       | Brings folders and files into the Inbox                                             |
+| `troubleshoot` | Repairs what can be repaired without asking, and reports what is still open         |
+| `answer`       | Resolves one open finding, by its key and one of its option ids                     |
+| `redo`         | Frees a run's rejected sheets and returns fresh instructions to judge them          |
+| `discard`      | Gives up on a run, archiving its records for 30 days                                |
+| `purge`        | Deletes the records of every finished run, with no way back                         |
+| `skill`        | Prints these instructions                                                           |
 
 Two flags work on every command. `--json` writes the result to standard output as one
 JSON document. `--quiet` reports no progress and leaves the result unchanged.
@@ -241,6 +243,10 @@ because sifting spends from the user's account balance and skipping a month is w
 extra spelling there. `sort` and `commit` take a span.
 
 A year and `--oldest` name different photos, so no verb takes both.
+
+`commit` takes two words where a year goes. `all` is every sorted year at once. `unsorted`
+is the photos nothing could date, which `rescue` leaves in `Sorted/Unsorted` and which no
+year names. `sort` and `sift` refuse both words.
 
 ### Addressing a run
 
@@ -310,6 +316,15 @@ straight into the Library. So a sift reaches the Library without a `commit`, for
 category. Photos that look like near-copies of each other go to `Duplicates`, one folder
 per group, with the kept one copied in beside them. Anything the sift could not judge goes
 to `Unreviewable`.
+
+**`rescue` is the way back out of all three.** It moves what is left in one folder into
+`Sorted`, where a later `commit` reaches it. `--from unreviewable` and `--from duplicates`
+name the other two roots. Under `unreviewable` a folder is a year and month, like
+`2019/06`. Under `duplicates` it is one near-copy group, like `2019-06_beach`. A file
+`Sorted` already holds, at the same name and size and with the same bytes, is deleted from
+the folder rather than put back twice. That is what the group's copy of the kept photo
+meets, its original never having left `Sorted`. Anything `rescue` cannot date lands flat
+in `Sorted/Unsorted`.
 
 ```
 sluice sift 2019                    # builds the sheets

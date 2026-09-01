@@ -3,6 +3,7 @@ package photos.sluice.application.service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.AnswerSource;
@@ -221,11 +222,11 @@ class PipelineTest {
         final var progress = new RecordingProgressPort();
         writeFile(root.resolve("Review/2019-06/IMG_1.jpg"), "keeper");
 
-        final RescueSummary summary = pipeline(root, progress).rescue("2019-06").join();
+        final RescueSummary summary = pipeline(root, progress).rescue(RescueRoot.REVIEW, "2019-06").join();
 
         assertThat(summary.rescued()).isEqualTo(1);
         assertThat(summary.folderRemoved()).isTrue();
-        assertThat(Files.exists(root.resolve("Library/Photos/2019/06/IMG_1.jpg"))).isTrue();
+        assertThat(Files.exists(root.resolve("Sorted/Photos/2019/06/IMG_1.jpg"))).isTrue();
     }
 
     @Test
@@ -234,12 +235,12 @@ class PipelineTest {
         writeFile(root.resolve("Review/2019-06/IMG_1.jpg"), "one");
         writeFile(root.resolve("Review/2019-06/IMG_2.jpg"), "two");
 
-        pipeline(root, progress).rescue("2019-06").join();
+        pipeline(root, progress).rescue(RescueRoot.REVIEW, "2019-06").join();
 
         assertThat(progress.events).containsExactly(
-                "planned:Moving to library...", "started:Moving to library...",
-                "tick:Moving to library...:1/2", "tick:Moving to library...:2/2",
-                "finished:Moving to library...");
+                "planned:Rescuing...", "started:Rescuing...",
+                "tick:Rescuing...:1/2", "tick:Rescuing...:2/2",
+                "finished:Rescuing...");
     }
 
     // The ProgressPort doc says phaseStarted/phaseFinished always bracket a phase. This proves that
@@ -251,12 +252,11 @@ class PipelineTest {
         final var progress = new RecordingProgressPort();
         writeFile(root.resolve("Review/2019-06/IMG_1.jpg"), "keeper");
 
-        final var handle = pipeline(root, progress, new FailingMoves()).rescue("2019-06");
+        final var handle = pipeline(root, progress, new FailingMoves()).rescue(RescueRoot.REVIEW, "2019-06");
 
         assertThatThrownBy(handle::join).isInstanceOf(CompletionException.class);
         assertThat(progress.events)
-                .containsExactly("planned:Moving to library...", "started:Moving to library...",
-                        "finished:Moving to library...");
+                .containsExactly("planned:Rescuing...", "started:Rescuing...", "finished:Rescuing...");
     }
 
     @Test
@@ -289,16 +289,15 @@ class PipelineTest {
         final var releaseMove = new CountDownLatch(1);
         final var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove));
 
-        final JobHandle<RescueSummary> handle = pipeline.rescue("2019-06");
+        final JobHandle<RescueSummary> handle = pipeline.rescue(RescueRoot.REVIEW, "2019-06");
         moveStarted.await();
         handle.requestCancellation();
         releaseMove.countDown();
         final RescueSummary summary = handle.join();
 
         assertThat(summary.rescued()).isEqualTo(1);
-        assertThat(summary.skipped()).isEmpty();
-        // The dissolve gate keeps the folder: the pass never reached every entry, so this marker
-        // must survive even though nothing it did reach was skipped.
+        // The dissolve gate keeps the folder, the pass never having reached every entry, so this
+        // marker survives.
         assertThat(summary.folderRemoved()).isFalse();
         assertThat(Files.exists(root.resolve("Review/2019-06"))).isTrue();
         assertThat(Files.exists(reasonsFile)).isTrue();

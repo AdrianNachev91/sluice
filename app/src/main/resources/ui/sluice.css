@@ -276,9 +276,8 @@
 }
 
 /* A few words inside a sentence that lead somewhere else in this app. A button rather than a
-   Hyperlink: the toolkit's own draws a visited state and its own underline, and neither means
-   anything for a screen you can come back to. No leaves-the-app mark either, which LinkedText draws
-   and this must not. */
+   Hyperlink: the toolkit's own draws a visited state, which means nothing for a screen you can come
+   back to. No leaves-the-app mark either, which LinkedText draws and this must not. */
 .in-app-link {
     -fx-background-color: transparent;
     -fx-border-color: transparent;
@@ -286,6 +285,7 @@
     -fx-font-weight: normal;
     -fx-padding: 0;
     -fx-cursor: hand;
+    -fx-underline: true;
 }
 
 /*noinspection CssInvalidPseudoSelector*/
@@ -294,7 +294,6 @@
 }
 
 .in-app-link:hover {
-    -fx-underline: true;
     -fx-opacity: 1.0;
 }
 
@@ -1238,6 +1237,13 @@
     -fx-background-color: -sluice-ground;
 }
 
+/* The one step in the row that leads somewhere instead of starting a run. Unboxed, so a reader can
+   see at a glance that it is not one of the three buttons. It takes the buttons' vertical padding
+   to sit on their centre line, and none at the sides, so every gap in the row measures the same. */
+.run-mode-link {
+    -fx-padding: 8px 0;
+}
+
 /* The chosen mode: tinted and outlined without being filled, so Start stays the only filled control
    here. In the accent rather than the fixed brand green, which the sidebar's selected entry settles
    the same way. The brand green holds its value in both looks by design. In the dark look this
@@ -1274,6 +1280,14 @@
 
 .run-year-rows {
     -fx-spacing: 4px;
+}
+
+/* The row for what no year names, set off from the years above it. A wider gap than the 4px between
+   years, because it is not one of them: nothing dates what it counts, and only one mode can take
+   it. The gap is on a class of its own, since a box carrying padding takes that height whether or
+   not it holds a row, and most installs hold none. */
+.run-undated-rows-filled {
+    -fx-padding: 10px 0 0 0;
 }
 
 /* One staged year, laid out the way a nav entry is: full width and left aligned. It carries a
@@ -1624,6 +1638,13 @@
     -fx-border-width: 0 0 1px 0;
 }
 
+/* A row counting part of the one above it. Indented so the eye reads it as belonging there, and
+   quieter, since the row it belongs to is the one that carries the news. */
+.run-result-count-part {
+    -fx-padding: 7px 2px 7px 20px;
+    -fx-opacity: 0.75;
+}
+
 .run-result-count-label {
     -fx-text-fill: -sluice-text;
 }
@@ -1821,13 +1842,6 @@
 .review-body {
     -fx-spacing: 16px;
     -fx-padding: 0 12px 0 0;
-}
-
-/* A refusal this screen reports, on the help line it shares with the ordinary reports. Said past
-   both single selectors, so this one wins. */
-.review-report-caution {
-    -fx-text-fill: -sluice-caution;
-    -fx-font-weight: bold;
 }
 
 /* The sections, and the cards inside one. Wider apart than the cards are, so a reader scanning down

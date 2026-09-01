@@ -9,6 +9,7 @@ import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.application.port.in.ReviewListing;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.in.SortedTally;
@@ -67,7 +68,7 @@ import java.util.List;
 public class Pipeline {
 
     private static final String COMMITTING = "Moving to library...";
-    private static final String RESCUING = "Moving to library...";
+    private static final String RESCUING = "Rescuing...";
     private static final String DISCARDING = "Discarding...";
     private static final String IMPORTING = "Importing...";
 
@@ -286,15 +287,16 @@ public class Pipeline {
     /**
      * Runs a rescue job as a cancellable background job.
      *
-     * @param reviewFolder {@link String} the Review folder to promote
+     * @param root {@link RescueRoot} which root the folder sits under
+     * @param folder {@link String} the folder to move back into Sorted
      * @return a {@link JobHandle} of {@link RescueSummary} a handle to the running job
      */
-    public JobHandle<RescueSummary> rescue(final String reviewFolder) {
+    public JobHandle<RescueSummary> rescue(final RescueRoot root, final String folder) {
         this.requireUsableRoots();
         return this.jobRunner.submit(handle -> {
             this.phaseRunner.planned(List.of(RESCUING));
             return this.runPhase(RESCUING,
-                    progress -> this.rescueEngine.rescue(reviewFolder, progress, handle.stopSignal()));
+                    progress -> this.rescueEngine.rescue(root, folder, progress, handle.stopSignal()));
         });
     }
 
@@ -553,19 +555,14 @@ public class Pipeline {
     /**
      * Retires every poller this process has armed. No run is started, stopped or altered by it.
      *
-     * <p>Three callers need it. One has just moved the working root. Every armed watcher polls a prep
-     * dir under {@code logs/sift-prep}, which hangs off that root. So for that one move, "armed
-     * under the old root" and "armed at all" name the same set. A watcher left behind would poll a folder
-     * outside the working root in force, for as long as the process lives. A library or inbox move
-     * strands nothing and must not come here, since this would also retire a watch a user turned on
-     * by hand.
+     * <p>For a working-root move, the app closing, and a save that turned watching off. Every armed
+     * watcher polls a prep dir under {@code logs/sift-prep}, which hangs off the working root, so
+     * "armed under the old root" and "armed at all" name the same set. One left behind would poll a
+     * folder outside the root in force, for as long as the process lives. The mode itself is read
+     * when a watch is armed and never again, which is why turning it off has to come here too.
      *
-     * <p>The second is the app closing, where every watcher is stale for the same reason: there will
-     * be no process left to poll in. That caller retires them first, so nothing is still deciding to
-     * start a job while the next step is settling what is still running.
-     *
-     * <p>The third is a save that turned watching off. The mode is read when a watch is armed and
-     * never again, so without this a reader who turns it off still has every watcher polling.
+     * <p>A library or inbox move strands nothing and must not come here. This would also retire a
+     * watch a user turned on by hand.
      *
      * <p>Retiring a watcher does not reach into a poll already running. A watcher whose thread is
      * mid-attempt when this arrives still finishes that attempt, resume included. What this
@@ -948,11 +945,9 @@ public class Pipeline {
 
     /**
      * Thrown by {@code curate()} in place of a plain {@link ScopeOccupiedException} whenever the
-     * refusal lands after its sort has already moved real files. Two calls reach that point. An
-     * auto-resolved {@code OldestYear} scope cannot be checked until its year is known, which is
-     * only after the sort. And the claim inside {@code buildFreshAndDispatch} re-asks for every
-     * scope shape, so a scope free when {@code curate()} was called but taken during a long sort
-     * refuses there too.
+     * refusal lands after its sort has already moved real files. An auto-resolved
+     * {@code OldestYear} scope cannot be checked until its year is known, which is only after the
+     * sort. And a scope free when {@code curate()} was called can be taken during a long one.
      *
      * <p>Both need to carry a partial result forward, which a plain refusal cannot:
      * {@link #sortSummary()} is what the sort stage already produced. A refusal raised before the

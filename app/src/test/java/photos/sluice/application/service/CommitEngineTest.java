@@ -102,6 +102,33 @@ class CommitEngineTest {
     }
 
     @Test
+    void undatedScopeMovesTheUnsortedFolderAndLeavesADatedYearWhereItIs(@TempDir final Path root)
+            throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Sorted/Unsorted/a.jpg"), "undated");
+        writeFile(root.resolve("Sorted/Photos/2019/06/dated.jpg"), "dated");
+
+        final CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.Undated());
+
+        assertThat(summary.committed()).isEqualTo(1);
+        assertThat(summary.byBucket()).containsEntry(LibraryBucket.UNDATED, 1);
+        assertThat(Files.exists(libraryRoot.resolve("Unsorted/a.jpg"))).isTrue();
+        assertThat(Files.exists(root.resolve("Sorted/Photos/2019/06/dated.jpg"))).isTrue();
+    }
+
+    @Test
+    void allScopeAlsoTakesTheUndatedFolder(@TempDir final Path root) throws IOException {
+        final Path libraryRoot = root.resolve("Library");
+        writeFile(root.resolve("Sorted/Unsorted/a.jpg"), "undated");
+
+        final CommitSummary summary = commitEngine(root, libraryRoot).commit(new CommitScope.All());
+
+        assertThat(summary.committed()).isEqualTo(1);
+        assertThat(summary.byBucket()).containsEntry(LibraryBucket.UNDATED, 1);
+        assertThat(Files.exists(libraryRoot.resolve("Unsorted/a.jpg"))).isTrue();
+    }
+
+    @Test
     void prunesSortedDirectoriesLeftEmptyAfterCommit(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
         writeFile(root.resolve("Sorted/Photos/2019/06/a.jpg"), "keeper");

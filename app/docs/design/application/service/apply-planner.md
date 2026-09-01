@@ -205,7 +205,7 @@ exists and still hashes to the recorded value. A record alone is never trusted o
 | A move-based decision's file is missing, with no move record verifying it already ran         | Unresolved - `ApplyException`, zero files moved                                          |
 | A move-based decision's file is missing, and its move record's destination hash-verifies      | Done - not reprocessed; a missing secondary write is backfilled (`apply-engine.md`)      |
 | A move record's destination is missing, or its content no longer matches the recorded hash    | Unresolved - `ApplyException`, zero files moved; the record alone is never trusted       |
-| An unreviewable file's move record verifies (destination hash-matches) but its source is gone | Done - not reprocessed; there is no secondary write to backfill                          |
+| An unreviewable file's move record verifies (destination hash-matches) but its source is gone | Done - not reprocessed; its note line is backfilled off the record (`apply-engine.md`)   |
 | An unreviewable file is missing, with no move record verifying it already ran                 | Unresolved - `ApplyException`, zero files moved (same gate as any decision)              |
 | An unreviewable entry, or a sidecar `src`, names a path outside the Sorted root               | `SourceOutsideSorted` - `ApplyException`, zero files moved, that path never opened       |
 

@@ -12,6 +12,7 @@ import photos.sluice.adapter.ui.ReviewView.Kind;
 import photos.sluice.adapter.ui.ReviewView.Notes;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
+import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.application.port.in.ReviewListing;
 import photos.sluice.application.port.in.ReviewListing.FiledBy;
 import photos.sluice.application.port.in.ReviewListing.Folder;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,7 +58,7 @@ public class ReviewPresenter {
 
     private static final String OPEN = "Open folder";
 
-    private static final String MOVE_TO_LIBRARY = RunMode.RESCUE.label();
+    private static final String RESCUE_TO_SORTED = RunMode.RESCUE.label();
 
     private static final String SHOW_NOTES = "Why these are here";
 
@@ -70,37 +72,38 @@ public class ReviewPresenter {
     private static final String NOTES_UNREADABLE = "What was written about this folder could not be "
             + "read.";
 
-    // Every movable section says it, since any of them can be the first one read.
-    private static final String WEED_THEN_MOVE = " Open a folder, throw away what you don't want, "
-            + "then move what is left into your library.";
+    // The one place the screen says what to do, rather than every heading saying it again. The
+    // second half is what a reader cannot see: a folder they emptied is gone from here while their
+    // own file keeps it on disk.
+    private static final String SCREEN_EXPLAINED = "Everything here is waiting for you to look at "
+            + "it. Open a folder, throw away what you don't want, then rescue what is left back to "
+            + "Sorted. A folder leaves this screen once its photos and videos are gone. One you "
+            + "have put your own file into stays on your disk, with that file in it.";
 
     private static final String GENERAL_JUNK_HEADING = "General junk";
 
     private static final String GENERAL_JUNK_EXPLAINED = "A sift judged these worthless and gave no "
-            + "reason beyond that." + WEED_THEN_MOVE;
+            + "reason beyond that.";
 
     private static final String CATEGORY_JUNK_HEADING = "Junk by category";
 
-    // Says what the folders are for, because a reader who wanted these photos is owed the reason a
-    // sift disagreed.
     private static final String CATEGORY_JUNK_EXPLAINED = "A sift decided against keeping these. "
-            + "Each folder is one of the reasons you set up." + WEED_THEN_MOVE;
+            + "Each folder is one of the reasons you set up.";
 
     private static final String NEVER_SIFTED_HEADING = "A sift never sees these";
 
-    // Names both of a sort's own destinations, because their folder names say when rather than why.
     private static final String NEVER_SIFTED_EXPLAINED = "A sort would not put these in Sorted, "
             + "which is the only place a sift looks. A dated folder holds photos whose file size or "
             + "resolution is under what a sift looks at, and Unsorted holds whatever a sort could "
-            + "not date." + WEED_THEN_MOVE;
+            + "not date.";
 
     private static final String DUPLICATES_HEADING = "Near-copies";
 
     // Says the keeper here is a copy, or a reader keeps it and ends up holding that photo twice.
     private static final String DUPLICATES_EXPLAINED = "Each folder holds the photos that looked "
             + "like near-copies of one that was kept. A copy of the kept one is in there too, with "
-            + "a note saying why. The original is safe in Sorted, so once you have compared them "
-            + "the whole folder can go.";
+            + "a note saying why, and the one that was kept is safe somewhere else. So the whole "
+            + "folder can go once you have compared them.";
 
     private static final String UNREVIEWABLE_HEADING = "A sift could not judge these";
 
@@ -117,8 +120,7 @@ public class ReviewPresenter {
 
     private static final Predicate<String> ANY_NAME = _ -> true;
 
-    // The order the sections are drawn in. The three a reader can act on lead, and the two offering
-    // only Open follow.
+    // The order the sections are drawn in: the Review root's three, then the other two roots.
     private static final List<Section> SECTIONS = List.of(
             new Section(Root.REVIEW, FiledBy.A_SIFT, JunkCategory::claims, "general-junk",
                     GENERAL_JUNK_HEADING, GENERAL_JUNK_EXPLAINED),
@@ -208,7 +210,7 @@ public class ReviewPresenter {
             this.group(listed, section).ifPresent(groups::add);
         }
         if (!this.read) {
-            return new ReviewView(HEADING, null, LOOKING, List.of(), null);
+            return new ReviewView(HEADING, null, null, LOOKING, List.of(), null);
         }
         // Asked of the reading rather than of the sections built from it. A folder no section
         // claimed would otherwise put this line over folders that are there.
@@ -216,8 +218,10 @@ public class ReviewPresenter {
         // A read that failed establishes nothing, so it cannot also report that nothing is waiting.
         final boolean nothingWaiting =
                 listed.folders().isEmpty() && listed.unreadable().isEmpty() && said == null;
-        return new ReviewView(HEADING, unreadableLine(listed), nothingWaiting ? NOTHING_YET : null,
-                groups, said);
+        // Only over folders. On a screen showing nothing waiting, telling a reader what to do with
+        // folders they have not got is one more thing to read past.
+        return new ReviewView(HEADING, groups.isEmpty() ? null : SCREEN_EXPLAINED,
+                unreadableLine(listed), nothingWaiting ? NOTHING_YET : null, groups, said);
     }
 
     /**
@@ -275,7 +279,7 @@ public class ReviewPresenter {
     }
 
     /**
-     * Moves what is left in one folder into the library.
+     * Moves what is left in one folder back into Sorted.
      *
      * <p>Handed to the launcher rather than run here, so it reports, cancels and refuses exactly as
      * every other job does. A refusal lands on the dashboard, which is where the reader is sent.
@@ -284,9 +288,12 @@ public class ReviewPresenter {
      * reader here, told so. A dashboard showing somebody else's run answers nothing they asked.
      *
      * @param action {@link Action} the button that was pressed
+     * @throws NullPointerException if the action carries no root, which only a rescue does
      */
-    public void moveToLibrary(final Action action) {
-        if (!this.launcher.moveToLibraryFromReview(action.folder(), action.named())) {
+    public void rescue(final Action action) {
+        final RescueRoot root = Objects.requireNonNull(action.root(),
+                "a rescue action carries the root its folder sits under");
+        if (!this.launcher.rescueFromReview(root, action.folder(), action.named())) {
             this.message = new Message(ALREADY_RUNNING, true);
             return;
         }
@@ -344,31 +351,15 @@ public class ReviewPresenter {
         final boolean shown = open != null;
         final String failed = shown ? open.failed() : null;
         final List<String> written = shown ? open.lines() : List.of();
-        final Notes notes = writesNotes(folder.root())
-                ? new Notes(idFor(folder, "notes"), SHOW_NOTES, shown,
-                        shown && failed == null ? written : List.of(),
-                        shown ? nothingIn(failed, written) : null)
-                : null;
+        final Notes notes = new Notes(idFor(folder, "notes"), SHOW_NOTES, shown,
+                shown && failed == null ? written : List.of(),
+                shown ? nothingIn(failed, written) : null);
         return new FolderCard(idFor(folder, "card"), folder.path(), folder.name(),
                 RunWords.held(folder.photos(), folder.videos()),
                 Instant.EPOCH.equals(folder.changed())
                         ? "When it last changed is not known"
                         : "Last changed " + RunWords.howLongAgo(folder.changed()),
                 notes, this.actions(folder));
-    }
-
-    /**
-     * Whether Sluice writes anything beside the photos it puts under this root.
-     *
-     * <p>Nothing does under the unreviewable root. A sift that could not judge a photo moves it and
-     * writes no line about it. A fold there could only ever open on the sentence saying there is
-     * nothing to show, and the section's own explanation already answers what it asks.
-     *
-     * @param root {@link Root} which of the three
-     * @return boolean true where a folder under it can carry a note
-     */
-    private static boolean writesNotes(final Root root) {
-        return root != Root.UNREVIEWABLE;
     }
 
     /**
@@ -409,45 +400,38 @@ public class ReviewPresenter {
     /**
      * What can be done about one folder.
      *
-     * <p>Only a folder under Review can be moved into the library. That is the one tree
-     * {@code RescueUseCase.rescue} resolves a name inside.
-     *
-     * <p>The move is withheld while anything is running. The app takes one job at a time, so
-     * offering the button then would put a question whose answer is a refusal.
+     * <p>The move goes inactive while anything is running. The app takes one job at a time, so a
+     * press then would put a question whose answer is a refusal.
      *
      * @param folder {@link Folder} the folder
      * @return a {@link List} of {@link Action} its buttons, in the order drawn
      */
     private List<Action> actions(final Folder folder) {
-        final boolean canMove = folder.root() == Root.REVIEW && !this.pipeline.isBusy();
-        final Action open = new Action(idFor(folder, "open"), OPEN, Kind.OPEN, true,
-                folder.name(), folder.name(), folder.path(), null);
-        if (!canMove) {
-            return List.of(open);
-        }
-        return List.of(open, new Action(idFor(folder, "move"), MOVE_TO_LIBRARY,
-                Kind.MOVE_TO_LIBRARY, false, folder.name(), folder.name(), folder.path(),
-                moveQuestion(folder)));
+        return List.of(
+                new Action(idFor(folder, "open"), OPEN, Kind.OPEN, true, true,
+                        folder.name(), folder.name(), folder.path(), null, null),
+                new Action(idFor(folder, "move"), RESCUE_TO_SORTED, Kind.RESCUE, false,
+                        !this.pipeline.isBusy(), folder.name(), folder.name(), folder.path(),
+                        rescueQuestion(folder), folder.root().rescueRoot()));
     }
 
     /**
-     * What to ask before a folder's photos go into the library.
+     * What to ask before a folder's photos go back into Sorted.
      *
-     * <p>Asked because the library is where this app treats photos as final. A reader who has not
-     * weeded the folder yet would be putting everything Sluice set aside into the place they keep
-     * what they chose.
+     * <p>Claims no count and promises no removal. A stray file that is not media moves nowhere, so
+     * the folder can survive a run that moved every photo in it.
      *
-     * <p>Claims neither a count nor the folder's removal, and both were tried. A rescue leaves
-     * behind anything it cannot date, so the count is an upper bound and the folder stays wherever
-     * one file is left. Promising either would be a sentence the engine can make false.
+     * <p>Going ahead leads. A reader who opened this has decided to rescue, so the button they came
+     * for is the one to meet first.
      *
      * @param folder {@link Folder} the folder about to be moved
      * @return {@link Confirmation} the question
      */
-    private static Confirmation moveQuestion(final Folder folder) {
-        return new Confirmation("Move " + folder.name() + " to your library?",
-                "Anything you don't want there has to come out first.",
-                "Move to library", "Cancel", false);
+    private static Confirmation rescueQuestion(final Folder folder) {
+        return new Confirmation("Rescue " + folder.name() + " to Sorted?",
+                "The photos and videos still in it go back into Sorted. A photo Sorted already "
+                        + "holds is deleted from the folder rather than put back twice.",
+                RESCUE_TO_SORTED, "Cancel", true);
     }
 
     /**

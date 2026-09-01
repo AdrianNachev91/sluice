@@ -34,9 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class ReviewPane {
 
-    // Worn by the report line when it is carrying a refusal.
-    private static final String CAUTION = "review-report-caution";
-
     private ReviewPane() {
     }
 
@@ -55,21 +52,27 @@ final class ReviewPane {
         headerRow.setAlignment(Pos.CENTER_LEFT);
         headerRow.getStyleClass().add("review-header");
 
-        // On its own ground rather than in the caution colour. This is a paragraph, and a whole
-        // paragraph set in that colour shouts where a box says the same thing once.
+        // Each on its own ground rather than in the caution colour. Both are paragraphs, and a
+        // whole paragraph set in that colour shouts where a box says the same thing once.
         final Label unreadable = SettingsRows.emptyHelpLine("review-unreadable");
-        final var unreadableBox = new VBox(unreadable);
-        unreadableBox.getStyleClass().add("warning-box");
-        unreadableBox.managedProperty().bind(unreadableBox.visibleProperty());
-        unreadableBox.visibleProperty().bind(unreadable.visibleProperty());
-        final Label nothingYet = SettingsRows.emptyHelpLine("review-nothing-yet");
+        final VBox unreadableBox = boxed(unreadable, "review-unreadable-box");
         final Label message = SettingsRows.emptyHelpLine("review-message");
+        final VBox messageBox = boxed(message, "review-message-box");
+        final Label nothingYet = SettingsRows.emptyHelpLine("review-nothing-yet");
+
+        final Label explained = SettingsRows.emptyHelpLine("review-explained");
+        // The badge stands on the callout's own edge, so the whole thing has to go together. Bound
+        // on the outside: hiding only the box inside would leave the badge floating on the page.
+        final Node explainer = SettingsRows.badgedCallout(new VBox(explained));
+        explainer.setId("review-explained-box");
+        explainer.managedProperty().bind(explainer.visibleProperty());
+        explainer.visibleProperty().bind(explained.visibleProperty());
 
         final var groups = new VBox();
         groups.setId("review-groups");
         groups.getStyleClass().add("review-groups");
 
-        final var body = new VBox(message, unreadableBox, nothingYet, groups);
+        final var body = new VBox(messageBox, unreadableBox, explainer, nothingYet, groups);
         body.getStyleClass().add("review-body");
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
@@ -78,7 +81,8 @@ final class ReviewPane {
         page.setId("review");
         page.getStyleClass().add("review");
 
-        final var controls = new Controls(heading, unreadable, nothingYet, message, groups, scroll);
+        final var controls = new Controls(heading, explained, unreadable, nothingYet, message,
+                groups, scroll);
         final Runnable redraw = new Runnable() {
             @Override
             public void run() {
@@ -104,16 +108,33 @@ final class ReviewPane {
     }
 
     /**
+     * One help line inside the box that gives it its own ground.
+     *
+     * @param line {@link Label} the line, which shows itself only while it says something
+     * @param id {@link String} the box's own id
+     * @return {@link VBox} the box, which collapses with the line
+     */
+    private static VBox boxed(final Label line, final String id) {
+        final var box = new VBox(line);
+        box.setId(id);
+        box.getStyleClass().add("warning-box");
+        box.managedProperty().bind(box.visibleProperty());
+        box.visibleProperty().bind(line.visibleProperty());
+        return box;
+    }
+
+    /**
      * Every control the screen fills in.
      *
      * @param heading {@link Label} the screen's own name
+     * @param explained {@link Label} what the screen is and what to do with it
      * @param unreadable {@link Label} what to say where a folder could not be read
      * @param nothingYet {@link Label} what to say where nothing at all is waiting
      * @param message {@link Label} what the screen has to report
      * @param groups {@link VBox} one node per section
      */
-    private record Controls(Label heading, Label unreadable, Label nothingYet, Label message,
-                            VBox groups, ScrollPane scroll) {
+    private record Controls(Label heading, Label explained, Label unreadable, Label nothingYet,
+                            Label message, VBox groups, ScrollPane scroll) {
 
         /**
          * Puts everything the presenter says onto the controls.
@@ -125,9 +146,10 @@ final class ReviewPane {
         private void fill(final ReviewView view, final ReviewPresenter presenter,
                           final Runnable redraw) {
             this.heading.setText(view.heading());
+            this.explained.setText(SettingsRows.orNothing(view.explained()));
             this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
             this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
-            SettingsRows.report(this.message, view.message(), CAUTION);
+            this.message.setText(view.message() == null ? "" : view.message().text());
             final List<Node> drawn = new ArrayList<>();
             view.groups().forEach(group -> drawn.add(section(group, presenter, redraw, this.scroll)));
             this.groups.getChildren().setAll(drawn);
@@ -314,16 +336,18 @@ final class ReviewPane {
          */
         private static Button button(final Action action, final ReviewPresenter presenter,
                                      final Runnable redraw) {
-            return SettingsRows.actionButton(action.id(), action.label(), action.leading(),
+            final Button drawn = SettingsRows.actionButton(action.id(), action.label(), action.leading(),
                     action.confirm(), () -> {
                         switch (action.kind()) {
                             case OPEN -> FileManager.open(action.path());
-                            case MOVE_TO_LIBRARY -> {
-                                presenter.moveToLibrary(action);
+                            case RESCUE -> {
+                                presenter.rescue(action);
                                 redraw.run();
                             }
                         }
                     });
+            drawn.setDisable(!action.live());
+            return drawn;
         }
     }
 }

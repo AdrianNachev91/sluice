@@ -2,6 +2,7 @@ package photos.sluice.adapter.ui;
 
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.NoteIsNotTextException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.ApplyException;
@@ -15,6 +16,7 @@ import photos.sluice.domain.paths.PathViolation;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -85,6 +87,10 @@ final class RunRefusals {
             // written for a report rather than for a reader.
             case final ApplyException _ -> "Sluice could not work on this sift, because the answers "
                     + "in it do not hold together.";
+            case final NoteIsNotTextException note -> noteIsNotText(note.file());
+            // Above the two arms below it, since a file whose bytes are not text was reached, and
+            // neither of the reasons they offer is true of it.
+            case final CharacterCodingException damaged -> fileIsNotText(damaged.toString());
             case final UncheckedIOException failed -> fileOutOfReach(failed.getMessage());
             // The same fault one level down. A job's failure arrives here through rootOf, which
             // answers with a throwable's cause, and an UncheckedIOException always has one. Without
@@ -102,9 +108,8 @@ final class RunRefusals {
     /**
      * What to say where the filesystem would not answer.
      *
-     * <p>Says nothing about which file, nor about what was being done to it. This sentence answers
-     * for every file this app opens, moves or writes, and only the call that failed knows which of
-     * those it was after.
+     * <p>Names no file. This one sentence answers for every file this app opens, moves or writes,
+     * and only the call that failed knows which of those it was after.
      *
      * @param quoting {@link String} the technical text worth putting in a bug report
      * @return {@link String} the sentence to show
@@ -112,6 +117,28 @@ final class RunRefusals {
     private static String fileOutOfReach(final String quoting) {
         return "A file could not be reached. Another program may have it open, or it is not there "
                 + "anymore. If it keeps happening, report it, quoting this: " + quoting;
+    }
+
+    /**
+     * What to say where a file was read and turned out not to hold text.
+     *
+     * @param quoting {@link String} the technical text worth putting in a bug report
+     * @return {@link String} the sentence to show
+     */
+    private static String fileIsNotText(final String quoting) {
+        return "A file Sluice had to read does not hold text any more. Something else may have "
+                + "written over it. If it keeps happening, report it, quoting this: " + quoting;
+    }
+
+    /**
+     * What to say where the file that does not hold text is one this app wrote, and is known.
+     *
+     * @param note {@link Path} the note whose bytes are not text
+     * @return {@link String} the sentence to show
+     */
+    private static String noteIsNotText(final Path note) {
+        return "Sluice stopped, because " + note + " holds something other than the text it wrote "
+                + "there. Open it to see what is in it, and delete it if it is not worth keeping.";
     }
 
     /**

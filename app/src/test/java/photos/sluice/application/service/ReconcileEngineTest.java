@@ -483,7 +483,7 @@ class ReconcileEngineTest {
         // reconcile() never writes one itself.
         assertThat(report.byCategory()).containsEntry("junk", 1);
         assertThat(Files.readAllLines(root.resolve("Review/junk/_reasons.txt")))
-                .containsExactlyInAnyOrder("a.jpg - blurry", "b.jpg - also blurry");
+                .containsExactlyInAnyOrder("a.jpg (2019-06) - blurry", "b.jpg (2019-06) - also blurry");
     }
 
     // reconcile() resolves the unreviewable list against the ledger BEFORE filing the old log into

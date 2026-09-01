@@ -79,11 +79,28 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
     /**
      * One row of what a run did.
      *
+     * <p>A row names a place files went, and a card's rows partition what it handled. A count of
+     * some of one place is drawn under it instead, indented. A number overlapping its neighbours
+     * cannot sit in a list that adds up.
+     *
      * @param id {@link String} the control's id, for the screen to set on it
      * @param label {@link String} what was counted
      * @param value {@link String} the count, written out
+     * @param partOfTheRowAbove boolean whether this counts some of the row before it rather than a
+     *     place of its own
      */
-    public record Count(String id, String label, String value) {
+    public record Count(String id, String label, String value, boolean partOfTheRowAbove) {
+
+        /**
+         * A row counting a place of its own.
+         *
+         * @param id {@link String} the control's id
+         * @param label {@link String} what was counted
+         * @param value {@link String} the count, written out
+         */
+        public Count(final String id, final String label, final String value) {
+            this(id, label, value, false);
+        }
     }
 
     /**

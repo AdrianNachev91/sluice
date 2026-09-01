@@ -57,6 +57,13 @@ final class RunResultPane {
 
         final Label detail = SettingsRows.emptyHelpLine("run-result-detail");
         detail.getStyleClass().add("run-result-detail");
+        // Given its own ground only where the run failed, which tone() decides. On every other
+        // ending this line introduces the counts under it. On a failure it is the whole card, and
+        // it names a file the reader has to go and deal with.
+        final var detailBox = new VBox(detail);
+        detailBox.setId("run-result-detail-box");
+        detailBox.managedProperty().bind(detailBox.visibleProperty());
+        detailBox.visibleProperty().bind(detail.visibleProperty());
 
         final var counts = new VBox();
         counts.setId("run-result-counts");
@@ -110,7 +117,7 @@ final class RunResultPane {
         doneRow.getStyleClass().add("run-start-row");
         doneRow.setAlignment(Pos.CENTER_RIGHT);
 
-        final var body = new VBox(detail, question, warning, counts);
+        final var body = new VBox(detailBox, question, warning, counts);
         body.getStyleClass().add("run-result-body");
         final ScrollPane scroll = SettingsRows.scrolling(body);
         scroll.setMinHeight(0);
@@ -127,7 +134,7 @@ final class RunResultPane {
         page.setId("run-result");
         page.getStyleClass().add("run-result");
 
-        final var controls = new Controls(page, heading, detail, counts, warningHeadline,
+        final var controls = new Controls(page, heading, detail, detailBox, counts, warningHeadline,
                 warningDetail, actionQuestion, actionButton, message, done);
         return new Mounted(page, showing -> controls.fill(showing, presenter, redraw));
     }
@@ -214,6 +221,7 @@ final class RunResultPane {
      * @param page {@link VBox} the card itself, which carries the tone
      * @param heading {@link Label} how the run ended
      * @param detail {@link Label} the sentence under it
+     * @param detailBox {@link VBox} what wears that sentence's own ground on a failed card
      * @param counts {@link VBox} the rows saying what the run did
      * @param warningHeadline {@link Label} what a reader needs to know about it, in one line
      * @param warningDetail {@link Label} what caused it and what Sluice did instead
@@ -222,7 +230,7 @@ final class RunResultPane {
      * @param message {@link Label} what a refused press on this card has to report
      * @param done {@link Button} the button back to the launcher
      */
-    private record Controls(VBox page, Label heading, Label detail, VBox counts,
+    private record Controls(VBox page, Label heading, Label detail, VBox detailBox, VBox counts,
                             Label warningHeadline, Label warningDetail,
                             Label actionQuestion, Button actionButton, Label message, Button done) {
 
@@ -251,16 +259,23 @@ final class RunResultPane {
          * Marks the card where its run failed, for the stylesheet to draw.
          *
          * <p>Only that one ending changes what is drawn. A run that stopped with work left is
-         * neither finished nor at fault, and the words say which it was. What a failure needs is
-         * legibility rather than a colour. Its own sentence is the whole of what the card has to
-         * say, where every other ending has counts under it.
+         * neither finished nor at fault, and the words say which it was.
          *
-         * <p>Set on every fill, so an ending that is not a failure clears it.
+         * <p>A failure's own sentence also takes its own ground. It is the whole of what the card
+         * has to say, where every other ending has counts under it. The colour is the ground's
+         * rather than the text's: a whole paragraph in the caution colour shouts where a box says
+         * it once.
+         *
+         * <p>Both are set on every fill, so an ending that is not a failure clears them.
          *
          * @param tone {@link Tone} how the run ended
          */
         private void tone(final Tone tone) {
             this.page.pseudoClassStateChanged(FAILED, tone == Tone.FAILED);
+            this.detailBox.getStyleClass().remove("warning-box");
+            if (tone == Tone.FAILED) {
+                this.detailBox.getStyleClass().add("warning-box");
+            }
         }
 
         /**
@@ -349,6 +364,9 @@ final class RunResultPane {
             row.setId(count.id());
             row.setAlignment(Pos.CENTER_LEFT);
             row.getStyleClass().add("run-result-count");
+            if (count.partOfTheRowAbove()) {
+                row.getStyleClass().add("run-result-count-part");
+            }
             return row;
         }
     }

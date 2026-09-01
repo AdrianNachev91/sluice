@@ -34,16 +34,20 @@ public final class SortPayloads {
      * @param setAsideForReview int files too small or too low-resolution to sift
      * @param couldNotBeDated int files with no date that could be trusted
      * @param dateFilesRemoved int date files removed once every photo they named had gone
+     * @param lowConfidenceDates int files whose date came off the file's own timestamp rather than
+     *        off the photo. They are filed like any other. Of the counts adding up to
+     *        {@code processed}, this overlaps three: {@code photosSorted}, {@code videosSorted}
+     *        and {@code setAsideForReview}
      * @param yearsSorted a {@link List} of {@link Integer} the years anything landed in
-     * @param datesMayBeWrong boolean whether the dates on this run's photos are the file's own
-     *        timestamp rather than one read from the photo
+     * @param datesMayBeWrong boolean whether an export's date files were present but almost none
+     *        paired to a photo. The whole run is then dated off weaker signals
      * @param stopped boolean whether the run gave up before the end of its scope
      * @param leftBehind int in-scope files the run never reached, still in the Inbox
      */
     public record SortedPayload(int processed, int photosSorted, int videosSorted, int alreadyInLibrary,
                                 int identicalCopies, int setAsideForReview, int couldNotBeDated,
-                                int dateFilesRemoved, List<Integer> yearsSorted, boolean datesMayBeWrong,
-                                boolean stopped, int leftBehind) {
+                                int dateFilesRemoved, int lowConfidenceDates, List<Integer> yearsSorted,
+                                boolean datesMayBeWrong, boolean stopped, int leftBehind) {
     }
 
     /**
@@ -62,7 +66,8 @@ public final class SortPayloads {
     public static SortedPayload sorted(final SortSummary sorted) {
         return new SortedPayload(sorted.processed(), sorted.photosSorted(), sorted.videosSorted(),
                 sorted.reimportsDeleted(), sorted.byteDupsDeleted(), sorted.lowRes(), sorted.unsorted(),
-                sorted.sidecarsDeleted(), sorted.yearsSorted().stream().sorted().toList(),
+                sorted.sidecarsDeleted(), sorted.lowConfidenceFiles().size(),
+                sorted.yearsSorted().stream().sorted().toList(),
                 !sorted.warnings().isEmpty(), sorted.cancelled(), sorted.leftBehind());
     }
 }

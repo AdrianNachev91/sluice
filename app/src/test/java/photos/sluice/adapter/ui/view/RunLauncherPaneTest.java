@@ -29,6 +29,7 @@ import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.model.SortSummary;
+import photos.sluice.domain.model.SortSummary.Guessed;
 import photos.sluice.application.service.JobHandle;
 
 import java.nio.file.Path;
@@ -72,15 +73,32 @@ class RunLauncherPaneTest {
                 .extracting(ToggleButton::getText).containsExactly("Sort");
     }
 
-    // The arrows say the three buttons run in the order they are drawn in. Asserted on the row's own
+    // The arrows say the row's steps run in the order they are drawn in. Asserted on the row's own
     // children rather than by a lookup, since where each one sits is the whole claim.
     @Test
-    void anArrowSitsInEveryGapBetweenTheModeButtons() throws Exception {
+    void anArrowSitsInEveryGapBetweenTheStepsOfTheRow() throws Exception {
         final Parent pane = onFxThread(() -> built(presenter()));
 
         assertThat(((HBox) pane.lookup(".run-mode-row")).getChildren())
                 .extracting(node -> node.getStyleClass().contains("run-mode-arrow"))
-                .containsExactly(false, true, false, true, false);
+                .containsExactly(false, true, false, true, false, true, false);
+    }
+
+    @Test
+    void theWayToReviewSitsBetweenSiftingAndMovingToTheLibrary() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenter()));
+
+        assertThat(((HBox) pane.lookup(".run-mode-row")).getChildren())
+                .filteredOn(node -> !node.getStyleClass().contains("run-mode-arrow"))
+                .extracting(Node::getId)
+                .containsExactly("run-mode-sort", "run-mode-sift", "run-mode-review", "run-mode-move");
+    }
+
+    @Test
+    void thatWayToReviewIsNotOneOfTheModeButtons() throws Exception {
+        final Parent pane = onFxThread(() -> built(presenter()));
+
+        assertThat(pane.lookup("#run-mode-review")).isNotInstanceOf(ToggleButton.class);
     }
 
     @Test
@@ -367,7 +385,7 @@ class RunLauncherPaneTest {
     @Test
     void withNothingStagedTheSortedCardSaysSoInsteadOfDrawingAnEmptyList() throws Exception {
         final Pipeline pipeline = pipeline();
-        when(pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        when(pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         final Parent pane = onFxThread(() -> built(new RunLauncherPresenter(pipeline, new FxProgressPort())));
 
         assertThat(pane.lookup("#run-year-2019")).isNull();
@@ -488,7 +506,7 @@ class RunLauncherPaneTest {
 
     private static void sortFinishes(final Pipeline pipeline) {
         sortAnswering(pipeline, CompletableFuture.completedFuture(
-                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), false, 0)));
+                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0)));
     }
 
     @SuppressWarnings("unchecked")
@@ -592,7 +610,7 @@ class RunLauncherPaneTest {
         when(pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2019, 100, 10, List.of(new MonthRow(6, 40, 10), new MonthRow(7, 30, 0),
                         new MonthRow(11, 30, 0))),
-                new YearRow(2018, 50, 0, List.of(new MonthRow(1, 50, 0))))));
+                new YearRow(2018, 50, 0, List.of(new MonthRow(1, 50, 0)))), 0));
         when(pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false, false));
         when(pipeline.configuredProviderSpends()).thenReturn(true);
         return pipeline;

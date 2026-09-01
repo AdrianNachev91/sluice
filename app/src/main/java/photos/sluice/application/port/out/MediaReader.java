@@ -150,4 +150,19 @@ public interface MediaReader {
      * @return a {@link List} of {@link String}, every line in the file, or empty if the file does not exist
      */
     List<String> readLines(Path file);
+
+    /**
+     * Whether a {@link #readLines} failure has to be rethrown rather than degraded around.
+     *
+     * <p>The two kinds are worth separating and easy to confuse. Damaged content means the bytes
+     * are not text, which a caller can answer by carrying on without whatever the file held. Every
+     * other failure means the file was not read at all, and treating that as an empty file says the
+     * content is absent when nobody looked.
+     *
+     * @param failure {@link UncheckedIOException} what readLines threw
+     * @return boolean true unless the file was reached and its bytes turned out not to be text
+     */
+    static boolean mustStayLoud(final UncheckedIOException failure) {
+        return !(failure.getCause() instanceof CharacterCodingException);
+    }
 }

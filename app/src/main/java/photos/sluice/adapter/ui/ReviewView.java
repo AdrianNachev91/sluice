@@ -3,6 +3,7 @@ package photos.sluice.adapter.ui;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
+import photos.sluice.application.port.in.RescueRoot;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -12,6 +13,8 @@ import java.util.List;
  * values. The view reads fields off this and decides nothing about what they mean.
  *
  * @param heading {@link String} the screen's own name
+ * @param explained what this screen is and what to do with it, or null where there is nothing on
+ *     it to explain
  * @param unreadable what to say where one or more of the folders could not be read, or null where
  *     they all could
  * @param nothingYet what to say in place of the groups where there is nothing waiting at all, or
@@ -19,13 +22,15 @@ import java.util.List;
  * @param groups a {@link List} of {@link Group} one per section, in the order drawn
  * @param message {@link Message} what the screen has to report, or null where it has nothing
  */
-public record ReviewView(String heading, @Nullable String unreadable, @Nullable String nothingYet,
-                         List<Group> groups, @Nullable Message message) {
+public record ReviewView(String heading, @Nullable String explained, @Nullable String unreadable,
+                         @Nullable String nothingYet, List<Group> groups,
+                         @Nullable Message message) {
 
     /**
      * Defensively copies the mutable collection component.
      *
      * @param heading {@link String} the screen's own name
+     * @param explained what this screen is and what to do with it
      * @param unreadable what to say where a folder could not be read
      * @param nothingYet what to say where there is nothing waiting at all
      * @param groups a {@link List} of {@link Group} one per section
@@ -133,14 +138,19 @@ public record ReviewView(String heading, @Nullable String unreadable, @Nullable 
      * @param label {@link String} what the button says
      * @param kind {@link Kind} what pressing it does
      * @param leading boolean whether this is the way on from the card, drawn to be reached for
+     * @param live boolean whether it can be pressed now. A control the screen is still offering,
+     *     drawn inactive, rather than one it has taken away
      * @param folder {@link String} the folder's name below its own root
      * @param named {@link String} that folder as this card named it. A press landing on another
      *     screen then names it the way the reader just saw it named
      * @param path {@link Path} where the folder is
      * @param confirm {@link Confirmation} what to ask first, or null where the action needs no asking
+     * @param root {@link RescueRoot} which root a rescue resolves the folder under, null on every
+     *     other kind
      */
-    public record Action(String id, String label, Kind kind, boolean leading, String folder,
-                         String named, Path path, @Nullable Confirmation confirm) {
+    public record Action(String id, String label, Kind kind, boolean leading, boolean live,
+                         String folder, String named, Path path, @Nullable Confirmation confirm,
+                         @Nullable RescueRoot root) {
     }
 
     /**
@@ -151,7 +161,7 @@ public record ReviewView(String heading, @Nullable String unreadable, @Nullable 
         /** Hands the folder to the file manager, where weeding and deleting happen. */
         OPEN,
 
-        /** Moves what is left in the folder into the library, dissolving the folder if it empties. */
-        MOVE_TO_LIBRARY
+        /** Moves what is left in the folder back into Sorted, dissolving the folder if it empties. */
+        RESCUE
     }
 }

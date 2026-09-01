@@ -15,6 +15,7 @@ import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
+import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SortedTally;
@@ -28,6 +29,7 @@ import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.model.SortSummary;
+import photos.sluice.domain.model.SortSummary.Guessed;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
@@ -39,6 +41,8 @@ import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 
+import java.io.UncheckedIOException;
+import java.nio.charset.MalformedInputException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -96,7 +100,7 @@ class RunLauncherPresenterTest {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2019, 100, 10, List.of(new MonthRow(6, 40, 10), new MonthRow(7, 30, 0),
                         new MonthRow(11, 30, 0))),
-                new YearRow(2018, 50, 0, List.of(new MonthRow(1, 30, 0), new MonthRow(6, 20, 0))))));
+                new YearRow(2018, 50, 0, List.of(new MonthRow(1, 30, 0), new MonthRow(6, 20, 0)))), 0));
         when(this.pipeline.estimateFor(anyInt())).thenReturn(NOTHING);
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
         this.setup.refreshCounts();
@@ -317,6 +321,26 @@ class RunLauncherPresenterTest {
         assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FAILED);
     }
 
+    // A rescue stops on a note it cannot read as text. The out-of-reach sentence offers two
+    // reasons, and both are untrue of that: the file is there, and nothing else is holding it.
+    @SuppressWarnings("unchecked")
+    @Test
+    void aFileThatTurnedOutNotToHoldTextIsNotReportedAsOneNothingCouldReach() {
+        this.choose(RunMode.SORT, "2019");
+        final JobHandle<Object> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(CompletableFuture.failedFuture(
+                new UncheckedIOException(new MalformedInputException(1))));
+        when(this.pipeline.sort(any())).thenReturn(retyped(handle));
+
+        this.presenter.start();
+
+        assertThat(requireNonNull(this.finishedView().detail()))
+                .contains("does not hold text any more")
+                .doesNotContain("could not be reached")
+                .doesNotContain("not there anymore");
+        assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FAILED);
+    }
+
     @Test
     void aStartRefusedByAFolderRootNamesThatFolderTheWayTheRestOfTheAppNamesIt() {
         this.choose(RunMode.SORT, "2019");
@@ -334,12 +358,12 @@ class RunLauncherPresenterTest {
     // nothing there could have refused it first. Every refusal the facade raises has to arrive here
     // in words, on the face the reader is sent to.
     @Test
-    void aMoveStartedFromTheReviewScreenReportsItsRefusalInPlainWords() {
+    void aRescueStartedFromTheReviewScreenReportsItsRefusalInPlainWords() {
         doThrow(new PathsMisconfiguredException(
                 List.of(new NotADirectory(PathRole.LIBRARY_ROOT, Path.of("gone")))))
-                .when(this.pipeline).rescue("Food");
+                .when(this.pipeline).rescue(RescueRoot.REVIEW, "Food");
 
-        this.presenter.moveToLibraryFromReview("Food", "Food");
+        this.presenter.rescueFromReview(RescueRoot.REVIEW, "Food", "Food");
 
         assertThat(this.reported().text())
                 .contains(PathRoleLabels.of(PathRole.LIBRARY_ROOT))
@@ -350,12 +374,12 @@ class RunLauncherPresenterTest {
     // whose button they pressed.
     @SuppressWarnings("unchecked")
     @Test
-    void aMoveStartedFromTheReviewScreenIsNamedByThatFolderWhileItRuns() {
+    void aRescueStartedFromTheReviewScreenIsNamedByThatFolderWhileItRuns() {
         final JobHandle<Object> handle = mock(JobHandle.class);
         when(handle.onComplete()).thenReturn(new CompletableFuture<>());
-        when(this.pipeline.rescue("Food")).thenReturn(retyped(handle));
+        when(this.pipeline.rescue(RescueRoot.REVIEW, "Food")).thenReturn(retyped(handle));
 
-        this.presenter.moveToLibraryFromReview("Food", "Food");
+        this.presenter.rescueFromReview(RescueRoot.REVIEW, "Food", "Food");
 
         assertThat(((RunStage.Running) this.presenter.stage()).progress().scope()).isEqualTo("Food");
     }
@@ -551,8 +575,8 @@ class RunLauncherPresenterTest {
     @Test
     void aSortsCardCountsEveryBucketAnythingLandedIn() {
         this.choose(RunMode.SORT, "");
-        this.sortEndsWith(new SortSummary(12, 1, 2, 5, 1, 2, 1, 0, List.of(), List.of(),
-                Set.of(2019), List.of(), false, 0));
+        this.sortEndsWith(new SortSummary(12, 1, 2, 5, 1, 2, 1, 0, List.of(), Guessed.NONE,
+                List.of(), Set.of(2019), List.of(), false, 0));
 
         this.presenter.start();
 
@@ -819,7 +843,7 @@ class RunLauncherPresenterTest {
         this.chooseAndStart(RunMode.SIFT, "2019");
         // What a sift does to its own scope: applying the decisions empties the year the field
         // still names, so the launcher behind the report now refuses it.
-        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         this.setup.refreshCounts();
 
         assertThat(this.presenter.stage()).isInstanceOf(RunStage.Finished.class);
@@ -892,7 +916,7 @@ class RunLauncherPresenterTest {
     void aSiftOfATimelineHoldingOnlyVideosIsRefusedWithoutEverAsking() {
         this.aFinishedSortShowing();
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0))))));
+                new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0)))), 0));
         this.setup.refreshCounts();
         final var asked = new AtomicInteger();
 
@@ -1047,7 +1071,7 @@ class RunLauncherPresenterTest {
     }
 
     private static SortSummary sortSummaryWith(final List<String> warnings) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), Set.of(2019), warnings, false, 0);
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), warnings, false, 0);
     }
 
     private void pipelineStarts() {

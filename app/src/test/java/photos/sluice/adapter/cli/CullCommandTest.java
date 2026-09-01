@@ -199,7 +199,7 @@ class CullCommandTest {
     void anEstimateIsPrintedBeforeTheJobIsAskedAboutItsOutcome(@TempDir final Path root) {
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(
-                List.of(new SortedTally.YearRow(2019, 187, 0, List.of()))));
+                List.of(new SortedTally.YearRow(2019, 187, 0, List.of())), 0));
         when(this.pipeline.estimateFor(187)).thenReturn(new SpendEstimate(50_000, 4_321, false, false, false));
         this.answering(applied());
 
@@ -224,7 +224,7 @@ class CullCommandTest {
     @Test
     void theEstimateIsSilentWhenQuietWasAsked(@TempDir final Path root) {
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);
-        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         when(this.pipeline.estimateFor(any(Integer.class))).thenReturn(new SpendEstimate(0, 0, false, false, false));
         this.answering(applied());
 

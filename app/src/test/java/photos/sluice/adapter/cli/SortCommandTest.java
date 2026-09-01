@@ -13,6 +13,7 @@ import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.model.MonthRange;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
+import photos.sluice.domain.model.SortSummary.Guessed;
 import photos.sluice.domain.paths.PathViolation;
 
 import java.io.ByteArrayInputStream;
@@ -76,7 +77,7 @@ class SortCommandTest {
 
     @Test
     void aSortSaysWhatItFiledAndWhereTheRestWent(@TempDir final Path root) {
-        this.answering(new SortSummary(10, 2, 1, 5, 1, 1, 0, 3, List.of(), List.of(), Set.of(2019), List.of(), false, 0));
+        this.answering(new SortSummary(10, 2, 1, 5, 1, 1, 0, 3, List.of(), Guessed.NONE, List.of(), Set.of(2019), List.of(), false, 0));
 
         final CliHarness.Result result = this.run(root, "sort", "2019");
 
@@ -87,7 +88,7 @@ class SortCommandTest {
 
     @Test
     void aSortThatFiledNothingStillNamesPhotosAndVideos(@TempDir final Path root) {
-        this.answering(new SortSummary(2, 2, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), false, 0));
+        this.answering(new SortSummary(2, 2, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
 
         assertThat(this.run(root, "sort", "2019").out().lines())
                 .containsExactly("Photos sorted: 0", "Videos sorted: 0", "Already in your Library: 2");
@@ -109,7 +110,7 @@ class SortCommandTest {
                 //noinspection BusyWait
                 Thread.sleep(1);
             }
-            return new SortSummary(3, 0, 0, 3, 0, 0, 0, 0, List.of(), List.of(), Set.of(2019), List.of(), true, 1466);
+            return new SortSummary(3, 0, 0, 3, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), List.of(), true, 1466);
         }));
 
         assertThat(this.run(root, "sort").out().lines())
@@ -125,7 +126,7 @@ class SortCommandTest {
                 //noinspection BusyWait
                 Thread.sleep(1);
             }
-            return new SortSummary(2, 0, 0, 0, 2, 0, 0, 0, List.of(), List.of(), Set.of(2019), List.of(), true, 1);
+            return new SortSummary(2, 0, 0, 0, 2, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), List.of(), true, 1);
         }));
 
         assertThat(this.run(root, "sort").out().lines())
@@ -141,7 +142,7 @@ class SortCommandTest {
                 //noinspection BusyWait
                 Thread.sleep(1);
             }
-            return new SortSummary(3, 0, 0, 3, 0, 0, 0, 0, List.of(), List.of(), Set.of(2019), List.of(), true, 0);
+            return new SortSummary(3, 0, 0, 3, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), List.of(), true, 0);
         }));
 
         assertThat(this.run(root, "sort").out().lines())
@@ -152,7 +153,7 @@ class SortCommandTest {
     @Test
     void aCancelLandingAfterTheRunFinishedIsNotReportedAsAStop(@TempDir final Path root) {
         this.typed = new ByteArrayInputStream("c\n".getBytes(StandardCharsets.UTF_8));
-        this.answering(new SortSummary(3, 0, 0, 3, 0, 0, 0, 0, List.of(), List.of(), Set.of(2019),
+        this.answering(new SortSummary(3, 0, 0, 3, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019),
                 List.of(), false, 0));
 
         final CliHarness.Result result = this.run(root, "sort");
@@ -187,7 +188,7 @@ class SortCommandTest {
 
     @Test
     void aCallerAskingForADocumentGetsTheCountsAsFields(@TempDir final Path root) {
-        this.answering(new SortSummary(10, 2, 1, 5, 1, 1, 0, 3, List.of(), List.of(), Set.of(2019), List.of(), false, 0));
+        this.answering(new SortSummary(10, 2, 1, 5, 1, 1, 0, 3, List.of(), Guessed.NONE, List.of(), Set.of(2019), List.of(), false, 0));
 
         final CliHarness.Result result = this.run(root, "sort", "2019", "--json");
 
@@ -198,7 +199,20 @@ class SortCommandTest {
                 .contains("\"photosSorted\":5")
                 .contains("\"alreadyInLibrary\":2")
                 .contains("\"dateFilesRemoved\":3")
+                .contains("\"lowConfidenceDates\":0")
                 .contains("\"yearsSorted\":[2019]");
+    }
+
+    @Test
+    void aCallerIsToldHowManyDatesCameOffTheFileRatherThanThePhoto(@TempDir final Path root) {
+        this.answering(new SortSummary(10, 2, 1, 5, 1, 1, 0, 3,
+                List.of("a.jpg (mtime 2022-06-01)", "b.jpg (mtime 2022-07-02)"),
+                new Guessed(1, 0, 1), List.of(), Set.of(2019), List.of(), false, 0));
+
+        assertThat(this.run(root, "sort", "2019", "--json").out()).contains("\"lowConfidenceDates\":2");
+        assertThat(this.run(root, "sort", "2019").out().lines()).containsSubsequence(
+                "Photos sorted: 5", "  of those, low confidence date: 1",
+                "Moved to Review: 1", "  of those, low confidence date: 1");
     }
 
     @Test
@@ -241,7 +255,7 @@ class SortCommandTest {
                 //noinspection BusyWait
                 Thread.sleep(1);
             }
-            return new SortSummary(1, 0, 0, 1, 0, 0, 0, 0, List.of(), List.of(), Set.of(2019), List.of(), true, 4);
+            return new SortSummary(1, 0, 0, 1, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), List.of(), true, 4);
         }));
 
         final CliHarness.Result result = this.run(root, "sort", "2019");
@@ -270,7 +284,7 @@ class SortCommandTest {
 
     @Test
     void datesFallingBackToTheFileClockAreSaidBesideTheAnswerRatherThanInIt(@TempDir final Path root) {
-        this.answering(new SortSummary(1, 0, 0, 1, 0, 0, 0, 0, List.of(), List.of(), Set.of(2019),
+        this.answering(new SortSummary(1, 0, 0, 1, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019),
                 List.of("sidecars are present but almost none paired"), false, 0));
 
         final CliHarness.Result result = this.run(root, "sort", "2019");
@@ -281,7 +295,7 @@ class SortCommandTest {
 
     @Test
     void thatSameFallbackReachesADocumentAsAFieldRatherThanAsASentence(@TempDir final Path root) {
-        this.answering(new SortSummary(1, 0, 0, 1, 0, 0, 0, 0, List.of(), List.of(), Set.of(2019),
+        this.answering(new SortSummary(1, 0, 0, 1, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019),
                 List.of("sidecars are present but almost none paired"), false, 0));
 
         final String document = this.run(root, "sort", "2019", "--json").out();
@@ -353,11 +367,11 @@ class SortCommandTest {
     }
 
     private static SortSummary nothingSorted() {
-        return new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), false, 0);
+        return new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0);
     }
 
     private static SortSummary stoppedWithNothingSorted() {
-        return new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), true, 0);
+        return new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), true, 0);
     }
 
     private CliHarness.Result run(final Path root, final String... args) {

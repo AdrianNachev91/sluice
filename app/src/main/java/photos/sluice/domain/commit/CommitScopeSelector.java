@@ -2,8 +2,10 @@ package photos.sluice.domain.commit;
 
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.commit.CommitScope.All;
+import photos.sluice.domain.commit.CommitScope.Undated;
 import photos.sluice.domain.commit.CommitScope.Year;
 import photos.sluice.domain.model.MonthRange;
+import photos.sluice.domain.paths.SortFolderNames;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -30,7 +32,25 @@ public final class CommitScopeSelector {
         return switch (scope) {
             case All() -> true;
             case Year(final int year, final MonthRange months) -> matchesYear(relativePath, year, months);
+            case Undated() -> isUndated(relativePath);
         };
+    }
+
+    /**
+     * Whether a path sits in the undated folder a rescue fills.
+     *
+     * <p>Matched on the first segment alone. Something further down happening to carry that name is
+     * a folder inside a year, which a year scope already reaches.
+     *
+     * <p>Case-insensitive, as {@link SortFolderNames#writtenByASort} is. Windows and a stock Mac
+     * both hand a hand-made {@code unsorted} the very folder this app writes.
+     *
+     * @param relativePath {@link String} the Sorted-relative file path
+     * @return boolean true where the undated folder directly or indirectly holds it
+     */
+    private static boolean isUndated(final String relativePath) {
+        final int slash = relativePath.indexOf('/');
+        return slash > 0 && SortFolderNames.UNDATED.equalsIgnoreCase(relativePath.substring(0, slash));
     }
 
     /**

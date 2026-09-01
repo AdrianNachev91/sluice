@@ -2,8 +2,6 @@ package photos.sluice.adapter.cli;
 
 import photos.sluice.domain.rescue.RescueSummary;
 
-import java.util.List;
-
 /**
  * The wire shape for what a rescue run did, and the reading that builds it.
  *
@@ -22,12 +20,15 @@ public final class RescuePayloads {
     /**
      * What one rescue run did.
      *
-     * @param rescued int files promoted into the library or Sorted
-     * @param skipped a {@link List} of {@link String} files left in place, with reasons
-     * @param folderRemoved boolean whether the Review folder was removed
+     * @param rescued int files moved into Sorted under a year and month
+     * @param undated int files moved into the undated folder, nothing having dated them
+     * @param alreadyInSorted int files deleted, their own bytes already at the destination
+     * @param leftBehind int media files the run never reached, still in the folder
+     * @param folderRemoved boolean whether the folder was removed
      * @param stopped boolean whether the run gave up before reaching every file
      */
-    public record RescuedPayload(int rescued, List<String> skipped, boolean folderRemoved, boolean stopped) {
+    public record RescuedPayload(int rescued, int undated, int alreadyInSorted, int leftBehind,
+                                 boolean folderRemoved, boolean stopped) {
     }
 
     /**
@@ -37,7 +38,7 @@ public final class RescuePayloads {
      * @return {@link RescuedPayload} its machine-readable shape
      */
     public static RescuedPayload rescued(final RescueSummary summary) {
-        return new RescuedPayload(summary.rescued(), summary.skipped(), summary.folderRemoved(),
-                summary.cancelled());
+        return new RescuedPayload(summary.rescued(), summary.undated(), summary.alreadyInSorted(),
+                summary.leftBehind(), summary.folderRemoved(), summary.cancelled());
     }
 }

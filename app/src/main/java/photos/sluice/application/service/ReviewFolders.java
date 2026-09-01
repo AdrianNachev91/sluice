@@ -10,7 +10,9 @@ import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.domain.model.MediaType;
+import photos.sluice.domain.paths.RelativePaths;
 import photos.sluice.domain.paths.SortFolderNames;
+import photos.sluice.domain.review.ReasonNotes;
 import photos.sluice.domain.scan.MediaTypeDetector;
 
 import java.nio.file.Path;
@@ -37,9 +39,6 @@ import java.util.Optional;
 final class ReviewFolders {
 
     private static final Logger log = LoggerFactory.getLogger(ReviewFolders.class);
-
-    // What the app writes beside the photos it sets aside.
-    private static final String NOTE_SUFFIX = ".txt";
 
     private final MediaReader media;
     private final PathsPort paths;
@@ -97,7 +96,7 @@ final class ReviewFolders {
             throw new IllegalArgumentException("folder must be under a review root: " + folder);
         }
         return this.filesIn(asked).stream()
-                .filter(file -> file.getFileName().toString().endsWith(NOTE_SUFFIX))
+                .filter(file -> file.getFileName().toString().endsWith(ReasonNotes.SUFFIX))
                 .sorted()
                 .flatMap(file -> this.media.readLines(file).stream())
                 .toList();
@@ -173,7 +172,7 @@ final class ReviewFolders {
                 .toList();
         final int photos = (int) kinds.stream().filter(MediaType.PHOTO::equals).count();
         final int videos = (int) kinds.stream().filter(MediaType.VIDEO::equals).count();
-        final String name = slashed(rootPath.relativize(dir));
+        final String name = RelativePaths.slashed(rootPath.relativize(dir));
         return new Folder(root, filedBy(root, name), name, dir, photos, videos, this.changed(dir));
     }
 
@@ -252,18 +251,4 @@ final class ReviewFolders {
         };
     }
 
-    /**
-     * A relative path written the one way, whatever the platform separates with.
-     *
-     * <p>The name reaches a screen and, under Review, {@code RescueUseCase.rescue}, which resolves
-     * it again. A resolve takes either separator, so the choice is only about what a reader sees.
-     *
-     * @param relative {@link Path} the path below a root
-     * @return {@link String} it written with forward slashes
-     */
-    private static String slashed(final Path relative) {
-        final List<String> parts = new ArrayList<>();
-        relative.forEach(part -> parts.add(part.toString()));
-        return String.join("/", parts);
-    }
 }

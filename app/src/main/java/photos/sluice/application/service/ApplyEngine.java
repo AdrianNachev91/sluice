@@ -1,11 +1,14 @@
 package photos.sluice.application.service;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.HashIndexPort;
+import photos.sluice.application.port.out.MediaReader;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.Sha256Port;
 import photos.sluice.application.port.out.TransferAbandonedException;
@@ -26,7 +29,9 @@ import photos.sluice.domain.cull.ValidationReport;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
+import photos.sluice.domain.review.ReasonNotes;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -56,7 +61,11 @@ import java.util.stream.Stream;
 @Component
 public class ApplyEngine {
 
-    private static final String REASONS_FILE = "_reasons.txt";
+    private static final Logger log = LoggerFactory.getLogger(ApplyEngine.class);
+
+    // Read by whoever opens the folder, and the same for every file in it. Nothing per-file is in
+    // hand: an unreviewable file arrives as a path, without the reason a classification carries.
+    private static final String REASON_UNREVIEWABLE = "could not be seen clearly enough to judge";
 
     private final MediaStore mediaStore;
     private final CullPrepPort cullPrepPort;
@@ -124,10 +133,10 @@ public class ApplyEngine {
      * classified against the disposition ledger. A decision whose file is still on disk is pending.
      * One that's gone but hash-verifies at its recorded destination is already done, its secondary
      * write (if any) reconciled rather than redone. index.json's own unreviewable list goes through
-     * the same classification - it has no shard-driven category, just a plain move once carried out.
-     * Anything unresolved, decision or unreviewable file alike, aborts the whole run before a single
-     * file moves. Once everything is handled, the merged decisions.json is written and the montage
-     * and tile intermediates are deleted.
+     * the same classification - it has no shard-driven category, and its one secondary write is the
+     * note line its destination folder carries. Anything unresolved, decision or unreviewable file
+     * alike, aborts the whole run before a single file moves. Once everything is handled, the merged
+     * decisions.json is written and the montage and tile intermediates are deleted.
      *
      * @param prepDirPath {@link Path} the prep directory to apply
      * @param options {@link ApplyOptions} apply behavior flags
@@ -185,9 +194,9 @@ public class ApplyEngine {
                 }
                 switch (status) {
                     case final Status.Pending p ->
-                            this.apply(p.decision(), prepDirPath, nearDupGroups, nearDupAnchors, outcome,
+                            this.apply(p.decision(), prepDirPath, nearDupAnchors, outcome,
                                     cancellation, TransferProgress.within(progress, current, total));
-                    case final Status.Done d -> this.backfillSecondaryWrite(d.decision(), d.record());
+                    case final Status.Done d -> this.backfillSecondaryWrite(d.decision(), d.record(), outcome);
                     case Status.Skipped _ -> {} // user gave up on this decision - nothing to do
                     case Status.Unresolved _ -> {} // already aborted the whole run above
                 }
@@ -197,13 +206,21 @@ public class ApplyEngine {
                 if (cancellation.isCancelled()) {
                     return null;
                 }
-                if (status instanceof FileStatus.Pending(final Path file)) {
-                    this.recordThenMove(file, this.cullDestinations.unreviewableDir(file), prepDirPath,
-                            cancellation, TransferProgress.within(progress, current, total));
+                switch (status) {
+                    case final FileStatus.Pending pending -> {
+                        final Path file = pending.file();
+                        final Path destDir = this.cullDestinations.unreviewableDir(file);
+                        final MoveOutcome moved = this.recordThenMove(file, destDir, prepDirPath,
+                                cancellation, TransferProgress.within(progress, current, total));
+                        this.note(file, destDir, moved.dest(), REASON_UNREVIEWABLE);
+                    }
+                    case final FileStatus.Done done -> this.backfillUnreviewableNote(done);
+                    case FileStatus.Skipped _ -> {} // user gave up on this file - nothing to do
+                    case FileStatus.Unresolved _ -> {} // already aborted the whole run above
                 }
-                // Done, Skipped: nothing further to do here.
                 progress.tick(++current, total);
             }
+            this.writeNearDupNotes(nearDupGroups, outcome);
         } catch (final TransferAbandonedException e) {
             // Null for the same reason a cancel between decisions gives null: the finalizers must
             // not run. The abandoned decision left a move record with nothing at its destination,
@@ -253,15 +270,22 @@ public class ApplyEngine {
     /**
      * Runs only for a decision already hash-verified as done. It never re-decides the move itself.
      * It only backfills the one write that could have landed after it and is still missing. That's a
-     * funny decision's library hash-index row, or a review category's _reasons.txt line.
-     * NearDupReject has no write beyond the move, already fully confirmed by classification alone.
+     * funny decision's library hash-index row, or a review category's note line.
+     * A NearDupReject has no write of its own beyond the move. Its landed path is taken here all the
+     * same, because the note its group keeps is written once, from every member's landed name, and a
+     * prior run's rejects are named in it too.
      *
      * @param decision {@link Decision} the already-verified-done decision
      * @param record {@link MoveRecord} the verified move record proving it ran
+     * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      */
-    private void backfillSecondaryWrite(final Decision decision, final MoveRecord record) {
+    private void backfillSecondaryWrite(final Decision decision, final MoveRecord record,
+                                        final ApplyOutcome outcome) {
         if (decision instanceof final Classification c) {
             this.backfillClassificationWrite(c, record);
+        }
+        if (decision instanceof final NearDupReject reject) {
+            outcome.landedRejects.put(reject.file(), record.dest());
         }
     }
 
@@ -285,11 +309,44 @@ public class ApplyEngine {
                 this.hashIndexPort.append(List.of(new IndexEntry(record.hash(), record.dest())));
             }
         } else {
-            final Path reasonsFile = this.cullDestinations.destinationDirFor(c).resolve(REASONS_FILE);
-            final String line = c.file().getFileName() + " - " + c.reason();
-            if (!this.mediaStore.readLines(reasonsFile).contains(line)) {
-                this.mediaStore.appendLine(reasonsFile, line);
+            this.noteUnlessListed(c.file(), this.cullDestinations.destinationDirFor(c), record.dest(), c.reason());
+        }
+    }
+
+    /**
+     * Backfills the note line for an unreviewable file an earlier run already moved.
+     *
+     * <p>The move is the only write it makes beyond this one, and that is what the verified record
+     * proves. So a note line is all a resumed run can still owe such a file.
+     *
+     * @param done {@link FileStatus.Done} the already-moved file and the record proving it
+     */
+    private void backfillUnreviewableNote(final FileStatus.Done done) {
+        this.noteUnlessListed(done.file(), this.cullDestinations.unreviewableDir(done.file()),
+                done.record().dest(), REASON_UNREVIEWABLE);
+    }
+
+    /**
+     * Appends a photo's note line unless the folder's note already names it.
+     *
+     * @param from {@link Path} where the file was, under Sorted
+     * @param destDir {@link Path} the folder it landed in
+     * @param landed {@link Path} the path it landed at
+     * @param reason {@link String} why it is here, as the note says it to a reader
+     */
+    private void noteUnlessListed(final Path from, final Path destDir, final Path landed, final String reason) {
+        final List<String> lines;
+        try {
+            lines = this.mediaStore.readLines(destDir.resolve(ReasonNotes.FILE_NAME));
+        } catch (final UncheckedIOException e) {
+            if (MediaReader.mustStayLoud(e)) {
+                throw e;
             }
+            log.warn("The note in {} is not text, so {} is left out of it", destDir, landed.getFileName(), e);
+            return;
+        }
+        if (!ReasonNotes.lists(lines, landed.getFileName().toString())) {
+            this.note(from, destDir, landed, reason);
         }
     }
 
@@ -320,8 +377,6 @@ public class ApplyEngine {
      *
      * @param decision {@link Decision} the pending decision to apply
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
-     * @param nearDupGroups a {@link Map} of {@link String} to a {@link List} of {@link Decision} near-dup decisions
-     * grouped by group id
      * @param nearDupAnchors a {@link Map} of {@link String} to {@link Path} each near-dup group's keeper file, by
      * group id
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
@@ -329,13 +384,12 @@ public class ApplyEngine {
      * @param watching {@link TransferProgress} told how far this decision's file has got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
-    private void apply(final Decision decision, final Path prepDirPath, final Map<String, List<Decision>> nearDupGroups,
+    private void apply(final Decision decision, final Path prepDirPath,
                        final Map<String, Path> nearDupAnchors, final ApplyOutcome outcome,
                        final CancellationSignal cancellation, final TransferProgress watching) {
         switch (decision) {
             case final Classification c -> this.applyClassification(c, prepDirPath, outcome, cancellation, watching);
-            case final NearDupChosen c ->
-                    this.applyNearDupChosen(c, nearDupGroups.get(c.group()), outcome, cancellation, watching);
+            case final NearDupChosen c -> this.applyNearDupChosen(c, outcome, cancellation, watching);
             case final NearDupReject reject -> this.applyNearDupReject(reject, nearDupAnchors.get(reject.group()),
                     prepDirPath, outcome, cancellation, watching);
         }
@@ -343,7 +397,7 @@ public class ApplyEngine {
 
     /**
      * A funny classification is kept, so it is hashed into the library index and gets no reason
-     * note. Every other category, junk included, gets a _reasons.txt note alongside its move.
+     * note. Every other category, junk included, gets a note line alongside its move.
      *
      * <p>The index append happens immediately, not batched after the loop. A decision an earlier,
      * crashed run already carried out is skipped on resume (backfillSecondaryWrite() handles it
@@ -365,7 +419,56 @@ public class ApplyEngine {
         if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
             this.hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
         } else {
-            this.mediaStore.appendLine(destDir.resolve(REASONS_FILE), c.file().getFileName() + " - " + c.reason());
+            this.note(c.file(), destDir, moved.dest(), c.reason());
+        }
+    }
+
+    /**
+     * Appends one photo's line to the note in the folder it just landed in.
+     *
+     * <p>The line names the file by where it landed rather than where it came from. A name already
+     * taken in the destination lands the file as a " (2)".
+     *
+     * <p>The date is the month the photo sat under in Sorted, which is the finest this run can
+     * honestly claim.
+     *
+     * @param from {@link Path} where the file was, under Sorted
+     * @param destDir {@link Path} the folder it landed in
+     * @param landed {@link Path} the path it landed at
+     * @param reason {@link String} why it is here, as the note says it to a reader
+     */
+    private void note(final Path from, final Path destDir, final Path landed, final String reason) {
+        final String name = landed.getFileName().toString();
+        this.mediaStore.appendLine(destDir.resolve(ReasonNotes.FILE_NAME),
+                this.cullDestinations.monthFiledUnder(from)
+                        .map(month -> ReasonNotes.line(name, month, reason))
+                        .orElseGet(() -> ReasonNotes.line(name, reason)));
+    }
+
+    /**
+     * Writes each near-copy group's note, once every member of it has reached its destination.
+     *
+     * <p>After the decision loop rather than beside the copy. A reject's line has to carry the name
+     * it landed under, and that name is not known until it moves. Written wholesale rather than
+     * appended, so a resumed run converges on the same file however far a prior attempt got.
+     *
+     * <p>Only a group whose keeper this run copied. A group nobody reached has no folder to write
+     * into, and a run the caller stopped never arrives here at all.
+     *
+     * @param groups a {@link Map} of {@link String} to a {@link List} of {@link Decision}, every
+     *     near-dup decision by group id
+     * @param outcome {@link ApplyOutcome} the run's outcome, holding where each reject landed
+     */
+    private void writeNearDupNotes(final Map<String, List<Decision>> groups, final ApplyOutcome outcome) {
+        for (final String group : outcome.nearDupGroupsChosen) {
+            final List<Decision> members = groups.getOrDefault(group, List.of());
+            members.stream()
+                    .filter(NearDupChosen.class::isInstance)
+                    .map(NearDupChosen.class::cast)
+                    .forEach(chosen -> this.mediaStore.write(
+                            this.cullDestinations.duplicatesDir(chosen.file(), group)
+                                    .resolve(chosen.file().getFileName() + ReasonNotes.SUFFIX),
+                            this.chosenNote(chosen, members, outcome)));
         }
     }
 
@@ -378,17 +481,16 @@ public class ApplyEngine {
      * stray " (2)" duplicate in Duplicates/, and re-appending a now-duplicated note line.
      *
      * <p>Guarded explicitly here instead: the copy is skipped when the exact destination this
-     * decision would produce already exists. The note is always (re)written wholesale, never
-     * appended to. That makes re-running safe regardless of how far a prior attempt got.
+     * decision would produce already exists. That makes re-running safe regardless of how far a
+     * prior attempt got.
      *
      * @param c {@link NearDupChosen} the chosen near-dup decision
-     * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are copying
      * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the copy finished
      */
-    private void applyNearDupChosen(final NearDupChosen c, final List<Decision> group, final ApplyOutcome outcome,
+    private void applyNearDupChosen(final NearDupChosen c, final ApplyOutcome outcome,
                                     final CancellationSignal cancellation, final TransferProgress watching) {
         // A copy rather than a move, so it takes the source check directly. Every other decision
         // type picks it up from recordThenMove.
@@ -398,7 +500,6 @@ public class ApplyEngine {
         if (!this.mediaStore.exists(dest)) {
             this.mediaStore.copy(c.file(), dupDir, cancellation, watching);
         }
-        this.mediaStore.write(dupDir.resolve(c.file().getFileName() + ".txt"), chosenNote(c, group));
         outcome.nearDupGroupsChosen.add(c.group());
     }
 
@@ -418,8 +519,10 @@ public class ApplyEngine {
     private void applyNearDupReject(final NearDupReject reject, final Path groupAnchor, final Path prepDirPath,
                                     final ApplyOutcome outcome, final CancellationSignal cancellation,
                                     final TransferProgress watching) {
-        this.recordThenMove(reject.file(), this.cullDestinations.duplicatesDir(groupAnchor, reject.group()),
-                prepDirPath, cancellation, watching);
+        final MoveOutcome moved = this.recordThenMove(reject.file(),
+                this.cullDestinations.duplicatesDir(groupAnchor, reject.group()), prepDirPath,
+                cancellation, watching);
+        outcome.landedRejects.put(reject.file(), moved.dest());
         outcome.nearDupRejects++;
     }
 
@@ -453,21 +556,65 @@ public class ApplyEngine {
     /**
      * Builds the note text recording which file was kept and why, plus its rejects.
      *
-     * <p>One photo per line, the kept one first, which is how every other note in these folders
-     * reads and how a screen drawing them draws each.
+     * <p>One photo per line, the kept one first, every line the same shape: the name, the month it
+     * sat under in Sorted, then why it is here.
+     *
+     * <p>The month matters on the kept photo's own line as much as on a reject's. Its copy here is
+     * deleted rather than moved only where a rescue resolves the destination its original is at, and
+     * for a photo nothing else can date, this line is the only thing that resolves it.
+     *
+     * <p>The folder's own name cannot stand in for any of them. It is built from the keeper's month,
+     * and a group's members can sit in different ones.
      *
      * @param chosen {@link NearDupChosen} the chosen near-dup decision
      * @param group a {@link List} of {@link Decision} all decisions in this near-dup group
+     * @param outcome {@link ApplyOutcome} the run's outcome, holding where each reject landed
      * @return {@link String} the note's text
      */
-    private static String chosenNote(final NearDupChosen chosen, final List<Decision> group) {
+    private String chosenNote(final NearDupChosen chosen, final List<Decision> group,
+                              final ApplyOutcome outcome) {
         return Stream.concat(
-                Stream.of("Kept " + chosen.file().getFileName() + " - " + chosen.chosenReason()),
+                Stream.of(this.keptLine(chosen)),
                 group.stream()
                         .filter(NearDupReject.class::isInstance)
                         .map(NearDupReject.class::cast)
-                        .map(reject -> reject.file().getFileName() + " - " + reject.reason()))
+                        .map(reject -> this.rejectLine(reject, outcome)))
                 .collect(Collectors.joining(System.lineSeparator()));
+    }
+
+    /**
+     * The kept photo's line in the note its group keeps.
+     *
+     * <p>Named by where it came from, unlike a reject's. It is copied rather than moved, so the copy
+     * lands under its own name or not at all.
+     *
+     * @param chosen {@link NearDupChosen} the chosen near-dup decision
+     * @return {@link String} the line
+     */
+    private String keptLine(final NearDupChosen chosen) {
+        final String name = chosen.file().getFileName().toString();
+        final String reason = "kept, " + chosen.chosenReason();
+        return this.cullDestinations.monthFiledUnder(chosen.file())
+                .map(month -> ReasonNotes.line(name, month, reason))
+                .orElseGet(() -> ReasonNotes.line(name, reason));
+    }
+
+    /**
+     * One rejected near-copy's line in the note its group keeps.
+     *
+     * <p>Named by where it landed. A reject the caller gave up on never moved, so it keeps the name
+     * it has in Sorted, which is the only name it answers to.
+     *
+     * @param reject {@link NearDupReject} the rejected near-dup decision
+     * @param outcome {@link ApplyOutcome} the run's outcome, holding where each reject landed
+     * @return {@link String} the line
+     */
+    private String rejectLine(final NearDupReject reject, final ApplyOutcome outcome) {
+        final String name = outcome.landedRejects.getOrDefault(reject.file(), reject.file())
+                .getFileName().toString();
+        return this.cullDestinations.monthFiledUnder(reject.file())
+                .map(month -> ReasonNotes.line(name, month, reject.reason()))
+                .orElseGet(() -> ReasonNotes.line(name, reject.reason()));
     }
 
     /**
@@ -495,6 +642,9 @@ public class ApplyEngine {
     private static final class ApplyOutcome {
         final Map<String, Integer> byCategory = new TreeMap<>();
         final Set<String> nearDupGroupsChosen = new HashSet<>();
+        // Where each near-copy reject ended up, by the file it came from. A name already taken in
+        // the group's folder lands the file as a " (2)".
+        final Map<Path, Path> landedRejects = new HashMap<>();
         int nearDupRejects;
     }
 

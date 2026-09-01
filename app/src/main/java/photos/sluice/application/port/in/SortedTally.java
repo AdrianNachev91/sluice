@@ -8,14 +8,18 @@ import java.util.List;
  * <p>Exact rather than estimated. A sort files a photo under its year, so the year directories are
  * the answer and no dating pass is needed to read them.
  *
+ * <p>The undated folder sits outside the years, nothing dating what is in it.
+ *
  * @param years a {@link List} of {@link YearRow} one row per year holding anything, newest first
+ * @param undated int photos and videos waiting in the undated folder, which a rescue fills
  */
-public record SortedTally(List<YearRow> years) {
+public record SortedTally(List<YearRow> years, int undated) {
 
     /**
      * Defensively copies the rows.
      *
      * @param years a {@link List} of {@link YearRow} one row per year holding anything
+     * @param undated int what is waiting in the undated folder
      */
     public SortedTally {
         years = List.copyOf(years);
@@ -31,11 +35,6 @@ public record SortedTally(List<YearRow> years) {
      * question. A sort writes every file into a month folder, so ordinarily they agree. A file
      * dropped straight into the year folder by hand counts toward the year and belongs to no
      * month. So the difference is real rather than a rounding of the same number.
-     *
-     * <p>What reaches such a file differs by run. A sift over the whole year reads the year folder
-     * itself, so it finds it; narrowed to months, it does not. A move takes a file by the year and
-     * month its own path spells, and this one spells no month, so only a move over everything
-     * staged reaches it.
      *
      * @param year int the year
      * @param photos int how many photos are staged anywhere under it

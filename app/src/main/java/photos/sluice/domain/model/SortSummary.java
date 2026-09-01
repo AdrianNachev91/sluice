@@ -36,11 +36,41 @@ public record SortSummary(
         int unsorted,
         int sidecarsDeleted,
         List<String> lowConfidenceFiles,
+        Guessed guessed,
         List<String> unsortedFiles,
         Set<Integer> yearsSorted,
         List<String> warnings,
         boolean cancelled,
         int leftBehind) {
+
+    /**
+     * How many files in each bucket that can hold one were dated from the file's own timestamp.
+     *
+     * <p>Three of the six buckets, and only three. {@code unsorted} holds what nothing could date,
+     * so it carries no date to doubt. {@code reimportsDeleted} and {@code byteDupsDeleted} are
+     * settled on a hash before anything is dated at all.
+     *
+     * <p>Each is a part of the bucket it names rather than a bucket of its own. So none of them is
+     * in {@code processed}'s sum, and adding one would count those files twice.
+     *
+     * @param photosSorted int photos filed under a year and month off a timestamp
+     * @param videosSorted int videos filed the same way
+     * @param lowRes int files set aside for review whose date came the same way
+     */
+    public record Guessed(int photosSorted, int videosSorted, int lowRes) {
+
+        /** Every date this run resolved came off the photo rather than off the file. */
+        public static final Guessed NONE = new Guessed(0, 0, 0);
+
+        /**
+         * How many files this run dated from a timestamp, wherever it then put them.
+         *
+         * @return int the three added together
+         */
+        public int total() {
+            return this.photosSorted + this.videosSorted + this.lowRes;
+        }
+    }
 
     /**
      * Validates that processed equals the six outcome buckets added together, then defensively
@@ -54,7 +84,9 @@ public record SortSummary(
      * @param lowRes int files routed to the low-res bucket
      * @param unsorted int files routed to Review\Unsorted
      * @param sidecarsDeleted int consumed Takeout JSON sidecars deleted
-     * @param lowConfidenceFiles a {@link List} of {@link String} filenames sorted on a low-confidence date
+     * @param lowConfidenceFiles a {@link List} of {@link String} filenames dated off the file's own
+     * timestamp, wherever this run then put them
+     * @param guessed {@link Guessed} how many of those went to each bucket that can hold one
      * @param unsortedFiles a {@link List} of {@link String} filenames routed to Review\Unsorted
      * @param yearsSorted a {@link Set} of {@link Integer} distinct years any file landed in this run
      * @param warnings a {@link List} of {@link String} conditions worth attention that stopped nothing
@@ -71,6 +103,14 @@ public record SortSummary(
                     + "videosSorted=%d, lowRes=%d, unsorted=%d)")
                     .formatted(processed, bucketed, reimportsDeleted, byteDupsDeleted, photosSorted, videosSorted,
                             lowRes, unsorted));
+        }
+        // Two readings of one set: the names, and where each of them went. A caller that disagrees
+        // with itself would draw a card whose parts do not add up to the row above them.
+        if (guessed.total() != lowConfidenceFiles.size()) {
+            throw new IllegalArgumentException(("guessed must account for every low-confidence file: "
+                    + "files=%d, guessed=%d (photosSorted=%d, videosSorted=%d, lowRes=%d)")
+                    .formatted(lowConfidenceFiles.size(), guessed.total(), guessed.photosSorted(),
+                            guessed.videosSorted(), guessed.lowRes()));
         }
         lowConfidenceFiles = List.copyOf(lowConfidenceFiles);
         unsortedFiles = List.copyOf(unsortedFiles);

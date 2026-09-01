@@ -30,7 +30,7 @@ sealed interface RunScope {
      */
     static boolean startable(final RunScope scope) {
         return switch (scope) {
-            case OldestYear _, Everything _, OfYear _ -> true;
+            case OldestYear _, Everything _, OfYear _, Undated _ -> true;
             case Refused _, Nothing _ -> false;
         };
     }
@@ -49,8 +49,9 @@ sealed interface RunScope {
                     : year + ", " + RunWords.namedMonths(months);
             case OldestYear _ -> "the oldest year in your Inbox";
             case Everything _ -> "everything in Sorted";
+            case Undated _ -> "whatever nothing could date";
             // Neither can reach a started job: the button is dead over both. Answered anyway, since
-            // a switch over a sealed set that throws for two of five is one added case away from
+            // a switch over a sealed set that throws for two of six is one added case away from
             // throwing on a screen.
             case Refused _, Nothing _ -> ran.verb();
         };
@@ -79,8 +80,9 @@ sealed interface RunScope {
                     new SortScope.Year(year, range(months));
             case OldestYear _, Everything _ -> new SortScope.OldestYear();
             // Oldest-year is the widest thing a sort can be asked for, so a scope that names no
-            // work must not land in it.
-            case Refused _, Nothing _ ->
+            // work must not land in it. The undated folder is in Sorted, and a sort reads the
+            // Inbox, so this mode refuses the word before a press can reach here.
+            case Refused _, Nothing _, Undated _ ->
                     throw new IllegalStateException("A sort was started from a scope naming no work");
         };
     }
@@ -109,6 +111,7 @@ sealed interface RunScope {
             case OfYear(final int year, final List<Integer> months) ->
                     new CommitScope.Year(year, range(months));
             case Everything _, OldestYear _ -> new CommitScope.All();
+            case Undated _ -> new CommitScope.Undated();
             // Everything else here widens to the whole library, so a scope naming no work must not
             // fall into it.
             case Refused _, Nothing _ ->
@@ -132,6 +135,14 @@ sealed interface RunScope {
 
     /** Everything staged, with no year filter at all. */
     record Everything() implements RunScope {
+    }
+
+    /**
+     * Whatever nothing could date, which a rescue leaves in Sorted under its own folder.
+     *
+     * <p>Only a move to the library takes it.
+     */
+    record Undated() implements RunScope {
     }
 
     /**

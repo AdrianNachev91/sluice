@@ -14,6 +14,7 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
+import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
@@ -68,7 +69,7 @@ class RunSetupPresenterTest {
                         new MonthRow(11, 30, 0))),
                 // 2018 shares June with 2019 so that a month marked on the wrong year's rows shows
                 // up as a marked row rather than as nothing.
-                new YearRow(2018, 50, 0, List.of(new MonthRow(1, 30, 0), new MonthRow(6, 20, 0))))));
+                new YearRow(2018, 50, 0, List.of(new MonthRow(1, 30, 0), new MonthRow(6, 20, 0)))), 0));
         when(this.pipeline.estimateFor(anyInt())).thenReturn(NOTHING);
         // A spending provider is the fixture, so every test below is about the figure rather than
         // about whether there is one at all. The tests that turn it off say so themselves.
@@ -92,7 +93,7 @@ class RunSetupPresenterTest {
     void severalMonthsInTheGapAreNamedAsOnePhrase() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2019, 40, 0, List.of(new MonthRow(1, 10, 0), new MonthRow(2, 10, 0),
-                        new MonthRow(3, 10, 0), new MonthRow(4, 10, 0))))));
+                        new MonthRow(3, 10, 0), new MonthRow(4, 10, 0)))), 0));
         this.presenter.refreshCounts();
 
         this.choose(RunMode.MOVE_TO_LIBRARY, "2019 1,4");
@@ -169,7 +170,7 @@ class RunSetupPresenterTest {
     @Test
     void aTimelineHoldingOnlyWhatThisRunSortedSaysSo() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2019, 6, 0, List.of(new MonthRow(6, 6, 0))))));
+                new YearRow(2019, 6, 0, List.of(new MonthRow(6, 6, 0)))), 0));
         this.presenter.refreshCounts();
 
         assertThat(this.askedBeforeSifting(2019).question())
@@ -202,7 +203,7 @@ class RunSetupPresenterTest {
     @Test
     void siftingATimelineHoldingOnlyVideosIsRefusedInTheLaunchersOwnWords() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0))))));
+                new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0)))), 0));
         this.presenter.refreshCounts();
 
         assertThat(this.presenter.siftNowNeeds(2021, 0))
@@ -528,7 +529,7 @@ class RunSetupPresenterTest {
 
     @Test
     void nothingStagedKillsStartForAMoveAndSaysNothingUnderTheField() {
-        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         this.presenter.refreshCounts();
         this.choose(RunMode.MOVE_TO_LIBRARY, "");
 
@@ -543,7 +544,7 @@ class RunSetupPresenterTest {
     @Test
     void aSiftIsRefusedForAYearHoldingNoPhotos() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2020, 0, 12, List.of()))));
+                new YearRow(2020, 0, 12, List.of())), 0));
         this.presenter.refreshCounts();
         this.choose(RunMode.SIFT, "2020");
 
@@ -600,7 +601,7 @@ class RunSetupPresenterTest {
 
     @Test
     void aReadInFlightLeavesTheScreenSayingWhatItLastKnew() {
-        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         this.presenter.refreshCounts();
         this.choose(RunMode.SIFT, "2019");
 
@@ -659,7 +660,7 @@ class RunSetupPresenterTest {
 
         assertThat(opening.confirmationNeeded()).isNull();
 
-        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         opening.refreshCounts();
 
         assertThat(opening.view().canStart()).isFalse();
@@ -670,7 +671,7 @@ class RunSetupPresenterTest {
         // A year of videos alone: the rows are live, and a sift over it still has nothing to look
         // at. An empty Inbox would refuse it too, in a mode whose rows do not mark at all.
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2019, 0, 4, List.of(new MonthRow(6, 0, 4))))));
+                new YearRow(2019, 0, 4, List.of(new MonthRow(6, 0, 4)))), 0));
         this.presenter.refreshCounts();
         this.aModeTheRowsScope();
 
@@ -819,7 +820,7 @@ class RunSetupPresenterTest {
 
     @Test
     void nothingStagedIsSaidOnlyOnceTheCountsHaveLanded() {
-        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of()));
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         this.presenter.refreshCounts();
 
         assertThat(this.presenter.view().nothingStaged()).contains("Sort your Inbox first");
@@ -858,7 +859,7 @@ class RunSetupPresenterTest {
     @Test
     void aMonthHoldingNothingAtAllGetsNoRowToClick() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2020, 5, 0, List.of(new MonthRow(3, 5, 0), new MonthRow(4, 0, 0))))));
+                new YearRow(2020, 5, 0, List.of(new MonthRow(3, 5, 0), new MonthRow(4, 0, 0)))), 0));
         this.presenter.refreshCounts();
         this.presenter.pressYear(2020);
 
@@ -869,7 +870,7 @@ class RunSetupPresenterTest {
     @Test
     void aMonthHoldingOnlyVideoGetsARowSayingSo() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2020, 5, 2, List.of(new MonthRow(3, 5, 0), new MonthRow(8, 0, 2))))));
+                new YearRow(2020, 5, 2, List.of(new MonthRow(3, 5, 0), new MonthRow(8, 0, 2)))), 0));
         this.presenter.refreshCounts();
         this.presenter.pressYear(2020);
 
@@ -881,7 +882,7 @@ class RunSetupPresenterTest {
     @Test
     void aMonthRowCountsTheVideosAMoveWouldTakeAlongWithThePhotos() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2020, 5, 3, List.of(new MonthRow(3, 5, 3))))));
+                new YearRow(2020, 5, 3, List.of(new MonthRow(3, 5, 3)))), 0));
         this.presenter.refreshCounts();
         this.presenter.pressYear(2020);
 
@@ -1030,6 +1031,108 @@ class RunSetupPresenterTest {
     void everyModeGetsAButtonAndTheyReadInTheOrderTheyAreOffered() {
         assertThat(this.presenter.view().modes()).extracting(RunLauncherView.ModeChoice::label)
                 .containsExactly("Sort", "Sift", "Move to library");
+    }
+
+    @Test
+    void theRowsOneLinkLeadsToReviewAndFollowsSifting() {
+        assertThat(this.presenter.view().rowLink().label()).isEqualTo("Review");
+        assertThat(this.presenter.view().rowLink().after()).isEqualTo(RunMode.SIFT);
+    }
+
+    @Test
+    void withNothingWaitingWithoutADateTheRowForItIsAbsentRatherThanReadingZero() {
+        assertThat(this.presenter.view().undated()).isNull();
+    }
+
+    @Test
+    void whatIsWaitingWithoutADateGetsItsOwnRowBesideTheYears() {
+        this.somethingUndated(7);
+
+        assertThat(requireNonNull(this.presenter.view().undated()).label()).isEqualTo("Unsorted");
+        assertThat(requireNonNull(this.presenter.view().undated()).counts()).isEqualTo("7 photos and videos");
+        assertThat(this.presenter.view().years()).extracting(YearChoice::year).containsExactly(2019, 2018);
+    }
+
+    @Test
+    void onlyAMoveToTheLibraryCanPressTheRowForWhatHasNoDate() {
+        this.somethingUndated(7);
+
+        this.presenter.setMode(RunMode.MOVE_TO_LIBRARY);
+        assertThat(requireNonNull(this.presenter.view().undated()).pressable()).isTrue();
+
+        this.presenter.setMode(RunMode.SIFT);
+        assertThat(requireNonNull(this.presenter.view().undated()).pressable()).isFalse();
+    }
+
+    @Test
+    void pressingThatRowScopesTheRunToItAndPressingItAgainClearsTheField() {
+        this.somethingUndated(7);
+        this.presenter.setMode(RunMode.MOVE_TO_LIBRARY);
+
+        this.presenter.pressUndated();
+        assertThat(this.presenter.view().scopeText()).isEqualTo("Unsorted");
+        assertThat(requireNonNull(this.presenter.view().undated()).chosen()).isTrue();
+
+        this.presenter.pressUndated();
+        assertThat(this.presenter.view().scopeText()).isEmpty();
+    }
+
+    @Test
+    void aMoveNarrowedToWhatHasNoDateAsksTheEngineForThatFolderAlone() {
+        this.somethingUndated(7);
+
+        this.choose(RunMode.MOVE_TO_LIBRARY, "unsorted");
+
+        assertThat(this.presenter.view().canStart()).isTrue();
+        assertThat(RunScope.asCommit(this.presenter.scope())).isEqualTo(new CommitScope.Undated());
+    }
+
+    @Test
+    void theWordForWhatHasNoDateIsTakenWhateverItsCase() {
+        this.somethingUndated(7);
+
+        this.choose(RunMode.MOVE_TO_LIBRARY, "UNSORTED");
+
+        assertThat(this.presenter.view().canStart()).isTrue();
+    }
+
+    @Test
+    void aSiftIsRefusedThatWordAndToldWhatASiftLooksAt() {
+        this.somethingUndated(7);
+
+        this.choose(RunMode.SIFT, "unsorted");
+
+        assertThat(this.presenter.view().canStart()).isFalse();
+        assertThat(this.presenter.view().scopeRefusal())
+                .isEqualTo("A sift looks at photos filed under a year, and these have no date.");
+    }
+
+    // The undated row comes from a tree the year rows never see, so the card can hold one while
+    // holding no years at all.
+    @Test
+    void aCardHoldingOnlyTheUndatedRowDoesNotSayNothingIsSorted() {
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 7));
+        this.presenter.refreshCounts();
+
+        assertThat(this.presenter.view().undated()).isNotNull();
+        assertThat(this.presenter.view().nothingStaged()).isNull();
+    }
+
+    @Test
+    void aCardHoldingNeitherSaysNothingIsSorted() {
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
+        this.presenter.refreshCounts();
+
+        assertThat(this.presenter.view().nothingStaged())
+                .isEqualTo("Nothing is sorted yet. Sort your Inbox first, and the years will show up here.");
+    }
+
+    @Test
+    void theWordIsRefusedWhereNothingIsWaitingWithoutADate() {
+        this.choose(RunMode.MOVE_TO_LIBRARY, "unsorted");
+
+        assertThat(this.presenter.view().canStart()).isFalse();
+        assertThat(this.presenter.view().scopeRefusal()).isEqualTo("Nothing is waiting without a date.");
     }
 
     @Test
@@ -1243,6 +1346,13 @@ class RunSetupPresenterTest {
         when(this.pipeline.inboxTally())
                 .thenThrow(new PathsMisconfiguredException(
                         List.of(new NotADirectory(PathRole.INBOX, Path.of("gone")))));
+        this.presenter.refreshCounts();
+    }
+
+    private void somethingUndated(final int held) {
+        when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
+                new YearRow(2019, 100, 10, List.of(new MonthRow(6, 40, 10))),
+                new YearRow(2018, 50, 0, List.of(new MonthRow(1, 50, 0)))), held));
         this.presenter.refreshCounts();
     }
 

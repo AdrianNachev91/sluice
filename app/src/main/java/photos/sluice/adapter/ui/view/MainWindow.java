@@ -184,6 +184,7 @@ final class MainWindow {
         // the presenter rather than passed to the pane, so the several places that redraw the
         // Dashboard need know nothing about it.
         runLauncherPresenter.setOpenRuns(runs::fire);
+        runLauncherPresenter.setOpenReview(review::fire);
         runsPresenter.setOpenDashboard(dashboard::fire);
         dashboard.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());
         settings.addEventHandler(ActionEvent.ACTION, _ -> readThenCount.run());

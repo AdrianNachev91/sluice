@@ -1,6 +1,7 @@
 package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
+import photos.sluice.domain.paths.SortFolderNames;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,8 +14,19 @@ import java.util.stream.IntStream;
  * <p>Static and holding nothing. What the field accepts is one rule, and the mode chosen decides
  * only what to do with the year and months it comes to. Keeping the reading here means a refusal
  * about the text itself is worded once, whichever mode the user is on.
+ *
+ * <p>So the refusal names both shapes this reads, including the one only a move to the library can
+ * act on. Which mode can take which is refused separately, and says why.
  */
 final class RunScopeText {
+
+    /**
+     * The word naming the photos nothing could date, which is what a rescue leaves in Sorted.
+     *
+     * <p>Read here whatever the mode, so the word means the same thing on every one of them. Which
+     * modes can take it is a separate question, and the mode is what answers it.
+     */
+    static final String UNDATED = SortFolderNames.UNDATED;
 
     private RunScopeText() {
     }
@@ -30,9 +42,13 @@ final class RunScopeText {
         if (trimmed.isEmpty()) {
             return new Typed.Blank();
         }
+        if (UNDATED.equalsIgnoreCase(trimmed)) {
+            return new Typed.Undated();
+        }
         final String[] parts = trimmed.split("\\s+", 2);
         if (!parts[0].matches("\\d{4}")) {
-            return new Typed.Refused("A scope starts with a four-digit year, like 2019.");
+            return new Typed.Refused("A scope is a four-digit year, like 2019, or the word "
+                    + UNDATED + ".");
         }
         final int year = Integer.parseInt(parts[0]);
         return parts.length == 1 ? new Typed.OfYear(year, List.of()) : months(year, parts[1]);
@@ -140,6 +156,10 @@ final class RunScopeText {
 
         /** Nothing has been typed. */
         record Blank() implements Typed {
+        }
+
+        /** The word naming the photos nothing could date. */
+        record Undated() implements Typed {
         }
 
         /**

@@ -8,8 +8,8 @@ import java.util.Map;
 
 /**
  * The effect boundary application services use to read and update the persisted hash index that
- * backs duplicate detection across sort, commit, and rescue runs. Every entry maps a file's
- * SHA-256 hash to every known path holding those bytes.
+ * backs duplicate detection. Every entry maps a file's SHA-256 hash to every known library path
+ * holding those bytes.
  */
 public interface HashIndexPort {
 
@@ -50,10 +50,10 @@ public interface HashIndexPort {
     boolean setAside(Path destination);
 
     /**
-     * For a caller appending many entries over a long-running move loop (Commit/RescueEngine). One
-     * session amortizes the header/leading-newline checks across the whole run instead of redoing
-     * them on every entry. Each entry is still flushed as it's written, so a crash mid-run never
-     * loses an already-moved file's row.
+     * For a caller appending many entries over a long-running move loop. One session amortizes the
+     * header/leading-newline checks across the whole run instead of redoing them on every entry.
+     * Each entry is still flushed as it's written, so a crash mid-run never loses an already-moved
+     * file's row.
      *
      * @return {@link Session} an open session for batched appends
      */

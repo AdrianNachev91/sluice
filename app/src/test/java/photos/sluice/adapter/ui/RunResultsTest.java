@@ -15,6 +15,7 @@ import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.model.SortSummary;
+import photos.sluice.domain.model.SortSummary.Guessed;
 import photos.sluice.domain.rescue.RescueSummary;
 
 import java.nio.file.Path;
@@ -150,14 +151,39 @@ class RunResultsTest {
     }
 
     @Test
-    void aStoppedRescueIsNotHeadedAsFinishedAndSaysWhereTheRestIs() {
-        final RunResultView card = card(RunMode.RESCUE,
-                new RescueSummary(7, List.of(), false, true));
+    void aStoppedRescueIsNotHeadedAsFinishedAndCountsWhatIsStillInTheFolder() {
+        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 1200, false, true));
 
-        assertThat(card.heading()).isEqualTo("Moving to library stopped.");
+        assertThat(card.heading()).isEqualTo("Rescuing stopped.");
         assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
         assertThat(card.detail())
-                .isEqualTo("The rest is still in the Review folder.");
+                .isEqualTo("1,200 photos and videos are still in the folder you started from.");
+    }
+
+    @Test
+    void aStoppedRescueThatLeftOnePhotoSaysSoInTheSingular() {
+        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 1, false, true));
+
+        assertThat(card.detail())
+                .isEqualTo("One photo or video is still in the folder you started from.");
+    }
+
+    // Reachable: a stop taken after the last photo moved, with only notes left in the tail.
+    @Test
+    void aStoppedRescueThatLeftNoMediaSaysThatRatherThanCountingZero() {
+        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 0, 0, 0, false, true));
+
+        assertThat(card.detail())
+                .isEqualTo("No photos or videos are left in the folder you started from.");
+    }
+
+    @Test
+    void aStoppedRescueStillNamesWhereTheUndatedOnesLanded() {
+        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(7, 3, 0, 4, false, true));
+
+        assertThat(card.detail())
+                .isEqualTo("4 photos and videos are still in the folder you started from.");
+        assertThat(labelled(card, "Moved to Unsorted")).isEqualTo("3");
     }
 
     // A run that threw is not a run the reader stopped, and only the colour would have told them
@@ -214,7 +240,7 @@ class RunResultsTest {
     @Test
     void aSortWhoseFilesWentSeveralWaysLeavesTheReasonToTheRows() {
         final RunResultView card = card(RunMode.SORT,
-                new SortSummary(20, 0, 0, 0, 0, 12, 8, 0, List.of(), List.of(), Set.of(), List.of(), false, 0));
+                new SortSummary(20, 0, 0, 0, 0, 12, 8, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
 
         assertThat(requireNonNull(card.detail()))
                 .endsWith("The rows below say what became of each one.");
@@ -223,7 +249,7 @@ class RunResultsTest {
     @Test
     void aSortWithNothingInScopeSaysSoRatherThanNamingRowsItHasNone() {
         final RunResultView card = card(RunMode.SORT,
-                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), false, 0));
+                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
 
         assertThat(card.detail()).isEqualTo("Nothing in your Inbox was ready to sort.");
     }
@@ -236,21 +262,21 @@ class RunResultsTest {
     }
 
     @Test
-    void aRescueCountsWhatItMovedAndWhatItLeftBehind() {
-        final RunResultView card = card(RunMode.RESCUE,
-                new RescueSummary(12, List.of("a.jpg", "b.jpg"), true, false));
+    void aRescueCountsBothOfTheDestinationsItMovedTo() {
+        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(12, 2, 0, 0, true, false));
 
-        assertThat(card.heading()).isEqualTo("Moving to library finished.");
-        assertThat(labelled(card, "Moved to your library")).isEqualTo("12");
-        assertThat(labelled(card, "Left behind")).isEqualTo("2");
+        assertThat(card.heading()).isEqualTo("Rescuing finished.");
+        assertThat(labelled(card, "Moved to Sorted")).isEqualTo("12");
+        assertThat(labelled(card, "Moved to Unsorted")).isEqualTo("2");
+        assertThat(card.detail()).isNull();
     }
 
     @Test
-    void aRescueThatLeftNothingBehindDrawsNoRowSayingSo() {
-        final RunResultView card = card(RunMode.RESCUE,
-                new RescueSummary(12, List.of(), true, false));
+    void aRescueThatDatedEverythingDrawsNoRowSayingSo() {
+        final RunResultView card = card(RunMode.RESCUE, new RescueSummary(12, 0, 0, 0, true, false));
 
-        assertThat(card.counts()).extracting(Count::label).containsExactly("Moved to your library");
+        assertThat(card.counts()).extracting(Count::label).containsExactly("Moved to Sorted");
+        assertThat(card.detail()).isNull();
     }
 
     @Test
@@ -361,7 +387,7 @@ class RunResultsTest {
     }
 
     private static SortSummary sortSummary(final List<String> warnings) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), Set.of(2019), warnings, false, 0);
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), warnings, false, 0);
     }
 
     private static SortSummary allOf(final int files, final String bucket) {
@@ -374,7 +400,8 @@ class RunResultsTest {
                 0, 0, 0,
                 "lowRes".equals(bucket) ? files : 0,
                 "unsorted".equals(bucket) ? files : 0,
-                0, List.of(), List.of(), Set.of(), List.of(), stopped, stopped ? 205 : 0);
+                0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), stopped,
+                stopped ? 205 : 0);
     }
 
     private static SortSummary sortedInto(final Set<Integer> years) {
@@ -382,7 +409,7 @@ class RunResultsTest {
     }
 
     private static SortSummary sortedInto(final Set<Integer> years, final boolean stopped) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), List.of(), years, List.of(),
-                stopped, stopped ? 205 : 0);
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(), years,
+                List.of(), stopped, stopped ? 205 : 0);
     }
 }

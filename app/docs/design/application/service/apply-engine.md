@@ -21,8 +21,8 @@ flowchart TD
     F -- no --> E2["for each<br/>unreviewable file<br/>(cancellation checked<br/>per item - see section 3)"]
     E -- Pending --> G["carry it out<br/>(see section 2 below) -<br/>records source hash +<br/>destination BEFORE moving"]
     E -- Done --> H["backfill only<br/>a missing secondary write,<br/>never re-move"]
-    E2 -- Pending --> G2["move to<br/>Unreviewable/&lt;yyyy&gt;/&lt;mm&gt;/ -<br/>same record-before-move"]
-    E2 -- Done --> H2(["nothing to backfill -<br/>the move alone was<br/>the whole action"])
+    E2 -- Pending --> G2["move to<br/>Unreviewable/&lt;yyyy&gt;/&lt;mm&gt;/ -<br/>same record-before-move,<br/>then append its note line"]
+    E2 -- Done --> H2["backfill its note line,<br/>unless the folder's note<br/>already names it"]
     G --> I["once every decision and<br/>unreviewable file is handled"]
     H --> I
     G2 --> I
@@ -55,8 +55,10 @@ decisions array, not as one more decision type, and has no shard, no category, n
 Pending/Done/Unresolved logic, minus the `NearDupChosen` copy exception (an unreviewable file is
 always a move). Carrying one out reuses `recordThenMove()` exactly as `Classification`/
 `NearDupReject` do, just with a different destination (`Unreviewable/<yyyy>/<mm>/`, resolved by
-`CullDestinations.unreviewableDir()`) and no secondary write. A Done unreviewable file has nothing
-left to backfill.
+`CullDestinations.unreviewableDir()`). Its one secondary write is the `_reasons.txt` line, and a
+Done unreviewable file has that line backfilled the way a Done classification does. Every line in
+one of these folders says the same thing. An unreviewable file arrives as a bare path, with no
+per-file reason to write.
 
 `ApplyReport` is built twice, at two different scopes, for two different readers. The value
 returned to the caller counts only what *this* invocation itself moved. A decision a prior,
@@ -189,7 +191,7 @@ engine this project's cancellation support touches; the verdict was to leave it 
 | A near-dup group's chosen photo                                                                            | Copied (not moved) to `Duplicates/`, original stays a Sorted keeper               |
 | A near-dup group's rejected photo                                                                          | Moved to `Duplicates/`                                                            |
 | A near-dup chosen photo's destination already exists (a prior run copied it, then crashed before its note) | Copy skipped; note (re)written wholesale                                          |
-| index.json lists an unreviewable file (couldn't render a judgeable tile at montage time)                   | Moved to `Unreviewable/<yyyy>/<mm>/` - no reason note, nothing to backfill        |
+| index.json lists an unreviewable file (couldn't render a judgeable tile at montage time)                   | Moved to `Unreviewable/<yyyy>/<mm>/`, one note line, backfilled if a run crashed  |
 | Cancellation requested mid-run, in either loop                                                             | `apply()` returns `null` - the finalizers never run, prep dir stays a waiting job |
 
 ## Related

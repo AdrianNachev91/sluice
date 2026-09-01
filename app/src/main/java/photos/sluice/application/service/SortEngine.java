@@ -32,10 +32,12 @@ import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.TakeoutSidecar;
 import photos.sluice.domain.paths.SortFolderNames;
+import photos.sluice.domain.review.ReasonNotes;
 import photos.sluice.domain.scan.MediaTypeDetector;
 import photos.sluice.domain.scan.SidecarSweep;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -62,7 +64,6 @@ public class SortEngine implements SortUseCase {
     // repeated on every line of a note.
     private static final String REASON_UNSORTED = "no date could be read";
     private static final String REASON_LOW_RES = "too small to sift";
-    private static final String REASONS_FILE = "_reasons.txt";
 
     // The pairing canary's threshold. Google's own sidecar naming scheme changes at export time,
     // not per-photo. A real change lands across the whole export at once rather than mixing, so
@@ -81,7 +82,8 @@ public class SortEngine implements SortUseCase {
     // anything is moved, deleted or written, so it is a clean abort with nothing to report. Its
     // counts are what an empty Inbox also produces, and the cancelled flag is what tells them apart.
     private static final SortSummary STOPPED_BEFORE_ANYTHING_MOVED =
-            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), List.of(), Set.of(), List.of(), true, 0);
+            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), SortSummary.Guessed.NONE, List.of(),
+                    Set.of(), List.of(), true, 0);
 
     private final PathsPort pathsPort;
     private final InboxScannerPort inboxScanner;
@@ -215,7 +217,10 @@ public class SortEngine implements SortUseCase {
 
         return new SortSummary(actuallyRemoved.size(), plan.redundantVsLibrary().size(),
                 plan.withinBatchDuplicates().size(), routing.photosSorted, routing.videosSorted, routing.lowRes,
-                routing.unsorted, consumedSidecars.size(), routing.lowConfidenceFiles, routing.unsortedFiles,
+                routing.unsorted, consumedSidecars.size(), routing.lowConfidenceFiles,
+                new SortSummary.Guessed(routing.photosSortedGuessed, routing.videosSortedGuessed,
+                        routing.lowResGuessed),
+                routing.unsortedFiles,
                 routing.yearsSorted, pairingWarnings(scanResult), stoppedShort,
                 plan.toSort().size() - routing.routedFiles.size());
     }
@@ -454,12 +459,14 @@ public class SortEngine implements SortUseCase {
         final String leaf = file.path().getFileName().toString();
 
         if (date.confidence() == Confidence.UNSORTABLE) {
-            this.routeToReview(file, leaf, this.pathsPort.review().resolve(SortFolderNames.UNDATED),
-                    REASON_UNSORTED, cancellation, watching);
+            this.routeToReview(file, this.pathsPort.review().resolve(SortFolderNames.UNDATED),
+                    null, false, REASON_UNSORTED, cancellation, watching);
             routing.unsorted++;
             routing.unsortedFiles.add(leaf);
             return;
         }
+
+        final boolean guessed = date.confidence() == Confidence.LOW;
 
         // The scanner already filtered to recognized extensions, so classification always
         // succeeds for a file that reached this point.
@@ -468,9 +475,10 @@ public class SortEngine implements SortUseCase {
         final String extension = MediaTypeDetector.extensionOf(file.path());
 
         if (!isVideo && this.isLowRes(file, type, extension)) {
-            this.routeToReview(file, leaf, this.pathsPort.review().resolve(yearMonthDash(date.when())),
-                    REASON_LOW_RES, cancellation, watching);
+            this.routeToReview(file, this.pathsPort.review().resolve(yearMonthDash(date.when())),
+                    date.when().toLocalDate(), guessed, REASON_LOW_RES, cancellation, watching);
             routing.lowRes++;
+            tallyGuess(routing, guessed, leaf, date, GuessBucket.LOW_RES);
             return;
         }
 
@@ -484,8 +492,32 @@ public class SortEngine implements SortUseCase {
         } else {
             routing.photosSorted++;
         }
-        if (date.confidence() == Confidence.LOW) {
-            routing.lowConfidenceFiles.add(leaf + " (mtime " + date.when().toLocalDate() + ")");
+        tallyGuess(routing, guessed, leaf, date, isVideo ? GuessBucket.VIDEOS : GuessBucket.PHOTOS);
+    }
+
+    /**
+     * Records a file whose date came off its own timestamp rather than off the photo.
+     *
+     * <p>Called after the move, like every other tally here, so a file the caller stopped mid-move
+     * appears in none of them.
+     *
+     * @param routing {@link RoutingResult} tallies updated with this file's outcome
+     * @param guessed boolean true where the date came off the timestamp
+     * @param leaf {@link String} the file's name
+     * @param date {@link DateResult} its resolved date
+     * @param bucket {@link GuessBucket} where this file went, which the caller knows and this does
+     *     not
+     */
+    private static void tallyGuess(final RoutingResult routing, final boolean guessed, final String leaf,
+                                   final DateResult date, final GuessBucket bucket) {
+        if (!guessed) {
+            return;
+        }
+        routing.lowConfidenceFiles.add(leaf + " (" + date.source() + " " + date.when().toLocalDate() + ")");
+        switch (bucket) {
+            case PHOTOS -> routing.photosSortedGuessed++;
+            case VIDEOS -> routing.videosSortedGuessed++;
+            case LOW_RES -> routing.lowResGuessed++;
         }
     }
 
@@ -504,20 +536,28 @@ public class SortEngine implements SortUseCase {
     }
 
     /**
-     * Moves a file into a Review destination and appends its reason line.
+     * Moves a file into a Review destination and appends its note line.
+     *
+     * <p>The line names the file by where it landed rather than where it came from. A name already
+     * taken in the destination lands the file as a " (2)".
      *
      * @param file {@link MediaFile} the file being set aside
-     * @param leaf {@link String} its file name
      * @param destDir {@link Path} the Review destination folder
-     * @param reason {@link String} why it is here, as the reasons file says it to a reader
+     * @param taken {@link LocalDate} when the photo was taken, or null where nothing could date it
+     * @param guessed boolean true where that date came off the file's timestamp
+     * @param reason {@link String} why it is here, as the note says it to a reader
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
      * @param watching {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
-    private void routeToReview(final MediaFile file, final String leaf, final Path destDir, final String reason,
+    private void routeToReview(final MediaFile file, final Path destDir, final @Nullable LocalDate taken,
+                               final boolean guessed, final String reason,
                                final CancellationSignal cancellation, final TransferProgress watching) {
-        this.mediaStore.move(file.path(), destDir, cancellation, watching);
-        this.mediaStore.appendLine(destDir.resolve(REASONS_FILE), leaf + " - " + reason);
+        final Path landed = this.mediaStore.move(file.path(), destDir, cancellation, watching);
+        final String name = landed.getFileName().toString();
+        this.mediaStore.appendLine(destDir.resolve(ReasonNotes.FILE_NAME), taken == null
+                ? ReasonNotes.line(name, reason)
+                : ReasonNotes.line(name, taken, guessed, reason));
     }
 
     /**
@@ -560,9 +600,21 @@ public class SortEngine implements SortUseCase {
         int videosSorted;
         int lowRes;
         int unsorted;
+        int photosSortedGuessed;
+        int videosSortedGuessed;
+        int lowResGuessed;
         final List<String> lowConfidenceFiles = new ArrayList<>();
         final List<String> unsortedFiles = new ArrayList<>();
         final Set<Integer> yearsSorted = new HashSet<>();
         final List<MediaFile> routedFiles = new ArrayList<>();
+    }
+
+    /**
+     * Which bucket a file with a guessed date went to.
+     *
+     * <p>Only the three that can hold one. Nothing else here is dated at all.
+     */
+    private enum GuessBucket {
+        PHOTOS, VIDEOS, LOW_RES
     }
 }

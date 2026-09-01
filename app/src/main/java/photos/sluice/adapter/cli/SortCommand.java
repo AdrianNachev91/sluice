@@ -38,6 +38,10 @@ public class SortCommand implements Callable<Integer> {
      */
     static final String VERB = "sort";
 
+    // Indented, and opening on "of those", because it counts part of the line above it rather than
+    // a place of its own. Every other line here names somewhere files went.
+    private static final String GUESSED_LABEL = "  of those, low confidence date";
+
     private final Pipeline pipeline;
     private final JobReports reports;
 
@@ -173,11 +177,15 @@ public class SortCommand implements Callable<Integer> {
         if (stopped) {
             lines.add(stoppedLine(sorted.leftBehind()));
         }
+        final SortSummary.Guessed guessed = sorted.guessed();
         lines.add(ResultLines.count("Photos sorted", sorted.photosSorted()));
+        ResultLines.addWhenAny(lines, GUESSED_LABEL, guessed.photosSorted());
         lines.add(ResultLines.count("Videos sorted", sorted.videosSorted()));
+        ResultLines.addWhenAny(lines, GUESSED_LABEL, guessed.videosSorted());
         ResultLines.addWhenAny(lines, "Already in your Library", sorted.reimportsDeleted());
         ResultLines.addWhenAny(lines, "Identical copies removed", sorted.byteDupsDeleted());
         ResultLines.addWhenAny(lines, "Moved to Review", sorted.lowRes());
+        ResultLines.addWhenAny(lines, GUESSED_LABEL, guessed.lowRes());
         ResultLines.addWhenAny(lines, "Could not be dated", sorted.unsorted());
         return lines;
     }

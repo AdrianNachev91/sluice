@@ -45,7 +45,7 @@ class QuitPresenterTest {
     void anInboxAndALibraryTheLauncherCanDraw() {
         when(this.pipeline.inboxTally()).thenReturn(new InboxTally(300, 1_000_000L));
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
-                new YearRow(2019, 100, 0, List.of(new MonthRow(6, 100, 0))))));
+                new YearRow(2019, 100, 0, List.of(new MonthRow(6, 100, 0)))), 0));
         when(this.pipeline.estimateFor(anyInt()))
                 .thenReturn(new SpendEstimate(0, 0, true, false, false));
         when(this.pipeline.configuredProviderSpends()).thenReturn(true);

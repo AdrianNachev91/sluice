@@ -9,6 +9,7 @@ import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunLauncherView.MonthChoice;
 import photos.sluice.adapter.ui.RunLauncherView.StartAction;
+import photos.sluice.adapter.ui.RunLauncherView.UndatedChoice;
 import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.SortedTally;
@@ -20,6 +21,7 @@ import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.PrepDirHealth.State;
+import photos.sluice.domain.paths.SortFolderNames;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -110,6 +112,16 @@ public class RunSetupPresenter {
     private static final String NOTHING_STAGED =
             "Nothing is sorted yet. Sort your Inbox first, and the years will show up here.";
 
+    private static final RunLauncherView.RowLink REVIEW_STEP =
+            new RunLauncherView.RowLink("run-mode-review", "Review", RunMode.SIFT);
+
+    private static final String UNDATED_LABEL = SortFolderNames.UNDATED;
+
+    private static final String NOTHING_UNDATED = "Nothing is waiting without a date.";
+
+    private static final String SIFT_TAKES_NO_UNDATED =
+            "A sift looks at photos filed under a year, and these have no date.";
+
     // One paragraph, so a reader meets a single statement about the figure rather than two they
     // have to reconcile. Only the middle varies, and it is absent where the warning box says it.
     private static final String ESTIMATE_OPENING = "An estimate, not a quote.";
@@ -197,8 +209,8 @@ public class RunSetupPresenter {
         final RunScope scope = this.scope();
         final List<YearChoice> years = this.yearChoices();
         final StartAction action = this.startAction(scope);
-        return new RunLauncherView(this.modes(), this.chosen.explained(), this.inboxCard(),
-                years, this.readsSorted(),
+        return new RunLauncherView(this.modes(), REVIEW_STEP, this.chosen.explained(), this.inboxCard(),
+                years, this.undatedChoice(), this.readsSorted(),
                 this.nothingStagedLine(), SCOPE_LABEL, this.scopeText, this.chosen.scopeHint(),
                 this.refusalOf(scope), this.cost(scope), legendFor(years),
                 legendFor(years) == null ? null : UNFINISHED_WAY_THERE,
@@ -313,6 +325,13 @@ public class RunSetupPresenter {
         this.scopeText = String.valueOf(year);
         this.monthsCollapsed = false;
         this.message = null;
+    }
+
+    /**
+     * Takes a press on the undated row, which clears the field where it is already the scope.
+     */
+    public void pressUndated() {
+        this.setScope(this.scope() instanceof RunScope.Undated ? "" : RunScopeText.UNDATED);
     }
 
     /**
@@ -518,6 +537,7 @@ public class RunSetupPresenter {
         return switch (RunScopeText.parse(this.scopeText)) {
             case RunScopeText.Typed.Refused(final String reason) -> new RunScope.Refused(reason);
             case RunScopeText.Typed.Blank _ -> this.blankScope();
+            case RunScopeText.Typed.Undated _ -> this.undatedScope();
             case RunScopeText.Typed.OfYear(final int year, final List<Integer> months) ->
                     this.yearScope(year, months);
         };
@@ -650,7 +670,11 @@ public class RunSetupPresenter {
      * @return {@link String} the line, or null where the rows themselves answer
      */
     private @Nullable String nothingStagedLine() {
-        if (this.countsUnreadable || this.sorted == null || !this.yearChoices().isEmpty()) {
+        // The undated row counts too. It comes from a tree the year rows never see, and it is drawn
+        // on this same card. A card holding one and no years would say nothing is sorted, directly
+        // above something that is.
+        if (this.countsUnreadable || this.sorted == null || !this.yearChoices().isEmpty()
+                || this.undatedHeld() > 0) {
             return null;
         }
         return NOTHING_STAGED;
@@ -932,6 +956,49 @@ public class RunSetupPresenter {
             // button in the row, and each already knows what it covers.
             case SIFT, RESCUE, IMPORT -> new RunScope.Nothing();
         };
+    }
+
+    /**
+     * What the undated word means for the chosen mode.
+     *
+     * @return {@link RunScope} the scope it stands for, or a refusal where the mode cannot take it
+     */
+    private RunScope undatedScope() {
+        return switch (this.chosen) {
+            case MOVE_TO_LIBRARY -> this.countsAreIn() && this.undatedHeld() == 0
+                    ? new RunScope.Refused(NOTHING_UNDATED)
+                    : new RunScope.Undated();
+            case SIFT -> new RunScope.Refused(SIFT_TAKES_NO_UNDATED);
+            // A sort never reads the field. Neither rescue nor import has a button in the row. So
+            // none of the three can be the chosen mode while text sits in it.
+            case SORT, RESCUE, IMPORT -> new RunScope.Nothing();
+        };
+    }
+
+    /**
+     * How much is waiting in the undated folder, or none while the walk that would say is running.
+     *
+     * @return int what the last completed read found there
+     */
+    private int undatedHeld() {
+        final SortedTally staged = this.sorted;
+        return staged == null ? 0 : staged.undated();
+    }
+
+    /**
+     * The undated row, where anything is waiting without a date.
+     *
+     * @return {@link UndatedChoice} the row, or null where there is nothing to show
+     */
+    private @Nullable UndatedChoice undatedChoice() {
+        final int held = this.undatedHeld();
+        if (held == 0) {
+            return null;
+        }
+        return new UndatedChoice("run-undated-row", UNDATED_LABEL,
+                RunWords.counted(held, "photo or video", "photos and videos"),
+                this.scope() instanceof RunScope.Undated,
+                this.chosen == RunMode.MOVE_TO_LIBRARY);
     }
 
     /**

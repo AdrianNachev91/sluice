@@ -478,7 +478,7 @@ final class PipelineTestSupport {
                 new ImageDimensionsReader(), mediaStore, progress);
         final var commitEngine = new CommitEngine(pathsConfig, mediaStore, sha256Port, hashIndex);
         final var rescueDateResolver = new RescueDateResolver(new ExifSource(), new FilenameSource());
-        final var rescueEngine = new RescueEngine(pathsConfig, mediaStore, sha256Port, hashIndex, rescueDateResolver);
+        final var rescueEngine = new RescueEngine(pathsConfig, mediaStore, rescueDateResolver, new Sha256Hasher());
 
         final HeifDecoder stubHeifDecoder = _ -> Optional.empty();
         final var montageRenderer = new CullMontageRenderer(new TileRenderer(stubHeifDecoder), new MontageBuilder(),

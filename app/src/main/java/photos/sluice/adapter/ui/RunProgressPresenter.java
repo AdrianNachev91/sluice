@@ -29,6 +29,7 @@ class RunProgressPresenter {
             " Giving up on the current file. Nothing half-written is left behind.";
     // What survives is the question a stopped run raises, and each mode answers it differently.
     private static final String CANCELLING_A_MOVE = "What reached your library stays there.";
+    private static final String CANCELLING_A_RESCUE = "What reached Sorted stays there.";
     private static final String CANCELLING_A_SORT = "What was sorted stays where it is.";
     // Named in the copy rather than left to a spinner. A model that has been asked a question
     // answers in its own time, and a screen that only spun would look stuck for that whole minute.
@@ -222,9 +223,8 @@ class RunProgressPresenter {
     private static String whatSurvives(final RunMode ran, final @Nullable ImportKind importing) {
         return switch (ran) {
             case SIFT -> CANCELLING_A_SIFT;
-            // A rescue also puts photos into the library, one Review folder at a time. So a stopped
-            // one leaves behind exactly what a stopped move leaves.
-            case MOVE_TO_LIBRARY, RESCUE -> CANCELLING_A_MOVE;
+            case MOVE_TO_LIBRARY -> CANCELLING_A_MOVE;
+            case RESCUE -> CANCELLING_A_RESCUE;
             // The copy's line for an import whose kind never arrived, being the one of the two that
             // claims nothing about the folder the photos came from.
             case IMPORT -> importing == ImportKind.MOVE ? CANCELLING_A_MOVE_IN : CANCELLING_A_COPY;

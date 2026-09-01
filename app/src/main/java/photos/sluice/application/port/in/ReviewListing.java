@@ -39,7 +39,8 @@ public record ReviewListing(List<Folder> folders, List<Path> unreadable) {
      * @param root {@link Root} which of the three it sits under
      * @param filedBy {@link FiledBy} which job put it there
      * @param name {@link String} its path below that root, using {@code /} whatever the platform
-     *     writes. Under {@link Root#REVIEW} this is also the name {@link RescueUseCase#rescue} takes
+     *     writes. This is also the name {@link RescueUseCase#rescue} takes, alongside the root's own
+     *     {@link Root#rescueRoot}
      * @param path {@link Path} where it is, for handing to the file manager
      * @param photos int how many photos are in it
      * @param videos int how many videos are in it
@@ -67,10 +68,6 @@ public record ReviewListing(List<Folder> folders, List<Path> unreadable) {
 
     /**
      * Which root a folder sits under.
-     *
-     * <p>What separates them is what may be done about them, not where they are. Only a folder under
-     * {@link #REVIEW} can be moved into the library, because that is the only tree
-     * {@link RescueUseCase#rescue} resolves a name inside.
      */
     public enum Root {
 
@@ -81,6 +78,19 @@ public record ReviewListing(List<Folder> folders, List<Path> unreadable) {
         DUPLICATES,
 
         /** What a sift could not render a judgeable tile for, so no model ever saw it. */
-        UNREVIEWABLE
+        UNREVIEWABLE;
+
+        /**
+         * The rescue this root's folders are moved back into Sorted by.
+         *
+         * @return {@link RescueRoot} what {@link RescueUseCase#rescue} takes for this root
+         */
+        public RescueRoot rescueRoot() {
+            return switch (this) {
+                case REVIEW -> RescueRoot.REVIEW;
+                case UNREVIEWABLE -> RescueRoot.UNREVIEWABLE;
+                case DUPLICATES -> RescueRoot.DUPLICATES;
+            };
+        }
     }
 }

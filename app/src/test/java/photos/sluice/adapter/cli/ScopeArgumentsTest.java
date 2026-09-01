@@ -153,6 +153,35 @@ class ScopeArgumentsTest {
     }
 
     @Test
+    void unsortedMovesTheUndatedFolderToTheLibrary() {
+        assertThat(year("unsorted").commitScope("commit")).isEqualTo(new CommitScope.Undated());
+    }
+
+    @Test
+    void unsortedWithMonthsIsRefusedBecauseThereIsNoYearToNarrow() {
+        final Refusal refusal = refusalOf(() -> new ScopeArguments("unsorted", "6-8", null).commitScope("commit"));
+
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_CONFLICTING);
+        assertThat(refusal.sentence()).contains("no year for --months to narrow");
+    }
+
+    @Test
+    void sortingUnsortedIsRefusedAndSaysASortReadsTheInboxInstead() {
+        final Refusal refusal = refusalOf(() -> year("unsorted").sortScope("sort"));
+
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_CONFLICTING);
+        assertThat(refusal.sentence()).contains("A sort reads your Inbox");
+    }
+
+    @Test
+    void siftingUnsortedIsRefusedAndSaysASiftLooksAtPhotosFiledUnderAYear() {
+        final Refusal refusal = refusalOf(() -> year("unsorted").cullScope("sift"));
+
+        assertThat(refusal.kind()).isEqualTo(RefusalKind.SCOPE_CONFLICTING);
+        assertThat(refusal.sentence()).contains("A sift looks at photos filed under a year");
+    }
+
+    @Test
     void aNumberThatIsNotFourDigitsIsNotAYearOnAnyVerb() {
         assertThat(refusalOf(() -> year("20199").sortScope("sort")).kind())
                 .isEqualTo(RefusalKind.SCOPE_VALUE_REFUSED);

@@ -294,7 +294,34 @@ class SortEngineTest {
         assertThat(summary.photosSorted()).isEqualTo(0);
         assertThat(Files.exists(root.resolve("Review/2019-06/20190615_tiny.jpg"))).isTrue();
         assertThat(Files.readString(root.resolve("Review/2019-06/_reasons.txt")))
-                .contains("20190615_tiny.jpg - too small to sift");
+                .contains("20190615_tiny.jpg (2019-06-15) - too small to sift");
+    }
+
+    @Test
+    void aLowResPhotoDatedOffItsTimestampSaysSoInTheNote(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        final Path file = inbox.resolve("tiny.jpg");
+        writeFile(file, "tiny");
+        setMtime(file, LocalDateTime.of(2022, 6, 1, 9, 0, 0));
+
+        final SortSummary summary = this.sortEngine(root).sort(new SortScope.OldestYear());
+
+        assertThat(summary.lowRes()).isEqualTo(1);
+        assertThat(summary.lowConfidenceFiles()).containsExactly("tiny.jpg (mtime 2022-06-01)");
+        assertThat(Files.readString(root.resolve("Review/2022-06/_reasons.txt")))
+                .contains("tiny.jpg (2022-06-01, low confidence date) - too small to sift");
+    }
+
+    @Test
+    void aNameAlreadyTakenInTheReviewFolderIsNotedUnderTheNameTheFileLandedAs(@TempDir final Path root)
+            throws IOException {
+        writeFile(root.resolve("Review/2019-06/20190615_tiny.jpg"), "already there");
+        writeFile(inboxOf(root).resolve("20190615_tiny.jpg"), "tiny");
+
+        this.sortEngine(root).sort(new SortScope.OldestYear());
+
+        assertThat(Files.readString(root.resolve("Review/2019-06/_reasons.txt")))
+                .contains("20190615_tiny (2).jpg (2019-06-15) - too small to sift");
     }
 
     @Test

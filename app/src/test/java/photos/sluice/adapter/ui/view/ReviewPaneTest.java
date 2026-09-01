@@ -74,13 +74,35 @@ class ReviewPaneTest {
     }
 
     @Test
-    void aFolderUnderReviewOffersBothButtonsAndTheOthersOnlyOpen() throws Exception {
+    void aFolderUnderAnyRootDrawsBothButtons() throws Exception {
         final Parent pane = onFxThread(() -> built(folder(Root.REVIEW, "Food"),
-                folder(Root.DUPLICATES, "2019-06_beach")));
+                folder(Root.DUPLICATES, "2019-06_beach"), folder(Root.UNREVIEWABLE, "2019/06")));
 
+        assertThat(pane.lookup("#review-open-review-food")).isNotNull();
         assertThat(pane.lookup("#review-move-review-food")).isNotNull();
-        assertThat(pane.lookup("#review-move-duplicates-2019-06-beach")).isNull();
         assertThat(pane.lookup("#review-open-duplicates-2019-06-beach")).isNotNull();
+        assertThat(pane.lookup("#review-move-duplicates-2019-06-beach")).isNotNull();
+        assertThat(pane.lookup("#review-open-unreviewable-2019-06")).isNotNull();
+        assertThat(pane.lookup("#review-move-unreviewable-2019-06")).isNotNull();
+    }
+
+    @Test
+    void aRescueIsDrawnInactiveWhileSomethingElseIsRunning() throws Exception {
+        final Pipeline pipeline = pipeline(folder(Root.REVIEW, "Food"));
+        when(pipeline.isBusy()).thenReturn(true);
+
+        final Parent pane = onFxThread(() -> built(pipeline));
+
+        assertThat(pane.lookup("#review-move-review-food").isDisabled()).isTrue();
+        assertThat(pane.lookup("#review-open-review-food").isDisabled()).isFalse();
+    }
+
+    @Test
+    void bothButtonsArePressableWhileNothingIsRunning() throws Exception {
+        final Parent pane = onFxThread(() -> built(folder(Root.REVIEW, "Food")));
+
+        assertThat(pane.lookup("#review-move-review-food").isDisabled()).isFalse();
+        assertThat(pane.lookup("#review-open-review-food").isDisabled()).isFalse();
     }
 
     @Test

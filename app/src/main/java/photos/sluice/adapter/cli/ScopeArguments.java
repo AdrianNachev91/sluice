@@ -15,9 +15,9 @@ import java.util.List;
  * oldest by the date it resolves for a photo and sift by the file's own timestamp, so one
  * description could not serve both.
  *
- * <p>The year arrives as text rather than as a number. Move-to-library takes {@code all} in the
- * same position. And a year that reads as a number but is not four digits is refused with a
- * document rather than by the parser.
+ * <p>The year arrives as text rather than as a number. Move-to-library takes {@code all} and
+ * {@code unsorted} in the same position. And a year that reads as a number but is not four digits
+ * is refused with a document rather than by the parser.
  *
  * @param year {@link String} the positional year, or {@code all}, or null where none was given
  * @param months {@link String} what was typed after {@code --months}, or null
@@ -39,6 +39,11 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      * The word standing for every year at once, where a verb takes one.
      */
     public static final String ALL = "all";
+
+    /**
+     * The word standing for the photos nothing could date, which a move to the library alone takes.
+     */
+    public static final String UNDATED = "unsorted";
 
     /**
      * How many digits a year has.
@@ -64,6 +69,8 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      */
     public SortScope sortScope(final String verb) {
         this.refuseTwoWays(verb);
+        this.refuseUndated(verb, "A sort reads your Inbox, and " + UNDATED
+                + " names photos already in Sorted");
         if (this.oldest != null) {
             return new SortScope.OldestN(count(this.oldest));
         }
@@ -85,6 +92,8 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      */
     public CullScope cullScope(final String verb) {
         this.refuseTwoWays(verb);
+        this.refuseUndated(verb, "A sift looks at photos filed under a year, and " + UNDATED
+                + " names the ones nothing could date");
         if (this.oldest != null) {
             return new CullScope.OldestN(count(this.oldest));
         }
@@ -119,8 +128,32 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
             }
             return new CommitScope.All();
         }
-        return new CommitScope.Year(yearOf(this.year, "For every year at once, write " + verb + " " + ALL + "."),
+        if (UNDATED.equals(this.year)) {
+            if (this.months != null) {
+                throw conflicting(verb, UNDATED + " is photos with no date, so there is no year for "
+                        + MONTHS + " to narrow.");
+            }
+            return new CommitScope.Undated();
+        }
+        // Both of the words this verb also takes, since a refusal enumerating what it accepts is
+        // the one place a caller learns there are any.
+        return new CommitScope.Year(yearOf(this.year, "For every year at once, write " + verb + " "
+                        + ALL + ". For the photos nothing could date, write " + verb + " " + UNDATED + "."),
                 this.span(verb));
+    }
+
+    /**
+     * Refuses the undated word for a verb that has nothing undated to work on.
+     *
+     * @param verb {@link String} the verb asking, as the person typed it
+     * @param why {@link String} what this verb reads, and what the word names
+     * @throws ScopeRefusedException when the undated word was given to a verb that cannot take it
+     */
+    private void refuseUndated(final String verb, final String why) {
+        if (UNDATED.equals(this.year)) {
+            throw conflicting(verb, why + ". Write " + CommitCommand.VERB + " " + UNDATED
+                    + " to move them into your Library.");
+        }
     }
 
     /**

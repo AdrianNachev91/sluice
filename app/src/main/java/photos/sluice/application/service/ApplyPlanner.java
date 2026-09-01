@@ -373,9 +373,9 @@ public class ApplyPlanner {
         if (ledger.skipped().contains(file)) {
             return new FileStatus.Skipped(file);
         }
-        return this.verifiedMoveRecord(file, ledger.moves()).isPresent()
-                ? new FileStatus.Done(file)
-                : new FileStatus.Unresolved(file);
+        return this.verifiedMoveRecord(file, ledger.moves())
+                .<FileStatus>map(record -> new FileStatus.Done(file, record))
+                .orElseGet(() -> new FileStatus.Unresolved(file));
     }
 
     /**
@@ -487,8 +487,7 @@ public class ApplyPlanner {
 
     /**
      * classifyFile()'s verdict for one unreviewable file - {@link Status}'s sibling for a plain path
-     * with no decision behind it. Done carries no record: an unreviewable file has no secondary
-     * write to reconcile, so confirming the move alone is enough.
+     * with no decision behind it.
      */
     sealed interface FileStatus {
 
@@ -511,8 +510,9 @@ public class ApplyPlanner {
          * The file was already moved, proven by a hash-verified move record.
          *
          * @param file {@link Path} the already-moved file
+         * @param record {@link MoveRecord} the record proving it, naming where it landed
          */
-        record Done(Path file) implements FileStatus {
+        record Done(Path file, MoveRecord record) implements FileStatus {
         }
 
         /**

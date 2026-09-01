@@ -121,10 +121,26 @@ of each other are grouped under `Duplicates`, one folder per group. That lets yo
 them before throwing any away. And anything the sift could not judge at all goes to
 `Unreviewable`.
 
-**Everything else stays in Sorted, where `commit` will find it.** So the three things that
-put photos in your Library take different photos. `commit` takes what a sift left in
-Sorted, plus anything you never sifted. `rescue` takes one `Review` folder, once you have
-been through it and thrown away what you did not want. And a sift itself takes `funny`.
+**Everything else stays in Sorted, where `commit` will find it.** Only two things put
+photos in your Library. `commit` takes what is in Sorted, which is what a sift left there
+plus anything you never sifted. And a sift itself takes `funny`.
+
+`rescue` is how a photo gets back. It takes one folder you have been through, out of
+`Review`, `Unreviewable` or `Duplicates`, and puts what is left back into `Sorted`. From
+there `commit` reaches it like anything else. So the recommended order is `sort`, `sift`,
+`rescue`, `commit`, and `commit` last is what lets you see everything before any of it
+lands.
+
+A photo `Sorted` already holds, at the same name and size and with the same bytes, is
+deleted from the folder rather than put back twice. That is what a near-copy group's own
+copy of the photo it kept meets: the original never left `Sorted`.
+
+A rescued photo is in scope for the next sift, which may set it aside again. That is
+deliberate. Nothing records that you overruled a verdict.
+
+Anything `rescue` cannot date goes to `Sorted/Unsorted`, flat. No year names those, so
+`commit 2019` never takes them. Write `commit unsorted` for that folder alone, or
+`commit all`, which takes everything sorted.
 
 Sifting is optional. The three commands above it file your media by year and month and
 move it into your Library, and that is a complete way to use Sluice. Sift when you also
@@ -199,6 +215,10 @@ Three commands narrow to part of your collection, and they do not narrow alike.
 account balance. Skipping a month you would rather handle on its own is worth the extra
 spelling there. `sort` and `commit` take a span.
 
+`commit` takes two words in the year's place. `all` is every year at once. `unsorted` is
+the photos nothing could date, which live in `Sorted/Unsorted` and belong to no year. No
+other command takes either word.
+
 ## Reading what a command says
 
 Standard output carries the answer. Standard error carries progress, warnings and the
@@ -239,7 +259,7 @@ and `resume`. The rest are short enough to run to completion once started.
 
 ## What Sluice will and will not delete
 
-**Sluice never deletes media unless the same bytes already exist somewhere else.** Four
+**Sluice never deletes media unless the same bytes already exist somewhere else.** Five
 deletions are allowed:
 
 - A file in your Inbox whose bytes are already in your Library. That is a re-import, and
@@ -247,6 +267,8 @@ deletions are allowed:
 - Byte-identical copies inside one batch, keeping one.
 - The original of an `import --move`, deleted only after its bytes are read back and
   hashed in your Inbox.
+- A file `rescue` would put back where `Sorted` already holds it, at the same name and
+  size and with the same bytes. Those bytes are read at the destination first.
 - A spent `.json` sidecar, which is metadata rather than a photo.
 
 Everything else is a move or a copy, and no photo or video is ever overwritten. A name

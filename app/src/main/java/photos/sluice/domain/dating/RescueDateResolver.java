@@ -1,5 +1,6 @@
 package photos.sluice.domain.dating;
 
+import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.model.MediaFile;
 
 import java.time.DateTimeException;
@@ -10,20 +11,24 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Resolves a plausible date for a file being rescued out of a {@code Review} folder, using its own
- * chain rather than {@link DateResolver}'s. By rescue time no Takeout sidecar survives. A file
- * with no real date signal is skipped rather than dated from mtime. A rescue never fabricates a
- * date, not even from the filesystem clock.
+ * Resolves a plausible date for a file being rescued, using its own chain rather than
+ * {@link DateResolver}'s. By rescue time no Takeout sidecar survives. A file with no real date
+ * signal answers empty rather than being dated from mtime. A rescue never fabricates a date, not
+ * even from the filesystem clock.
  *
- * <p>The order also differs: a folder-derived date is tried first, not last. The {@code Review}
- * folder a file already sits in encodes a dated {@code "yyyy-mm"} leaf, which is more trustworthy
- * than a two-source exif/filename re-derivation could produce. Only Food, Scenery, and Unsorted
- * folders, whose names carry no date, actually fall through to exif and filename.
+ * <p>The order also differs: what the folder's own note recorded comes first, then the date the
+ * file's path spells, and only then exif and the filename. The note is the answer this app reached
+ * when it filed the photo, off a chain wider than anything still readable now. The path is that
+ * same answer with the day dropped. A folder named for a category carries no date, and a note
+ * written before dates were recorded carries none either, so both fall through.
  */
 public class RescueDateResolver {
 
-    // Matches the whole target leaf, e.g. "2019-06".
-    private static final Pattern DATED_LEAF = Pattern.compile("^(\\d{4})-(\\d{2})$");
+    // A folder named for one month, which is how a sort files what a sift will not look at.
+    private static final Pattern DASHED_MONTH = Pattern.compile("(?:^|/)(\\d{4})-(\\d{2})/");
+
+    // A year folder holding month folders, which is how a sift files what it could not judge.
+    private static final Pattern NESTED_MONTH = Pattern.compile("(?:^|/)(\\d{4})/(\\d{2})/");
 
     private final DateSource exifSource;
     private final DateSource filenameSource;
@@ -40,33 +45,55 @@ public class RescueDateResolver {
     }
 
     /**
-     * Resolves a plausible date for a rescued file, preferring the target folder's own date.
+     * Resolves a plausible date for a file being rescued, preferring what its folder's note says.
+     *
+     * <p>An implausible noted date is not the end of the chain. It is text a reader can edit, so a
+     * bad one falls through to what the file itself still carries.
      *
      * @param file {@link MediaFile} the media file to date
-     * @param targetLeaf {@link String} the rescue destination's leaf folder name
+     * @param within {@link String} the file's path below the root it is being rescued from, written
+     *     with {@code /} whatever the platform uses
+     * @param noted {@link LocalDateTime} what the folder's note recorded for this file, or null
      * @return an {@link Optional} {@link LocalDateTime}, if any source produced a plausible one
      */
-    public Optional<LocalDateTime> resolve(final MediaFile file, final String targetLeaf) {
-        return folderDate(targetLeaf)
-                .or(() -> this.exifSource.resolve(file, null))
-                .or(() -> this.filenameSource.resolve(file, null))
-                .filter(DatePlausibility::isPlausible);
+    public Optional<LocalDateTime> resolve(final MediaFile file, final String within,
+                                           final @Nullable LocalDateTime noted) {
+        return Optional.ofNullable(noted)
+                .filter(DatePlausibility::isPlausible)
+                .or(() -> pathDate(within)
+                        .or(() -> this.exifSource.resolve(file, null))
+                        .or(() -> this.filenameSource.resolve(file, null))
+                        .filter(DatePlausibility::isPlausible));
     }
 
     /**
-     * Parses a dated "yyyy-mm" leaf folder name into its first-of-month date.
+     * The month a file's own path names, in either of the two shapes a job writes.
      *
-     * @param targetLeaf {@link String} the rescue destination's leaf folder name
-     * @return an {@link Optional} {@link LocalDateTime}, if the leaf matches the dated pattern
+     * <p>Both are read as the first of that month. A folder names a month and nothing finer, so any
+     * other day would be invented.
+     *
+     * @param within {@link String} the file's path below the root it is being rescued from
+     * @return an {@link Optional} {@link LocalDateTime}, empty where the path names no month
      */
-    private static Optional<LocalDateTime> folderDate(final String targetLeaf) {
-        final Matcher leaf = DATED_LEAF.matcher(targetLeaf);
-        if (!leaf.matches()) {
-            return Optional.empty();
+    private static Optional<LocalDateTime> pathDate(final String within) {
+        final Matcher dashed = DASHED_MONTH.matcher(within);
+        if (dashed.find()) {
+            return firstOfMonth(dashed.group(1), dashed.group(2));
         }
+        final Matcher nested = NESTED_MONTH.matcher(within);
+        return nested.find() ? firstOfMonth(nested.group(1), nested.group(2)) : Optional.empty();
+    }
+
+    /**
+     * The first of the month two matched groups name.
+     *
+     * @param year {@link String} four digits
+     * @param month {@link String} two digits, which the pattern does not bound to 1 through 12
+     * @return an {@link Optional} {@link LocalDateTime}, empty where those digits name no real month
+     */
+    private static Optional<LocalDateTime> firstOfMonth(final String year, final String month) {
         try {
-            return Optional.of(LocalDate.of(Integer.parseInt(leaf.group(1)), Integer.parseInt(leaf.group(2)), 1)
-                    .atStartOfDay());
+            return Optional.of(LocalDate.of(Integer.parseInt(year), Integer.parseInt(month), 1).atStartOfDay());
         } catch (DateTimeException _) {
             return Optional.empty();
         }

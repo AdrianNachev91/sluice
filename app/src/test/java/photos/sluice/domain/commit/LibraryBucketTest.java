@@ -17,4 +17,9 @@ class LibraryBucketTest {
     void fallsBackToOtherForAnUnrecognizedFirstSegment() {
         assertThat(LibraryBucket.ofFirstSegment("Unreviewable")).isEqualTo(LibraryBucket.OTHER);
     }
+
+    @Test
+    void classifiesTheUndatedFolder() {
+        assertThat(LibraryBucket.ofFirstSegment("Unsorted")).isEqualTo(LibraryBucket.UNDATED);
+    }
 }

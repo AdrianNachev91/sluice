@@ -37,4 +37,21 @@ class CommitScopeSelectorTest {
     void yearScopeExcludesUndatedPathsLikeFunny() {
         assertThat(this.selector.isInScope("Funny/a.jpg", new CommitScope.Year(2019, null))).isFalse();
     }
+
+    @Test
+    void undatedScopeIncludesTheUnsortedFolderAndExcludesADatedPath() {
+        assertThat(this.selector.isInScope("Unsorted/a.jpg", new CommitScope.Undated())).isTrue();
+        assertThat(this.selector.isInScope("Photos/2019/06/a.jpg", new CommitScope.Undated())).isFalse();
+    }
+
+    @Test
+    void theUnsortedFolderIsNotInScopeUnderAYearButIsUnderAll() {
+        assertThat(this.selector.isInScope("Unsorted/a.jpg", new CommitScope.Year(2019, null))).isFalse();
+        assertThat(this.selector.isInScope("Unsorted/a.jpg", new CommitScope.All())).isTrue();
+    }
+
+    @Test
+    void unsortedNestedInsideAYearIsReadAsThatYearRatherThanAsUndated() {
+        assertThat(this.selector.isInScope("Photos/2019/06/Unsorted/a.jpg", new CommitScope.Undated())).isFalse();
+    }
 }

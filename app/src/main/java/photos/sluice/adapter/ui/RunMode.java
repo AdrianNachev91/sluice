@@ -36,17 +36,15 @@ public enum RunMode {
             "Moves what is in Sorted into your library. That is the photos a sift left alone, plus "
                     + "any it has not seen.",
             "Leave this empty to move everything in Sorted. Or type a year, and a run of months "
-                    + "after it if you want less, like 2019 6-8.", 1),
+                    + "after it if you want less, like 2019 6-8. Or pick Unsorted above, for "
+                    + "whatever nothing could date.", 1),
 
     /**
-     * Moves what is left in one Review folder into the library.
-     *
-     * <p>Named with the same words as {@link #MOVE_TO_LIBRARY} deliberately. Both put photos into
-     * the library, and that is what a reader would call either.
+     * Moves what is left in one waiting folder back into Sorted.
      *
      * <p>The two fields a row would read are empty, since this mode has no button in the row.
      */
-    RESCUE("Move to library", "Moving to library", "", "", 1),
+    RESCUE("Rescue to Sorted", "Rescuing", "", "", 1),
 
     /**
      * Brings photos into the Inbox from folders and files outside it.

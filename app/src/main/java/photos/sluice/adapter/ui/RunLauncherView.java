@@ -11,10 +11,13 @@ import java.util.List;
  * display-ready values. The view reads fields off this and decides nothing about what they mean.
  *
  * @param modes a {@link List} of {@link ModeChoice} the buttons across the top, in the order drawn
+ * @param rowLink {@link RowLink} the step in that row that leads somewhere instead of starting a run
  * @param modeHint {@link String} what the mode now chosen does
  * @param inbox {@link InboxCard} what the Inbox card says right now
  * @param years a {@link List} of {@link YearChoice} the Sorted rows, newest first, empty when
  *     nothing is staged
+ * @param undated {@link UndatedChoice} the row for what is sorted without a date, or null where
+ *     nothing is
  * @param scopeNamesTheRun boolean whether the field and the Sorted rows decide what this run
  *     covers, false for a mode that takes the oldest year whatever they say
  * @param nothingStaged what to say in place of the rows when there are none, or null when there
@@ -33,8 +36,9 @@ import java.util.List;
  * @param startAction {@link StartAction} what pressing it does
  * @param message {@link Message} what the screen has to report, or null where it has nothing
  */
-public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard inbox,
-                              List<YearChoice> years, boolean scopeNamesTheRun,
+public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String modeHint, InboxCard inbox,
+                              List<YearChoice> years, @Nullable UndatedChoice undated,
+                              boolean scopeNamesTheRun,
                               @Nullable String nothingStaged,
                               String scopeLabel, String scopeText, String scopeHint,
                               @Nullable String scopeRefusal, @Nullable Cost cost,
@@ -48,9 +52,11 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
      * Defensively copies the mutable collection components.
      *
      * @param modes a {@link List} of {@link ModeChoice} the buttons across the top
+     * @param rowLink {@link RowLink} the step in that row that leads somewhere
      * @param modeHint {@link String} what the mode now chosen does
      * @param inbox {@link InboxCard} what the Inbox card says right now
      * @param years a {@link List} of {@link YearChoice} the Sorted rows, newest first
+     * @param undated {@link UndatedChoice} the row for what is sorted without a date, or null
      * @param scopeNamesTheRun boolean whether the field and the rows decide what this run covers
      * @param nothingStaged what to say in place of the rows when there are none
      * @param scopeLabel {@link String} the label above the scope field
@@ -127,6 +133,16 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
     }
 
     /**
+     * The step in the mode row that leads somewhere rather than starting something.
+     *
+     * @param id {@link String} the control's id, for the screen to set on it
+     * @param label {@link String} what it says
+     * @param after {@link RunMode} the mode it is drawn after
+     */
+    public record RowLink(String id, String label, RunMode after) {
+    }
+
+    /**
      * The Inbox card, which says how much is waiting and nothing about which years it covers.
      *
      * <p>Deliberately opaque. A file's year is not known until a sort resolves its date. A card
@@ -175,6 +191,19 @@ public record RunLauncherView(List<ModeChoice> modes, String modeHint, InboxCard
         public YearChoice {
             months = List.copyOf(months);
         }
+    }
+
+    /**
+     * What is sorted without a date, as a row that scopes a run to it.
+     *
+     * @param id {@link String} the control's id, for the screen to set on it
+     * @param label {@link String} what the row says
+     * @param counts {@link String} what it holds, written out
+     * @param chosen boolean whether this row is the one now selected
+     * @param pressable boolean whether pressing it scopes the run
+     */
+    public record UndatedChoice(String id, String label, String counts, boolean chosen,
+                                boolean pressable) {
     }
 
     /**
