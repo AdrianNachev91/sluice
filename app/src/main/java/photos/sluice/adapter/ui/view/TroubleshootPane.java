@@ -19,7 +19,7 @@ import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.TroubleshootView.Detail;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
-import photos.sluice.adapter.ui.TroubleshootView.SameProblem;
+import photos.sluice.adapter.ui.TroubleshootView.ProblemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -221,11 +221,11 @@ final class TroubleshootPane {
         /**
          * Replaces the rows with the ones the screen now holds.
          *
-         * @param problems a {@link List} of {@link SameProblem} what is on the screen now
+         * @param problems a {@link List} of {@link ProblemStack} what is on the screen now
          * @param presenter {@link TroubleshootPresenter} takes a press on any row's buttons
          * @param redraw {@link Runnable} draws the screen again once it has been told
          */
-        private void drawProblems(final List<SameProblem> problems,
+        private void drawProblems(final List<ProblemStack> problems,
                                   final TroubleshootPresenter presenter, final Runnable redraw) {
             this.problems.getChildren().setAll(problems.stream()
                     .flatMap(same -> drawn(same, presenter, redraw).stream())
@@ -239,12 +239,12 @@ final class TroubleshootPane {
          * several sets inside one card read as one set of choices for the whole group. Rows with
          * nothing to answer share their kind's card.
          *
-         * @param same {@link SameProblem} the heading and its rows
+         * @param same {@link ProblemStack} the heading and its rows
          * @param presenter {@link TroubleshootPresenter} takes a press on any row's buttons
          * @param redraw {@link Runnable} draws the screen again once it has been told
          * @return a {@link List} of {@link Node} what to add, in drawing order
          */
-        private static List<Node> drawn(final SameProblem same,
+        private static List<Node> drawn(final ProblemStack same,
                                         final TroubleshootPresenter presenter,
                                         final Runnable redraw) {
             final List<Node> nodes = new ArrayList<>();

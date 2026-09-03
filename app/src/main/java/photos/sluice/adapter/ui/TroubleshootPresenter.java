@@ -13,7 +13,7 @@ import photos.sluice.adapter.ui.TroubleshootView.Deed;
 import photos.sluice.adapter.ui.TroubleshootView.Detail;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
-import photos.sluice.adapter.ui.TroubleshootView.SameProblem;
+import photos.sluice.adapter.ui.TroubleshootView.ProblemStack;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.AnswerSource;
@@ -176,7 +176,7 @@ public class TroubleshootPresenter {
         this.prepDir = prepDir;
         this.scope = scope;
         this.report = null;
-        this.nowReporting(null);
+        this.report(null);
         this.detailCopied = false;
         this.checkRefusedReason = null;
         this.reading.set(Reading.NOTHING_YET);
@@ -222,7 +222,7 @@ public class TroubleshootPresenter {
         if (run == null) {
             return;
         }
-        this.nowReporting(null);
+        this.report(null);
         final Finding finding = problem.finding();
         // Found by identity rather than by the index the row was drawn at. Answering one finding
         // resolves it, so every later index shifts. A row the reader can still see would otherwise
@@ -315,7 +315,7 @@ public class TroubleshootPresenter {
             final String refused = RunRefusals.plainly(e);
             this.checking = false;
             this.checkRefusedReason = refused;
-            this.nowReporting(new Message(refused, true));
+            this.report(new Message(refused, true));
             this.draw();
         }
     }
@@ -339,7 +339,7 @@ public class TroubleshootPresenter {
             log.warn("Could not look through {}", run, failure);
             final String refused = RunRefusals.plainly(RunRefusals.rootOf(failure));
             this.checkRefusedReason = refused;
-            this.nowReporting(new Message(refused, true));
+            this.report(new Message(refused, true));
         }
         this.report = pass;
         this.checking = false;
@@ -361,10 +361,10 @@ public class TroubleshootPresenter {
             this.pipeline.answer(run, answer, AnswerSource.DESKTOP);
         } catch (final RuntimeException e) {
             log.info("Could not answer {} on {}", chosen, run, e);
-            this.nowReporting(new Message(RunRefusals.plainly(e), true));
+            this.report(new Message(RunRefusals.plainly(e), true));
             return;
         }
-        this.nowReporting(new Message(requireNonNull(FindingWords.settled(chosen)), false));
+        this.report(new Message(requireNonNull(FindingWords.settled(chosen)), false));
         this.reread(run);
     }
 
@@ -373,7 +373,7 @@ public class TroubleshootPresenter {
      *
      * @param message {@link Message} what to report, or null to leave the screen saying nothing
      */
-    private void nowReporting(final @Nullable Message message) {
+    private void report(final @Nullable Message message) {
         this.notice.updateAndGet(last -> new Notice(message, last.number() + 1));
     }
 
@@ -403,7 +403,7 @@ public class TroubleshootPresenter {
         // An answer that ran and left the problem standing is what the reader has to notice. Said
         // in the tone of a confirmation, it reads as the press having worked.
         final boolean stillThere = landed.findings().contains(finding);
-        this.nowReporting(new Message(stillThere ? LOOKED_AGAIN_STILL_THERE : LOOKED_AGAIN_GONE,
+        this.report(new Message(stillThere ? LOOKED_AGAIN_STILL_THERE : LOOKED_AGAIN_GONE,
                 stillThere));
     }
 
@@ -414,7 +414,7 @@ public class TroubleshootPresenter {
      */
     private void overtaken(final Path run) {
         if (this.reread(run) != null) {
-            this.nowReporting(new Message(RUN_MOVED, false));
+            this.report(new Message(RUN_MOVED, false));
         }
     }
 
@@ -442,7 +442,7 @@ public class TroubleshootPresenter {
             // Moved off READY with the findings it was read from, or Finish stays on offer over a
             // run this cannot see.
             this.reading.set(new Reading(List.of(), State.DAMAGED, refused));
-            this.nowReporting(new Message(refused, true));
+            this.report(new Message(refused, true));
             return null;
         }
     }
@@ -469,7 +469,7 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void finish(final Path run) {
-        this.nowReporting(null);
+        this.report(null);
         this.launcher.continueRunFromRuns(run, this.scope, false);
         final Runnable dashboard = this.openDashboard;
         if (dashboard != null) {
@@ -487,13 +487,13 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void discard(final Path run) {
-        this.nowReporting(null);
+        this.report(null);
         final JobHandle<DiscardReport> handle;
         try {
             handle = this.pipeline.discard(run);
         } catch (final RuntimeException e) {
             log.info("Refused to discard {}", run, e);
-            this.nowReporting(new Message(RunRefusals.plainly(e), true));
+            this.report(new Message(RunRefusals.plainly(e), true));
             this.draw();
             return;
         }
@@ -512,7 +512,7 @@ public class TroubleshootPresenter {
         this.discarding = false;
         if (failure != null) {
             log.warn("Could not discard {}", run, failure);
-            this.nowReporting(new Message(RunRefusals.plainly(RunRefusals.rootOf(failure)), true));
+            this.report(new Message(RunRefusals.plainly(RunRefusals.rootOf(failure)), true));
             this.draw();
             return;
         }
@@ -532,19 +532,19 @@ public class TroubleshootPresenter {
      *
      * @param open a {@link List} of {@link Finding} what is still unresolved, in reading order
      * @param busy boolean whether something is running that these rows have to wait for
-     * @return a {@link List} of {@link SameProblem} the headings and their rows, in drawing order
+     * @return a {@link List} of {@link ProblemStack} the headings and their rows, in drawing order
      */
-    private List<SameProblem> groupedProblems(final List<Finding> open, final boolean busy) {
+    private List<ProblemStack> groupedProblems(final List<Finding> open, final boolean busy) {
         final Map<Class<? extends Finding>, List<Integer>> byKind = new LinkedHashMap<>();
         for (int i = 0; i < open.size(); i++) {
             byKind.computeIfAbsent(open.get(i).getClass(), _ -> new ArrayList<>()).add(i);
         }
-        final List<SameProblem> grouped = new ArrayList<>();
+        final List<ProblemStack> grouped = new ArrayList<>();
         for (final List<Integer> places : byKind.values()) {
             final String heading = places.size() == 1
                     ? null
                     : FindingWords.of(open.get(places.getFirst())).heading(places.size());
-            grouped.add(new SameProblem(heading, places.stream()
+            grouped.add(new ProblemStack(heading, places.stream()
                     .map(i -> problem(i, open.get(i), heading != null, busy))
                     .toList()));
         }

@@ -16,7 +16,7 @@ import java.util.List;
  * @param checking what to say while the pass is running, or null where it is not
  * @param summary {@link String} what the pass found and what it put right, or null before one has
  *     run
- * @param problems a {@link List} of {@link SameProblem} what is still unresolved, in the order
+ * @param problems a {@link List} of {@link ProblemStack} what is still unresolved, in the order
  *     drawn, with faults of one kind gathered under one heading
  * @param nothingLeft what to say under rows none of which can be answered. Null where an answer is
  *     on offer, and null again where there is nothing left at all
@@ -28,7 +28,7 @@ import java.util.List;
  *     sentence, and the second is still news
  */
 public record TroubleshootView(String heading, String back, @Nullable String checking,
-                               @Nullable String summary, List<SameProblem> problems,
+                               @Nullable String summary, List<ProblemStack> problems,
                                @Nullable String nothingLeft, @Nullable Detail detail,
                                List<Action> actions, @Nullable Message message, int reportNumber) {
 
@@ -39,7 +39,7 @@ public record TroubleshootView(String heading, String back, @Nullable String che
      * @param back {@link String} what the way out says
      * @param checking what to say while the pass is running
      * @param summary {@link String} what the pass found and put right
-     * @param problems a {@link List} of {@link SameProblem} what is still unresolved
+     * @param problems a {@link List} of {@link ProblemStack} what is still unresolved
      * @param nothingLeft what to say under rows none of which can be answered
      * @param detail the technical report
      * @param actions a {@link List} of {@link Action} what can be done about the run
@@ -59,7 +59,7 @@ public record TroubleshootView(String heading, String back, @Nullable String che
      * @param rows a {@link List} of {@link Problem} one per fault, each naming what it happened to
      *     and carrying its own answers
      */
-    public record SameProblem(@Nullable String heading, List<Problem> rows) {
+    public record ProblemStack(@Nullable String heading, List<Problem> rows) {
 
         /**
          * Defensively copies the mutable list.
@@ -67,7 +67,7 @@ public record TroubleshootView(String heading, String back, @Nullable String che
          * @param heading what covers the rows, or null
          * @param rows a {@link List} of {@link Problem} the rows it covers
          */
-        public SameProblem {
+        public ProblemStack {
             rows = List.copyOf(rows);
         }
     }

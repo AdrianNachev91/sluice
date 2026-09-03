@@ -6,7 +6,7 @@ import photos.sluice.adapter.ui.TroubleshootView.Answer;
 import photos.sluice.adapter.ui.TroubleshootView.Deed;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
-import photos.sluice.adapter.ui.TroubleshootView.SameProblem;
+import photos.sluice.adapter.ui.TroubleshootView.ProblemStack;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
@@ -95,7 +95,7 @@ class TroubleshootPresenterTest {
                         new Finding.SourceOutsideSorted(Path.of("b.jpg"), SORTED),
                         new Finding.SourceOutsideSorted(Path.of("c.jpg"), SORTED))));
 
-        final SameProblem stacked = presenter.view().problems().getFirst();
+        final ProblemStack stacked = presenter.view().problems().getFirst();
 
         assertThat(presenter.view().problems()).hasSize(1);
         assertThat(stacked.heading())
@@ -110,7 +110,7 @@ class TroubleshootPresenterTest {
         final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
                 List.of(new Finding.SourceOutsideSorted(PHOTO, SORTED))));
 
-        final SameProblem alone = presenter.view().problems().getFirst();
+        final ProblemStack alone = presenter.view().problems().getFirst();
 
         assertThat(alone.heading()).isNull();
         assertThat(alone.rows()).extracting(Problem::problem)
@@ -124,7 +124,7 @@ class TroubleshootPresenterTest {
                         new Finding.CorruptShard("montage-003", "decisions-003.json"),
                         new Finding.MissingShard("montage-004", "decisions-004.json"))));
 
-        assertThat(presenter.view().problems()).extracting(SameProblem::heading)
+        assertThat(presenter.view().problems()).extracting(ProblemStack::heading)
                 .containsExactly("2 sheets have not been judged yet.", null);
     }
 
@@ -134,7 +134,7 @@ class TroubleshootPresenterTest {
                 List.of(new Finding.MissingSource(PHOTO, Path.of("a.log")),
                         new Finding.MissingSource(Path.of("b.jpg"), Path.of("b.log")))));
 
-        final SameProblem stacked = presenter.view().problems().getFirst();
+        final ProblemStack stacked = presenter.view().problems().getFirst();
 
         assertThat(stacked.rows()).hasSize(2);
         assertThat(stacked.rows()).allSatisfy(problem ->
@@ -169,7 +169,7 @@ class TroubleshootPresenterTest {
                 List.of(new Finding.CorruptIndex(Path.of("a", "index.json")),
                         new Finding.CorruptIndex(Path.of("b", "index.json")))));
 
-        final SameProblem neither = presenter.view().problems().getFirst();
+        final ProblemStack neither = presenter.view().problems().getFirst();
 
         assertThat(neither.heading()).isNull();
         assertThat(neither.rows()).extracting(Problem::problem)
