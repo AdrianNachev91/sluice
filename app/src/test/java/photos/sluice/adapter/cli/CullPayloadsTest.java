@@ -64,7 +64,7 @@ class CullPayloadsTest {
     @Test
     void aFinishedSiftReportsWhatItMovedAndWhatItCost() {
         final CullPayloads.OutcomePayload payload = CullPayloads.outcome(new CullJobOutcome.Applied(
-                report(), new ApplyReport(120, Map.of("junk", 14), 3, 2, 5, List.of()), null));
+                report(), new ApplyReport(120, Map.of("junk", 14), 3, 2, 5, List.of()), null, null));
 
         assertThat(payload.outcome()).isEqualTo("Applied");
         assertThat(payload.applied()).isNotNull();
@@ -99,7 +99,7 @@ class CullPayloadsTest {
         assertThat(List.of(
                 CullPayloads.outcome(new CullJobOutcome.Cancelled(report(), null)),
                 CullPayloads.outcome(new CullJobOutcome.Applied(report(),
-                        new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), null)),
+                        new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), null, null)),
                 CullPayloads.outcome(new CullJobOutcome.Waiting(
                         new WaitingCullJob("2019-06", PREP_DIR, new ShardTally(1, 1, 2), WRITTEN),
                         WaitingReason.CANCELLED, report(), null)),
@@ -116,7 +116,7 @@ class CullPayloadsTest {
         assertThat(List.of(
                 CullPayloads.outcome(new CullJobOutcome.Cancelled(report(), graveyard)),
                 CullPayloads.outcome(new CullJobOutcome.Applied(report(),
-                        new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), graveyard))))
+                        new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), graveyard, null))))
                 .allSatisfy(payload -> assertThat(payload.archivedPriorRun()).isEqualTo(graveyard.toString()));
     }
 

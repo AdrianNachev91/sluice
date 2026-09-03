@@ -64,7 +64,7 @@ class FindingFamilyTest {
 
     @Test
     void everyOverlapFindingIsAboutTheDecisionsWhateverDecisionItCarries() {
-        assertThat(FindingFamily.of(new Finding.DecisionUnreviewableOverlap(
+        assertThat(FindingFamily.of(new Finding.VerdictUnreviewableOverlap(
                 new Decision.Classification(Path.of("a.jpg"), "junk", "blurred"))))
                 .isEqualTo(FindingFamily.DECISIONS);
     }

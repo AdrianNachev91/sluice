@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
@@ -28,7 +27,6 @@ import photos.sluice.application.port.out.StaleSecretNotClearedException;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -138,7 +136,7 @@ class VisionProviderPresenterTest {
     @Test
     void aProviderNeverConfiguredDrawsNoUnrecognisedCautionEvenThoughThePickerFellBackToARecommendation() {
         final var settings = new Settings(new PathSettings(null, null, null), "anthropic",
-                Map.of(), List.of(), new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5),
+                Map.of(), List.of(), new MontageConfig(224, 5),
                 ThemeChoice.SYSTEM);
         final VisionProviderPresenter visionProvider = visionProviderChecking(settings,
                 _ -> {
@@ -360,7 +358,7 @@ class VisionProviderPresenterTest {
     @Test
     void noStartUpCheckIsMadeForAProviderThatOffersNoModels() {
         final var settings = new Settings(new PathSettings(null, null, null), "external-agent", Map.of(),
-                List.of(), new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5),
+                List.of(), new MontageConfig(224, 5),
                 ThemeChoice.SYSTEM);
         final var checks = new AtomicInteger();
         final VisionProviderPresenter visionProvider = visionProviderChecking(settings, _ -> {
@@ -466,17 +464,17 @@ class VisionProviderPresenterTest {
     }
 
     @Test
-    void aProviderCallingAModelUsesTheModelSettingsAndNotTheWatchMode() {
+    void aProviderCallingAModelUsesAModelAnEndpointAndACredential() {
         final var fields = choiceFor("anthropic", visionProviderOver(new FixedSecretStore(new Absent()))).fields();
 
-        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(true, true, false, true));
+        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(true, true, true));
     }
 
     @Test
-    void theExternalAgentUsesTheWatchModeAndNoneOfTheModelSettings() {
+    void theExternalAgentUsesNoneOfTheProviderSettings() {
         final var fields = choiceFor("external-agent", visionProviderOver(new FixedSecretStore(new Absent()))).fields();
 
-        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(false, false, true, false));
+        assertThat(fields).isEqualTo(new SettingsView.ProviderFields(false, false, false));
     }
 
     @Test
@@ -570,7 +568,7 @@ class VisionProviderPresenterTest {
                         Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
                         Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null, SETUP_GUIDE),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
+                        Set.of(), Set.of(), null, null, null, null));
     }
 
     private static VisionProviderCatalog checkingCatalog(final Function<String, ProviderCheck> checkById) {
@@ -579,7 +577,7 @@ class VisionProviderPresenterTest {
                         Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
                         Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, MODELS, null, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null)), checkById);
+                        Set.of(), Set.of(), null, null, null, null)), checkById);
     }
 
     private static VisionProviderCatalog checkingCatalog(final List<VisionProviderDescriptor> all,
@@ -618,7 +616,7 @@ class VisionProviderPresenterTest {
                 new VisionProviderDescriptor("other-api", "Another model service", apiSettings,
                         Set.of(ProviderSetting.MODEL), new SecretId("other-api", "OTHER_API_KEY"), MODELS, null, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
+                        Set.of(), Set.of(), null, null, null, null));
     }
 
     // A check that says it has started, then hangs until the test releases it. That is what makes
@@ -695,7 +693,7 @@ class VisionProviderPresenterTest {
                                      final @Nullable String inbox) {
         return new Settings(new PathSettings(repoRoot, libraryRoot, inbox), "anthropic",
                 Map.of("anthropic", new CullProviderSettings("claude-opus-5", null, null)), List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 
     private record FixedSettingsUseCase(Settings settings) implements SettingsUseCase {

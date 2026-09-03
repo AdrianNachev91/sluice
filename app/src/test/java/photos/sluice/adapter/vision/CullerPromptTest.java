@@ -3,11 +3,9 @@ package photos.sluice.adapter.vision;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
-import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -82,6 +80,17 @@ class CullerPromptTest {
     }
 
     @Test
+    void systemPromptTellsTheModelACardsOwnDescriptionSetsItsThreshold() {
+        final String prompt = cullerPrompt().systemPrompt(CARDS);
+
+        assertThat(prompt).contains("""
+                A category's description says two things: what belongs in it, and when a photo of that kind should
+                go there rather than be kept. Where a description states a default for its own kind of photo, that
+                default decides those photos, not the general "when unsure, keep" above. Where it states none, "when
+                unsure, keep" applies.""");
+    }
+
+    @Test
     void systemPromptFailsLoudWhenTheRunRecordedNoCategories() {
         final var prompt = cullerPrompt();
 
@@ -153,11 +162,6 @@ class CullerPromptTest {
         @Override
         public CullProviderSettings providerSettings(final String providerId) {
             return CullProviderSettings.unset();
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL);
         }
     }
 }

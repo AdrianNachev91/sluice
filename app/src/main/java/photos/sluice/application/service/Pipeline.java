@@ -72,11 +72,11 @@ public class Pipeline {
     private static final String DISCARDING = "Discarding...";
     private static final String IMPORTING = "Importing...";
 
-    // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
-    // unlike mode, this cadence isn't a documented user-facing knob, just an internal
-    // responsiveness/overhead tradeoff. Short enough that a human dropping files never perceives the
-    // delay; long enough not to hammer disk or spam re-validation. See the package-private
-    // constructor overload for how tests override it.
+    // How often a waiting job re-checks its prep dir's shard tally. Not part of CullSettings: this
+    // cadence is an internal responsiveness/overhead tradeoff rather than anything a user is
+    // offered. Short enough that a human dropping files never perceives the delay; long enough not
+    // to hammer disk or spam re-validation. See the package-private constructor overload for how
+    // tests override it.
     private static final Duration DEFAULT_WATCH_POLL_INTERVAL = Duration.ofSeconds(2);
 
     private final SortEngine sortEngine;
@@ -148,7 +148,7 @@ public class Pipeline {
 
     /**
      * Test seam: production wiring always goes through the public constructor above, which fixes
-     * the poll cadence at DEFAULT_WATCH_POLL_INTERVAL. Tests exercising real watch-mode timing pass
+     * the poll cadence at DEFAULT_WATCH_POLL_INTERVAL. Tests exercising real poll timing pass
      * a much shorter interval here so the behavior proves out in milliseconds, not seconds, without
      * resorting to a mock clock.
      *
@@ -174,7 +174,7 @@ public class Pipeline {
      * @param pathValidation {@link PathValidationUseCase} checks the folder roots before work reaches them
      * @param spendLedger {@link SpendLedgerPort} records what each cull run consumed
      * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
-     * @param watchPollInterval {@link Duration} how often a watch-mode job re-checks its prep dir
+     * @param watchPollInterval {@link Duration} how often a waiting job re-checks its prep dir
      */
     Pipeline(final SortEngine sortEngine, final CommitEngine commitEngine, final RescueEngine rescueEngine,
              final ImportEngine importEngine, final MontageRenderer montageRenderer,
@@ -525,44 +525,14 @@ public class Pipeline {
     }
 
     /**
-     * Turns one waiting run's auto-resume on, whatever the configured mode is. This and
-     * {@link #stopWatching} are the two halves of watching a single run. Neither touches the run
-     * itself: it stays Waiting, stays listed, and still blocks a re-cull of its scope either way. A
-     * run belonging to an automated provider is left alone, since its shards never arrive from
-     * outside the app.
-     *
-     * <p>No shipped surface reaches this or its other half, watching being turned on and off for
-     * the install rather than per run. {@code PipelineSurfaceTest} pins both, so a later deletion
-     * is a decision rather than a tidy-up.
-     *
-     * @param prepDir {@link Path} the cull prep directory to watch
-     */
-    public void startWatching(final Path prepDir) {
-        this.requireUsableRoots();
-        this.cullEngine.armWatch(prepDir);
-    }
-
-    /**
-     * Turns one waiting run's auto-resume off - {@link #startWatching}'s other half.
-     *
-     * @param prepDir {@link Path} the cull prep directory to stop watching
-     */
-    public void stopWatching(final Path prepDir) {
-        this.requireUsableRoots();
-        this.cullEngine.disarmWatch(prepDir);
-    }
-
-    /**
      * Retires every poller this process has armed. No run is started, stopped or altered by it.
      *
-     * <p>For a working-root move, the app closing, and a save that turned watching off. Every armed
-     * watcher polls a prep dir under {@code logs/sift-prep}, which hangs off the working root, so
-     * "armed under the old root" and "armed at all" name the same set. One left behind would poll a
-     * folder outside the root in force, for as long as the process lives. The mode itself is read
-     * when a watch is armed and never again, which is why turning it off has to come here too.
+     * <p>For a working-root move and for the app closing. Every armed watcher polls a prep dir
+     * under {@code logs/sift-prep}, which hangs off the working root. So "armed under the old root"
+     * and "armed at all" name the same set. One left behind would poll a folder outside the root in
+     * force, for as long as the process lives.
      *
-     * <p>A library or inbox move strands nothing and must not come here. This would also retire a
-     * watch a user turned on by hand.
+     * <p>A library or inbox move strands nothing and must not come here.
      *
      * <p>Retiring a watcher does not reach into a poll already running. A watcher whose thread is
      * mid-attempt when this arrives still finishes that attempt, resume included. What this
@@ -699,7 +669,12 @@ public class Pipeline {
                 throw new RunAlreadyFinishedException(prepDir);
             }
             this.cullEngine.disarmWatch(prepDir);
-            return this.runPhase(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
+            final DiscardReport report =
+                    this.runPhase(DISCARDING, progress -> this.prepDirRemedies.discard(prepDir, progress));
+            // After the file work, so a discard that threw leaves the run still occupying its scope
+            // in the ledger as well as on disk.
+            this.cullEngine.recordDiscard(prepDir.getFileName().toString());
+            return report;
         });
     }
 
@@ -752,15 +727,7 @@ public class Pipeline {
     }
 
     /**
-     * Whether a watcher is currently polling prepDir.
-     *
-     * <p>A live read rather than a remembered answer. A watcher retires itself on several occasions
-     * nothing outside is told about: a resume going in, a working-root move, the app closing, and a
-     * save that turns watching off. Anything remembering the answer would keep reporting a run as
-     * watched long after nothing was.
-     *
-     * <p>No shipped surface reaches this. {@code PipelineSurfaceTest} pins it so a later deletion
-     * is a decision rather than a tidy-up.
+     * Whether a watcher is currently polling one waiting run's prep dir.
      *
      * @param prepDir {@link Path} the cull prep directory to check
      * @return boolean true if a watcher is currently polling it
@@ -772,10 +739,9 @@ public class Pipeline {
     /**
      * Asks to be told whenever a run moves with nobody pressing anything.
      *
-     *
      * @param listener {@link Runnable} what to run, on whatever thread caused the change. That can
-     *     be the one that paints, since turning a run's watch on is a press. A listener marshals
-     *     for itself and does anything slow somewhere else
+     *     be the one that paints, since a startup scan arms from it. A listener marshals for itself
+     *     and does anything slow somewhere else
      */
     public void onRunsMoved(final Runnable listener) {
         this.runChanges.onMoved(listener);
@@ -893,7 +859,7 @@ public class Pipeline {
     }
 
     /**
-     * Thrown when a fresh sift is refused because its timeline shares photos with unfinished sifts
+     * Thrown when a fresh sift is refused because its timeframe shares photos with unfinished sifts
      * being any of them. It carries every one of them, diagnosed, so a caller can name them all.
      *
      * <p>Apart from {@link ScopeOccupiedException}, which is the exact-tag case. A prep dir is
@@ -912,9 +878,9 @@ public class Pipeline {
         private final transient List<CullRunSummary> across;
 
         /**
-         * Creates the exception over the timeline chosen and the unfinished runs it overlaps.
+         * Creates the exception over the timeframe chosen and the unfinished runs it overlaps.
          *
-         * @param chosen {@link CullScope.Year} the timeline the caller asked to sift
+         * @param chosen {@link CullScope.Year} the timeframe the caller asked to sift
          * @param across a {@link List} of {@link CullRunSummary} the unfinished runs it overlaps
          */
         public ScopeOverlapsException(final CullScope.Year chosen, final List<CullRunSummary> across) {
@@ -925,7 +891,7 @@ public class Pipeline {
         }
 
         /**
-         * Returns the timeline the caller asked to sift.
+         * Returns the timeframe the caller asked to sift.
          *
          * @return {@link CullScope.Year} the chosen scope
          */
@@ -934,7 +900,7 @@ public class Pipeline {
         }
 
         /**
-         * Returns the unfinished runs the chosen timeline overlaps, diagnosed.
+         * Returns the unfinished runs the chosen timeframe overlaps, diagnosed.
          *
          * @return a {@link List} of {@link CullRunSummary} the runs in the way
          */
@@ -1011,12 +977,15 @@ public class Pipeline {
      * Thrown when asking for a run's answers to be written again is refused, because a fresh
      * reading of it blames no sheet.
      *
-     * <p>Two ways there. The run was put right between the card being drawn and the button being
-     * pressed, by a watch or by another window. Or what is wrong with it is not a sheet's fault at
-     * all, and writing one sheet again answers none of that.
+     * <p>Three ways there. An earlier press already set those answers aside, and this reading finds
+     * a sheet with no shard rather than one with a bad shard. The run was put right between the card
+     * being drawn and the button being pressed, by a watch or by another window. Or what is wrong
+     * with it is not a sheet's fault at all, and writing one sheet again answers none of that.
      *
-     * <p>Carries the prep dir, and its message names both rather than guessing between them.
-     * Nothing was discarded, so nothing was lost either way.
+     * <p>Carries the prep dir. Its message folds the first two into one, since a reader cannot act
+     * on the difference and both leave the run already handled. It names no way on, because the
+     * causes do not share one: a waiting run can be carried on and a blocked one cannot. Nothing is
+     * set aside before this throws, so nothing was lost either way.
      *
      * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
      * refused needs no knowledge of this type at all.
@@ -1029,9 +998,9 @@ public class Pipeline {
          * @param prepDir {@link Path} the run whose answers were to be written again
          */
         public NothingToRedoException(final Path prepDir) {
-            super("There is nothing to judge again in " + prepDir + ". Either the sift was "
-                    + "repaired in the meantime, or the problem is not in the sifting. Nothing was "
-                    + "discarded.");
+            super("Nothing in " + prepDir + " is waiting to be judged again. It might have already "
+                    + "been handled in the meantime, or what is wrong with it may not be a sheet's "
+                    + "fault.");
         }
     }
 

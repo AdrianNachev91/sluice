@@ -10,6 +10,7 @@ import photos.sluice.application.startup.StartupFailure.ConfigSpot;
 import photos.sluice.application.startup.StartupFailure.RejectedSetting;
 import photos.sluice.application.startup.StartupFailure.Unclassified;
 import photos.sluice.application.startup.StartupFailure.UnparsableConfigFile;
+import photos.sluice.application.startup.StartupFailure.UnusableSettings;
 import photos.sluice.application.startup.StartupFailure.WorkingRootBusy;
 
 import java.nio.file.Path;
@@ -59,6 +60,18 @@ class StartupFailurePresenterTest {
                 "Sluice could not use the setting sluice.montage.tile-size. It did not come from your settings "
                         + "file. Check for an environment variable named SLUICE_MONTAGE_TILE_SIZE, or report this "
                         + "as a bug in Sluice if you have not set one.",
+                "trace"));
+    }
+
+    @Test
+    void settingsTheAppRefusesDrawTheirOwnSentenceRatherThanTheReportABugCard() {
+        final var presenter = new StartupFailurePresenter(new UnusableSettings(
+                "Photo categories may not hold one called 'junk'. Sluice supplies that one itself, "
+                        + "and it is always on.", "trace"));
+
+        assertThat(presenter.card()).isEqualTo(new Generic(
+                "Photo categories may not hold one called 'junk'. Sluice supplies that one itself, and it "
+                        + "is always on.",
                 "trace"));
     }
 

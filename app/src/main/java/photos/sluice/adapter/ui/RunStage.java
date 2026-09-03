@@ -42,7 +42,7 @@ public sealed interface RunStage {
      * A run has ended and nobody has dismissed its report yet.
      *
      * <p>The message is about a press on this card rather than about the run. Offering to sift is
-     * an ordinary press to refuse. The timeline can already have an unfinished sift on it, it can
+     * an ordinary press to refuse. The timeframe can already have an unfinished sift on it, it can
      * overlap one, or another job can have started in between.
      *
      * @param result {@link RunResultView} what the result card draws

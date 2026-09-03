@@ -102,7 +102,7 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
      *     {@link RunCard#actions()}, or null to sit with the card's own text instead. The screen
      *     places it and judges nothing about order
      * @param prepDir {@link Path} the run it acts on
-     * @param scope {@link String} the timeline it covers, as the run names it
+     * @param scope {@link String} the timeframe it covers, as the run names it
      * @param confirm {@link Confirmation} what to ask before it goes ahead, or null where nothing
      *     needs asking
      */

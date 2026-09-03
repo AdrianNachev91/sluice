@@ -90,9 +90,9 @@ final class FindingWords {
                     missing.file().toString(),
                     List.of(new Choice(Answer.RECHECK, "Look again", true, null),
                             new Choice(Answer.SKIP_FILE, "Go on without this photo", false, null)));
-            case final Finding.DecisionUnreviewableOverlap overlap -> new Told(
+            case final Finding.VerdictUnreviewableOverlap overlap -> new Told(
                     "One photo was both judged and listed as one nobody could judge.",
-                    overlap.decision().file().toString(),
+                    overlap.verdict().file().toString(),
                     List.of(new Choice(Answer.TRUST_DECISION, "Use the judgement", true, null),
                             new Choice(Answer.TREAT_AS_UNREVIEWABLE, "Leave the photo unjudged",
                                     false, null)));
@@ -183,8 +183,9 @@ final class FindingWords {
             case RECHECK -> null;
             case SKIP_FILE -> "The sift will go on without that photo. Nothing has touched it, so "
                     + "a later sift can still pick it up.";
-            case TRUST_DECISION -> "The judgement stands, and the photo will be moved with it.";
-            case TREAT_AS_UNREVIEWABLE -> "The photo stays where it is, unjudged.";
+            case TRUST_DECISION -> "The judgement stands, and this sift will do what it says.";
+            case TREAT_AS_UNREVIEWABLE -> "The judgement is dropped, and the photo joins the ones a "
+                    + "sift could not judge.";
             case SET_ASIDE_SHEET -> "The sift will go on without that sheet. Its photos stay where "
                     + "they are, so a later sift can judge them afresh.";
             case APPLY_SHEET_ANYWAY -> "That sheet's answers will be used as they are.";

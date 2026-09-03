@@ -251,6 +251,24 @@ class NioMediaStoreTest {
     }
 
     @Test
+    void directoryIsThereIsTrueForAFolder(@TempDir final Path root) throws IOException {
+        assertThat(this.store.directoryIsThere(Files.createDirectory(root.resolve("folder")))).isTrue();
+    }
+
+    @Test
+    void directoryIsThereIsFalseForAPathNamingNothing(@TempDir final Path root) {
+        assertThat(this.store.directoryIsThere(root.resolve("absent"))).isFalse();
+    }
+
+    @Test
+    void directoryIsThereIsFalseForARegularFile(@TempDir final Path root) throws IOException {
+        final Path file = root.resolve("file.jpg");
+        Files.writeString(file, "bytes");
+
+        assertThat(this.store.directoryIsThere(file)).isFalse();
+    }
+
+    @Test
     void realDirectoryResolvesAFolderThatIsThere(@TempDir final Path root) throws IOException {
         final Path dir = Files.createDirectory(root.resolve("folder"));
 

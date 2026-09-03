@@ -31,8 +31,7 @@ final class AppearanceCard {
      * <p>A dropdown hides every option but the chosen one. There are three, they are short, and
      * they are the kind of thing a user changes by comparing rather than by knowing.
      *
-     * <p>On one line rather than stacked, which the watch-mode options cannot be: those are
-     * sentences, and these are one or two words each.
+     * <p>On one line rather than stacked, each option being one or two words.
      *
      * @param view {@link SettingsView} the state to draw
      * @return {@link HBox} the choices, each button carrying the option it stands for

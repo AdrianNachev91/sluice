@@ -13,6 +13,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
@@ -74,12 +75,12 @@ final class PageHeader {
         final var save = new Button("Save");
         save.setId(saveId);
 
-        // Stacked rather than laid out in a row, so Save sits at the middle of the bar itself. In a
-        // row it would centre in whatever the heading left over, and each page's heading is a
-        // different width, so the button would land somewhere different on every screen.
+        // Stacked rather than laid out in a row, so each is placed against the bar itself. In a row
+        // the heading would decide what is left for Save, and each page's heading is a different
+        // width.
         final var actions = new StackPane(name, save);
         StackPane.setAlignment(name, Pos.CENTER_LEFT);
-        StackPane.setAlignment(save, Pos.CENTER);
+        StackPane.setAlignment(save, Pos.CENTER_RIGHT);
         actions.getStyleClass().add("pane-header-actions");
 
         final var status = new Label();
@@ -87,8 +88,7 @@ final class PageHeader {
         status.getStyleClass().add("settings-save-status");
         // No text, no line. A bar that always reserved a row for a message would put a permanent
         // gap between the heading and the page on every screen that has nothing to say.
-        status.managedProperty().bind(status.visibleProperty());
-        status.visibleProperty().bind(status.textProperty().isNotEmpty());
+        SettingsRows.showWhileItSaysSomething(status);
 
         final var header = new VBox();
         if (above != null) {
@@ -112,18 +112,32 @@ final class PageHeader {
     static VBox pinnedOver(final Result header, final VBox body) {
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
-        // The bar sits outside the pane, so it keeps the full width while the page below it loses
-        // some to a scrollbar. Held instead to what the pane can actually show, so Save stays on
-        // the same centre line as the cards whether or not the page is long enough to scroll.
-        // Before the first layout the viewport measures nothing, and a bar bound to that would
-        // have no width at all, so an unmeasured pane leaves it unbounded.
-        header.header().maxWidthProperty().bind(scroll.viewportBoundsProperty()
-                .map(seen -> widthOf(seen) <= 0 ? Double.MAX_VALUE : widthOf(seen)));
+        heldToTheViewport(scroll, header.header());
         final var page = new VBox(header.header(), scroll);
         page.getStyleClass().add("pinned-header-page");
         saveOnEnter(page, header.save());
         releaseAFieldWhenTheReaderClicksAway(page);
         return page;
+    }
+
+    /**
+     * Holds a pinned bar to the width of the pane scrolling under it.
+     *
+     * <p>A bar outside the pane keeps the whole window's width while the page below it gives some
+     * up to a scrollbar. Held to what the pane can show instead, the two keep one axis whether or
+     * not the page is long enough to scroll.
+     *
+     * <p>Before the first layout the viewport measures nothing, and a bar bound to that would have
+     * no width at all. So an unmeasured pane leaves it unbounded.
+     *
+     * @param scroll {@link ScrollPane} the pane they have to agree with
+     * @param pinned {@link Region} the rows sitting outside it
+     */
+    static void heldToTheViewport(final ScrollPane scroll, final Region... pinned) {
+        for (final Region row : pinned) {
+            row.maxWidthProperty().bind(scroll.viewportBoundsProperty()
+                    .map(seen -> widthOf(seen) <= 0 ? Double.MAX_VALUE : widthOf(seen)));
+        }
     }
 
     /**

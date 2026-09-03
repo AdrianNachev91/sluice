@@ -45,7 +45,7 @@ import static photos.sluice.application.service.PipelineTestSupport.inboxOf;
 import static photos.sluice.application.service.PipelineTestSupport.padded;
 import static photos.sluice.application.service.PipelineTestSupport.pipeline;
 import static photos.sluice.application.service.PipelineTestSupport.sortedPhotosDir;
-import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
+import static photos.sluice.application.service.PipelineTestSupport.defaultCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.writeFile;
 import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
@@ -255,8 +255,18 @@ class PipelineTest {
         final var handle = pipeline(root, progress, new FailingMoves()).rescue(RescueRoot.REVIEW, "2019-06");
 
         assertThatThrownBy(handle::join).isInstanceOf(CompletionException.class);
-        assertThat(progress.events)
-                .containsExactly("planned:Rescuing...", "started:Rescuing...", "finished:Rescuing...");
+        assertThat(progress.events).containsExactly("planned:Rescuing...", "started:Rescuing...",
+                "cutShort:Rescuing...", "finished:Rescuing...");
+    }
+
+    @Test
+    void nothingIsReportedAsCutShortWhenTheEngineReturns(@TempDir final Path root) throws IOException {
+        final var progress = new RecordingProgressPort();
+        writeFile(root.resolve("Review/2019-06/IMG_1.jpg"), "keeper");
+
+        pipeline(root, progress).rescue(RescueRoot.REVIEW, "2019-06").join();
+
+        assertThat(progress.events).doesNotContain("cutShort:Rescuing...");
     }
 
     @Test
@@ -585,7 +595,7 @@ class PipelineTest {
     @Test
     void discardDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();

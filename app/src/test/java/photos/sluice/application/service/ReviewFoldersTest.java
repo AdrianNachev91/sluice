@@ -142,6 +142,18 @@ class ReviewFoldersTest {
     }
 
     @Test
+    void aRootTheFilesystemWillNotDescribeIsNamedRatherThanTreatedAsNeverWritten() {
+        this.file("Review/Food/a.jpg");
+        final Path duplicates = this.workingRoot.resolve("Duplicates");
+        this.file("Duplicates/2019-06_beach/b.jpg");
+
+        final ReviewListing listing = this.foldersSilentAbout(duplicates).list();
+
+        assertThat(listing.folders()).extracting(Folder::name).containsExactly("Food");
+        assertThat(listing.unreadable()).containsExactly(duplicates);
+    }
+
+    @Test
     void aRootThatIsAFileRatherThanAFolderContributesNoRows() {
         this.file("Review/Food/a.jpg");
         this.file("Duplicates");
@@ -193,6 +205,16 @@ class ReviewFoldersTest {
                 .containsExactly("Chose first.jpg", "Chose second.jpg");
     }
 
+    // Sorting first, README.txt is what the note link would otherwise open.
+    @Test
+    void aReadersOwnTextFileIsNotReadAsANote() {
+        this.lines("Review/Food/README.txt", "my own jottings");
+        this.lines("Review/Food/_reasons.txt", "a.jpg - food");
+
+        assertThat(this.folders().noteFilesIn(this.workingRoot.resolve("Review").resolve("Food")))
+                .containsExactly(this.workingRoot.resolve("Review").resolve("Food").resolve("_reasons.txt"));
+    }
+
     @Test
     void aFolderWithNoNoteBesideItsPhotosAnswersWithNothing() {
         this.file("Review/Food/a.jpg");
@@ -231,7 +253,11 @@ class ReviewFoldersTest {
     }
 
     private ReviewFolders foldersRefusing(final Path root) {
-        return this.over(new RefusesOneRoot(new NioMediaStore(), root));
+        return this.over(new RefusesOneRoot(new NioMediaStore(), root, Refusal.ONE_LEVEL_DOWN));
+    }
+
+    private ReviewFolders foldersSilentAbout(final Path root) {
+        return this.over(new RefusesOneRoot(new NioMediaStore(), root, Refusal.AT_THE_ROOT));
     }
 
     private ReviewFolders over(final MediaReader media) {
@@ -239,13 +265,15 @@ class ReviewFoldersTest {
                 this.workingRoot.resolve("Library"), this.workingRoot.resolve("Inbox")));
     }
 
-    // The real reader everywhere but one root, where it throws what a walk of a folder it may not
-    // open throws.
-    private record RefusesOneRoot(MediaReader real, Path refused) implements MediaReader {
+    private enum Refusal { ONE_LEVEL_DOWN, AT_THE_ROOT }
+
+    // The real reader everywhere but the one refused root.
+    private record RefusesOneRoot(MediaReader real, Path refused, Refusal refusal)
+            implements MediaReader {
 
         @Override
         public List<Path> listFiles(final Path root) {
-            if (root.equals(this.refused)) {
+            if (this.refusal == Refusal.ONE_LEVEL_DOWN && root.equals(this.refused)) {
                 throw new UncheckedIOException(new IOException(root + " is not readable"));
             }
             return this.real.listFiles(root);
@@ -269,6 +297,14 @@ class ReviewFoldersTest {
         @Override
         public boolean exists(final Path path) {
             return this.real.exists(path);
+        }
+
+        @Override
+        public boolean directoryIsThere(final Path path) {
+            if (this.refusal == Refusal.AT_THE_ROOT && path.equals(this.refused)) {
+                throw new UncheckedIOException(new IOException(path + " will not say what is there"));
+            }
+            return this.real.directoryIsThere(path);
         }
 
         @Override

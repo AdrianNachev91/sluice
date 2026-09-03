@@ -46,19 +46,21 @@ flowchart TD
     B -- "skip this file" --> D["skipMissingSource() -<br/>appends SKIPPED_BY_USER<br/>+ timestamp + reason"]
     D --> E(["classify() reports Skipped -<br/>apply() moves/writes<br/>nothing for it, ever"])
 
-    F["Finding.DecisionUnreviewableOverlap"] --> G{"user's choice"}
+    F["Finding.VerdictUnreviewableOverlap"] --> G{"user's choice"}
     G -- "trust the decision" --> H["resolveOverlap(TRUST_DECISION)"]
     G -- "treat as unreviewable" --> I["resolveOverlap(TREAT_AS_UNREVIEWABLE)"]
     H --> J["validate(): finding suppressed,<br/>file dropped from<br/>resolvedUnreviewable()"]
-    I --> K["validate(): finding suppressed,<br/>decision dropped from<br/>the decisions this run acts on"]
+    I --> K["validate(): finding suppressed,<br/>the verdict dropped, and the<br/>file moved to Unreviewable"]
 ```
 
-`DecisionUnreviewableOverlap` is `ShardValidator`'s own finding for the narrow
-one-decision-plus-one-unreviewable shape. Every other multi-reference shape stays the general
-`DuplicateFileReference`, which has no CHOICE remedy. `ApplyPlanner.resolveOverlaps()` resolves
-it, a post-processing pass `validate()` runs over `ShardValidator`'s own report. A resolved
-finding is suppressed. The losing side never reaches `apply()`: the decision for
-`TREAT_AS_UNREVIEWABLE`, or the unreviewable listing for `TRUST_DECISION`.
+`VerdictUnreviewableOverlap` is `ShardValidator`'s own finding for the narrow
+one-verdict-plus-one-unreviewable shape. A `Verdict.Keep` counts as that one verdict, not only a
+`Decision`. Either is a shard claiming it judged a photo the app reported nobody could judge.
+Every other multi-reference shape stays the general `DuplicateFileReference`, which has no CHOICE
+remedy. `ApplyPlanner.resolveOverlaps()` resolves it, a post-processing pass `validate()` runs over
+`ShardValidator`'s own report. A resolved finding is suppressed. The losing side never reaches
+`apply()`: the verdict for `TREAT_AS_UNREVIEWABLE`, or the unreviewable listing for
+`TRUST_DECISION`.
 `ApplyPlanner.resolvedUnreviewable()` is the single place `prepDir.unreviewable()` gets filtered
 against a `TRUST_DECISION` resolution. Every caller that needs prepDir's unreviewable list -
 `apply()`, `checkMissingSources()`, `reconcile()` - reads through it instead of
@@ -162,7 +164,7 @@ Both `resolveCorruptSidecar` resolutions depend on that. So does `resolveOverlap
 `TRUST_DECISION`. Each records an answer that only this gate can read, on a prep dir whose raw disk
 state still shows the original problem.
 
-Watch mode's automatic resume reaches those answers the ordinary way. Its readiness check
+A watcher's automatic resume reaches those answers the ordinary way. Its readiness check
 (`ShardTallyCalculator.isReadyToResume`) only asks whether every shard has arrived and parses, never
 whether the batch is any good. So a run whose remaining problem the user has already answered simply
 resumes, and the gate above honours the answer. Nothing between the two holds a second opinion. See
@@ -198,10 +200,10 @@ asks is whether the run being filed away is finished.
 
 | Scenario                                                                             | Outcome                                                                            |
 |--------------------------------------------------------------------------------------|------------------------------------------------------------------------------------|
-| A file listed both as a decision and in index.json's unreviewable list               | Reported as `DecisionUnreviewableOverlap` (CHOICE), not `DuplicateFileReference`   |
+| A file listed both as a verdict and in index.json's unreviewable list                | Reported as `VerdictUnreviewableOverlap` (CHOICE), not `DuplicateFileReference`    |
 | A missing file the user resolved via `skipMissingSource()`                           | Skipped - `apply()` moves/writes nothing for it, ever again                        |
-| An overlap resolved `TRUST_DECISION`                                                 | The decision applies normally; the file is no longer treated as unreviewable       |
-| An overlap resolved `TREAT_AS_UNREVIEWABLE`                                          | The file moves to `Unreviewable/<yyyy>/<mm>/`; the decision is dropped             |
+| An overlap resolved `TRUST_DECISION`                                                 | The shard's verdict applies; the file is no longer treated as unreviewable         |
+| An overlap resolved `TREAT_AS_UNREVIEWABLE`                                          | The file moves to `Unreviewable/<yyyy>/<mm>/`; the verdict is dropped              |
 | A stray shard, exactly one montage unclaimed, decisions match that montage's sidecar | `autoRepairStrayShard()` (AUTO) renames it into place with no user input           |
 | A stray shard that can't be assigned unambiguously                                   | Left as a `StrayShard` finding; `setAsideStrayShard()` is the CHOICE fallback      |
 | index.json is corrupt or missing, every sidecar contiguous and parseable             | `rebuildIndex()` (AUTO) rebuilds it from the sidecars; original filed if present   |

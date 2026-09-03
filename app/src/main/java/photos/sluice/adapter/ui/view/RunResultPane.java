@@ -140,7 +140,7 @@ final class RunResultPane {
     }
 
     /**
-     * Sifts the timeline this card offers, putting whatever question the presenter says is owed.
+     * Sifts the timeframe this card offers, putting whatever question the presenter says is owed.
      *
      * <p>This screen opens the dialog and decides nothing else. Whether one is owed at all, and
      * what it says, are the presenter's.

@@ -11,7 +11,6 @@ import photos.sluice.config.CullConfig;
 import org.junit.jupiter.api.io.TempDir;
 import org.yaml.snakeyaml.Yaml;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
@@ -19,7 +18,6 @@ import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -50,7 +48,6 @@ class YamlSettingsStoreTest {
                 .contains("provider: anthropic")
                 .contains("model: claude-sonnet-5")
                 .contains("max-retries: 4")
-                .contains("mode: watch")
                 .contains("name: receipts");
     }
 
@@ -150,7 +147,6 @@ class YamlSettingsStoreTest {
         assertThat(Files.readString(file))
                 .contains("poll-interval: 30s")
                 .contains("organisation: acme")
-                .contains("mode: watch")
                 .contains("model: claude-sonnet-5");
     }
 
@@ -305,7 +301,7 @@ class YamlSettingsStoreTest {
     void whatASaveWritesStillBindsWhenNoProviderIsConfigured(@TempDir final Path dir) {
         final Path file = dir.resolve("config.yml");
         final Settings noProviderConfigured = new Settings(settings().paths(), "external-agent", Map.of(),
-                settings().categories(), settings().externalAgent(), settings().montage(), settings().theme());
+                settings().categories(), settings().montage(), settings().theme());
 
         new YamlSettingsStore(file).save(noProviderConfigured);
 
@@ -339,7 +335,7 @@ class YamlSettingsStoreTest {
                 List.of(CullCategory.of("receipts", "photographed paperwork"),
                         new CullCategory("food", "meals and menus", List.of("plates", "menus"), Boolean.TRUE),
                         new CullCategory("scenery", "landscapes", List.of(), Boolean.FALSE)),
-                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK);
+                new MontageConfig(96, 7), ThemeChoice.DARK);
     }
 
     // The null is reachable and the IDE reads it as dead. A card offering no examples writes no key
@@ -372,8 +368,6 @@ class YamlSettingsStoreTest {
                 Map.of("anthropic", new CullProviderSettings((String) anthropic.get("model"),
                         (String) anthropic.get("endpoint"), (Integer) anthropic.get("max-retries"))),
                 categories,
-                new ExternalAgentSettings(WatchMode.valueOf(
-                        ((String) asMap(cull.get("external-agent")).get("mode")).toUpperCase(Locale.ROOT))),
                 new MontageConfig((Integer) montage.get("tile-size"), (Integer) montage.get("tiles-per-row")),
                 ThemeChoice.valueOf(((String) ui.get("theme")).toUpperCase(Locale.ROOT)));
     }

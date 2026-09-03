@@ -86,12 +86,6 @@ sluice:
         enabled: true
         description: Photos worth setting aside to laugh at later.
 
-    external-agent:
-      # How a waiting sift resumes once the external agent's answers land, when provider is
-      # "external-agent". "watch" (the default) polls the working folder and resumes on its own
-      # once every sheet has been answered. "manual" waits for an explicit resume.
-      mode: watch
-
   montage:
     # The pixel size of each square tile in a montage contact sheet.
     tile-size: 224

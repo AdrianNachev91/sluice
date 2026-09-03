@@ -10,6 +10,15 @@ import java.util.function.Function;
 /**
  * Announces the phases a job will report, then brackets each one it runs, {@code phaseStarted} then
  * ticks then {@code phaseFinished}, around one engine call.
+ *
+ * <p>{@code phaseFinished} fires in a finally, so the bracket closes even when the engine call
+ * throws. A listener otherwise has no signal the phase ever ended. {@code phaseCutShort} goes ahead
+ * of it on a throw, and in {@link #around} on a null return.
+ *
+ * <p>A stage that carries its own stop in the value it returns reaches neither, and is reported as
+ * having worked through. Six do, and that is a decided trade rather than an oversight. It is in
+ * {@code docs/accepted-residuals.md} under "A stopped stage still reads done on a captured
+ * command-line run", with what was weighed and what it would cost to close.
  */
 final class PhaseRunner {
 
@@ -34,9 +43,7 @@ final class PhaseRunner {
     }
 
     /**
-     * phaseFinished fires in a finally so the phaseStarted/phaseFinished bracket always closes,
-     * even when the engine call itself throws. A listener otherwise has no signal the phase ever
-     * ended.
+     * Brackets one engine call that may throw a checked exception.
      *
      * @param phase {@link String} name of the phase being run
      * @param work a {@link PhaseWork} of T the engine call to bracket
@@ -44,10 +51,13 @@ final class PhaseRunner {
      */
     <T> T run(final String phase, final PhaseWork<T> work) throws Exception {
         this.progressPort.phaseStarted(phase);
+        boolean completed = false;
         try {
-            return work.run(this.reporting(phase));
+            final T result = work.run(this.reporting(phase));
+            completed = true;
+            return result;
         } finally {
-            this.progressPort.phaseFinished(phase);
+            this.report(phase, completed);
         }
     }
 
@@ -66,11 +76,27 @@ final class PhaseRunner {
      */
     <T extends @Nullable Object> T around(final String phase, final Function<ProgressCallback, T> work) {
         this.progressPort.phaseStarted(phase);
+        boolean completed = false;
         try {
-            return work.apply(this.reporting(phase));
+            final T result = work.apply(this.reporting(phase));
+            completed = result != null;
+            return result;
         } finally {
-            this.progressPort.phaseFinished(phase);
+            this.report(phase, completed);
         }
+    }
+
+    /**
+     * Closes one phase's bracket, saying first where the work did not reach its own end.
+     *
+     * @param phase {@link String} name of the phase that ended
+     * @param completed boolean whether the work worked through to the end
+     */
+    private void report(final String phase, final boolean completed) {
+        if (!completed) {
+            this.progressPort.phaseCutShort(phase);
+        }
+        this.progressPort.phaseFinished(phase);
     }
 
     /**

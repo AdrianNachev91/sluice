@@ -542,7 +542,7 @@ public class VisionProviderPresenter {
     private static SettingsView.ProviderFields fieldsOf(final VisionProviderDescriptor provider) {
         final Set<ProviderSetting> used = provider.settingsUsed();
         return new SettingsView.ProviderFields(used.contains(ProviderSetting.MODEL),
-                used.contains(ProviderSetting.ENDPOINT), used.contains(ProviderSetting.WATCH_MODE),
+                used.contains(ProviderSetting.ENDPOINT),
                 used.contains(ProviderSetting.CREDENTIAL));
     }
 

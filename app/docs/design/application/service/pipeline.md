@@ -14,11 +14,10 @@ with progress reported through `ProgressPort` via `PhaseRunner`
 `Troubleshooter` and `PrepDirDoctor` respectively), with no `PhaseRunner`/`ProgressPort` bracketing.
 Neither has per-item progress worth reporting, so `JobRunner`'s one-job-at-a-time discipline is the
 whole reason either runs as a job. See `troubleshooter.md`/`prep-dir-doctor.md` for what each
-actually does. `startWatching(prepDir)`, `stopWatching(prepDir)` and `stopAllWatching()` switch
-auto-resume on and off, which is bookkeeping against an in-memory map rather than work - see
-`cull-engine.md`. The first two govern one waiting run. `stopAllWatching()` retires every poller at
-once. Two callers need that: a save that moved the working root and so left them all polling outside
-it, and an app that is closing. A save moving only the library or the inbox does not come here.
+actually does. `stopAllWatching()` retires every auto-resume poller at once, which is bookkeeping
+against an in-memory map rather than work - see `cull-engine.md`. Two callers need it: a save that
+moved the working root and so left them all polling outside it, and an app that is closing. A save
+moving only the library or the inbox does not come here.
 
 `stopAcceptingJobs(timeout)` is the last delegate, and the exit path's own. It shuts `JobRunner` for
 good, asks the job in flight to stop, and waits up to `timeout` for it to. It answers whether
@@ -31,17 +30,17 @@ Those two are the only entry points that run no root check. Neither resolves a p
 whose roots are unusable has to be able to close as cleanly as one whose roots are fine.
 
 Every other public method opens with the same call before it resolves a single path:
-`RootsGuard.requireUsable()`. That is `sort`, `commit`, `rescue`, `cull`, `curate`, `resume`,
-`cullRuns`, `startWatching`, `stopWatching`, `armWatchesForResumableRuns`,
-`sweepExpiredDisasterDrawers`, `troubleshoot`, `purgeCompleted`, and `discard` - fourteen in all.
+`RootsGuard.requireUsable()`. That includes `sort`, `commit`, `rescue`, `cull`, `curate`, `resume`,
+`cullRuns`, `armWatchesForResumableRuns`, `sweepExpiredDisasterDrawers`, `troubleshoot`,
+`purgeCompleted`, and `discard`.
 `RootsGuard` reads `PathValidationUseCase.violationsInForce()` and
 throws `PathsMisconfiguredException` (an `IllegalStateException`) the moment the list is non-empty:
 any of the three roots unset, unparsable, missing, unreadable, or overlapping another. A fresh
 install with
-nothing configured meets this on every one of those fourteen calls until its first run is set up.
+nothing configured meets this on every one of those calls until its first run is set up.
 `CullEngine.resume` runs the identical check on its own, since a watcher's auto-resume reaches it
 without passing through `Pipeline` at all - see `cull-engine.md`. `SettingsService.save` runs a
-narrower version of the same question, admitting an unset root where these fourteen do not - see
+narrower version of the same question, admitting an unset root where these do not - see
 `settings-service.md`.
 
 ## How one call works
@@ -118,8 +117,9 @@ for the watcher it disarms.
 - `RootsGuard`'s check, `PathValidationUseCase`, and its implementation: `path-validation-service.md`
   in this same design folder.
 - `SettingsService`, the other caller of that same use case, admitting an unset root where these
-  fourteen do not: `settings-service.md` in this same design folder.
-- `cull-engine.md`: `CullEngine` - `cull()`/`resume()`, scope occupancy, cancellation, and watch mode.
+  entry points do not: `settings-service.md` in this same design folder.
+- `cull-engine.md`: `CullEngine` - `cull()`/`resume()`, scope occupancy, cancellation, and the
+  watchers that auto-resume a waiting run.
 - `prep-dir-doctor.md`: `PrepDirDoctor` - `runs()` behind `cullRuns()`, and `purgeCompleted()`.
 - `curate-engine.md`: `CurateEngine` - `curate()`, and the `Pipeline.CurateConflictException` type it throws.
 - `JobRunner`/`JobHandle`/`JobWork` (the single-slot async executor `Pipeline` submits onto): no dedicated design doc

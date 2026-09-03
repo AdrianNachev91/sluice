@@ -12,7 +12,6 @@ import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ProviderSetting;
@@ -24,7 +23,6 @@ import photos.sluice.application.port.out.SettingOverride.ByEnvironmentVariable;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
@@ -151,8 +149,6 @@ public class SettingsPresenter {
                 modelPicker.picker(), this.overrideNote(providerProperty(shownProvider, "model")),
                 modelPicker.unrecognisedNote(),
                 providerSettings.endpoint(), this.overrideNote(providerProperty(shownProvider, "endpoint")),
-                settings.externalAgent().mode() == WatchMode.WATCH,
-                this.overrideNote("sluice.cull.external-agent.mode"),
                 this.visionProvider.secretRow(shownProvider),
                 montage.tileSize(), TILE_SIZE_RANGE, this.overrideNote("sluice.montage.tile-size"),
                 montage.tilesPerRow(), TILES_PER_ROW_RANGE, this.overrideNote("sluice.montage.tiles-per-row"),
@@ -196,12 +192,11 @@ public class SettingsPresenter {
      * @param provider {@link String} the id of the provider chosen
      * @param model {@link String} the model id selected, or blank where the provider takes none
      * @param endpoint {@link String} the endpoint as typed, or blank where the provider takes none
-     * @param watchAutomatically boolean whether a waiting sift resumes itself
      * @param tileSize int the sheet's tile size
      * @param tilesPerRow int how many tiles a sheet row holds
      */
     public record SettingsEdits(String workingRoot, String libraryRoot, String inbox, String provider,
-                                String model, String endpoint, boolean watchAutomatically,
+                                String model, String endpoint,
                                 int tileSize, int tilesPerRow) {
     }
 
@@ -226,7 +221,7 @@ public class SettingsPresenter {
         ThemeSelection.set(theme);
         final Settings current = this.settingsUseCase.settings();
         this.settingsUseCase.save(new Settings(current.paths(), current.provider(),
-                current.providerSettingsById(), current.categories(), current.externalAgent(),
+                current.providerSettingsById(), current.categories(),
                 current.montage(), theme));
     }
 
@@ -284,8 +279,6 @@ public class SettingsPresenter {
      * @param provider {@link String} the selected provider id
      * @param model {@link String} the model field's text, possibly blank
      * @param endpoint {@link String} the endpoint field's text, possibly blank
-     * @param watchAutomatically boolean whether a waiting cull should resume on its own once ready;
-     *         false waits for an explicit resume
      * @param tileSize int the montage tile size
      * @param tilesPerRow int the montage tiles per row
      * @param themeId {@link String} id of the look the user picked, from a {@link SettingsView.ThemeOption}
@@ -293,7 +286,6 @@ public class SettingsPresenter {
      */
     public SaveOutcome save(final String workingRoot, final String libraryRoot, final String inbox,
                             final String provider, final String model, final String endpoint,
-                            final boolean watchAutomatically,
                             final int tileSize, final int tilesPerRow, final String themeId) {
         // Before anything touches the disk. What a provider needs is answerable from the field
         // values alone, so refusing on it leaves no folder behind.
@@ -306,7 +298,6 @@ public class SettingsPresenter {
         createIfItIsOurOwnSuggestion(inbox, inboxSuggestion(workingRoot));
         final var paths = new PathSettings(blankToNull(workingRoot), blankToNull(libraryRoot),
                 blankToNull(inbox));
-        final var watchMode = watchAutomatically ? WatchMode.WATCH : WatchMode.MANUAL;
         final Settings settings;
         try {
             // Inside the guard with everything else that can refuse. An id this class never put in
@@ -319,7 +310,7 @@ public class SettingsPresenter {
             settings = new Settings(paths, provider,
                     this.providerSettingsWith(provider,
                             new CullProviderSettings(blankToNull(model), blankToNull(endpoint), maxRetries)),
-                    this.settingsUseCase.settings().categories(), new ExternalAgentSettings(watchMode),
+                    this.settingsUseCase.settings().categories(),
                     new MontageConfig(tileSize, tilesPerRow), theme);
         } catch (final RuntimeException e) {
             return this.refusalMarkingItsFields(e, paths);
@@ -376,7 +367,7 @@ public class SettingsPresenter {
         final var keeping = new PathSettings(asked.repoRoot(), stayingAt.toString(), asked.inbox());
         try {
             this.settingsUseCase.save(new Settings(keeping, settings.provider(),
-                    settings.providerSettingsById(), settings.categories(), settings.externalAgent(),
+                    settings.providerSettingsById(), settings.categories(),
                     settings.montage(), settings.theme()));
             ThemeSelection.set(settings.theme());
         } catch (final RuntimeException e) {
@@ -419,7 +410,7 @@ public class SettingsPresenter {
         final CullProviderSettings provider = settings.providerSettings(providerId);
         final String endpoint = provider.endpoint() == null ? "" : provider.endpoint();
         return this.save(workingRoot, libraryRoot, inbox, providerId, this.modelToCarryFor(providerId), endpoint,
-                settings.externalAgent().mode() == WatchMode.WATCH, settings.montage().tileSize(),
+                settings.montage().tileSize(),
                 settings.montage().tilesPerRow(), settings.theme().name());
     }
 
@@ -1070,7 +1061,7 @@ public class SettingsPresenter {
                 ? options.selected() : "";
         return new SettingsEdits(view.workingRoot().value(), view.libraryRoot().value(),
                 view.inbox().value(), view.provider(), model,
-                view.endpoint() == null ? "" : view.endpoint(), view.watchAutomatically(),
+                view.endpoint() == null ? "" : view.endpoint(),
                 view.tileSize(), view.tilesPerRow());
     }
 }

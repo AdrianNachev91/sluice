@@ -8,14 +8,12 @@ import photos.sluice.adapter.ui.PhotoCategoriesView.CategoryRow;
 import photos.sluice.adapter.ui.PhotoCategoriesView.SaveOutcome;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -339,7 +337,7 @@ class PhotoCategoriesPresenterTest {
         public Settings settings() {
             return new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"), "anthropic",
                     Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), this.cards,
-                    new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                    new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         }
 
         @Override

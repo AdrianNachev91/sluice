@@ -37,7 +37,7 @@ final class RunWords {
      */
     static String spelledScope(final CullScope.@Nullable Year scope) {
         if (scope == null) {
-            return "another timeline";
+            return "another timeframe";
         }
         return scope.months() == null
                 ? String.valueOf(scope.year())
@@ -130,7 +130,7 @@ final class RunWords {
     }
 
     /**
-     * What a timeline or a folder says it holds.
+     * What a timeframe or a folder says it holds.
      *
      * @param photos int the photos in it
      * @param videos int the videos in it

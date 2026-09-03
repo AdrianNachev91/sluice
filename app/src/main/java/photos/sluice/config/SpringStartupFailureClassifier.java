@@ -9,6 +9,7 @@ import org.springframework.boot.origin.TextResourceOrigin;
 import org.springframework.core.io.Resource;
 import org.yaml.snakeyaml.error.Mark;
 import org.yaml.snakeyaml.error.MarkedYAMLException;
+import photos.sluice.application.port.out.UnusableSettingsException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.startup.StartupFailure;
 import photos.sluice.application.startup.StartupFailure.ConfigPosition;
@@ -16,6 +17,7 @@ import photos.sluice.application.startup.StartupFailure.ConfigSpot;
 import photos.sluice.application.startup.StartupFailure.RejectedSetting;
 import photos.sluice.application.startup.StartupFailure.Unclassified;
 import photos.sluice.application.startup.StartupFailure.UnparsableConfigFile;
+import photos.sluice.application.startup.StartupFailure.UnusableSettings;
 import photos.sluice.application.startup.StartupFailure.WorkingRootBusy;
 import photos.sluice.application.startup.StartupFailureClassifier;
 
@@ -122,6 +124,7 @@ public class SpringStartupFailureClassifier implements StartupFailureClassifier 
             case final BindException bind -> new RejectedSetting(bind.getName().toString(),
                     this.spotOf(bind), trace);
             case final MarkedYAMLException yaml -> this.unparsable(yaml, trace);
+            case final UnusableSettingsException refused -> new UnusableSettings(refused.getMessage(), trace);
             default -> null;
         };
     }

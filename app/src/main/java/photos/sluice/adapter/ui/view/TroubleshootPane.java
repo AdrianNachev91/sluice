@@ -89,6 +89,7 @@ final class TroubleshootPane {
         actions.setId("troubleshoot-actions");
         actions.getStyleClass().add("run-start-row");
 
+        PageHeader.heldToTheViewport(scroll, header, actions);
         final var page = new VBox(header, scroll, actions);
         page.setId("troubleshoot");
         page.getStyleClass().add("runs");

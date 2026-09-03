@@ -62,7 +62,7 @@ class RunsPresenterTest {
     }
 
     @Test
-    void theCardsAreOrderedByTimelineWhateverStateEachRunIsIn() {
+    void theCardsAreOrderedByTimeframeWhateverStateEachRunIsIn() {
         final RunsPresenter presenter = presenterOver(run("2018", State.READY),
                 run("2016", State.DAMAGED), run("2017", State.BLOCKED), run("2015", State.WAITING));
 
@@ -1281,7 +1281,7 @@ class RunsPresenterTest {
 
         assertThat(presenter.judgeAgain(prepDir, "2019")).isNull();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .contains("nothing to judge again").contains("Nothing was discarded");
+                .contains("waiting to be judged again").contains("already been handled");
     }
 
     // Nothing to redo is not a refusal where an agent does the judging. The run has stalled rather
@@ -1399,7 +1399,7 @@ class RunsPresenterTest {
         return new RunLauncherPresenter(pipeline, new FxProgressPort(Runnable::run));
     }
 
-    // By scope rather than by position. The cards are sorted by timeline, so which one is first
+    // By scope rather than by position. The cards are sorted by timeframe, so which one is first
     // turns on what the other runs in the fixture are called.
     private static RunCard cardFor(final RunsPresenter presenter, final String scope) {
         return presenter.view().unfinished().stream()

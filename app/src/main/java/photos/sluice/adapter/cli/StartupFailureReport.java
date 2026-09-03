@@ -67,6 +67,7 @@ public final class StartupFailureReport {
                     Fields.of("workingRoot", busy.workingRoot().toString())));
             case final StartupFailure.RejectedSetting rejected -> CommandOutcome.refused(rejectedSetting(rejected));
             case final StartupFailure.UnparsableConfigFile broken -> CommandOutcome.refused(unparsable(broken));
+            case final StartupFailure.UnusableSettings unusable -> CommandOutcome.refused(unusable(unusable));
             case final StartupFailure.Unclassified unclassified -> unclassified(unclassified);
         };
     }
@@ -101,6 +102,21 @@ public final class StartupFailureReport {
                         broken.problem() + at(broken.spot().position()) + ".",
                         "Nothing in the file was read.")),
                 detail);
+    }
+
+    /**
+     * The refusal for settings the app will not run on.
+     *
+     * <p>The refusal's own sentence is carried through rather than reworded. It is the only thing
+     * that names what is wrong, and nothing here knows more about it than that.
+     *
+     * @param unusable {@link StartupFailure.UnusableSettings} the refusal and its wording
+     * @return {@link Refusal} the refusal
+     */
+    private static Refusal unusable(final StartupFailure.UnusableSettings unusable) {
+        return new Refusal(RefusalKind.SETTINGS_UNUSABLE,
+                Refusal.sentences(List.of("Sluice will not start.", unusable.problem())),
+                Fields.of("problem", unusable.problem()));
     }
 
     /**

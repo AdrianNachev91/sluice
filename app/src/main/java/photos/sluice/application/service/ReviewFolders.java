@@ -91,14 +91,26 @@ final class ReviewFolders {
      * @throws IllegalArgumentException if folder is not under one of the three roots
      */
     List<String> notesIn(final Path folder) {
+        return this.noteFilesIn(folder).stream()
+                .flatMap(file -> this.media.readLines(file).stream())
+                .toList();
+    }
+
+    /**
+     * The files those lines were read from, in the order they were read.
+     *
+     * @param folder {@link Path} a folder this listing named
+     * @return a {@link List} of {@link Path} the note files, empty where the folder holds none
+     * @throws IllegalArgumentException if folder is not under one of the three roots
+     */
+    List<Path> noteFilesIn(final Path folder) {
         final Path asked = folder.normalize();
         if (this.rootHolding(asked).isEmpty()) {
             throw new IllegalArgumentException("folder must be under a review root: " + folder);
         }
         return this.filesIn(asked).stream()
-                .filter(file -> file.getFileName().toString().endsWith(ReasonNotes.SUFFIX))
+                .filter(file -> ReasonNotes.isANote(file.getFileName().toString()))
                 .sorted()
-                .flatMap(file -> this.media.readLines(file).stream())
                 .toList();
     }
 
@@ -112,10 +124,9 @@ final class ReviewFolders {
      * path that is a file answers with that file, whose own folder is the working root. Relativized
      * against this root, that produces a name climbing out of it.
      *
-     * <p>A root the operating system refuses at the root itself reads as absent rather than as
-     * unreadable. {@code realDirectory} answers empty for a denied permission, for a share that has
-     * gone away and for a path naming nothing. No port method here separates the three. A refusal
-     * one level down is caught, since walking it throws.
+     * <p>{@code directoryIsThere} is what separates the two, rather than the other presence checks
+     * on the same port. Those answer false for a refusal as well as for an absence, which would
+     * report the ordinary state for a root the operating system would not open.
      *
      * @param root {@link Root} which root to read
      * @param folders a {@link List} of {@link Folder} collected so far, added to
@@ -124,7 +135,7 @@ final class ReviewFolders {
     private void collect(final Root root, final List<Folder> folders, final List<Path> unreadable) {
         final Path rootPath = this.pathOf(root);
         try {
-            if (this.media.realDirectory(rootPath).isPresent()) {
+            if (this.media.directoryIsThere(rootPath)) {
                 this.byFolder(rootPath).forEach((dir, files) ->
                         folders.add(this.folder(root, rootPath, dir, files)));
             }

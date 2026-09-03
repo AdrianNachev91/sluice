@@ -24,9 +24,6 @@ import java.util.List;
  *     null when it is, or when nothing is configured
  * @param endpoint {@link String} the configured endpoint
  * @param endpointOverride an override note for the endpoint field, or null
- * @param watchAutomatically boolean whether a waiting cull resumes on its own once ready; false
- *     means it waits for an explicit resume
- * @param watchModeOverride an override note for the watch-mode field, or null
  * @param secret {@link SecretRow} the credential row, for the provider it belongs to
  * @param tileSize int the configured montage tile size
  * @param tileSizeRange {@link NumberRange} what a tile size is allowed to be
@@ -48,7 +45,7 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
                            @Nullable String modelOverride, @Nullable String modelUnrecognised,
                            @Nullable String endpoint,
                            @Nullable String endpointOverride,
-                           boolean watchAutomatically, @Nullable String watchModeOverride, SecretRow secret, int tileSize,
+                           SecretRow secret, int tileSize,
                            NumberRange tileSizeRange, @Nullable String tileSizeOverride, int tilesPerRow,
                            NumberRange tilesPerRowRange, @Nullable String tilesPerRowOverride, String theme,
                            List<ThemeOption> themes, @Nullable String themeOverride,
@@ -134,16 +131,15 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      * Which settings the selected provider actually uses.
      *
      * <p>A provider that calls a model from inside the app needs a model id, an endpoint and a
-     * credential. One whose judgement comes from an agent the user runs needs none of them, and
-     * needs a watch mode instead. Showing a provider the other's settings offers a control that
-     * cannot do anything, which reads as a promise the app does not keep.
+     * credential. One whose judgement comes from an agent the user runs needs none of them. Showing
+     * a provider the other's settings offers a control that cannot do anything, which reads as a
+     * promise the app does not keep.
      *
      * @param model boolean whether a model id applies
      * @param endpoint boolean whether a non-default endpoint applies
-     * @param watchMode boolean whether the waiting-cull watch mode applies
      * @param credential boolean whether a stored credential applies
      */
-    public record ProviderFields(boolean model, boolean endpoint, boolean watchMode, boolean credential) {
+    public record ProviderFields(boolean model, boolean endpoint, boolean credential) {
     }
 
     /**

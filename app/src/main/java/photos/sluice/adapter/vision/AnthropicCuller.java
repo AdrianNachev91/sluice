@@ -86,10 +86,10 @@ import java.util.stream.IntStream;
  * The {@link VisionCuller} provider that calls the user's configured Anthropic vision model from
  * inside the app. Each montage is one stateless request: the shared system prompt, the montage
  * JPEG, and the photo table. A structured-output schema constrains the response to a JSON verdict
- * list. The model must return a verdict for every tile. That forces a look at every photo instead
- * of skimming past faint junk. Every verdict is written to the shard, keeps included, which is the
- * same on-disk contract an external agent answers. {@link ShardValidator} is what checks the sheet
- * is covered, so the rule holds for both routes rather than only this one.
+ * list. The model must return a verdict for every tile. That forces a look at every photo rather
+ * than a skim over the ones that need one. Every verdict is written to the shard, keeps included,
+ * which is the same on-disk contract an external agent answers. {@link ShardValidator} is what
+ * checks the sheet is covered, so the rule holds for both routes rather than only this one.
  *
  * <p>The model references photos by tile index and filename, never by path. The response is
  * resolved index to sidecar src here. A name that does not match the sidecar entry at that index

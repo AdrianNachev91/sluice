@@ -120,7 +120,7 @@ class ResumeCommandTest {
 
     private static CullJobOutcome.Applied applied() {
         return new CullJobOutcome.Applied(CullReport.nothingSpent("external-agent", 0),
-                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), null);
+                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), null, null);
     }
 
     private CliHarness.Result run(final Path root, final String... args) {

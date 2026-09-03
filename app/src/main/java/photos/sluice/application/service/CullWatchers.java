@@ -6,10 +6,8 @@ import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
-import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.domain.job.ShardTally;
-import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -27,14 +25,10 @@ final class CullWatchers {
 
     private static final Logger log = LoggerFactory.getLogger(CullWatchers.class);
 
-    private final CullSettings cullSettings;
     private final Predicate<ProviderType> configuredProviderIs;
     private final ShardTallyCalculator shardTallyCalculator;
-    // How often a watch-mode job re-checks its prep dir's shard tally. Not part of CullSettings -
-    // unlike mode, this cadence isn't a documented user-facing knob, just an internal
-    // responsiveness/overhead tradeoff. Short enough that a human dropping files never perceives the
-    // delay; long enough not to hammer disk or spam re-validation. Pipeline's own package-private
-    // constructor overload is what lets a test override this.
+    // How often a watcher re-checks its prep dir's shard tally. Short enough that a human dropping
+    // files never perceives the delay; long enough not to hammer disk or spam re-validation.
     private final Duration watchPollInterval;
     private final Function<Path, JobHandle<CullJobOutcome>> resume;
     private final RunChanges runChanges;
@@ -48,7 +42,6 @@ final class CullWatchers {
     /**
      * Creates the watch lifecycle owner.
      *
-     * @param cullSettings {@link CullSettings} configured provider and watch-mode settings
      * @param configuredProviderIs a {@link Predicate} of {@link ProviderType} whether the configured
      *         provider works that way, asked afresh each time because a user can change it between
      *         runs
@@ -58,11 +51,10 @@ final class CullWatchers {
      *         the route back to {@link CullEngine#resume} a ready watcher's auto-resume attempt uses
      * @param runChanges {@link RunChanges} told whenever a watch arms, disarms, or finishes a run
      */
-    CullWatchers(final CullSettings cullSettings, final Predicate<ProviderType> configuredProviderIs,
+    CullWatchers(final Predicate<ProviderType> configuredProviderIs,
                  final ShardTallyCalculator shardTallyCalculator,
                  final Duration watchPollInterval, final Function<Path, JobHandle<CullJobOutcome>> resume,
                  final RunChanges runChanges) {
-        this.cullSettings = cullSettings;
         this.configuredProviderIs = configuredProviderIs;
         this.shardTallyCalculator = shardTallyCalculator;
         this.watchPollInterval = watchPollInterval;
@@ -85,15 +77,13 @@ final class CullWatchers {
     }
 
     /**
-     * Starts polling a prep dir for an auto-resume whatever the configured mode says, so one run's
-     * watch can be turned on by itself. disarmWatch() is its off position. A no-op when a watcher
-     * is already active for that prep dir, rather than a competing second poller.
+     * Starts polling a prep dir for an auto-resume. disarmWatch() is its off position. A no-op when
+     * a watcher is already active for that prep dir, rather than a competing second poller.
      *
-     * <p>The provider check stays even here, where the user asked for this explicitly. Watch mode
-     * exists to notice when the user's own separate culling agent, running outside this app, drops
-     * a shard. An automated provider's shards never arrive that way, so its waiting run has nothing
-     * to notice. A run that already looks ready would only trigger an unasked-for, API-spending
-     * resume.
+     * <p>Only the external-agent provider is watched. Watching exists to notice when the user's own
+     * culling agent, running outside this app, drops a shard. A provider that calls a model returns
+     * its own answers inside the run, so its waiting run has nothing to notice. A run that already
+     * looks ready would only trigger an unasked-for, API-spending resume.
      *
      * @param prepDir {@link Path} the prep dir to watch
      */
@@ -124,21 +114,6 @@ final class CullWatchers {
         if (armed.get()) {
             this.runChanges.moved();
         }
-    }
-
-    /**
-     * armWatch() for a run nobody has decided about yet, so the configured mode picks. Every
-     * automatic arming site goes through here: the startup scan and dispatchAndApply()'s own
-     * Waiting branch. A per-run toggle calls armWatch() directly instead, which is the whole
-     * difference between the two.
-     *
-     * @param prepDir {@link Path} the waiting run's prep dir
-     */
-    void armWatchIfConfigured(final Path prepDir) {
-        if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH) {
-            return;
-        }
-        this.armWatch(prepDir);
     }
 
     /**
@@ -259,7 +234,7 @@ final class CullWatchers {
         try {
             handle = this.resume.apply(prepDir);
         } catch (final PathsMisconfiguredException refused) {
-            log.warn("Watch-mode auto-resume for {} was refused and this watcher is stopping", prepDir, refused);
+            log.warn("Auto-resume for {} was refused and this watcher is stopping", prepDir, refused);
             return true;
         } catch (final ShuttingDownException closing) {
             return true;
@@ -268,7 +243,7 @@ final class CullWatchers {
         }
         handle.onComplete().whenComplete((_, failure) -> {
             if (failure != null) {
-                log.warn("Watch-mode auto-resume for {} failed", prepDir, failure);
+                log.warn("Auto-resume for {} failed", prepDir, failure);
             }
             // Told here rather than only where the watcher is retired. dispatchAndApply retires it
             // on the way in. An announcement from there reaches a screen before the apply that

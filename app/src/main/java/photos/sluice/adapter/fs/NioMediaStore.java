@@ -15,6 +15,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
@@ -270,6 +271,23 @@ public class NioMediaStore implements MediaStore {
     @Override
     public boolean exists(final Path path) {
         return Files.exists(path);
+    }
+
+    /**
+     * Reports whether a directory is there, letting a refusal through as a throw.
+     *
+     * @param path {@link Path} path to check
+     * @return boolean true if a directory is there, false if nothing is
+     */
+    @Override
+    public boolean directoryIsThere(final Path path) {
+        try {
+            return Files.readAttributes(path, BasicFileAttributes.class).isDirectory();
+        } catch (final NoSuchFileException e) {
+            return false;
+        } catch (final IOException e) {
+            throw new UncheckedIOException("Failed to read what is at " + path, e);
+        }
     }
 
     /**

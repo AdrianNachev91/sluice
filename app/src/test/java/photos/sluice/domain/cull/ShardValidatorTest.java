@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
-import photos.sluice.domain.cull.Finding.DecisionUnreviewableOverlap;
+import photos.sluice.domain.cull.Finding.VerdictUnreviewableOverlap;
 import photos.sluice.domain.cull.Finding.DuplicateFileReference;
 import photos.sluice.domain.cull.Finding.FileOutOfScope;
 import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
@@ -384,22 +384,20 @@ class ShardValidatorTest {
                 CATEGORIES,
                 List.of(A));
 
-        assertThat(report.findings()).containsExactly(new DecisionUnreviewableOverlap(decision));
+        assertThat(report.findings()).containsExactly(new VerdictUnreviewableOverlap(decision));
     }
 
-    // The resolvable overlap offers a choice between trusting the decision and treating the file as
-    // unreviewable. A keep asks for nothing to happen, which is not one of those two, so this pair
-    // has no resolution and falls to the general finding.
     @Test
-    void aFileKeptAndAlsoListedAsUnreviewableIsNotTheResolvableOverlap() {
-        final var report = this.validator().validate(
-                List.of(this.shardFile("montage-001", new Keep(A))), SCOPE, CATEGORIES, List.of(A));
+    void aFileKeptAndAlsoListedAsUnreviewableIsTheSameResolvableOverlap() {
+        final var keep = new Keep(A);
 
-        assertThat(report.findings()).containsExactly(new DuplicateFileReference(A.toString(), 2));
+        final var report = this.validator().validate(
+                List.of(this.shardFile("montage-001", keep)), SCOPE, CATEGORIES, List.of(A));
+
+        assertThat(report.findings()).containsExactly(new VerdictUnreviewableOverlap(keep));
+        assertThat(report.findings().getFirst().remedy()).isEqualTo(Finding.Remedy.CHOICE);
     }
 
-    // Distinguishes the resolvable one-decision-plus-one-unreviewable overlap above from every other
-    // multi-reference shape, which has no such resolution and stays the general DuplicateFileReference.
     @Test
     void aFileListedTwiceAsADecisionAndOnceAsUnreviewableIsReportedAsAPlainDuplicate() {
         final var report = this.validator().validate(
@@ -478,10 +476,10 @@ class ShardValidatorTest {
     }
 
     @Test
-    void decisionUnreviewableOverlapDescribesTheFileAndCarriesTheChoiceRemedy() {
-        final var overlap = new DecisionUnreviewableOverlap(new Classification(A, "junk", "screenshot"));
+    void verdictUnreviewableOverlapDescribesTheFileAndCarriesTheChoiceRemedy() {
+        final var overlap = new VerdictUnreviewableOverlap(new Classification(A, "junk", "screenshot"));
 
-        assertThat(overlap.describe()).isEqualTo("file listed both as a decision and as unreviewable: " + A);
+        assertThat(overlap.describe()).isEqualTo("file listed both as a verdict and as unreviewable: " + A);
         assertThat(overlap.remedy()).isEqualTo(Finding.Remedy.CHOICE);
     }
 

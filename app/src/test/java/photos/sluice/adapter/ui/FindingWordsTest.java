@@ -28,7 +28,7 @@ class FindingWordsTest {
             new Finding.TooFewRejects("montage-001", "beach-run", 0),
             new Finding.InvalidGroupSlug("montage-001", "Beach Run", 40),
             new Finding.DuplicateFileReference(PHOTO.toString(), 3),
-            new Finding.DecisionUnreviewableOverlap(
+            new Finding.VerdictUnreviewableOverlap(
                     new Decision.Classification(PHOTO, "junk", "blurry")),
             new Finding.GroupSpansMultipleMontages("beach-run", List.of("montage-001", "montage-002")),
             new Finding.MissingFile("montage-001", 3),
@@ -108,7 +108,7 @@ class FindingWordsTest {
                 .filter(finding -> !FindingWords.of(finding).choices().isEmpty())
                 .toList())
                 .containsExactlyInAnyOrder(
-                        new Finding.DecisionUnreviewableOverlap(
+                        new Finding.VerdictUnreviewableOverlap(
                                 new Decision.Classification(PHOTO, "junk", "blurry")),
                         new Finding.StrayShard("decisions-009.json"),
                         new Finding.CorruptSidecar("montage-002"),

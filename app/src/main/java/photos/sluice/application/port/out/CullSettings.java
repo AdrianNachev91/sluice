@@ -88,15 +88,6 @@ public interface CullSettings {
     CullProviderSettings providerSettings(String providerId);
 
     /**
-     * Tuning for the external-agent provider only. An implementation must return a non-null
-     * instance, substituting a MANUAL-mode default for a missing configured block; see
-     * ExternalAgentSettings' own doc for its own null-handling.
-     *
-     * @return {@link ExternalAgentSettings} the external-agent tuning settings
-     */
-    ExternalAgentSettings externalAgent();
-
-    /**
      * The contact-sheet grid a cull renders: tile size, and how many tiles form a row. Asked for at
      * the moment it is needed, so a saved change reaches a cull without a restart.
      *

@@ -389,7 +389,7 @@ answerable by this route.
 
 | Finding                       | `key` is                 | `options`                                 |
 |-------------------------------|--------------------------|-------------------------------------------|
-| `DecisionUnreviewableOverlap` | the decision's file path | `TRUST_DECISION`, `TREAT_AS_UNREVIEWABLE` |
+| `VerdictUnreviewableOverlap`  | the verdict's file path  | `TRUST_DECISION`, `TREAT_AS_UNREVIEWABLE` |
 | `CorruptSidecar`              | the sheet's name         | `SET_ASIDE`, `APPLY_ANYWAY`               |
 | `MissingSource`               | the missing file's path  | `SKIP`                                    |
 | `StrayShard`                  | the shard's file name    | `SET_ASIDE`                               |

@@ -3,7 +3,6 @@ package photos.sluice.application.port.out;
 import org.junit.jupiter.api.Test;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;
 import java.util.Map;
@@ -84,6 +83,14 @@ class SettingsBoundsTest {
     }
 
     @Test
+    void twoCategoriesUnderOneNameAreRefusedAndTheRefusalNamesIt() {
+        assertThatThrownBy(() -> settingsWith(List.of(
+                CullCategory.of("food", "meals"), CullCategory.of("food", "also meals"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("more than once: food.");
+    }
+
+    @Test
     void aCategoryCalledJunkIsRefusedWhereverItWasWritten() {
         assertThatThrownBy(() -> settingsWith(List.of(CullCategory.of("junk", "mine"))))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -94,6 +101,6 @@ class SettingsBoundsTest {
 
     private static Settings settingsWith(final List<CullCategory> categories) {
         return new Settings(ROOTS, "anthropic", Map.of(), categories,
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 }

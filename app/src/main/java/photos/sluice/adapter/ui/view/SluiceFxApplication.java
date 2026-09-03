@@ -1,6 +1,7 @@
 package photos.sluice.adapter.ui.view;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.stage.Stage;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -71,6 +72,11 @@ public class SluiceFxApplication extends Application {
         ExternalBrowser.openWith(this.getHostServices()::showDocument);
         FileManager.openWith(folder ->
                 Thread.ofVirtual().start(() -> FileManager.inTheSystemFileManager(folder)));
+        FileManager.openFilesWith((file, whenNothingCan) -> Thread.ofVirtual().start(() -> {
+            if (!FileManager.inTheRegisteredApplication(file)) {
+                Platform.runLater(whenNothingCan);
+            }
+        }));
         this.present(stage);
         stage.show();
     }

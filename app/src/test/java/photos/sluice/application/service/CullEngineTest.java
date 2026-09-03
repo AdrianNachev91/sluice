@@ -14,10 +14,8 @@ import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.VisionCuller;
 import photos.sluice.application.port.out.CullException;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
@@ -25,7 +23,6 @@ import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
-import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 
@@ -41,7 +38,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,7 +81,6 @@ import static photos.sluice.application.service.PipelineTestSupport.sortedPhotos
 import static photos.sluice.application.service.PipelineTestSupport.spendLedgerOf;
 import static photos.sluice.application.service.PipelineTestSupport.waitForJobToFinish;
 import static photos.sluice.application.service.PipelineTestSupport.waitUntil;
-import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
 import static photos.sluice.application.service.PipelineTestSupport.watchPipeline;
 import static photos.sluice.application.service.PipelineTestSupport.writeAllKeepsShard;
 import static photos.sluice.application.service.PipelineTestSupport.writeFile;
@@ -205,6 +200,78 @@ class CullEngineTest {
                     assertThat(entry.ending()).isEqualTo(RunEnding.APPLIED);
                     assertThat(entry.montagesCulled()).isEqualTo(1);
                 });
+    }
+
+    @Test
+    void aFinishedRunCountsWhatEveryCallOfItSpent(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        spendLedgerOf(root).append(spent("2019", 9_000, 3_000, RunEnding.CEILING_REACHED));
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
+                applied -> assertThat(applied.tokensAcrossEveryLeg()).isEqualTo(12_000L));
+    }
+
+    @Test
+    void aFinishedRunLeavesOutWhatARunTheReaderThrewAwaySpent(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        spendLedgerOf(root).append(spent("2019", 40_000, 8_000, RunEnding.CEILING_REACHED));
+        spendLedgerOf(root).append(spent("2019", 0, 0, RunEnding.DISCARDED));
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
+                applied -> assertThat(applied.tokensAcrossEveryLeg()).isZero());
+    }
+
+    @Test
+    void givingUpOnARunRecordsThatItsScopeIsFree(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        final Pipeline pipeline = cullPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
+                List.of(new ManualModeCuller()));
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        pipeline.discard(waiting.job().prepDir()).join();
+
+        assertThat(spendLedgerOf(root).read()).last()
+                .satisfies(entry -> {
+                    assertThat(entry.scope()).isEqualTo("2019");
+                    assertThat(entry.ending()).isEqualTo(RunEnding.DISCARDED);
+                });
+    }
+
+    @Test
+    void aFinishedRunLeavesOutWhatAnEarlierRunOfTheSameScopeSpent(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        spendLedgerOf(root).append(spent("2019", 5_000, 1_000, RunEnding.APPLIED));
+        spendLedgerOf(root).append(spent("2019", 9_000, 3_000, RunEnding.CEILING_REACHED));
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
+                applied -> assertThat(applied.tokensAcrossEveryLeg()).isEqualTo(12_000L));
+    }
+
+    @Test
+    void aFinishedRunLeavesOutWhatAnotherScopeSpent(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        spendLedgerOf(root).append(spent("2018", 7_000, 2_000, RunEnding.APPLIED));
+
+        final CullJobOutcome outcome = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
+                List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
+                applied -> assertThat(applied.tokensAcrossEveryLeg()).isZero());
+    }
+
+    private static SpendLedgerEntry spent(final String scope, final long input, final long output,
+                                          final RunEnding ending) {
+        return new SpendLedgerEntry(Instant.parse("2026-09-01T10:00:00Z"), scope, "anthropic", "a-model",
+                224, 5, 1, 0, 1, input, output, ending);
     }
 
     @Test
@@ -355,7 +422,7 @@ class CullEngineTest {
         assertThat(progress.events).containsExactly(
                 "planned:Reading photos..., Sifting..., Applying decisions...",
                 "started:Reading photos...", "tick:Reading photos...:1/1", "finished:Reading photos...",
-                "started:Sifting...", "finished:Sifting...");
+                "started:Sifting...", "cutShort:Sifting...", "finished:Sifting...");
     }
 
     // MontageRenderer.build() clears a scope's prep dir before writing. Re-running cull() on a
@@ -417,7 +484,6 @@ class CullEngineTest {
                 .doesNotThrowAnyException();
     }
 
-    // A count of files names no timeline, so nothing it covers can be worked out from its tag.
     @Test
     void cullAllowsAScopeOfTheOldestFilesBesideAnUnfinishedYear(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
@@ -564,7 +630,7 @@ class CullEngineTest {
         // it. Wiring a fresh store here would leave the index perfectly readable. The run would
         // then arm as WAITING, for reasons unrelated to what this test claims.
         final var watchPipeline = pipeline(root, new RecordingProgressPort(), new NioMediaStore(),
-                watchCullSettings(), List.of(new ManualModeCuller()), Duration.ofSeconds(30), prepStore);
+                defaultCullSettings(), List.of(new ManualModeCuller()), Duration.ofSeconds(30), prepStore);
         prepStore.startFailing();
 
         this.armed.add(watchPipeline);
@@ -715,7 +781,7 @@ class CullEngineTest {
     // sift can run without it, whatever else is on disk. Pinned because nothing else keeps this
     // order: it is the sequence of two calls in one method.
     @Test
-    void aKeylessProviderIsReportedAheadOfAnOccupiedTimeline(@TempDir final Path root) throws IOException {
+    void aKeylessProviderIsReportedAheadOfAnOccupiedTimeframe(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final Path prepDir = root.resolve("logs/sift-prep/2019");
         Files.createDirectories(prepDir);
@@ -1026,7 +1092,7 @@ class CullEngineTest {
 
         assertThatThrownBy(() -> pipeline.redoRejectedAnswers(prepDir))
                 .isInstanceOf(Pipeline.NothingToRedoException.class)
-                .hasMessageContaining("Nothing was discarded");
+                .hasMessageContaining("waiting to be judged again");
         assertThat(Files.exists(prepDir.resolve("decisions-001.json"))).isTrue();
     }
 
@@ -1038,7 +1104,7 @@ class CullEngineTest {
     void anApplyRefusalDisarmsTheWatchInsteadOfLeavingAPollerRunning(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -1097,8 +1163,7 @@ class CullEngineTest {
     void cullPropagatesAFailureFromAnAutomatedProviderInsteadOfReturningWaiting(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final var progress = new RecordingProgressPort();
-        final var settings = new FixedSettings("anthropic", List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL));
+        final var settings = new FixedSettings("anthropic", List.of());
         final var pipeline = cullPipeline(root, progress, settings, List.of(new ThrowingCuller("anthropic")));
 
         final var handle = pipeline.cull(new CullScope.Year(2019, null));
@@ -1110,22 +1175,13 @@ class CullEngineTest {
         assertThat(progress.events).noneMatch(event -> event.startsWith("started:Applying"));
     }
 
-    // Mid-cull cancellation for an automated provider: Cancel is effectively Pause. The
-    // signal-honoring fake below writes a shard for the one montage it reaches before the signal
-    // trips, then stops without throwing - never a CullException. dispatchAndApply's post-dispatch
-    // cancellation check resolves the outcome to Waiting instead of propagating a failure. Watch
-    // mode is configured on here too, but this path never calls
-    // armWatchIfConfigured() at all. isWatchActive() below is therefore false regardless of
-    // provider - the dedicated provider-gate test further down is what actually proves that gate.
     @Test
     void cullCancelledMidDispatchResolvesToWaitingThenResumeCompletes(@TempDir final Path root) throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
         final var firstShardWritten = new CountDownLatch(1);
         final var releaseCull = new CountDownLatch(1);
-        final var settings = new FixedSettings("auto-approve",
-                List.of(),
-                new ExternalAgentSettings(WatchMode.WATCH));
+        final var settings = new FixedSettings("auto-approve", List.of());
         final var pipeline = cullPipeline(root, new RecordingProgressPort(), settings,
                 List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
 
@@ -1148,12 +1204,6 @@ class CullEngineTest {
         assertThat(Files.exists(prepDir.resolve("decisions-002.json"))).isTrue();
     }
 
-    // Proves the armWatchIfConfigured() provider gate. armWatchesForResumableRuns()'s
-    // startup scan walks every waiting job on disk regardless of which provider produced it.
-    // dispatchAndApply()'s own call site is different: it can only reach armWatchIfConfigured() when
-    // the provider already matches. So this scan is the one call site the gate actually changes
-    // behavior at. Without it, a leftover mode=WATCH setting would arm a phantom watcher for this
-    // automated provider's own cancelled prep dir, risking an unasked-for, API-spending auto-resume.
     @Test
     void armWatchesForResumableRunsNeverArmsAWatcherForAnAutomatedProvidersRun(@TempDir final Path root)
             throws Exception {
@@ -1161,23 +1211,18 @@ class CullEngineTest {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
         final var firstShardWritten = new CountDownLatch(1);
         final var releaseCull = new CountDownLatch(1);
-        final var manualSettings = new FixedSettings("auto-approve",
-                List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL));
-        final var manualPipeline = cullPipeline(root, new RecordingProgressPort(), manualSettings,
+        final var settings = new FixedSettings("auto-approve", List.of());
+        final var cullPipeline = cullPipeline(root, new RecordingProgressPort(), settings,
                 List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)));
 
-        final JobHandle<CullJobOutcome> handle = manualPipeline.cull(new CullScope.Year(2019, null));
+        final JobHandle<CullJobOutcome> handle = cullPipeline.cull(new CullScope.Year(2019, null));
         firstShardWritten.await();
         handle.requestCancellation();
         releaseCull.countDown();
         final var waiting = (CullJobOutcome.Waiting) handle.join();
         final Path prepDir = waiting.job().prepDir();
 
-        final var watchSettings = new FixedSettings("auto-approve",
-                List.of(),
-                new ExternalAgentSettings(WatchMode.WATCH));
-        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchSettings, List.of(),
+        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), settings, List.of(),
                 Duration.ofMillis(20));
 
         this.armed.add(watchPipeline);
@@ -1228,9 +1273,7 @@ class CullEngineTest {
         final var moveStarted = new CountDownLatch(1);
         final var releaseMove = new CountDownLatch(1);
         final var mediaStore = new BlockingMoveTo(moveStarted, releaseMove);
-        final var settings = new FixedSettings("auto-approve",
-                List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL));
+        final var settings = new FixedSettings("auto-approve", List.of());
         final var pipeline = pipeline(root, new RecordingProgressPort(), mediaStore, settings,
                 List.of(new JunkEverythingCuller()));
 
@@ -1253,17 +1296,14 @@ class CullEngineTest {
         }
     }
 
-    // The manual-mode CullException branch must not arm a watcher when cancellation raced
-    // it - an auto-resume moments after a cancel would defy the cancel. Watch mode and the
-    // external-agent provider are both genuinely configured here, so an uncancelled run of this
-    // same pause would arm a watcher (see cullInWatchModeAutoResumesOnceAValidShardIsDropped below).
-    // This proves the simultaneous cancellation is what suppresses it, not just the settings.
+    // An uncancelled run of this same pause does arm one, so the simultaneous cancellation is what
+    // suppresses it.
     @Test
-    void manualModePauseDoesNotArmAWatcherWhenCancellationRacedIt(@TempDir final Path root) throws Exception {
+    void aPauseDoesNotArmAWatcherWhenCancellationRacedIt(@TempDir final Path root) throws Exception {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         final var started = new CountDownLatch(1);
         final var release = new CountDownLatch(1);
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new BlockingIncompleteCuller(started, release)), Duration.ofMillis(20));
 
         final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
@@ -1278,10 +1318,10 @@ class CullEngineTest {
     }
 
     @Test
-    void cullInWatchModeAutoResumesOnceAValidShardIsDropped(@TempDir final Path root) throws IOException {
+    void aWaitingCullAutoResumesOnceAValidShardIsDropped(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
 
@@ -1302,7 +1342,7 @@ class CullEngineTest {
     void manualResumeDisarmsAnAlreadyArmedWatcher(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -1315,7 +1355,7 @@ class CullEngineTest {
         assertThat(pipeline.isWatchActive(prepDir)).isFalse();
     }
 
-    // Proves watch mode survives a restart: nothing calls cull()/resume() on this Pipeline
+    // Proves a watch survives a restart: nothing calls cull()/resume() on this Pipeline
     // instance for the run at all. armWatchesForResumableRuns() has to discover it on disk, purely
     // from what diagnosing the sift-prep root turns up.
     // The shard is dropped before the restart, so this run is READY rather than WAITING when it is
@@ -1328,7 +1368,7 @@ class CullEngineTest {
         final var waiting = (CullJobOutcome.Waiting) manualPipeline.cull(new CullScope.Year(2019, null)).join();
         writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
 
-        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         this.armed.add(watchPipeline);
         watchPipeline.armWatchesForResumableRuns();
@@ -1355,7 +1395,7 @@ class CullEngineTest {
         assertThat(listed(manualPipeline.cullRuns())).singleElement()
                 .extracting(run -> run.health().state()).isEqualTo(State.BLOCKED);
 
-        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var watchPipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         this.armed.add(watchPipeline);
         watchPipeline.armWatchesForResumableRuns();
@@ -1363,71 +1403,20 @@ class CullEngineTest {
         assertThat(watchPipeline.isWatchActive(prepDir)).isFalse();
     }
 
-    // The per-run watch toggle's on position, against a manual-mode config. Watching one run is the
-    // user's own decision about that run, so it does not need the config's blessing. Nothing else
-    // in this test arms anything: cull() ran under plain manual settings, which is exactly what the
-    // pre-toggle assertion pins.
     @Test
-    void startWatchingArmsOneRunEvenWhileTheConfiguredModeIsManual(@TempDir final Path root) throws IOException {
+    void aWaitingRunArmsItselfAndResumesWhenTheShardLands(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
         final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
-        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
+        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
 
-        pipeline.startWatching(prepDir);
         writeShard(prepDir, "montage-001", classificationJson(photo, "junk", "blurry"));
 
         waitForJobToFinish(pipeline, Duration.ofSeconds(2));
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
-    }
-
-    // The toggle's off position. Turning it off costs the run nothing: it is still waiting, still
-    // listed, and still refuses a fresh cull of the same scope. Only the polling stops.
-    @Test
-    void stopWatchingLeavesTheRunWaitingAndStillBlockingAReCullOfItsScope(@TempDir final Path root) throws IOException {
-        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
-                List.of(new ManualModeCuller()), Duration.ofMillis(20));
-        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
-        final Path prepDir = waiting.job().prepDir();
-        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
-
-        pipeline.stopWatching(prepDir);
-
-        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
-        assertThat(listed(pipeline.cullRuns())).singleElement()
-                .extracting(CullRunSummary::prepDir).isEqualTo(prepDir);
-        assertThatThrownBy(() -> pipeline.cull(new CullScope.Year(2019, null)))
-                .isInstanceOf(Pipeline.ScopeOccupiedException.class);
-    }
-
-    // The provider gate holds even for an explicit per-run arm. An automated provider's shards are
-    // written by this app itself, so nothing arrives from outside for a poller to notice. A
-    // fully-valid tally would only trigger an unasked-for round of paid API calls.
-    @Test
-    void startWatchingRefusesAnAutomatedProvidersRun(@TempDir final Path root) throws Exception {
-        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
-        final var firstShardWritten = new CountDownLatch(1);
-        final var releaseCull = new CountDownLatch(1);
-        final var settings = new FixedSettings("auto-approve",
-                List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), settings,
-                List.of(new BlockingCancellableCuller(firstShardWritten, releaseCull)), Duration.ofMillis(20));
-
-        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
-        firstShardWritten.await();
-        handle.requestCancellation();
-        releaseCull.countDown();
-        final Path prepDir = ((CullJobOutcome.Waiting) handle.join()).job().prepDir();
-
-        pipeline.startWatching(prepDir);
-
-        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
     }
 
     // A dir whose index.json is unparseable is listed, not dropped, and it does not take the rest
@@ -1496,10 +1485,10 @@ class CullEngineTest {
     // readiness check clever enough to see the stray shard itself would be the failure. It would
     // withhold that resume forever, while the per-montage tally reads a healthy 1/1 throughout.
     @Test
-    void watchModeResumesAStrayShardIntoBlockedRatherThanPollingOnForever(@TempDir final Path root) throws IOException {
+    void aWatcherResumesAStrayShardIntoBlockedRatherThanPollingOnForever(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         this.armed.add(pipeline);
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
@@ -1521,7 +1510,7 @@ class CullEngineTest {
     void stopAllWatchingRetiresEveryArmedWatcher(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
         writePhoto(sortedPhotosDir(root, "2020", "06"), "IMG_2.jpg", Instant.parse("2020-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         final Path first = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
                 .job().prepDir();
@@ -1544,7 +1533,7 @@ class CullEngineTest {
             @TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
                 Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
                 .job().prepDir();
@@ -1562,47 +1551,9 @@ class CullEngineTest {
     }
 
     @Test
-    void armingAWatchThatIsAlreadyPollingAnnouncesNothing(@TempDir final Path root) throws IOException {
-        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
-                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
-        final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
-                .job().prepDir();
-        final var told = new AtomicInteger();
-        pipeline.onRunsMoved(told::incrementAndGet);
-
-        pipeline.startWatching(prepDir);
-
-        assertThat(pipeline.isWatchActive(prepDir)).isTrue();
-        assertHoldsFor(WINDOW, () -> told.get() == 0);
-    }
-
-    @Test
-    void retiringOneWatchAnnouncesItWhileRetiringThemAllDoesNot(@TempDir final Path root) throws IOException {
-        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
-                List.of(new ManualModeCuller()), Duration.ofSeconds(30));
-        final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
-                .job().prepDir();
-        final var told = new AtomicInteger();
-        pipeline.onRunsMoved(told::incrementAndGet);
-
-        pipeline.stopWatching(prepDir);
-        assertThat(told).hasValue(1);
-
-        // The control. Closing the app retires watchers too, and that one must stay silent: its
-        // caller has just promised nothing of this app's will read the folder again.
-        pipeline.startWatching(prepDir);
-        pipeline.stopAllWatching();
-
-        assertThat(pipeline.isWatchActive(prepDir)).isFalse();
-        assertThat(told).hasValue(2);
-    }
-
-    @Test
     void stopAllWatchingStillRetiresWatchersOnceAFolderRootHasGone(@TempDir final Path root) throws IOException {
         writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofSeconds(30));
         final Path prepDir = ((CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join())
                 .job().prepDir();
@@ -1615,12 +1566,12 @@ class CullEngineTest {
     }
 
     @Test
-    void watchModeRefusesToAutoResumeOnceAFolderRootHasGone(@TempDir final Path root) throws Exception {
+    void aWatcherRefusesToAutoResumeOnceAFolderRootHasGone(@TempDir final Path root) throws Exception {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
         final var moveStarted = new CountDownLatch(1);
         final var pipeline = pipeline(root, new RecordingProgressPort(),
-                new BlockingMoveTo(moveStarted, new CountDownLatch(0)), watchCullSettings(),
+                new BlockingMoveTo(moveStarted, new CountDownLatch(0)), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -1652,10 +1603,10 @@ class CullEngineTest {
     // Retiring is the whole proof, and it discriminates. A poll that met a shut runner without
     // recognising the refusal would log and keep polling, leaving the watch active here.
     @Test
-    void watchModeRetiresItsWatcherOnceTheRunnerIsShut(@TempDir final Path root) throws Exception {
+    void aWatchRetiresOnceTheRunnerIsShut(@TempDir final Path root) throws Exception {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
                 Instant.parse("2019-06-01T10:00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -1669,14 +1620,14 @@ class CullEngineTest {
     // The sort is submitted and provably in flight before the shard lands. Otherwise the watcher
     // could take the job slot first, and sort() would throw instead of the test proving anything.
     @Test
-    void watchModeKeepsPollingWhileAnotherJobHoldsTheRunner(@TempDir final Path root) throws Exception {
+    void aWatcherKeepsPollingWhileAnotherJobHoldsTheRunner(@TempDir final Path root) throws Exception {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
         writeFile(inboxOf(root).resolve("20210315_other.jpg"), padded("keeper"));
         final var moveStarted = new CountDownLatch(1);
         final var releaseMove = new CountDownLatch(1);
         final var pipeline = pipeline(root, new RecordingProgressPort(), new BlockingMoves(moveStarted, releaseMove),
-                watchCullSettings(), List.of(new ManualModeCuller()), Duration.ofMillis(20));
+                defaultCullSettings(), List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
 
@@ -1697,10 +1648,10 @@ class CullEngineTest {
     // Parsing is what tells the two apart. The truncated shard below is what a poll landing
     // mid-write sees.
     @Test
-    void watchModeWaitsRatherThanResumingWhileAShardIsStillHalfWritten(@TempDir final Path root) throws IOException {
+    void aWatcherWaitsRatherThanResumingWhileAShardIsStillHalfWritten(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        final var pipeline = watchPipeline(root, new RecordingProgressPort(), watchCullSettings(),
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
         final Path prepDir = waiting.job().prepDir();
@@ -1721,14 +1672,12 @@ class CullEngineTest {
     }
 
     // A resolved corrupt sidecar takes effect at apply's own gate, which is the only place the
-    // disposition ledger is ever read. Watch mode reaches it the ordinary way: every montage has a
+    // disposition ledger is ever read. A watcher reaches it the ordinary way: every montage has a
     // parseable shard, so the run resumes and the answer applies.
     @Test
-    void watchModeAppliesAMontageWhoseCorruptSidecarTheUserResolvedWithApplyAnyway(@TempDir final Path root) throws IOException {
+    void aWatcherAppliesAMontageWhoseCorruptSidecarTheUserResolvedWithApplyAnyway(@TempDir final Path root) throws IOException {
         final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10" +
                 ":00:00Z"));
-        // Manual settings, so cull() arms nothing and the whole fixture can be built with no
-        // watcher running against it. The per-run toggle below is what starts the polling.
         final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
                 List.of(new ManualModeCuller()), Duration.ofMillis(20));
         final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
@@ -1744,7 +1693,7 @@ class CullEngineTest {
             assertThat(run.shards().valid()).isEqualTo(0);
         });
 
-        pipeline.startWatching(prepDir);
+        pipeline.armWatchesForResumableRuns();
 
         waitForJobToFinish(pipeline, Duration.ofSeconds(2));
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();

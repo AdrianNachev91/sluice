@@ -58,6 +58,20 @@ public sealed interface StartupFailure {
     }
 
     /**
+     * The app refused the settings it was configured with, and said why in its own words.
+     *
+     * <p>Apart from {@link RejectedSetting} because the two know different things. That one names
+     * the setting and usually where it sits, and leaves the wording to the surface. This one has
+     * the sentence and neither the setting nor a place. Its refusal comes from a value the app
+     * builds out of several settings, rather than from any one of them failing to bind.
+     *
+     * @param problem {@link String} what is wrong, as the refusal itself worded it
+     * @param trace {@link String} the rendered stack trace
+     */
+    record UnusableSettings(String problem, String trace) implements StartupFailure {
+    }
+
+    /**
      * A failure this app has written no copy for. The trace is the whole of what it can offer.
      *
      * @param trace {@link String} the rendered stack trace

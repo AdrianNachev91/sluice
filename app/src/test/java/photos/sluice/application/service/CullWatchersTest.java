@@ -4,7 +4,6 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.in.CullJobOutcome;
-import photos.sluice.application.port.out.CullSettings;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.domain.job.ShardTally;
 
@@ -21,7 +20,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static photos.sluice.application.service.PipelineTestSupport.assertHoldsFor;
 import static photos.sluice.application.service.PipelineTestSupport.waitUntil;
-import static photos.sluice.application.service.PipelineTestSupport.watchCullSettings;
 
 class CullWatchersTest {
 
@@ -53,7 +51,7 @@ class CullWatchersTest {
     // value, and is then never a change at all.
     @Test
     void aSheetArrivingIsAnnouncedWithoutTheRunHavingToFinish() {
-        this.arm(watchCullSettings());
+        this.arm();
         final int atArming = this.announcements.get();
         waitUntil(Duration.ofSeconds(2), () -> this.polls.get() >= 1);
 
@@ -63,36 +61,34 @@ class CullWatchersTest {
         assertThat(requireNonNull(this.watchers).isWatchActive(PREP_DIR)).isTrue();
     }
 
-    // Announcing is driven by the tally changing rather than by a poll happening. A poll that
-    // announced whatever it read would fire on every tick, which nothing asserting that a sheet
-    // arrived can tell apart from the real thing.
+    // A poll that announced whatever it read would fire on every tick, which nothing asserting
+    // that a sheet arrived can tell apart from the real thing.
     @Test
     void aFolderThatHasNotMovedIsAnnouncedOnNoTickAtAll() {
-        this.arm(watchCullSettings());
+        this.arm();
         final int atArming = this.announcements.get();
 
         assertThat(requireNonNull(this.watchers).isWatchActive(PREP_DIR)).isTrue();
         assertHoldsFor(Duration.ofMillis(200), () -> this.announcements.get() == atArming);
     }
 
-    // A prep dir nobody could read answers no tally. Reported as a change, it would send every
-    // listener back to the whole runs folder on every tick the folder stayed unreadable.
+    // The wait is what makes it the readable-to-unreadable transition rather than a watcher that
+    // read nothing from its very first poll. Without it the null is already in place when polling
+    // starts, and the guard this exercises is never reached.
     @Test
     void aFolderThatCouldNotBeReadIsAnnouncedAsNothing() {
-        this.arm(watchCullSettings());
+        this.arm();
         final int atArming = this.announcements.get();
+        waitUntil(Duration.ofSeconds(2), () -> this.polls.get() >= 1);
 
         this.reading.set(new ShardTallyCalculator.Reading(false, null));
 
         assertHoldsFor(Duration.ofMillis(200), () -> this.announcements.get() == atArming);
     }
 
-    // A watcher usually ends by stopping itself once its auto-resume goes in, which never reaches
-    // retire(). Re-arming over the tally that watcher left would make the first poll of the new
-    // watch compare against a reading it did not take.
     @Test
     void aWatchArmedOverARetiredOnesTallyStillAnnouncesNothingOnItsFirstPoll() {
-        this.arm(watchCullSettings());
+        this.arm();
         waitUntil(Duration.ofSeconds(2), () -> this.polls.get() >= 1);
         requireNonNull(this.watchers).disarmWatch(PREP_DIR);
         // The folder moved while nothing was watching it, which is what the stale tally would be
@@ -107,13 +103,47 @@ class CullWatchersTest {
         assertHoldsFor(Duration.ofMillis(200), () -> this.announcements.get() == atRearming);
     }
 
-    private void arm(final CullSettings settings) {
+    @Test
+    void armingAWatchAnnouncesThatTheRunMoved() {
+        this.arm();
+
+        assertThat(this.announcements.get()).isEqualTo(1);
+    }
+
+    @Test
+    void armingAWatchThatIsAlreadyPollingAnnouncesNothing() {
+        this.arm();
+        final int atArming = this.announcements.get();
+
+        requireNonNull(this.watchers).armWatch(PREP_DIR);
+
+        assertThat(this.watchers.isWatchActive(PREP_DIR)).isTrue();
+        assertHoldsFor(Duration.ofMillis(200), () -> this.announcements.get() == atArming);
+    }
+
+    @Test
+    void retiringOneWatchAnnouncesItWhileRetiringThemAllDoesNot() {
+        this.arm();
+        final int atArming = this.announcements.get();
+
+        requireNonNull(this.watchers).disarmWatch(PREP_DIR);
+        assertThat(this.announcements.get()).isEqualTo(atArming + 1);
+
+        this.watchers.armWatch(PREP_DIR);
+        final int atRearming = this.announcements.get();
+        this.watchers.disarmAll();
+
+        assertThat(this.watchers.isWatchActive(PREP_DIR)).isFalse();
+        assertThat(this.announcements.get()).isEqualTo(atRearming);
+    }
+
+    private void arm() {
         final ShardTallyCalculator calculator = mock(ShardTallyCalculator.class);
         when(calculator.poll(any())).thenAnswer(_ -> {
             this.polls.incrementAndGet();
             return this.reading.get();
         });
-        this.watchers = new CullWatchers(settings, ProviderType.MANUAL::equals, calculator, TICK,
+        this.watchers = new CullWatchers(ProviderType.MANUAL::equals, calculator, TICK,
                 _ -> neverFinishes(), runChanges(this.announcements));
         this.watchers.armWatch(PREP_DIR);
     }

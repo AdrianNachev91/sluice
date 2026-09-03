@@ -71,6 +71,17 @@ final class RunResults {
     // count, because a narrowed move leaves the rest of Sorted untouched and out of this number.
     private static final String MOVE_STOPPED = "%s of them are still in Sorted.";
 
+    private static final String MOVE_STOPPED_ONE = "One of them is still in Sorted.";
+
+    // Reachable: a stop taken after the last in-scope file had already moved.
+    private static final String MOVE_STOPPED_NONE = "None of them are still in Sorted.";
+
+    private static final String SORT_STOPPED = "%s of them are still in your Inbox.";
+
+    private static final String SORT_STOPPED_ONE = "One of them is still in your Inbox.";
+
+    private static final String SORT_STOPPED_NONE = "None of them are still in your Inbox.";
+
     // Names what it counts, where the line above says "of them". A rescue cannot be narrowed, so
     // there is no in-scope subset for "them" to point back at.
     private static final String RESCUE_STOPPED = "%s photos and videos are still in the folder you "
@@ -187,9 +198,25 @@ final class RunResults {
         if (sorted.cancelled()) {
             return sorted.processed() == 0
                     ? "Your Inbox is unchanged."
-                    : RunWords.grouped(sorted.leftBehind()) + " of them are still in your Inbox.";
+                    : sortStopped(sorted.leftBehind());
         }
         return sortedNothing(sorted, narrowedTo);
+    }
+
+    /**
+     * What a stopped sort that did file something says about the rest.
+     *
+     * @param leftBehind int in-scope files still in the Inbox
+     * @return {@link String} the sentence
+     */
+    private static String sortStopped(final int leftBehind) {
+        if (leftBehind == 0) {
+            return SORT_STOPPED_NONE;
+        }
+        if (leftBehind == 1) {
+            return SORT_STOPPED_ONE;
+        }
+        return SORT_STOPPED.formatted(RunWords.grouped(leftBehind));
     }
 
     /**
@@ -248,9 +275,9 @@ final class RunResults {
     }
 
     /**
-     * The offer to sift what a sort just filed, where the sort filled exactly one timeline.
+     * The offer to sift what a sort just filed, where the sort filled exactly one timeframe.
      *
-     * <p>Empty means nothing reached Sorted, so there is nothing to offer. More than one timeline
+     * <p>Empty means nothing reached Sorted, so there is nothing to offer. More than one timeframe
      * is refused rather than picked between. The button names what it would sift, and naming one of
      * several spends the reader's money on photos they had not asked about. Nothing on the
      * dashboard produces more than one today, and this is the answer for when something does.
@@ -314,8 +341,24 @@ final class RunResults {
      */
     private static RunResultView movedResult(final RunMode ran, final CommitSummary moved) {
         return new RunResultView(headingFor(ran, moved.cancelled()), toneFor(moved.cancelled()),
-                moved.cancelled() ? MOVE_STOPPED.formatted(RunWords.grouped(moved.leftBehind())) : null,
+                moved.cancelled() ? moveStopped(moved.leftBehind()) : null,
                 movedCounts(moved), null, null, DONE);
+    }
+
+    /**
+     * What a stopped move says above its counts.
+     *
+     * @param leftBehind int in-scope files still in Sorted
+     * @return {@link String} the sentence
+     */
+    private static String moveStopped(final int leftBehind) {
+        if (leftBehind == 0) {
+            return MOVE_STOPPED_NONE;
+        }
+        if (leftBehind == 1) {
+            return MOVE_STOPPED_ONE;
+        }
+        return MOVE_STOPPED.formatted(RunWords.grouped(leftBehind));
     }
 
     /**
@@ -450,9 +493,10 @@ final class RunResults {
      */
     private static RunResultView siftResult(final RunMode ran, final CullJobOutcome outcome) {
         return switch (outcome) {
-            case CullJobOutcome.Applied(final CullReport report, final ApplyReport applied, Path _) ->
+            case CullJobOutcome.Applied(final CullReport report, final ApplyReport applied, Path _,
+                                        final Long tokens) ->
                     new RunResultView(finishedHeading(ran), Tone.FINISHED, null,
-                            siftCounts(report, applied), null, null, DONE);
+                            siftCounts(report, applied, tokens), null, null, DONE);
             case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _) ->
                     new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED, waitingDetail(why),
                             sheetCounts(job.shards()), null,
@@ -477,13 +521,22 @@ final class RunResults {
      * zeroed sort bucket is.
      *
      * @param applied {@link ApplyReport} what applying the decisions did
+     * @param tokens every token the run spent, or null where that could not be read
      * @return a {@link List} of {@link Count} the rows
      */
-    private static List<Count> siftCounts(final CullReport report, final ApplyReport applied) {
+    private static List<Count> siftCounts(final CullReport report, final ApplyReport applied,
+                                          final @Nullable Long tokens) {
         final List<Count> rows = new ArrayList<>();
         rows.add(new Count("result-reviewed", "Photos looked at", RunWords.grouped(applied.reviewed())));
         rows.add(new Count("result-sheets", "Sheets judged", RunWords.grouped(report.montagesCulled())));
         rows.add(new Count("result-api-calls", "Calls to your provider", RunWords.grouped(report.apiCalls())));
+        // Left out where nothing was spent, which is every run on a provider that reaches no model.
+        // A zero there is not a cheap run, it is a figure that does not apply. Left out too where
+        // the ledger holding the figure could not be read. A run's own last call accounts for only
+        // part of what a continued run cost, so there is nothing to fall back to.
+        if (tokens != null && tokens > 0) {
+            rows.add(new Count("result-tokens", "Tokens used", RunWords.grouped(tokens)));
+        }
         applied.byCategory().entrySet().stream()
                 .filter(category -> category.getValue() > 0)
                 .sorted(Map.Entry.comparingByKey())

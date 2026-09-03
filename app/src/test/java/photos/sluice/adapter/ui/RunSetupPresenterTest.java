@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -114,6 +115,149 @@ class RunSetupPresenterTest {
     }
 
     @Test
+    void aReadNobodyAskedForLeavesTheStartButtonAlone() {
+        final RunSetupPresenter reading = this.launcher();
+        reading.setMode(RunMode.SORT);
+
+        reading.refreshCountsUnprompted();
+
+        assertThat(reading.view().canStart()).isTrue();
+    }
+
+    @Test
+    void aReadTheScreenAskedForTakesTheStartButtonWhileItRuns() {
+        final RunSetupPresenter reading = this.launcher();
+        reading.setMode(RunMode.SORT);
+        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
+            assertThat(reading.view().canStart()).isFalse();
+            return new InboxTally(300, 1_000_000L);
+        });
+
+        reading.refreshCounts();
+
+        assertThat(reading.view().canStart()).isTrue();
+    }
+
+    @Test
+    void aReadNobodyAskedForCannotLowerTheFlagAReadThatWasAskedForRaised() throws Exception {
+        final RunSetupPresenter reading = this.launcher();
+        reading.setMode(RunMode.SORT);
+        final var pollIsWalking = new CountDownLatch(1);
+        final var letThePollFinish = new CountDownLatch(1);
+        final var walks = new AtomicInteger();
+        final var liveDuringTheAskedForWalk = new AtomicBoolean();
+        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
+            if (walks.incrementAndGet() == 1) {
+                pollIsWalking.countDown();
+                assertThat(letThePollFinish.await(5, TimeUnit.SECONDS)).isTrue();
+            } else {
+                liveDuringTheAskedForWalk.set(reading.view().canStart());
+            }
+            return new InboxTally(300, 1_000_000L);
+        });
+        final var poll = new Thread(reading::refreshCountsUnprompted);
+        poll.start();
+        assertThat(pollIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
+
+        final var afterTheRun = new Thread(reading::refreshCounts);
+        afterTheRun.start();
+        // Parked on the lock, which is the whole arrangement. Released before it gets there, the
+        // asked-for read never queues behind the poll and the test proves nothing.
+        waitUntilParked(afterTheRun);
+        letThePollFinish.countDown();
+        poll.join(5_000);
+        afterTheRun.join(5_000);
+
+        // The flag defaults to the passing value, so a walk that never happened would read as a
+        // pass. This is what says the button was actually looked at.
+        assertThat(walks.get()).isEqualTo(2);
+        assertThat(liveDuringTheAskedForWalk).isFalse();
+    }
+
+    // Under a read that counts itself in only once it holds the lock, the button is live here and
+    // this fails.
+    @Test
+    void aReadThatWasAskedForGreysTheButtonWhileItWaitsForTheWalkAhead() throws Exception {
+        final RunSetupPresenter reading = this.launcher();
+        reading.setMode(RunMode.SORT);
+        final var pollIsWalking = new CountDownLatch(1);
+        final var letThePollFinish = new CountDownLatch(1);
+        final var walks = new AtomicInteger();
+        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
+            if (walks.incrementAndGet() == 2) {
+                pollIsWalking.countDown();
+                assertThat(letThePollFinish.await(5, TimeUnit.SECONDS)).isTrue();
+            }
+            return new InboxTally(300, 1_000_000L);
+        });
+        // A first read that lands, so the screen is past the state it opens in having read nothing.
+        // Without it the button is dead for a reason that has nothing to do with the queue below.
+        reading.refreshCountsUnprompted();
+        assertThat(reading.view().canStart()).isTrue();
+
+        final var poll = new Thread(reading::refreshCountsUnprompted);
+        poll.start();
+        assertThat(pollIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
+        final var afterTheRun = new Thread(reading::refreshCounts);
+        afterTheRun.start();
+        waitUntilParked(afterTheRun);
+
+        final boolean liveWhileItWaited = reading.view().canStart();
+        letThePollFinish.countDown();
+        poll.join(5_000);
+        afterTheRun.join(5_000);
+
+        assertThat(walks.get()).isEqualTo(3);
+        assertThat(liveWhileItWaited).isFalse();
+        // A read that counts itself in and never out passes everything above this line.
+        assertThat(reading.view().canStart()).isTrue();
+    }
+
+    // Two asked-for reads, and the first one out must not answer for the second. A flag cleared on
+    // the first's way out reads as live here.
+    @Test
+    void anAskedForReadStillWalkingKeepsTheButtonAFinishedOneWouldHaveFreed() throws Exception {
+        final RunSetupPresenter reading = this.launcher();
+        reading.setMode(RunMode.SORT);
+        final var firstIsWalking = new CountDownLatch(1);
+        final var letTheFirstFinish = new CountDownLatch(1);
+        final var secondIsWalking = new CountDownLatch(1);
+        final var letTheSecondFinish = new CountDownLatch(1);
+        final var walks = new AtomicInteger();
+        // The second read is held mid-walk as well as the first. Released, it would finish in
+        // microseconds and the moment this test is about would be gone before it could be read.
+        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
+            final int walk = walks.incrementAndGet();
+            if (walk == 2) {
+                firstIsWalking.countDown();
+                assertThat(letTheFirstFinish.await(5, TimeUnit.SECONDS)).isTrue();
+            } else if (walk == 3) {
+                secondIsWalking.countDown();
+                assertThat(letTheSecondFinish.await(5, TimeUnit.SECONDS)).isTrue();
+            }
+            return new InboxTally(300, 1_000_000L);
+        });
+        reading.refreshCountsUnprompted();
+
+        final var first = new Thread(reading::refreshCounts);
+        first.start();
+        assertThat(firstIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
+        final var second = new Thread(reading::refreshCounts);
+        second.start();
+        waitUntilParked(second);
+        letTheFirstFinish.countDown();
+        first.join(5_000);
+        assertThat(secondIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
+
+        final boolean liveOnceTheFirstWasOut = reading.view().canStart();
+        letTheSecondFinish.countDown();
+        second.join(5_000);
+
+        assertThat(walks.get()).isEqualTo(3);
+        assertThat(liveOnceTheFirstWasOut).isFalse();
+    }
+
+    @Test
     void anEmptyScopeCannotStartASiftAndLeavesTheAskingToTheHint() {
         this.choose(RunMode.SIFT, "");
 
@@ -162,13 +306,13 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void theQuestionSplitsTheTimelineIntoThisRunAndWhatWasThereBefore() {
+    void theQuestionSplitsTheTimeframeIntoThisRunAndWhatWasThereBefore() {
         assertThat(this.askedBeforeSifting(2019).question())
                 .contains("100 photos sorted for 2019: 6 from this run and 94 sorted earlier");
     }
 
     @Test
-    void aTimelineHoldingOnlyWhatThisRunSortedSaysSo() {
+    void aTimeframeHoldingOnlyWhatThisRunSortedSaysSo() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2019, 6, 0, List.of(new MonthRow(6, 6, 0)))), 0));
         this.presenter.refreshCounts();
@@ -201,7 +345,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void siftingATimelineHoldingOnlyVideosIsRefusedInTheLaunchersOwnWords() {
+    void siftingATimeframeHoldingOnlyVideosIsRefusedInTheLaunchersOwnWords() {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0)))), 0));
         this.presenter.refreshCounts();
@@ -1128,6 +1272,25 @@ class RunSetupPresenterTest {
     }
 
     @Test
+    void aScopeNothingIsLeftInIsDroppedRatherThanDrawnWithItsOwnRefusal() {
+        this.choose(RunMode.SIFT, "1998");
+
+        this.presenter.forgetAScopeNothingIsLeftIn();
+
+        assertThat(this.presenter.view().scopeText()).isEmpty();
+        assertThat(this.presenter.view().scopeRefusal()).isNull();
+    }
+
+    @Test
+    void aScopeStillWorthRunningIsKept() {
+        this.choose(RunMode.SIFT, "2019");
+
+        this.presenter.forgetAScopeNothingIsLeftIn();
+
+        assertThat(this.presenter.view().scopeText()).isEqualTo("2019");
+    }
+
+    @Test
     void theWordIsRefusedWhereNothingIsWaitingWithoutADate() {
         this.choose(RunMode.MOVE_TO_LIBRARY, "unsorted");
 
@@ -1136,7 +1299,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aTimelineHoldingAnUnfinishedSiftIsMarkedAndTheOthersAreNot() {
+    void aTimeframeHoldingAnUnfinishedSiftIsMarkedAndTheOthersAreNot() {
         this.anUnfinishedSiftOf("2019", State.WAITING);
 
         assertThat(this.presenter.view().years()).filteredOn(YearChoice::unfinishedSift)
@@ -1168,7 +1331,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void theLegendAppearsOnlyWhileSomeTimelineIsMarked() {
+    void theLegendAppearsOnlyWhileSomeTimeframeIsMarked() {
         assertThat(this.presenter.view().scopeLegend()).isNull();
 
         this.anUnfinishedSiftOf("2019", State.WAITING);
@@ -1177,7 +1340,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aSiftOfATimelineThatCanCarryOnTurnsTheButtonIntoContinue() {
+    void aSiftOfATimeframeThatCanCarryOnTurnsTheButtonIntoContinue() {
         this.anUnfinishedSiftOf("2019", State.READY);
         this.choose(RunMode.SIFT, "2019");
 
@@ -1188,7 +1351,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aSiftOfATimelineThatCannotCarryOnSendsTheReaderToTheRunsScreen() {
+    void aSiftOfATimeframeThatCannotCarryOnSendsTheReaderToTheRunsScreen() {
         this.anUnfinishedSiftOf("2019", State.BLOCKED);
         this.choose(RunMode.SIFT, "2019");
 
@@ -1197,7 +1360,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aTimelineRunningAcrossAnUnfinishedSiftIsRefusedAndTheButtonGoesDead() {
+    void aTimeframeRunningAcrossAnUnfinishedSiftIsRefusedAndTheButtonGoesDead() {
         this.anUnfinishedSiftOf("2019-06", State.WAITING);
         this.choose(RunMode.SIFT, "2019");
 
@@ -1232,7 +1395,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aTimelineAcrossSeveralUnfinishedSiftsNamesAllOfThem() {
+    void aTimeframeAcrossSeveralUnfinishedSiftsNamesAllOfThem() {
         this.unfinishedSiftsOf("2019-06", "2019-08");
         this.choose(RunMode.SIFT, "2019");
 
@@ -1241,7 +1404,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aTimelineNamingTheSameMonthsAsTheUnfinishedSiftIsContinuedRatherThanCalledAnOverlap() {
+    void aTimeframeNamingTheSameMonthsAsTheUnfinishedSiftIsContinuedRatherThanCalledAnOverlap() {
         this.anUnfinishedSiftOf("2019-06", State.WAITING);
         this.choose(RunMode.SIFT, "2019 6");
 
@@ -1250,7 +1413,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aTimelineSharingNoMonthWithAnUnfinishedSiftStartsFresh() {
+    void aTimeframeSharingNoMonthWithAnUnfinishedSiftStartsFresh() {
         this.anUnfinishedSiftOf("2019-06", State.WAITING);
         this.choose(RunMode.SIFT, "2019 7");
 
@@ -1259,7 +1422,7 @@ class RunSetupPresenterTest {
     }
 
     @Test
-    void aRunScopedToACountOfFilesMarksNoTimelineAndBlocksNothing() {
+    void aRunScopedToACountOfFilesMarksNoTimeframeAndBlocksNothing() {
         this.anUnfinishedSiftOf("oldest-25", State.WAITING);
         this.choose(RunMode.SIFT, "2019");
 
@@ -1288,6 +1451,20 @@ class RunSetupPresenterTest {
 
     private RunSetupPresenter launcher() {
         return new RunSetupPresenter(this.pipeline, this.jobIsRunning::get, () -> this.redraw.run());
+    }
+
+    // Waits for a thread to block acquiring the read lock. Two states, because a lock parks a
+    // thread as WAITING while the latch above it parks as TIMED_WAITING. Which of those this
+    // thread reaches first is not something to depend on.
+    private static void waitUntilParked(final Thread thread) {
+        final long deadline = System.currentTimeMillis() + 5_000;
+        while (thread.getState() != Thread.State.WAITING
+                && thread.getState() != Thread.State.TIMED_WAITING) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("thread never parked: " + thread.getState());
+            }
+            Thread.onSpinWait();
+        }
     }
 
     private RunSetupPresenter.Confirmation askedBeforeSifting(final int year) {

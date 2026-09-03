@@ -42,6 +42,11 @@ public enum RefusalKind {
     SETTING_REJECTED,
 
     /**
+     * The settings as a whole are ones the app will not run on, and it said why.
+     */
+    SETTINGS_UNUSABLE,
+
+    /**
      * The sift-prep root could not be read, so what sits under it is unknown.
      */
     RUNS_UNREADABLE,
@@ -77,7 +82,7 @@ public enum RefusalKind {
     SCOPE_OCCUPIED,
 
     /**
-     * A sift's timeline shares months with one or more unfinished sifts under a different tag.
+     * A sift's timeframe shares months with one or more unfinished sifts under a different tag.
      */
     SCOPE_OVERLAPS,
 

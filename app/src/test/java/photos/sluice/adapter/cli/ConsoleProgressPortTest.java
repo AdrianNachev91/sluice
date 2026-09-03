@@ -54,6 +54,24 @@ class ConsoleProgressPortTest {
     }
 
     @Test
+    void aPhaseCutShortIsNotReportedAsDone() {
+        this.progress.phaseStarted("Rescuing...");
+        this.progress.phaseCutShort("Rescuing...");
+        this.progress.phaseFinished("Rescuing...");
+
+        assertThat(this.lines()).containsExactly("Rescuing...");
+    }
+
+    @Test
+    void theNextPhaseAfterOneCutShortIsStillReportedAsDone() {
+        this.progress.phaseCutShort("Rescuing...");
+        this.progress.phaseFinished("Rescuing...");
+        this.progress.phaseFinished("Sorting...");
+
+        assertThat(this.lines()).containsExactly("Sorting... done");
+    }
+
+    @Test
     void anEmptyPhaseStillOpensAndCloses() {
         this.progress.phaseStarted("Sorting...");
         this.progress.phaseFinished("Sorting...");

@@ -28,7 +28,7 @@ import java.util.List;
  * @param scopeRefusal what is wrong with what has been typed, or null while nothing is
  * @param cost {@link Cost} what the screen says about money, or null where this mode never reaches
  *     a vision provider
- * @param scopeLegend what the mark on a timeline row means, or null where no row carries one
+ * @param scopeLegend what the mark on a timeframe row means, or null where no row carries one
  * @param scopeLegendWayThere the word inside it that leads to that sift, or null with the legend
  * @param scopeLegendAfter what the legend says after that word, or null with the legend
  * @param startLabel {@link String} what the start button says
@@ -64,7 +64,7 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      * @param scopeHint {@link String} what the field accepts for the mode now chosen
      * @param scopeRefusal what is wrong with what has been typed, or null
      * @param cost {@link Cost} what the screen says about money, or null
-     * @param scopeLegend what the mark on a timeline row means, or null
+     * @param scopeLegend what the mark on a timeframe row means, or null
      * @param scopeLegendWayThere the word leading to that sift, or null
      * @param scopeLegendAfter what follows it, or null
      * @param startLabel {@link String} what the start button says
@@ -84,7 +84,7 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      * dressings of one. What the button says comes from {@code startLabel} beside this, so a screen
      * never works out what to call any of them.
      *
-     * <p>A timeline already holding an unfinished sift cannot be sifted again.
+     * <p>A timeframe already holding an unfinished sift cannot be sifted again.
      */
     public sealed interface StartAction {
 
@@ -93,7 +93,7 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
         }
 
         /**
-         * Picks the unfinished sift of the chosen timeline back up.
+         * Picks the unfinished sift of the chosen timeframe back up.
          *
          * @param prepDir {@link Path} that run's own directory
          */
@@ -101,7 +101,7 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
         }
 
         /**
-         * Goes to the runs screen, where the chosen timeline's run can be dealt with.
+         * Goes to the runs screen, where the chosen timeframe's run can be dealt with.
          *
          * <p>Reached where that run is blocked or its records could not be read. Neither can be
          * carried on from here. One wants an answer first, and the other has said nothing about

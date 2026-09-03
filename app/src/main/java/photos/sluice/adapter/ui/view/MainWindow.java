@@ -17,6 +17,7 @@ import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import photos.sluice.adapter.ui.DashboardMark;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.LeavingUnsaved;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
@@ -51,6 +52,13 @@ final class MainWindow {
     private static final String RUNS_COUNT_MEANS =
             "Sifts you have started that have not finished. Open Runs to carry them on or throw "
                     + "them away.";
+
+    // What the mark on the Dashboard entry means, for a reader who has left that screen. The two
+    // read the same way round: the first needs nothing, the second is waiting on them.
+    private static final String DASHBOARD_RUNNING = "Something is running on the Dashboard.";
+
+    private static final String DASHBOARD_FINISHED = "Something on the Dashboard has finished, and "
+            + "is waiting for you to close it.";
 
     /**
      * Prevents instantiation of this static factory class.
@@ -90,7 +98,8 @@ final class MainWindow {
                        final ReviewPresenter reviewPresenter,
                        final AtomicReference<BooleanSupplier> leavingLosesWork) {
         final var group = new ToggleGroup();
-        final var dashboard = navEntry(group, "nav-dashboard", DASHBOARD);
+        final var dashboardMark = markBadge();
+        final var dashboard = countedNavEntry(group, "nav-dashboard", DASHBOARD, dashboardMark);
         final var settings = navEntry(group, "nav-settings", SETTINGS);
         final var runsCount = countBadge();
         final var runs = countedNavEntry(group, "nav-runs", RUNS, runsCount);
@@ -154,6 +163,13 @@ final class MainWindow {
         // with nobody pressing anything. Almost everything that changes the count is done by a
         // reader who is on a screen they will leave. A watch finishing a run is the exception, and
         // it can land while they are anywhere.
+        drawMark(dashboardMark, runLauncherPresenter.dashboardMark());
+        // Marshalled here rather than by the presenter, which reports from whichever thread moved
+        // the job.
+        runLauncherPresenter.setShellMark(() -> {
+            final DashboardMark mark = runLauncherPresenter.dashboardMark();
+            Platform.runLater(() -> drawMark(dashboardMark, mark));
+        });
         final Runnable drawCount = () -> runsCount.setText(countOf(runsPresenter));
         final Runnable readThenCount = () -> countInTheBackground(runsPresenter, runsCount);
         // The badge alone, from a reading the presenter has already taken. Marshalled here because
@@ -180,7 +196,7 @@ final class MainWindow {
         // button from there leaves the page it was meant to close still standing.
         troubleshootPresenter.setOpenRuns(() -> Platform.runLater(runs::fire));
         troubleshootPresenter.setOpenDashboard(dashboard::fire);
-        // The launcher's own way out of a timeline whose unfinished sift it cannot carry on. Set on
+        // The launcher's own way out of a timeframe whose unfinished sift it cannot carry on. Set on
         // the presenter rather than passed to the pane, so the several places that redraw the
         // Dashboard need know nothing about it.
         runLauncherPresenter.setOpenRuns(runs::fire);
@@ -415,6 +431,39 @@ final class MainWindow {
         badge.setTooltip(new Tooltip(RUNS_COUNT_MEANS));
         SettingsRows.showWhileItSaysSomething(badge);
         return badge;
+    }
+
+    /**
+     * The mark on the Dashboard entry, saying what is happening on a screen the reader has left.
+     *
+     * <p>The same shape as the Runs count, which is the sidebar's one established way of carrying
+     * state. A dot rather than a number, since there is only ever one dashboard.
+     *
+     * @return {@link Label} the mark, empty until something is happening
+     */
+    private static Label markBadge() {
+        final var badge = new Label();
+        badge.setId("nav-dashboard-mark");
+        badge.getStyleClass().add("nav-mark");
+        SettingsRows.showWhileItSaysSomething(badge);
+        return badge;
+    }
+
+    /**
+     * Puts the Dashboard's own state onto its mark.
+     *
+     * <p>The tooltip carries the difference the two colours cannot. A dot on its own says something
+     * is there, and a reader still has to be told whether it wants anything from them.
+     *
+     * @param badge {@link Label} the mark to fill in
+     * @param mark {@link DashboardMark} what is happening on the dashboard
+     */
+    private static void drawMark(final Label badge, final DashboardMark mark) {
+        badge.setText(mark == DashboardMark.NONE ? "" : "●");
+        badge.getStyleClass().setAll("nav-mark",
+                mark == DashboardMark.FINISHED ? "nav-mark-finished" : "nav-mark-running");
+        badge.setTooltip(mark == DashboardMark.NONE ? null : new Tooltip(
+                mark == DashboardMark.FINISHED ? DASHBOARD_FINISHED : DASHBOARD_RUNNING));
     }
 
     /**

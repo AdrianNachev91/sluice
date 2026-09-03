@@ -134,7 +134,7 @@ final class RunProgressPane {
      * @return {@link Node} a row the layout counts and the reader never sees
      */
     private static Node reservedRow() {
-        final var row = barRow(new PhaseBar("", "", null, 0, true, false));
+        final var row = barRow(new PhaseBar("", "", null, 0, true, true, false));
         row.setVisible(false);
         return row;
     }
@@ -144,7 +144,8 @@ final class RunProgressPane {
      *
      * <p>A phase with no total runs the toolkit's own indeterminate animation rather than sitting
      * at zero. Zero is a claim that nothing has happened, and what is true is that nothing has been
-     * counted.
+     * counted. A phase the job has not reached sits at zero instead: nothing has happened there,
+     * and an animation would say something is under way.
      *
      * @param phase {@link PhaseBar} the phase to draw
      * @return {@link Node} the row
@@ -160,17 +161,35 @@ final class RunProgressPane {
         top.setAlignment(Pos.CENTER_LEFT);
 
         final var bar = new ProgressBar();
-        bar.setProgress(phase.measured() ? phase.fraction() : ProgressBar.INDETERMINATE_PROGRESS);
+        bar.setProgress(waitingBar(phase));
         bar.setMaxWidth(Double.MAX_VALUE);
         bar.getStyleClass().add("run-phase-bar");
-        if (phase.finished()) {
-            bar.getStyleClass().add("run-phase-done");
-        }
 
         final var row = new VBox(top, bar);
         row.setId(phase.id());
         row.getStyleClass().add("run-phase");
+        // On the row rather than on the bar, because what each state changes is the label, and the
+        // label is the bar's sibling rather than its child.
+        if (phase.finished()) {
+            row.getStyleClass().add("run-phase-done");
+        }
+        if (!phase.started()) {
+            row.getStyleClass().add("run-phase-ahead");
+        }
         return row;
+    }
+
+    /**
+     * How full to draw one phase's bar.
+     *
+     * @param phase {@link PhaseBar} the phase to draw
+     * @return double the fill, or the toolkit's indeterminate marker
+     */
+    private static double waitingBar(final PhaseBar phase) {
+        if (!phase.started()) {
+            return 0;
+        }
+        return phase.measured() ? phase.fraction() : ProgressBar.INDETERMINATE_PROGRESS;
     }
 
     /**

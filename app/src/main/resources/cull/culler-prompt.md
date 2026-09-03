@@ -16,6 +16,11 @@ Return a verdict for EVERY numbered photo, exactly once each:
 
 ## Set-aside categories
 
+A category's description says two things: what belongs in it, and when a photo of that kind should
+go there rather than be kept. Where a description states a default for its own kind of photo, that
+default decides those photos, not the general "when unsure, keep" above. Where it states none, "when
+unsure, keep" applies.
+
 {{categories}}
 
 ## Near-duplicate shape

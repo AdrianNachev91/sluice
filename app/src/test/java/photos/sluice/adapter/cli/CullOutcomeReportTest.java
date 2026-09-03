@@ -30,7 +30,7 @@ class CullOutcomeReportTest {
     void aCompletedRunReportsWhatApplyMovedAndExitsDone() {
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(
                 new CullReport(4, 0, 6, TokenSpend.none("external-agent"), false),
-                new ApplyReport(10, Map.of("Junk", 3), 1, 2, 5, List.of()), null);
+                new ApplyReport(10, Map.of("Junk", 3), 1, 2, 5, List.of()), null, null);
 
         final CommandOutcome outcome = CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS);
 
@@ -137,7 +137,7 @@ class CullOutcomeReportTest {
     void whatWasActuallySpentIsNotedWhenAnythingWas() {
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(
                 new CullReport(2, 0, 3, new TokenSpend(1000, 500, "anthropic", "claude-sonnet-5"), false),
-                new ApplyReport(2, Map.of(), 0, 0, 0, List.of()), null);
+                new ApplyReport(2, Map.of(), 0, 0, 0, List.of()), null, null);
 
         assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines())
                 .containsExactly("Spent: 1,500 tokens across 3 calls.");
@@ -146,7 +146,7 @@ class CullOutcomeReportTest {
     @Test
     void nothingSpentIsSilentRatherThanSayingZero() {
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(zeroReport(),
-                new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), null);
+                new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), null, null);
 
         assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines()).isEmpty();
     }
@@ -155,7 +155,7 @@ class CullOutcomeReportTest {
     void aSingleCallIsNamedInTheSingular() {
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(
                 new CullReport(1, 0, 1, new TokenSpend(10, 5, "anthropic", "claude-sonnet-5"), false),
-                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), null);
+                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), null, null);
 
         assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines())
                 .containsExactly("Spent: 15 tokens across 1 call.");
@@ -165,7 +165,7 @@ class CullOutcomeReportTest {
     void anArchivedPriorRunIsNamedInItsNewLocation() {
         final Path graveyard = Path.of("logs", "archives", "2019-2026-08-29_18-50-45");
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(zeroReport(),
-                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), graveyard);
+                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), graveyard, null);
 
         assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines()).containsExactly(
                 "A previous sift of this scope was moved to " + graveyard + ".");
@@ -176,7 +176,7 @@ class CullOutcomeReportTest {
         final Path graveyard = Path.of("logs", "archives", "2019-2026-08-29_18-50-45");
         final CullJobOutcome.Applied applied = new CullJobOutcome.Applied(
                 new CullReport(1, 0, 1, new TokenSpend(10, 5, "anthropic", "claude-sonnet-5"), false),
-                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), graveyard);
+                new ApplyReport(1, Map.of(), 0, 0, 0, List.of()), graveyard, null);
 
         assertThat(CullOutcomeReport.of(applied, DUPLICATES, INSTRUCTIONS).noteLines())
                 .containsExactly("Spent: 15 tokens across 1 call.",

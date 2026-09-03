@@ -110,6 +110,12 @@ public class PathValidationService implements PathValidationUseCase {
         }
         final Path real;
         try {
+            // Asked before resolving, because resolving cannot separate a refusal from an absence
+            // and this has to mark the field with the right one of the two.
+            if (!this.media.directoryIsThere(path)) {
+                violations.add(new NotADirectory(role, path));
+                return null;
+            }
             real = this.media.realDirectory(path).orElse(null);
         } catch (final UncheckedIOException e) {
             log.warn("Could not resolve the folder root {}", path, e);

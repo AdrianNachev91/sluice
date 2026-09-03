@@ -70,6 +70,29 @@ class RunProgressPresenterTest {
     }
 
     @Test
+    void aPhaseThatGaveUpPartWayKeepsTheCountItReachedRatherThanFillingUp() {
+        this.port.phaseStarted("Sifting");
+        this.port.tick("Sifting", 11, 28);
+
+        this.port.phaseFinished("Sifting");
+
+        assertThat(this.working().phases()).singleElement()
+                .extracting(PhaseBar::fraction, PhaseBar::finished)
+                .containsExactly(11d / 28, true);
+    }
+
+    @Test
+    void aPhaseThatEndedHavingCountedNothingIsFullRatherThanEmpty() {
+        this.port.phaseStarted("Applying decisions");
+
+        this.port.phaseFinished("Applying decisions");
+
+        assertThat(this.working().phases()).singleElement()
+                .extracting(PhaseBar::fraction, PhaseBar::measured)
+                .containsExactly(1d, true);
+    }
+
+    @Test
     void aRunWithNoPhaseYetSaysItIsStartingRatherThanShowingAnEmptyPage() {
         assertThat(this.working().phases()).isEmpty();
         assertThat(this.working().waiting()).isEqualTo("Starting...");

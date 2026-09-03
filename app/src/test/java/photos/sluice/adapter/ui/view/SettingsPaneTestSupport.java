@@ -22,7 +22,6 @@ import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.PathSettings;
@@ -37,7 +36,6 @@ import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
@@ -166,7 +164,7 @@ final class SettingsPaneTestSupport {
     private static Settings settingsFor(final String provider) {
         return new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
     }
 
     static SettingsUseCase settingsUseCase(final Settings settings) {
@@ -305,7 +303,7 @@ final class SettingsPaneTestSupport {
                 new VisionProviderDescriptor("other-api", "Another model service", apiSettings,
                         Set.of(ProviderSetting.MODEL), OTHER_KEY, MODELS, null, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
+                        Set.of(), Set.of(), null, null, null, null));
         return new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {

@@ -109,9 +109,6 @@ class CullWatcherTest {
         assertThat(readyChecks.get()).isGreaterThan(1);
     }
 
-    // isActive() is what a run card reads to show whether a run is being watched, so a throwing
-    // tick must not leave it lying in either direction. The watcher genuinely is still alive here,
-    // which is the whole point of the test above.
     @Test
     void staysActiveWhileARecoveredPollFailureIsTheOnlyThingThatHappened() throws InterruptedException {
         final var readyChecks = new AtomicInteger(0);

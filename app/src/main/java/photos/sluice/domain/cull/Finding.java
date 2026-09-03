@@ -13,7 +13,7 @@ import java.util.List;
  * no caller formats a message out of a finding's fields itself. A caller may still read those
  * fields directly to act on the finding - {@link photos.sluice.application.service.PrepDirRemedies}
  * takes a {@link StrayShard}'s own file name to repair it, and {@code ApplyPlanner} reads a
- * {@link DecisionUnreviewableOverlap}'s file to suppress it once resolved - it just never renders
+ * {@link VerdictUnreviewableOverlap}'s file to suppress it once resolved - it just never renders
  * text from them.
  *
  * <p>{@link #remedy()} classifies how, if at all, {@code PrepDirDoctor}'s troubleshooter can
@@ -156,7 +156,7 @@ public sealed interface Finding {
     /**
      * A file referenced more than once across all shards and the unreviewable list. This covers
      * every shape too general for any automatic resolution: two decisions, two unreviewable
-     * entries, or three or more references altogether. See {@link DecisionUnreviewableOverlap} for
+     * entries, or three or more references altogether. See {@link VerdictUnreviewableOverlap} for
      * the one two-reference shape specific enough to offer a real choice.
      */
     record DuplicateFileReference(String file, long count) implements Finding {
@@ -167,18 +167,22 @@ public sealed interface Finding {
     }
 
     /**
-     * A file listed both as a decision (in some montage's shard) and in index.json's own
-     * unreviewable list. It is the one duplicate-reference shape common and specific enough for a
-     * troubleshooter to offer a real choice, unlike the more general {@link DuplicateFileReference}.
-     * CHOICE because either resolution changes which pile the file ends up in, and the engine cannot
-     * decide that on its own. "Trust the decision" means the shard's verdict applies, and the file is
-     * no longer treated as unreviewable. "Treat as unreviewable" means the decision is dropped, and
-     * the file stays put, unreviewed.
+     * A file listed both as a verdict (in some montage's shard) and in index.json's own unreviewable
+     * list. It is the one duplicate-reference shape common and specific enough for a troubleshooter
+     * to offer a real choice, unlike the more general {@link DuplicateFileReference}. CHOICE because
+     * either resolution changes which pile the file ends up in, and the engine cannot decide that on
+     * its own. "Trust the decision" means the shard's verdict applies. "Treat as unreviewable" means
+     * the verdict is dropped and the file goes to the unreviewable folder.
+     *
+     * <p>A {@link Verdict.Keep} counts, not only a {@link Decision}. Either is a shard claiming it
+     * judged a photo the app reported nobody could judge. Both resolutions mean something for a
+     * keep too: trusting it leaves the photo in Sorted, dropping it lets the file go where an
+     * unreviewable one goes.
      */
-    record DecisionUnreviewableOverlap(Decision decision) implements Finding {
+    record VerdictUnreviewableOverlap(Verdict verdict) implements Finding {
         @Override
         public String describe() {
-            return "file listed both as a decision and as unreviewable: " + this.decision.file();
+            return "file listed both as a verdict and as unreviewable: " + this.verdict.file();
         }
 
         @Override

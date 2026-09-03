@@ -312,7 +312,7 @@ class LibraryRootMoveServiceTest {
             this.hashIndex = new CsvLibraryHashIndex(paths);
             final var settingsService = new SettingsService(this.live, store,
                     new NoClaims(), jobRunner, validation, new NioMediaStore(),
-                    _ -> Optional.empty(), List.of(), List.of());
+                    _ -> Optional.empty(), List.of());
             this.service = new LibraryRootMoveService(settingsService, jobRunner, copyEngine,
                     this.hashIndex, paths, CullPrepTestSupport.prepDirDoctor(root), validation, this.progress);
         }

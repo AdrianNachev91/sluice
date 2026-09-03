@@ -14,6 +14,7 @@ import photos.sluice.application.startup.StartupFailure.ConfigPosition;
 import photos.sluice.application.startup.StartupFailure.RejectedSetting;
 import photos.sluice.application.startup.StartupFailure.Unclassified;
 import photos.sluice.application.startup.StartupFailure.UnparsableConfigFile;
+import photos.sluice.application.startup.StartupFailure.UnusableSettings;
 import photos.sluice.application.startup.StartupFailure.WorkingRootBusy;
 
 import java.io.IOException;
@@ -67,6 +68,27 @@ class SpringStartupFailureClassifierTest {
             assertThat(rejected.property()).isEqualTo("sluice.montage.tile-size");
             assertThat(rejected.spot()).isNull();
         });
+    }
+
+    // A refusal the app words itself, rather than one the framework raises. It binds cleanly and is
+    // refused by the value built out of it. So nothing here is a BindException, and there is no
+    // place in the file to point at.
+    @Test
+    void settingsTheAppItselfRefusesCarryTheirOwnSentence(@TempDir final Path dir) throws IOException {
+        final Path configFile = dir.resolve("config.yml");
+        Files.writeString(configFile, """
+                sluice:
+                  cull:
+                    categories:
+                      - name: junk
+                        description: Screenshots and blurry shots.
+                """);
+
+        final StartupFailure failure = classify(configFile, startWith(configFile));
+
+        assertThat(failure).isInstanceOfSatisfying(UnusableSettings.class, unusable ->
+                assertThat(unusable.problem()).isEqualTo("Photo categories may not hold one called 'junk'. "
+                        + "Sluice supplies that one itself, and it is always on."));
     }
 
     // Offering to edit a file is only honest for the file the user owns. A value the app rejects

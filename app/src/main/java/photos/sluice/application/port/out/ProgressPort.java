@@ -12,10 +12,11 @@ import java.util.List;
  * it.
  *
  * <p>{@link #phaseStarted} and {@link #phaseFinished} always bracket a phase. That holds even when
- * a phase's total is zero and it never ticks. A listener can then tell "not started yet" from
- * "done with nothing to do". The {@code phase} parameter is a short human-readable label the
- * caller controls directly ("Sorting...", "Reading photos...", "Applying decisions...") rather
- * than a code a listener has to translate.
+ * a phase's total is zero and it never ticks, and when the phase's own work throws. A listener can
+ * then tell "not started yet" from "done with nothing to do". {@link #phaseCutShort} is how one that
+ * cares which of those two ends it was finds out. The {@code phase} parameter is a short
+ * human-readable label the caller controls directly ("Sorting...", "Reading photos...",
+ * "Applying decisions...") rather than a code a listener has to translate.
  */
 public interface ProgressPort {
 
@@ -85,7 +86,18 @@ public interface ProgressPort {
     }
 
     /**
-     * Signals that a phase has finished.
+     * Signals that the running phase gave up part way rather than working through to its end.
+     *
+     * <p>Fired immediately before {@link #phaseFinished}, which closes the bracket either way. So a
+     * listener that only needs to know a phase ended takes nothing from here.
+     *
+     * @param phase {@link String} short human-readable label for the phase
+     */
+    default void phaseCutShort(final String phase) {
+    }
+
+    /**
+     * Signals that a phase has finished, whether its work completed or threw.
      *
      * @param phase {@link String} short human-readable label for the phase
      */

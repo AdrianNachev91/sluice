@@ -699,6 +699,11 @@ class RescueEngineTest {
         }
 
         @Override
+        public boolean directoryIsThere(final Path path) {
+            return this.delegate.directoryIsThere(path);
+        }
+
+        @Override
         public long size(final Path path) {
             return this.delegate.size(path);
         }

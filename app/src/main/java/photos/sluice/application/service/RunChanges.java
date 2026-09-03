@@ -17,10 +17,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * rest, which is the same reading it takes when a reader opens the screen. Carrying the change
  * itself would mean a second description of a run alongside the one on disk.
  *
- * <p>Fired on whatever thread caused the change, which may well be the one that paints. A watch
- * announces from its own polling thread; a reader turning a run's watch on announces from the
- * toolkit's. So a listener marshals for itself and does its own work somewhere else, and one that
- * reads the runs folder had better not do it here.
+ * <p>Fired on whatever thread caused the change, which may well be the one that paints. A watcher
+ * announces from its own polling thread; a startup scan arming one announces from the thread that
+ * boots. So a listener marshals for itself and does its own work somewhere else, and one that reads
+ * the runs folder had better not do it here.
  *
  * <p>A listener that throws a {@link RuntimeException} is logged and the rest still run. One screen
  * failing to redraw must not stop another from hearing, and a watcher's thread has nothing above it

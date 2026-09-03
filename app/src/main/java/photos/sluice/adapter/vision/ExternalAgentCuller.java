@@ -5,7 +5,6 @@ import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.ProviderCheck;
-import photos.sluice.application.port.out.ProviderSetting;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.TokenSpend;
@@ -52,7 +51,7 @@ class ExternalAgentCuller implements VisionCuller {
      * {@inheritDoc}
      *
      * <p>The judging happens outside this app, so none of the model settings apply and there is
-     * nothing to authenticate. What it does need is what to do while it waits.
+     * nothing to authenticate. It takes no settings of its own.
      *
      * <p>Named by what the agent has to be able to do rather than by where it runs. An agent hands
      * its answers back by writing them into a folder. One that can only reply in a chat window
@@ -62,7 +61,7 @@ class ExternalAgentCuller implements VisionCuller {
     public VisionProviderDescriptor describe() {
         return new VisionProviderDescriptor(PROVIDER_ID,
                 "External agent (an agent on this computer that can write files, like Claude Cowork)",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null);
+                Set.of(), Set.of(), null, null, null, null);
     }
 
     /**

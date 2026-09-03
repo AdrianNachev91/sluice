@@ -12,7 +12,6 @@ import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.service.ApplyEngine;
 import photos.sluice.application.service.ApplyPlanner;
 import photos.sluice.application.service.CullDestinations;
@@ -22,7 +21,6 @@ import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -236,11 +234,6 @@ class ApplyEngineRealDataParityTest {
         @Override
         public CullProviderSettings providerSettings(final String providerId) {
             return CullProviderSettings.unset();
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL);
         }
 
         @Override

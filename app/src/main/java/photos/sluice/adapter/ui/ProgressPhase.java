@@ -13,11 +13,15 @@ package photos.sluice.adapter.ui;
  * It is the only reading that moves while a single large file is written. It drops back to zero as
  * that file lands and the count steps.
  *
+ * <p>{@code started} is false for a phase the job has announced but not reached.
+ *
  * @param label {@link String} the phase's name, as the engine that reported it wrote it
  * @param current int units done so far
  * @param total int units the phase said it had, zero until it first ticks
+ * @param started boolean whether the job has reached this phase
  * @param finished boolean whether the phase has ended
  * @param partDone double how much of the unit now being worked on is done, from 0 to 1
  */
-public record ProgressPhase(String label, int current, int total, boolean finished, double partDone) {
+public record ProgressPhase(String label, int current, int total, boolean started, boolean finished,
+                            double partDone) {
 }

@@ -3,7 +3,7 @@ package photos.sluice.domain.cull;
 import photos.sluice.domain.cull.Decision.Classification;
 import photos.sluice.domain.cull.Decision.NearDupChosen;
 import photos.sluice.domain.cull.Decision.NearDupReject;
-import photos.sluice.domain.cull.Finding.DecisionUnreviewableOverlap;
+import photos.sluice.domain.cull.Finding.VerdictUnreviewableOverlap;
 import photos.sluice.domain.cull.Finding.DuplicateFileReference;
 import photos.sluice.domain.cull.Finding.FileOutOfScope;
 import photos.sluice.domain.cull.Finding.GroupSpansMultipleMontages;
@@ -169,20 +169,19 @@ public final class ShardValidator {
         // and as a decision is a shard contradicting itself. Counting only decisions would resolve
         // that silently toward the one that moves the photo.
         //
-        // The exactly-one-decision-plus-exactly-one-unreviewable shape gets its own finding,
-        // DecisionUnreviewableOverlap: common and specific enough that a troubleshooter can offer a
-        // real choice (trust the decision, or treat the file as unreviewable). Every other shape -
-        // two decisions, a keep beside a decision, two unreviewable entries, or three or more
-        // references - has no such resolution, and stays the general DuplicateFileReference.
-        final Map<String, List<Decision>> decisionsByFile = new TreeMap<>();
+        // The exactly-one-verdict-plus-exactly-one-unreviewable shape gets its own finding,
+        // VerdictUnreviewableOverlap. It is common and specific enough that a troubleshooter can
+        // offer a real choice: trust the verdict, or treat the file as unreviewable. Every other
+        // shape has no such resolution and stays the general DuplicateFileReference. That covers
+        // two decisions, a keep beside a decision, two unreviewable entries, and three or more
+        // references.
+        final Map<String, List<Verdict>> verdictsByFile = new TreeMap<>();
         final Map<String, Integer> verdictCountByFile = new TreeMap<>();
         for (final Verdict verdict : healedVerdicts) {
             final String file = verdict.file().toString();
             if (!file.isBlank()) {
                 verdictCountByFile.merge(file, 1, Integer::sum);
-                if (verdict instanceof final Decision decision) {
-                    decisionsByFile.computeIfAbsent(file, _ -> new ArrayList<>()).add(decision);
-                }
+                verdictsByFile.computeIfAbsent(file, _ -> new ArrayList<>()).add(verdict);
             }
         }
         final Map<String, Integer> unreviewableCountByFile = new TreeMap<>();
@@ -193,7 +192,7 @@ public final class ShardValidator {
         allReferencedFiles.addAll(verdictCountByFile.keySet());
         allReferencedFiles.addAll(unreviewableCountByFile.keySet());
         allReferencedFiles.forEach(f -> checkDuplicateReferences(f,
-                decisionsByFile.getOrDefault(f, List.of()), verdictCountByFile.getOrDefault(f, 0),
+                verdictsByFile.getOrDefault(f, List.of()), verdictCountByFile.getOrDefault(f, 0),
                 unreviewableCountByFile.getOrDefault(f, 0), problems));
 
         // A near-dup group belongs to exactly one montage (groups never span montages). The same
@@ -209,26 +208,26 @@ public final class ShardValidator {
     }
 
     /**
-     * One file's worth of the duplicate-reference check: exactly one decision paired with exactly
-     * one unreviewable entry is a {@link DecisionUnreviewableOverlap} (has a real CHOICE remedy);
-     * any other multi-reference shape is the general {@link DuplicateFileReference}. A no-op when
-     * f is referenced at most once.
+     * One file's worth of the duplicate-reference check. Exactly one verdict paired with exactly
+     * one unreviewable entry is a {@link VerdictUnreviewableOverlap}, which carries a real CHOICE
+     * remedy. Any other multi-reference shape is the general {@link DuplicateFileReference}. A
+     * no-op when f is referenced at most once.
      *
      * @param f {@link String} the file path, as it appears in a verdict or the unreviewable list
-     * @param decisionsForFile a {@link List} of {@link Decision} every decision naming f
+     * @param verdictsForFile a {@link List} of {@link Verdict} every verdict naming f, keeps included
      * @param verdictCount int how many verdicts name f, keeps included
      * @param unreviewableCount int how many times f appears in the unreviewable list
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      */
-    private static void checkDuplicateReferences(final String f, final List<Decision> decisionsForFile,
+    private static void checkDuplicateReferences(final String f, final List<Verdict> verdictsForFile,
                                                  final int verdictCount, final int unreviewableCount,
                                                  final List<Finding> problems) {
         final long count = verdictCount + unreviewableCount;
         if (count <= 1) {
             return;
         }
-        if (decisionsForFile.size() == 1 && verdictCount == 1 && unreviewableCount == 1) {
-            problems.add(new DecisionUnreviewableOverlap(decisionsForFile.getFirst()));
+        if (verdictCount == 1 && unreviewableCount == 1) {
+            problems.add(new VerdictUnreviewableOverlap(verdictsForFile.getFirst()));
         } else {
             problems.add(new DuplicateFileReference(f, count));
         }

@@ -17,22 +17,25 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
+import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.FirstRunPresenter;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
 import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.ReviewPresenter;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
+import photos.sluice.adapter.ui.RunMode;
 import photos.sluice.adapter.ui.RunsPresenter;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.TroubleshootPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
+import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.ReviewListing;
+import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
@@ -45,6 +48,7 @@ import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
+import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.CullCategory;
@@ -53,8 +57,8 @@ import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.ShardTally;
+import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
@@ -67,13 +71,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -90,6 +97,8 @@ class MainWindowTest {
 
     private static final ModelCatalog MODELS =
             new ModelCatalog(List.of(new ModelOption("a-model", "A model")), "a-model");
+
+    private @Nullable CompletableFuture<SortSummary> sortJob;
 
     @BeforeAll
     static void startToolkit() throws Exception {
@@ -143,6 +152,40 @@ class MainWindowTest {
         final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
 
         assertThat(root.lookup("#nav-runs-count").isManaged()).isFalse();
+    }
+
+    @Test
+    void theDashboardEntryCarriesNoMarkWithNothingHappeningThere() throws Exception {
+        final BorderPane root = onFxThread(() -> built(firstRunPresenter(false)));
+
+        assertThat(root.lookup("#nav-dashboard-mark").isManaged()).isFalse();
+    }
+
+    @Test
+    void aRunUnderWayMarksTheDashboardEntryAsRunning() throws Exception {
+        final RunLauncherPresenter launcher = this.launcherRunningASort();
+        final BorderPane root = onFxThread(() ->
+                built(firstRunPresenter(false), settingsPresenter(), runsPresenter(), launcher));
+
+        final Label mark = (Label) root.lookup("#nav-dashboard-mark");
+        assertThat(mark.isManaged()).isTrue();
+        assertThat(mark.getText()).isEqualTo("●");
+        assertThat(mark.getStyleClass()).contains("nav-mark-running").doesNotContain("nav-mark-finished");
+        assertThat(mark.getTooltip()).isNotNull();
+    }
+
+    @Test
+    void aRunEndingSwitchesTheMarkToTheOneAskingToBeRead() throws Exception {
+        final RunLauncherPresenter launcher = this.launcherRunningASort();
+        final BorderPane root = onFxThread(() ->
+                built(firstRunPresenter(false), settingsPresenter(), runsPresenter(), launcher));
+
+        runOnFxThread(() -> requireNonNull(this.sortJob).complete(sortSummary()));
+        WaitForAsyncUtils.waitForFxEvents();
+
+        final Label mark = (Label) root.lookup("#nav-dashboard-mark");
+        assertThat(mark.getStyleClass()).contains("nav-mark-finished").doesNotContain("nav-mark-running");
+        assertThat(mark.getTooltip()).isNotNull();
     }
 
     // Selecting the Dashboard as the shell is built raises no action event, so nothing on the
@@ -358,8 +401,13 @@ class MainWindowTest {
 
     private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters,
                                     final RunsPresenter runs) {
+        return built(presenter, presenters, runs, runLauncherPresenter());
+    }
+
+    private static BorderPane built(final FirstRunPresenter presenter, final Presenters presenters,
+                                    final RunsPresenter runs, final RunLauncherPresenter launcher) {
         final Scene scene = MainWindow.scene(presenter, presenters.settings(), presenters.vision(),
-                photoCategoriesPresenter(), runLauncherPresenter(), runs, troubleshootPresenter(),
+                photoCategoriesPresenter(), launcher, runs, troubleshootPresenter(),
                 reviewPresenter(), new AtomicReference<>(() -> false));
         final var stage = new Stage();
         stage.setScene(scene);
@@ -387,6 +435,28 @@ class MainWindowTest {
 
     private static RunLauncherPresenter runLauncherPresenter() {
         return new RunLauncherPresenter(mock(Pipeline.class), new FxProgressPort());
+    }
+
+    @SuppressWarnings("unchecked")
+    private RunLauncherPresenter launcherRunningASort() {
+        final Pipeline pipeline = mock(Pipeline.class);
+        when(pipeline.inboxTally()).thenReturn(new InboxTally(1204, 4_000_000_000L));
+        when(pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of()));
+        final JobHandle<SortSummary> handle = mock(JobHandle.class);
+        this.sortJob = new CompletableFuture<>();
+        when(handle.onComplete()).thenReturn(this.sortJob);
+        when(pipeline.sort(any())).thenReturn(handle);
+        final var launcher = new RunLauncherPresenter(pipeline, new FxProgressPort());
+        launcher.setup().refreshCounts();
+        launcher.setup().setMode(RunMode.SORT);
+        launcher.start();
+        return launcher;
+    }
+
+    private static SortSummary sortSummary() {
+        return new SortSummary(12, 0, 0, 12, 0, 0, 0, 0, List.of(), SortSummary.Guessed.NONE,
+                List.of(), Set.of(2019), List.of(), false, 0);
     }
 
     // A mock answers cullRuns() with null, so it is given an empty listing instead. The sidebar's
@@ -440,7 +510,7 @@ class MainWindowTest {
 
         private final Settings settings = new Settings(new PathSettings("D:\\repo", "D:\\library", null),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         private List<PathViolation> inForce;
 
         private MovingRoots(final PathRole... unset) {
@@ -544,7 +614,7 @@ class MainWindowTest {
     private static PhotoCategoriesPresenter photoCategoriesPresenter() {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of(), List.of(CullCategory.of("blurry", "Not worth keeping")),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return new PhotoCategoriesPresenter(new SettingsUseCase() {
             @Override
             public Settings settings() {
@@ -566,7 +636,7 @@ class MainWindowTest {
     private static Presenters settingsPresenter(final Consumer<String> onCheck) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return settingsPresenter(onCheck, new SettingsUseCase() {
             @Override
             public Settings settings() {

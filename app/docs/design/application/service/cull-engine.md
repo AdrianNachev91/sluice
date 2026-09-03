@@ -9,11 +9,12 @@ only while some montage still lacks a shard
 the one `CullEngine` instance it needs and exposes `cull()`/`resume()` under its own type - see
 `pipeline.md` for that facade and for `sort()`/`commit()`/`rescue()`.
 
-The watch-mode auto-resume that polls a still-waiting job for its shards to land is a separate
-concern, owned by `CullWatchers`
+The auto-resume that polls a still-waiting job for its shards to land is a separate concern, owned
+by `CullWatchers`
 (`app/src/main/java/photos/sluice/application/service/CullWatchers.java`,
 `app/src/main/java/photos/sluice/application/service/CullWatcher.java`). `CullEngine` holds the one
-`CullWatchers` instance it needs and delegates to it - see the "Watch mode" section below.
+`CullWatchers` instance it needs and delegates to it - see the "Watching a waiting run" section
+below.
 
 ## Claiming a scope
 
@@ -95,8 +96,8 @@ resulting graveyard path into the outcome.
 
 Two forks decide the shape of a run. The first is whether any montage still lacks a shard, which
 decides whether a culler is entered at all. The second is what a `CullException` from dispatch
-means, which depends on the provider. See `VisionCuller.MANUAL_MODE_PROVIDER_ID`'s own doc comment
-for the full reasoning on that one.
+means, which depends on the provider. See `ProviderType`'s own doc comment for the full reasoning
+on that one.
 
 ```mermaid
 flowchart TD
@@ -124,7 +125,7 @@ flowchart TD
     AP -- "null" --> APZ(["CullJobOutcome.Waiting"])
     AP -- "ApplyException" --> APB(["CullJobOutcome.Blocked<br/>- carries the findings,<br/>watch stays disarmed"])
     AP -- "RuntimeException" --> APR(["propagates -<br/>recorded as FAILED first"])
-    D -- "CullException" --> M{"configured provider ==<br/>MANUAL_MODE_PROVIDER_ID?"}
+    D -- "CullException" --> M{"configured provider's<br/>type == MANUAL?"}
     M -- "yes" --> WT(["CullJobOutcome.Waiting<br/>- slot released, not a failure"])
     M -- "no" --> RT(["propagates -<br/>recorded as FAILED first"])
 ```
@@ -134,8 +135,8 @@ flowchart TD
 The two non-terminal outcomes differ by whose move comes next, not by severity.
 
 **Waiting** means shards are still missing. Somebody else has work left to do: the external agent is
-still culling, or an automated run stopped part way. A watcher can usefully poll for that, so watch
-mode arms one here.
+still culling, or an automated run stopped part way. A watcher can usefully poll for that, so the
+external-agent provider's own pause arms one here.
 
 **Blocked** means every montage has a shard and apply's validation refused anyway. Nothing further
 is coming on its own, so there is nothing left to watch and no watcher is armed. Exit is
@@ -238,7 +239,7 @@ Then no `"Sifting..."` bracket is reported and no provider client is built.
 
 | Scenario                                                                | Outcome                                                                                                                                                    |
 |-------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `cull()` on a scope with no shards dropped yet (fresh manual-mode prep) | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                               |
+| `cull()` on an external-agent scope with no shards dropped yet          | `CullJobOutcome.Waiting` with a `present=0/valid=0` tally; job slot released                                                                               |
 | `cull()` called again while that scope's run is unresolved              | `ScopeOccupiedException` thrown synchronously, before `JobRunner.submit()` - the existing prep dir (and any already-dropped shards) is left untouched      |
 | `cull()` on a scope whose own prep dir cannot be listed at all          | `ScopeUnreadableException` thrown synchronously, naming the prep dir and the read failure - nothing rebuilt, no run fabricated to blame                    |
 | `cull()` called again once that scope's run has applied                 | The old record is archived to the graveyard, named by `archivedPriorRun`, and the fresh run proceeds with no confirm                                       |
@@ -246,7 +247,7 @@ Then no `"Sifting..."` bracket is reported and no provider client is built.
 | `resume()` while a shard is still missing                               | Dispatch runs again; `CullJobOutcome.Waiting`, with a freshly recomputed tally                                                                             |
 | `resume()` with every shard present but apply's validation refusing     | `CullJobOutcome.Blocked` carrying the findings; nothing moved, `decisions.json` never written, no watcher armed                                            |
 | `resume(prepDir, allowPartial=true)` with a shard still missing         | Applies what it has; the missing montage's photos are left in place, untouched                                                                             |
-| A genuine `CullException` from an automated (non-manual-mode) provider  | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`. A cancellation is a separate path (see Cancellation below) and never reaches this one |
+| A genuine `CullException` from an automated (non-MANUAL) provider       | Propagates - `JobHandle.join()` throws, never resolves to `Waiting`. A cancellation is a separate path (see Cancellation below) and never reaches this one |
 | The run stops at its own spend ceiling                                  | `CullJobOutcome.Waiting` with reason `CEILING_REACHED`. Apply is not reached, so the shards already written stay unapplied and Continue picks them up.     |
 | Apply fails on the filesystem rather than on validation                 | Propagates. The vision pass has already been billed, so what it consumed is recorded as `FAILED` before the exception leaves.                              |
 
@@ -280,7 +281,7 @@ condition and once more before its corrective retry. A cancellation therefore la
 one montage call, plus rarely one retry call - never as a thrown `CullException`.
 
 The external-agent provider's dispatch is a single fast completeness check with nothing to
-interrupt mid-call. Its own manual-mode-pause `CullException` still resolves to `Waiting` as
+interrupt mid-call. Its own pause `CullException` still resolves to `Waiting` as
 before. The cancellation check right after that catch skips arming a watcher for it, the same way
 every other cancellation-triggered `Waiting` in this diagram does.
 
@@ -290,8 +291,8 @@ plain re-run of `cull()` on the same scope starts fresh. Every other cancellatio
 diagram (mid-dispatch, mid-apply, or right at either stage boundary) lands on `Waiting` instead. A
 resumable prep dir (and, for mid-dispatch, some shards) already exists by that point.
 
-None of these paths ever arm a watcher, regardless of `mode`: an auto-resume moments after a
-cancel would defy the cancel.
+None of these paths ever arms a watcher: an auto-resume moments after a cancel would defy the
+cancel.
 
 | Scenario                                                                       | Outcome                                                                                |
 |--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
@@ -300,32 +301,32 @@ cancel would defy the cancel.
 | Cancellation requested right after prep finishes, before dispatch starts       | `Waiting` with a `0/N` tally - dispatch never runs                                     |
 | Cancellation requested mid-dispatch (an automated provider's montage loop)     | `Waiting` with a tally reflecting however many shards the loop wrote before stopping   |
 | Cancellation requested mid-apply (either of `ApplyEngine`'s two status loops)  | `Waiting` - `decisions.json` was never written, so the prep dir still reads as waiting |
-| Cancellation requested racing a manual-mode pause's `CullException`            | `Waiting`, same as an uncancelled pause, but no watcher is armed even if `mode=WATCH`  |
+| Cancellation requested racing the provider's pause `CullException`             | `Waiting`, same as an uncancelled pause, but no watcher is armed                       |
 | Cancellation requested after the run had already stopped at its spend ceiling  | `Waiting` with `CEILING_REACHED`, not the cancellation - the ceiling is asked first    |
-| `mode=WATCH` configured with an automated (non-manual-mode) provider           | Never arms a watcher, cancelled or not - watch mode is an external-agent-only feature  |
+| A `Waiting` outcome on an automated (non-MANUAL) provider                      | Never arms a watcher, cancelled or not - only the external-agent provider is watched   |
 
-## Watch mode
+## Watching a waiting run
 
 `CullWatchers` owns the watch lifecycle: which prep dirs currently have a `CullWatcher` polling
 them, and the arm/disarm/auto-resume rules around that. `CullEngine` holds the one instance it
 needs and delegates every method below to it. It passes itself in only as the route back for an
 auto-resume attempt (`prepDir -> this.resume(prepDir, false)`).
 
-The split exists because `CullEngine` grew a second job once this lifecycle got a public on/off
-contract of its own. Prep/dispatch/apply orchestration is a distinct concern from deciding when to
-poll.
+The split exists because prep/dispatch/apply orchestration is a distinct concern from deciding when
+to poll.
 
-`cull.externalAgent.mode: watch` (`ExternalAgentSettings`, `WatchMode`) makes a `Waiting` outcome
-from `CullEngine.dispatchAndApply()` arm a `CullWatcher` for that prep dir, on top of the plain
-`Waiting` behavior above. `MANUAL` mode (the default) skips this section entirely -
-`CullWatchers.armWatchIfConfigured` returns immediately.
+`CullEngine.dispatchAndApply()` arms a `CullWatcher` for the prep dir when the provider's own pause
+resolves into `Waiting`. That is on top of the plain `Waiting` behavior above.
 
-That setting is only the default a run starts with. `CullWatchers.armWatch()` arms one prep dir
-whatever the mode says, and `disarmWatch()` turns it off again. The two are the waiting card's own
-"auto-apply when shards arrive" toggle, reaching `CullWatchers` through `Pipeline.startWatching`/
-`stopWatching` and `CullEngine`'s own thin passthrough methods of the same names. Neither touches
-the run itself. It stays Waiting, stays listed, and still refuses a fresh cull of its scope either
-way. Only the polling changes.
+Only the external-agent provider is watched, and `CullWatchers.armWatch()` returns at once for any
+other. Watching exists to notice when the user's own culling agent, running outside this app, drops
+a shard. A provider that calls a model returns its own answers inside the run, so its waiting run
+has nothing to notice.
+
+A second `armWatch()` for a prep dir that already has a live watcher is a no-op rather than a
+competing poller. `disarmWatch()` is its off position. Retiring one leaves the run exactly as it
+is: still Waiting, still listed, and still blocking a fresh cull of its scope. Only the polling
+stops.
 
 There is no time limit on the polling, and no setting for one. A watch that never fires costs one
 read-only readiness check per interval. A watch that does fire either completes the run or lands it
@@ -340,7 +341,7 @@ resume can never take turns re-triggering each other.
 
 ```mermaid
 flowchart TD
-    A["dispatchAndApply() lands<br/>on CullJobOutcome.Waiting"] --> B{"mode == WATCH?"}
+    A["dispatchAndApply() lands<br/>on CullJobOutcome.Waiting"] --> B{"configured provider's<br/>type == MANUAL?"}
     B -- "no" --> Z(["stay Waiting - unchanged"])
     B -- "yes" --> C["CullWatcher armed,<br/>polling every watchPollInterval<br/>(2s in production)"]
     C --> D{"isReadyToResume()?<br/>every shard present<br/>and parseable"}
@@ -353,7 +354,7 @@ flowchart TD
 Deliberately pure polling, not `java.nio.file.WatchService`. A user's working folder can itself be
 a cloud-synced or network folder (a Settings choice) - exactly the folder type known to miss
 filesystem events. Depending on events at all would just relocate that gap. `watchPollInterval` is
-an internal cadence, not a `CullSettings` field - `mode` is the one documented user-facing knob.
+an internal cadence rather than a `CullSettings` field.
 
 `disarmWatch()` runs at the very start of every `dispatchAndApply()` call, regardless of who
 triggered it (a fresh `cull()`, a manual `resume()` click, or a watcher's own auto-resume). The
@@ -369,10 +370,10 @@ It is reached from a settings save and from the exit path, for different reasons
 
 A save that moved the **working** root specifically. Every armed watcher polls a prep
 dir under that root, so only that move leaves them all naming a folder outside the roots in force. A
-library or inbox move strands nothing, and retiring there would switch off a watch a user turned on
-by hand for one run. The same save then re-arms against the new roots, which is why the retire has
-to come first. That sequence runs with the job slot held shut. Arming is skipped while a job runs,
-so a watcher taking the slot in between would leave the re-arm doing nothing at all.
+library or inbox move strands nothing, so it retires nothing. The same save then re-arms against the
+new roots, which is why the retire has to come first. That sequence runs with the job slot held
+shut. Arming is skipped while a job runs, so a watcher taking the slot in between would leave the
+re-arm doing nothing at all.
 
 The exit path retires every watcher before draining the job runner, so nothing is still deciding to
 start a job. It holds no job slot, and re-arms nothing.
@@ -381,26 +382,6 @@ An auto-resume refused because a root is unusable retires its own watcher rather
 Nothing the watcher can see will clear that condition. The run stays `Waiting`, and a manual Resume
 surfaces the refusal where somebody can act on it. Repairing the root through Settings re-arms,
 since any root move fires the same housekeeping.
-
-Retiring by prep dir rather than by watcher identity leaves one known window, accepted rather than
-closed. This is all `CullWatchers`' own state and logic - `CullEngine` only supplies the trigger. A
-watcher that fires stops itself as soon as its resume is *submitted*, but the submitted job runs
-asynchronously. A `CullWatchers.armWatch()` landing between those two moments installs a fresh
-watcher. The job's own call back into `CullEngine.disarmWatch()` (via `dispatchAndApply()`) then
-retires that one a moment later, aiming at the dead one it replaced. So a per-run watch switched on
-inside that window turns itself back off.
-
-It is bounded in three ways. The window is one job handoff wide. `CullWatchers`' own `activeWatches`
-map is in-memory and per-process, so it takes two actors inside one process racing the same prep
-dir. That is a UI shape, a background watcher against a person, rather than a CLI one. And a second
-click works.
-
-Identity-aware removal would close it. The cost is `dispatchAndApply()` having to know whether a
-watcher or a person entered it, threaded through `resume()` and the job submission. The blind retire
-is genuinely correct for the manual path, so it cannot simply be made conditional. Not worth that
-for this window. A caller should instead bind any watch indicator to `isWatchActive()` rather than
-to its own optimistic state. A lost click then shows as a toggle flipping back, not as a click that
-did nothing.
 
 That startup scan arms a run diagnosed `WAITING` or `READY`, and nothing else. Those are the two
 states a run can leave without a person. `WAITING` still expects shards, which is what a watcher
@@ -414,25 +395,24 @@ its watcher would poll for good.
 
 The only state that keeps polling is a montage whose shard never arrives at all, or never finishes
 being written. That is genuinely still waiting, and the card's tally says so. No resume is submitted
-and no file moves. Watch mode never arms for an automated provider, so nothing spends money either.
+and no file moves. No watcher ever arms for an automated provider, so nothing spends money either.
 
 ### Scenarios
 
 | Scenario                                                            | Outcome                                                                                               |
 |---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
-| Watch mode, a valid shard for every montage eventually appears      | The next poll tick's readiness check passes, `resume()` is submitted automatically, `Applied` follows |
-| Watch mode, the auto-resume's own apply then refuses                | `Blocked`; the watcher already stopped after its one attempt and nothing re-arms it                   |
-| Watch mode, `JobRunner` is busy with an unrelated job when ready    | `attemptConsume` returns false; the watcher keeps polling and retries on the next tick                |
-| Watch mode, a shard is present but never parses                     | The watcher polls on, submitting nothing; the card's tally stays short of total                       |
-| Watch mode, every shard arrives but the batch is invalid            | The watcher fires once; that resume lands `Blocked` with the findings, and nothing re-arms            |
-| Watch mode, a poll tick throws                                      | Logged and treated as "not ready this tick"; the watch survives and retries                           |
-| Watch mode, app restarts while a run is still waiting               | `armWatchesForResumableRuns()` re-arms a watcher for it, from diagnosing the sift-prep root           |
-| Watch mode, app restarts after the agent finished while it was shut | Same scan finds the run `READY` and arms it; the first poll resumes on the spot                       |
-| Watch mode, app restarts while a run sits `BLOCKED` or `DAMAGED`    | Left unarmed - neither can resolve itself, so a watcher would only re-block or poll forever           |
-| Manual mode, the user turns one run's toggle on                     | `startWatching()` arms that prep dir alone; every other run still needs an explicit Resume            |
-| Either mode, the user turns one run's toggle off                    | `stopWatching()` stops the polling only; the run stays Waiting, listed, and blocking its scope        |
+| A valid shard for every montage eventually appears                  | The next poll tick's readiness check passes, `resume()` is submitted automatically, `Applied` follows |
+| The auto-resume's own apply then refuses                            | `Blocked`; the watcher already stopped after its one attempt and nothing re-arms it                   |
+| `JobRunner` is busy with an unrelated job when the run reads ready  | `attemptConsume` returns false; the watcher keeps polling and retries on the next tick                |
+| A shard is present but never parses                                 | The watcher polls on, submitting nothing; the card's tally stays short of total                       |
+| Every shard arrives but the batch is invalid                        | The watcher fires once; that resume lands `Blocked` with the findings, and nothing re-arms            |
+| A poll tick throws                                                  | Logged and treated as "not ready this tick"; the watch survives and retries                           |
+| The app restarts while a run is still waiting                       | `armWatchesForResumableRuns()` re-arms a watcher for it, from diagnosing the sift-prep root           |
+| The app restarts after the agent finished while it was shut         | Same scan finds the run `READY` and arms it; the first poll resumes on the spot                       |
+| The app restarts while a run sits `BLOCKED` or `DAMAGED`            | Left unarmed - neither can resolve itself, so a watcher would only re-block or poll forever           |
+| The auto-resume is refused because a folder root is unusable        | The watcher stops rather than polling on; the run stays `Waiting` for a manual Resume                 |
 | The user's answer to a troubleshoot finding makes the run appliable | A resume applies it; readiness never asked about the finding, so a watch armed for the run just fires |
-| Manual mode (default), no toggle touched                            | No watcher ever arms; behavior is identical to the `cull()`/`resume()` section above                  |
+| The configured provider is an automated one                         | No watcher ever arms; behavior is identical to the `cull()`/`resume()` section above                  |
 
 ## Related
 

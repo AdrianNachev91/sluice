@@ -91,8 +91,6 @@ public class RunsPresenter {
 
     private static final String FINISH_WITHOUT_THE_MISSING = "Finish without the missing sheets";
 
-    // Says nothing about what happens once shards arrive back. Whether they are picked up
-    // automatically is Settings' watch mode, global rather than a choice this card makes.
     private static final String WAITING_ON_AN_AGENT = "Copy the instructions for your own agent. "
             + "They prompt it to write its decisions back into the folder below.";
 
@@ -252,7 +250,7 @@ public class RunsPresenter {
         final CullRuns reading = this.runs;
         final List<CullRunSummary> found = found(reading);
         final String unreadable = unreadable(reading);
-        // Oldest timeline first, which is the order a reader already has in their head. Sorted here
+        // Oldest timeframe first, which is the order a reader already has in their head. Sorted here
         // rather than left to the reading's own order, since where the cards sit is this screen's
         // claim to keep.
         final List<RunCard> unfinished = found.stream()
@@ -376,7 +374,7 @@ public class RunsPresenter {
      * line, the way a refused press does, and nothing reaches the clipboard.
      *
      * @param prepDir {@link Path} the run
-     * @param scope {@link String} the timeline it covers, for the run this may start
+     * @param scope {@link String} the timeframe it covers, for the run this may start
      * @return {@link String} the instructions to hand on, or null where there are none to hand on
      *     or the press was refused
      */
@@ -477,9 +475,8 @@ public class RunsPresenter {
      * count and the cards come from one reading by design. Two listeners each walking the whole
      * folder would pay for it twice and race over which reading won.
      *
-     * <p>On a thread of its own, because the caller's may be the one that paints. A watch announces
-     * from its polling thread, and a reader turning a watch on announces from the toolkit's. The
-     * walk opens every sidecar and shard of every run, which is not something to do on either.
+     * <p>On a thread of its own, because the caller's may be the one that paints. The walk opens
+     * every sidecar and shard of every run, which is not something to do there.
      */
     private void runsMovedElsewhere() {
         Thread.ofVirtual().start(() -> {

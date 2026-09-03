@@ -10,9 +10,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
-import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextField;
-import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -29,8 +27,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * The VISION PROVIDER card: the provider dropdown, the model picker, the endpoint row, the
- * watch-mode row, and the credential card nested inside it.
+ * The VISION PROVIDER card: the provider dropdown, the model picker, the endpoint row, and the
+ * credential card nested inside it.
  */
 final class VisionProviderCard {
 
@@ -51,16 +49,15 @@ final class VisionProviderCard {
     private VisionProviderCard() {}
 
     /**
-     * The built card, and the four nodes a caller has to reach again once a provider changes.
+     * The built card, and the three nodes a caller has to reach again once a provider changes.
      *
      * @param card {@link VBox} the card itself, for the page to lay out
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the provider dropdown
      * @param providerFields {@link VBox} the model and endpoint rows
-     * @param watchRow {@link VBox} the watch-mode row
      * @param secretCard {@link VBox} the credential card nested inside
      */
     record Result(VBox card, ComboBox<SettingsView.ProviderChoice> providerBox, VBox providerFields,
-                  VBox watchRow, VBox secretCard) {
+                  VBox secretCard) {
     }
 
     static Result build(final SettingsView view, final VisionProviderPresenter visionProvider) {
@@ -68,27 +65,25 @@ final class VisionProviderCard {
         providerBox.setId("settings-provider");
         final var providerFields = providerFields(view, visionProvider, providerBox);
         providerFields.setId("settings-provider-fields");
-        final var watchRow = watchModeRow(view);
-        watchRow.setId("settings-watch-mode");
         final var secretCard = new VBox();
         secretCard.setId("settings-api-key");
         secretCard.getStyleClass().add("settings-subsection");
         fillSecretCard(secretCard, visionProvider, providerBox, providerFields, null, view.keyLimit());
         final var card = SettingsRows.card("VISION PROVIDER",
-                "What actually looks at your photos and decides what is junk, a duplicate, or worth "
-                        + "keeping. Sluice has no judgement of its own. It either calls a model you pay for, "
+                "What actually looks at your photos and decides where each one belongs. "
+                        + "Sluice has no judgement of its own. It either calls a model you pay for, "
                         + "or waits for an agent you already run to do the looking. That agent writes its "
                         + "decisions into a folder, so it has to be one that can work with files rather "
                         + "than only chat.",
                 providerRow(providerBox, view.providerOverride(), view.providerUnrecognised()),
-                providerFields, watchRow, secretCard);
+                providerFields, secretCard);
 
         // Every provider shares one set of controls, so what the chosen one does not use is hidden
         // rather than rebuilt. A rebuild reads the saved settings back, wiping anything typed but
         // not yet saved. That is every field on the page, not only this card's.
-        showOnlyWhatTheProviderUses(providerChoiceOf(providerBox).fields(), providerFields, watchRow, secretCard);
+        showOnlyWhatTheProviderUses(providerChoiceOf(providerBox).fields(), providerFields, secretCard);
 
-        return new Result(card, providerBox, providerFields, watchRow, secretCard);
+        return new Result(card, providerBox, providerFields, secretCard);
     }
 
     static SettingsView.ProviderChoice providerChoiceOf(final ComboBox<SettingsView.ProviderChoice> box) {
@@ -104,16 +99,14 @@ final class VisionProviderCard {
      *
      * @param fields {@link SettingsView.ProviderFields} which settings the chosen provider uses
      * @param providerFields {@link VBox} the model and endpoint rows
-     * @param watchRow {@link VBox} the watch-mode row
      * @param secretCard {@link VBox} the credential card
      */
     static void showOnlyWhatTheProviderUses(final SettingsView.ProviderFields fields,
-                                            final VBox providerFields, final VBox watchRow,
+                                            final VBox providerFields,
                                             final VBox secretCard) {
         final ProviderFieldControls controls = controlsOf(providerFields);
         showIf(fields.model(), controls.model().getParent());
         showIf(fields.endpoint(), controls.endpointField().getParent());
-        showIf(fields.watchMode(), watchRow);
         showIf(fields.credential(), secretCard);
         showIf(fields.model() || fields.endpoint(), providerFields);
     }
@@ -198,11 +191,6 @@ final class VisionProviderCard {
         // genuinely unselected.
         //noinspection ConstantValue
         return selected == null ? "" : selected.id();
-    }
-
-    static boolean watchAutomaticallyOf(final VBox watchRow) {
-        final var watchToggle = (RadioButton) watchRow.getProperties().get("watchToggle");
-        return watchToggle.isSelected();
     }
 
     /**
@@ -749,31 +737,6 @@ final class VisionProviderCard {
         task.setOnSucceeded(_ -> redraw.run());
         task.setOnFailed(_ -> redraw.run());
         Thread.ofVirtual().start(task);
-    }
-
-    private static VBox watchModeRow(final SettingsView view) {
-        final var group = new ToggleGroup();
-        final var manual = new RadioButton("Wait for me before moving any photos");
-        manual.setToggleGroup(group);
-        final var watch = new RadioButton("Move the photos without asking me");
-        watch.setToggleGroup(group);
-        (view.watchAutomatically() ? watch : manual).setSelected(true);
-        // The choices sit in their own box, so a note added below lands under the pair rather than
-        // against the last option. At one spacing they read as a remark about that option alone.
-        final var choices = new VBox(watch, manual);
-        choices.getStyleClass().add("settings-choices");
-        final var help = new Label("Sifting only writes decisions down. Moving your photos happens "
-                + "afterwards, and this is whether Sluice waits for you before it starts.");
-        help.setWrapText(true);
-        help.getStyleClass().add("settings-help");
-        final var box = new VBox(SettingsRows.fieldLabel("When an external agent has finished sifting"), help,
-                choices);
-        box.getStyleClass().add("settings-row");
-        if (view.watchModeOverride() != null) {
-            box.getChildren().add(SettingsRows.overrideLabel(view.watchModeOverride()));
-        }
-        box.getProperties().put("watchToggle", watch);
-        return box;
     }
 
     /**

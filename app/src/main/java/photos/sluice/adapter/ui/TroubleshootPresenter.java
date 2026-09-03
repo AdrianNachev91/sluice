@@ -19,13 +19,13 @@ import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.ChoiceAnswer;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
 import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.LaunchPrompt;
 import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.cull.Verdict;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -595,7 +595,7 @@ public class TroubleshootPresenter {
      */
     private static @Nullable ChoiceAnswer overlap(final Finding finding,
                                                   final OverlapResolution resolution) {
-        return finding instanceof Finding.DecisionUnreviewableOverlap(final Decision both)
+        return finding instanceof Finding.VerdictUnreviewableOverlap(final Verdict both)
                 ? new ChoiceAnswer.ResolveOverlap(both.file(), resolution) : null;
     }
 

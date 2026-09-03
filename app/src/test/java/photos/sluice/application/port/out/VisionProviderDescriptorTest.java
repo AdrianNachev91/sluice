@@ -27,14 +27,14 @@ class VisionProviderDescriptorTest {
     @Test
     void aProviderTakingNoCredentialAndNamingNoneIsAccepted() {
         assertThatCode(() -> new VisionProviderDescriptor("no-key", "No key",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null))
+                Set.of(ProviderSetting.ENDPOINT), Set.of(), null, null, null, null))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void requiringASettingItDoesNotUseIsRefused() {
         assertThatThrownBy(() -> new VisionProviderDescriptor("a-provider", "A provider",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(ProviderSetting.MODEL), null, null, null, null))
+                Set.of(), Set.of(ProviderSetting.MODEL), null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("a-provider");
     }
@@ -67,7 +67,7 @@ class VisionProviderDescriptorTest {
         final var descriptor =
                 new VisionProviderDescriptor("a-provider", "A provider", mutable, Set.of(), null, MODELS, null, null);
 
-        mutable.add(ProviderSetting.WATCH_MODE);
+        mutable.add(ProviderSetting.ENDPOINT);
 
         assertThat(descriptor.settingsUsed()).containsExactly(ProviderSetting.MODEL);
     }
@@ -83,7 +83,7 @@ class VisionProviderDescriptorTest {
     @Test
     void offeringACatalogWithoutUsingAModelIsRefused() {
         assertThatThrownBy(() -> new VisionProviderDescriptor("a-provider", "A provider",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, MODELS, null, null))
+                Set.of(), Set.of(), null, MODELS, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("a-provider");
     }
@@ -91,7 +91,7 @@ class VisionProviderDescriptorTest {
     @Test
     void namingADefaultEndpointWithoutUsingAnEndpointSettingIsRefused() {
         assertThatThrownBy(() -> new VisionProviderDescriptor("a-provider", "A provider",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, "https://example.test", null))
+                Set.of(), Set.of(), null, null, "https://example.test", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("a-provider");
     }
@@ -106,7 +106,7 @@ class VisionProviderDescriptorTest {
     @Test
     void namingASetupGuideWithoutUsingACredentialIsRefused() {
         assertThatThrownBy(() -> new VisionProviderDescriptor("a-provider", "A provider",
-                Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, "Get one at example.test."))
+                Set.of(), Set.of(), null, null, null, "Get one at example.test."))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("a-provider");
     }

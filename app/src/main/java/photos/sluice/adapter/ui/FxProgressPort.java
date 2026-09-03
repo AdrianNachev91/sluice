@@ -123,15 +123,40 @@ public class FxProgressPort implements ProgressPort {
     }
 
     /**
+     * Records every phase the job means to report, before it starts the first one, and redraws.
+     *
+     * <p>Replaces whatever stood there. A job announces its own list once, so anything left from
+     * the job before it is not this job's.
+     *
+     * @param phases a {@link List} of {@link String} the phase labels, in order
+     */
+    @Override
+    public void phasesPlanned(final List<String> phases) {
+        this.change(_ -> phases.stream()
+                .map(label -> new ProgressPhase(label, 0, 0, false, false, 0))
+                .toList());
+    }
+
+    /**
      * Records a phase beginning and redraws.
+     *
+     * <p>Appends where the phase was not announced, so an unannounced one still reaches the screen
+     * rather than being dropped. Nothing reports that way today, and the append is what keeps a
+     * reporting mistake visible instead of silent.
      *
      * @param phase {@link String} short human-readable label for the phase
      */
     @Override
     public void phaseStarted(final String phase) {
         this.change(before -> {
+            final int waiting = firstWaiting(before, phase);
+            final var started = new ProgressPhase(phase, 0, 0, true, false, 0);
             final List<ProgressPhase> after = new ArrayList<>(before);
-            after.add(new ProgressPhase(phase, 0, 0, false, 0));
+            if (waiting >= 0) {
+                after.set(waiting, started);
+            } else {
+                after.add(started);
+            }
             return List.copyOf(after);
         });
     }
@@ -146,7 +171,7 @@ public class FxProgressPort implements ProgressPort {
     @Override
     public void tick(final String phase, final int current, final int total) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), current, total, found.finished(), 0)));
+                found -> new ProgressPhase(found.label(), current, total, true, found.finished(), 0)));
     }
 
     /**
@@ -161,7 +186,7 @@ public class FxProgressPort implements ProgressPort {
     public void tickWithin(final String phase, final int current, final int total,
                            final double partDone) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), current, total, found.finished(), partDone)));
+                found -> new ProgressPhase(found.label(), current, total, true, found.finished(), partDone)));
     }
 
     /**
@@ -176,7 +201,7 @@ public class FxProgressPort implements ProgressPort {
     @Override
     public void phaseFinished(final String phase) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), found.current(), found.total(), true, 0)));
+                found -> new ProgressPhase(found.label(), found.current(), found.total(), true, true, 0)));
     }
 
     /**
@@ -225,15 +250,17 @@ public class FxProgressPort implements ProgressPort {
     /**
      * Rewrites the most recent phase carrying this label, leaving the list alone when none does.
      *
-     * <p>Matched by label from the end rather than by position, because the same label can appear
-     * more than once in the list. This port is told about phases and never about jobs, so a second
-     * job's phases follow the first job's until the screen clears them. Rewriting the last entry
-     * blindly would credit a running phase's counts to whichever phase happened to be added last.
+     * <p>Matched by label from the end rather than by position, because a job may plan the same
+     * label more than once. Rewriting the last entry blindly would credit a running phase's counts
+     * to whichever phase happened to be added last.
      *
      * <p>A label that was never started is ignored rather than added. The port's own contract is
      * that a phase is bracketed, so an unbracketed tick is a bug in the engine reporting it.
-     * Adding a phase here would draw a bar for it and hide that bug. It would also draw one for a
-     * late event from a job the screen has already cleared away.
+     * Adding a phase here would draw a bar for it and hide that bug.
+     *
+     * <p>An announced entry the job has not reached is skipped for the same reason. In a plan
+     * naming the label twice it sits after the running one. A scan from the end that took it would
+     * credit the running phase's counts to a bar drawn as still to come.
      *
      * @param before a {@link List} of {@link ProgressPhase} the snapshot as it stands
      * @param label {@link String} the phase to rewrite
@@ -243,12 +270,33 @@ public class FxProgressPort implements ProgressPort {
     private static List<ProgressPhase> replaceLast(final List<ProgressPhase> before, final String label,
                                                    final UnaryOperator<ProgressPhase> rewrite) {
         for (int i = before.size() - 1; i >= 0; i--) {
-            if (before.get(i).label().equals(label)) {
+            if (before.get(i).started() && before.get(i).label().equals(label)) {
                 final List<ProgressPhase> after = new ArrayList<>(before);
                 after.set(i, rewrite.apply(after.get(i)));
                 return List.copyOf(after);
             }
         }
         return before;
+    }
+
+    /**
+     * Where the announced-but-unreached entry for this label sits, or -1 where there is none.
+     *
+     * <p>Earliest first, and only an unstarted one. A job that runs the same phase twice announces
+     * it twice. The second run has to land on the second entry, the first already carrying its own
+     * counts. A phase started and finished is never reused for the same reason.
+     *
+     * @param before a {@link List} of {@link ProgressPhase} the phases as they stand
+     * @param label {@link String} the phase that has just begun
+     * @return int the index to fill in, or -1 to append instead
+     */
+    private static int firstWaiting(final List<ProgressPhase> before, final String label) {
+        for (int i = 0; i < before.size(); i++) {
+            final ProgressPhase phase = before.get(i);
+            if (!phase.started() && phase.label().equals(label)) {
+                return i;
+            }
+        }
+        return -1;
     }
 }

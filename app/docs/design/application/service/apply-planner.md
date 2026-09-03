@@ -109,9 +109,12 @@ own output, so a corrupt one is a prep-dir problem the engine can offer options 
 culling agent's output. No engine-level repair can invent judgements it failed to record, so the
 ways out are a rewritten shard or the last-resort discard-and-redo.
 
-`resolveOverlaps()` runs right after `ShardValidator`, suppressing a `Finding.DecisionUnreviewableOverlap`
+`resolveOverlaps()` runs right after `ShardValidator`, suppressing a `Finding.VerdictUnreviewableOverlap`
 once the disposition ledger records how the user resolved it. Neither a shard nor `index.json` is
-ever edited: this only drops the losing side from the in-memory decision list.
+ever edited: this only drops the losing side from the in-memory lists.
+`TREAT_AS_UNREVIEWABLE` drops the shard's verdict, so the file's unreviewable entry survives and
+`apply()` moves it to the unreviewable folder. A `Verdict.Keep` is not in the decision list to begin
+with, so there dropping the verdict is already done and the surviving entry is the whole effect.
 `resolvedUnreviewable()` is the analogous filter for `prepDir.unreviewable()` itself. Both consult
 the same ledger `overlaps` map. See `prep-dir-remedies.md` for how each resolution gets recorded in
 the first place.

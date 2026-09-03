@@ -50,9 +50,18 @@ class RunProgressPaneTest {
     }
 
     @Test
+    void aPhaseTheRunHasNotReachedSitsEmptyRatherThanAnimating() throws Exception {
+        final Parent pane = onFxThread(() -> shown(view(List.of(
+                new PhaseBar("run-phase-applying", "Applying decisions", null, 0, false, false, false)))));
+
+        assertThat(bar(pane).getProgress()).isZero();
+        assertThat(pane.lookup("#run-phase-applying").getStyleClass()).contains("run-phase-ahead");
+    }
+
+    @Test
     void aPhaseWithCountsDrawsThemBesideABarAtItsOwnFraction() throws Exception {
         final Parent pane = onFxThread(() -> shown(view(List.of(
-                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, false)))));
+                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, true, false)))));
 
         assertThat(text(pane, ".run-phase-label")).isEqualTo("Sifting");
         assertThat(text(pane, ".run-phase-counts")).isEqualTo("11 of 28");
@@ -62,33 +71,33 @@ class RunProgressPaneTest {
     @Test
     void aPhaseThatCannotSayHowMuchWorkItHasRunsTheToolkitsOwnAnimation() throws Exception {
         final Parent pane = onFxThread(() -> shown(view(List.of(
-                new PhaseBar("run-phase-reading", "Reading", null, 0, false, false)))));
+                new PhaseBar("run-phase-reading", "Reading", null, 0, false, true, false)))));
 
         assertThat(bar(pane).getProgress()).isEqualTo(ProgressBar.INDETERMINATE_PROGRESS);
         assertThat(text(pane, ".run-phase-counts")).isEmpty();
     }
 
     @Test
-    void aFinishedPhaseIsMarkedSoTheStylesheetCanRecedeIt() throws Exception {
+    void aFinishedPhaseIsMarkedOnTheRowTheStylesheetRecedesItBy() throws Exception {
         final Parent pane = onFxThread(() -> shown(view(List.of(
-                new PhaseBar("run-phase-built", "Reading photos", "28 of 28", 1, true, true)))));
+                new PhaseBar("run-phase-built", "Reading photos", "28 of 28", 1, true, true, true)))));
 
-        assertThat(bar(pane).getStyleClass()).contains("run-phase-done");
+        assertThat(pane.lookup("#run-phase-built").getStyleClass()).contains("run-phase-done");
     }
 
     @Test
     void aPhaseStillRunningIsNotMarkedAsOneThatFinished() throws Exception {
         final Parent pane = onFxThread(() -> shown(view(List.of(
-                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, false)))));
+                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, true, false)))));
 
-        assertThat(bar(pane).getStyleClass()).doesNotContain("run-phase-done");
+        assertThat(pane.lookup("#run-phase-sifting").getStyleClass()).doesNotContain("run-phase-done");
     }
 
     @Test
     void everyPhaseReportedGetsItsOwnRowInTheOrderTheyArrived() throws Exception {
         final Parent pane = onFxThread(() -> shown(view(List.of(
-                new PhaseBar("run-phase-built", "Reading photos", "28 of 28", 1, true, true),
-                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, false)))));
+                new PhaseBar("run-phase-built", "Reading photos", "28 of 28", 1, true, true, true),
+                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, true, false)))));
 
         assertThat(shownPhaseLabels(pane)).containsExactly("Reading photos", "Sifting");
     }
@@ -104,7 +113,7 @@ class RunProgressPaneTest {
     @Test
     void aRunThatHasReportedAPhaseKeepsNoRoomForTheStartingLine() throws Exception {
         final Parent pane = onFxThread(() -> shown(view(List.of(
-                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, false)))));
+                new PhaseBar("run-phase-sifting", "Sifting", "11 of 28", 11d / 28, true, true, false)))));
 
         assertThat(pane.lookup("#run-progress-waiting").isManaged()).isFalse();
     }

@@ -143,7 +143,7 @@ class TroubleshootPresenterTest {
     @Test
     void anOverlapIsAnsweredAgainstTheFileTheDecisionNamed() {
         final Pipeline pipeline = pipelineReporting(State.BLOCKED,
-                List.of(new Finding.DecisionUnreviewableOverlap(
+                List.of(new Finding.VerdictUnreviewableOverlap(
                         new Decision.Classification(PHOTO, "junk", "blurry"))));
         final TroubleshootPresenter presenter = opened(pipeline);
 

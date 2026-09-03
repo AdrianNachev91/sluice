@@ -44,7 +44,9 @@ public class PhotoCategoriesPresenter {
             + "photos a better home: where it matches a category, it goes to that folder instead, "
             + "so you can look through one reason at a time. The one exception is the built-in "
             + "category at the top, whose photos are moved straight to your library. It is also "
-            + "the only one judged on what a photo is rather than on how good it is.";
+            + "the only one judged on what a photo is rather than on how good it is. A description "
+            + "does two jobs: it says what belongs in the category, and it says when a photo of "
+            + "that kind should go to the folder rather than stay in Sorted.";
 
     private static final String FIXED_NOTE = "Built in. This is the one category moved straight to "
             + "your library rather than to Review, and the one judged on what a photo is rather "
@@ -144,7 +146,7 @@ public class PhotoCategoriesPresenter {
                         edit.examples(), edit.enabled()))
                 .toList();
         this.settingsUseCase.save(new Settings(current.paths(), current.provider(),
-                current.providerSettingsById(), cards, current.externalAgent(), current.montage(),
+                current.providerSettingsById(), cards, current.montage(),
                 current.theme()));
         return new SaveOutcome.Saved();
     }

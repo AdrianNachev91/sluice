@@ -1,5 +1,6 @@
 package photos.sluice.adapter.ui.view;
 
+import javafx.animation.Animation;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
@@ -47,6 +48,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The dashboard's working state: what to do, what to do it to, and the button that starts it.
@@ -56,8 +58,8 @@ import java.util.Set;
  * user is still pressing, so a fill writes onto controls and never replaces one.
  *
  * <p>The year rows are the exception, since how many there are is not known until the counts land.
- * They are replaced by {@code drawCounts} alone, which runs when the screen is built and when a
- * finished run has changed what is staged.
+ * They are replaced by {@code drawCounts} alone, which runs when the screen is built, when a
+ * finished run has changed what is staged, and when a read finds something else has.
  *
  * <p>The counts come from walking two folder trees, which takes long enough on a full Inbox to be
  * seen. That read runs on a thread of its own once the window is painted, and the Inbox card says
@@ -71,7 +73,15 @@ final class RunLauncherPane {
      */
     private static final Duration FOLD_TRAVEL = Duration.millis(160);
 
-    // The glyph a marked timeline row carries. The legend explaining it is written by the
+    /**
+     * How often the screen goes back to the two folder trees while a reader is sitting on it.
+     *
+     * <p>Five seconds is what somebody who has just dropped files into their Inbox and switched
+     * back would call straight away.
+     */
+    private static final Duration RECOUNT_INTERVAL = Duration.seconds(5);
+
+    // The glyph a marked timeframe row carries. The legend explaining it is written by the
     // presenter, which spells the same glyph, and RunLauncherPaneTest pins the two together.
     private static final String UNFINISHED_MARK = "*";
 
@@ -213,6 +223,7 @@ final class RunLauncherPane {
         });
         presenter.setRecount(() -> recount(setup, controls));
 
+        PageHeader.heldToTheViewport(scroll, heading, modeRow, modeHint, action);
         final var launcher = new VBox(heading, modeRow, modeHint, scroll, action);
         launcher.setId("run-launcher");
         launcher.getStyleClass().add("run-launcher");
@@ -241,7 +252,65 @@ final class RunLauncherPane {
         controls.drawCounts(setup);
         draw.run();
         countInTheBackground(setup, controls);
+        keepCountingWhileThisScreenIsUp(dashboard, presenter, setup, controls);
         return dashboard;
+    }
+
+    /**
+     * Reads both folder trees again, over and over, for as long as this screen is in the window.
+     *
+     * <p>What changes the Inbox is somebody dropping files into it in their own file manager, which
+     * this app is told nothing about. Without this the count a reader is looking at is the one taken
+     * when they arrived, and only leaving the screen and coming back corrects it.
+     *
+     * <p>Bound to the scene rather than to a hook of the presenter's. The shell drops a screen it
+     * replaces without telling it anything. A timer held anywhere else would outlive the pane and
+     * go on walking two trees for a screen nobody is looking at.
+     *
+     * <p>A tick that lands while the last read is still going is dropped rather than queued. The
+     * walk covers the whole Inbox and the whole of Sorted, so on a large one the rate settles at
+     * whatever that allows.
+     *
+     * @param dashboard {@link Node} the screen, whose scene says whether it is still in the window
+     * @param presenter {@link RunLauncherPresenter} says which of the three faces is up
+     * @param setup {@link RunSetupPresenter} does the reading
+     * @param controls {@link Controls} the controls to fill in once it lands
+     */
+    private static void keepCountingWhileThisScreenIsUp(final Node dashboard,
+                                                        final RunLauncherPresenter presenter,
+                                                        final RunSetupPresenter setup,
+                                                        final Controls controls) {
+        final var reading = new AtomicBoolean();
+        final var poll = new Timeline(new KeyFrame(RECOUNT_INTERVAL, _ -> {
+            // Only the launcher's own face reads these counts. A job under way has the progress
+            // face up and reports itself, and a finished card stands until the reader closes it.
+            if (!(presenter.stage() instanceof RunStage.Setup) || !reading.compareAndSet(false, true)) {
+                return;
+            }
+            Thread.ofVirtual().start(() -> {
+                final RunSetupPresenter.Counts before = setup.counts();
+                try {
+                    setup.refreshCountsUnprompted();
+                } finally {
+                    reading.set(false);
+                }
+                // A read that found everything where it was draws nothing. Drawing replaces every
+                // year row, which takes keyboard focus and hover with it and can swap a row out
+                // from under a press. That is worth paying where something moved. On a screen left
+                // open it is nearly all reads that find nothing, and there it is pure loss.
+                if (!setup.counts().equals(before)) {
+                    Platform.runLater(() -> controls.drawCounts(setup));
+                }
+            });
+        }));
+        poll.setCycleCount(Animation.INDEFINITE);
+        dashboard.sceneProperty().addListener((_, _, window) -> {
+            if (window == null) {
+                poll.stop();
+            } else {
+                poll.play();
+            }
+        });
     }
 
     /**
@@ -461,7 +530,16 @@ final class RunLauncherPane {
      * @param controls {@link Controls} the controls to fill in once it lands
      */
     private static void countInTheBackground(final RunSetupPresenter setup, final Controls controls) {
-        AfterFirstFrame.run(() -> recount(setup, controls));
+        AfterFirstFrame.run(() -> Thread.ofVirtual().start(() -> {
+            setup.refreshCounts();
+            Platform.runLater(() -> {
+                // The presenter outlives the screen, so a scope a run emptied is still in it when
+                // the reader arrives back here by any route. Dropped before the draw, so the field
+                // follows. On this thread because it writes the field a reader types into.
+                setup.forgetAScopeNothingIsLeftIn();
+                controls.drawCounts(setup);
+            });
+        }));
     }
 
     /**
@@ -609,8 +687,9 @@ final class RunLauncherPane {
         /**
          * Builds the year rows from the counts as they stand, then fills the whole screen in.
          *
-         * <p>The one place rows are replaced. Called when the counts first land and when a run has
-         * finished changing them, and at neither moment is a row being pressed.
+         * <p>The one place rows are replaced, and every row control goes with them. So a caller
+         * that has not established the counts moved is throwing away the reader's focus, hover and
+         * any press in flight for nothing.
          *
          * @param setup {@link RunSetupPresenter} decides everything this screen shows
          */
@@ -1061,7 +1140,7 @@ final class RunLauncherPane {
         }
 
         /**
-         * The mark a timeline row carries when an unfinished sift already covers it.
+         * The mark a timeframe row carries when an unfinished sift already covers it.
          *
          * <p>The row is still pressable. What the mark changes is what the button under the field
          * then offers, and the legend under the rows says so.

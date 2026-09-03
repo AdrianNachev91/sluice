@@ -97,6 +97,7 @@ final class RunsPane {
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
+        PageHeader.heldToTheViewport(scroll, headerRow);
         final var page = new VBox(headerRow, scroll);
         page.setId("runs");
         page.getStyleClass().add("runs");

@@ -345,11 +345,51 @@ class ReviewPresenterTest {
 
         presenter.toggleNotes(onlyCard(presenter).path());
 
-        assertThat(notesOn(presenter).lines()).hasSize(201);
+        assertThat(notesOn(presenter).lines()).hasSize(200);
         assertThat(notesOn(presenter).lines().getFirst()).isEqualTo(written.getFirst());
-        assertThat(notesOn(presenter).lines().get(199)).isEqualTo(written.get(199));
-        assertThat(notesOn(presenter).lines().getLast())
-                .isEqualTo("50 more lines are in the folder's own note file.");
+        assertThat(notesOn(presenter).lines().getLast()).isEqualTo(written.get(199));
+        assertThat(notesOn(presenter).beyondTheFold())
+                .isEqualTo("50 more lines are in the note file itself.");
+    }
+
+    @Test
+    void aFoldOverOneMoreLineThanItDrawsCountsThatOneInTheSingular() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.reviewNotes(any())).thenReturn(IntStream.rangeClosed(1, 201)
+                .mapToObj(n -> "IMG_" + n + ".jpg - too small to sift")
+                .toList());
+        final ReviewPresenter presenter = over(pipeline, folder(Root.REVIEW, "2019-06"));
+
+        presenter.toggleNotes(onlyCard(presenter).path());
+
+        assertThat(notesOn(presenter).beyondTheFold())
+                .isEqualTo("1 more line is in the note file itself.");
+    }
+
+    @Test
+    void aFoldWithLinesInItPointsAtTheFolderTheyAreIn() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.reviewNotes(any())).thenReturn(List.of("a.jpg - blurry"));
+        final ReviewPresenter presenter = over(pipeline, folder(Root.REVIEW, "Food"));
+
+        presenter.toggleNotes(onlyCard(presenter).path());
+
+        assertThat(notesOn(presenter).beyondTheFold()).isNull();
+        assertThat(notesOn(presenter).openTheFolder())
+                .isEqualTo("Open the folder to see all the notes.");
+    }
+
+    @Test
+    void aFoldOverAFolderNothingWasWrittenAboutPointsAtNoFolder() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.reviewNotes(any())).thenReturn(List.of());
+        final ReviewPresenter presenter = over(pipeline, folder(Root.REVIEW, "Food"));
+
+        presenter.toggleNotes(onlyCard(presenter).path());
+
+        assertThat(notesOn(presenter).nothingWritten())
+                .isEqualTo("Nothing was written about this folder.");
+        assertThat(notesOn(presenter).openTheFolder()).isNull();
     }
 
     @Test

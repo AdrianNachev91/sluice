@@ -59,12 +59,20 @@ public sealed interface CullJobOutcome {
      * A cull run that completed: a usable shard set came back and apply moved the resulting
      * files.
      *
+     * <p>{@code cullReport} covers the call that ended the run, and {@code tokensAcrossEveryLeg}
+     * covers the run. A sift stopped at its spending limit and then continued is billed once per
+     * call. A continue that finds every sheet already judged is billed nothing at all. So the
+     * report alone answers what the last call cost rather than what the run cost.
+     *
      * @param cullReport {@link CullReport} what the vision pass decided
      * @param applyReport {@link ApplyReport} what applying those decisions actually did
      * @param archivedPriorRun {@link Path} the graveyard directory a prior completed run was archived into, or null
+     * @param tokensAcrossEveryLeg every token this run spent, over all of its legs, or null where
+     *     the ledger holding them could not be read
      */
     record Applied(CullReport cullReport, ApplyReport applyReport,
-                   @Nullable Path archivedPriorRun) implements CullJobOutcome {
+                   @Nullable Path archivedPriorRun,
+                   @Nullable Long tokensAcrossEveryLeg) implements CullJobOutcome {
     }
 
     /**

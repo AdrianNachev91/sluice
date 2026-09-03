@@ -60,13 +60,9 @@ public interface MediaReader {
     /**
      * Every immediate subdirectory of root, non-recursive, as absolute paths. Order is unspecified.
      * A file sitting directly in root, rather than in one of its subdirectories, is not named here.
-     * Only directories are. root itself must exist. A caller checking {@link #exists} first is what
-     * separates a genuinely empty root from a missing one.
+     * Only directories are. root itself must exist.
      *
-     * <p>Deliberately shallow, unlike {@link #listFiles}. A caller enumerating many independent
-     * subdirectories lists them at this level first, each one worth reading on its own. It then
-     * reads each subdirectory inside its own guard. One subdirectory's read failure then costs one
-     * entry rather than the whole enumeration.
+     * <p>Deliberately shallow, unlike {@link #listFiles}.
      *
      * @param root {@link Path} the directory to list
      * @return a {@link List} of {@link Path}, every immediate subdirectory found, as absolute paths
@@ -89,6 +85,15 @@ public interface MediaReader {
      * @return boolean true if the path exists
      */
     boolean exists(Path path);
+
+    /**
+     * Whether a directory is there, answering false only for a path naming nothing.
+     *
+     * @param path {@link Path} the path to check
+     * @return boolean true if a directory is there, false if nothing is
+     * @throws UncheckedIOException if the filesystem would not say what is there
+     */
+    boolean directoryIsThere(Path path);
 
     /**
      * The real, symlink- and junction-free form of path, when a directory can be confirmed there.

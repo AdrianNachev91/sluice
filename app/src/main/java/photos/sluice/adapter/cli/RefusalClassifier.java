@@ -225,7 +225,7 @@ public class RefusalClassifier {
     }
 
     /**
-     * The refusal for a sift whose timeline shares months with unfinished sifts under other tags.
+     * The refusal for a sift whose timeframe shares months with unfinished sifts under other tags.
      *
      * @param overlapped {@link Pipeline.ScopeOverlapsException} the refused claim
      * @return {@link Refusal} the refusal

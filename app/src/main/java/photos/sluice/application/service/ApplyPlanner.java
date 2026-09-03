@@ -21,6 +21,7 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.ShardValidator;
 import photos.sluice.domain.cull.ShardValidator.ShardFile;
 import photos.sluice.domain.cull.ValidationReport;
+import photos.sluice.domain.cull.Verdict;
 import photos.sluice.domain.paths.Containment;
 
 import java.nio.file.Path;
@@ -311,9 +312,8 @@ public class ApplyPlanner {
     }
 
     /**
-     * ShardValidator checks a decision's file against the sidecar's in-scope set, not the
-     * filesystem. Whether it still exists on disk, or was already carried out by an earlier run, is
-     * decided here.
+     * Whether a decision's source file still exists on disk, or was already carried out by an
+     * earlier run, is decided here.
      *
      * <p>A decision whose source file is still on disk is always pending, regardless of the
      * move-record log. A move that never happened needs no verification - it just needs doing. That
@@ -391,11 +391,10 @@ public class ApplyPlanner {
     }
 
     /**
-     * Suppresses a {@link Finding.DecisionUnreviewableOverlap} finding once the disposition ledger
+     * Suppresses a {@link Finding.VerdictUnreviewableOverlap} finding once the disposition ledger
      * records how the user resolved it, dropping the losing side from the decisions this run acts
      * on. Shards and index.json are never edited. TREAT_AS_UNREVIEWABLE only removes the decision
-     * from this in-memory list. A TRUST_DECISION resolution suppresses the other side instead,
-     * wherever {@link #resolvedUnreviewable} is consulted.
+     * from this in-memory list.
      *
      * @param ledger {@link Ledger} the parsed disposition ledger
      * @param report {@link ValidationReport} the shard validator's own report, before ledger resolution
@@ -409,9 +408,10 @@ public class ApplyPlanner {
         final var findings = new ArrayList<Finding>();
         final var decisions = new ArrayList<>(report.decisions());
         for (final Finding finding : report.findings()) {
-            if (finding instanceof Finding.DecisionUnreviewableOverlap(final Decision decision)
-                    && overlaps.containsKey(decision.file())) {
-                if (overlaps.get(decision.file()) == OverlapResolution.TREAT_AS_UNREVIEWABLE) {
+            if (finding instanceof Finding.VerdictUnreviewableOverlap(final Verdict verdict)
+                    && overlaps.containsKey(verdict.file())) {
+                if (overlaps.get(verdict.file()) == OverlapResolution.TREAT_AS_UNREVIEWABLE
+                        && verdict instanceof final Decision decision) {
                     decisions.remove(decision);
                 }
             } else {

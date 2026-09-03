@@ -142,12 +142,36 @@ class RunProgressPresenter {
      * @return {@link PhaseBar} the bar
      */
     private static PhaseBar bar(final ProgressPhase phase) {
-        final boolean measured = phase.total() > 0;
+        final boolean counted = phase.started() && phase.total() > 0;
+        // A phase that ends having found nothing to do is bracketed like any other and never
+        // ticks. Counted is false there, so without this it would animate for the rest of the run.
+        final boolean measured = counted || phase.finished();
         return new PhaseBar("run-phase-" + phase.label().toLowerCase(Locale.UK).replace(' ', '-'),
                 phase.label(),
-                measured ? counts(phase) : null,
-                measured ? (phase.current() + phase.partDone()) / phase.total() : 0,
-                measured, phase.finished());
+                counted ? counts(phase) : null,
+                fill(phase, counted),
+                measured, phase.started(), phase.finished());
+    }
+
+    /**
+     * How far along one phase's bar is drawn.
+     *
+     * <p>A phase that ended having counted something keeps that count, whatever ended it. Sifting
+     * gives up part way whenever a run pauses for an agent. A full bar over eleven of twenty-eight
+     * sheets would say the opposite of what the card underneath says.
+     *
+     * <p>A phase that ended having counted nothing is full instead. There is no fraction to draw,
+     * and it did finish.
+     *
+     * @param phase {@link ProgressPhase} what the job reported about it
+     * @param counted boolean whether the phase both started and named a total
+     * @return double the fraction filled
+     */
+    private static double fill(final ProgressPhase phase, final boolean counted) {
+        if (counted) {
+            return (phase.current() + phase.partDone()) / phase.total();
+        }
+        return phase.finished() ? 1 : 0;
     }
 
     /**

@@ -521,6 +521,22 @@ class SortEngineTest {
                 "started:Sorting...", "tick:Sorting...:1/2", "tick:Sorting...:2/2", "finished:Sorting...");
     }
 
+    @Test
+    void aStoppedSortSaysTheStageGaveUpBeforeItSaysTheStageEnded(@TempDir final Path root) throws IOException {
+        final Path inbox = inboxOf(root);
+        writeFile(inbox.resolve("20210101_a.jpg"), padded("a"));
+        writeFile(inbox.resolve("20210102_b.jpg"), padded("b"));
+
+        final AtomicInteger polls = new AtomicInteger();
+        final var reported = new RecordingPhases();
+        this.sortEngine(root, reported)
+                .sort(new SortScope.OldestYear(), () -> polls.incrementAndGet() > 1);
+
+        assertThat(reported.events).containsExactly(
+                "started:Finding dates...", "tick:Finding dates...:1/2",
+                "cut-short:Finding dates...", "finished:Finding dates...");
+    }
+
     // Every stage is counted. None of the three can quietly become the indeterminate one covering
     // the slow work while a measured bar covers the fast one.
     private static final class RecordingPhases implements ProgressPort {
@@ -535,6 +551,11 @@ class SortEngineTest {
         @Override
         public void tick(final String phase, final int current, final int total) {
             this.events.add("tick:" + phase + ":" + current + "/" + total);
+        }
+
+        @Override
+        public void phaseCutShort(final String phase) {
+            this.events.add("cut-short:" + phase);
         }
 
         @Override

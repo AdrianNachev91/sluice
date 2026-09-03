@@ -108,7 +108,7 @@ public interface VisionCuller {
      *
      * <p>An implementation does not vouch for the shards' content. That is the apply phase's to
      * judge, since it alone reads the user's own answers to earlier findings. So a culler checks
-     * only what it is placed to check. The manual-mode provider checks that a shard is there at
+     * only what it is placed to check. The external-agent provider checks that a shard is there at
      * all. A provider calling a model checks that model's response before writing it.
      *
      * @param prep {@link PrepDir} the prep directory holding montages to judge

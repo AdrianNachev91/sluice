@@ -44,6 +44,7 @@ public class RunLauncherPresenter {
     // flag is written by both of those, and read whenever somebody types.
     private volatile boolean running;
     private volatile @Nullable Runnable repaint;
+    private volatile @Nullable Runnable shellMark;
     private volatile @Nullable Runnable recount;
     private volatile @Nullable Runnable openRuns;
     private volatile @Nullable Runnable openReview;
@@ -113,7 +114,7 @@ public class RunLauncherPresenter {
      * Says how the screen goes to the runs list.
      *
      * <p>Held here rather than passed with each press, because the press that needs it is one the
-     * launcher answers rather than one it starts. A timeline whose unfinished sift cannot be
+     * launcher answers rather than one it starts. A timeframe whose unfinished sift cannot be
      * carried on has its way out on that screen, and nothing else on this one leads there.
      *
      * @param openRuns {@link Runnable} shows the runs screen
@@ -134,7 +135,7 @@ public class RunLauncherPresenter {
     /**
      * Takes a press on the button under the scope field.
      *
-     * <p>What that button does depends on what the chosen timeline already holds, and the launcher
+     * <p>What that button does depends on what the chosen timeframe already holds, and the launcher
      * has worked that out before the press arrives. Three things can happen and only one of them
      * starts fresh work.
      *
@@ -264,12 +265,12 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * Sifts the timeline a sort filled, from that sort's own result card.
+     * Sifts the timeframe a sort filled, from that sort's own result card.
      *
      * <p>The dialog is the caller's to put, because only a screen can open one. What it may not do
      * is decide whether one is owed.
      *
-     * @param offer {@link CardAction.SiftNow} what the card offered, carrying the timeline and
+     * @param offer {@link CardAction.SiftNow} what the card offered, carrying the timeframe and
      *     what this run put in it
      * @param ask a {@link Predicate} of {@link RunSetupPresenter.Confirmation} puts the question and
      *     answers true where the reader agreed
@@ -298,6 +299,8 @@ public class RunLauncherPresenter {
     public void dismissResult() {
         this.ended = null;
         this.cardMessage = null;
+        this.setup.forgetAScopeNothingIsLeftIn();
+        this.markShell();
     }
 
     /**
@@ -355,6 +358,32 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * What the sidebar's Dashboard entry should be carrying.
+     *
+     * <p>Read in the same order {@link #stage} reads its own state, so the two never disagree about
+     * which face is up.
+     *
+     * @return {@link DashboardMark} the mark, or NONE where nothing is happening there
+     */
+    public DashboardMark dashboardMark() {
+        if (this.running) {
+            return DashboardMark.RUNNING;
+        }
+        return this.ended == null ? DashboardMark.NONE : DashboardMark.FINISHED;
+    }
+
+    /**
+     * Says how the shell redraws the mark on its Dashboard entry.
+     *
+     * <p>Called on whichever thread moved the job, so the shell marshals it.
+     *
+     * @param mark {@link Runnable} redraws the sidebar's mark
+     */
+    public void setShellMark(final Runnable mark) {
+        this.shellMark = mark;
+    }
+
+    /**
      * Says how a screen redraws itself while a job is reporting progress.
      *
      * <p>Apart from {@link #setRepaint} because of the thread each arrives on. A job reports its
@@ -382,9 +411,9 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * Hands a whole timeline to the facade as a sift.
+     * Hands a whole timeframe to the facade as a sift.
      *
-     * @param year int the timeline to sift
+     * @param year int the timeframe to sift
      */
     private void startSift(final int year) {
         final RunScope scope = new RunScope.OfYear(year, List.of());
@@ -424,6 +453,10 @@ public class RunLauncherPresenter {
     private void begin(final RunMode ran, final String scope, final @Nullable String narrowedTo,
                        final @Nullable ImportKind kind, final Supplier<JobHandle<?>> submit) {
         this.report(null);
+        // Ahead of the submit, and that order is the whole of it. The job's first act is to
+        // announce its own phases, from its own thread. Dropped after the submit, this would race
+        // that announcement and could wipe the plan the run had just made.
+        this.progress.forgetPhases();
         try {
             final JobHandle<?> handle = submit.get();
             // Nothing above this line has changed what the screen shows, and that is the point. A
@@ -438,12 +471,9 @@ public class RunLauncherPresenter {
             this.ended = null;
             this.cancelRequested = false;
             this.abandonRequested = false;
-            // The port holds whatever the last job reported until somebody says a new one has
-            // begun. It is told about phases and never about jobs, so this is the only place that
-            // boundary is known.
-            this.progress.forgetPhases();
             this.inFlight = handle;
             this.running = true;
+            this.markShell();
             handle.onComplete().whenComplete((outcome, failure) -> this.ends(ran, outcome, failure));
         } catch (final RuntimeException e) {
             // Everything the facade refuses outright arrives here, before any job exists. A job
@@ -549,11 +579,25 @@ public class RunLauncherPresenter {
 
     /**
      * Draws the launcher again, where a screen has said how.
+     *
+     * <p>The shell's mark goes with it. Every one of the three faces the launcher can be showing
+     * is a different mark, so nothing changes one without changing the other.
      */
     private void repaint() {
         final Runnable draw = this.repaint;
         if (draw != null) {
             draw.run();
+        }
+        this.markShell();
+    }
+
+    /**
+     * Puts the sidebar's mark back in step with what the dashboard is doing.
+     */
+    private void markShell() {
+        final Runnable mark = this.shellMark;
+        if (mark != null) {
+            mark.run();
         }
     }
 

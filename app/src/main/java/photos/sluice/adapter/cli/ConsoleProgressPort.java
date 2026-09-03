@@ -36,6 +36,10 @@ public class ConsoleProgressPort implements ProgressPort {
     // reports. Volatile is what gives those two the happens-before.
     private volatile boolean quiet;
 
+    // Set by phaseCutShort and read by the phaseFinished that follows it. Both arrive from the job's
+    // own thread, in that order, so this one is not shared across threads.
+    private boolean cutShort;
+
     // Two threads write this stream: the job reporting its progress, and the cancel reader saying
     // it heard a caller. Each write is several calls, so without one lock a note lands partway
     // along a row of counts. It also guards the width below, which both of them read and set.
@@ -146,22 +150,37 @@ public class ConsoleProgressPort implements ProgressPort {
     }
 
     /**
+     * Records that the running phase gave up part way, so the line closing it does not say done.
+     *
+     * @param phase {@link String} the phase name
+     */
+    @Override
+    public void phaseCutShort(final String phase) {
+        this.cutShort = true;
+    }
+
+    /**
      * Reports a phase as finished.
      *
      * <p>The redrawn line is ended here rather than left open. That starts the next phase on a row
      * of its own, and leaves the last count this one reached on screen.
      *
+     * <p>A phase cut short is closed silently. "Done" belongs to a phase that worked through to its
+     * end.
+     *
      * @param phase {@link String} the phase name
      */
     @Override
     public void phaseFinished(final String phase) {
+        final boolean gaveUp = this.cutShort;
+        this.cutShort = false;
         if (this.quiet) {
             return;
         }
         synchronized (this.writing) {
             if (this.redrawn) {
                 this.endAnyOpenRow();
-            } else {
+            } else if (!gaveUp) {
                 this.stream.println(phase + " done");
             }
         }

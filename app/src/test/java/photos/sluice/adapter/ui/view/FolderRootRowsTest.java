@@ -144,8 +144,8 @@ class FolderRootRowsTest {
         final var field = new SettingsView.FolderField(value, "D:\\suggested", null);
         return new SettingsView(field, field, field, "external-agent",
                 List.of(new SettingsView.ProviderChoice("external-agent", "External agent",
-                        new SettingsView.ProviderFields(false, false, true, false), null, null)),
-                null, null, null, null, null, null, null, false, null,
+                        new SettingsView.ProviderFields(false, false, false), null, null)),
+                null, null, null, null, null, null, null,
                 new SettingsView.SecretRow("", null, null, null, false), 224,
                 new SettingsView.NumberRange(16, 1024, 16), null, 5,
                 new SettingsView.NumberRange(1, 12, 1), null, "SYSTEM",

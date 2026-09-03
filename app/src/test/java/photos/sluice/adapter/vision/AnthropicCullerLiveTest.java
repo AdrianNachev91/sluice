@@ -21,7 +21,6 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ProviderCheck;
@@ -32,7 +31,6 @@ import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
-import photos.sluice.domain.job.WatchMode;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -326,11 +324,6 @@ class AnthropicCullerLiveTest {
         @Override
         public CullProviderSettings providerSettings(final String providerId) {
             return this.provider.equals(providerId) ? this.providerSettings : CullProviderSettings.unset();
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL);
         }
 
         // The same grid renderRealMontage() lays the sheet out on, so the prompt describes the

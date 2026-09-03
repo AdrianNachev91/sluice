@@ -26,7 +26,7 @@ class AnswerVocabularyTest {
     @Test
     void anOverlapIsKeyedByItsDecisionsFileAndOffersBothResolutions() {
         final var decision = new Decision.Classification(Path.of("IMG_1.jpg"), "keeper", "sharp");
-        final Finding overlap = new Finding.DecisionUnreviewableOverlap(decision);
+        final Finding overlap = new Finding.VerdictUnreviewableOverlap(decision);
 
         assertThat(AnswerVocabulary.keyFor(overlap)).isEqualTo("IMG_1.jpg");
         assertThat(AnswerVocabulary.optionsFor(overlap)).containsExactly("TRUST_DECISION", "TREAT_AS_UNREVIEWABLE");
@@ -81,7 +81,7 @@ class AnswerVocabularyTest {
     void resolvingAnOverlapBuildsItsResolveOverlapAnswer() {
         final Path file = Path.of("IMG_1.jpg");
         final var decision = new Decision.Classification(file, "keeper", "sharp");
-        final Finding overlap = new Finding.DecisionUnreviewableOverlap(decision);
+        final Finding overlap = new Finding.VerdictUnreviewableOverlap(decision);
         final Path prepDir = Path.of("D:", "Sift", "2019");
 
         final AnswerVocabulary.Answer answer = AnswerVocabulary.resolve(prepDir, "IMG_1.jpg", "TRUST_DECISION",

@@ -3,11 +3,13 @@ package photos.sluice.adapter.ui;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.service.Pipeline;
 
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * Decides what closing the window does while Something is still running.
@@ -60,9 +62,21 @@ public class QuitPresenter {
     private static final String WAITING_ON_SOMETHING_ELSE =
             "Finishing what was already started. \"Force quit now\" leaves without waiting for it.";
 
+    // How long a close waits before it decides there is anything to ask about. A run seconds from
+    // finishing would otherwise put a question up that the reader answers for nothing. Long enough
+    // for a job on its last file to land. Short enough to stay under the five seconds Windows waits
+    // before calling a window not responding.
+    static final Duration CLOSING_BEAT = Duration.ofMillis(2_500);
+
+    // How often that wait re-asks, at most. Nothing announces a job ending, so this polls, and the
+    // interval is what a reader would feel as a delay past the job's own end. Capped at a quarter
+    // of the beat as well, or a wait shorter than one step would ask once and give up.
+    private static final Duration LONGEST_BEAT_STEP = Duration.ofMillis(50);
+
     private final Pipeline pipeline;
     private final StartupSequence startup;
     private final RunLauncherPresenter launcher;
+    private final Duration closingBeat;
 
     /**
      * Creates the presenter over the facade it asks about running work and the sequence that winds
@@ -72,11 +86,26 @@ public class QuitPresenter {
      * @param startup {@link StartupSequence} winds the app down and gives the working root back
      * @param launcher {@link RunLauncherPresenter} says what the run on the dashboard was started as
      */
+    @Autowired
     public QuitPresenter(final Pipeline pipeline, final StartupSequence startup,
                          final RunLauncherPresenter launcher) {
+        this(pipeline, startup, launcher, CLOSING_BEAT);
+    }
+
+    /**
+     * Test seam: the same presenter with a shorter wait before the question goes up.
+     *
+     * @param pipeline {@link Pipeline} says whether anything is running, and carries the escalation
+     * @param startup {@link StartupSequence} winds the app down and gives the working root back
+     * @param launcher {@link RunLauncherPresenter} says what the run on the dashboard was started as
+     * @param closingBeat {@link Duration} how long a close waits for a run to end on its own
+     */
+    QuitPresenter(final Pipeline pipeline, final StartupSequence startup,
+                  final RunLauncherPresenter launcher, final Duration closingBeat) {
         this.pipeline = pipeline;
         this.startup = startup;
         this.launcher = launcher;
+        this.closingBeat = closingBeat;
     }
 
     /**
@@ -85,12 +114,13 @@ public class QuitPresenter {
      * @return {@link QuitView} the wording of both dialogs, or null to close straight away
      */
     public @Nullable QuitView quitDialog() {
-        if (!this.pipeline.isBusy()) {
+        if (this.endsWithinTheBeat()) {
             return null;
         }
         return new QuitView(HEADING, this.whatIsRunning() + WHAT_IS_DONE_STAYS_DONE, STOP_AND_QUIT,
                 KEEP_RUNNING, false, WAITING_HEADING, this.waitingLine(), FORCE_QUIT);
     }
+
 
     /**
      * Stops the run and waits for it, then gives the working root back if it stopped in time.
@@ -169,5 +199,46 @@ public class QuitPresenter {
             return WAITING_ON_SOMETHING_ELSE;
         }
         return running == RunMode.SIFT ? WAITING_ON_A_SHEET : WAITING_ON_A_FILE;
+    }
+
+    /**
+     * Whether nothing is running, giving a run already under way a moment to end first.
+     *
+     * <p>Blocks the caller for up to the beat this presenter was built with, and the window sits
+     * there while it does. That is what closing looks like anyway. A reader who presses the close
+     * button on a run about to end then sees it close, rather than a question about stopping it.
+     *
+     * <p>Returns as soon as the run ends, so the wait is only as long as the run needs. A run with
+     * real work left uses the whole beat and is asked about, which is the case the question was
+     * written for.
+     *
+     * @return boolean true where nothing is running by the end of the wait
+     */
+    private boolean endsWithinTheBeat() {
+        final Instant deadline = Instant.now().plus(this.closingBeat);
+        final Duration step = min(LONGEST_BEAT_STEP, this.closingBeat.dividedBy(4));
+        while (this.pipeline.isBusy()) {
+            if (!Instant.now().isBefore(deadline)) {
+                return false;
+            }
+            try {
+                Thread.sleep(step);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The shorter of two durations.
+     *
+     * @param one {@link Duration} the first
+     * @param other {@link Duration} the second
+     * @return {@link Duration} whichever is shorter
+     */
+    private static Duration min(final Duration one, final Duration other) {
+        return one.compareTo(other) <= 0 ? one : other;
     }
 }

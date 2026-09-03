@@ -1,7 +1,6 @@
 package photos.sluice.adapter.vision;
 
 import org.junit.jupiter.api.Test;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
@@ -9,7 +8,6 @@ import photos.sluice.config.SettingsHolder;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.SidecarPhotoEntry;
-import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -59,6 +57,6 @@ class CullerPromptLiveSettingsTest {
 
     private static Settings settings(final List<CullCategory> categories, final MontageConfig montage) {
         return new Settings(PATHS, "anthropic", Map.of(), categories,
-                new ExternalAgentSettings(WatchMode.MANUAL), montage, ThemeChoice.SYSTEM);
+                montage, ThemeChoice.SYSTEM);
     }
 }

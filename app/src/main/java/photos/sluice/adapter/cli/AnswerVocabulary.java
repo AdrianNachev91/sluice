@@ -72,7 +72,7 @@ final class AnswerVocabulary {
      */
     private static Answerability answerability(final Finding finding) {
         return switch (finding) {
-            case final Finding.DecisionUnreviewableOverlap f -> new Answerability(text(f.decision().file()),
+            case final Finding.VerdictUnreviewableOverlap f -> new Answerability(text(f.verdict().file()),
                     List.of(OverlapResolution.TRUST_DECISION.name(), OverlapResolution.TREAT_AS_UNREVIEWABLE.name()));
             case final Finding.CorruptSidecar f -> new Answerability(f.montage(),
                     List.of(CorruptSidecarResolution.SET_ASIDE.name(), CorruptSidecarResolution.APPLY_ANYWAY.name()));
@@ -101,8 +101,8 @@ final class AnswerVocabulary {
      */
     private static Answer answerFor(final Path prepDir, final Finding finding, final String option) {
         return switch (finding) {
-            case final Finding.DecisionUnreviewableOverlap f -> new Answer.Choice(
-                    new ChoiceAnswer.ResolveOverlap(f.decision().file(), OverlapResolution.valueOf(option)));
+            case final Finding.VerdictUnreviewableOverlap f -> new Answer.Choice(
+                    new ChoiceAnswer.ResolveOverlap(f.verdict().file(), OverlapResolution.valueOf(option)));
             case final Finding.CorruptSidecar f -> new Answer.Choice(
                     new ChoiceAnswer.ResolveCorruptSidecar(f.montage(), CorruptSidecarResolution.valueOf(option)));
             case final Finding.MissingSource f -> new Answer.Choice(new ChoiceAnswer.SkipMissingSource(f.file()));

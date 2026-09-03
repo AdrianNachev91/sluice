@@ -43,7 +43,7 @@ import java.util.Set;
  * thumbnail directly from the file's own bytes.
  *
  * <p>Alongside the image, every render also decides whether the tile is fit to show a vision
- * model for a keep/junk judgment. That decision rests on the resolution of the actual preview
+ * model for a verdict. That decision rests on the resolution of the actual preview
  * recovered, not the file's own claimed capture resolution. See {@link TileResult}.
  */
 @Component
@@ -76,8 +76,7 @@ public class TileRenderer {
     }
 
     /**
-     * A rendered tile together with whether it is safe to show a vision model for a keep/junk
-     * judgment.
+     * A rendered tile together with whether it is safe to show a vision model for a verdict.
      *
      * <p>{@code unreviewable} covers two different underlying cases the same way. One is a drawn
      * placeholder with no photo content at all. The other is a real but too-small recovered
@@ -274,7 +273,7 @@ public class TileRenderer {
             final var metadata = ImageMetadataReader.readMetadata(file.toFile());
             final var directory = metadata.getFirstDirectoryOfType(ExifThumbnailDirectory.class);
             // The IDE doesn't recognize metadata-extractor's own @Nullable annotation on this
-            // method. The branch is real, exercised by TileRendererTest's no-EXIF-metadata fixture.
+            // method, so the branch reads as dead and is not.
             //noinspection ConstantValue
             if (directory == null) {
                 return Optional.empty();

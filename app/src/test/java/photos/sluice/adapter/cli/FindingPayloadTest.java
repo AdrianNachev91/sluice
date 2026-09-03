@@ -55,7 +55,7 @@ class FindingPayloadTest {
         final Path overlapping = Path.of("D:", "Sorted", "a.jpg");
         final Decision decision = new Decision.Classification(overlapping, "junk", "blurry");
 
-        final FindingPayload payload = FindingPayload.of(new Finding.DecisionUnreviewableOverlap(decision));
+        final FindingPayload payload = FindingPayload.of(new Finding.VerdictUnreviewableOverlap(decision));
 
         assertThat(payload.detail()).containsExactly(entry("file", overlapping.toString()));
     }
@@ -105,7 +105,7 @@ class FindingPayloadTest {
                         Fields.of("montage", "montage-001", "group", "Beach Day", "maxLength", 40)),
                 new Kind(new Finding.DuplicateFileReference("a.jpg", 3),
                         Fields.of("file", "a.jpg", "count", 3L)),
-                new Kind(new Finding.DecisionUnreviewableOverlap(
+                new Kind(new Finding.VerdictUnreviewableOverlap(
                         new Decision.Classification(file, "junk", "blurry")),
                         Fields.of("file", file.toString())),
                 new Kind(new Finding.GroupSpansMultipleMontages("beach", List.of("montage-001", "montage-004")),

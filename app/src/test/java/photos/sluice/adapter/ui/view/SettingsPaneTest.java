@@ -20,14 +20,12 @@ import photos.sluice.application.port.in.LibraryRootResolution;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.service.JobRunner;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -239,7 +237,7 @@ class SettingsPaneTest {
     private static Presenters presenterNeedingLibraryRootResolution(final LibraryRootUseCase libraryRoot) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         final var libraryRootInForce = new AtomicReference<>("D:\\library");
         final var useCase = new SettingsUseCase() {
             @Override

@@ -37,7 +37,6 @@ import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
@@ -60,7 +59,6 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.Verdict.Keep;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
-import photos.sluice.domain.job.WatchMode;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -1578,11 +1576,6 @@ class AnthropicCullerTest {
         @Override
         public CullProviderSettings providerSettings(final String providerId) {
             return this.provider.equals(providerId) ? this.providerSettings : CullProviderSettings.unset();
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL);
         }
 
         @Override

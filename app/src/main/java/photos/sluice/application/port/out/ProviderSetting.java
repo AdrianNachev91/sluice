@@ -18,9 +18,6 @@ public enum ProviderSetting {
     /** A service address other than the provider's own. */
     ENDPOINT,
 
-    /** Whether a waiting cull resumes on its own once every montage is ready. */
-    WATCH_MODE,
-
     /** A stored credential the provider authenticates with. */
     CREDENTIAL
 }

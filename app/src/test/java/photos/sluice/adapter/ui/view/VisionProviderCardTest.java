@@ -19,7 +19,6 @@ import photos.sluice.adapter.ui.SettingsView;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
 import photos.sluice.application.port.in.VisionProviderCatalog;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.PathSettings;
@@ -29,7 +28,6 @@ import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.application.port.out.VisionProviderDescriptor;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;
 import java.util.Map;
@@ -97,13 +95,11 @@ class VisionProviderCardTest {
 
         assertThat(shown(pane, "#settings-provider-fields")).isTrue();
         assertThat(shown(pane, "#settings-api-key")).isTrue();
-        assertThat(shown(pane, "#settings-watch-mode")).isFalse();
 
         runOnFxThread(() -> select(pane, "external-agent"));
 
         assertThat(shown(pane, "#settings-provider-fields")).isFalse();
         assertThat(shown(pane, "#settings-api-key")).isFalse();
-        assertThat(shown(pane, "#settings-watch-mode")).isTrue();
     }
 
     // Both providers here take a key, so a block following the wrong one still looks plausible.
@@ -621,7 +617,7 @@ class VisionProviderCardTest {
                                                                      final Function<String, ProviderCheck> checkById) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 provider, Map.of(provider, new CullProviderSettings("a-model", null, 2)), List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         return new VisionProviderPresenter(oneStoredKey(), checkingThreeProviders(checkById),
                 settingsUseCase(settings));
     }
@@ -660,13 +656,13 @@ class VisionProviderCardTest {
                 new ModelOption("other-model", "Other model")), "recommended-model");
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("other-model", null, 2)), List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL), new MontageConfig(224, 5), ThemeChoice.SYSTEM);
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM);
         final List<VisionProviderDescriptor> all = List.of(
                 new VisionProviderDescriptor("anthropic", "Anthropic",
                         Set.of(ProviderSetting.MODEL, ProviderSetting.ENDPOINT, ProviderSetting.CREDENTIAL),
                         Set.of(ProviderSetting.MODEL), ANTHROPIC_KEY, richModels, null, null),
                 new VisionProviderDescriptor("external-agent", "External agent",
-                        Set.of(ProviderSetting.WATCH_MODE), Set.of(), null, null, null, null));
+                        Set.of(), Set.of(), null, null, null, null));
         final VisionProviderCatalog catalog = new VisionProviderCatalog() {
             @Override
             public List<VisionProviderDescriptor> providers() {

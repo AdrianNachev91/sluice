@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.LiveSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
@@ -67,7 +66,7 @@ public class SettingsHolder implements LiveSettings, CullSettings {
                           final UiProperties ui) {
         return new Settings(
                 new PathSettings(paths.repoRoot(), paths.libraryRoot(), paths.inbox()),
-                cull.provider(), cull.providerSettings(), cull.categories(), cull.externalAgent(),
+                cull.provider(), cull.providerSettings(), cull.categories(),
                 new MontageConfig(montage.tileSize(), montage.tilesPerRow()), ui.theme());
     }
 
@@ -130,16 +129,6 @@ public class SettingsHolder implements LiveSettings, CullSettings {
     @Override
     public CullProviderSettings providerSettings(final String providerId) {
         return this.current.providerSettings(providerId);
-    }
-
-    /**
-     * Tuning for the external-agent provider.
-     *
-     * @return {@link ExternalAgentSettings} the external-agent tuning settings
-     */
-    @Override
-    public ExternalAgentSettings externalAgent() {
-        return this.current.externalAgent();
     }
 
     /**

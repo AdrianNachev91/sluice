@@ -191,7 +191,7 @@ class LaunchPromptTest {
         return List.of(
                 new Finding.GroupSpansMultipleMontages("beach", List.of("montage-001", "montage-003")),
                 new Finding.DuplicateFileReference(file.toString(), 2),
-                new Finding.DecisionUnreviewableOverlap(new Decision.Classification(file, "junk", "blurry")),
+                new Finding.VerdictUnreviewableOverlap(new Decision.Classification(file, "junk", "blurry")),
                 new Finding.SourceOutsideSorted(file, Path.of("Sorted")),
                 new Finding.StrayShard("decisions-009.json"),
                 new Finding.MissingShard("montage-003", "decisions-003.json"),

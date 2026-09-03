@@ -44,10 +44,43 @@ class FxProgressPortTest {
     }
 
     @Test
+    void everyPhaseAJobPlansIsListedBeforeAnyOfThemStarts() {
+        this.port.phasesPlanned(List.of("Reading photos...", "Sifting...", "Applying decisions..."));
+
+        assertThat(this.port.phases()).containsExactly(
+                new ProgressPhase("Reading photos...", 0, 0, false, false, 0),
+                new ProgressPhase("Sifting...", 0, 0, false, false, 0),
+                new ProgressPhase("Applying decisions...", 0, 0, false, false, 0));
+    }
+
+    @Test
+    void aPlannedPhaseStartingIsMarkedBegunWhereItAlreadyStands() {
+        this.port.phasesPlanned(List.of("Reading photos...", "Sifting..."));
+
+        this.port.phaseStarted("Sifting...");
+
+        assertThat(this.port.phases()).containsExactly(
+                new ProgressPhase("Reading photos...", 0, 0, false, false, 0),
+                new ProgressPhase("Sifting...", 0, 0, true, false, 0));
+    }
+
+    @Test
+    void aFreshPlanReplacesWhateverTheJobBeforeItLeft() {
+        this.port.phasesPlanned(List.of("Sorting..."));
+        this.port.phaseStarted("Sorting...");
+        this.port.tick("Sorting...", 40, 100);
+
+        this.port.phasesPlanned(List.of("Moving to library..."));
+
+        assertThat(this.port.phases()).containsExactly(
+                new ProgressPhase("Moving to library...", 0, 0, false, false, 0));
+    }
+
+    @Test
     void aStartedPhaseIsListedWithNothingDoneYet() {
         this.port.phaseStarted("Sorting...");
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, false, 0));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, true, false, 0));
     }
 
     @Test
@@ -58,8 +91,8 @@ class FxProgressPortTest {
         this.port.tick("Sorting...", 850, 1204);
 
         assertThat(this.port.phases()).containsExactly(
-                new ProgressPhase("Sorting...", 850, 1204, false, 0),
-                new ProgressPhase("Sifting...", 0, 0, false, 0));
+                new ProgressPhase("Sorting...", 850, 1204, true, false, 0),
+                new ProgressPhase("Sifting...", 0, 0, true, false, 0));
     }
 
     @Test
@@ -72,8 +105,8 @@ class FxProgressPortTest {
         this.port.tick("Applying decisions...", 12, 28);
 
         assertThat(this.port.phases()).containsExactly(
-                new ProgressPhase("Applying decisions...", 3, 28, true, 0),
-                new ProgressPhase("Applying decisions...", 12, 28, false, 0));
+                new ProgressPhase("Applying decisions...", 3, 28, true, true, 0),
+                new ProgressPhase("Applying decisions...", 12, 28, true, false, 0));
     }
 
     @Test
@@ -83,7 +116,7 @@ class FxProgressPortTest {
         this.port.tickWithin("Moving to library...", 3, 8, 0.45);
 
         assertThat(this.port.phases())
-                .containsExactly(new ProgressPhase("Moving to library...", 3, 8, false, 0.45));
+                .containsExactly(new ProgressPhase("Moving to library...", 3, 8, true, false, 0.45));
     }
 
     @Test
@@ -94,7 +127,7 @@ class FxProgressPortTest {
         this.port.tick("Moving to library...", 4, 8);
 
         assertThat(this.port.phases())
-                .containsExactly(new ProgressPhase("Moving to library...", 4, 8, false, 0));
+                .containsExactly(new ProgressPhase("Moving to library...", 4, 8, true, false, 0));
     }
 
     @Test
@@ -105,7 +138,7 @@ class FxProgressPortTest {
         this.port.phaseFinished("Moving to library...");
 
         assertThat(this.port.phases())
-                .containsExactly(new ProgressPhase("Moving to library...", 3, 8, true, 0));
+                .containsExactly(new ProgressPhase("Moving to library...", 3, 8, true, true, 0));
     }
 
     @Test
@@ -115,7 +148,7 @@ class FxProgressPortTest {
         this.port.tick("Rescuing...", 1, 2);
         this.port.tick("Sorting...", 1, 2);
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, false, 0));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, true, false, 0));
     }
 
     @Test
@@ -124,11 +157,11 @@ class FxProgressPortTest {
         this.port.tick("Sorting...", 1, 2);
 
         this.port.phaseFinished("Rescuing...");
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, false, 0));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, true, false, 0));
 
         this.port.phaseFinished("Sorting...");
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, true, 0));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 1, 2, true, true, 0));
     }
 
     @Test
@@ -137,7 +170,7 @@ class FxProgressPortTest {
 
         this.port.phaseFinished("Sorting...");
 
-        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, true, 0));
+        assertThat(this.port.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, true, true, 0));
     }
 
     @Test
@@ -177,6 +210,20 @@ class FxProgressPortTest {
         assertThat(this.handedToTheToolkit).hasSize(1);
     }
 
+    // A plan may name one label twice, and the second entry is still waiting while the first runs.
+    // A tick matched from the end without asking which had started would land on the waiting one.
+    @Test
+    void aTickOnALabelPlannedTwiceCountsAgainstTheRunOfItThatStarted() {
+        this.port.phasesPlanned(List.of("Sorting...", "Sorting..."));
+        this.port.phaseStarted("Sorting...");
+
+        this.port.tick("Sorting...", 40, 100);
+
+        assertThat(this.port.phases()).containsExactly(
+                new ProgressPhase("Sorting...", 40, 100, true, false, 0),
+                new ProgressPhase("Sorting...", 0, 0, false, false, 0));
+    }
+
     @Test
     void forgottenPhasesLeaveNoneOfThePreviousJobBehind() {
         this.port.phaseStarted("Sorting...");
@@ -193,6 +240,17 @@ class FxProgressPortTest {
         this.port.setRepaint(redraws::incrementAndGet);
 
         this.port.forgetPhases();
+        this.runWhatTheToolkitWasHanded();
+
+        assertThat(redraws).hasValue(1);
+    }
+
+    @Test
+    void aPlanLandingRedrawsSoTheWholeRunIsOnScreenBeforeItStarts() {
+        final var redraws = new AtomicInteger();
+        this.port.setRepaint(redraws::incrementAndGet);
+
+        this.port.phasesPlanned(List.of("Reading photos...", "Sifting..."));
         this.runWhatTheToolkitWasHanded();
 
         assertThat(redraws).hasValue(1);
@@ -217,7 +275,7 @@ class FxProgressPortTest {
         this.port.tick("Sorting...", 3, 3);
         this.runWhatTheToolkitWasHanded();
 
-        assertThat(drawn).containsExactly(new ProgressPhase("Sorting...", 3, 3, false, 0));
+        assertThat(drawn).containsExactly(new ProgressPhase("Sorting...", 3, 3, true, false, 0));
     }
 
     @Test
@@ -270,7 +328,7 @@ class FxProgressPortTest {
 
         assertThatCode(() -> noToolkit.phaseStarted("Sorting...")).doesNotThrowAnyException();
 
-        assertThat(noToolkit.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, false, 0));
+        assertThat(noToolkit.phases()).containsExactly(new ProgressPhase("Sorting...", 0, 0, true, false, 0));
     }
 
     @Test

@@ -131,18 +131,18 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
         }
 
         /**
-         * An offer to sift the timeline a finished sort filled.
+         * An offer to sift the timeframe a finished sort filled.
          *
          * <p>No question of its own. What this one spends depends on a count the card cannot have
          * yet. So the question is asked on the press, where a fresh count is in and can be named.
          *
-         * <p>{@code justSorted} is what this run put into that timeline, which the question splits
-         * out from the timeline's whole count. The two differ whenever the year already held
+         * <p>{@code justSorted} is what this run put into that timeframe, which the question splits
+         * out from the timeframe's whole count. The two differ whenever the year already held
          * photos, and the difference is the part a reader would not otherwise expect to pay for.
          *
          * @param label {@link String} what the button says
-         * @param year int the timeline it would sift
-         * @param justSorted int how many photos this run filed into that timeline
+         * @param year int the timeframe it would sift
+         * @param justSorted int how many photos this run filed into that timeframe
          */
         record SiftNow(String label, int year, int justSorted) implements CardAction {
         }

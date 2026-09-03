@@ -91,9 +91,6 @@ public class YamlSettingsStore implements SettingsStore {
             YamlConfigFile.remove(cull, "provider-settings");
         }
 
-        final Map<String, Object> externalAgent = this.document.group(cull, "external-agent");
-        YamlConfigFile.set(externalAgent, "mode", settings.externalAgent().mode().name().toLowerCase(Locale.ROOT));
-
         final Map<String, Object> ui = this.document.group(sluice, "ui");
         YamlConfigFile.set(ui, "theme", settings.theme().name().toLowerCase(Locale.ROOT));
 

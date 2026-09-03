@@ -8,7 +8,9 @@ import photos.sluice.adapter.ui.RunResultView.Tone;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
 import photos.sluice.application.port.out.CullReport;
+import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.domain.commit.CommitSummary;
+import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.imports.ImportSummary;
@@ -57,6 +59,35 @@ class RunResultsTest {
         assertThat(labelled(card, "Sheets judged")).isEqualTo("28 of 28");
     }
 
+    // The 31,400 is deliberately larger than the 9,000 + 1,500 in the report beside it, so a card
+    // reading the report's own figure fails here.
+    @Test
+    void aFinishedSiftCountsEveryTokenTheRunSpentRatherThanTheLastCallsOwn() {
+        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
+                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
+                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 31_400L));
+
+        assertThat(labelled(card, "Tokens used")).isEqualTo("31,400");
+    }
+
+    @Test
+    void aSiftThatReachedNoModelCountsNoTokensRatherThanZero() {
+        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
+                CullReport.nothingSpent("external-agent", 0),
+                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, 0L));
+
+        assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
+    }
+
+    @Test
+    void aSiftWhoseSpendCouldNotBeReadBackCountsNoTokensAtAll() {
+        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Applied(
+                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false),
+                new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), null, null));
+
+        assertThat(card.counts()).extracting(Count::label).doesNotContain("Tokens used");
+    }
+
     @Test
     void aSiftCancelledBeforeItsSheetsWereBuiltCountsNoneOfThem() {
         final RunResultView card = card(RunMode.SIFT,
@@ -90,7 +121,7 @@ class RunResultsTest {
     }
 
     @Test
-    void aFinishedSortOffersToSiftTheOneTimelineItFilled() {
+    void aFinishedSortOffersToSiftTheOneTimeframeItFilled() {
         final RunResultView card = card(RunMode.SORT, sortSummary(List.of()));
 
         assertThat(card.action()).isEqualTo(new CardAction.SiftNow("Sift 2019", 2019, 2));
@@ -125,6 +156,20 @@ class RunResultsTest {
     }
 
     @Test
+    void aSortStoppedWithOneFileLeftSaysOneRatherThanCountingIt() {
+        final RunResultView card = card(RunMode.SORT, stoppedSortLeaving(1));
+
+        assertThat(card.detail()).isEqualTo("One of them is still in your Inbox.");
+    }
+
+    @Test
+    void aSortStoppedAfterTheLastFileSaysNothingIsLeft() {
+        final RunResultView card = card(RunMode.SORT, stoppedSortLeaving(0));
+
+        assertThat(card.detail()).isEqualTo("None of them are still in your Inbox.");
+    }
+
+    @Test
     void aStoppedSortIsNotHeadedAsFinished() {
         final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019), true));
 
@@ -148,6 +193,22 @@ class RunResultsTest {
         assertThat(card.heading()).isEqualTo("Moving to library stopped.");
         assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
         assertThat(card.detail()).isEqualTo("300 of them are still in Sorted.");
+    }
+
+    @Test
+    void aMoveStoppedWithOneFileLeftSaysOneRatherThanCountingIt() {
+        final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
+                new CommitSummary(4, 1, Map.of(LibraryBucket.PHOTOS, 4), true));
+
+        assertThat(card.detail()).isEqualTo("One of them is still in Sorted.");
+    }
+
+    @Test
+    void aMoveStoppedAfterTheLastFileSaysNothingIsLeft() {
+        final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
+                new CommitSummary(4, 0, Map.of(LibraryBucket.PHOTOS, 4), true));
+
+        assertThat(card.detail()).isEqualTo("None of them are still in Sorted.");
     }
 
     @Test
@@ -255,7 +316,7 @@ class RunResultsTest {
     }
 
     @Test
-    void aSortSpanningSeveralTimelinesOffersNoSiftRatherThanPickingOne() {
+    void aSortSpanningSeveralTimeframesOffersNoSiftRatherThanPickingOne() {
         final RunResultView card = card(RunMode.SORT, sortedInto(Set.of(2019, 2020)));
 
         assertThat(card.action()).isNull();
@@ -411,5 +472,10 @@ class RunResultsTest {
     private static SortSummary sortedInto(final Set<Integer> years, final boolean stopped) {
         return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(), years,
                 List.of(), stopped, stopped ? 205 : 0);
+    }
+
+    private static SortSummary stoppedSortLeaving(final int leftBehind) {
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(),
+                Set.of(2019), List.of(), true, leftBehind);
     }
 }

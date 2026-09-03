@@ -8,12 +8,6 @@ sluice:
     # key). Future openai and ollama adapters are planned but not yet written. A new provider is
     # one class; see adapter/vision/package-info.java.
     provider: external-agent
-    # Tuning for the external-agent provider only. mode: watch (default) polls the prep dir and
-    # auto-resumes once every montage's shard has arrived; manual needs an explicit Resume once
-    # shards are dropped. This is only the default a run starts with - a single waiting run's
-    # auto-resume can be switched on or off on its own, whatever this says.
-    external-agent:
-      mode: watch
     # Category cards. name is the action id decisions carry. description is the "what belongs
     # here" prose an automated vision provider renders into its culling prompt. examples are
     # sample subjects rendered under it, and are optional - the cards below name their cases

@@ -92,13 +92,13 @@ public class PrepDirRemedies {
     }
 
     /**
-     * A DecisionUnreviewableOverlap finding's CHOICE remedy: records which of the two conflicting
+     * A VerdictUnreviewableOverlap finding's CHOICE remedy: records which of the two conflicting
      * listings wins for file. Neither the shard nor index.json is ever edited. Validation consults
      * this ledger entry instead, suppressing the finding and dropping the losing side from the
      * decisions and unreviewable files a later apply acts on.
      *
      * @param prepDirPath {@link Path} the prep directory whose ledger receives the entry
-     * @param file {@link Path} the file this overlap concerns, as named by the DecisionUnreviewableOverlap finding
+     * @param file {@link Path} the file this overlap concerns, as named by the VerdictUnreviewableOverlap finding
      * @param resolution {@link OverlapResolution} which listing should win
      * @param answeredOn {@link AnswerSource} which surface the answer was given through
      */

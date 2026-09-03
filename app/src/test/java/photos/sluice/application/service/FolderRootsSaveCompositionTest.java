@@ -33,10 +33,7 @@ import static photos.sluice.application.service.PipelineTestSupport.writePhoto;
 // proves the announce, FolderRootsHousekeepingTest the reaction, CullEngineTest the retire, and
 // SmokeTest that the desktop registers the listener at all. What none of them can say is whether
 // the beans the context builds join up, so that is the whole subject here.
-//
-// Watch mode is the one setting turned on: without it a waiting run arms no watcher, and there
-// would be nothing for the save to strand.
-@SpringBootTest(properties = "sluice.cull.external-agent.mode=watch")
+@SpringBootTest
 class FolderRootsSaveCompositionTest {
 
     @TempDir
@@ -96,7 +93,7 @@ class FolderRootsSaveCompositionTest {
         final Settings current = this.settings.settings();
         return new Settings(new PathSettings(root.toString(), current.paths().libraryRoot(),
                 root.resolve("Inbox").toString()),
-                current.provider(), current.providerSettingsById(), current.categories(), current.externalAgent(),
+                current.provider(), current.providerSettingsById(), current.categories(),
                 current.montage(), current.theme());
     }
 

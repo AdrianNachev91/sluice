@@ -33,6 +33,7 @@ import photos.sluice.domain.model.SortSummary.Guessed;
 import photos.sluice.application.service.JobHandle;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -46,12 +47,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.when;
 
 // What only a built scene graph can be wrong about. Which controls the screen draws, what a press
 // does to the ones beside it, and what a line with nothing to say takes up. What a scope means is
 // RunLauncherPresenterTest's.
 class RunLauncherPaneTest {
+
+    // Two of the screen's own recount intervals, so a poll that had not stopped would have fired
+    // twice inside this.
+    private static final Duration TWO_RECOUNTS = Duration.ofSeconds(11);
+
+    // Long enough for a read that began before a screen was taken away to finish. Every read walks
+    // mocked trees here, so the real figure is microseconds.
+    private static final Duration READS_ALREADY_GOING_LANDING_WINDOW = Duration.ofMillis(500);
 
     @BeforeAll
     static void startToolkit() throws Exception {
@@ -316,6 +326,22 @@ class RunLauncherPaneTest {
         assertThat(((TextField) pane.lookup("#run-scope-field")).getText()).isEqualTo("2019");
         assertThat(((ToggleButton) pane.lookup("#run-year-2019")).isSelected()).isTrue();
         assertThat(((ToggleButton) pane.lookup("#run-year-2018")).isSelected()).isFalse();
+    }
+
+    // The presenter outlives the pane, so a scope the last run emptied is still in the field when
+    // the shell builds the Dashboard again.
+    @Test
+    void arrivingBackAtTheDashboardDropsAScopeNothingIsLeftIn() throws Exception {
+        final var presenter = new RunLauncherPresenter(pipeline(), new FxProgressPort());
+        final Parent before = onFxThread(() -> built(presenter));
+        onFxThread(() -> fire(before, "#run-mode-sift"));
+        onFxThread(() -> type(before, "1998"));
+        assertThat(((TextField) before.lookup("#run-scope-field")).getText()).isEqualTo("1998");
+
+        final Parent back = onFxThread(() -> built(presenter));
+
+        WaitForAsyncUtils.waitFor(20, TimeUnit.SECONDS, () -> readOnFxThread(
+                () -> ((TextField) back.lookup("#run-scope-field")).getText()).isEmpty());
     }
 
     @Test
@@ -594,6 +620,52 @@ class RunLauncherPaneTest {
 
     private static RunLauncherPresenter presenter() {
         return new RunLauncherPresenter(pipeline(), new FxProgressPort());
+    }
+
+    // Waited for rather than read once, because what this proves is that a read nobody asked for
+    // happens on its own. Read through readOnFxThread so the toolkit thread keeps getting the
+    // pulses the timeline needs while the wait is running.
+    @Test
+    void theInboxCardFollowsFilesThatArriveWhileTheReaderIsSittingOnTheScreen() throws Exception {
+        final Pipeline pipeline = pipeline();
+        final Parent pane =
+                onFxThread(() -> built(new RunLauncherPresenter(pipeline, new FxProgressPort())));
+        assertThat(onFxThread(() -> headlineOf(pane))).contains("300");
+
+        when(pipeline.inboxTally()).thenReturn(new InboxTally(412, 2_000_000L));
+
+        WaitForAsyncUtils.waitFor(20, TimeUnit.SECONDS,
+                () -> readOnFxThread(() -> headlineOf(pane)).contains("412"));
+    }
+
+    // Silence alone does not distinguish a stopped poll from one that never started.
+    @Test
+    void nothingGoesOnCountingForAScreenTheShellHasReplaced() throws Exception {
+        final Pipeline pipeline = pipeline();
+        final Parent pane =
+                onFxThread(() -> built(new RunLauncherPresenter(pipeline, new FxProgressPort())));
+
+        onFxThread(() -> ((StackPane) pane.getParent()).getChildren().remove(pane));
+        // Every read runs on a thread of its own, so one that started before the removal lands
+        // after it. The baseline is taken once those have drained, and what this holds to is that
+        // no further read begins. Counting from zero instead would fail on a read already in
+        // flight, which is a pane stopping correctly.
+        Thread.sleep(READS_ALREADY_GOING_LANDING_WINDOW.toMillis());
+        final long onceTheScreenWasGone = timesCounted(pipeline);
+
+        Thread.sleep(TWO_RECOUNTS.toMillis());
+
+        assertThat(timesCounted(pipeline)).isEqualTo(onceTheScreenWasGone);
+    }
+
+    private static long timesCounted(final Pipeline pipeline) {
+        return mockingDetails(pipeline).getInvocations().stream()
+                .filter(call -> "inboxTally".equals(call.getMethod().getName()))
+                .count();
+    }
+
+    private static String headlineOf(final Parent pane) {
+        return ((Label) pane.lookup("#run-inbox-headline")).getText();
     }
 
     private static RunLauncherPresenter presenterOverAnUnfinishedSiftOf2019() {

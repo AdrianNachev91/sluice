@@ -88,7 +88,7 @@ public sealed interface CullScope {
      * cannot drift apart. A caller comparing what somebody has chosen against the runs already on
      * disk needs the months back, not just the string.
      *
-     * <p>{@link OldestN} answers null, because a count of files names no timeline. So does anything
+     * <p>{@link OldestN} answers null, because a count of files names no timeframe. So does anything
      * else found in the sift-prep root, including a folder somebody made by hand.
      *
      * @param tag {@link String} a prep dir's own folder name

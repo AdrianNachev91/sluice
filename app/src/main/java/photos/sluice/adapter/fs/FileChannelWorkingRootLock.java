@@ -186,8 +186,7 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     }
 
     /**
-     * Test seam: whether this instance currently holds workingRoot. Nothing in the app asks, since
-     * a caller either took the root or was refused it.
+     * Whether this instance currently holds workingRoot.
      *
      * @param workingRoot {@link Path} the working root to check
      * @return boolean true when this instance holds that root
@@ -199,10 +198,10 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
     }
 
     /**
-     * Test seam: how many outstanding acquires this instance has against workingRoot.
+     * How many outstanding acquires this instance has against workingRoot.
      *
-     * <p>A count rather than a boolean, because the case worth pinning is a folder reached under
-     * two spellings. Only the count tells that apart from the ordinary single hold.
+     * <p>A count rather than a boolean, because a folder reached under two spellings is only
+     * distinguishable from an ordinary single hold by the number.
      *
      * @param workingRoot {@link Path} the working root to count holders for
      * @return int how many acquires are outstanding, zero when the root is not held

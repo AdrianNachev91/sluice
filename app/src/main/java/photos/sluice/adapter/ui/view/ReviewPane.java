@@ -77,6 +77,7 @@ final class ReviewPane {
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
+        PageHeader.heldToTheViewport(scroll, headerRow);
         final var page = new VBox(headerRow, scroll);
         page.setId("review");
         page.getStyleClass().add("review");
@@ -220,7 +221,7 @@ final class ReviewPane {
             written.getStyleClass().add("review-notes-lines");
             fillNotes(written, notes);
             card.getChildren().addAll(
-                    foldRow(folder.path(), notes, presenter, card, written, scroll, buttons),
+                    foldRow(folder.path(), notes, presenter, redraw, card, written, scroll, buttons),
                     written);
             return card;
         }
@@ -231,6 +232,7 @@ final class ReviewPane {
          * @param folder {@link Path} which folder a press acts on
          * @param notes {@link Notes} what the fold says and holds
          * @param presenter {@link ReviewPresenter} reads the notes and remembers which fold is open
+         * @param redraw {@link Runnable} draws the screen again once the presenter has been told
          * @param card {@link Node} the whole card, whose foot has to end on screen once it opens
          * @param written {@link VBox} the box the note's lines are drawn into
          * @param scroll {@link ScrollPane} the pane the page sits in, which the fold takes with it
@@ -238,9 +240,9 @@ final class ReviewPane {
          * @return {@link Node} the row
          */
         private static Node foldRow(final Path folder, final Notes notes,
-                                    final ReviewPresenter presenter, final Node card,
-                                    final VBox written, final @Nullable ScrollPane scroll,
-                                    final Node buttons) {
+                                    final ReviewPresenter presenter, final Runnable redraw,
+                                    final Node card, final VBox written,
+                                    final @Nullable ScrollPane scroll, final Node buttons) {
             final var toggle = new Button(notes.label());
             toggle.setId(notes.id());
             toggle.getStyleClass().add("review-notes-toggle");
@@ -287,6 +289,12 @@ final class ReviewPane {
         private static void fillNotes(final VBox written, final @Nullable Notes notes) {
             final List<Node> drawn = new ArrayList<>();
             if (notes != null) {
+                if (notes.beyondTheFold() != null) {
+                    drawn.add(SettingsRows.helpLine(notes.beyondTheFold()));
+                }
+                if (notes.openTheFolder() != null) {
+                    drawn.add(SettingsRows.helpLine(notes.openTheFolder()));
+                }
                 notes.lines().forEach(line -> drawn.add(noteLine(line)));
                 if (notes.nothingWritten() != null) {
                     drawn.add(noteLine(notes.nothingWritten()));

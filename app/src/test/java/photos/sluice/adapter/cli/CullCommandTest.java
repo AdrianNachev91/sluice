@@ -96,7 +96,7 @@ class CullCommandTest {
     @Test
     void aCompletedSiftReportsWhatApplyMoved(@TempDir final Path root) {
         this.answering(new CullJobOutcome.Applied(zeroReport(), new ApplyReport(10, Map.of("Junk", 3), 1, 0, 0,
-                List.of()), null));
+                List.of()), null, null));
 
         final CliHarness.Result result = this.run(root, "sift", "2019");
 
@@ -174,7 +174,7 @@ class CullCommandTest {
     void whatWasActuallySpentIsNotedWhenAnythingWas(@TempDir final Path root) {
         this.answering(new CullJobOutcome.Applied(
                 new CullReport(2, 0, 3, new TokenSpend(1000, 500, "anthropic", "claude-sonnet-5"), false),
-                new ApplyReport(2, Map.of(), 0, 0, 0, List.of()), null));
+                new ApplyReport(2, Map.of(), 0, 0, 0, List.of()), null, null));
 
         assertThat(this.run(root, "sift", "2019").err()).contains("Spent: 1,500 tokens across 3 calls.");
     }
@@ -190,7 +190,7 @@ class CullCommandTest {
     void anArchivedPriorRunIsNamedInItsNewLocation(@TempDir final Path root) {
         final Path graveyard = root.resolve("graveyard").resolve("2019-06-01");
         this.answering(new CullJobOutcome.Applied(zeroReport(), new ApplyReport(1, Map.of(), 0, 0, 0, List.of()),
-                graveyard));
+                graveyard, null));
 
         assertThat(this.run(root, "sift", "2019").err()).contains(graveyard.toString());
     }
@@ -258,7 +258,7 @@ class CullCommandTest {
     }
 
     private static CullJobOutcome.Applied applied() {
-        return new CullJobOutcome.Applied(zeroReport(), new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), null);
+        return new CullJobOutcome.Applied(zeroReport(), new ApplyReport(0, Map.of(), 0, 0, 0, List.of()), null, null);
     }
 
     private static CullReport zeroReport() {

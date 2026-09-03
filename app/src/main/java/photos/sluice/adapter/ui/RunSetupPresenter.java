@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
@@ -45,9 +46,9 @@ import java.util.stream.IntStream;
  * window. What the text itself amounts to is {@link RunScopeText}, and what an engine takes is
  * {@link RunScope}.
  *
- * <p>The counts are read by calling {@link #refreshCounts}, which walks three trees and blocks
- * while it does. The caller runs it off whatever thread paints. The runs folder is the expensive
- * one: reading it diagnoses every sift on disk.
+ * <p>The counts are read by calling {@link #refreshCounts} or {@link #refreshCountsUnprompted},
+ * each of which walks three trees and blocks while it does. The caller runs it off whatever thread
+ * paints. The runs folder is the expensive one: reading it diagnoses every sift on disk.
  *
  * <p>Whether a job is running is not held here. {@link RunLauncherPresenter} owns that, and answers
  * the question through the supplier handed in.
@@ -56,7 +57,7 @@ public class RunSetupPresenter {
 
     private static final Logger log = LoggerFactory.getLogger(RunSetupPresenter.class);
 
-    private static final String SCOPE_LABEL = "Timeline for this run";
+    private static final String SCOPE_LABEL = "Timeframe for this run";
 
     // How long a folder read is given before the screen says it is reading. Under this, a reader
     // sees one state rather than three. Over it, they are waiting and want to know why.
@@ -100,7 +101,7 @@ public class RunSetupPresenter {
     // meet a bare asterisk. The screen opens this line with the mark itself, in its own colour.
     // Three pieces because the middle one is pressable. Split here rather than on the screen, which
     // would have to read the sentence to find the word that leads anywhere.
-    private static final String UNFINISHED_LEGEND = "This timeline already has a sift that has not "
+    private static final String UNFINISHED_LEGEND = "This timeframe already has a sift that has not "
             + "finished. Open ";
     private static final String UNFINISHED_WAY_THERE = "Runs";
     private static final String UNFINISHED_LEGEND_AFTER = " to see it.";
@@ -160,21 +161,30 @@ public class RunSetupPresenter {
     // Volatile throughout, and the traffic runs both ways. The counts and the flags beside them are
     // written by the read behind the cards and looked at while somebody types. The mode, the field
     // and the line go the other way: written by a press, and looked at by that same read when it
-    // draws the screen. Without it a reader can see counting already false while the count is still
+    // draws the screen. Without it a reader can see the read already over while the count is still
     // null, and the Inbox card then reports a failure that never happened.
     private volatile RunMode chosen = RunMode.SORT;
     private volatile String scopeText = "";
     private volatile @Nullable InboxTally inbox;
     private volatile @Nullable SortedTally sorted;
-    private volatile boolean counting = true;
     private volatile boolean countsUnreadable;
     private volatile List<CullRunSummary> unfinished = List.of();
     private volatile @Nullable Message message;
 
-    // The one field above that is not volatile, because it is the one no other thread touches. It
-    // is written by a press and by a keystroke, and read while drawing, all on the thread that
-    // paints. Volatile would not make its own toggle atomic anyway, and would suggest a second
-    // writer that does not exist.
+    // How many asked-for reads are somewhere between being asked for and finishing their walk. A
+    // count rather than a flag, because two of them can overlap. A boolean the first cleared on its
+    // way out would bring the button live over counts the second is still replacing. The pane's
+    // mount read and a recount after a run are the pair that does it. Finish a run, then arrive
+    // back at the Dashboard while that recount is still walking.
+    private final AtomicInteger askedReads = new AtomicInteger();
+
+    // Whether any read at all has landed. A screen that has read nothing has no counts to offer,
+    // and no asked-for read need be in flight for that to be true.
+    private volatile boolean wasReadAtLeastOnce;
+
+    // Plain, because no other thread touches this one. It is written by a press and by a keystroke,
+    // and read while drawing, all on the thread that paints. Volatile would not make its own toggle
+    // atomic anyway, and would suggest a second writer that does not exist.
     private boolean monthsCollapsed;
 
     private final ReentrantLock reading = new ReentrantLock();
@@ -219,10 +229,44 @@ public class RunSetupPresenter {
     }
 
     /**
-     * Reads what is in the Inbox and what is staged in Sorted, from disk.
+     * Everything the last read found, as one value.
      *
-     * <p>Blocks for as long as walking those two trees takes, which on a full Inbox is long enough
-     * to be felt. Called off the thread that paints.
+     * @param inbox {@link InboxTally} what is waiting, or null where the read failed
+     * @param sorted {@link SortedTally} what is staged, or null where the read failed
+     * @param unfinished a {@link List} of {@link CullRunSummary} the sifts left part way through
+     * @param unreadable boolean whether the last read failed
+     */
+    public record Counts(@Nullable InboxTally inbox, @Nullable SortedTally sorted,
+                         List<CullRunSummary> unfinished, boolean unreadable) {
+
+        /**
+         * Defensively copies the mutable list.
+         *
+         * @param inbox {@link InboxTally} what is waiting, or null
+         * @param sorted {@link SortedTally} what is staged, or null
+         * @param unfinished a {@link List} of {@link CullRunSummary} the sifts left part way through
+         * @param unreadable boolean whether the last read failed
+         */
+        public Counts {
+            unfinished = List.copyOf(unfinished);
+        }
+    }
+
+    /**
+     * What the last read found, so a caller can tell a read that moved something from one that
+     * found everything where it was.
+     *
+     * @return {@link Counts} the four values a read writes
+     */
+    public Counts counts() {
+        return new Counts(this.inbox, this.sorted, this.unfinished, this.countsUnreadable);
+    }
+
+    /**
+     * Reads what is in the Inbox, what is staged in Sorted and what sifts are on disk.
+     *
+     * <p>Blocks for as long as walking those three trees takes, which on a full Inbox is long
+     * enough to be felt. Called off the thread that paints.
      *
      * <p>A refusal from the facade is kept rather than thrown on. The roots were usable when this
      * screen was drawn, so one that is not now went wrong while somebody was looking at it. The
@@ -230,28 +274,55 @@ public class RunSetupPresenter {
      * is at fault, and that is more than this screen knows.
      */
     public void refreshCounts() {
-        // Serialised rather than allowed to overlap. Two things start a read: a screen being built
-        // and a run ending. Left concurrent, whichever finished first would drop the flag while the
-        // other was still walking. The cards would then pair an Inbox from one moment with years
-        // from another. A waiting caller re-walks rather than skipping, since the read it would
-        // have skipped may predate the run that asked for this one.
+        this.readCounts(true);
+    }
+
+    /**
+     * Reads the same two trees for a caller nobody asked for an answer from.
+     */
+    public void refreshCountsUnprompted() {
+        this.readCounts(false);
+    }
+
+    /**
+     * Walks the two folder trees and the runs folder, and records what they hold.
+     *
+     * <p>Serialised rather than allowed to overlap. Left concurrent, the cards would pair an Inbox
+     * from one moment with years from another. A waiting caller re-walks rather than skipping,
+     * since the read it would have skipped may predate the run that asked for this one.
+     *
+     * <p>An asked-for read counts itself in before the lock and out once its own walk has ended, so
+     * it covers its wait as well as its walk. A read queued behind a walk already running would
+     * otherwise leave the start button live for the rest of that walk. A press landing there scopes
+     * a job by the very counts this read was asked to correct.
+     *
+     * <p>A read nobody asked for counts nothing, so it cannot take the button away every few seconds
+     * from a reader who is only sitting there. What it does do is record that a read has landed,
+     * which is what ends the state a screen starts in, having read nothing.
+     *
+     * @param prompted boolean whether something happened that the screen has yet to catch up with
+     */
+    private void readCounts(final boolean prompted) {
+        if (prompted) {
+            // Drawn before the read rather than after it, but not straight away. A wait behind
+            // another walk, or a walk over a full Inbox, is long enough to be felt. A screen still
+            // showing the live button it was drawn with takes a press and does nothing. A read that
+            // waits for nothing and walks an empty Inbox is over in milliseconds. A button going
+            // dead and live again inside that reads as a glitch. So the dead state waits to see
+            // which kind of read this turns out to be.
+            this.redrawIfStillReadingByThen();
+            // Last before the lock, so nothing that allocates sits between the count going up and
+            // the try that brings it down again. A count left up has no way back down, and the
+            // start button is then dead for the life of the process.
+            this.askedReads.incrementAndGet();
+        }
         this.reading.lock();
-        // Everything between the lock and the unlock sits in the try, the repaint included. It
-        // reaches the screen through the FX thread, which refuses the handover once the window is
-        // gone. Thrown from outside the try, that leaves the lock held for the rest of the run.
+        // A throw between the lock and the try would reach the caller with the lock still held,
+        // and with the count above it still up. Every later read would park on that lock for the
+        // rest of the run.
         try {
             // A run that just finished spent against the ledger the estimate is averaged from.
             this.lastEstimateCovered = -1;
-            // Raised on every read, not only the first. Between a run ending and this landing, the
-            // cards hold the state from before that run. A Start pressed against them would scope a
-            // job by counts the run has already changed.
-            this.counting = true;
-            // Drawn before the walk rather than after it, but not straight away. A walk over a full
-            // Inbox is long enough to be felt. A screen still showing the live button it was drawn
-            // with takes a press and does nothing. A walk over an empty one is over in
-            // milliseconds, and a button going dead and live again inside that reads as a glitch.
-            // So the dead state waits to see which kind of walk this is.
-            this.deadButtonOnceThisIsSlow();
             // Read first and guarded on its own. What the runs folder answers decides which rows
             // carry a mark and nothing else on this screen, so its failures stay off the Inbox and
             // Sorted cards.
@@ -267,9 +338,24 @@ public class RunSetupPresenter {
             this.sorted = null;
             this.countsUnreadable = true;
         } finally {
-            this.counting = false;
+            // Set before the count comes down, so no reader sees an asked-for read gone while the
+            // screen still reads as having read nothing.
+            this.wasReadAtLeastOnce = true;
+            if (prompted) {
+                this.askedReads.decrementAndGet();
+            }
             this.reading.unlock();
         }
+    }
+
+    /**
+     * Whether the counts on the cards are being replaced.
+     *
+     * @return boolean true while an asked-for read is under way, and until the first read of any
+     *     kind has landed
+     */
+    private boolean isCounting() {
+        return this.askedReads.get() > 0 || !this.wasReadAtLeastOnce;
     }
 
     /**
@@ -299,6 +385,23 @@ public class RunSetupPresenter {
         // folded would otherwise narrow the run to a row nobody can see.
         this.monthsCollapsed = false;
         this.message = null;
+    }
+
+    /**
+     * Empties the field where nothing is left in what it names.
+     *
+     * <p>What a run empties, the field still says. A reader coming back from a finished move over
+     * 2019 meets a refusal of the very thing that just worked. The better the run went, the more
+     * certain that refusal.
+     *
+     * <p>Keyed on the scope being refused rather than on the run having finished. A run the reader
+     * stopped leaves something behind, so its scope is not refused and it stays, which is what they
+     * need to finish it. A year still worth running in another mode stays for the same reason.
+     */
+    public void forgetAScopeNothingIsLeftIn() {
+        if (!this.scopeText.isBlank() && this.scope() instanceof RunScope.Refused) {
+            this.setScope("");
+        }
     }
 
     /**
@@ -395,7 +498,7 @@ public class RunSetupPresenter {
     }
 
     /**
-     * What a press to sift a timeline from a finished sort's result card needs before it can start.
+     * What a press to sift a timeframe from a finished sort's result card needs before it can start.
      *
      * <p>One answer rather than a question and a separate guard, so the whole decision is taken
      * from one read of the counts.
@@ -405,12 +508,12 @@ public class RunSetupPresenter {
      * dialog is the only place a reader learns either, and skipping it on a free provider would
      * skip the scope along with the money.
      *
-     * <p>The question names the whole timeline and splits out what this run put there. A sort that
+     * <p>The question names the whole timeframe and splits out what this run put there. A sort that
      * added two months to a year already holding others yields a sift over every month of it, and
      * the photos it did not add are the ones a reader would not think they were paying for.
      *
-     * @param year int the timeline the card offered to sift
-     * @param justSorted int how many photos this run filed into that timeline
+     * @param year int the timeframe the card offered to sift
+     * @param justSorted int how many photos this run filed into that timeframe
      * @return {@link SiftNow} the question to put first, or the refusal to report instead
      */
     public SiftNow siftNowNeeds(final int year, final int justSorted) {
@@ -419,8 +522,8 @@ public class RunSetupPresenter {
             return new SiftNow.Refuse(blocked);
         }
         final int photos = this.photosIn(new RunScope.OfYear(year, List.of()));
-        // A sort files videos under a year as readily as photos, so a timeline can reach this card
-        // holding nothing a provider could look at. The launcher refuses the same timeline in the
+        // A sort files videos under a year as readily as photos, so a timeframe can reach this card
+        // holding nothing a provider could look at. The launcher refuses the same timeframe in the
         // same words.
         if (photos == 0) {
             return new SiftNow.Refuse(new Message(nothingToSift(year), true));
@@ -431,7 +534,7 @@ public class RunSetupPresenter {
     }
 
     /**
-     * What a sift of this timeline would look at, split into what the run just filed and what was
+     * What a sift of this timeframe would look at, split into what the run just filed and what was
      * already there.
      *
      * <p>The split is the point. A reader pressing this after a sort that filed six photos has no
@@ -439,10 +542,10 @@ public class RunSetupPresenter {
      * reads as the run's own.
      *
      * <p>Falls back to the total alone where the two cannot be told apart. A stale count can put
-     * the timeline behind what the run reported. A sentence claiming a negative remainder is worse
+     * the timeframe behind what the run reported. A sentence claiming a negative remainder is worse
      * than one that simply says how many there are.
      *
-     * @param year int the timeline
+     * @param year int the timeframe
      * @param photos int how many photos it holds in all
      * @param justSorted int how many of those this run filed
      * @return {@link String} the sentence
@@ -490,7 +593,7 @@ public class RunSetupPresenter {
      * @return {@link Message} what to say instead of starting, or null where nothing is in the way
      */
     RunLauncherView.@Nullable Message cannotSizeARun() {
-        if (this.counting) {
+        if (this.isCounting()) {
             return new Message(STILL_READING, true);
         }
         return this.countsUnreadable ? new Message(INBOX_UNREADABLE, true) : null;
@@ -550,7 +653,7 @@ public class RunSetupPresenter {
      * @return boolean true when there is something to start
      */
     boolean canStart(final RunScope scope) {
-        return !this.jobRunning.getAsBoolean() && !this.counting
+        return !this.jobRunning.getAsBoolean() && !this.isCounting()
                 && RunScope.startable(scope) && !this.pipeline.isBusy()
                 && this.overlapRefusal(scope) == null;
     }
@@ -565,7 +668,7 @@ public class RunSetupPresenter {
     void reasonNothingStarted() {
         if (this.pipeline.isBusy()) {
             this.message = new Message(BUSY_ELSEWHERE, true);
-        } else if (this.counting) {
+        } else if (this.isCounting()) {
             // The button is live for the first moments of a read, so this press is one the screen
             // invited. Saying nothing would make the press look like it missed.
             this.message = new Message(STILL_READING, true);
@@ -643,7 +746,7 @@ public class RunSetupPresenter {
         // somebody may want to put photos.
         final boolean canImport = !this.jobRunning.getAsBoolean();
         final InboxTally waiting = this.inbox;
-        if (this.counting && waiting == null && !this.countsUnreadable) {
+        if (this.isCounting() && waiting == null && !this.countsUnreadable) {
             return new InboxCard(INBOX_COUNTING, null, IMPORT_LABEL, IMPORT_HINT, canImport);
         }
         if (this.countsUnreadable || waiting == null) {
@@ -707,8 +810,8 @@ public class RunSetupPresenter {
     /**
      * One year's row, and the month rows under it.
      *
-     * <p>The mark is drawn whatever mode is chosen, since it is about the timeline rather than the
-     * mode. A reader looking at Sorted is looking at the same timelines whichever mode they came
+     * <p>The mark is drawn whatever mode is chosen, since it is about the timeframe rather than the
+     * mode. A reader looking at Sorted is looking at the same timeframes whichever mode they came
      * here for.
      *
      * @param row {@link YearRow} the year's counts
@@ -912,16 +1015,17 @@ public class RunSetupPresenter {
     }
 
     /**
-     * Puts the counting state on the screen, but only if the read is still going by then.
+     * Puts the counting state on the screen, but only if an asked-for read is still going by then.
      *
-     * <p>Nothing cancels this. It asks whether a read is still running when it wakes, and one that
-     * has finished leaves it with nothing to draw. A second read started in the meantime is the
-     * same answer for a different walk, which is the state the screen should be in anyway.
+     * <p>Nothing cancels this. It asks the same flag the screen does when it wakes, so a read that
+     * has already finished leaves it nothing to draw. A second asked-for read in the meantime
+     * raises the flag again. A read nobody asked for does not, and the screen wants its live button
+     * through one of those anyway.
      */
-    private void deadButtonOnceThisIsSlow() {
+    private void redrawIfStillReadingByThen() {
         CompletableFuture.runAsync(
                 () -> {
-                    if (this.counting) {
+                    if (this.isCounting()) {
                         this.repaint.run();
                     }
                 },
@@ -1110,17 +1214,17 @@ public class RunSetupPresenter {
      * @return boolean true only where a completed read succeeded
      */
     private boolean countsAreIn() {
-        return !this.counting && !this.countsUnreadable;
+        return !this.isCounting() && !this.countsUnreadable;
     }
 
     /**
-     * What a timeline holding no photo is refused with.
+     * What a timeframe holding no photo is refused with.
      *
-     * <p>One sentence, because two surfaces refuse the same timeline. The launcher greys Start on
+     * <p>One sentence, because two surfaces refuse the same timeframe. The launcher greys Start on
      * it, and a result card's Sift reports it. A reader who meets both must not be told two
      * different things about one folder.
      *
-     * @param year int the timeline nothing can be sifted out of
+     * @param year int the timeframe nothing can be sifted out of
      * @return {@link String} the refusal
      */
     private static String nothingToSift(final int year) {
@@ -1170,7 +1274,7 @@ public class RunSetupPresenter {
     }
 
     /**
-     * What to say where the chosen timeline runs across an unfinished sift without being it.
+     * What to say where the chosen timeframe runs across an unfinished sift without being it.
      *
      * <p>The screen's half of a guard the facade also makes. This one greys Start while somebody
      * types, off the last reading of the folder, so it can be a moment out of date and the worst it
@@ -1214,7 +1318,7 @@ public class RunSetupPresenter {
     /**
      * What pressing the button under the field does.
      *
-     * <p>A sift of a timeline that already holds an unfinished one is refused by the facade. Where
+     * <p>A sift of a timeframe that already holds an unfinished one is refused by the facade. Where
      * that run can be continued, the button continues it. Where it cannot, the button goes to the
      * screen that can deal with it.
      *
@@ -1261,7 +1365,7 @@ public class RunSetupPresenter {
     }
 
     /**
-     * What the mark on a timeline row means, or nothing where no row carries one.
+     * What the mark on a timeframe row means, or nothing where no row carries one.
      *
      * @param years a {@link List} of {@link YearChoice} the rows as they will be drawn
      * @return {@link String} the legend, or null
@@ -1284,7 +1388,7 @@ public class RunSetupPresenter {
                     ? listed.stream().filter(run -> run.health().state() != State.COMPLETE).toList()
                     : List.of();
         } catch (final RuntimeException e) {
-            log.warn("Could not read the runs, so no timeline is marked this pass", e);
+            log.warn("Could not read the runs, so no timeframe is marked this pass", e);
             return List.of();
         }
     }

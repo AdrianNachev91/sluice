@@ -39,7 +39,18 @@ class QuitPresenterTest {
     private final RunLauncherPresenter launcher =
             new RunLauncherPresenter(this.pipeline, new FxProgressPort(Runnable::run));
 
-    private final QuitPresenter presenter = new QuitPresenter(this.pipeline, this.startup, this.launcher);
+    // Short enough that a test asking about a run which never ends is not paying the real
+    // 2.5-second wait. Nearly every test in this file waits it out, so what is spent here is spent
+    // about twenty times over.
+    private static final Duration A_SHORT_BEAT = Duration.ofMillis(20);
+
+    // A sleep costs its own granularity on top of what it asks for. That overhead is a fixed number
+    // of milliseconds rather than a fraction, so a longer beat absorbs it where a shorter one is
+    // overrun by it.
+    private static final Duration A_BEAT_LONG_ENOUGH_TO_ASK_THREE_TIMES = Duration.ofMillis(400);
+
+    private final QuitPresenter presenter =
+            new QuitPresenter(this.pipeline, this.startup, this.launcher, A_SHORT_BEAT);
 
     @BeforeEach
     void anInboxAndALibraryTheLauncherCanDraw() {
@@ -57,6 +68,26 @@ class QuitPresenterTest {
         when(this.pipeline.isBusy()).thenReturn(false);
 
         assertThat(this.presenter.quitDialog()).isNull();
+    }
+
+    // On a beat of its own, and the only test here that needs one. What it turns on is the wait
+    // asking a third time, which takes two sleeps of a quarter of the beat. Windows rounds a sleep
+    // up to its timer's own granularity. On the shared beat above, those two can outlast the
+    // deadline on a loaded machine, and the third question is then never put.
+    @Test
+    void aRunThatEndsWhileTheCloseWaitsIsNeverAskedAbout() {
+        final var waiting = new QuitPresenter(this.pipeline, this.startup, this.launcher,
+                A_BEAT_LONG_ENOUGH_TO_ASK_THREE_TIMES);
+        when(this.pipeline.isBusy()).thenReturn(true, true, false);
+
+        assertThat(waiting.quitDialog()).isNull();
+    }
+
+    @Test
+    void aRunStillGoingWhenTheBeatIsSpentIsAskedAbout() {
+        when(this.pipeline.isBusy()).thenReturn(true);
+
+        assertThat(this.presenter.quitDialog()).isNotNull();
     }
 
     @Test
@@ -179,7 +210,7 @@ class QuitPresenterTest {
         start.accept(launcher);
         when(this.pipeline.isBusy()).thenReturn(true);
         final QuitView asked =
-                new QuitPresenter(this.pipeline, this.startup, launcher).quitDialog();
+                new QuitPresenter(this.pipeline, this.startup, launcher, A_SHORT_BEAT).quitDialog();
         assertThat(asked).isNotNull();
         return asked;
     }

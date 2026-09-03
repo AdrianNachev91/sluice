@@ -1599,6 +1599,14 @@
     -fx-text-fill: -sluice-text-muted;
 }
 
+/* A phase the run has not reached yet. Muted the same way a finished one is, and for the same
+   reason: neither is what the reader is watching. The empty bar under it is what tells the two
+   apart, since a finished phase's is full. */
+.run-phase-ahead .run-phase-label {
+    -fx-font-weight: normal;
+    -fx-text-fill: -sluice-text-muted;
+}
+
 /* Cancel carries no fill. The filled button on this app is the one that starts work, and stopping
    is not the way through. */
 .run-cancel {
@@ -1704,6 +1712,24 @@
     -fx-font-size: 11px;
     -fx-font-weight: bold;
     -fx-padding: 1px 7px;
+}
+
+/* The mark on the Dashboard entry, in the same slot the count above sits in. A dot rather than a
+   number, since there is only ever one dashboard. */
+.nav-mark {
+    -fx-font-size: 14px;
+    -fx-padding: 1px 7px;
+}
+
+/* Work under way. Muted, because it asks nothing of the reader and will end on its own. */
+.nav-mark-running {
+    -fx-text-fill: -sluice-text-muted;
+}
+
+/* An answer nobody has read, which is the one that wants a press. Caution, like the count above,
+   for the same reason: the brand accent means "the screen you are on" everywhere in this sidebar. */
+.nav-mark-finished {
+    -fx-text-fill: -sluice-caution;
 }
 
 /* A nav entry whose name and count sit at opposite ends of it. The name is drawn by the graphic
@@ -1926,7 +1952,7 @@
     -fx-text-fill: -sluice-text-muted;
 }
 
-/* The mark on a timeline row whose sift has not finished, and the same mark opening the legend
+/* The mark on a timeframe row whose sift has not finished, and the same mark opening the legend
    below the rows. Caution-coloured, like the sidebar count that stands for the same runs.
    Never the only signal: the legend spells it out, and the button under the field changes what it
    offers. */

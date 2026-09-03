@@ -73,7 +73,7 @@ final class RunRefusals {
             case final Pipeline.RunAlreadyFinishedException finished -> messageOf(finished);
             case final Pipeline.NothingToRedoException nothing -> messageOf(nothing);
             case final Pipeline.ScopeUnreadableException unreadable -> "Sluice doesn't know whether a "
-                    + "sift is already running for that timeline, because " + unreadable.prepDir()
+                    + "sift is already running for that timeframe, because " + unreadable.prepDir()
                     + " cannot be read. Most likely the folder is held by another process or not "
                     + "there anymore.";
             // Names no way out but the working folder. Several calls raise this, discarding among
@@ -152,7 +152,7 @@ final class RunRefusals {
     }
 
     /**
-     * What to say where the chosen timeline shares photos with unfinished sifts without being one of
+     * What to say where the chosen timeframe shares photos with unfinished sifts without being one of
      * them.
      *
      * <p>Takes the scopes rather than the refusal, because two callers word it. The facade refuses
@@ -163,7 +163,7 @@ final class RunRefusals {
      * comes back, and is refused by the next.
      *
      * @param across a {@link List} of {@link String} the scopes in the way, as their runs name them
-     * @param chosen {@link String} the timeline the reader picked
+     * @param chosen {@link String} the timeframe the reader picked
      * @return {@link String} the sentence to show
      */
     static String coveringUnfinished(final CullScope.Year chosen, final List<CullScope.Year> across) {
@@ -175,7 +175,7 @@ final class RunRefusals {
     }
 
     /**
-     * What to say about a timeline a sift is already sitting on.
+     * What to say about a timeframe a sift is already sitting on.
      *
      * <p>The exception's own message names the prep dir and the raw state, which is what a log
      * needs. A reader needs to know their earlier sift is still there, and why this one stopped.
@@ -190,7 +190,7 @@ final class RunRefusals {
      */
     private static String occupiedBy(final Pipeline.ScopeOccupiedException occupied) {
         return "You already have a sift of " + occupied.occupant().scope() + " that has not finished. "
-                + "Another cannot be started for the same timeline while that one is there. "
+                + "Another cannot be started for the same timeframe while that one is there. "
                 + "Open Runs to continue or discard it.";
     }
 
@@ -199,7 +199,7 @@ final class RunRefusals {
      *
      * <p>A run whose folder name this app did not build reads back as nothing, and a sentence
      * cannot name what it could not read. Where that leaves nothing to name, the refusal falls
-     * back to its own message rather than saying a timeline overlaps an empty list.
+     * back to its own message rather than saying a timeframe overlaps an empty list.
      *
      * @param overlaps {@link Pipeline.ScopeOverlapsException} the refusal
      * @return {@link String} the sentence to show

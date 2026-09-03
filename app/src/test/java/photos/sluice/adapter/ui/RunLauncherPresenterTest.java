@@ -17,6 +17,7 @@ import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.adapter.ui.RunProgressView.PhaseBar;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SortedTally.MonthRow;
@@ -158,6 +159,37 @@ class RunLauncherPresenterTest {
         this.chooseAndStart(RunMode.SIFT, "2019");
 
         verify(this.pipeline).cull(new CullScope.Year(2019, null));
+    }
+
+    @Test
+    void theSidebarIsMarkedForNothingWhileTheDashboardIsIdle() {
+        assertThat(this.presenter.dashboardMark()).isEqualTo(DashboardMark.NONE);
+    }
+
+    @Test
+    void theSidebarIsMarkedForACardNobodyHasClosed() {
+        this.chooseAndStart(RunMode.SORT, "");
+
+        assertThat(this.presenter.dashboardMark()).isEqualTo(DashboardMark.FINISHED);
+    }
+
+    @Test
+    void theMarkGoesWithThePressThatClosesTheCard() {
+        this.chooseAndStart(RunMode.SORT, "");
+
+        this.presenter.dismissResult();
+
+        assertThat(this.presenter.dashboardMark()).isEqualTo(DashboardMark.NONE);
+    }
+
+    @Test
+    void theSidebarIsMarkedWhileAJobIsStillGoing() {
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+
+        this.presenter.start();
+
+        assertThat(this.presenter.dashboardMark()).isEqualTo(DashboardMark.RUNNING);
     }
 
     @Test
@@ -539,8 +571,8 @@ class RunLauncherPresenterTest {
     @Test
     void aSiftThatAppliedItsDecisionsIsTheOneThatSaysItFinished() {
         this.choose(RunMode.SIFT, "2019");
-        this.siftEndsWith(new CullJobOutcome.Applied(mock(CullReport.class),
-                new ApplyReport(25, Map.of("Keep", 20), 0, 1, 3, List.of()), null));
+        this.siftEndsWith(new CullJobOutcome.Applied(CullReport.nothingSpent("anthropic", 0),
+                new ApplyReport(25, Map.of("Keep", 20), 0, 1, 3, List.of()), null, null));
 
         this.presenter.start();
 
@@ -673,6 +705,26 @@ class RunLauncherPresenterTest {
         assertThat(this.runningView().phases()).isEmpty();
     }
 
+    // The stub announces from inside the submit, which is where a real job announces from: its own
+    // first statement, on its own thread.
+    @SuppressWarnings("unchecked")
+    @Test
+    void aRunsOwnPlanSurvivesTheClearingOfTheRunBeforeIt() {
+        this.choose(RunMode.SORT, "");
+        this.progress.phaseStarted("Sorting");
+        final JobHandle<Object> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(new CompletableFuture<>());
+        when(this.pipeline.sort(any())).thenAnswer(_ -> {
+            this.progress.phasesPlanned(List.of("Finding dates...", "Sorting..."));
+            return handle;
+        });
+
+        this.presenter.start();
+
+        assertThat(this.runningView().phases()).extracting(PhaseBar::label)
+                .containsExactly("Finding dates...", "Sorting...");
+    }
+
     @Test
     void cancelAsksTheRunningJobToStop() {
         this.choose(RunMode.SORT, "");
@@ -731,7 +783,7 @@ class RunLauncherPresenterTest {
     // because the presenter had no arm for its type. The refusal is deliberate and the app knows
     // exactly what is wrong, so the bug line is the one thing none of them may say.
     @Test
-    void aTimelineAlreadyHoldingAnUnfinishedSiftIsRefusedInWordsRatherThanAsABug() {
+    void aTimeframeAlreadyHoldingAnUnfinishedSiftIsRefusedInWordsRatherThanAsABug() {
         this.choose(RunMode.SIFT, "2019");
         doThrow(new Pipeline.ScopeOccupiedException(occupantOf2019())).when(this.pipeline).cull(any());
 
@@ -739,7 +791,7 @@ class RunLauncherPresenterTest {
 
         assertThat(this.reported().text())
                 .isEqualTo("You already have a sift of 2019 that has not finished. Another cannot "
-                        + "be started for the same timeline while that one is there. "
+                        + "be started for the same timeframe while that one is there. "
                         + "Open Runs to continue or discard it.");
     }
 
@@ -777,7 +829,7 @@ class RunLauncherPresenterTest {
     }
 
     @Test
-    void aTimelineWhoseFolderCannotBeReadSaysSoRatherThanReportingABug() {
+    void aTimeframeWhoseFolderCannotBeReadSaysSoRatherThanReportingABug() {
         this.choose(RunMode.SIFT, "2019");
         doThrow(new Pipeline.ScopeUnreadableException(Path.of("logs", "sift-prep", "2019"), new RuntimeException()))
                 .when(this.pipeline).cull(any());
@@ -861,7 +913,7 @@ class RunLauncherPresenterTest {
     }
 
     @Test
-    void siftingFromAFinishedSortsCardCoversTheWholeTimelineThatSortFilled() {
+    void siftingFromAFinishedSortsCardCoversTheWholeTimeframeThatSortFilled() {
         this.aFinishedSortShowing();
         this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
 
@@ -913,7 +965,7 @@ class RunLauncherPresenterTest {
     }
 
     @Test
-    void aSiftOfATimelineHoldingOnlyVideosIsRefusedWithoutEverAsking() {
+    void aSiftOfATimeframeHoldingOnlyVideosIsRefusedWithoutEverAsking() {
         this.aFinishedSortShowing();
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(
                 new YearRow(2021, 0, 0, List.of(new MonthRow(6, 0, 0)))), 0));

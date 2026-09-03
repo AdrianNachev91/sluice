@@ -5,7 +5,6 @@ import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.config.PathsConfig;
 import photos.sluice.config.SettingsFixture;
@@ -16,7 +15,6 @@ import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
-import photos.sluice.domain.job.WatchMode;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -405,11 +403,6 @@ class CullMontageRendererTest {
         @Override
         public CullProviderSettings providerSettings(final String providerId) {
             return CullProviderSettings.unset();
-        }
-
-        @Override
-        public ExternalAgentSettings externalAgent() {
-            return new ExternalAgentSettings(WatchMode.MANUAL);
         }
 
         @Override

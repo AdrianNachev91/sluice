@@ -11,6 +11,7 @@ import photos.sluice.application.startup.StartupFailure.ConfigSpot;
 import photos.sluice.application.startup.StartupFailure.RejectedSetting;
 import photos.sluice.application.startup.StartupFailure.Unclassified;
 import photos.sluice.application.startup.StartupFailure.UnparsableConfigFile;
+import photos.sluice.application.startup.StartupFailure.UnusableSettings;
 import photos.sluice.application.startup.StartupFailure.WorkingRootBusy;
 
 import java.util.Locale;
@@ -73,6 +74,7 @@ public class StartupFailurePresenter {
             case final UnparsableConfigFile unparsable -> new Unparsable(UNPARSABLE_CONFIG,
                     unparsable.spot().file().toString(), positionText(unparsable.spot()), unparsable.problem(),
                     unparsable.trace());
+            case final UnusableSettings unusable -> new Generic(unusable.problem(), unusable.trace());
             case final Unclassified unclassified -> new Generic(GENERIC, unclassified.trace());
         };
     }

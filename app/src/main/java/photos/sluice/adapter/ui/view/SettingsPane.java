@@ -103,7 +103,6 @@ final class SettingsPane {
                 VisionProviderCard.providerChoiceOf(onScreen.provider().providerBox()).id(),
                 VisionProviderCard.selectedModelId(controls.model()),
                 controls.endpoint().getText(),
-                VisionProviderCard.watchAutomaticallyOf(onScreen.provider().watchRow()),
                 onScreen.montage().tileSize().getValue(),
                 onScreen.montage().tilesPerRow().getValue()));
     }
@@ -146,7 +145,7 @@ final class SettingsPane {
                     folders.inbox().violation(),
                     VisionProviderCard.controlsOf(provider.providerFields()).modelViolation());
             VisionProviderCard.showOnlyWhatTheProviderUses(chosen.fields(), provider.providerFields(),
-                    provider.watchRow(), provider.secretCard());
+                    provider.secretCard());
             // Both rebuilt rather than toggled. A credential and a model catalog each belong to the
             // provider that owns them, so what these say and offer has to change with the choice.
             //
@@ -168,7 +167,7 @@ final class SettingsPane {
         header.save().setOnAction(_ -> onSave(container, presenter, visionProvider, folders.workingRoot(),
                 folders.libraryRoot(), folders.inbox(),
                 VisionProviderCard.providerChoiceOf(provider.providerBox()), provider.providerFields(),
-                VisionProviderCard.watchAutomaticallyOf(provider.watchRow()), montage.tileSize().getValue(),
+                montage.tileSize().getValue(),
                 montage.tilesPerRow().getValue(), AppearanceCard.themeChoiceOf(appearance.themeBox()), status,
                 said -> refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, said,
                         onScreen)));
@@ -191,12 +190,12 @@ final class SettingsPane {
                                final SettingsRows.FolderRow workingRoot,
                                final SettingsRows.FolderRow libraryRoot, final SettingsRows.FolderRow inbox,
                                final SettingsView.ProviderChoice provider, final VBox providerFields,
-                               final boolean watchAutomatically, final int tileSize, final int tilesPerRow,
+                               final int tileSize, final int tilesPerRow,
                                final String themeId, final Label status, final Consumer<String> showBanner) {
         final VisionProviderCard.ProviderFieldControls controls = VisionProviderCard.controlsOf(providerFields);
         final SaveOutcome outcome = presenter.save(workingRoot.field().getText(), libraryRoot.field().getText(),
                 inbox.field().getText(), provider.id(), VisionProviderCard.selectedModelId(controls.model()),
-                controls.endpoint().getText(), watchAutomatically, tileSize, tilesPerRow, themeId);
+                controls.endpoint().getText(), tileSize, tilesPerRow, themeId);
         switch (outcome) {
             case final SaveOutcome.Saved _ -> {
                 // Behind the status line rather than a blocking dialog. The save itself has already

@@ -24,14 +24,14 @@ final class PhotoSheetsCard {
                         + "is doing the looking reads a sheet at a time. The defaults are a balance that "
                         + "works; both settings below trade something away.",
                 SettingsRows.explainedRow("Tile size (pixels)",
-                        "How large each photo is drawn on the sheet. Bigger catches the faint junk that "
-                                + "small tiles miss, like screenshots and photos of documents, and costs more "
-                                + "per photo. What you pay follows this number, not how many fit on a sheet. "
+                        "How large each photo is drawn on the sheet. Bigger is easier to judge, so fewer "
+                                + "photos end up in the wrong place, and costs more per photo. What you pay "
+                                + "follows this number, not how many fit on a sheet. "
                                 + SettingsRows.anythingFrom(view.tileSizeRange()),
                         tileSize, view.tileSizeOverride()),
                 SettingsRows.explainedRow("Photos per row",
                         "How many share one sheet. More means fewer sheets and a quicker, cheaper run, and "
-                                + "draws every photo smaller, so more of the faint junk goes unnoticed. "
+                                + "draws every photo smaller, so more of them end up in the wrong place. "
                                 + SettingsRows.anythingFrom(view.tilesPerRowRange()),
                         tilesPerRow, view.tilesPerRowOverride()));
         return new Result(card, tileSize, tilesPerRow);

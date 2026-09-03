@@ -212,7 +212,7 @@ class RefusalClassifierTest {
     }
 
     @Test
-    void overlappingScopesNameTheChosenTimelineAndEveryRunInTheWay() {
+    void overlappingScopesNameTheChosenTimeframeAndEveryRunInTheWay() {
         final CullRunSummary blocking = new CullRunSummary("2019-06", Path.of("logs", "sift-prep", "2019-06"),
                 new PrepDirHealth(PrepDirHealth.State.READY, List.of()), new ShardTally(1, 1, 1),
                 Instant.parse("2026-08-20T10:15:30Z"));

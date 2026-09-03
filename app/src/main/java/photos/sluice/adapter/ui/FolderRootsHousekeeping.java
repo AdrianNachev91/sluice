@@ -26,9 +26,7 @@ import photos.sluice.application.service.Pipeline;
  *
  * <p>Only a working-root move retires anything. Watchers poll prep dirs under that root, so that is
  * the one move which leaves them all pointing outside it. A library or inbox move leaves every prep
- * dir where it was, and retiring there would silently switch off a watch the user turned on by hand
- * for a single run. Nothing would switch it back: the re-arm below only covers runs the configured
- * mode would have armed anyway.
+ * dir where it was, so there is nothing stranded to retire.
  *
  * <p>Every failure is logged and swallowed, including a refused retire. The save that triggered
  * this has already reached disk, so a throw would report a successful save as a failed one. The

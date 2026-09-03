@@ -42,8 +42,6 @@ class PipelineSurfaceTest {
             "resume(Path, boolean)",
             "cullRuns()",
             "cullRun(Path)",
-            "startWatching(Path)",
-            "stopWatching(Path)",
             "isWatchActive(Path)",
             "onRunsMoved(Runnable)",
             "onJobFinished(Runnable)",
@@ -69,11 +67,11 @@ class PipelineSurfaceTest {
     // The methods that must run whatever the roots say. Named rather than detected, because what
     // exempts one is what its caller is doing, which no property of the method reveals.
     //
-    // stopAllWatching's callers are a folder root that just moved, an app that is closing, and a
-    // save that turned watching off. Refusing the first would strand every watcher on a folder
-    // nothing is working in, for the life of the process. stopAcceptingJobs is the closing half of
-    // that same caller. An install whose roots are unusable is the one most likely to be closed.
-    // Refused there, its exit path could never learn whether anything was still moving files.
+    // stopAllWatching's callers are a folder root that just moved and an app that is closing.
+    // Refusing the first would strand every watcher on a folder nothing is working in, for the life
+    // of the process. stopAcceptingJobs is the closing half of that same caller. An install whose
+    // roots are unusable is the one most likely to be closed. Refused there, its exit path could
+    // never learn whether anything was still moving files.
     //
     // abandonTheFileInFlight is a stop the reader has already asked for, escalated. It sets a flag on
     // the running job and resolves nothing. Refused while the roots are unusable, a reader could not
@@ -95,9 +93,9 @@ class PipelineSurfaceTest {
     // discard, naming where the records will go. Refused while the roots are unusable, that question
     // could not be worded at all, and the roots being unusable is not what it is about.
     //
-    // isWatchActive looks one path up in a map of the watchers this process has armed. It resolves
-    // nothing and reads nothing, so the roots have no bearing on the answer. A caller asking which
-    // of this process's own watchers are live is asking about this process, not about a folder.
+    // isWatchActive asks a map in this process whether one path is a key, and reaches no disk to
+    // answer it. Only tests ask, and what they ask about is arming and retiring, neither of which
+    // is a folder-root question.
     //
     // onRunsMoved takes no path at all. It adds a listener to a list, which is a question about this
     // process rather than about any folder.

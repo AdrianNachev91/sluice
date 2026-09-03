@@ -111,7 +111,7 @@ public final class LaunchPrompt {
             // A group two sheets share names both, and picking which to rewrite is a choice
             // nothing here can make.
             case Finding.GroupSpansMultipleMontages _, Finding.DuplicateFileReference _,
-                 Finding.DecisionUnreviewableOverlap _, Finding.SourceOutsideSorted _,
+                 Finding.VerdictUnreviewableOverlap _, Finding.SourceOutsideSorted _,
                  Finding.StrayShard _, Finding.MissingShard _, Finding.CorruptIndex _,
                  Finding.UnreadablePrepDir _, Finding.CorruptSidecar _, Finding.MissingSource _ ->
                     null;

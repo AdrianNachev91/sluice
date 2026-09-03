@@ -40,7 +40,6 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.WaitingCullJob;
-import photos.sluice.domain.job.WatchMode;
 import photos.sluice.domain.paths.Containment;
 
 import java.nio.file.Path;
@@ -48,11 +47,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 /**
  * Orchestrates a whole cull job: prep, then dispatch, then apply (see
  * {@link #buildFreshAndDispatch}). It also owns {@link #resume} for a job still sitting on shards,
- * and the rules that decide whether a fresh run may start at all. The watch-mode lifecycle itself
+ * and the rules that decide whether a fresh run may start at all. A watcher's own lifecycle
  * lives in {@link CullWatchers}. The dispatch step is conditional, not a fixed stage: it runs only
  * while a montage still lacks a shard.
  */
@@ -95,7 +95,7 @@ final class CullEngine {
      * @param cullDispatcher {@link CullDispatcher} runs the cull phase
      * @param applyEngine {@link ApplyEngine} runs the apply phase
      * @param cullPrepPort {@link CullPrepPort} reads/writes prep dir index state
-     * @param cullSettings {@link CullSettings} configured provider, watch-mode and montage-grid settings
+     * @param cullSettings {@link CullSettings} configured provider and montage-grid settings
      * @param mediaStore {@link MediaStore} filesystem access for prep dirs
      * @param pathsPort {@link PathsPort} resolves repo-relative paths
      * @param jobRunner {@link JobRunner} runs cull jobs one at a time
@@ -133,7 +133,7 @@ final class CullEngine {
         this.jobRunner = jobRunner;
         this.phaseRunner = new PhaseRunner(progressPort);
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
-        this.cullWatchers = new CullWatchers(cullSettings, cullDispatcher::configuredProviderIs,
+        this.cullWatchers = new CullWatchers(cullDispatcher::configuredProviderIs,
                 this.shardTallyCalculator, watchPollInterval,
                 prepDir -> this.resume(prepDir, false), runChanges);
         this.prepDirDoctor = prepDirDoctor;
@@ -144,8 +144,8 @@ final class CullEngine {
     /**
      * Re-arms a watcher for every resumable run found on disk. There is no persistent job store (see
      * WaitingCullJob's own doc), so restarting the app would otherwise stop watching every run armed
-     * before it. A no-op when mode is MANUAL. Pipeline calls this explicitly, on behalf of a
-     * driving adapter that stays open long enough for a watcher to be worth arming.
+     * before it. Pipeline calls this explicitly, on behalf of a driving adapter that stays open
+     * long enough for a watcher to be worth arming.
      *
      * <p>Resumable means WAITING or READY: the two states a run can leave without a person. WAITING
      * still expects shards, which is what a watcher watches for. READY has them all already, the
@@ -159,11 +159,10 @@ final class CullEngine {
      * decisions.json is written only near the end of a successful apply. So it can still look like
      * something to arm. JobRunner runs one job at a time, so a busy runner means that job is this
      * dir's own. Arming it would leave a phantom watcher for a job about to resolve by itself.
-     * Anything genuinely waiting is picked up on the next run once the app is idle. Not the only
-     * path that arms a watcher - see dispatchAndApply()'s own note.
+     * Anything genuinely waiting is picked up on the next run once the app is idle.
      */
     void armWatchesForResumableRuns() {
-        if (this.cullSettings.externalAgent().mode() != WatchMode.WATCH || this.jobRunner.isBusy()) {
+        if (this.jobRunner.isBusy()) {
             return;
         }
         // A root nobody could list arms nothing, which is what an empty one does too. Said out
@@ -172,7 +171,7 @@ final class CullEngine {
         if (this.prepDirDoctor.runs(this.cullPrepRoot()) instanceof CullRuns.Listed(final List<CullRunSummary> runs)) {
             runs.stream()
                     .filter(run -> run.health().state() == State.WAITING || run.health().state() == State.READY)
-                    .forEach(run -> this.cullWatchers.armWatchIfConfigured(run.prepDir()));
+                    .forEach(run -> this.cullWatchers.armWatch(run.prepDir()));
         }
     }
 
@@ -209,7 +208,7 @@ final class CullEngine {
      * <p>What it does next depends only on which shards are on disk. A montage still without one
      * means the run is genuinely unfinished, so dispatch runs again. A resume triggered too early
      * then lands right back in Waiting with a freshly recomputed tally. A full shard set means only
-     * apply is left, so no culler is entered at all - see dispatchAndApply()'s own doc.
+     * apply is left, so no culler is entered at all.
      *
      * <p>The roots check runs here rather than only on {@link Pipeline}'s own way in. A watcher's
      * auto-resume calls this method directly, so a check at the facade alone would be walked past
@@ -270,17 +269,7 @@ final class CullEngine {
     }
 
     /**
-     * Delegates to {@link CullWatchers#armWatch}. {@link Pipeline#startWatching}'s own route in.
-     *
-     * @param prepDir {@link Path} the prep dir to watch
-     */
-    void armWatch(final Path prepDir) {
-        this.cullWatchers.armWatch(prepDir);
-    }
-
-    /**
-     * Delegates to {@link CullWatchers#disarmWatch}. {@link Pipeline#stopWatching} and
-     * {@link Pipeline#discard} both route in here.
+     * Stops whatever watcher is polling one prep dir.
      *
      * @param prepDir {@link Path} the prep dir whose watcher should stop
      */
@@ -388,7 +377,7 @@ final class CullEngine {
     }
 
     /**
-     * Throws if scope's timeline runs across unfinished sifts without being any of them.
+     * Throws if scope's timeframe runs across unfinished sifts without being any of them.
      *
      * <p>The other half of the guard above, and the half a prep dir's own claim cannot make. A
      * claim is on an exact tag, so an unfinished sift of June 2019 leaves the whole of 2019 free to
@@ -396,7 +385,7 @@ final class CullEngine {
      * already holds. Both then hold decisions over the same photos, and whichever applies second
      * finds its files already moved.
      *
-     * <p>Only a year scope can overlap. An {@code OldestN} names no timeline, so nothing it covers
+     * <p>Only a year scope can overlap. An {@code OldestN} names no timeframe, so nothing it covers
      * can be worked out from its tag, and it neither blocks nor is blocked.
      *
      * <p>A run whose own tag names no year is passed over rather than treated as overlapping. It
@@ -425,10 +414,7 @@ final class CullEngine {
 
 
     /**
-     * Builds scope's prep dir fresh, then dispatches and applies it. Shared by cull() and
-     * CurateEngine's cull stage; resume() re-enters at dispatchAndApply() directly instead, since it
-     * must never rebuild an existing prep dir. See cull()'s own doc for why the occupancy question
-     * is asked here too, not only at its synchronous pre-submit call site.
+     * Builds scope's prep dir fresh, then dispatches and applies it.
      *
      * <p>claimScope() runs before anything else, and every outcome below carries what it returned.
      * The archive happens ahead of montage rendering, so every way this method can end is reachable
@@ -528,10 +514,6 @@ final class CullEngine {
             throw new Pipeline.ScopeOccupiedException(run);
         }
         log.info("Archiving the completed cull of {} before re-culling the same scope", run.scope());
-        // Disarmed before the graveyard move starts, never after. A watcher left polling survives
-        // the archive and then finds the fresh run at that same path. It would be watching a
-        // different run than the one it was armed for. Only a manual startWatching() on an
-        // already-COMPLETE run leaves one armed here, since dispatchAndApply() disarms on entry.
         this.disarmWatch(run.prepDir());
         return this.prepDirRemedies.discard(run.prepDir()).graveyard();
     }
@@ -636,8 +618,7 @@ final class CullEngine {
      * shard set goes straight to apply, and apply's own gate becomes the single validator.
      *
      * <p>A refused apply therefore resolves to Blocked rather than propagating. Blocked is the
-     * user's move: the shard set is complete, so nothing is left to wait for. No watcher is armed
-     * for it, and the disarmWatch() below has already retired any that was polling.
+     * user's move: the shard set is complete, so nothing is left to wait for.
      *
      * <p>A CullException from the dispatch step means different things depending on the configured
      * provider's own ProviderType. From a MANUAL one it's the expected pause: resolved into Waiting,
@@ -646,11 +627,9 @@ final class CullEngine {
      * cancellation, but via the cancellation.isCancelled() check further down, after dispatch
      * returns normally rather than through this catch block.
      *
-     * <p>disarmWatch() runs unconditionally up front, regardless of whether this call landed here from
-     * cull(), a user's manual resume(), or a watcher's own auto-resume. Whatever watcher was polling
-     * this prep dir is retired the moment any resume attempt actually runs. That means a manual
-     * click racing an armed watcher can never leave two pollers running for the same job. A fresh
-     * watcher gets (re-)armed below only if the outcome is Waiting again.
+     * <p>A manual click racing an armed watcher can never leave two pollers on one job: the disarm
+     * runs before anything else, on every path in. A fresh watcher is armed below only if the
+     * outcome is Waiting again.
      *
      * @param prep {@link PrepDir} the prep dir to dispatch and apply
      * @param allowPartial boolean whether a partial shard set is acceptable
@@ -683,15 +662,14 @@ final class CullEngine {
                 }
                 // The exception names which montages are still missing a shard. Nothing downstream
                 // reads that list - the outcome carries a tally, not montage names - so this is the
-                // only place it can be seen at all. A watch mode that never converges is diagnosed
-                // from here.
+                // only place it can be seen at all. A watch that never converges is diagnosed from
+                // here.
                 log.info("Cull for {} is waiting on shards: {}", prep.scope(), e.getMessage());
                 final WaitingCullJob job = this.buildWaitingJob(prep);
-                // Not armed when this CullException is itself the manual-mode pause racing a
-                // cancellation: an auto-resume moments after a cancel would defy it. A plain manual
-                // pause (no cancellation involved) still arms as before.
+                // Not armed where this CullException is itself the provider's pause racing a
+                // cancellation: an auto-resume moments after a cancel would defy it.
                 if (!cancellation.isCancelled()) {
-                    this.cullWatchers.armWatchIfConfigured(job.prepDir());
+                    this.cullWatchers.armWatch(job.prepDir());
                 }
                 return this.recorded(prep, new CullJobOutcome.Waiting(job, WaitingReason.SHARDS_OUTSTANDING,
                         this.abandonedSpend(e, prep.entries().size()), archivedPriorRun));
@@ -735,7 +713,7 @@ final class CullEngine {
         // either, for the same reason the pre-APPLYING check above doesn't: an auto-resume
         // moments after a cancel would defy it.
         return this.recorded(prep, applyReport
-                .<CullJobOutcome>map(applied -> new CullJobOutcome.Applied(cullReport, applied, archivedPriorRun))
+                .<CullJobOutcome>map(applied -> new CullJobOutcome.Applied(cullReport, applied, archivedPriorRun, null))
                 .orElseGet(() -> new CullJobOutcome.Waiting(this.buildWaitingJob(prep),
                         WaitingReason.CANCELLED, cullReport, archivedPriorRun)));
     }
@@ -753,8 +731,73 @@ final class CullEngine {
      * @return {@link CullJobOutcome} that same outcome
      */
     private CullJobOutcome recorded(final PrepDir prep, final CullJobOutcome outcome) {
-        this.recordSpend(prep.scope(), outcome.cullReport(), endingOf(outcome));
+        final boolean recorded = this.recordSpend(prep.scope(), outcome.cullReport(), endingOf(outcome));
+        if (outcome instanceof final CullJobOutcome.Applied applied) {
+            return new CullJobOutcome.Applied(applied.cullReport(), applied.applyReport(),
+                    applied.archivedPriorRun(),
+                    recorded ? this.tokensAcrossEveryLeg(prep.scope()) : null);
+        }
         return outcome;
+    }
+
+    /**
+     * Every token this run spent, over all of its calls, or null where the ledger could not be read.
+     *
+     * <p>Read back out of the ledger rather than accumulated in memory. Nothing outlives a run:
+     * each call is its own job, and the one that finishes carries only what it consumed itself.
+     *
+     * @param scope {@link String} the run's scope tag
+     * @return {@link Long} the tokens, or null where the ledger could not be read
+     */
+    private @Nullable Long tokensAcrossEveryLeg(final String scope) {
+        try {
+            final List<SpendLedgerEntry> inTimeframe = this.spendLedger.read().stream()
+                    .filter(entry -> entry.scope().equals(scope))
+                    .toList();
+            return inTimeframe.stream().skip(runStart(inTimeframe))
+                    .mapToLong(entry -> entry.inputTokens() + entry.outputTokens())
+                    .sum();
+        } catch (final RuntimeException e) {
+            log.warn("Could not read back what the sift of {} spent", scope, e);
+            return null;
+        }
+    }
+
+    /**
+     * Where this run's own lines begin, among every line one scope has ever produced.
+     *
+     * <p>Just after the newest earlier line that freed the scope. Freeing it is what lets a fresh
+     * sift have it, so anything older than that belongs to a run this one replaced. Applying frees
+     * it and so does giving up on one, which is why the question sits on {@link RunEnding} rather
+     * than on a list of endings kept here.
+     *
+     * <p>The newest line of all is this run's own and is never the boundary, which is what lets
+     * this be called immediately after writing it.
+     *
+     * @param inTimeframe a {@link List} of {@link SpendLedgerEntry} one scope's lines, oldest first
+     * @return int the index this run's first line sits at
+     */
+    private static int runStart(final List<SpendLedgerEntry> inTimeframe) {
+        final List<SpendLedgerEntry> earlier = inTimeframe.subList(0, Math.max(0, inTimeframe.size() - 1));
+        return IntStream.range(0, earlier.size())
+                .filter(i -> earlier.get(i).ending().freedTheScope())
+                .max().orElse(-1) + 1;
+    }
+
+    /**
+     * Records that a run was given up on, so the scope it held reads as free from here down.
+     *
+     * <p>The giving up spent nothing, and the run's own calls are already on their own lines. What
+     * this line carries is the ending. A sum over one scope stops at it, and without it the next
+     * run of that scope is billed for the one the reader threw away.
+     *
+     * <p>Reported rather than raised, for the reason {@code recordSpend} is. The run is gone by the
+     * time this is called, so a failure here can only cost the record.
+     *
+     * @param scope {@link String} the discarded run's scope tag
+     */
+    void recordDiscard(final String scope) {
+        this.recordSpend(scope, CullReport.nothingSpent(this.cullSettings.provider(), 0), RunEnding.DISCARDED);
     }
 
     /**
@@ -861,16 +904,19 @@ final class CullEngine {
      * @param scope {@link String} the run's scope tag
      * @param report {@link CullReport} what the run judged and consumed
      * @param ending {@link RunEnding} how it ended
+     * @return boolean true where the line reached the ledger
      */
-    private void recordSpend(final String scope, final CullReport report, final RunEnding ending) {
+    private boolean recordSpend(final String scope, final CullReport report, final RunEnding ending) {
         try {
             final MontageConfig grid = this.cullSettings.montage();
             this.spendLedger.append(new SpendLedgerEntry(Instant.now(), scope, report.spend().providerId(),
                     report.spend().modelId(), grid.tileSize(), grid.tilesPerRow(), report.montagesCulled(),
                     report.montagesSkipped(), report.apiCalls(), report.spend().inputTokens(),
                     report.spend().outputTokens(), ending));
+            return true;
         } catch (final RuntimeException e) {
             log.warn("Could not record what the sift of {} spent", scope, e);
+            return false;
         }
     }
 
@@ -896,7 +942,7 @@ final class CullEngine {
     /**
      * prepDirPath's mtime, or the epoch if it cannot be read.
      *
-     * <p>This snapshot sits on a live cull job's resolution path - cancellation, a manual-mode
+     * <p>This snapshot sits on a live cull job's resolution path - cancellation, a provider's own
      * pause, a blocked apply, an empty apply return. Throwing here would replace that outcome with
      * a crash instead of the Waiting or Blocked result it should have been. The epoch reads as "as
      * old as anything", the same degrade {@link PrepDirDoctor#diagnose} uses for the same failure.

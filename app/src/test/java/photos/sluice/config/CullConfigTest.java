@@ -7,7 +7,6 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.domain.cull.CullCategory;
-import photos.sluice.domain.job.WatchMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -103,14 +102,6 @@ class CullConfigTest {
             final CullConfig config = context.getBean(CullConfig.class);
             assertThat(config.categories().getFirst().examples())
                     .containsExactly("restaurant plates", "home dinners");
-        });
-    }
-
-    @Test
-    void externalAgentDefaultsToWatchModeWhenAbsent() {
-        this.runner.run(context -> {
-            final CullConfig config = context.getBean(CullConfig.class);
-            assertThat(config.externalAgent().mode()).isEqualTo(WatchMode.WATCH);
         });
     }
 

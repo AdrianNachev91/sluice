@@ -55,7 +55,7 @@ enum FindingFamily {
                  Finding.InvalidCategory _, Finding.MissingReason _, Finding.MissingGroup _,
                  Finding.MissingChosenReason _, Finding.WrongChosenCount _, Finding.TooFewRejects _,
                  Finding.InvalidGroupSlug _, Finding.DuplicateFileReference _,
-                 Finding.DecisionUnreviewableOverlap _, Finding.GroupSpansMultipleMontages _,
+                 Finding.VerdictUnreviewableOverlap _, Finding.GroupSpansMultipleMontages _,
                  Finding.PhotoFromAnotherSheet _ ->
                     DECISIONS;
             case Finding.MissingFile _, Finding.FileOutOfScope _, Finding.SourceOutsideSorted _,

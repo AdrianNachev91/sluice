@@ -7,13 +7,11 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import photos.sluice.application.port.out.CullProviderSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
-import photos.sluice.domain.job.WatchMode;
 
 import java.util.List;
 import java.util.Map;
@@ -44,7 +42,6 @@ class SettingsHolderTest {
         assertThat(holder.current().paths()).isEqualTo(PATHS);
         assertThat(holder.provider()).isEqualTo("external-agent");
         assertThat(holder.categories()).containsExactly(CullCategory.of("scenery", "scenery description"));
-        assertThat(holder.externalAgent().mode()).isEqualTo(WatchMode.MANUAL);
         assertThat(holder.providerSettings().model()).isNull();
     }
 
@@ -57,7 +54,7 @@ class SettingsHolderTest {
                 List.of(CullCategory.of("scenery", "scenery description"),
                         new CullCategory("food", "food description", List.of(), Boolean.FALSE),
                         CullCategory.of("funny", "funny description")),
-                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(224, 5), ThemeChoice.SYSTEM));
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM));
 
         assertThat(holder.activeCategories()).extracting(CullCategory::name)
                 .containsExactly("scenery", "funny", "junk");
@@ -71,7 +68,7 @@ class SettingsHolderTest {
                 cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         holder.apply(new Settings(PATHS, "anthropic", Map.of(), List.of(),
-                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(224, 5), ThemeChoice.SYSTEM));
+                new MontageConfig(224, 5), ThemeChoice.SYSTEM));
 
         assertThat(holder.activeCategories()).extracting(CullCategory::name).containsExactly("junk");
         assertThat(holder.categoriesForRepair()).extracting(CullCategory::name).containsExactly("junk");
@@ -85,12 +82,11 @@ class SettingsHolderTest {
 
         holder.apply(new Settings(PATHS, "anthropic", Map.of("anthropic", new CullProviderSettings("claude-sonnet-5", null, null)),
                 List.of(CullCategory.of("food", "food description")),
-                new ExternalAgentSettings(WatchMode.WATCH), new MontageConfig(96, 7), ThemeChoice.DARK));
+                new MontageConfig(96, 7), ThemeChoice.DARK));
 
         assertThat(holder.provider()).isEqualTo("anthropic");
         assertThat(holder.providerSettings().model()).isEqualTo("claude-sonnet-5");
         assertThat(holder.categories()).containsExactly(CullCategory.of("food", "food description"));
-        assertThat(holder.externalAgent().mode()).isEqualTo(WatchMode.WATCH);
         assertThat(holder.montage()).isEqualTo(new MontageConfig(96, 7));
     }
 
@@ -100,8 +96,7 @@ class SettingsHolderTest {
     void refusesTwoCategoryCardsSharingAName() {
         final var cull = new CullConfig("external-agent", Map.of(),
                 List.of(CullCategory.of("receipts", "paper receipts"),
-                        CullCategory.of("receipts", "till slips")),
-                new ExternalAgentSettings(WatchMode.MANUAL));
+                        CullCategory.of("receipts", "till slips")));
 
         assertThatThrownBy(() -> SettingsHolder.bound(new PathsProperties("repo", "library", "inbox"),
                 cull, new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM)))
@@ -129,8 +124,7 @@ class SettingsHolderTest {
 
     private static CullConfig cullConfig() {
         return new CullConfig("external-agent", Map.of(),
-                List.of(CullCategory.of("scenery", "scenery description")),
-                new ExternalAgentSettings(WatchMode.MANUAL));
+                List.of(CullCategory.of("scenery", "scenery description")));
     }
 
     // Every properties class SettingsHolder takes. One missing makes the context fail to build, and

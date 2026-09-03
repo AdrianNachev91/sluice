@@ -303,7 +303,7 @@ class ApplyEngineTest {
     }
 
     @Test
-    void aFileListedBothAsADecisionAndAsUnreviewableFailsValidationAndMovesNothing(@TempDir final Path root) throws IOException {
+    void aFileListedBothAsAVerdictAndAsUnreviewableFailsValidationAndMovesNothing(@TempDir final Path root) throws IOException {
         final Path libraryRoot = root.resolve("Library");
         final Path prepDir = prepDir(root);
         final Path photo = root.resolve("Sorted/Photos/2019/06/a.jpg");
@@ -314,7 +314,7 @@ class ApplyEngineTest {
 
         assertThatThrownBy(() -> applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false)))
                 .isInstanceOf(ApplyException.class)
-                .hasMessageContaining("file listed both as a decision and as unreviewable: " + photo);
+                .hasMessageContaining("file listed both as a verdict and as unreviewable: " + photo);
         assertThat(Files.exists(photo)).isTrue();
     }
 
@@ -1118,6 +1118,11 @@ class ApplyEngineTest {
         @Override
         public boolean exists(final Path path) {
             return this.delegate.exists(path);
+        }
+
+        @Override
+        public boolean directoryIsThere(final Path path) {
+            return this.delegate.directoryIsThere(path);
         }
 
         @Override

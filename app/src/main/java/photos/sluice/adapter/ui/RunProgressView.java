@@ -50,9 +50,10 @@ public record RunProgressView(String heading, String scope, List<PhaseBar> phase
      * @param counts what it has done of what it has to do, or null where it cannot say
      * @param fraction double how far along it is, from 0 to 1
      * @param measured boolean whether this phase knows how much work it has
+     * @param started boolean whether the job has reached it, false for one still ahead
      * @param finished boolean whether it has ended
      */
     public record PhaseBar(String id, String label, @Nullable String counts, double fraction,
-                           boolean measured, boolean finished) {
+                           boolean measured, boolean started, boolean finished) {
     }
 }

@@ -72,9 +72,8 @@ public class ReviewPresenter {
     private static final String NOTES_UNREADABLE = "What was written about this folder could not be "
             + "read.";
 
-    // The one place the screen says what to do, rather than every heading saying it again. The
-    // second half is what a reader cannot see: a folder they emptied is gone from here while their
-    // own file keeps it on disk.
+    private static final String OPEN_THE_FOLDER = "Open the folder to see all the notes.";
+
     private static final String SCREEN_EXPLAINED = "Everything here is waiting for you to look at "
             + "it. Open a folder, throw away what you don't want, then rescue what is left back to "
             + "Sorted. A folder leaves this screen once its photos and videos are gone. One you "
@@ -248,10 +247,11 @@ public class ReviewPresenter {
         }
         Fold read;
         try {
-            read = new Fold(capped(this.pipeline.reviewNotes(folder)), null);
+            final List<String> lines = this.pipeline.reviewNotes(folder);
+            read = new Fold(capped(lines), beyondTheFold(lines.size()), null);
         } catch (final RuntimeException e) {
             log.info("Could not read the notes in {}", folder, e);
-            read = new Fold(List.of(), NOTES_UNREADABLE);
+            read = new Fold(List.of(), null, NOTES_UNREADABLE);
         }
         synchronized (this.foldLock) {
             if (this.asked.contains(folder)) {
@@ -353,6 +353,8 @@ public class ReviewPresenter {
         final List<String> written = shown ? open.lines() : List.of();
         final Notes notes = new Notes(idFor(folder, "notes"), SHOW_NOTES, shown,
                 shown && failed == null ? written : List.of(),
+                shown ? open.beyondTheFold() : null,
+                shown && !written.isEmpty() ? OPEN_THE_FOLDER : null,
                 shown ? nothingIn(failed, written) : null);
         return new FolderCard(idFor(folder, "card"), folder.path(), folder.name(),
                 RunWords.held(folder.photos(), folder.videos()),
@@ -367,19 +369,27 @@ public class ReviewPresenter {
      *
      * <p>A line is written per photo a folder ever took, and the fold draws one wrapping label per
      * line. A junk folder off a large backlog carries thousands, which is a page nobody reads and a
-     * scene graph that costs to build. Past the cut the reader is pointed at the file itself.
+     * scene graph that costs to build.
      *
      * @param lines a {@link List} of {@link String} every line the folder's notes hold
      * @return a {@link List} of {@link String} what to draw
      */
     private static List<String> capped(final List<String> lines) {
-        if (lines.size() <= MOST_LINES_DRAWN) {
-            return lines;
+        return lines.size() <= MOST_LINES_DRAWN ? lines : lines.subList(0, MOST_LINES_DRAWN);
+    }
+
+    /**
+     * What to say about the lines the fold leaves undrawn, or null where it draws them all.
+     *
+     * @param held int how many lines the folder's notes hold
+     * @return {@link String} the sentence
+     */
+    private static @Nullable String beyondTheFold(final int held) {
+        if (held <= MOST_LINES_DRAWN) {
+            return null;
         }
-        final List<String> cut = new ArrayList<>(lines.subList(0, MOST_LINES_DRAWN));
-        cut.add(RunWords.counted(lines.size() - MOST_LINES_DRAWN, "more line is", "more lines are")
-                + " in the folder's own note file.");
-        return cut;
+        return RunWords.counted(held - MOST_LINES_DRAWN, "more line is", "more lines are")
+                + " in the note file itself.";
     }
 
     /**
@@ -465,10 +475,13 @@ public class ReviewPresenter {
      * What is drawn under one open fold.
      *
      * @param lines a {@link List} of {@link String} what was written there, cut to what is drawn
+     * @param beyondTheFold {@link String} what to say about the lines it does not draw, or null
+     *     where it draws them all
      * @param failed {@link String} what to say instead where the read failed, or null where it did
      *     not
      */
-    private record Fold(List<String> lines, @Nullable String failed) {
+    private record Fold(List<String> lines, @Nullable String beyondTheFold,
+                        @Nullable String failed) {
     }
 
     /**

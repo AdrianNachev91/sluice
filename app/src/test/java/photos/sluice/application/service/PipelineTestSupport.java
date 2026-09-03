@@ -23,7 +23,6 @@ import photos.sluice.application.port.out.CullPrepPort;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.CullSettings;
-import photos.sluice.application.port.out.ExternalAgentSettings;
 import photos.sluice.application.port.out.HeifDecoder;
 import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.ProgressPort;
@@ -57,7 +56,6 @@ import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
-import photos.sluice.domain.job.WatchMode;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -211,10 +209,10 @@ final class PipelineTestSupport {
     }
 
     static CullSettings autoApproveCullSettings() {
-        return new FixedSettings("auto-approve", List.of(), new ExternalAgentSettings(WatchMode.MANUAL));
+        return new FixedSettings("auto-approve", List.of());
     }
 
-    // Watch-mode tests go through this name: same wiring, but with a millisecond-scale poll
+    // Watcher tests go through this name: same wiring, but with a millisecond-scale poll
     // interval (via Pipeline's package-private test constructor). A real auto-resume proves out
     // fast this way, instead of waiting on the production 2-second cadence.
     static Pipeline watchPipeline(final Path root, final RecordingProgressPort progress,
@@ -312,6 +310,11 @@ final class PipelineTestSupport {
                 this.onFirstQuery.run();
             }
             return result;
+        }
+
+        @Override
+        public boolean directoryIsThere(final Path path) {
+            return this.delegate.directoryIsThere(path);
         }
 
         @Override
@@ -433,11 +436,6 @@ final class PipelineTestSupport {
         }
     }
 
-    // The one full wiring every overload above funnels into - real adapters throughout (matching
-    // this project's no-mocks test convention), same as the engines below. CullMontageRenderer's
-    // HeifDecoder dependency is stubbed to always miss: none of these fixtures are HEIC/AVIF, and
-    // real HEIC/AVIF decode already has its own coverage in TileRendererTest. pollInterval null
-    // means "use Pipeline's own production default" - only watchPipeline() ever passes one.
     // Same wiring, with the prep-dir reader swapped out. Only a test that needs a read to fail at a
     // seam this code owns passes one.
     static Pipeline cullPipeline(final Path root, final RecordingProgressPort progress,
@@ -459,6 +457,11 @@ final class PipelineTestSupport {
                 new FixedSecretStore(null));
     }
 
+    // The one full wiring every overload above funnels into - real adapters throughout (matching
+    // this project's no-mocks test convention), same as the engines below. CullMontageRenderer's
+    // HeifDecoder dependency is stubbed to always miss: none of these fixtures are HEIC/AVIF, and
+    // real HEIC/AVIF decode already has its own coverage in TileRendererTest. pollInterval null
+    // means "use Pipeline's own production default".
     static Pipeline pipeline(final Path root, final RecordingProgressPort progress, final MediaStore mediaStore,
                              final CullSettings cullSettings, final List<VisionCuller> cullers,
                              final @Nullable Duration pollInterval, final CullPrepPort cullPrepPort,
@@ -534,13 +537,7 @@ final class PipelineTestSupport {
     }
 
     static CullSettings defaultCullSettings() {
-        return new FixedSettings(MANUAL_PROVIDER_ID, List.of(),
-                new ExternalAgentSettings(WatchMode.MANUAL));
-    }
-
-    static CullSettings watchCullSettings() {
-        return new FixedSettings(MANUAL_PROVIDER_ID, List.of(),
-                new ExternalAgentSettings(WatchMode.WATCH));
+        return new FixedSettings(MANUAL_PROVIDER_ID, List.of());
     }
 
     static void writeFile(final Path file, final String content) throws IOException {
@@ -665,6 +662,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public void phaseCutShort(final String phase) {
+            this.events.add("cutShort:" + phase);
+        }
+
+        @Override
         public void tick(final String phase, final int current, final int total) {
             this.events.add("tick:" + phase + ":" + current + "/" + total);
             if (this.onFirstTick != null) {
@@ -762,6 +764,11 @@ final class PipelineTestSupport {
         @Override
         public boolean exists(final Path path) {
             return this.delegate.exists(path);
+        }
+
+        @Override
+        public boolean directoryIsThere(final Path path) {
+            return this.delegate.directoryIsThere(path);
         }
 
         @Override
@@ -887,6 +894,11 @@ final class PipelineTestSupport {
         @Override
         public boolean exists(final Path path) {
             return this.delegate.exists(path);
+        }
+
+        @Override
+        public boolean directoryIsThere(final Path path) {
+            return this.delegate.directoryIsThere(path);
         }
 
         @Override
@@ -1017,6 +1029,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public boolean directoryIsThere(final Path path) {
+            return this.delegate.directoryIsThere(path);
+        }
+
+        @Override
         public long size(final Path path) {
             return this.delegate.size(path);
         }
@@ -1143,6 +1160,11 @@ final class PipelineTestSupport {
         }
 
         @Override
+        public boolean directoryIsThere(final Path path) {
+            return this.delegate.directoryIsThere(path);
+        }
+
+        @Override
         public long size(final Path path) {
             return this.delegate.size(path);
         }
@@ -1173,11 +1195,6 @@ final class PipelineTestSupport {
         }
     }
 
-    // Stands in for the real (package-private, unreachable from here) ExternalAgentCuller. Only a
-    // completeness check, gating on hasShard() alone rather than full shard validation. That
-    // validation is ShardValidator/ApplyEngine's job, already covered by their own tests - and by
-    // CullEngine's own tally (ShardTallyCalculator), which runs real ShardValidator logic
-    // independently of this fake.
     // Every double below needs a description because the port has one, and none of them is about
     // what a settings screen would draw. Named settings and a credential would be fixture that
     // no assertion here reads.
@@ -1227,6 +1244,11 @@ final class PipelineTestSupport {
         }
     }
 
+    // Stands in for the real (package-private, unreachable from here) ExternalAgentCuller. Only a
+    // completeness check, gating on hasShard() alone rather than full shard validation. That
+    // validation is ShardValidator/ApplyEngine's job, already covered by their own tests - and by
+    // CullEngine's own tally (ShardTallyCalculator), which runs real ShardValidator logic
+    // independently of this fake.
     static final class ManualModeCuller implements VisionCuller {
 
         private final @Nullable SecretId credential;
@@ -1286,7 +1308,7 @@ final class PipelineTestSupport {
         }
     }
 
-    // The same manual-mode "not complete yet" pause as ManualModeCuller above, but blocking
+    // The same "not complete yet" pause as ManualModeCuller above, but blocking
     // first. That lets a test synchronize a real cancellation with the exact moment dispatch is
     // in flight, before it throws the CullException. A real external-agent provider would throw
     // that same exception for a genuinely incomplete shard set.
@@ -1726,7 +1748,7 @@ final class PipelineTestSupport {
         }
     }
 
-    record FixedSettings(String provider, List<CullCategory> categories, ExternalAgentSettings externalAgent)
+    record FixedSettings(String provider, List<CullCategory> categories)
             implements CullSettings {
         @Override
         public CullProviderSettings providerSettings() {
