@@ -331,7 +331,8 @@ public class PrepDirDoctor {
         try {
             return this.mediaStore.lastModifiedTime(prepDirPath);
         } catch (final RuntimeException e) {
-            log.warn("Could not read the mtime of {}, ageing it as the epoch", prepDirPath, e);
+            log.warn("Could not read the mtime of {}, ageing it as the epoch: {}",
+                    prepDirPath, e.toString());
             return Instant.EPOCH;
         }
     }
@@ -366,7 +367,8 @@ public class PrepDirDoctor {
                     .sorted()
                     .toList());
         } catch (final RuntimeException e) {
-            log.warn("Could not list {}, so what it holds is unknown this pass", cullPrepRoot, e);
+            log.warn("Could not list {}, so what it holds is unknown this pass: {}",
+                    cullPrepRoot, e.toString());
             return new Listing.Unlistable(e);
         }
     }
@@ -408,7 +410,8 @@ public class PrepDirDoctor {
         try {
             return !this.mediaStore.listFiles(prepDir).isEmpty();
         } catch (final RuntimeException e) {
-            log.warn("Could not check whether {} holds any files, treating it as occupied", prepDir, e);
+            log.warn("Could not check whether {} holds any files, treating it as occupied: {}",
+                    prepDir, e.toString());
             return true;
         }
     }

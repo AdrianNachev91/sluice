@@ -25,8 +25,6 @@ final class FindingWords {
 
     private static final String APPLY_SHEET_ANYWAY = "Use this sheet's answers as they are";
 
-    // Names both checks the damaged record costs, not only the scope one. Coverage reads the same
-    // sidecar, so ShardValidator.checkCoverage is handed an empty sheet list and raises nothing.
     private static final Confirmation APPLY_ANYWAY_ASK = new Confirmation(
             "Use this sheet's answers unchecked?",
             "Every photo still exists, its category is one you configured, and nothing is ever "
@@ -40,22 +38,37 @@ final class FindingWords {
     /**
      * One finding, and what a reader can do about it.
      *
-     * @param problem {@link String} what went wrong
+     * @param problem {@link String} what went wrong, worded for one of them
+     * @param forSeveral the same thing worded for several, with {@code {}} where the count goes,
+     *     or null for a fault a run can only hold one of
      * @param about what it happened to, or null where the problem is about the whole run
      * @param choices a {@link List} of {@link Choice} the answers on offer, empty where there are
      *     none
      */
-    record Told(String problem, @Nullable String about, List<Choice> choices) {
+    record Told(String problem, @Nullable String forSeveral, @Nullable String about,
+                List<Choice> choices) {
 
         /**
          * Defensively copies the mutable list.
          *
-         * @param problem {@link String} what went wrong
+         * @param problem {@link String} what went wrong, worded for one of them
+         * @param forSeveral the same thing worded for several, with a place for the count, or null
          * @param about what it happened to, or null
          * @param choices a {@link List} of {@link Choice} the answers on offer
          */
         Told {
             choices = List.copyOf(choices);
+        }
+
+        /**
+         * How to head a set of these, where there is more than one.
+         *
+         * @param count int how many were found
+         * @return {@link String} the heading, or null where this fault carries no plural wording
+         */
+        @Nullable String heading(final int count) {
+            return this.forSeveral == null ? null : this.forSeveral.replace("{}",
+                    RunWords.grouped(count));
         }
     }
 
@@ -87,86 +100,108 @@ final class FindingWords {
         return switch (finding) {
             case final Finding.MissingSource missing -> new Told(
                     "A photo this sift wants to move is not where it was.",
+                    "{} photos this sift wants to move are not where they were.",
                     missing.file().toString(),
                     List.of(new Choice(Answer.RECHECK, "Look again", true, null),
                             new Choice(Answer.SKIP_FILE, "Go on without this photo", false, null)));
             case final Finding.VerdictUnreviewableOverlap overlap -> new Told(
                     "One photo was both judged and listed as one nobody could judge.",
+                    "{} photos were both judged and listed as ones nobody could judge.",
                     overlap.verdict().file().toString(),
                     List.of(new Choice(Answer.TRUST_DECISION, "Use the judgement", true, null),
                             new Choice(Answer.TREAT_AS_UNREVIEWABLE, "Leave the photo unjudged",
                                     false, null)));
             case final Finding.CorruptSidecar sidecar -> new Told(
                     "The record of which photos this sheet contained is damaged.",
+                    "{} sheets have a damaged record of which photos they contained.",
                     sheet(sidecar.montage()) + ", " + sidecar.montage() + ".json",
                     List.of(new Choice(Answer.SET_ASIDE_SHEET, SET_ASIDE_SHEET, true, null),
                             new Choice(Answer.APPLY_SHEET_ANYWAY, APPLY_SHEET_ANYWAY, false,
                                     APPLY_ANYWAY_ASK)));
             case final Finding.StrayShard stray -> new Told(
                     "There is a set of answers that belongs to no sheet in this sift.",
+                    "There are {} sets of answers that belong to no sheet in this sift.",
                     stray.shardFile(),
                     List.of(new Choice(Answer.SET_ASIDE_STRAY_ANSWERS, "Go on without them", true, null)));
             case final Finding.PhotosNotJudged notJudged -> new Told(
                     "Some of the photos on a sheet were never judged.",
+                    "Some of the photos on {} sheets were never judged.",
                     sheet(notJudged.montage()) + ", "
                             + RunWords.counted(notJudged.photos().size(), "photo", "photos")
                             + " with no verdict",
                     List.of());
-            case final Finding.MissingShard missing ->
-                    new Told("One sheet has not been judged yet.", sheet(missing.montage()), List.of());
-            case final Finding.CorruptShard corrupt ->
-                    new Told("One sheet's answers cannot be read.", sheet(corrupt.montage()), List.of());
+            case final Finding.MissingShard missing -> new Told("One sheet has not been judged yet.",
+                    "{} sheets have not been judged yet.", sheet(missing.montage()), List.of());
+            case final Finding.CorruptShard corrupt -> new Told("One sheet's answers cannot be read.",
+                    "The answers on {} sheets cannot be read.", sheet(corrupt.montage()), List.of());
+            // A diagnosis builds CorruptIndex and UnreadablePrepDir as the sole finding it answers
+            // with, so neither can ever turn up beside another of its own kind.
             case final Finding.CorruptIndex corrupt -> new Told(
                     "Sluice cannot read its own record of what this sift covers.",
-                    corrupt.indexPath().toString(), List.of());
+                    null, corrupt.indexPath().toString(), List.of());
             case final Finding.UnreadablePrepDir unreadable -> new Told(
                     "This sift's records could not be read at all.",
-                    unreadable.prepDir().toString(), List.of());
+                    null, unreadable.prepDir().toString(), List.of());
             case final Finding.MissingMontageField missing -> new Told(
                     "A set of answers does not say which sheet it is for.",
+                    "{} sets of answers do not say which sheet they are for.",
                     sheet(missing.montage()), List.of());
             case final Finding.MontageFieldMismatch mismatch -> new Told(
                     "A sheet's answers say they are for a different sheet.",
+                    "{} sheets carry answers that say they are for another sheet.",
                     sheet(mismatch.montage()) + ", answering for " + mismatch.declared(), List.of());
             case final Finding.InvalidCategory invalid -> new Told(
                     "One photo was put in a category this sift does not have.",
+                    "{} photos were put in categories this sift does not have.",
                     photoOn(invalid.montage(), invalid.index()) + ", category "
                             + invalid.category(), List.of());
             case final Finding.MissingReason missing -> new Told(
                     "One photo was judged with no reason given.",
+                    "{} photos were judged with no reason given.",
                     photoOn(missing.montage(), missing.index()), List.of());
             case final Finding.MissingGroup missing -> new Told(
                     "One photo was called a near-duplicate without saying which group it is in.",
+                    "{} photos were called near-duplicates without saying which group they are in.",
                     photoOn(missing.montage(), missing.index()), List.of());
             case final Finding.MissingChosenReason missing -> new Told(
                     "One group of near-duplicates says which photo to keep but not why.",
+                    "{} groups of near-duplicates say which photo to keep but not why.",
                     photoOn(missing.montage(), missing.index()), List.of());
             case final Finding.WrongChosenCount wrong -> new Told(
                     "A group of near-duplicates does not name exactly one photo to keep.",
+                    "{} groups of near-duplicates do not name exactly one photo to keep.",
                     group(wrong.montage(), wrong.group()), List.of());
             case final Finding.TooFewRejects tooFew -> new Told(
                     "A group of near-duplicates has a photo to keep and nothing to keep it over.",
+                    "{} groups of near-duplicates have a photo to keep and nothing to keep it over.",
                     group(tooFew.montage(), tooFew.group()), List.of());
             case final Finding.InvalidGroupSlug invalid -> new Told(
                     "A group of near-duplicates has a name that cannot become a folder.",
+                    "{} groups of near-duplicates have names that cannot become folders.",
                     group(invalid.montage(), invalid.group()), List.of());
             case final Finding.GroupSpansMultipleMontages spanning -> new Told(
                     "One group of near-duplicates is spread over more than one sheet.",
+                    "{} groups of near-duplicates are spread over more than one sheet.",
                     "Group " + spanning.group(), List.of());
             case final Finding.DuplicateFileReference duplicate -> new Told(
-                    "One photo was answered for more than once.", duplicate.file(), List.of());
+                    "One photo was answered for more than once.",
+                    "{} photos were answered for more than once.", duplicate.file(), List.of());
             case final Finding.MissingFile missing -> new Told(
                     "One answer does not say which photo it is about.",
+                    "{} answers do not say which photo they are about.",
                     photoOn(missing.montage(), missing.index()), List.of());
             case final Finding.PhotoFromAnotherSheet other -> new Told(
-                    "A sheet judged a photo that a different sheet contained.",
+                    "One photo was judged by a sheet that did not contain it.",
+                    "{} photos were judged by sheets that did not contain them.",
                     photoOn(other.montage(), other.index()) + ", " + other.file(), List.of());
             case final Finding.FileOutOfScope outOfScope -> new Told(
                     "An answer names a photo this sift never showed.",
+                    "{} answers name photos this sift never showed.",
                     photoOn(outOfScope.montage(), outOfScope.index()) + ", "
                             + outOfScope.file(), List.of());
             case final Finding.SourceOutsideSorted outside -> new Told(
                     "This sift was asked to move a file from outside your Sorted folder.",
+                    "This sift was asked to move {} files from outside your Sorted folder.",
                     outside.file().toString(), List.of());
         };
     }
@@ -175,7 +210,7 @@ final class FindingWords {
      * What a reader is told once an answer has been given.
      *
      * @param answer {@link Answer} what they chose
-     * @return {@link String} the line the row collapses to, or null where the answer settles
+     * @return {@link String} what to report, or null where the answer settles
      *     nothing and the run is only looked at again
      */
     static @Nullable String settled(final Answer answer) {

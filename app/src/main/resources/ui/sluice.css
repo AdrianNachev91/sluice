@@ -1084,12 +1084,18 @@
     -fx-border-color: -sluice-border;
 }
 
-/* What answering a problem settled, in place of the buttons that offered the answers. Quieter than
-   the lines above it, since it is a record of something already done rather than something to act
-   on. */
-.troubleshoot-outcome {
-    -fx-fill: -sluice-text-muted;
-    -fx-text-fill: -sluice-text-muted;
+/* The top padding adds to the row spacing, so a heading sits nearer the set it names than the set
+   before it. One-sided on purpose. */
+.troubleshoot-stack-heading {
+    -fx-text-fill: -sluice-text;
+    -fx-font-weight: bold;
+    -fx-padding: 6px 0 0 0;
+}
+
+/* One problem sharing its kind's card. The card's own inset already surrounds the set, so a row
+   inside it pays for nothing but the space between its own lines. */
+.troubleshoot-stacked-problem {
+    -fx-spacing: 6px;
 }
 
 .troubleshoot-detail {

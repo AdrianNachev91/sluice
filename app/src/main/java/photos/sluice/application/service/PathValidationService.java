@@ -118,7 +118,7 @@ public class PathValidationService implements PathValidationUseCase {
             }
             real = this.media.realDirectory(path).orElse(null);
         } catch (final UncheckedIOException e) {
-            log.warn("Could not resolve the folder root {}", path, e);
+            log.warn("Could not resolve the folder root {}: {}", path, e.toString());
             violations.add(new Unreadable(role, path));
             return null;
         }

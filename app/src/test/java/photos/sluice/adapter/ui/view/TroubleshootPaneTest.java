@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,6 +65,92 @@ class TroubleshootPaneTest {
         assertThat(pane.lookup("#troubleshoot-problem-1")).isNotNull();
         assertThat(textsIn(pane, "#troubleshoot-problem-0"))
                 .contains("A photo this sift wants to move is not where it was.", PHOTO.toString());
+    }
+
+    // Nothing else would fail if the heading were never drawn.
+    @Test
+    void faultsOfOneKindAreDrawnUnderOneCountedHeading() throws Exception {
+        final Parent pane = onFxThread(() -> built(State.BLOCKED,
+                new Finding.MissingShard("montage-002", "decisions-002.json"),
+                new Finding.MissingShard("montage-003", "decisions-003.json")));
+
+        assertThat(textsIn(pane, ".troubleshoot-stack-heading"))
+                .containsExactly("2 sheets have not been judged yet.");
+        assertThat(textsIn(pane, "#troubleshoot-problem-0")).containsExactly("Sheet 2");
+        assertThat(textsIn(pane, "#troubleshoot-problem-1")).containsExactly("Sheet 3");
+    }
+
+    @Test
+    void faultsOfOneKindWithNothingToAnswerShareOneCard() throws Exception {
+        final Parent pane = onFxThread(() -> built(State.BLOCKED,
+                new Finding.MissingShard("montage-002", "decisions-002.json"),
+                new Finding.MissingShard("montage-003", "decisions-003.json")));
+
+        final Parent problems = (Parent) pane.lookup("#troubleshoot-problems");
+        assertThat(problems.lookupAll(".card")).hasSize(1);
+        final Node card = problems.lookup(".card");
+        assertThat(card.lookup("#troubleshoot-problem-0")).isNotNull();
+        assertThat(card.lookup("#troubleshoot-problem-1")).isNotNull();
+    }
+
+    // The buttons are what a reader aims at, so two sets inside one card would read as one set
+    // covering both photos.
+    @Test
+    void faultsOfOneKindAReaderCanAnswerKeepACardEach() throws Exception {
+        final Parent pane = onFxThread(() -> built(State.BLOCKED,
+                new Finding.MissingSource(PHOTO, Path.of("a.log")),
+                new Finding.MissingSource(Path.of("D:", "Sorted", "b.jpg"), Path.of("b.log"))));
+
+        final Parent problems = (Parent) pane.lookup("#troubleshoot-problems");
+        assertThat(problems.lookupAll(".card")).hasSize(2);
+        assertThat(textsIn(pane, ".troubleshoot-stack-heading"))
+                .containsExactly("2 photos this sift wants to move are not where they were.");
+    }
+
+    @Test
+    void aFaultFoundOnceIsDrawnWithoutAHeadingAndSpeaksForItself() throws Exception {
+        final Parent pane = onFxThread(() -> built(State.BLOCKED,
+                new Finding.MissingShard("montage-002", "decisions-002.json")));
+
+        assertThat(pane.lookupAll(".troubleshoot-stack-heading")).isEmpty();
+        assertThat(textsIn(pane, "#troubleshoot-problem-0"))
+                .contains("One sheet has not been judged yet.", "Sheet 2");
+    }
+
+    // Both presses say the same sentence, so the node is what says a fresh banner went up.
+    @Test
+    void answeringTwicePutsUpASecondBannerRatherThanKeepingTheFirst() throws Exception {
+        final Parent pane = onFxThread(() -> built(State.BLOCKED,
+                new Finding.MissingSource(PHOTO, Path.of("a.log"))));
+
+        onFxThread(() -> fire(pane, "#troubleshoot-answer-0-SKIP_FILE"));
+        waitForDraw(() -> pane.lookup("#troubleshoot-banner") != null);
+        final Node first = pane.lookup("#troubleshoot-banner");
+        onFxThread(() -> fire(pane, "#troubleshoot-answer-0-SKIP_FILE"));
+        waitForDraw(() -> {
+            final Node now = pane.lookup("#troubleshoot-banner");
+            return now != null && now != first;
+        });
+
+        assertThat(first).isNotNull();
+        assertThat(pane.lookup("#troubleshoot-banner")).isNotNull().isNotSameAs(first);
+        // lookup answers with the first match and a new banner goes to the front, so without this
+        // the old one could still be down the page.
+        assertThat(pane.lookupAll("#troubleshoot-banner")).hasSize(1);
+    }
+
+    @Test
+    void aRedrawWithNothingNewToReportLeavesTheBannerAlone() throws Exception {
+        final Parent pane = onFxThread(() -> built(State.BLOCKED,
+                new Finding.MissingSource(PHOTO, Path.of("a.log"))));
+        onFxThread(() -> fire(pane, "#troubleshoot-answer-0-SKIP_FILE"));
+        waitForDraw(() -> pane.lookup("#troubleshoot-banner") != null);
+        final Node banner = pane.lookup("#troubleshoot-banner");
+
+        onFxThread(() -> fire(pane, "#troubleshoot-detail-toggle"));
+
+        assertThat(banner).isNotNull();
+        assertThat(pane.lookup("#troubleshoot-banner")).isSameAs(banner);
     }
 
     @Test
@@ -177,5 +264,12 @@ class TroubleshootPaneTest {
         final T result = WaitForAsyncUtils.asyncFx(work).get();
         WaitForAsyncUtils.waitForFxEvents();
         return result;
+    }
+
+    // An answer runs on its own virtual thread and asks for the redraw only once it ends. Pumping
+    // the event queue can therefore happen before anything is queued to pump.
+    private static void waitForDraw(final Callable<Boolean> drawn) throws Exception {
+        WaitForAsyncUtils.waitFor(5, TimeUnit.SECONDS, drawn);
+        WaitForAsyncUtils.waitForFxEvents();
     }
 }

@@ -19,6 +19,7 @@ import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.TroubleshootView.Detail;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
+import photos.sluice.adapter.ui.TroubleshootView.SameProblem;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -138,14 +139,14 @@ final class TroubleshootPane {
      * @param fold {@link SectionFold} opens and shuts the report
      * @param unfolded a {@link List} of {@link VBox} holding the report while it is open, empty
      *     while it is shut
-     * @param reported a {@link List} of {@link Message} the one now banner-ed, empty while the
-     *     screen has nothing to report. Held so a redraw that reports the same thing leaves the
-     *     banner it already put up alone, rather than restarting its four seconds
+     * @param reported a {@link List} of {@link Integer} the report number the banner now up came
+     *     from, empty before the first draw. Held so a redraw leaves the banner it already put up
+     *     alone rather than restarting its four seconds
      */
     private record Controls(Button back, Label heading, VBox page, Label checking, Label summary,
                             VBox problems, Label nothingLeft, VBox detail, Button detailToggle,
                             Button detailCopy, TextArea trace, HBox actions, SectionFold fold,
-                            List<VBox> unfolded, List<Message> reported) {
+                            List<VBox> unfolded, List<Integer> reported) {
 
         /**
          * Wires the fold, which is the one control whose press changes nothing on disk.
@@ -174,7 +175,7 @@ final class TroubleshootPane {
                           final Runnable redraw) {
             this.back.setText(view.back());
             this.heading.setText(view.heading());
-            this.report(view.message());
+            this.report(view.message(), view.reportNumber());
             this.checking.setText(SettingsRows.orNothing(view.checking()));
             this.summary.setText(SettingsRows.orNothing(view.summary()));
             this.nothingLeft.setText(SettingsRows.orNothing(view.nothingLeft()));
@@ -191,22 +192,23 @@ final class TroubleshootPane {
          * somebody already looking at it. The report that matters most says an answer left the
          * problem where it was, which is the one case where nothing else on the screen changed.
          *
-         * <p>Only a report that changed puts up a new banner. Every press redraws the whole screen,
-         * and a fresh banner each time would restart the four seconds for as long as the reader
-         * kept pressing.
+         * <p>Only a report the screen has not drawn yet puts up a new banner. Every press redraws
+         * the whole screen, and a fresh banner each time would restart the four seconds for as long
+         * as the reader kept pressing.
          *
          * @param said {@link Message} what to report, or null where there is nothing
+         * @param number int which report this is, counted by the presenter
          */
-        private void report(final @Nullable Message said) {
-            if (this.reported.equals(said == null ? List.of() : List.of(said))) {
+        private void report(final @Nullable Message said, final int number) {
+            if (this.reported.equals(List.of(number))) {
                 return;
             }
             this.reported.clear();
+            this.reported.add(number);
             this.page.getChildren().removeIf(node -> BANNER.equals(node.getId()));
             if (said == null) {
                 return;
             }
-            this.reported.add(said);
             // Every report this screen has is one short sentence about the press just made, so all
             // of them leave on their own. Nothing here names a path or a count to be read twice.
             final HBox banner = SettingsRows.banner(this.page, BANNER, said.text(), true);
@@ -219,15 +221,66 @@ final class TroubleshootPane {
         /**
          * Replaces the rows with the ones the screen now holds.
          *
-         * @param problems a {@link List} of {@link Problem} what is on the screen now
+         * @param problems a {@link List} of {@link SameProblem} what is on the screen now
          * @param presenter {@link TroubleshootPresenter} takes a press on any row's buttons
          * @param redraw {@link Runnable} draws the screen again once it has been told
          */
-        private void drawProblems(final List<Problem> problems,
+        private void drawProblems(final List<SameProblem> problems,
                                   final TroubleshootPresenter presenter, final Runnable redraw) {
-            final List<Node> rows = new ArrayList<>();
-            problems.forEach(problem -> rows.add(row(problem, presenter, redraw)));
-            this.problems.getChildren().setAll(rows);
+            this.problems.getChildren().setAll(problems.stream()
+                    .flatMap(same -> drawn(same, presenter, redraw).stream())
+                    .toList());
+        }
+
+        /**
+         * How one kind's problems are laid out.
+         *
+         * <p>Rows a reader can answer keep a card each. The buttons are what they aim at, and
+         * several sets inside one card read as one set of choices for the whole group. Rows with
+         * nothing to answer share their kind's card.
+         *
+         * @param same {@link SameProblem} the heading and its rows
+         * @param presenter {@link TroubleshootPresenter} takes a press on any row's buttons
+         * @param redraw {@link Runnable} draws the screen again once it has been told
+         * @return a {@link List} of {@link Node} what to add, in drawing order
+         */
+        private static List<Node> drawn(final SameProblem same,
+                                        final TroubleshootPresenter presenter,
+                                        final Runnable redraw) {
+            final List<Node> nodes = new ArrayList<>();
+            if (same.heading() != null) {
+                nodes.add(heading(same.heading()));
+            }
+            if (same.rows().stream().anyMatch(problem -> !problem.options().isEmpty())) {
+                same.rows().forEach(problem -> {
+                    final Node row = row(problem, presenter, redraw);
+                    row.getStyleClass().add("card");
+                    nodes.add(row);
+                });
+                return nodes;
+            }
+            final var card = new VBox();
+            card.getStyleClass().add("card");
+            same.rows().forEach(problem -> {
+                final Node row = row(problem, presenter, redraw);
+                row.getStyleClass().add("troubleshoot-stacked-problem");
+                card.getChildren().add(row);
+            });
+            nodes.add(card);
+            return nodes;
+        }
+
+        /**
+         * The line above one kind's rows, counting them.
+         *
+         * @param said {@link String} what it says
+         * @return {@link Label} the heading
+         */
+        private static Label heading(final String said) {
+            final var heading = new Label(said);
+            heading.getStyleClass().add("troubleshoot-stack-heading");
+            SettingsRows.wrapping(heading);
+            return heading;
         }
 
         /**
@@ -291,11 +344,10 @@ final class TroubleshootPane {
             lines.getStyleClass().add("runs-card-lines");
             addIfPresent(lines, problem.problem(), "runs-card-headline");
             addIfPresent(lines, problem.about(), "runs-card-detail");
-            addIfPresent(lines, problem.outcome(), "troubleshoot-outcome");
 
             final var row = new VBox(lines);
             row.setId(problem.id());
-            row.getStyleClass().add("card");
+            row.getStyleClass().add("troubleshoot-problem");
             if (problem.options().isEmpty()) {
                 return row;
             }

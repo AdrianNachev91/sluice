@@ -18,7 +18,6 @@ import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
-import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.paths.SortFolderNames;
@@ -29,10 +28,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -40,15 +35,15 @@ import java.util.stream.IntStream;
 /**
  * Decides what the launcher shows and what a press on it would start.
  *
- * <p>It holds what has been chosen so far: the mode, whatever is typed in the scope field, and the
- * counts last read off disk. The screen keeps the controls and asks here after every change. So
+ * <p>It holds what has been chosen so far: the mode, and whatever is typed in the scope field. The
+ * screen keeps the controls and asks here after every change. So
  * what a chosen mode makes of a typed scope is settled here, which a test can reach without a
  * window. What the text itself amounts to is {@link RunScopeText}, and what an engine takes is
  * {@link RunScope}.
  *
- * <p>The counts are read by calling {@link #refreshCounts} or {@link #refreshCountsUnprompted},
- * each of which walks three trees and blocks while it does. The caller runs it off whatever thread
- * paints. The runs folder is the expensive one: reading it diagnoses every sift on disk.
+ * <p>The counts themselves are {@link FolderCounts}, read by calling {@link #refreshCounts} or
+ * {@link #refreshCountsUnprompted}. Each walks three folders and blocks while it does, so the
+ * caller runs it off whatever thread paints.
  *
  * <p>Whether a job is running is not held here. {@link RunLauncherPresenter} owns that, and answers
  * the question through the supplier handed in.
@@ -58,10 +53,6 @@ public class RunSetupPresenter {
     private static final Logger log = LoggerFactory.getLogger(RunSetupPresenter.class);
 
     private static final String SCOPE_LABEL = "Timeframe for this run";
-
-    // How long a folder read is given before the screen says it is reading. Under this, a reader
-    // sees one state rather than three. Over it, they are waiting and want to know why.
-    private static final long SETTLE_BEFORE_SAYING_SO = 200;
 
     // Careful about whose money it is. Sluice calls no model for these providers, so it spends
     // nothing. An agent somebody runs themselves still bills them, and that is not ours to report.
@@ -156,42 +147,22 @@ public class RunSetupPresenter {
 
     private final Pipeline pipeline;
     private final BooleanSupplier jobRunning;
-    private final Runnable repaint;
+    private final FolderCounts folders;
 
-    // Volatile throughout, and the traffic runs both ways. The counts and the flags beside them are
-    // written by the read behind the cards and looked at while somebody types. The mode, the field
-    // and the line go the other way: written by a press, and looked at by that same read when it
-    // draws the screen. Without it a reader can see the read already over while the count is still
-    // null, and the Inbox card then reports a failure that never happened.
+    // Volatile because these are read off the thread that paints. A press writes them there, and a
+    // job reports its ending from whatever thread it ran on.
     private volatile RunMode chosen = RunMode.SORT;
     private volatile String scopeText = "";
-    private volatile @Nullable InboxTally inbox;
-    private volatile @Nullable SortedTally sorted;
-    private volatile boolean countsUnreadable;
-    private volatile List<CullRunSummary> unfinished = List.of();
     private volatile @Nullable Message message;
-
-    // How many asked-for reads are somewhere between being asked for and finishing their walk. A
-    // count rather than a flag, because two of them can overlap. A boolean the first cleared on its
-    // way out would bring the button live over counts the second is still replacing. The pane's
-    // mount read and a recount after a run are the pair that does it. Finish a run, then arrive
-    // back at the Dashboard while that recount is still walking.
-    private final AtomicInteger askedReads = new AtomicInteger();
-
-    // Whether any read at all has landed. A screen that has read nothing has no counts to offer,
-    // and no asked-for read need be in flight for that to be true.
-    private volatile boolean wasReadAtLeastOnce;
 
     // Plain, because no other thread touches this one. It is written by a press and by a keystroke,
     // and read while drawing, all on the thread that paints. Volatile would not make its own toggle
     // atomic anyway, and would suggest a second writer that does not exist.
     private boolean monthsCollapsed;
 
-    private final ReentrantLock reading = new ReentrantLock();
-
     // Written value first and key second, and read the other way round. Between them that is what
     // makes a reader finding its own count in the key certain of the answer beside it. Either half
-    // alone gives nothing. The counts above are ordered on the same principle.
+    // alone gives nothing.
     private volatile @Nullable SpendEstimate lastEstimate;
     private volatile int lastEstimateCovered = -1;
 
@@ -207,7 +178,7 @@ public class RunSetupPresenter {
                       final Runnable repaint) {
         this.pipeline = pipeline;
         this.jobRunning = jobRunning;
-        this.repaint = repaint;
+        this.folders = new FolderCounts(pipeline, repaint);
     }
 
     /**
@@ -253,13 +224,13 @@ public class RunSetupPresenter {
     }
 
     /**
-     * What the last read found, so a caller can tell a read that moved something from one that
-     * found everything where it was.
+     * What the last read found.
      *
      * @return {@link Counts} the four values a read writes
      */
     public Counts counts() {
-        return new Counts(this.inbox, this.sorted, this.unfinished, this.countsUnreadable);
+        return new Counts(this.folders.inbox(), this.folders.sorted(), this.folders.unfinished(),
+                this.folders.unreadable());
     }
 
     /**
@@ -268,94 +239,20 @@ public class RunSetupPresenter {
      * <p>Blocks for as long as walking those three trees takes, which on a full Inbox is long
      * enough to be felt. Called off the thread that paints.
      *
-     * <p>A refusal from the facade is kept rather than thrown on. The roots were usable when this
-     * screen was drawn, so one that is not now went wrong while somebody was looking at it. The
-     * cards say so. The start button stays live, because the refusal it raises names which folder
-     * is at fault, and that is more than this screen knows.
+     * <p>A read that failed leaves the start button live. The refusal the facade then raises names
+     * which folder is at fault, and that is more than this screen knows.
      */
     public void refreshCounts() {
-        this.readCounts(true);
+        this.retireTheHeldEstimate();
+        this.folders.refresh();
     }
 
     /**
-     * Reads the same two trees for a caller nobody asked for an answer from.
+     * Reads the same three folders for a caller nobody asked for an answer from.
      */
     public void refreshCountsUnprompted() {
-        this.readCounts(false);
-    }
-
-    /**
-     * Walks the two folder trees and the runs folder, and records what they hold.
-     *
-     * <p>Serialised rather than allowed to overlap. Left concurrent, the cards would pair an Inbox
-     * from one moment with years from another. A waiting caller re-walks rather than skipping,
-     * since the read it would have skipped may predate the run that asked for this one.
-     *
-     * <p>An asked-for read counts itself in before the lock and out once its own walk has ended, so
-     * it covers its wait as well as its walk. A read queued behind a walk already running would
-     * otherwise leave the start button live for the rest of that walk. A press landing there scopes
-     * a job by the very counts this read was asked to correct.
-     *
-     * <p>A read nobody asked for counts nothing, so it cannot take the button away every few seconds
-     * from a reader who is only sitting there. What it does do is record that a read has landed,
-     * which is what ends the state a screen starts in, having read nothing.
-     *
-     * @param prompted boolean whether something happened that the screen has yet to catch up with
-     */
-    private void readCounts(final boolean prompted) {
-        if (prompted) {
-            // Drawn before the read rather than after it, but not straight away. A wait behind
-            // another walk, or a walk over a full Inbox, is long enough to be felt. A screen still
-            // showing the live button it was drawn with takes a press and does nothing. A read that
-            // waits for nothing and walks an empty Inbox is over in milliseconds. A button going
-            // dead and live again inside that reads as a glitch. So the dead state waits to see
-            // which kind of read this turns out to be.
-            this.redrawIfStillReadingByThen();
-            // Last before the lock, so nothing that allocates sits between the count going up and
-            // the try that brings it down again. A count left up has no way back down, and the
-            // start button is then dead for the life of the process.
-            this.askedReads.incrementAndGet();
-        }
-        this.reading.lock();
-        // A throw between the lock and the try would reach the caller with the lock still held,
-        // and with the count above it still up. Every later read would park on that lock for the
-        // rest of the run.
-        try {
-            // A run that just finished spent against the ledger the estimate is averaged from.
-            this.lastEstimateCovered = -1;
-            // Read first and guarded on its own. What the runs folder answers decides which rows
-            // carry a mark and nothing else on this screen, so its failures stay off the Inbox and
-            // Sorted cards.
-            this.unfinished = this.unfinishedRunsOrNone();
-            this.inbox = this.pipeline.inboxTally();
-            this.sorted = this.pipeline.sortedTally();
-            this.countsUnreadable = false;
-        } catch (final RuntimeException e) {
-            log.warn("Could not count what is waiting and what is staged", e);
-            // Both counts go, not only the one that failed. A card saying the Inbox cannot be read,
-            // over a list of years read a minute ago, describes two different moments as one.
-            this.inbox = null;
-            this.sorted = null;
-            this.countsUnreadable = true;
-        } finally {
-            // Set before the count comes down, so no reader sees an asked-for read gone while the
-            // screen still reads as having read nothing.
-            this.wasReadAtLeastOnce = true;
-            if (prompted) {
-                this.askedReads.decrementAndGet();
-            }
-            this.reading.unlock();
-        }
-    }
-
-    /**
-     * Whether the counts on the cards are being replaced.
-     *
-     * @return boolean true while an asked-for read is under way, and until the first read of any
-     *     kind has landed
-     */
-    private boolean isCounting() {
-        return this.askedReads.get() > 0 || !this.wasReadAtLeastOnce;
+        this.retireTheHeldEstimate();
+        this.folders.refreshUnprompted();
     }
 
     /**
@@ -484,11 +381,11 @@ public class RunSetupPresenter {
     public @Nullable Confirmation confirmationNeeded() {
         // Nothing to ask where the counts are not in. Start stays live so the facade can name the
         // folder at fault, and this question names years and a file count it has neither of.
-        if (this.chosen != RunMode.MOVE_TO_LIBRARY || !this.countsAreIn()
+        if (this.chosen != RunMode.MOVE_TO_LIBRARY || !this.folders.countsAreIn()
                 || !(this.scope() instanceof RunScope.Everything)) {
             return null;
         }
-        final List<YearRow> staged = this.stagedYears();
+        final List<YearRow> staged = this.folders.stagedYears();
         final int files = staged.stream().mapToInt(YearRow::total).sum();
         return new Confirmation("Move everything to your library?",
                 "This moves " + RunWords.counted(files, "file", "files") + " from "
@@ -509,8 +406,8 @@ public class RunSetupPresenter {
      * skip the scope along with the money.
      *
      * <p>The question names the whole timeframe and splits out what this run put there. A sort that
-     * added two months to a year already holding others yields a sift over every month of it, and
-     * the photos it did not add are the ones a reader would not think they were paying for.
+     * added two months to a year already holding others yields a sift over every month of it. The
+     * photos it did not add are the ones a reader would not think they were paying for.
      *
      * @param year int the timeframe the card offered to sift
      * @param justSorted int how many photos this run filed into that timeframe
@@ -593,10 +490,10 @@ public class RunSetupPresenter {
      * @return {@link Message} what to say instead of starting, or null where nothing is in the way
      */
     RunLauncherView.@Nullable Message cannotSizeARun() {
-        if (this.isCounting()) {
+        if (this.folders.isCounting()) {
             return new Message(STILL_READING, true);
         }
-        return this.countsUnreadable ? new Message(INBOX_UNREADABLE, true) : null;
+        return this.folders.unreadable() ? new Message(INBOX_UNREADABLE, true) : null;
     }
 
     /**
@@ -653,7 +550,7 @@ public class RunSetupPresenter {
      * @return boolean true when there is something to start
      */
     boolean canStart(final RunScope scope) {
-        return !this.jobRunning.getAsBoolean() && !this.isCounting()
+        return !this.jobRunning.getAsBoolean() && !this.folders.isCounting()
                 && RunScope.startable(scope) && !this.pipeline.isBusy()
                 && this.overlapRefusal(scope) == null;
     }
@@ -668,7 +565,7 @@ public class RunSetupPresenter {
     void reasonNothingStarted() {
         if (this.pipeline.isBusy()) {
             this.message = new Message(BUSY_ELSEWHERE, true);
-        } else if (this.isCounting()) {
+        } else if (this.folders.isCounting()) {
             // The button is live for the first moments of a read, so this press is one the screen
             // invited. Saying nothing would make the press look like it missed.
             this.message = new Message(STILL_READING, true);
@@ -745,11 +642,11 @@ public class RunSetupPresenter {
         // Live even on the unreadable card, since a card that could not be counted is still where
         // somebody may want to put photos.
         final boolean canImport = !this.jobRunning.getAsBoolean();
-        final InboxTally waiting = this.inbox;
-        if (this.isCounting() && waiting == null && !this.countsUnreadable) {
+        final InboxTally waiting = this.folders.inbox();
+        if (this.folders.isCounting() && waiting == null && !this.folders.unreadable()) {
             return new InboxCard(INBOX_COUNTING, null, IMPORT_LABEL, IMPORT_HINT, canImport);
         }
-        if (this.countsUnreadable || waiting == null) {
+        if (this.folders.unreadable() || waiting == null) {
             return new InboxCard(INBOX_UNREADABLE, null, IMPORT_LABEL, IMPORT_HINT, canImport);
         }
         if (waiting.files() == 0) {
@@ -776,8 +673,8 @@ public class RunSetupPresenter {
         // The undated row counts too. It comes from a tree the year rows never see, and it is drawn
         // on this same card. A card holding one and no years would say nothing is sorted, directly
         // above something that is.
-        if (this.countsUnreadable || this.sorted == null || !this.yearChoices().isEmpty()
-                || this.undatedHeld() > 0) {
+        if (this.folders.unreadable() || this.folders.sorted() == null || !this.yearChoices().isEmpty()
+                || this.folders.undatedHeld() > 0) {
             return null;
         }
         return NOTHING_STAGED;
@@ -802,7 +699,7 @@ public class RunSetupPresenter {
                 typed instanceof RunScopeText.Typed.OfYear(int _, final List<Integer> months)
                         ? months
                         : List.of();
-        return this.stagedYears().stream()
+        return this.folders.stagedYears().stream()
                 .map(row -> this.yearChoice(row, selected, narrowed))
                 .toList();
     }
@@ -867,16 +764,6 @@ public class RunSetupPresenter {
      */
     private static String held(final YearRow row) {
         return RunWords.held(row.photos(), row.videos());
-    }
-
-    /**
-     * What is staged, or nothing while the walk that would say is still going.
-     *
-     * @return a {@link List} of {@link YearRow} the staged years, newest first
-     */
-    private List<YearRow> stagedYears() {
-        final SortedTally staged = this.sorted;
-        return staged == null ? List.of() : staged.years();
     }
 
     /**
@@ -978,8 +865,7 @@ public class RunSetupPresenter {
      * Typing a year asks the same question several times over, since the count only moves when the
      * scope resolves to a different set of photos.
      *
-     * <p>Held only until the next read of the folders. A finished run adds to the ledger, and
-     * {@link #refreshCounts} is what runs after one.
+     * <p>Held only until the next read of the folders.
      *
      * @param photos int how many photos the scope covers
      * @return {@link SpendEstimate} what the facade says about that many
@@ -999,6 +885,13 @@ public class RunSetupPresenter {
     }
 
     /**
+     * Throws away the estimate held for the last scope.
+     */
+    private void retireTheHeldEstimate() {
+        this.lastEstimateCovered = -1;
+    }
+
+    /**
      * How many staged photos a scope covers.
      *
      * @param scope {@link RunScope} what the field and mode come to
@@ -1008,28 +901,10 @@ public class RunSetupPresenter {
         if (!(scope instanceof RunScope.OfYear(final int year, final List<Integer> months))) {
             return 0;
         }
-        return this.stagedYears().stream()
+        return this.folders.stagedYears().stream()
                 .filter(row -> row.year() == year)
                 .mapToInt(row -> months.isEmpty() ? row.photos() : row.photosIn(months))
                 .sum();
-    }
-
-    /**
-     * Puts the counting state on the screen, but only if an asked-for read is still going by then.
-     *
-     * <p>Nothing cancels this. It asks the same flag the screen does when it wakes, so a read that
-     * has already finished leaves it nothing to draw. A second asked-for read in the meantime
-     * raises the flag again. A read nobody asked for does not, and the screen wants its live button
-     * through one of those anyway.
-     */
-    private void redrawIfStillReadingByThen() {
-        CompletableFuture.runAsync(
-                () -> {
-                    if (this.isCounting()) {
-                        this.repaint.run();
-                    }
-                },
-                CompletableFuture.delayedExecutor(SETTLE_BEFORE_SAYING_SO, TimeUnit.MILLISECONDS));
     }
 
     /**
@@ -1040,7 +915,7 @@ public class RunSetupPresenter {
     private RunScope blankScope() {
         return switch (this.chosen) {
             // The oldest year of an empty Inbox is no year at all, so the run would be over nothing.
-            case SORT -> this.inboxIsEmpty() ? new RunScope.Nothing() : new RunScope.OldestYear();
+            case SORT -> this.folders.inboxIsEmpty() ? new RunScope.Nothing() : new RunScope.OldestYear();
             // Everything means everything staged, and on an install with nothing staged that is a
             // run over no files behind a confirm naming none of them. The Sorted card says so, in
             // the same words a line here would use and in a tone that does not read as a fault.
@@ -1048,7 +923,7 @@ public class RunSetupPresenter {
             // in front of it names the years and the file count. A read that failed leaves neither
             // knowable, so the press is withheld rather than offered without its question. A typed
             // year still goes through: it is bounded, and the facade names the folder at fault.
-            case MOVE_TO_LIBRARY -> this.countsAreIn() && !this.stagedYears().isEmpty()
+            case MOVE_TO_LIBRARY -> this.folders.countsAreIn() && !this.folders.stagedYears().isEmpty()
                     ? new RunScope.Everything()
                     : new RunScope.Nothing();
             // A sift has no oldest-year to fall back on, deliberately. It reads Sorted, where
@@ -1069,7 +944,7 @@ public class RunSetupPresenter {
      */
     private RunScope undatedScope() {
         return switch (this.chosen) {
-            case MOVE_TO_LIBRARY -> this.countsAreIn() && this.undatedHeld() == 0
+            case MOVE_TO_LIBRARY -> this.folders.countsAreIn() && this.folders.undatedHeld() == 0
                     ? new RunScope.Refused(NOTHING_UNDATED)
                     : new RunScope.Undated();
             case SIFT -> new RunScope.Refused(SIFT_TAKES_NO_UNDATED);
@@ -1080,22 +955,12 @@ public class RunSetupPresenter {
     }
 
     /**
-     * How much is waiting in the undated folder, or none while the walk that would say is running.
-     *
-     * @return int what the last completed read found there
-     */
-    private int undatedHeld() {
-        final SortedTally staged = this.sorted;
-        return staged == null ? 0 : staged.undated();
-    }
-
-    /**
      * The undated row, where anything is waiting without a date.
      *
      * @return {@link UndatedChoice} the row, or null where there is nothing to show
      */
     private @Nullable UndatedChoice undatedChoice() {
-        final int held = this.undatedHeld();
+        final int held = this.folders.undatedHeld();
         if (held == 0) {
             return null;
         }
@@ -1113,8 +978,8 @@ public class RunSetupPresenter {
      * @return {@link RunScope} the scope it stands for, or a refusal where the mode cannot take it
      */
     private RunScope yearScope(final int year, final List<Integer> months) {
-        if (this.readsSorted() && this.countsAreIn()
-                && this.stagedYears().stream().noneMatch(row -> row.year() == year)) {
+        if (this.readsSorted() && this.folders.countsAreIn()
+                && this.folders.stagedYears().stream().noneMatch(row -> row.year() == year)) {
             return new RunScope.Refused("Nothing is sorted for " + year + ".");
         }
         if (this.chosen == RunMode.SIFT) {
@@ -1122,7 +987,7 @@ public class RunSetupPresenter {
             // A year can hold videos alone, and months can be named that hold nothing. Both leave a
             // sift with no photo to look at, and neither is caught by the year check above. Said
             // here rather than left to an absent cost line, which a free provider draws too.
-            return this.countsAreIn() && this.photosIn(sift) == 0
+            return this.folders.countsAreIn() && this.photosIn(sift) == 0
                     ? new RunScope.Refused(months.isEmpty()
                             ? nothingToSift(year)
                             : "No photos are sorted for the chosen months of " + year
@@ -1192,32 +1057,6 @@ public class RunSetupPresenter {
     }
 
     /**
-     * Whether a finished read found the Inbox holding nothing.
-     *
-     * <p>False while the count is still going, and false where it could not be read. Refusing on
-     * either would be refusing over an answer nobody has yet.
-     *
-     * @return boolean true only where the Inbox is known to be empty
-     */
-    private boolean inboxIsEmpty() {
-        final InboxTally waiting = this.inbox;
-        return this.countsAreIn() && waiting != null && waiting.files() == 0;
-    }
-
-    /**
-     * Whether a finished read has actually answered.
-     *
-     * <p>An empty list of years means three different things: nothing is staged, the walk has not
-     * got there yet, and the walk failed. Only the first is a fact about somebody's folders, and
-     * every refusal built on that list has to know which one it is holding.
-     *
-     * @return boolean true only where a completed read succeeded
-     */
-    private boolean countsAreIn() {
-        return !this.isCounting() && !this.countsUnreadable;
-    }
-
-    /**
      * What a timeframe holding no photo is refused with.
      *
      * <p>One sentence, because two surfaces refuse the same timeframe. The launcher greys Start on
@@ -1239,7 +1078,7 @@ public class RunSetupPresenter {
      * press spends.
      *
      * <p>The ceiling rides with the figure and not without it. It is the reassurance the launcher's
-     * own disclaimer carries, and this route is the only other way to start a sift, so a reader who
+     * own disclaimer carries. This route is the only other way to start a sift, so a reader who
      * never sees that box hears it here instead. With no figure there is nothing for a reader to
      * measure "far past" against.
      *
@@ -1277,8 +1116,8 @@ public class RunSetupPresenter {
      * What to say where the chosen timeframe runs across an unfinished sift without being it.
      *
      * <p>The screen's half of a guard the facade also makes. This one greys Start while somebody
-     * types, off the last reading of the folder, so it can be a moment out of date and the worst it
-     * can do is fail to warn. {@code CullEngine.refuseIfScopeOverlaps} reads freshly and is the
+     * types, off the last reading of the folder. So it can be a moment out of date, and the worst
+     * it can do is fail to warn. {@code CullEngine.refuseIfScopeOverlaps} reads freshly and is the
      * guarantee. Both word it through {@link RunRefusals#coveringUnfinished}, so the sentence on the
      * screen and the sentence in the refusal cannot drift apart.
      *
@@ -1291,7 +1130,7 @@ public class RunSetupPresenter {
             return null;
         }
         final String exact = CullScope.tag(chosenYear);
-        final List<CullScope.Year> across = this.unfinished.stream()
+        final List<CullScope.Year> across = this.folders.unfinished().stream()
                 .filter(run -> !run.scope().equals(exact))
                 .map(run -> CullScope.yearScopeOf(run.scope()))
                 .filter(Objects::nonNull)
@@ -1331,7 +1170,7 @@ public class RunSetupPresenter {
             return new StartAction.StartFresh();
         }
         final String exact = CullScope.tag(chosenYear);
-        return this.unfinished.stream()
+        return this.folders.unfinished().stream()
                 .filter(run -> run.scope().equals(exact))
                 .findFirst()
                 .<StartAction>map(run -> carriedOn(run.health().state())
@@ -1375,25 +1214,6 @@ public class RunSetupPresenter {
     }
 
     /**
-     * Every run on disk that still owes somebody something.
-     *
-     * <p>A folder nobody could read marks nothing, and neither does one this refused to read at
-     * all. A mark is only ever drawn from a run the read established.
-     *
-     * @return a {@link List} of {@link CullRunSummary} the unfinished ones
-     */
-    private List<CullRunSummary> unfinishedRunsOrNone() {
-        try {
-            return this.pipeline.cullRuns() instanceof CullRuns.Listed(final List<CullRunSummary> listed)
-                    ? listed.stream().filter(run -> run.health().state() != State.COMPLETE).toList()
-                    : List.of();
-        } catch (final RuntimeException e) {
-            log.warn("Could not read the runs, so no timeframe is marked this pass", e);
-            return List.of();
-        }
-    }
-
-    /**
      * Which months of one year an unfinished sift already covers.
      *
      * <p>An empty answer means no sift touches that year. A run scoped to the whole year answers
@@ -1404,7 +1224,7 @@ public class RunSetupPresenter {
      * @return a {@link Set} of {@link Integer} the months covered, empty where none are
      */
     private Set<Integer> siftedMonthsOf(final int year) {
-        final List<CullScope.Year> covering = this.unfinished.stream()
+        final List<CullScope.Year> covering = this.folders.unfinished().stream()
                 .map(run -> CullScope.yearScopeOf(run.scope()))
                 .filter(Objects::nonNull)
                 .filter(scope -> scope.year() == year)
@@ -1434,10 +1254,10 @@ public class RunSetupPresenter {
      * @return a {@link List} of {@link Integer} what the gap holds, or null where that cannot be said
      */
     private @Nullable List<Integer> gapHolds(final int year, final List<Integer> months) {
-        if (!this.countsAreIn()) {
+        if (!this.folders.countsAreIn()) {
             return null;
         }
-        final List<Integer> filed = this.stagedYears().stream()
+        final List<Integer> filed = this.folders.stagedYears().stream()
                 .filter(row -> row.year() == year)
                 .flatMap(row -> row.months().stream())
                 .filter(month -> month.photos() > 0 || month.videos() > 0)

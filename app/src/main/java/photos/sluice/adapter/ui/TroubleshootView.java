@@ -11,26 +11,26 @@ import java.util.List;
  * What the troubleshoot screen draws, chosen from a {@link TroubleshootPresenter}. The view reads
  * fields off this and decides nothing about what they mean.
  *
- * <p>Two fields are not for it to read at all. A {@link Problem}'s {@code at} and {@code finding}
- * are an identity handed straight back to {@link TroubleshootPresenter#press}, the way
- * {@link RunsView.Action} carries its prep dir. Everything else is display-ready.
- *
  * @param heading {@link String} the screen's own name, carrying which run it is about
  * @param back {@link String} what the way out says
  * @param checking what to say while the pass is running, or null where it is not
  * @param summary {@link String} what the pass found and what it put right, or null before one has
  *     run
- * @param problems a {@link List} of {@link Problem} what is still unresolved, in the order drawn
- * @param nothingLeft what to say in place of the problems where there are none, or null where there
- *     are some
+ * @param problems a {@link List} of {@link SameProblem} what is still unresolved, in the order
+ *     drawn, with faults of one kind gathered under one heading
+ * @param nothingLeft what to say under rows none of which can be answered. Null where an answer is
+ *     on offer, and null again where there is nothing left at all
  * @param detail the technical report, or null before a pass has produced one
  * @param actions a {@link List} of {@link Action} what can be done about the run as a whole
  * @param message {@link Message} what the screen has to report, or null where it has nothing
+ * @param reportNumber int how many times this screen has reported anything, so a screen can tell a
+ *     fresh report from a redraw carrying the last one. Two answers of one kind say the same
+ *     sentence, and the second is still news
  */
 public record TroubleshootView(String heading, String back, @Nullable String checking,
-                               @Nullable String summary, List<Problem> problems,
+                               @Nullable String summary, List<SameProblem> problems,
                                @Nullable String nothingLeft, @Nullable Detail detail,
-                               List<Action> actions, @Nullable Message message) {
+                               List<Action> actions, @Nullable Message message, int reportNumber) {
 
     /**
      * Defensively copies the mutable collection components.
@@ -39,11 +39,12 @@ public record TroubleshootView(String heading, String back, @Nullable String che
      * @param back {@link String} what the way out says
      * @param checking what to say while the pass is running
      * @param summary {@link String} what the pass found and put right
-     * @param problems a {@link List} of {@link Problem} what is still unresolved
-     * @param nothingLeft what to say where there are no problems left
+     * @param problems a {@link List} of {@link SameProblem} what is still unresolved
+     * @param nothingLeft what to say under rows none of which can be answered
      * @param detail the technical report
      * @param actions a {@link List} of {@link Action} what can be done about the run
      * @param message {@link Message} what the screen has to report
+     * @param reportNumber int how many times this screen has reported anything
      */
     public TroubleshootView {
         problems = List.copyOf(problems);
@@ -51,32 +52,49 @@ public record TroubleshootView(String heading, String back, @Nullable String che
     }
 
     /**
-     * One thing still standing between the run and finishing, as the reader meets it.
+     * Several rows about one and the same fault, under the heading that covers them.
      *
-     * <p>An answered problem carries its outcome and no options. Answers are permanent, so there is
-     * nothing to take back and nothing to press twice.
+     * @param heading what covers the rows and counts them, or null where there is only one row and
+     *     it says what went wrong itself
+     * @param rows a {@link List} of {@link Problem} one per fault, each naming what it happened to
+     *     and carrying its own answers
+     */
+    public record SameProblem(@Nullable String heading, List<Problem> rows) {
+
+        /**
+         * Defensively copies the mutable list.
+         *
+         * @param heading what covers the rows, or null
+         * @param rows a {@link List} of {@link Problem} the rows it covers
+         */
+        public SameProblem {
+            rows = List.copyOf(rows);
+        }
+    }
+
+    /**
+     * One thing still standing between the run and finishing, as the reader meets it.
      *
      * @param id {@link String} the row's id, for the screen to set on it
      * @param finding {@link Finding} the fault this row was drawn from, handed straight back to
-     *     {@link TroubleshootPresenter#press}. Null on a settled row, which has no options to
-     *     press. Never something for the screen to read
-     * @param problem {@link String} what went wrong, in the terms a reader would use
+     *     {@link TroubleshootPresenter#press}. Never something for the screen to read
+     * @param problem what went wrong, in the terms a reader would use, or null where the heading
+     *     above this row says it for several rows at once
      * @param about what it happened to, such as the photo or the sheet, or null where the problem
      *     names nothing narrower than the run
-     * @param outcome what answering it settled, or null while it is still open
-     * @param options a {@link List} of {@link Option} the answers on offer, empty once answered
+     * @param options a {@link List} of {@link Option} the answers on offer, empty while a job holds
+     *     the run
      */
-    public record Problem(String id, @Nullable Finding finding, String problem,
-                          @Nullable String about, @Nullable String outcome, List<Option> options) {
+    public record Problem(String id, Finding finding, @Nullable String problem,
+                          @Nullable String about, List<Option> options) {
 
         /**
          * Defensively copies the mutable list.
          *
          * @param id {@link String} the row's id
-         * @param finding {@link Finding} the fault this row was drawn from, or null on a settled row
-         * @param problem {@link String} what went wrong
+         * @param finding {@link Finding} the fault this row was drawn from
+         * @param problem what went wrong, or null where a heading says it
          * @param about what it happened to, or null
-         * @param outcome what answering it settled, or null
          * @param options a {@link List} of {@link Option} the answers on offer
          */
         public Problem {

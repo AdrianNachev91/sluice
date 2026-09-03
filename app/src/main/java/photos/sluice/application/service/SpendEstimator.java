@@ -182,7 +182,8 @@ final class SpendEstimator {
         try {
             return new History(this.ledger.read(), false);
         } catch (final RuntimeException e) {
-            log.warn("Could not read the spend ledger, so this run is estimated without history", e);
+            log.warn("Could not read the spend ledger, so this run is estimated without history: {}",
+                    e.toString());
             return new History(List.of(), true);
         }
     }

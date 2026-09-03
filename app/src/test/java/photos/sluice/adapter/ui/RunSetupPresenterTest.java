@@ -24,7 +24,6 @@ import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
 
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,7 +31,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Objects.requireNonNull;
 
@@ -49,16 +47,9 @@ class RunSetupPresenterTest {
 
     private static final SpendEstimate NOTHING = new SpendEstimate(0, 0, true, false, false);
 
-    // Comfortably past the 200ms a read is given before the screen says it is reading. The pair of
-    // tests either side of it are a negative and its control, so this number is checked by them
-    // rather than picked to feel safe.
-    private static final long SLOWER_THAN_THE_WAIT = 400;
-
     private final Pipeline pipeline = mock(Pipeline.class);
 
     private final AtomicBoolean jobIsRunning = new AtomicBoolean();
-
-    private volatile Runnable redraw = () -> { };
 
     private final RunSetupPresenter presenter = this.launcher();
 
@@ -112,149 +103,6 @@ class RunSetupPresenterTest {
 
         assertThat(counting.view().scopeRefusal())
                 .contains("would take months you did not ask for.");
-    }
-
-    @Test
-    void aReadNobodyAskedForLeavesTheStartButtonAlone() {
-        final RunSetupPresenter reading = this.launcher();
-        reading.setMode(RunMode.SORT);
-
-        reading.refreshCountsUnprompted();
-
-        assertThat(reading.view().canStart()).isTrue();
-    }
-
-    @Test
-    void aReadTheScreenAskedForTakesTheStartButtonWhileItRuns() {
-        final RunSetupPresenter reading = this.launcher();
-        reading.setMode(RunMode.SORT);
-        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
-            assertThat(reading.view().canStart()).isFalse();
-            return new InboxTally(300, 1_000_000L);
-        });
-
-        reading.refreshCounts();
-
-        assertThat(reading.view().canStart()).isTrue();
-    }
-
-    @Test
-    void aReadNobodyAskedForCannotLowerTheFlagAReadThatWasAskedForRaised() throws Exception {
-        final RunSetupPresenter reading = this.launcher();
-        reading.setMode(RunMode.SORT);
-        final var pollIsWalking = new CountDownLatch(1);
-        final var letThePollFinish = new CountDownLatch(1);
-        final var walks = new AtomicInteger();
-        final var liveDuringTheAskedForWalk = new AtomicBoolean();
-        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
-            if (walks.incrementAndGet() == 1) {
-                pollIsWalking.countDown();
-                assertThat(letThePollFinish.await(5, TimeUnit.SECONDS)).isTrue();
-            } else {
-                liveDuringTheAskedForWalk.set(reading.view().canStart());
-            }
-            return new InboxTally(300, 1_000_000L);
-        });
-        final var poll = new Thread(reading::refreshCountsUnprompted);
-        poll.start();
-        assertThat(pollIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
-
-        final var afterTheRun = new Thread(reading::refreshCounts);
-        afterTheRun.start();
-        // Parked on the lock, which is the whole arrangement. Released before it gets there, the
-        // asked-for read never queues behind the poll and the test proves nothing.
-        waitUntilParked(afterTheRun);
-        letThePollFinish.countDown();
-        poll.join(5_000);
-        afterTheRun.join(5_000);
-
-        // The flag defaults to the passing value, so a walk that never happened would read as a
-        // pass. This is what says the button was actually looked at.
-        assertThat(walks.get()).isEqualTo(2);
-        assertThat(liveDuringTheAskedForWalk).isFalse();
-    }
-
-    // Under a read that counts itself in only once it holds the lock, the button is live here and
-    // this fails.
-    @Test
-    void aReadThatWasAskedForGreysTheButtonWhileItWaitsForTheWalkAhead() throws Exception {
-        final RunSetupPresenter reading = this.launcher();
-        reading.setMode(RunMode.SORT);
-        final var pollIsWalking = new CountDownLatch(1);
-        final var letThePollFinish = new CountDownLatch(1);
-        final var walks = new AtomicInteger();
-        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
-            if (walks.incrementAndGet() == 2) {
-                pollIsWalking.countDown();
-                assertThat(letThePollFinish.await(5, TimeUnit.SECONDS)).isTrue();
-            }
-            return new InboxTally(300, 1_000_000L);
-        });
-        // A first read that lands, so the screen is past the state it opens in having read nothing.
-        // Without it the button is dead for a reason that has nothing to do with the queue below.
-        reading.refreshCountsUnprompted();
-        assertThat(reading.view().canStart()).isTrue();
-
-        final var poll = new Thread(reading::refreshCountsUnprompted);
-        poll.start();
-        assertThat(pollIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
-        final var afterTheRun = new Thread(reading::refreshCounts);
-        afterTheRun.start();
-        waitUntilParked(afterTheRun);
-
-        final boolean liveWhileItWaited = reading.view().canStart();
-        letThePollFinish.countDown();
-        poll.join(5_000);
-        afterTheRun.join(5_000);
-
-        assertThat(walks.get()).isEqualTo(3);
-        assertThat(liveWhileItWaited).isFalse();
-        // A read that counts itself in and never out passes everything above this line.
-        assertThat(reading.view().canStart()).isTrue();
-    }
-
-    // Two asked-for reads, and the first one out must not answer for the second. A flag cleared on
-    // the first's way out reads as live here.
-    @Test
-    void anAskedForReadStillWalkingKeepsTheButtonAFinishedOneWouldHaveFreed() throws Exception {
-        final RunSetupPresenter reading = this.launcher();
-        reading.setMode(RunMode.SORT);
-        final var firstIsWalking = new CountDownLatch(1);
-        final var letTheFirstFinish = new CountDownLatch(1);
-        final var secondIsWalking = new CountDownLatch(1);
-        final var letTheSecondFinish = new CountDownLatch(1);
-        final var walks = new AtomicInteger();
-        // The second read is held mid-walk as well as the first. Released, it would finish in
-        // microseconds and the moment this test is about would be gone before it could be read.
-        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
-            final int walk = walks.incrementAndGet();
-            if (walk == 2) {
-                firstIsWalking.countDown();
-                assertThat(letTheFirstFinish.await(5, TimeUnit.SECONDS)).isTrue();
-            } else if (walk == 3) {
-                secondIsWalking.countDown();
-                assertThat(letTheSecondFinish.await(5, TimeUnit.SECONDS)).isTrue();
-            }
-            return new InboxTally(300, 1_000_000L);
-        });
-        reading.refreshCountsUnprompted();
-
-        final var first = new Thread(reading::refreshCounts);
-        first.start();
-        assertThat(firstIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
-        final var second = new Thread(reading::refreshCounts);
-        second.start();
-        waitUntilParked(second);
-        letTheFirstFinish.countDown();
-        first.join(5_000);
-        assertThat(secondIsWalking.await(5, TimeUnit.SECONDS)).isTrue();
-
-        final boolean liveOnceTheFirstWasOut = reading.view().canStart();
-        letTheSecondFinish.countDown();
-        second.join(5_000);
-
-        assertThat(walks.get()).isEqualTo(3);
-        assertThat(liveOnceTheFirstWasOut).isFalse();
     }
 
     @Test
@@ -621,54 +469,37 @@ class RunSetupPresenterTest {
         verify(this.pipeline, times(2)).estimateFor(100);
     }
 
+    // A read that skipped the retire would hand back a figure averaged from the old ledger.
     @Test
-    void aReadThatFinishesAtOnceNeverPutsTheCountingStateOnTheScreen() throws Exception {
-        final var repaints = new AtomicInteger();
-        this.redraw = repaints::incrementAndGet;
+    void aReadNobodyAskedForRetiresTheHeldSizeToo() {
+        this.choose(RunMode.SIFT, "2019");
+        this.presenter.view();
 
-        this.presenter.refreshCounts();
+        this.presenter.refreshCountsUnprompted();
+        this.presenter.view();
 
-        Thread.sleep(SLOWER_THAN_THE_WAIT);
-        assertThat(repaints.get()).isZero();
+        verify(this.pipeline, times(2)).estimateFor(100);
     }
 
     @Test
-    void aReadStillGoingAfterTheWaitPutsItThereAndSaysSo() throws Exception {
-        final var held = new CountDownLatch(1);
-        final List<Boolean> liveWhenDrawn = new ArrayList<>();
+    void aSizeHeldFromBeforeAReadIsRetiredAsThatReadStartsRatherThanAsItLands() throws Exception {
+        this.choose(RunMode.SIFT, "2019");
+        this.presenter.view();
+        final var walking = new CountDownLatch(1);
+        final var letItFinish = new CountDownLatch(1);
         when(this.pipeline.inboxTally()).thenAnswer(_ -> {
-            held.await();
-            return new InboxTally(12, 4_300);
+            walking.countDown();
+            assertThat(letItFinish.await(5, TimeUnit.SECONDS)).isTrue();
+            return new InboxTally(300, 1_000_000L);
         });
-        // Its own presenter, because a read counts the draws it causes. The one in the fixture has
-        // already read once, and that read's own wake-up would land inside this one and draw again.
-        final RunSetupPresenter slow = this.launcher();
-        slow.setMode(RunMode.SORT);
-        this.redraw = () -> liveWhenDrawn.add(slow.view().canStart());
 
-        final Thread walking = Thread.ofVirtual().start(slow::refreshCounts);
-        Thread.sleep(SLOWER_THAN_THE_WAIT);
+        final Thread read = Thread.ofVirtual().start(this.presenter::refreshCounts);
+        assertThat(walking.await(5, TimeUnit.SECONDS)).isTrue();
+        this.presenter.view();
 
-        // Drawn once, and the button was dead when it was. A live one would take a press and do
-        // nothing for as long as the walk lasts.
-        assertThat(liveWhenDrawn).containsExactly(false);
-        held.countDown();
-        walking.join();
-    }
-
-    @Test
-    void aRepaintTheScreenRefusesLeavesTheNextReadAbleToRun() {
-        // A closing window refuses the handover to the screen with this. A read in flight when it
-        // lands holds the one thing a later read has to take.
-        this.redraw = () -> {
-            throw new IllegalStateException("Toolkit not running");
-        };
-        this.presenter.refreshCounts();
-
-        this.redraw = () -> { };
-        this.presenter.refreshCounts();
-
-        assertThat(this.presenter.view().years()).isNotEmpty();
+        verify(this.pipeline, times(2)).estimateFor(100);
+        letItFinish.countDown();
+        read.join(5_000);
     }
 
     @Test
@@ -756,32 +587,6 @@ class RunSetupPresenterTest {
         });
 
         this.presenter.refreshCounts();
-    }
-
-    // The window is what makes this weak rather than flaky. On a slow enough machine the second
-    // read might not have reached the tally even unserialised, and it would pass for the wrong
-    // reason. It cannot fail against correct code.
-    @Test
-    void oneReadWaitsForAnotherRatherThanWalkingBesideIt() throws Exception {
-        final var arrived = new CountDownLatch(1);
-        final var release = new CountDownLatch(1);
-        final var entries = new AtomicInteger();
-        when(this.pipeline.inboxTally()).thenAnswer(_ -> {
-            entries.incrementAndGet();
-            arrived.countDown();
-            release.await();
-            return new InboxTally(1, 1L);
-        });
-
-        final Thread first = Thread.ofVirtual().start(this.presenter::refreshCounts);
-        arrived.await();
-        final Thread second = Thread.ofVirtual().start(this.presenter::refreshCounts);
-        assertThat(second.join(Duration.ofMillis(200))).isFalse();
-        assertThat(entries).hasValue(1);
-
-        release.countDown();
-        first.join();
-        second.join();
     }
 
     @Test
@@ -1450,21 +1255,7 @@ class RunSetupPresenterTest {
     }
 
     private RunSetupPresenter launcher() {
-        return new RunSetupPresenter(this.pipeline, this.jobIsRunning::get, () -> this.redraw.run());
-    }
-
-    // Waits for a thread to block acquiring the read lock. Two states, because a lock parks a
-    // thread as WAITING while the latch above it parks as TIMED_WAITING. Which of those this
-    // thread reaches first is not something to depend on.
-    private static void waitUntilParked(final Thread thread) {
-        final long deadline = System.currentTimeMillis() + 5_000;
-        while (thread.getState() != Thread.State.WAITING
-                && thread.getState() != Thread.State.TIMED_WAITING) {
-            if (System.currentTimeMillis() > deadline) {
-                throw new AssertionError("thread never parked: " + thread.getState());
-            }
-            Thread.onSpinWait();
-        }
+        return new RunSetupPresenter(this.pipeline, this.jobIsRunning::get, () -> { });
     }
 
     private RunSetupPresenter.Confirmation askedBeforeSifting(final int year) {

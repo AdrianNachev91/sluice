@@ -6,8 +6,10 @@ import photos.sluice.adapter.ui.TroubleshootView.Answer;
 import photos.sluice.adapter.ui.TroubleshootView.Deed;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
+import photos.sluice.adapter.ui.TroubleshootView.SameProblem;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.JobInProgressException;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
@@ -22,17 +24,22 @@ import photos.sluice.domain.cull.OverlapResolution;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.TroubleshootReport;
+import photos.sluice.domain.paths.PathRole;
+import photos.sluice.domain.paths.PathViolation.NotADirectory;
 
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -44,6 +51,8 @@ class TroubleshootPresenterTest {
     private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
 
     private static final Path PHOTO = Path.of("D:", "Sorted", "Photos", "2019", "06", "a.jpg");
+
+    private static final Path SORTED = Path.of("D:", "Sorted");
 
     @Test
     void theScreenNamesTheRunItWasOpenedAgainst() {
@@ -71,7 +80,7 @@ class TroubleshootPresenterTest {
         final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
                 List.of(new Finding.MissingSource(PHOTO, Path.of("move-records.log")))));
 
-        final Problem problem = presenter.view().problems().getFirst();
+        final Problem problem = rows(presenter).getFirst();
 
         assertThat(problem.problem()).isEqualTo("A photo this sift wants to move is not where it was.");
         assertThat(problem.about()).isEqualTo(PHOTO.toString());
@@ -80,15 +89,104 @@ class TroubleshootPresenterTest {
     }
 
     @Test
+    void severalFaultsOfOneKindAreCountedInOneHeadingWithTheFilesUnderIt() {
+        final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
+                List.of(new Finding.SourceOutsideSorted(PHOTO, SORTED),
+                        new Finding.SourceOutsideSorted(Path.of("b.jpg"), SORTED),
+                        new Finding.SourceOutsideSorted(Path.of("c.jpg"), SORTED))));
+
+        final SameProblem stacked = presenter.view().problems().getFirst();
+
+        assertThat(presenter.view().problems()).hasSize(1);
+        assertThat(stacked.heading())
+                .isEqualTo("This sift was asked to move 3 files from outside your Sorted folder.");
+        assertThat(stacked.rows()).extracting(Problem::problem).containsOnlyNulls();
+        assertThat(stacked.rows()).extracting(Problem::about)
+                .containsExactly(PHOTO.toString(), "b.jpg", "c.jpg");
+    }
+
+    @Test
+    void aFaultFoundOnceKeepsItsOwnSentenceAndTakesNoHeading() {
+        final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
+                List.of(new Finding.SourceOutsideSorted(PHOTO, SORTED))));
+
+        final SameProblem alone = presenter.view().problems().getFirst();
+
+        assertThat(alone.heading()).isNull();
+        assertThat(alone.rows()).extracting(Problem::problem)
+                .containsExactly("This sift was asked to move a file from outside your Sorted folder.");
+    }
+
+    @Test
+    void kindsKeepTheOrderTheFirstOfEachWasFoundIn() {
+        final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingShard("montage-002", "decisions-002.json"),
+                        new Finding.CorruptShard("montage-003", "decisions-003.json"),
+                        new Finding.MissingShard("montage-004", "decisions-004.json"))));
+
+        assertThat(presenter.view().problems()).extracting(SameProblem::heading)
+                .containsExactly("2 sheets have not been judged yet.", null);
+    }
+
+    @Test
+    void everyRowUnderAHeadingKeepsItsOwnAnswers() {
+        final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log")),
+                        new Finding.MissingSource(Path.of("b.jpg"), Path.of("b.log")))));
+
+        final SameProblem stacked = presenter.view().problems().getFirst();
+
+        assertThat(stacked.rows()).hasSize(2);
+        assertThat(stacked.rows()).allSatisfy(problem ->
+                assertThat(problem.options()).extracting(Option::answer)
+                        .containsExactly(Answer.RECHECK, Answer.SKIP_FILE));
+        assertThat(rows(presenter)).extracting(Problem::id).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void answeringOneOfAPairLeavesTheSurvivorSpeakingForItself() {
+        final Finding.MissingSource second = new Finding.MissingSource(Path.of("b.jpg"),
+                Path.of("b.log"));
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log")), second));
+        final TroubleshootPresenter presenter = opened(pipeline);
+        assertThat(presenter.view().problems().getFirst().heading())
+                .isEqualTo("2 photos this sift wants to move are not where they were.");
+        when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of(second)));
+
+        pressOption(presenter, Answer.SKIP_FILE);
+
+        assertThat(presenter.view().problems().getFirst().heading()).isNull();
+        assertThat(rows(presenter)).extracting(Problem::problem)
+                .containsExactly("A photo this sift wants to move is not where it was.");
+    }
+
+    // Nothing produces two of either today, so without this the branch that keeps their singular
+    // sentences is one no test enters.
+    @Test
+    void aKindWithNoPluralDrawsARowEachRatherThanACountedHeading() {
+        final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
+                List.of(new Finding.CorruptIndex(Path.of("a", "index.json")),
+                        new Finding.CorruptIndex(Path.of("b", "index.json")))));
+
+        final SameProblem neither = presenter.view().problems().getFirst();
+
+        assertThat(neither.heading()).isNull();
+        assertThat(neither.rows()).extracting(Problem::problem)
+                .containsExactly("Sluice cannot read its own record of what this sift covers.",
+                        "Sluice cannot read its own record of what this sift covers.");
+    }
+
+    @Test
     void aProblemNoAnswerCanSettleIsStillDrawn() {
         final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
                 List.of(new Finding.CorruptShard("montage-002", "decisions-002.json"),
                         new Finding.MissingShard("montage-003", "decisions-003.json"))));
 
-        assertThat(presenter.view().problems()).extracting(Problem::problem)
+        assertThat(rows(presenter)).extracting(Problem::problem)
                 .containsExactly("One sheet's answers cannot be read.",
                         "One sheet has not been judged yet.");
-        assertThat(presenter.view().problems()).allSatisfy(problem ->
+        assertThat(rows(presenter)).allSatisfy(problem ->
                 assertThat(problem.options()).isEmpty());
         assertThat(presenter.view().nothingLeft()).isNotNull();
     }
@@ -155,18 +253,167 @@ class TroubleshootPresenterTest {
     }
 
     @Test
-    void anAnsweredProblemCollapsesToWhatItSettled() {
+    void anAnsweredProblemLeavesTheListAndSaysWhatItSettledAtTheTop() {
         final Pipeline pipeline = pipelineReporting(State.BLOCKED,
                 List.of(new Finding.MissingSource(PHOTO, Path.of("move-records.log"))));
         final TroubleshootPresenter presenter = opened(pipeline);
-        // The answer resolves the finding, so the reading behind the redraw reports a clean run.
         when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
 
         pressOption(presenter, Answer.SKIP_FILE);
 
-        final Problem settled = presenter.view().problems().getFirst();
-        assertThat(settled.outcome()).contains("go on without that photo");
-        assertThat(settled.options()).isEmpty();
+        assertThat(rows(presenter)).isEmpty();
+        final RunLauncherView.Message said = requireNonNull(presenter.view().message());
+        assertThat(said.text()).contains("go on without that photo");
+        assertThat(said.refused()).isFalse();
+    }
+
+    // Counted on the way out the number would rise on every redraw, putting up a fresh banner
+    // whenever anything at all was pressed.
+    @Test
+    void drawingTheScreenAgainIsNotAReport() {
+        final TroubleshootPresenter presenter = opened(pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log")))));
+
+        final int drawn = presenter.view().reportNumber();
+
+        assertThat(presenter.view().reportNumber()).isEqualTo(drawn);
+    }
+
+    @Test
+    void neitherLookingAgainNorBeingOvertakenSpeaksOverAReadThatFailed() {
+        final Finding.MissingSource missing = new Finding.MissingSource(PHOTO, Path.of("a.log"));
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED, List.of(missing));
+        final TroubleshootPresenter presenter = opened(pipeline);
+        final Problem row = rows(presenter).getFirst();
+        when(pipeline.cullRun(any())).thenThrow(new IllegalStateException("the folder is gone"));
+
+        presenter.press(row, option(row, Answer.RECHECK));
+
+        final RunLauncherView.Message afterLooking =
+                requireNonNull(presenter.view().message());
+        assertThat(afterLooking.refused()).isTrue();
+        assertThat(afterLooking.text()).doesNotContain("no longer a problem");
+
+        presenter.press(row, option(row, Answer.SKIP_FILE));
+
+        final RunLauncherView.Message afterPressing =
+                requireNonNull(presenter.view().message());
+        assertThat(afterPressing.refused()).isTrue();
+        assertThat(afterPressing.text()).doesNotContain("read again");
+    }
+
+    // Thrown by the roots guard rather than by anything about the sift, that being the only thing
+    // cullRun can throw. PrepDirDoctor.summaryOf answers a damaged run rather than throwing over
+    // one, so a summary naming a cause of its own would name one that never gets here.
+    @Test
+    void aRunNobodyCouldReadSaysSoWhereTheCountsWouldGo() {
+        final var roots = new PathsMisconfiguredException(
+                List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone"))));
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log"))));
+        final TroubleshootPresenter presenter = opened(pipeline);
+        final Problem row = rows(presenter).getFirst();
+        when(pipeline.cullRun(any())).thenThrow(roots);
+
+        presenter.press(row, option(row, Answer.SKIP_FILE));
+
+        assertThat(rows(presenter)).isEmpty();
+        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.plainly(roots));
+        assertThat(presenter.view().summary())
+                .isEqualTo(requireNonNull(presenter.view().message()).text());
+    }
+
+    @Test
+    void aFailedReadTakesFinishOffTheScreen() {
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log"))));
+        final TroubleshootPresenter presenter = opened(pipeline);
+        final Problem row = rows(presenter).getFirst();
+        // The answer clears the last finding, so the run reads as ready and offers Finish. The row
+        // the reader is still looking at is now stale, and pressing it again reads once more.
+        doReturn(summary(State.READY, List.of())).when(pipeline).cullRun(any());
+        presenter.press(row, option(row, Answer.SKIP_FILE));
+        assertThat(presenter.view().actions()).extracting(Action::id)
+                .contains("troubleshoot-finish");
+        doThrow(new PathsMisconfiguredException(
+                List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone")))))
+                .when(pipeline).cullRun(any());
+
+        presenter.press(row, option(row, Answer.SKIP_FILE));
+
+        assertThat(presenter.view().actions()).extracting(Action::id)
+                .doesNotContain("troubleshoot-finish");
+    }
+
+    // The press is driven from inside the draw rather than from a second thread. Two threads would
+    // have to hit a window a few instructions wide to prove anything, and would pass by missing it.
+    // archivesFolder is asked for while the buttons are being built. That is after the summary
+    // above them has been worked out, so it lands in exactly that window every time.
+    @Test
+    void oneDrawTakesEveryPartOfOneReadingRatherThanTheLatestOfEach() {
+        final var roots = new PathsMisconfiguredException(
+                List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone"))));
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log"))));
+        final TroubleshootPresenter presenter = opened(pipeline);
+        final Problem row = rows(presenter).getFirst();
+        doThrow(roots).doReturn(summary(State.READY, List.of())).when(pipeline).cullRun(any());
+        presenter.press(row, option(row, Answer.SKIP_FILE));
+        final var pressedMidDraw = new AtomicBoolean();
+        when(pipeline.archivesFolder()).thenAnswer(_ -> {
+            if (pressedMidDraw.compareAndSet(false, true)) {
+                presenter.press(row, option(row, Answer.SKIP_FILE));
+            }
+            return Path.of("logs", "archives");
+        });
+
+        final TroubleshootView drawn = presenter.view();
+
+        // Without it the press never happened and the rest of this passes for the wrong reason.
+        assertThat(pressedMidDraw).isTrue();
+        assertThat(drawn.summary()).isEqualTo(RunRefusals.plainly(roots));
+        assertThat(drawn.actions()).extracting(Action::id).doesNotContain("troubleshoot-finish");
+    }
+
+    // The line has to leave again on its own, or one unreadable moment sticks to the screen for
+    // the rest of the visit.
+    @Test
+    void aReadThatLandsTakesTheCouldNotReadLineBack() {
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log"))));
+        final TroubleshootPresenter presenter = opened(pipeline);
+        final Problem row = rows(presenter).getFirst();
+        final var roots = new PathsMisconfiguredException(
+                List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone"))));
+        when(pipeline.cullRun(any())).thenThrow(roots);
+        presenter.press(row, option(row, Answer.RECHECK));
+        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.plainly(roots));
+        // doReturn, because when(...) would call the still-throwing stub while setting up the
+        // replacement for it.
+        doReturn(summary(State.READY, List.of())).when(pipeline).cullRun(any());
+
+        presenter.press(row, option(row, Answer.RECHECK));
+
+        assertThat(presenter.view().summary()).isNotEqualTo(RunRefusals.plainly(roots));
+    }
+
+    @Test
+    void answeringTwiceReportsTwiceEvenWhenBothSayTheSameThing() {
+        final Finding.MissingSource second = new Finding.MissingSource(Path.of("b.jpg"),
+                Path.of("b.log"));
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED,
+                List.of(new Finding.MissingSource(PHOTO, Path.of("a.log")), second));
+        final TroubleshootPresenter presenter = opened(pipeline);
+        when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of(second)));
+        pressOption(presenter, Answer.SKIP_FILE);
+        final int afterTheFirst = presenter.view().reportNumber();
+
+        pressOption(presenter, Answer.SKIP_FILE);
+
+        assertThat(presenter.view().message()).isEqualTo(
+                new RunLauncherView.Message("The sift will go on without that photo. Nothing has "
+                        + "touched it, so a later sift can still pick it up.", false));
+        assertThat(presenter.view().reportNumber()).isGreaterThan(afterTheFirst);
     }
 
     @Test
@@ -203,7 +450,7 @@ class TroubleshootPresenterTest {
         final Pipeline pipeline = pipelineReporting(State.BLOCKED,
                 List.of(new Finding.CorruptSidecar("montage-002")));
         final TroubleshootPresenter presenter = opened(pipeline);
-        final Problem stale = presenter.view().problems().getFirst();
+        final Problem stale = rows(presenter).getFirst();
         when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
         presenter.press(stale, stale.options().getFirst());
 
@@ -226,7 +473,7 @@ class TroubleshootPresenterTest {
         final Pipeline pipeline = pipelineReporting(State.BLOCKED,
                 List.of(findingA, findingB, findingC));
         final TroubleshootPresenter presenter = opened(pipeline);
-        final List<Problem> drawn = presenter.view().problems();
+        final List<Problem> drawn = rows(presenter);
         final Problem problemA = drawn.get(0);
         final Problem problemB = drawn.get(1);
         when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of(findingB, findingC)));
@@ -245,7 +492,7 @@ class TroubleshootPresenterTest {
         final Finding.MissingSource findingA = new Finding.MissingSource(PHOTO, Path.of("a.log"));
         final Pipeline pipeline = pipelineReporting(State.BLOCKED, List.of(findingA));
         final TroubleshootPresenter presenter = opened(pipeline);
-        final Problem problemA = presenter.view().problems().getFirst();
+        final Problem problemA = rows(presenter).getFirst();
         // Something else settled it between the row being drawn and the press landing.
         when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
         skipFile(presenter, problemA);
@@ -367,6 +614,9 @@ class TroubleshootPresenterTest {
         assertThat(presenter.view().checking()).isNull();
         assertThat(requireNonNull(presenter.view().message()).text())
                 .isEqualTo("Something else is running.");
+        // The banner leaves on its own. Without this the screen it leaves behind is the empty one
+        // the test is named for.
+        assertThat(presenter.view().summary()).isEqualTo("Something else is running.");
     }
 
     // The pass reaches a move-log reconcile, which refuses on a shard contract that does not
@@ -410,6 +660,107 @@ class TroubleshootPresenterTest {
 
         assertThat(presenter.view().heading()).isEqualTo("Troubleshoot 2018");
         assertThat(presenter.view().problems()).isEmpty();
+        assertThat(presenter.view().message()).isNull();
+    }
+
+    // The second pass never finishes, which is the only window in which the clearing is visible.
+    // Let it report and it overwrites what the first one left, so the screen looks right either way.
+    @Test
+    void openingASecondRunKeepsNoneOfTheFirstOnesReport() {
+        final Pipeline pipeline = pipelineReporting(State.BLOCKED, List.of());
+        final TroubleshootPresenter presenter = opened(pipeline);
+        presenter.detail();
+        assertThat(presenter.view().detail()).isNotNull();
+        assertThat(presenter.detailCopied()).isTrue();
+        final JobHandle<TroubleshootReport> running = neverFinishes();
+        when(pipeline.troubleshoot(any())).thenReturn(running);
+
+        presenter.open(Path.of("logs", "sift-prep", "2018"), "2018");
+
+        assertThat(presenter.view().detail()).isNull();
+        assertThat(presenter.detailCopied()).isFalse();
+    }
+
+    // Rows and a refusal at once, which the reading-failed arm above can never draw.
+    @Test
+    void aPassThatCouldNotRunSaysSoWhereTheCountsWouldGo() {
+        final Pipeline pipeline = pipeline();
+        final JobHandle<TroubleshootReport> refused =
+                failing(new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
+        when(pipeline.troubleshoot(any())).thenReturn(refused);
+        when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED,
+                List.of(new Finding.CorruptSidecar("montage-002"))));
+        final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
+
+        presenter.open(PREP_DIR, "2019");
+
+        assertThat(presenter.view().summary())
+                .isEqualTo("Sluice could not work on this sift, because the answers in it do not "
+                        + "hold together.");
+        assertThat(presenter.view().summary())
+                .isEqualTo(requireNonNull(presenter.view().message()).text());
+        assertThat(rows(presenter)).hasSize(1);
+    }
+
+    @Test
+    void aPassThatRanTakesTheCouldNotRunLineBack() {
+        final Pipeline pipeline = pipeline();
+        final JobHandle<TroubleshootReport> refused =
+                failing(new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
+        when(pipeline.troubleshoot(any())).thenReturn(refused);
+        when(pipeline.cullRun(any())).thenReturn(summary(State.READY, List.of()));
+        final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
+        presenter.open(PREP_DIR, "2019");
+        assertThat(presenter.view().summary()).contains("do not hold together");
+        final var health = new PrepDirHealth(State.READY, List.of());
+        final JobHandle<TroubleshootReport> ran = reporting(new TroubleshootReport(
+                health, false, null, List.of(), health, "the technical report"));
+        doReturn(ran).when(pipeline).troubleshoot(any());
+
+        presenter.open(PREP_DIR, "2019");
+
+        assertThat(presenter.view().summary()).isEqualTo("Nothing left to put right.");
+    }
+
+    // The second pass never finishes, so nothing but open() can have cleared the first one's
+    // refusal. Let it finish and its own success arm clears the field instead.
+    @Test
+    void openingASecondRunKeepsNoneOfTheFirstOnesRefusal() {
+        final Pipeline pipeline = pipeline();
+        final JobHandle<TroubleshootReport> refused =
+                failing(new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
+        when(pipeline.troubleshoot(any())).thenReturn(refused);
+        when(pipeline.cullRun(any())).thenReturn(summary(State.BLOCKED, List.of()));
+        final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
+        presenter.open(PREP_DIR, "2019");
+        assertThat(presenter.view().summary()).contains("do not hold together");
+        final JobHandle<TroubleshootReport> running = neverFinishes();
+        doReturn(running).when(pipeline).troubleshoot(any());
+
+        presenter.open(Path.of("logs", "sift-prep", "2018"), "2018");
+
+        assertThat(presenter.view().summary()).isNull();
+        assertThat(presenter.view().checking()).isNotNull();
+    }
+
+    // Two failures at once, and the reader has one problem rather than two. The banner is the read
+    // refusal, so a summary carrying the pass refusal instead would name a second cause.
+    @Test
+    void aReadingThatFailedOutranksThePassThatCouldNotRun() {
+        final Pipeline pipeline = pipeline();
+        final JobHandle<TroubleshootReport> refused =
+                failing(new ApplyException("montage-004[#3]: missing 'reason'", List.of()));
+        when(pipeline.troubleshoot(any())).thenReturn(refused);
+        final var roots = new PathsMisconfiguredException(
+                List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone"))));
+        when(pipeline.cullRun(any())).thenThrow(roots);
+        final var presenter = new TroubleshootPresenter(pipeline, launcher(pipeline));
+
+        presenter.open(PREP_DIR, "2019");
+
+        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.plainly(roots));
+        assertThat(presenter.view().summary())
+                .isEqualTo(requireNonNull(presenter.view().message()).text());
     }
 
     @Test
@@ -460,8 +811,21 @@ class TroubleshootPresenterTest {
                 .orElseThrow());
     }
 
+    private static List<Problem> rows(final TroubleshootPresenter presenter) {
+        return presenter.view().problems().stream()
+                .flatMap(same -> same.rows().stream())
+                .toList();
+    }
+
+    private static Option option(final Problem problem, final Answer answer) {
+        return problem.options().stream()
+                .filter(offered -> offered.answer() == answer)
+                .findFirst()
+                .orElseThrow();
+    }
+
     private static void pressOption(final TroubleshootPresenter presenter, final Answer answer) {
-        final Problem problem = presenter.view().problems().getFirst();
+        final Problem problem = rows(presenter).getFirst();
         presenter.press(problem, problem.options().stream()
                 .filter(option -> option.answer() == answer)
                 .findFirst()

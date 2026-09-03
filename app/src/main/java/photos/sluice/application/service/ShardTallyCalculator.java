@@ -28,8 +28,8 @@ import java.util.Objects;
  * <p>Every read here degrades rather than throws. A transiently unreadable index, sidecar, or shard
  * reports as not-yet-ready or not-yet-valid, never as an exception escaping to a caller. {@link Error}
  * stays uncaught. This class states that contract itself rather than depending on a caller's own
- * catch-all to hold it, since a display number and a watcher's poll should never be able to take a
- * caller down over a read that will very likely succeed on the next pass.
+ * catch-all to hold it. A display number and a watcher's poll should never be able to take a caller
+ * down over a read that will very likely succeed on the next pass.
  */
 final class ShardTallyCalculator {
 
@@ -60,9 +60,7 @@ final class ShardTallyCalculator {
      * montages, a file claimed by two different shards) isn't caught here. That montage still
      * counts as valid.
      *
-     * <p>Acceptable because this validity number is only ever shown. present and total, not valid,
-     * are what decide whether anything happens - {@link PrepDirDoctor#diagnose} branches on them
-     * internally to reach WAITING, and only a WAITING or READY run gets a watcher armed.
+     * <p>Acceptable because this validity number is only ever shown.
      *
      * <p>One ledger-resolved answer does reach it. A file the user resolved with TRUST_DECISION is
      * no longer treated as unreviewable, so the montage claiming it stops reading invalid. A montage
@@ -92,7 +90,7 @@ final class ShardTallyCalculator {
         try {
             return this.readingOf(this.cullPrepPort.readIndex(prepDir));
         } catch (final RuntimeException e) {
-            log.warn("Could not read {}, reporting it as not ready", prepDir, e);
+            log.warn("Could not read {}, reporting it as not ready: {}", prepDir, e.toString());
             return new Reading(false, null);
         }
     }
@@ -146,7 +144,8 @@ final class ShardTallyCalculator {
         try {
             return this.cullPrepPort.readSidecar(prep.prepDir(), montage);
         } catch (final RuntimeException e) {
-            log.warn("Could not read {}'s sidecar in {}, contributing no files from it", montage, prep.prepDir(), e);
+            log.warn("Could not read {}'s sidecar in {}, contributing no files from it: {}",
+                    montage, prep.prepDir(), e.toString());
             return List.of();
         }
     }
@@ -163,7 +162,8 @@ final class ShardTallyCalculator {
         try {
             return this.applyPlanner.resolvedUnreviewable(prep, this.ledgerReader.read(prep.prepDir()));
         } catch (final RuntimeException e) {
-            log.warn("Could not read the ledger for {}, using its unresolved unreviewable list", prep.prepDir(), e);
+            log.warn("Could not read the ledger for {}, using its unresolved unreviewable list: {}",
+                    prep.prepDir(), e.toString());
             return prep.unreviewable();
         }
     }
@@ -192,9 +192,10 @@ final class ShardTallyCalculator {
                     unreviewable);
             return new MontageShardStatus(true, true, report.valid());
         } catch (final RuntimeException e) {
-            // Present but unparseable, or its own presence could not even be confirmed - either way
-            // not valid, and never reported as absent, since an unconfirmed shard is not a missing one.
-            log.warn("Could not check {}'s shard status in {}, reporting it as invalid", montage, prep.prepDir(), e);
+            // Present but unparseable, or its own presence could not even be confirmed. Either way
+            // not valid, and never absent, since an unconfirmed shard is not a missing one.
+            log.warn("Could not check {}'s shard status in {}, reporting it as invalid: {}",
+                    montage, prep.prepDir(), e.toString());
             return new MontageShardStatus(true, false, false);
         }
     }

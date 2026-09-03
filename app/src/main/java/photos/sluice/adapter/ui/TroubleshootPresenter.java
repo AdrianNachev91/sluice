@@ -13,24 +13,29 @@ import photos.sluice.adapter.ui.TroubleshootView.Deed;
 import photos.sluice.adapter.ui.TroubleshootView.Detail;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
+import photos.sluice.adapter.ui.TroubleshootView.SameProblem;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.AnswerSource;
 import photos.sluice.domain.cull.ChoiceAnswer;
 import photos.sluice.domain.cull.CorruptSidecarResolution;
-import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.LaunchPrompt;
 import photos.sluice.domain.cull.OverlapResolution;
+import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.cull.TroubleshootReport;
 import photos.sluice.domain.cull.Verdict;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Decides what the troubleshoot screen shows for one run, and what a press on it does.
@@ -89,20 +94,30 @@ public class TroubleshootPresenter {
     private volatile String scope = "";
     private volatile boolean checking;
     private volatile @Nullable TroubleshootReport report;
-    private volatile List<Finding> showing = List.of();
-    private volatile State state = State.BLOCKED;
-    private volatile @Nullable Message message;
+
+    // Held as well as reported through the notice below, which is transient. Left to that alone,
+    // the screen ends up carrying no sign that the check never happened.
+    private volatile @Nullable String checkRefusedReason;
+
+    // What the last reading found, held as one value rather than three fields. Read apart, a caller
+    // can take one reading's findings and another reading's refusal. The screen then puts a count
+    // on a run the second reading could not see, and offers Finish over it.
+    //
+    // Atomic because every press runs on its own virtual thread, and the pass reports its ending
+    // from whichever thread it ran on.
+    private final AtomicReference<Reading> reading = new AtomicReference<>(Reading.NOTHING_YET);
+
     private volatile @Nullable Runnable repaint;
     private volatile @Nullable Runnable openRuns;
     private volatile @Nullable Runnable openDashboard;
     private volatile boolean detailCopied;
     private volatile boolean discarding;
 
-    // What the reader has answered this visit, in the order they answered it. An answer resolves
-    // the finding, so the next reading does not report it, and the row it collapses to has nothing
-    // left to be rebuilt from. Added to from a virtual thread a button press starts and read and
-    // cleared from the thread that paints, so a plain list is not safe here.
-    private final List<Problem> settled = new CopyOnWriteArrayList<>();
+    // What the screen has to report, and which report it is. Held as one value rather than two
+    // fields. Read apart, a caller can take one report's words and the next report's number. The
+    // screen then files the old sentence under the new number, and the real one is suppressed for
+    // good as a redraw it has already seen.
+    private final AtomicReference<Notice> notice = new AtomicReference<>(new Notice(null, 0));
 
     /**
      * Creates the presenter over the facade it reads and answers through.
@@ -161,11 +176,10 @@ public class TroubleshootPresenter {
         this.prepDir = prepDir;
         this.scope = scope;
         this.report = null;
-        this.message = null;
+        this.nowReporting(null);
         this.detailCopied = false;
-        this.settled.clear();
-        this.showing = List.of();
-        this.state = State.BLOCKED;
+        this.checkRefusedReason = null;
+        this.reading.set(Reading.NOTHING_YET);
         this.checking = true;
         this.startTheCheck(prepDir);
     }
@@ -176,18 +190,19 @@ public class TroubleshootPresenter {
      * @return {@link TroubleshootView} every row and every button, in the order they are drawn
      */
     public TroubleshootView view() {
-        final List<Finding> open = this.showing;
-        final List<Problem> problems = new ArrayList<>();
-        for (int at = 0; at < open.size(); at++) {
-            problems.add(this.problem(at, open.get(at)));
-        }
-        problems.addAll(this.settled);
+        final Reading last = this.reading.get();
         final TroubleshootReport pass = this.report;
+        final Notice reported = this.notice.get();
+        // Both asked once for the whole draw. A job starting or ending partway through would
+        // otherwise put answers on some rows and take the buttons off the rest.
+        final boolean stillChecking = this.checking;
+        final boolean busy = stillChecking || this.discarding || this.pipeline.isBusy();
         return new TroubleshootView("Troubleshoot " + this.scope, BACK,
-                this.checking ? CHECKING : null, this.summary(pass, open),
-                problems, this.nothingLeft(pass, open),
+                stillChecking ? CHECKING : null, this.summary(pass, last),
+                this.groupedProblems(last.findings(), busy),
+                nothingLeft(pass, last.findings(), stillChecking),
                 pass == null ? null : new Detail(DETAIL, pass.text(), COPY_DETAIL, COPIED),
-                this.actions(), this.message);
+                this.actions(last.state(), busy), reported.message(), reported.number());
     }
 
     /**
@@ -207,12 +222,12 @@ public class TroubleshootPresenter {
         if (run == null) {
             return;
         }
-        this.message = null;
+        this.nowReporting(null);
         final Finding finding = problem.finding();
         // Found by identity rather than by the index the row was drawn at. Answering one finding
         // resolves it, so every later index shifts. A row the reader can still see would otherwise
         // be answered against whatever slid into its place.
-        if (finding == null || !this.showing.contains(finding)) {
+        if (!this.reading.get().findings().contains(finding)) {
             this.overtaken(run);
             return;
         }
@@ -225,7 +240,7 @@ public class TroubleshootPresenter {
             this.overtaken(run);
             return;
         }
-        this.answer(run, problem, option.answer(), answer);
+        this.answer(run, option.answer(), answer);
     }
 
     /**
@@ -297,8 +312,10 @@ public class TroubleshootPresenter {
             handle.onComplete().whenComplete((pass, failure) -> this.checked(run, pass, failure));
         } catch (final RuntimeException e) {
             log.info("Could not look through {}", run, e);
+            final String refused = RunRefusals.plainly(e);
             this.checking = false;
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.checkRefusedReason = refused;
+            this.nowReporting(new Message(refused, true));
             this.draw();
         }
     }
@@ -316,9 +333,13 @@ public class TroubleshootPresenter {
      */
     private void checked(final Path run, final @Nullable TroubleshootReport pass,
                          final @Nullable Throwable failure) {
-        if (failure != null) {
+        if (failure == null) {
+            this.checkRefusedReason = null;
+        } else {
             log.warn("Could not look through {}", run, failure);
-            this.message = new Message(RunRefusals.plainly(RunRefusals.rootOf(failure)), true);
+            final String refused = RunRefusals.plainly(RunRefusals.rootOf(failure));
+            this.checkRefusedReason = refused;
+            this.nowReporting(new Message(refused, true));
         }
         this.report = pass;
         this.checking = false;
@@ -329,25 +350,40 @@ public class TroubleshootPresenter {
     /**
      * Records one answer, then reads the run again.
      *
+     * <p>{@link Answer#RECHECK} never reaches here.
+     *
      * @param run {@link Path} the run being answered
-     * @param problem {@link Problem} the row answered
      * @param chosen {@link Answer} what the reader chose
      * @param answer {@link ChoiceAnswer} what that means for this finding
      */
-    private void answer(final Path run, final Problem problem, final Answer chosen,
-                        final ChoiceAnswer answer) {
+    private void answer(final Path run, final Answer chosen, final ChoiceAnswer answer) {
         try {
             this.pipeline.answer(run, answer, AnswerSource.DESKTOP);
         } catch (final RuntimeException e) {
             log.info("Could not answer {} on {}", chosen, run, e);
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.nowReporting(new Message(RunRefusals.plainly(e), true));
             return;
         }
-        // Numbered by how many have settled rather than off the row's own id. Answering the top
-        // problem twice running draws both rows from index 0, so the id it came with is not unique.
-        this.settled.add(new Problem("troubleshoot-settled-" + this.settled.size(), null,
-                problem.problem(), problem.about(), FindingWords.settled(chosen), List.of()));
+        this.nowReporting(new Message(requireNonNull(FindingWords.settled(chosen)), false));
         this.reread(run);
+    }
+
+    /**
+     * Records what the screen has to report, or that it has nothing.
+     *
+     * @param message {@link Message} what to report, or null to leave the screen saying nothing
+     */
+    private void nowReporting(final @Nullable Message message) {
+        this.notice.updateAndGet(last -> new Notice(message, last.number() + 1));
+    }
+
+    /**
+     * One thing the screen was given to report, and where it sits in the sequence of them.
+     *
+     * @param message {@link Message} what to report, or null to leave the screen saying nothing
+     * @param number int which report this is, rising by one each time and never reset
+     */
+    private record Notice(@Nullable Message message, int number) {
     }
 
     /**
@@ -360,12 +396,15 @@ public class TroubleshootPresenter {
      * @param finding {@link Finding} the problem the reader answered
      */
     private void lookAgain(final Path run, final Finding finding) {
-        this.reread(run);
+        final Reading landed = this.reread(run);
+        if (landed == null) {
+            return;
+        }
         // An answer that ran and left the problem standing is what the reader has to notice. Said
         // in the tone of a confirmation, it reads as the press having worked.
-        final boolean stillThere = this.showing.contains(finding);
-        this.message = new Message(stillThere ? LOOKED_AGAIN_STILL_THERE : LOOKED_AGAIN_GONE,
-                stillThere);
+        final boolean stillThere = landed.findings().contains(finding);
+        this.nowReporting(new Message(stillThere ? LOOKED_AGAIN_STILL_THERE : LOOKED_AGAIN_GONE,
+                stillThere));
     }
 
     /**
@@ -374,25 +413,54 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void overtaken(final Path run) {
-        this.reread(run);
-        this.message = new Message(RUN_MOVED, false);
+        if (this.reread(run) != null) {
+            this.nowReporting(new Message(RUN_MOVED, false));
+        }
     }
 
     /**
      * Reads one run's own records again.
      *
+     * <p>A read that failed empties the findings and reports why. A caller with something to say
+     * about what the run now holds then has nothing to say it from. Speaking anyway puts a
+     * sentence about the photos over a refusal about the folder.
+     *
      * @param run {@link Path} the run
+     * @return {@link Reading} what this reading found, or null where it failed. Answered rather
+     *     than left to be picked up off the field. A caller acts on its own reading, never on
+     *     whichever one has landed by the time it looks
      */
-    private void reread(final Path run) {
+    private @Nullable Reading reread(final Path run) {
         try {
-            final CullRunSummary summary = this.pipeline.cullRun(run);
-            this.showing = summary.health().findings();
-            this.state = summary.health().state();
+            final PrepDirHealth health = this.pipeline.cullRun(run).health();
+            final Reading landed = new Reading(health.findings(), health.state(), null);
+            this.reading.set(landed);
+            return landed;
         } catch (final RuntimeException e) {
             log.info("Could not read {}", run, e);
-            this.showing = List.of();
-            this.message = new Message(RunRefusals.plainly(e), true);
+            final String refused = RunRefusals.plainly(e);
+            // Moved off READY with the findings it was read from, or Finish stays on offer over a
+            // run this cannot see.
+            this.reading.set(new Reading(List.of(), State.DAMAGED, refused));
+            this.nowReporting(new Message(refused, true));
+            return null;
         }
+    }
+
+    /**
+     * What one reading of the run found.
+     *
+     * @param findings a {@link List} of {@link Finding} what is still unresolved, in reading order
+     * @param state {@link State} the run's own state as this reading found it
+     * @param nothingKnownReason {@link String} why this reading found nothing, or null where it
+     *     found nothing because there is nothing. An empty findings list means both, and the counts
+     *     drawn from it are only true of the second. The refusal's own words rather than a sentence
+     *     of this screen's, so what the reader is told cannot drift from what actually refused
+     */
+    private record Reading(List<Finding> findings, State state,
+                           @Nullable String nothingKnownReason) {
+
+        private static final Reading NOTHING_YET = new Reading(List.of(), State.BLOCKED, null);
     }
 
     /**
@@ -401,7 +469,7 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void finish(final Path run) {
-        this.message = null;
+        this.nowReporting(null);
         this.launcher.continueRunFromRuns(run, this.scope, false);
         final Runnable dashboard = this.openDashboard;
         if (dashboard != null) {
@@ -419,13 +487,13 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void discard(final Path run) {
-        this.message = null;
+        this.nowReporting(null);
         final JobHandle<DiscardReport> handle;
         try {
             handle = this.pipeline.discard(run);
         } catch (final RuntimeException e) {
             log.info("Refused to discard {}", run, e);
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.nowReporting(new Message(RunRefusals.plainly(e), true));
             this.draw();
             return;
         }
@@ -444,7 +512,7 @@ public class TroubleshootPresenter {
         this.discarding = false;
         if (failure != null) {
             log.warn("Could not discard {}", run, failure);
-            this.message = new Message(RunRefusals.plainly(RunRefusals.rootOf(failure)), true);
+            this.nowReporting(new Message(RunRefusals.plainly(RunRefusals.rootOf(failure)), true));
             this.draw();
             return;
         }
@@ -452,22 +520,57 @@ public class TroubleshootPresenter {
     }
 
     /**
+     * The open findings as the screen draws them, with faults of one kind under one heading.
+     *
+     * <p>Kept in the order the reading found them, keyed on the first of each kind. A pass that
+     * puts one fault right and leaves another alone must not reshuffle what is left. A reader
+     * would otherwise come back to a page they have to read again from the top.
+     *
+     * <p>Rows keep their own answers whatever the heading above them says. An answer is about one
+     * photo or one sheet, and one press settling several of them would do something other than
+     * what the button reads.
+     *
+     * @param open a {@link List} of {@link Finding} what is still unresolved, in reading order
+     * @param busy boolean whether something is running that these rows have to wait for
+     * @return a {@link List} of {@link SameProblem} the headings and their rows, in drawing order
+     */
+    private List<SameProblem> groupedProblems(final List<Finding> open, final boolean busy) {
+        final Map<Class<? extends Finding>, List<Integer>> byKind = new LinkedHashMap<>();
+        for (int i = 0; i < open.size(); i++) {
+            byKind.computeIfAbsent(open.get(i).getClass(), _ -> new ArrayList<>()).add(i);
+        }
+        final List<SameProblem> grouped = new ArrayList<>();
+        for (final List<Integer> places : byKind.values()) {
+            final String heading = places.size() == 1
+                    ? null
+                    : FindingWords.of(open.get(places.getFirst())).heading(places.size());
+            grouped.add(new SameProblem(heading, places.stream()
+                    .map(i -> problem(i, open.get(i), heading != null, busy))
+                    .toList()));
+        }
+        return grouped;
+    }
+
+    /**
      * One still-open problem's row.
      *
-     * @param at int where the finding sits in the reading this row was drawn from
+     * @param i int where the finding sits in the reading this row was drawn from
      * @param finding {@link Finding} the fault
+     * @param headed boolean whether a heading above this row already says what went wrong
+     * @param busy boolean whether something is running that this row has to wait for
      * @return {@link Problem} the row
      */
-    private Problem problem(final int at, final Finding finding) {
+    private static Problem problem(final int i, final Finding finding, final boolean headed,
+                                   final boolean busy) {
         final FindingWords.Told told = FindingWords.of(finding);
         final List<Option> options = new ArrayList<>();
         for (final FindingWords.Choice choice : told.choices()) {
-            options.add(new Option("troubleshoot-answer-" + at + "-" + choice.answer(),
-                    choice.label(), choice.answer(), choice.leading() && !this.working(),
+            options.add(new Option("troubleshoot-answer-" + i + "-" + choice.answer(),
+                    choice.label(), choice.answer(), choice.leading() && !busy,
                     choice.confirm()));
         }
-        return new Problem("troubleshoot-problem-" + at, finding, told.problem(), told.about(),
-                null, this.working() ? List.of() : options);
+        return new Problem("troubleshoot-problem-" + i, finding, headed ? null : told.problem(),
+                told.about(), busy ? List.of() : options);
     }
 
     /**
@@ -479,14 +582,26 @@ public class TroubleshootPresenter {
      * same reason, so none is offered.
      *
      * @param pass {@link TroubleshootReport} what the pass reported, or null before one has run
-     * @param open a {@link List} of {@link Finding} what is still unresolved
-     * @return {@link String} the line, or null before a pass has run
+     * @param last {@link Reading} the reading this screen is being drawn from
+     * @return {@link String} the line, or null while a pass is still running
      */
-    private @Nullable String summary(final @Nullable TroubleshootReport pass,
-                                     final List<Finding> open) {
+    private @Nullable String summary(final @Nullable TroubleshootReport pass, final Reading last) {
+        // Ahead of the pass's own refusal below, so two failures at once read as one problem. The
+        // notice carries this same sentence, and the two would otherwise name different causes.
+        final String refused = last.nothingKnownReason();
+        if (refused != null) {
+            return refused;
+        }
+        // Rows can still be under this one, read by the reading that followed the pass. That is
+        // what separates it from the arm above, which speaks only where nothing was read at all.
+        final String checkRefused = this.checkRefusedReason;
+        if (checkRefused != null) {
+            return checkRefused;
+        }
         if (pass == null) {
             return null;
         }
+        final List<Finding> open = last.findings();
         final int repaired = (pass.indexRebuilt() ? 1 : 0) + pass.strayShardsRepaired().size();
         if (repaired == 0 && open.isEmpty()) {
             return "Nothing left to put right.";
@@ -505,11 +620,13 @@ public class TroubleshootPresenter {
      *
      * @param pass {@link TroubleshootReport} what the pass reported, or null before one has run
      * @param open a {@link List} of {@link Finding} what is still unresolved
+     * @param stillChecking boolean whether the pass was still running when this draw began
      * @return {@link String} the line, or null where there is nothing to add
      */
-    private @Nullable String nothingLeft(final @Nullable TroubleshootReport pass,
-                                         final List<Finding> open) {
-        if (pass == null || this.checking || open.isEmpty()) {
+    private static @Nullable String nothingLeft(final @Nullable TroubleshootReport pass,
+                                                final List<Finding> open,
+                                                final boolean stillChecking) {
+        if (pass == null || stillChecking || open.isEmpty()) {
             return null;
         }
         if (open.stream().anyMatch(finding -> !FindingWords.of(finding).choices().isEmpty())) {
@@ -525,16 +642,18 @@ public class TroubleshootPresenter {
      * <p>Finishing is offered only once the run has nothing left blocking it, which is the state
      * the reader came here to reach. Throwing it away works whatever state it is in.
      *
+     * @param state {@link State} the run's state as the reading being drawn found it
+     * @param busy boolean whether something is running that these buttons have to wait for
      * @return a {@link List} of {@link Action} the buttons
      */
-    private List<Action> actions() {
-        if (this.working()) {
+    private List<Action> actions(final State state, final boolean busy) {
+        if (busy) {
             return List.of();
         }
         final List<Action> actions = new ArrayList<>();
         actions.add(new Action("troubleshoot-discard", "Discard", Deed.DISCARD, false,
                 this.discardConfirm()));
-        if (this.state == State.READY) {
+        if (state == State.READY) {
             actions.add(new Action("troubleshoot-finish", FINISH, Deed.FINISH, true, null));
         }
         return actions;

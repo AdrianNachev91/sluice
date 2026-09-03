@@ -50,13 +50,42 @@ class FindingWordsTest {
                 assertThat(FindingWords.of(finding).problem()).isNotBlank().endsWith("."));
     }
 
+    // A sentence whose placeholder is misspelt loses the count silently rather than failing, and
+    // the heading then claims a set of one.
+    @Test
+    void everyKindThatCanStackCountsItselfInOneSentence() {
+        assertThat(EVERY_KIND).allSatisfy(finding -> {
+            final String heading = FindingWords.of(finding).heading(1234);
+            if (heading != null) {
+                assertThat(heading).contains("1,234").doesNotContain("{}").endsWith(".");
+            }
+        });
+    }
+
+    // An arm that lost its plural would draw a row per finding again, and no test would fail for
+    // it. So the two that legitimately have none are pinned by name.
+    @Test
+    void onlyTheTwoFaultsARunCanHoldOneOfHaveNoPluralAtAll() {
+        assertThat(EVERY_KIND).filteredOn(finding -> FindingWords.of(finding).heading(3) == null)
+                .hasSize(2)
+                .allSatisfy(finding -> assertThat(finding)
+                        .isInstanceOfAny(Finding.CorruptIndex.class, Finding.UnreadablePrepDir.class));
+    }
+
     // The engine's own words for these are montage, shard and cull. None of the three is what a
     // user calls the thing, and the sentence is where a reader meets it.
     @Test
     void noProblemSentenceUsesTheEnginesOwnVocabulary() {
-        assertThat(EVERY_KIND).allSatisfy(finding ->
-                assertThat(FindingWords.of(finding).problem().toLowerCase())
-                        .doesNotContain("montage").doesNotContain("shard").doesNotContain("cull"));
+        assertThat(EVERY_KIND).allSatisfy(finding -> {
+            final FindingWords.Told told = FindingWords.of(finding);
+            assertThat(told.problem().toLowerCase())
+                    .doesNotContain("montage").doesNotContain("shard").doesNotContain("cull");
+            final String forSeveral = told.forSeveral();
+            if (forSeveral != null) {
+                assertThat(forSeveral.toLowerCase())
+                        .doesNotContain("montage").doesNotContain("shard").doesNotContain("cull");
+            }
+        });
     }
 
     @Test
@@ -134,8 +163,6 @@ class FindingWordsTest {
                 .allSatisfy(answer -> assertThat(FindingWords.settled(answer)).isNotBlank());
     }
 
-    // Looking again settles nothing. The diagnosis that follows is what says whether the photo is
-    // back, so there is no outcome line for a row to collapse to.
     @Test
     void lookingAgainSettlesNothing() {
         assertThat(FindingWords.settled(Answer.RECHECK)).isNull();
