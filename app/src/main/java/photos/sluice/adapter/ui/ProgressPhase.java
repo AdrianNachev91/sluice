@@ -21,7 +21,23 @@ package photos.sluice.adapter.ui;
  * @param started boolean whether the job has reached this phase
  * @param finished boolean whether the phase has ended
  * @param partDone double how much of the unit now being worked on is done, from 0 to 1
+ * @param cutShort boolean whether it gave up part way rather than working through to its end
  */
 public record ProgressPhase(String label, int current, int total, boolean started, boolean finished,
-                            double partDone) {
+                            double partDone, boolean cutShort) {
+
+    /**
+     * A phase that has not given up part way.
+     *
+     * @param label {@link String} the phase's name
+     * @param current int units done so far
+     * @param total int units the phase said it had
+     * @param started boolean whether the job has reached this phase
+     * @param finished boolean whether the phase has ended
+     * @param partDone double how much of the unit now being worked on is done, from 0 to 1
+     */
+    public ProgressPhase(final String label, final int current, final int total,
+                         final boolean started, final boolean finished, final double partDone) {
+        this(label, current, total, started, finished, partDone, false);
+    }
 }

@@ -558,6 +558,17 @@ class RunLauncherPresenterTest {
     }
 
     @Test
+    void theOneSiftEndingWithNoButtonSaysWhereToPickItUp() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().action()).isNull();
+        assertThat(this.finishedView().detail()).contains("from Runs");
+    }
+
+    @Test
     void aSiftStoppedByItsSpendCeilingSaysNothingMoreHasBeenSpent() {
         this.choose(RunMode.SIFT, "2019");
         this.siftEndsWith(waitingBecause(WaitingReason.CEILING_REACHED));

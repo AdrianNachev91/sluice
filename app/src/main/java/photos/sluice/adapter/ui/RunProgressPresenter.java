@@ -61,7 +61,9 @@ class RunProgressPresenter {
      */
     RunProgressView view(final RunMode ran, final String scope, final boolean cancelling,
                          final boolean abandoning, final @Nullable ImportKind importing) {
-        final List<PhaseBar> bars = this.progress.phases().stream().map(RunProgressPresenter::bar).toList();
+        final List<PhaseBar> bars = this.progress.phases().stream()
+                .map(phase -> bar(phase, cancelling))
+                .toList();
         return new RunProgressView(ran.label() + " progress", scope, bars,
                 bars.isEmpty() ? STARTING : null, stopLabel(ran, cancelling, abandoning),
                 !cancelling || offersToGiveUpOnTheFile(ran, abandoning),
@@ -139,18 +141,24 @@ class RunProgressPresenter {
      * in flight lands, so on one large file over a slow connection the fill is all that moves.
      *
      * @param phase {@link ProgressPhase} what the job reported about it
+     * @param stopped boolean whether the reader has asked this run to stop
      * @return {@link PhaseBar} the bar
      */
-    private static PhaseBar bar(final ProgressPhase phase) {
+    private static PhaseBar bar(final ProgressPhase phase, final boolean stopped) {
         final boolean counted = phase.started() && phase.total() > 0;
+        // A count that reached its total is the phase's own proof, which a stopped run does not
+        // take away. Without one there is nothing to weigh against the stop. A stage carrying its
+        // stop in what it returns arrives here looking exactly like one that worked through.
+        final boolean provedItself = counted && phase.current() >= phase.total();
+        final boolean wentThrough = phase.finished() && !phase.cutShort() && (!stopped || provedItself);
         // A phase that ends having found nothing to do is bracketed like any other and never
         // ticks. Counted is false there, so without this it would animate for the rest of the run.
         final boolean measured = counted || phase.finished();
         return new PhaseBar("run-phase-" + phase.label().toLowerCase(Locale.UK).replace(' ', '-'),
                 phase.label(),
                 counted ? counts(phase) : null,
-                fill(phase, counted),
-                measured, phase.started(), phase.finished());
+                fill(phase, counted, wentThrough),
+                measured, phase.started(), phase.finished(), phase.cutShort(), wentThrough);
     }
 
     /**
@@ -160,18 +168,20 @@ class RunProgressPresenter {
      * gives up part way whenever a run pauses for an agent. A full bar over eleven of twenty-eight
      * sheets would say the opposite of what the card underneath says.
      *
-     * <p>A phase that ended having counted nothing is full instead. There is no fraction to draw,
-     * and it did finish.
+     * <p>An uncounted ending has no fraction to draw either way. Full where the work went through,
+     * and empty otherwise, since a full bar there would say it did.
      *
      * @param phase {@link ProgressPhase} what the job reported about it
      * @param counted boolean whether the phase both started and named a total
+     * @param wentThrough boolean whether it can be said to have done all its work
      * @return double the fraction filled
      */
-    private static double fill(final ProgressPhase phase, final boolean counted) {
+    private static double fill(final ProgressPhase phase, final boolean counted,
+                               final boolean wentThrough) {
         if (counted) {
             return (phase.current() + phase.partDone()) / phase.total();
         }
-        return phase.finished() ? 1 : 0;
+        return wentThrough ? 1 : 0;
     }
 
     /**

@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static photos.sluice.application.service.PipelineTestSupport.AutoApproveCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingCancellableCuller;
-import static photos.sluice.application.service.PipelineTestSupport.BlockingCeilingStoppedCuller;
+import static photos.sluice.application.service.PipelineTestSupport.BlockingCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingIncompleteCuller;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingListFiles;
 import static photos.sluice.application.service.PipelineTestSupport.BlockingMoveTo;
@@ -143,6 +143,31 @@ class CullEngineTest {
 
         assertThat(((CullJobOutcome.Waiting) outcome).reason()).isEqualTo(WaitingReason.CEILING_REACHED);
         assertThat(outcome.cullReport().spend().inputTokens()).isEqualTo(9_000);
+    }
+
+    @Test
+    void aRunStoppedByItsSpendCeilingSaysTheSiftingPhaseGaveUpPartWay(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var progress = new RecordingProgressPort();
+
+        cullPipeline(root, progress, autoApproveCullSettings(), List.of(new CeilingStoppedCuller()))
+                .cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(progress.events).containsSubsequence("cutShort:Sifting...", "finished:Sifting...");
+    }
+
+    @Test
+    void aSiftThatSpentUnderItsCeilingIsNotSaidToHaveGivenUpPartWay(@TempDir final Path root) throws IOException {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var progress = new RecordingProgressPort();
+
+        cullPipeline(root, progress, autoApproveCullSettings(), List.of(new AutoApproveCuller()))
+                .cull(new CullScope.Year(2019, null)).join();
+
+        assertThat(progress.events).contains("finished:Sifting...")
+                .doesNotContain("cutShort:Sifting...");
     }
 
     @Test
@@ -329,7 +354,7 @@ class CullEngineTest {
         final var stoppedAtCeiling = new CountDownLatch(1);
         final var releaseCull = new CountDownLatch(1);
         final var pipeline = cullPipeline(root, new RecordingProgressPort(), autoApproveCullSettings(),
-                List.of(new BlockingCeilingStoppedCuller(stoppedAtCeiling, releaseCull)));
+                List.of(new BlockingCuller(stoppedAtCeiling, releaseCull, true)));
 
         final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
         stoppedAtCeiling.await();
@@ -340,6 +365,26 @@ class CullEngineTest {
         assertThat(((CullJobOutcome.Waiting) outcome).reason()).isEqualTo(WaitingReason.CEILING_REACHED);
         assertThat(spendLedgerOf(root).read()).extracting(SpendLedgerEntry::ending)
                 .containsExactly(RunEnding.CEILING_REACHED);
+    }
+
+    @Test
+    void aSiftTheReaderCancelledIsNotSaidToHaveGivenUpPartWay(@TempDir final Path root) throws Exception {
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg", Instant.parse("2019-06-01T10:00:00Z"));
+        writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_2.jpg", Instant.parse("2019-06-02T10:00:00Z"));
+        final var cullStarted = new CountDownLatch(1);
+        final var releaseCull = new CountDownLatch(1);
+        final var progress = new RecordingProgressPort();
+        final var pipeline = cullPipeline(root, progress, autoApproveCullSettings(),
+                List.of(new BlockingCuller(cullStarted, releaseCull, false)));
+
+        final JobHandle<CullJobOutcome> handle = pipeline.cull(new CullScope.Year(2019, null));
+        cullStarted.await();
+        handle.requestCancellation();
+        releaseCull.countDown();
+        handle.join();
+
+        assertThat(progress.events).contains("finished:Sifting...")
+                .doesNotContain("cutShort:Sifting...");
     }
 
     @Test

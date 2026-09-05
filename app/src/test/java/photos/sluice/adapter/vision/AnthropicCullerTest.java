@@ -251,13 +251,16 @@ class AnthropicCullerTest {
         this.writeMontage("montage-002", "IMG_0002.jpg");
         this.respondWith(keeping("IMG_0001.jpg", 1_000, 100), keeping("IMG_0002.jpg", 10, 1));
 
+        final List<String> ticks = new ArrayList<>();
         final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"),
-                bounded(new SpendCeiling(10, 100, 1)));
+                bounded(new SpendCeiling(10, 100, 1)),
+                (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(report.stoppedAtCeiling()).isTrue();
         assertThat(report.apiCalls()).isEqualTo(1);
         assertThat(this.prepDir.resolve("decisions-001.json")).exists();
         assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(ticks).containsExactly("1/2");
     }
 
     @Test
@@ -357,13 +360,16 @@ class AnthropicCullerTest {
         final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
         this.respondWith(keeping("WRONG.jpg", 100, 10));
 
-        final CullReport report = this.culler().cull(prep, bounded(new SpendCeiling(1, 1_000_000, 0)));
+        final List<String> ticks = new ArrayList<>();
+        final CullReport report = this.culler().cull(prep, bounded(new SpendCeiling(1, 1_000_000, 0)),
+                (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(report.stoppedAtCeiling()).isTrue();
         assertThat(report.apiCalls()).isEqualTo(1);
         assertThat(report.montagesCulled()).isZero();
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
         verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        assertThat(ticks).isEmpty();
     }
 
     @Test
@@ -422,6 +428,70 @@ class AnthropicCullerTest {
         verify(this.client).close();
     }
 
+    @Test
+    void aMontageJudgedWhileAStopWasAlreadyAskedForIsStillCounted() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        final List<String> ticks = new ArrayList<>();
+        // The stop is set from inside the call, so it is already pending by the time the response
+        // is judged. Polling a counter instead would land after the loop rather than during it.
+        final var stopped = new AtomicBoolean();
+        when(this.messages.create(any(MessageCreateParams.class))).thenAnswer(_ -> {
+            stopped.set(true);
+            return keeping("IMG_0001.jpg", 100, 10);
+        });
+
+        final CullReport report = this.culler().cull(prep, OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), stopped::get);
+
+        assertThat(report.montagesCulled()).isEqualTo(1);
+        assertThat(this.prepDir.resolve("decisions-001.json")).exists();
+        assertThat(ticks).containsExactly("1/1");
+    }
+
+    @Test
+    void aMontageWhoseRetryWasCancelledMidCallIsNotCounted() throws Exception {
+        final PrepDir prep = this.prepWithOneMontage("IMG_0001.jpg");
+        final var stopped = new AtomicBoolean();
+        // The first response fails validation, so a retry is dispatched. The stop is set from
+        // inside that retry, which is the one arm no other test reaches.
+        when(this.messages.create(any(MessageCreateParams.class)))
+                .thenReturn(misnamed(100, 10))
+                .thenAnswer(_ -> {
+                    stopped.set(true);
+                    return misnamed(100, 10);
+                });
+        final List<String> ticks = new ArrayList<>();
+
+        final CullReport report = this.culler().cull(prep, OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), stopped::get);
+
+        assertThat(report.montagesCulled()).isZero();
+        assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
+        verify(this.messages, times(2)).create(any(MessageCreateParams.class));
+        assertThat(ticks).isEmpty();
+    }
+
+    @Test
+    void aStopLandingOnALaterMontageKeepsTheTicksTheEarlierOnesEarned() throws Exception {
+        this.writeMontage("montage-001", "IMG_0001.jpg");
+        this.writeMontage("montage-002", "IMG_0002.jpg");
+        this.writeMontage("montage-003", "IMG_0003.jpg");
+        final var stopped = new AtomicBoolean();
+        when(this.messages.create(any(MessageCreateParams.class)))
+                .thenReturn(keeping("IMG_0001.jpg", 100, 10))
+                .thenAnswer(_ -> {
+                    stopped.set(true);
+                    return misnamed(100, 10);
+                });
+        final List<String> ticks = new ArrayList<>();
+
+        this.culler().cull(this.prep("montage-001", "montage-002", "montage-003"), OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), stopped::get);
+
+        assertThat(this.prepDir.resolve("decisions-002.json")).doesNotExist();
+        assertThat(ticks).containsExactly("1/3");
+    }
+
     // The second, pre-retry check is what actually saves the latency. Without it, a cancellation
     // landing here would still have to wait out a whole extra API round trip before it takes effect.
     @Test
@@ -440,13 +510,16 @@ class AnthropicCullerTest {
         // lands instead.
         final var polls = new AtomicInteger();
         final CancellationSignal cancelBeforeRetry = () -> polls.incrementAndGet() > 1;
+        final List<String> ticks = new ArrayList<>();
 
-        final CullReport report = this.culler().cull(prep, OPTIONS, ProgressCallback.NO_OP, cancelBeforeRetry);
+        final CullReport report = this.culler().cull(prep, OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total), cancelBeforeRetry);
 
         // The failed first attempt's tokens still count - that call already cost real money.
         assertThat(report).isEqualTo(report(0, 0, 1, 100, 10));
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
         verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        assertThat(ticks).isEmpty();
     }
 
     // A stateless call cannot remember the slugs earlier montages picked, so the accumulated
@@ -546,13 +619,16 @@ class AnthropicCullerTest {
                 }
                 """, 500, 50));
 
-        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
+        final List<String> ticks = new ArrayList<>();
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(report).isEqualTo(report(1, 1, 1, 500, 50));
         assertThat(this.prepDir.resolve("decisions-002.json")).exists();
         // Never culled, so no shard is invented for it - and no model call was spent trying.
         assertThat(this.prepDir.resolve("decisions-001.json")).doesNotExist();
         verify(this.messages, times(1)).create(any(MessageCreateParams.class));
+        assertThat(ticks).containsExactly("1/2", "2/2");
     }
 
     // The state resolveCorruptSidecar() actually leaves behind: the sidecar filed away, its shard
@@ -726,9 +802,12 @@ class AnthropicCullerTest {
                 }
                 """, 500, 50));
 
-        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS);
+        final List<String> ticks = new ArrayList<>();
+        final CullReport report = this.culler().cull(this.prep("montage-001", "montage-002"), OPTIONS,
+                (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(report).isEqualTo(report(1, 1, 1, 500, 50));
+        assertThat(ticks).containsExactly("1/2", "2/2");
         final var captor = ArgumentCaptor.forClass(MessageCreateParams.class);
         verify(this.messages).create(captor.capture());
         // The one request that went out is montage-002's, still numbered 2 of 2: a skip does not

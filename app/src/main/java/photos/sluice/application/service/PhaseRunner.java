@@ -6,6 +6,7 @@ import photos.sluice.domain.job.ProgressCallback;
 
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Announces the phases a job will report, then brackets each one it runs, {@code phaseStarted} then
@@ -13,12 +14,14 @@ import java.util.function.Function;
  *
  * <p>{@code phaseFinished} fires in a finally, so the bracket closes even when the engine call
  * throws. A listener otherwise has no signal the phase ever ended. {@code phaseCutShort} goes ahead
- * of it on a throw, and in {@link #around} on a null return.
+ * of it on a throw, in {@link #around} on a null return, and where a result fails the predicate
+ * {@link #run(String, PhaseWork, Predicate)} was given.
  *
- * <p>A stage that carries its own stop in the value it returns reaches neither, and is reported as
- * having worked through. Six do, and that is a decided trade rather than an oversight. It is in
+ * <p>A null return is the one stop this class reads off a value by itself. A stage carrying its
+ * stop any other way reaches none of the three unless a predicate asks. Which stages that still
+ * leaves, and what closing each would cost, is a decided trade rather than an oversight. It is in
  * {@code docs/accepted-residuals.md} under "A stopped stage still reads done on a captured
- * command-line run", with what was weighed and what it would cost to close.
+ * command-line run".
  */
 final class PhaseRunner {
 
@@ -50,11 +53,26 @@ final class PhaseRunner {
      * @return T the engine call's result
      */
     <T> T run(final String phase, final PhaseWork<T> work) throws Exception {
+        return this.run(phase, work, _ -> true);
+    }
+
+    /**
+     * The same bracket around work whose own result says whether it reached the end.
+     *
+     * @param phase {@link String} name of the phase being run
+     * @param work a {@link PhaseWork} of T the engine call to bracket
+     * @param workedThrough a {@link Predicate} of T, false where the result says the stage stopped
+     *     before its end. Read once on a normal return, and not at all on a throw. It must not
+     *     throw itself: that reads as the stage having stopped, and the throw reaches the caller
+     * @return T the engine call's result
+     */
+    <T> T run(final String phase, final PhaseWork<T> work, final Predicate<T> workedThrough)
+            throws Exception {
         this.progressPort.phaseStarted(phase);
         boolean completed = false;
         try {
             final T result = work.run(this.reporting(phase));
-            completed = true;
+            completed = workedThrough.test(result);
             return result;
         } finally {
             this.report(phase, completed);

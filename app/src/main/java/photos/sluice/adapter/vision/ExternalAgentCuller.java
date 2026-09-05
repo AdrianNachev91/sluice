@@ -116,7 +116,9 @@ class ExternalAgentCuller implements VisionCuller {
      *
      * @param prep {@link PrepDir} the prep directory to check
      * @param opts {@link CullOptions} cull options
-     * @param progress {@link ProgressCallback} progress callback ticked per montage
+     * @param progress {@link ProgressCallback} progress callback ticked once for each montage that
+     *        has a shard. One the agent never judged is not ticked, so a partial run's count rests
+     *        below the montage total
      * @return {@link CullReport} the cull report
      * @throws CullException if any montage has no shard and allowPartial is off
      */
@@ -127,10 +129,11 @@ class ExternalAgentCuller implements VisionCuller {
         int current = 0;
         for (final String montage : prep.entries()) {
             final String shardName = MontageNaming.shardFileFor(montage);
-            if (!Files.exists(prep.prepDir().resolve(shardName))) {
+            if (Files.exists(prep.prepDir().resolve(shardName))) {
+                progress.tick(++current, total);
+            } else {
                 missing.add(montage + ": no shard " + shardName);
             }
-            progress.tick(++current, total);
         }
         if (!opts.allowPartial() && !missing.isEmpty()) {
             throw new CullException("The sifting for " + prep.scope() + " is incomplete ("

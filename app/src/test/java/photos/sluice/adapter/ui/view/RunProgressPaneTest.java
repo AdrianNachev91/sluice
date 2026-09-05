@@ -78,11 +78,44 @@ class RunProgressPaneTest {
     }
 
     @Test
-    void aFinishedPhaseIsMarkedOnTheRowTheStylesheetRecedesItBy() throws Exception {
+    void aFinishedPhaseIsMarkedOnTheRowRatherThanOnTheBarInsideIt() throws Exception {
         final Parent pane = onFxThread(() -> shown(view(List.of(
                 new PhaseBar("run-phase-built", "Reading photos", "28 of 28", 1, true, true, true)))));
 
         assertThat(pane.lookup("#run-phase-built").getStyleClass()).contains("run-phase-done");
+        assertThat(bar(pane).getStyleClass()).doesNotContain("run-phase-done");
+    }
+
+    @Test
+    void aPhaseThatGaveUpPartWayIsMarkedApartFromOneThatWorkedThrough() throws Exception {
+        final Parent pane = onFxThread(() -> shown(view(List.of(
+                new PhaseBar("run-phase-sorting", "Sorting", null, 0, true, true, true, true, false)))));
+
+        assertThat(pane.lookup("#run-phase-sorting").getStyleClass())
+                .contains("run-phase-done", "run-phase-cut-short")
+                .doesNotContain("run-phase-through");
+    }
+
+    @Test
+    void aPhaseThatWorkedThroughToItsEndCarriesNoGaveUpMark() throws Exception {
+        final Parent pane = onFxThread(() -> shown(view(List.of(
+                new PhaseBar("run-phase-built", "Reading photos", "28 of 28", 1,
+                        true, true, true, false, true)))));
+
+        assertThat(pane.lookup("#run-phase-built").getStyleClass())
+                .contains("run-phase-through")
+                .doesNotContain("run-phase-cut-short");
+    }
+
+    @Test
+    void aPhaseThatEndedWithoutDoingAllItsWorkIsNotMarkedAsHavingDoneIt() throws Exception {
+        final Parent pane = onFxThread(() -> shown(view(List.of(
+                new PhaseBar("run-phase-sorting", "Sorting", "850 of 1,204", 850d / 1204,
+                        true, true, true, false, false)))));
+
+        assertThat(pane.lookup("#run-phase-sorting").getStyleClass())
+                .contains("run-phase-done")
+                .doesNotContain("run-phase-through", "run-phase-cut-short");
     }
 
     @Test
@@ -135,8 +168,6 @@ class RunProgressPaneTest {
         assertThat(cancel(pane).isDisabled()).isTrue();
     }
 
-    // Told, then drawn. Without the draw the button stays live and silent, which on a sift is up to
-    // a minute of a press looking like it missed.
     @Test
     void pressingCancelAsksThePresenterToStopTheRunAndThenDrawsAgain() throws Exception {
         final RunLauncherPresenter presenter = mock(RunLauncherPresenter.class);

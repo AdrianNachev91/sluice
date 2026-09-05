@@ -350,7 +350,9 @@ class AnthropicCuller implements VisionCuller {
      *
      * @param prep {@link PrepDir} the prep directory to cull
      * @param opts {@link CullOptions} cull options
-     * @param progress {@link ProgressCallback} progress callback ticked per montage
+     * @param progress {@link ProgressCallback} progress callback ticked once for each montage the
+     *        run finished with, judged or skipped. One the ceiling refused, or one a stop
+     *        interrupted, is not ticked
      * @return {@link CullReport} the cull report
      * @throws CullException if culling fails
      */
@@ -365,7 +367,9 @@ class AnthropicCuller implements VisionCuller {
      *
      * @param prep {@link PrepDir} the prep directory to cull
      * @param opts {@link CullOptions} cull options
-     * @param progress {@link ProgressCallback} progress callback ticked per montage
+     * @param progress {@link ProgressCallback} progress callback ticked once for each montage the
+     *        run finished with, judged or skipped. One the ceiling refused, or one a stop
+     *        interrupted, is not ticked
      * @param cancellation {@link CancellationSignal} signal checked between montages to stop early
      * @return {@link CullReport} the cull report
      * @throws CullException if a montage's response fails validation and the corrective retry does too
@@ -420,9 +424,11 @@ class AnthropicCuller implements VisionCuller {
                 ordinal++;
                 final List<SidecarPhotoEntry> entries = entriesByMontage.get(montage);
                 final Path shardPath = prep.prepDir().resolve(MontageNaming.shardFileFor(montage));
+                boolean counted = false;
                 if (entries == null || this.resumesExistingShard(shardPath, montage, entries, acceptedShards,
                         scopeSrcs, categoryNames)) {
                     skipped++;
+                    counted = true;
                 } else if (exhausted(ceiling, apiCalls, montagesAttempted, inputTokens + outputTokens)) {
                     // Checked before this montage's first call rather than only after the last one,
                     // so the run stops owing nothing further. This montage and every one after it
@@ -473,9 +479,12 @@ class AnthropicCuller implements VisionCuller {
                     if (outcome.shard() != null) {
                         this.shardCodec.write(shardPath, outcome.shard());
                         culled++;
+                        counted = true;
                     }
                 }
-                progress.tick(ordinal, total);
+                if (counted) {
+                    progress.tick(ordinal, total);
+                }
             }
         } finally {
             client.close();

@@ -171,7 +171,8 @@ public class FxProgressPort implements ProgressPort {
     @Override
     public void tick(final String phase, final int current, final int total) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), current, total, true, found.finished(), 0)));
+                found -> new ProgressPhase(found.label(), current, total, true, found.finished(), 0,
+                        found.cutShort())));
     }
 
     /**
@@ -186,7 +187,20 @@ public class FxProgressPort implements ProgressPort {
     public void tickWithin(final String phase, final int current, final int total,
                            final double partDone) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), current, total, true, found.finished(), partDone)));
+                found -> new ProgressPhase(found.label(), current, total, true, found.finished(), partDone,
+                        found.cutShort())));
+    }
+
+    /**
+     * Records that a phase gave up part way rather than working through to its end, and redraws.
+     *
+     * @param phase {@link String} short human-readable label for the phase
+     */
+    @Override
+    public void phaseCutShort(final String phase) {
+        this.change(before -> replaceLast(before, phase,
+                found -> new ProgressPhase(found.label(), found.current(), found.total(),
+                        true, found.finished(), found.partDone(), true)));
     }
 
     /**
@@ -201,7 +215,8 @@ public class FxProgressPort implements ProgressPort {
     @Override
     public void phaseFinished(final String phase) {
         this.change(before -> replaceLast(before, phase,
-                found -> new ProgressPhase(found.label(), found.current(), found.total(), true, true, 0)));
+                found -> new ProgressPhase(found.label(), found.current(), found.total(), true, true, 0,
+                        found.cutShort())));
     }
 
     /**

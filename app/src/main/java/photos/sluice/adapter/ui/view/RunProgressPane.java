@@ -168,10 +168,14 @@ final class RunProgressPane {
         final var row = new VBox(top, bar);
         row.setId(phase.id());
         row.getStyleClass().add("run-phase");
-        // On the row rather than on the bar, because what each state changes is the label, and the
-        // label is the bar's sibling rather than its child.
         if (phase.finished()) {
             row.getStyleClass().add("run-phase-done");
+        }
+        if (phase.cutShort()) {
+            row.getStyleClass().add("run-phase-cut-short");
+        }
+        if (phase.wentThrough()) {
+            row.getStyleClass().add("run-phase-through");
         }
         if (!phase.started()) {
             row.getStyleClass().add("run-phase-ahead");

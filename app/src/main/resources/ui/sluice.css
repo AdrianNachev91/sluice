@@ -1595,19 +1595,32 @@
     -fx-padding: 0;
 }
 
-/* A finished phase recedes by its name, and its bar keeps the accent. Recolouring the bar instead
-   is what fails: pale enough not to outweigh the part-filled green above it, and a full bar is
-   then indistinguishable from an empty track, so a phase that has just started looks finished.
-   Left alone, the fill separates all three states on its own. Empty is waiting, part-filled is
-   working, full is done. */
+/* A phase that has ended, whichever way it ended. The weight drops because the reader is watching
+   whatever is running now. */
 .run-phase-done .run-phase-label {
     -fx-font-weight: normal;
     -fx-text-fill: -sluice-text-muted;
 }
 
-/* A phase the run has not reached yet. Muted the same way a finished one is, and for the same
-   reason: neither is what the reader is watching. The empty bar under it is what tells the two
-   apart, since a finished phase's is full. */
+/* A row wearing either rule below wears the one above too, and takes its weight from there. Equal
+   specificity, so each must stay below it to win the colour. */
+
+/* A phase that did all its work, on a run nobody stopped. Its name takes the accent its own full
+   bar already carries, so the row reads as one finished thing rather than as a green bar under a
+   grey word. It is held back on a run the reader stopped, where a phase can end looking complete
+   and green would tell them it went fine. */
+.run-phase-through .run-phase-label {
+    -fx-text-fill: -sluice-accent;
+}
+
+/* A phase that gave up part way. Ordinary text rather than muted, because this is the row a reader
+   stopping a run goes looking for. */
+.run-phase-cut-short .run-phase-label {
+    -fx-text-fill: -sluice-text;
+}
+
+/* A phase the run has not reached yet. Muted, since it is the one row on the list that has nothing
+   to report either way. */
 .run-phase-ahead .run-phase-label {
     -fx-font-weight: normal;
     -fx-text-fill: -sluice-text-muted;

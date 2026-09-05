@@ -653,7 +653,8 @@ final class CullEngine {
                     new CullOptions(allowPartial, null, this.ceilingFor(prep, montagesToDispatchFor));
             try {
                 cullReport = this.phaseRunner.run(CULLING,
-                        progress -> this.cullDispatcher.cull(prep, options, progress, cancellation));
+                        progress -> this.cullDispatcher.cull(prep, options, progress, cancellation),
+                        report -> !report.stoppedAtCeiling());
             } catch (final CullException e) {
                 if (!this.cullDispatcher.configuredProviderIs(ProviderType.MANUAL)) {
                     this.recordSpend(prep.scope(), this.abandonedSpend(e, prep.entries().size()),

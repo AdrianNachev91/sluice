@@ -44,8 +44,6 @@ class RunProgressPresenterTest {
                 .containsExactly("3 of 8, current file 50%", 3.5d / 8);
     }
 
-    // The fill carries the same fraction as 1/total of its width, which disappears at any real
-    // number of files. This is the reader's only sight of it there.
     @Test
     void aFilePartWayAcrossIsSaidInTheCountsAtAnyTotal() {
         this.port.phaseStarted("Sorting");
@@ -74,6 +72,7 @@ class RunProgressPresenterTest {
         this.port.phaseStarted("Sifting");
         this.port.tick("Sifting", 11, 28);
 
+        this.port.phaseCutShort("Sifting");
         this.port.phaseFinished("Sifting");
 
         assertThat(this.working().phases()).singleElement()
@@ -90,6 +89,110 @@ class RunProgressPresenterTest {
         assertThat(this.working().phases()).singleElement()
                 .extracting(PhaseBar::fraction, PhaseBar::measured)
                 .containsExactly(1d, true);
+    }
+
+    @Test
+    void aPhaseThatGaveUpBeforeCountingAnythingIsEmptyRatherThanFull() {
+        this.port.phaseStarted("Applying decisions");
+
+        this.port.phaseCutShort("Applying decisions");
+        this.port.phaseFinished("Applying decisions");
+
+        assertThat(this.working().phases()).singleElement()
+                .extracting(PhaseBar::fraction, PhaseBar::measured, PhaseBar::finished)
+                .containsExactly(0d, true, true);
+    }
+
+    @Test
+    void aPhaseEndingUncountedOnARunTheReaderStoppedIsEmptyRatherThanFull() {
+        this.port.phaseStarted("Moving to library");
+
+        this.port.phaseFinished("Moving to library");
+
+        assertThat(this.stopping(RunMode.MOVE_TO_LIBRARY).phases()).singleElement()
+                .extracting(PhaseBar::fraction, PhaseBar::cutShort)
+                .containsExactly(0d, false);
+    }
+
+    @Test
+    void aPhaseThatWorkedThroughOnARunNobodyStoppedIsMarkedAsHavingDoneItsWork() {
+        this.port.phaseStarted("Finding dates");
+        this.port.tick("Finding dates", 1204, 1204);
+
+        this.port.phaseFinished("Finding dates");
+
+        assertThat(this.working().phases()).singleElement()
+                .extracting(PhaseBar::finished, PhaseBar::wentThrough)
+                .containsExactly(true, true);
+    }
+
+    @Test
+    void aPhaseWhoseCountReachedItsTotalKeepsTheMarkOnARunTheReaderStopped() {
+        this.port.phaseStarted("Finding dates");
+        this.port.tick("Finding dates", 1204, 1204);
+        this.port.phaseFinished("Finding dates");
+
+        assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
+                .extracting(PhaseBar::wentThrough)
+                .isEqualTo(true);
+    }
+
+    @Test
+    void aPhaseStoppedShortOfItsTotalCarriesNoMarkOnARunTheReaderStopped() {
+        this.port.phaseStarted("Sorting");
+        this.port.tick("Sorting", 850, 1204);
+        this.port.phaseFinished("Sorting");
+
+        assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
+                .extracting(PhaseBar::wentThrough)
+                .isEqualTo(false);
+    }
+
+    @Test
+    void anUncountedPhaseCarriesNoMarkOnARunTheReaderStopped() {
+        this.port.phaseStarted("Finding dates");
+        this.port.phaseFinished("Finding dates");
+
+        assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
+                .extracting(PhaseBar::finished, PhaseBar::cutShort, PhaseBar::wentThrough)
+                .containsExactly(true, false, false);
+    }
+
+    @Test
+    void aPhaseThatGaveUpPartWayHavingCountedKeepsTheFractionItReached() {
+        this.port.phaseStarted("Sorting");
+        this.port.tick("Sorting", 850, 1204);
+
+        this.port.phaseCutShort("Sorting");
+        this.port.phaseFinished("Sorting");
+
+        assertThat(this.working().phases()).singleElement()
+                .extracting(PhaseBar::fraction, PhaseBar::cutShort, PhaseBar::wentThrough)
+                .containsExactly(850d / 1204, true, false);
+    }
+
+    @Test
+    void aCountedPhaseOnARunTheReaderStoppedKeepsTheFractionItReached() {
+        this.port.phaseStarted("Sorting");
+        this.port.tick("Sorting", 850, 1204);
+
+        this.port.phaseFinished("Sorting");
+
+        assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
+                .extracting(PhaseBar::fraction, PhaseBar::cutShort, PhaseBar::wentThrough)
+                .containsExactly(850d / 1204, false, false);
+    }
+
+    @Test
+    void aPhaseThatGaveUpPartWayIsCarriedToTheScreenAsHavingDoneSo() {
+        this.port.phaseStarted("Sorting");
+
+        this.port.phaseCutShort("Sorting");
+        this.port.phaseFinished("Sorting");
+
+        assertThat(this.working().phases()).singleElement()
+                .extracting(PhaseBar::cutShort)
+                .isEqualTo(true);
     }
 
     @Test
@@ -148,8 +251,6 @@ class RunProgressPresenterTest {
         assertThat(this.stopping(RunMode.SORT).cancelling()).contains("gives up on it instead");
     }
 
-    // A sort finds dates and checks for duplicates before it moves anything, and both report counts
-    // without a fraction. Naming a current file there would assert one that does not exist.
     @Test
     void aStopWhileNothingIsBeingWrittenNamesNoCurrentFile() {
         this.port.phaseStarted("Finding dates");

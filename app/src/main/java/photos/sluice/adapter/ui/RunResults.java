@@ -51,8 +51,11 @@ final class RunResults {
             + "account balance. Continuing on sends "
             + "the sheets it had not reached, under a fresh limit.";
 
+    // Ends by naming where to go, because this is the one ending that offers no button. Without it
+    // a reader who did nothing wrong is left to find the Runs screen on their own.
     private static final String SHARDS_OUTSTANDING = "The sheets are ready, waiting for your "
-            + "agent's decisions on them. Nothing moves until they arrive.";
+            + "agent's decisions on them. Nothing moves until they arrive. Once they have, pick "
+            + "this sift up again from Runs.";
 
     // Opens on what came back rather than on every sheet being judged. A sheet whose answer covers
     // only some of its photos has a decisions file and has not been judged, and the clause that

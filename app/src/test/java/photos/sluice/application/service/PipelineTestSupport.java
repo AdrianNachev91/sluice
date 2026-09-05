@@ -1458,7 +1458,8 @@ final class PipelineTestSupport {
 
     // CeilingStoppedCuller with a gap held open in the middle. A test lands a cancellation in that
     // gap, so both it and the ceiling stop are true when the engine picks which one to report.
-    record BlockingCeilingStoppedCuller(CountDownLatch started, CountDownLatch release) implements VisionCuller {
+    record BlockingCuller(CountDownLatch started, CountDownLatch release, boolean stoppedAtCeiling)
+            implements VisionCuller {
         @Override
         public VisionProviderDescriptor describe() {
             return describing("auto-approve");
@@ -1493,7 +1494,8 @@ final class PipelineTestSupport {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return new CullReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"), true);
+            return new CullReport(1, 0, 2, new TokenSpend(9_000, 3_000, "auto-approve", "a-model"),
+                    this.stoppedAtCeiling);
         }
     }
 

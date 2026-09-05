@@ -114,7 +114,7 @@ class ExternalAgentCullerTest {
     }
 
     @Test
-    void progressCallbackTicksOnceForEachMontageIncludingOneWithAMissingShard(@TempDir final Path dir)
+    void progressCallbackLeavesOutTheMontageTheAgentNeverJudged(@TempDir final Path dir)
             throws CullException {
         final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
         this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
@@ -125,7 +125,23 @@ class ExternalAgentCullerTest {
                 (current, total) -> ticks.add(current + "/" + total));
 
         assertThat(cullReport).isEqualTo(report(1, 1));
-        assertThat(ticks).containsExactly("1/2", "2/2");
+        assertThat(ticks).containsExactly("1/2");
+    }
+
+    @Test
+    void aShardlessMontageInTheMiddleDoesNotBreakTheCountThatFollowsIt(@TempDir final Path dir)
+            throws CullException {
+        final Path junk = dir.resolve("base").resolve("IMG_001.jpg");
+        this.codec.write(dir.resolve("decisions-001.json"), new DecisionShard("montage-001",
+                List.of(new Classification(junk, "junk", "photo of a monitor"))));
+        this.codec.write(dir.resolve("decisions-003.json"), new DecisionShard("montage-003",
+                List.of(new Classification(junk, "junk", "photo of a monitor"))));
+
+        final List<String> ticks = new ArrayList<>();
+        this.culler.cull(prep(dir, "montage-001", "montage-002", "montage-003"), allowPartial(),
+                (current, total) -> ticks.add(current + "/" + total));
+
+        assertThat(ticks).containsExactly("1/3", "2/3");
     }
 
     private static CullOptions options() {

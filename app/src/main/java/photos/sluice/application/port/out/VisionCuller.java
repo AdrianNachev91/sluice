@@ -118,14 +118,16 @@ public interface VisionCuller {
     CullReport cull(PrepDir prep, CullOptions opts) throws CullException;
 
     /**
-     * Progress-aware sibling of cull() above, ticked once per montage processed. Defaulted to
+     * Progress-aware sibling of cull() above. Defaulted to
      * silently ignore progress so an implementation that doesn't override it still satisfies the
      * port. Each concrete culler overrides this one directly. Its plain cull() delegates to it
      * instead, so the real work lives in exactly one place.
      *
      * @param prep {@link PrepDir} the prep directory holding montages to judge
      * @param opts {@link CullOptions} options controlling how the culler runs
-     * @param progress {@link ProgressCallback} callback ticked once per montage processed
+     * @param progress {@link ProgressCallback} callback ticked once for each montage the run
+     *        finished with. A provider that can stop early ticks fewer times than there are
+     *        montages
      * @return {@link CullReport} a report of what the run did and spent
      */
     default CullReport cull(final PrepDir prep, final CullOptions opts, final ProgressCallback progress) throws CullException {
@@ -141,7 +143,9 @@ public interface VisionCuller {
      *
      * @param prep {@link PrepDir} the prep directory holding montages to judge
      * @param opts {@link CullOptions} options controlling how the culler runs
-     * @param progress {@link ProgressCallback} callback ticked once per montage processed
+     * @param progress {@link ProgressCallback} callback ticked once for each montage the run
+     *        finished with. A provider that can stop early ticks fewer times than there are
+     *        montages
      * @param cancellation {@link CancellationSignal} signal checked between montages
      * @return {@link CullReport} a report of what the run did and spent
      */

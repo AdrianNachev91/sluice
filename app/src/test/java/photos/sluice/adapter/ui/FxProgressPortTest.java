@@ -174,6 +174,41 @@ class FxProgressPortTest {
     }
 
     @Test
+    void aPhaseThatGaveUpPartWayStillSaysSoOnceItsEndArrives() {
+        this.port.phaseStarted("Sifting...");
+        this.port.tick("Sifting...", 11, 28);
+
+        this.port.phaseCutShort("Sifting...");
+        this.port.phaseFinished("Sifting...");
+
+        assertThat(this.port.phases())
+                .containsExactly(new ProgressPhase("Sifting...", 11, 28, true, true, 0, true));
+    }
+
+    @Test
+    void aPhaseThatWorkedThroughToItsEndIsNotMarkedAsHavingGivenUp() {
+        this.port.phaseStarted("Sifting...");
+        this.port.tick("Sifting...", 28, 28);
+
+        this.port.phaseFinished("Sifting...");
+
+        assertThat(this.port.phases()).singleElement()
+                .extracting(ProgressPhase::finished, ProgressPhase::cutShort)
+                .containsExactly(true, false);
+    }
+
+    @Test
+    void aGivingUpForAPhaseNobodyStartedIsDroppedRatherThanMarkingAnotherPhase() {
+        this.port.phaseStarted("Sorting...");
+
+        this.port.phaseCutShort("Rescuing...");
+
+        assertThat(this.port.phases()).singleElement()
+                .extracting(ProgressPhase::label, ProgressPhase::cutShort)
+                .containsExactly("Sorting...", false);
+    }
+
+    @Test
     void nothingIsRedrawnUntilTheToolkitRunsWhatItWasHanded() {
         final var redraws = new AtomicInteger();
         this.port.setRepaint(redraws::incrementAndGet);
@@ -319,7 +354,6 @@ class FxProgressPortTest {
         assertThat(screenNowUp).hasValue(1);
     }
 
-    // The engine reporting the event is moving files, and the window it describes may be gone.
     @Test
     void aJobIsNotFailedByThereBeingNoToolkitToDrawOn() {
         final var noToolkit = new FxProgressPort(_ -> {

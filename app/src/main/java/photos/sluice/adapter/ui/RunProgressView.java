@@ -52,8 +52,29 @@ public record RunProgressView(String heading, String scope, List<PhaseBar> phase
      * @param measured boolean whether this phase knows how much work it has
      * @param started boolean whether the job has reached it, false for one still ahead
      * @param finished boolean whether it has ended
+     * @param cutShort boolean whether it gave up part way rather than working through to its end
+     * @param wentThrough boolean whether it can be said to have done all its work. False for a
+     *     phase on a run the reader stopped, even one that reported no giving up of its own
      */
     public record PhaseBar(String id, String label, @Nullable String counts, double fraction,
-                           boolean measured, boolean started, boolean finished) {
+                           boolean measured, boolean started, boolean finished, boolean cutShort,
+                           boolean wentThrough) {
+
+        /**
+         * A bar claiming neither of the two endings.
+         *
+         * @param id {@link String} the control's id
+         * @param label {@link String} what the phase is called
+         * @param counts what it has done of what it has to do, or null where it cannot say
+         * @param fraction double how far along it is, from 0 to 1
+         * @param measured boolean whether this phase knows how much work it has
+         * @param started boolean whether the job has reached it
+         * @param finished boolean whether it has ended
+         */
+        public PhaseBar(final String id, final String label, final @Nullable String counts,
+                        final double fraction, final boolean measured, final boolean started,
+                        final boolean finished) {
+            this(id, label, counts, fraction, measured, started, finished, false, false);
+        }
     }
 }
