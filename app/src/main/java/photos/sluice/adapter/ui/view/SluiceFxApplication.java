@@ -2,6 +2,7 @@ package photos.sluice.adapter.ui.view;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -67,8 +68,6 @@ public class SluiceFxApplication extends Application {
     public void start(final Stage stage) {
         stage.setTitle("Sluice");
         stage.getIcons().setAll(BrandMark.icons());
-        // Set here because this class is the only one holding the services that can open one. What
-        // a screen does with an address is then the screen's, and how it reaches a browser is not.
         ExternalBrowser.openWith(this.getHostServices()::showDocument);
         FileManager.openWith(folder ->
                 Thread.ofVirtual().start(() -> FileManager.inTheSystemFileManager(folder)));
@@ -78,6 +77,7 @@ public class SluiceFxApplication extends Application {
             }
         }));
         this.present(stage);
+        Stylesheet.openNoLargerThan(stage, Screen.getPrimary().getVisualBounds());
         stage.show();
     }
 
@@ -154,10 +154,10 @@ public class SluiceFxApplication extends Application {
      * Shows whichever scene the app's current state calls for: the shell when nothing stopped it,
      * the failure screen otherwise.
      *
-     * <p>The quit question is installed and taken away here rather than once at launch, because a
-     * repair swaps the shell in on a stage that was showing the failure screen. Installed at launch
-     * it would be absent on exactly that path, and closing the window over a running job would take
-     * the unattended exit with nothing on screen to say so.
+     * <p>The quit question is installed and taken away here rather than once at launch. A repair
+     * swaps the shell in on a stage that was showing the failure screen. Installed at launch, the
+     * question would be absent on exactly that path. Closing the window over a running job would
+     * then take the unattended exit, with nothing on screen to say so.
      *
      * @param stage {@link Stage} the stage to draw into
      */

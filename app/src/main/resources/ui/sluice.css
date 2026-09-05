@@ -16,6 +16,10 @@
  * A maximum width is the one exception, and it is not the thing the rule guards against. Longer
  * text under a maximum wraps and the layout grows taller, which is what a reader wants. Prose run
  * across a wide window is hard to read, and the website caps its own measure for that reason.
+ *
+ * Nothing here is set below 12px. Microsoft states that as the floor for regular weight, and text
+ * under it is illegible in some languages. Most of that tier draws in muted grey, which makes it
+ * harder still. The body sits at 14px, which is Windows' own body size and close to GNOME's.
  */
 
 /* The colours. Named by the job each one does rather than by its value, which is what lets one set
@@ -66,7 +70,7 @@
     -fx-faint-focus-color: transparent;
 
     -fx-font-family: "Segoe UI", "SF Pro Text", "Ubuntu", "Helvetica Neue", sans-serif;
-    -fx-font-size: 13px;
+    -fx-font-size: 14px;
     -fx-background-color: -sluice-bg;
 }
 
@@ -92,7 +96,7 @@
    The padding is what sets it apart from whatever sits above; the gap to its own heading stays the
    layout's, because the two are one unit. */
 .eyebrow {
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text-muted;
     -fx-padding: 10px 0 0 0;
@@ -120,10 +124,10 @@
 .brand-mark {
     -fx-background-color: -sluice-mark-bg;
     -fx-background-radius: 6px;
-    -fx-min-width: 26px;
-    -fx-min-height: 26px;
-    -fx-max-width: 26px;
-    -fx-max-height: 26px;
+    -fx-min-width: 28px;
+    -fx-min-height: 28px;
+    -fx-max-width: 28px;
+    -fx-max-height: 28px;
 }
 
 .brand-mark-glyph {
@@ -131,7 +135,7 @@
 }
 
 .brand-name {
-    -fx-font-size: 17px;
+    -fx-font-size: 18px;
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text;
 }
@@ -147,7 +151,7 @@
 /* Held to a readable measure rather than run the width of the window. See the note at the top on
    why a maximum is not the pinned width that note rules out. */
 .failure-card {
-    -fx-max-width: 620px;
+    -fx-max-width: 670px;
 }
 
 .failure-headline {
@@ -389,7 +393,7 @@
    answers a question the marks raise. */
 .settings-required-legend {
     -fx-text-fill: -sluice-text-muted;
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
     -fx-line-spacing: 2px;
     -fx-padding: 6px 0 0 0;
 }
@@ -483,7 +487,7 @@
 .trace-text {
     -fx-cursor: default;
     -fx-font-family: "Monospaced";
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
     -fx-pref-height: 240px;
     -fx-text-fill: -sluice-text;
 }
@@ -934,7 +938,7 @@
     -fx-background-color: transparent;
     -fx-border-color: transparent;
     -fx-text-fill: -sluice-accent;
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
     -fx-padding: 0 4px;
     -fx-cursor: hand;
@@ -960,7 +964,7 @@
    launch. */
 .settings-override-note {
     -fx-text-fill: -sluice-text-muted;
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
 }
 
 /* What a whole panel is for, under its name and above its first control. Sits at body size rather
@@ -970,7 +974,7 @@
     -fx-text-fill: -sluice-text-muted;
     -fx-line-spacing: 2px;
     -fx-padding: 2px 0 6px 0;
-    -fx-max-width: 640px;
+    -fx-max-width: 690px;
 }
 
 /* A block within a card, such as the credential rows inside the provider panel. Its own top border
@@ -992,7 +996,7 @@
    the value it explains, so a reader who already knows the setting skims past it. */
 .settings-help {
     -fx-text-fill: -sluice-text-muted;
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
     -fx-padding: 0 0 2px 0;
 }
 
@@ -1028,7 +1032,7 @@
 /* The line under the API key entry, naming where a save would land before anything is typed. */
 .settings-reassurance {
     -fx-text-fill: -sluice-text-muted;
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
 }
 
 .settings-save-status {
@@ -1271,7 +1275,7 @@
 /* What a card is chiefly there to say. Heavier than the muted line beneath it, and short of the
    size a page heading takes. */
 .run-card-headline {
-    -fx-font-size: 16px;
+    -fx-font-size: 17px;
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text;
 }
@@ -1280,7 +1284,7 @@
    lines below it, keeping their colour, so the one sentence explaining what the chosen mode does is
    not the faintest thing on it. */
 .run-mode-hint {
-    -fx-font-size: 12px;
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
 }
 
@@ -1397,10 +1401,10 @@
    square reads at a glance and a tick at this size does not. Drawn from the row's own state, so the
    row stays one target rather than growing a second thing to hit. */
 .run-month-box {
-    -fx-min-width: 11px;
-    -fx-min-height: 11px;
-    -fx-max-width: 11px;
-    -fx-max-height: 11px;
+    -fx-min-width: 12px;
+    -fx-min-height: 12px;
+    -fx-max-width: 12px;
+    -fx-max-height: 12px;
     -fx-background-color: -sluice-surface;
     -fx-border-color: -sluice-border;
     -fx-border-width: 1px;
@@ -1433,7 +1437,7 @@
    reads as a bar being filled rather than something to type in. See the note at the top on why a
    maximum is not the pinned width that note rules out. */
 .run-scope-field {
-    -fx-max-width: 280px;
+    -fx-max-width: 300px;
 }
 
 /* A field for a mode that decides its own scope. What was typed for another mode is kept and still
@@ -1573,7 +1577,7 @@
    the loudest thing on the page. */
 .run-phase-counts {
     -fx-text-fill: -sluice-text-muted;
-    -fx-font-size: 12px;
+    -fx-font-size: 13px;
 }
 
 .run-phase-bar {
@@ -1728,7 +1732,7 @@
     -fx-background-color: -sluice-caution-bg;
     -fx-background-radius: 9px;
     -fx-text-fill: -sluice-caution;
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-padding: 1px 7px;
 }
@@ -1736,7 +1740,7 @@
 /* The mark on the Dashboard entry, in the same slot the count above sits in. A dot rather than a
    number, since there is only ever one dashboard. */
 .nav-mark {
-    -fx-font-size: 14px;
+    -fx-font-size: 15px;
     -fx-padding: 1px 7px;
 }
 
@@ -1792,7 +1796,7 @@
 /* What the run covers, which is the first thing a reader looks for when scanning a stack of these.
    The state beside it is the second, so it is the quieter of the two. */
 .runs-card-scope {
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text;
 }
@@ -1816,7 +1820,7 @@
 
 .runs-card-sheets, .runs-card-age {
     -fx-text-fill: -sluice-text-muted;
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
 }
 
 /* Its own top padding sets this block off from the lines above, which are facts about the run
@@ -1830,7 +1834,7 @@
    character by character, against what their file manager shows them. */
 .runs-card-folder {
     -fx-font-family: "Monospaced";
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
     -fx-text-fill: -sluice-text-muted;
 }
 
@@ -1905,7 +1909,7 @@
 }
 
 .review-group-heading {
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text;
 }
@@ -1920,7 +1924,7 @@
 
 /* The folder's own name, which is what a reader scans a stack of these for. */
 .review-card-name {
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
     -fx-text-fill: -sluice-text;
 }
@@ -1933,7 +1937,7 @@
 
 .review-card-age {
     -fx-text-fill: -sluice-text-muted;
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
 }
 
 /* Tighter than the gap above a card's buttons, because the fold belongs to the lines above it
@@ -1967,7 +1971,7 @@
    against what their file manager shows them. */
 .review-note-line {
     -fx-font-family: "Monospaced";
-    -fx-font-size: 11px;
+    -fx-font-size: 12px;
     -fx-text-fill: -sluice-text-muted;
 }
 

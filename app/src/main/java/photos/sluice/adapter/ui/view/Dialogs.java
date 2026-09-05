@@ -33,8 +33,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>What a caller describes is the choices, not their placement. The row reads the same on every
  * desktop this app runs on: the choice the dialog wants pressed, then the rest, then the way out.
- * The three platforms order buttons by what each one is for and disagree with each other about
- * where the way out goes, so following any of them would make the same question read differently
+ * The three platforms order buttons by what each one is for, and disagree with each other about
+ * where the way out goes. Following any of them would make the same question read differently
  * depending on the machine.
  */
 final class Dialogs {
@@ -44,10 +44,10 @@ final class Dialogs {
     // the buttons themselves lost that fight twice, in both directions. A floor on the pane ends
     // it: wide enough for the choices at their real widths, and still well inside the window the
     // dialog covers.
-    private static final double PANE_FLOOR = 600;
+    private static final double PANE_FLOOR = 650;
 
     // Where the body text folds. Inside PANE_FLOOR by the pane's own padding.
-    private static final double BODY_WIDTH = 560;
+    private static final double BODY_WIDTH = 610;
 
     /**
      * What one button in a dialog is for.
@@ -123,9 +123,9 @@ final class Dialogs {
     /**
      * Puts one question and answers which choice was taken.
      *
-     * <p>The row leads with the choice this dialog wants pressed and keeps the way out last, so
-     * two or more ways to go ahead stay together rather than reading as equal options either side
-     * of it.
+     * <p>The row leads with the choice this dialog wants pressed and keeps the way out last. Two
+     * or more ways to go ahead then stay together, rather than reading as equal options either
+     * side of it.
      *
      * @param opensOver {@link Node} something on the window the question opens over
      * @param heading {@link String} what the question is about
@@ -198,17 +198,6 @@ final class Dialogs {
             }
         });
         return alert;
-    }
-
-    /**
-     * The buttons a set of choices comes to. A caller drawing a dialog rather than showing one
-     * hands the same map to {@link #asked}.
-     *
-     * @param choices the ways out of the dialog
-     * @return a {@link Map} of {@link ButtonType} to {@link Choice}
-     */
-    static Map<ButtonType, Choice> waysOut(final Choice... choices) {
-        return buttonsFor(choices);
     }
 
     /**
@@ -287,13 +276,13 @@ final class Dialogs {
      * No way out, two answers to Enter, or a dialog whose only button leaves.
      *
      * <p>The leading choice comes first whatever it is for. A dialog about something the app cannot
-     * undo leads with backing out, and a row putting the quiet choice ahead of it reads as an
+     * undo leads with backing out. A row putting the quiet choice ahead of that reads as an
      * afterthought stuck on the end. The offered order decides the rest.
      *
      * @param choices the choices to build
      * @return a {@link Map} of {@link ButtonType} to {@link Choice}, leading choice first
      */
-    private static Map<ButtonType, Choice> buttonsFor(final Choice... choices) {
+    static Map<ButtonType, Choice> buttonsFor(final Choice... choices) {
         final long goAheads = Arrays.stream(choices).filter(c -> c.role() == Role.GO_AHEAD).count();
         final long cancels = Arrays.stream(choices).filter(c -> c.role() == Role.CANCEL).count();
         final long loud = Arrays.stream(choices).filter(c -> c.emphasis() == Emphasis.LOUD).count();
@@ -313,7 +302,7 @@ final class Dialogs {
      * Has a dialog's button row keep the order the buttons were built in.
      *
      * <p>A miss leaves the bar sorting the buttons itself, which is the whole of what this turns
-     * off, so {@code DialogsTest} pins the resulting order rather than this call.
+     * off.
      *
      * @param alert {@link Alert} the dialog
      */

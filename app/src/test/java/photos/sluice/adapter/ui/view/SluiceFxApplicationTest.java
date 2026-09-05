@@ -1,6 +1,7 @@
 package photos.sluice.adapter.ui.view;
 
 import javafx.application.Application;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
@@ -8,6 +9,7 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.Paint;
+import javafx.stage.Screen;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -254,6 +256,22 @@ class SluiceFxApplicationTest {
         assertThat(onFxThread(() -> FxToolkit.toolkitContext().getRegisteredStage().getIcons()))
                 .isNotEmpty()
                 .allSatisfy(icon -> assertThat(icon.isError()).isFalse());
+    }
+
+    // Without the cap the scene would keep its own 1100.
+    @Test
+    void theWindowOpensNoWiderThanTheDisplaysUsableArea(@TempDir final Path repoRoot,
+                                                        @TempDir final Path libraryRoot,
+                                                        @TempDir final Path inbox) throws Exception {
+        final Rectangle2D area = onFxThread(() -> Screen.getPrimary().getVisualBounds());
+        assertThat(area.getWidth())
+                .describedAs("the harness screen has to be narrower than %s for this to test anything",
+                        Stylesheet.INITIAL_WIDTH)
+                .isLessThan(Stylesheet.INITIAL_WIDTH);
+
+        this.startApplication(repoRoot, libraryRoot, inbox);
+
+        assertThat(onFxThread(() -> scene().getWidth())).isEqualTo(area.getWidth());
     }
 
     private void startApplication(final Path repoRoot, final Path libraryRoot, final Path inbox) throws Exception {

@@ -58,7 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * user is still pressing, so a fill writes onto controls and never replaces one.
  *
  * <p>The year rows are the exception, since how many there are is not known until the counts land.
- * They are replaced by {@code drawCounts} alone, which runs when the screen is built, when a
+ * They are replaced by {@code drawCounts} alone. That runs when the screen is built, when a
  * finished run has changed what is staged, and when a read finds something else has.
  *
  * <p>The counts come from walking two folder trees, which takes long enough on a full Inbox to be
@@ -82,7 +82,7 @@ final class RunLauncherPane {
     private static final Duration RECOUNT_INTERVAL = Duration.seconds(5);
 
     // The glyph a marked timeframe row carries. The legend explaining it is written by the
-    // presenter, which spells the same glyph, and RunLauncherPaneTest pins the two together.
+    // presenter, which spells the same glyph.
     private static final String UNFINISHED_MARK = "*";
 
     // A box carrying padding takes that height whether or not anything is in it. So the gap above
@@ -235,7 +235,7 @@ final class RunLauncherPane {
         final RunResultPane.Mounted result = RunResultPane.mount(presenter, redraw);
 
         // No id of its own. The shell names whichever screen it puts in the content area, so one set
-        // here would be overwritten. A test finding it would be finding the shell's name.
+        // here would be overwritten.
         final var dashboard = new StackPane(launcher, progress.node(), result.node());
         final Runnable draw = () -> show(presenter, setup, controls, launcher, progress, result);
         redraw.becomes(draw);
@@ -658,13 +658,13 @@ final class RunLauncherPane {
         /**
          * One arrow between two mode buttons, drawn rather than typed so no font has to carry it.
          *
-         * <p>A shaft and a filled head, 14 by 10, with the shaft 4 thick. Solid at that size where
-         * a glyph at the row's font size reads as punctuation.
+         * <p>A shaft and a filled head, 15 by 10.8, with the shaft 4.4 thick. Solid at that size
+         * where a glyph at the row's font size reads as punctuation.
          *
          * @return {@link Polygon} the arrow, pointing right
          */
         private static Polygon flowArrow() {
-            final var arrow = new Polygon(0, 3, 8, 3, 8, 0, 14, 5, 8, 10, 8, 7, 0, 7);
+            final var arrow = new Polygon(0, 3.2, 8.6, 3.2, 8.6, 0, 15, 5.4, 8.6, 10.8, 8.6, 7.6, 0, 7.6);
             arrow.getStyleClass().add("run-mode-arrow");
             return arrow;
         }

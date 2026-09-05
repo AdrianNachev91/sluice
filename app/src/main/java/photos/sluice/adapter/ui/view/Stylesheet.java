@@ -2,7 +2,10 @@ package photos.sluice.adapter.ui.view;
 
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.WeakChangeListener;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
+import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
 import photos.sluice.adapter.ui.Theme;
 import photos.sluice.adapter.ui.ThemeSelection;
 
@@ -14,11 +17,11 @@ import java.util.List;
  */
 final class Stylesheet {
 
-    /** The width the window opens at. */
-    static final int INITIAL_WIDTH = 1024;
+    /** The width the screens are laid out against, and the most a window opens showing. */
+    static final int INITIAL_WIDTH = 1100;
 
-    /** The height the window opens at. */
-    static final int INITIAL_HEIGHT = 700;
+    /** The height the screens are laid out against, and the most a window opens showing. */
+    static final int INITIAL_HEIGHT = 760;
 
     // Keys the scene's own property map, which is where the restyle listener's strong reference
     // lives. An identity of its own rather than a string, so nothing else can name it by accident.
@@ -51,6 +54,43 @@ final class Stylesheet {
         scene.getProperties().put(RESTYLE_LISTENER, restyle);
         look.addListener(new WeakChangeListener<>(restyle));
         return scene;
+    }
+
+    /**
+     * Holds a window that would open bigger than its display down to what the display can show.
+     *
+     * <p>A window taller than the desktop puts its own bottom edge, and whatever sits on it, out of
+     * reach.
+     *
+     * <p>A maximum rather than a size, because the two are different quantities. A window's size
+     * counts its frame, and a scene is laid out in the area inside that frame. Setting a size here
+     * would cost the scene whatever the platform's title bar and borders take, and the frame is not
+     * measurable before the window is shown. A maximum caps the outer edge and leaves the scene to
+     * ask for the size it wants.
+     *
+     * <p>The maximum is lifted once the window is up. It exists to shape the opening only, and a
+     * reader who moves the window to a roomier display can then resize into it.
+     *
+     * <p>No position either. Where the window lands is JavaFX's, which places an unpositioned one
+     * inside the usable area of the screen it picks.
+     *
+     * <p>An area reporting no usable width or height, NaN included, leaves the window alone rather
+     * than capping it to nothing.
+     *
+     * @param stage {@link Stage} the window about to be shown
+     * @param area {@link Rectangle2D} the display's usable area
+     */
+    static void openNoLargerThan(final Stage stage, final Rectangle2D area) {
+        if (!(area.getWidth() > 0) || !(area.getHeight() > 0)) {
+            return;
+        }
+        stage.setMaxWidth(area.getWidth());
+        stage.setMaxHeight(area.getHeight());
+        // Additive, where setOnShown is a single slot another handler would displace.
+        stage.addEventHandler(WindowEvent.WINDOW_SHOWN, _ -> {
+            stage.setMaxWidth(Double.MAX_VALUE);
+            stage.setMaxHeight(Double.MAX_VALUE);
+        });
     }
 
     /**

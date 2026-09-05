@@ -12,8 +12,8 @@ import java.util.List;
  *
  * <p>The two are built differently and carry the same colours. The in-window mark is drawn from
  * {@link #DROPLET} and sized by the stylesheet; the icon is a file. Both are the brand's green and
- * white, which the stylesheet holds outside the two looks so that a dark desktop does not show one
- * version of the mark in the window and another on the taskbar.
+ * white, held outside the two looks by the stylesheet. So a dark desktop does not show one version
+ * of the mark in the window and another on the taskbar.
  *
  * <p>The shape itself originates on the website, where the same path draws both the favicon and the
  * sharing image. Nothing checks that the three copies agree, and each side regenerates its own
@@ -27,7 +27,7 @@ final class BrandMark {
 
     // What the path is scaled by inside the window. Tuned against the square the stylesheet gives
     // it, so it is a companion to `-fx-min-width` on `.brand-mark` rather than a free choice.
-    private static final double GLYPH_SCALE = 0.62;
+    private static final double GLYPH_SCALE = 0.67;
 
     // The sizes the icon files come in. A window hands the platform all of them and the platform
     // picks. The tool that draws them and the test that checks they shipped each list them again,
