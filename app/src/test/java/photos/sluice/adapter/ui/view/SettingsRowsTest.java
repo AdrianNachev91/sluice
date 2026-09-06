@@ -16,6 +16,7 @@ import org.testfx.util.WaitForAsyncUtils;
 import java.util.concurrent.Callable;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 // The shared row vocabulary's own behaviour, where it has any. Most of it builds nodes and is
 // judged rendered; holdTo is the piece that refuses input, and a refusal has to be exercised.
@@ -129,6 +130,27 @@ class SettingsRowsTest {
         });
 
         assertThat(rightAfter[0]).isEqualTo(scroll.getVmax());
+    }
+
+    // A row stretches its children to its tallest, which in a banner is the dismiss button.
+    // Wrapping text lays its words against its own top edge, so a stretched sentence draws above
+    // the middle of the ground behind it.
+    @Test
+    void theBannersSentenceIsNotStretchedToTheHeightOfItsDismissButton() throws Exception {
+        final TextArea said = onFxThread(SettingsRowsTest::aBannerOnScreen);
+
+        assertThat(said.getHeight()).isCloseTo(said.prefHeight(said.getWidth()), within(1.0));
+    }
+
+    private static TextArea aBannerOnScreen() {
+        final var page = new VBox();
+        page.getChildren().addFirst(SettingsRows.banner(page, "probe-banner", "Settings saved.", false));
+        final var stage = new Stage();
+        stage.setScene(Stylesheet.applyTo(new Scene(page, 700, 300)));
+        stage.show();
+        page.applyCss();
+        page.layout();
+        return (TextArea) page.lookup(".settings-banner-text");
     }
 
     private static ScrollPane aPageTallerThanItsWindow() {

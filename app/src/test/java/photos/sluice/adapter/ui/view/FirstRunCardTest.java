@@ -5,7 +5,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -259,7 +259,8 @@ class FirstRunCardTest {
     }
 
     private static String bannerText(final Parent pane) {
-        return ((Label) pane.lookup("#settings-report-banner").lookup(".label")).getText();
+        return ((TextArea) pane.lookup("#settings-report-banner")
+                .lookup(".settings-banner-text")).getText();
     }
 
     private static void type(final Parent card, final String fieldId, final String text) {

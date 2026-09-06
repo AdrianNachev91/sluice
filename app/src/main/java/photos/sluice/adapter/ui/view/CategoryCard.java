@@ -5,7 +5,6 @@ import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
-import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
@@ -43,13 +42,13 @@ final class CategoryCard {
      * @param examples {@link TextArea} the examples box, one per line
      * @param enabled {@link CheckBox} the card's own switch
      * @param delete {@link Button} its Delete, or null on the built-in card, which has none
-     * @param nameViolation {@link Label} what is wrong with the name, empty when nothing is
-     * @param descriptionViolation {@link Label} what is wrong with the description
-     * @param examplesViolation {@link Label} what is wrong with the examples
+     * @param nameViolation {@link TextArea} what is wrong with the name, empty when nothing is
+     * @param descriptionViolation {@link TextArea} what is wrong with the description
+     * @param examplesViolation {@link TextArea} what is wrong with the examples
      */
     record Result(VBox card, TextField name, TextArea description, TextArea examples, CheckBox enabled,
-                  @Nullable Button delete, Label nameViolation, Label descriptionViolation,
-                  Label examplesViolation) {
+                  @Nullable Button delete, TextArea nameViolation, TextArea descriptionViolation,
+                  TextArea examplesViolation) {
     }
 
     /**
@@ -144,7 +143,7 @@ final class CategoryCard {
      * @return {@link VBox} the row
      */
     private static VBox labelled(final String label, final TextArea field,
-                                 final @Nullable Label violation) {
+                                 final @Nullable TextArea violation) {
         final var row = new VBox(SettingsRows.fieldLabel(label), field);
         if (violation != null) {
             row.getChildren().add(violation);

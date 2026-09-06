@@ -63,7 +63,10 @@ final class ScreenWarmUp {
                 new Separator(), new Spinner<Integer>(), new TextArea(), new TextField(),
                 new TitledPane(), new ToggleButton(),
                 new Circle(), new Polygon(), new Rectangle(), new SVGPath(), new Text(), new TextFlow(),
-                new ListCell<String>(), new VisionProviderCard.ModelChoiceCell());
+                new ListCell<String>(), new VisionProviderCard.ModelChoiceCell(),
+                // Through the factory, since what the screens draw is its own subclass of each of
+                // these rather than the plain control two rows up.
+                SelectableText.line(), SelectableText.prose());
     }
 
     /**

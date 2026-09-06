@@ -4,7 +4,8 @@ import javafx.application.Application;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
@@ -296,7 +297,7 @@ class SluiceFxApplicationTest {
         return onFxThread(() -> {
             final Parent root = scene().getRoot();
             return root.lookupAll(".failure-detail").stream()
-                    .map(node -> ((Label) node).getText())
+                    .map(node -> ((TextArea) node).getText())
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("no .failure-detail label in the window"));
         });
@@ -306,7 +307,7 @@ class SluiceFxApplicationTest {
         return onFxThread(() -> {
             final Parent root = scene().getRoot();
             return root.lookupAll(".pane-heading").stream()
-                    .map(node -> ((Label) node).getText())
+                    .map(node -> ((TextInputControl) node).getText())
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("no .pane-heading label in the window"));
         });

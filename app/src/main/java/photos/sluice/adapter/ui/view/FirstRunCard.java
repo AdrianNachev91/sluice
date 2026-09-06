@@ -3,7 +3,7 @@ package photos.sluice.adapter.ui.view;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.FirstRunPresenter;
@@ -77,7 +77,7 @@ final class FirstRunCard {
         final ComboBox<SettingsView.ProviderChoice> provider = VisionProviderCard.providerChoice(view);
         provider.setId("first-run-provider");
 
-        final Label status = header.status();
+        final TextArea status = header.status();
         // A save that lands redraws the card, so its own banner replaces whatever was there. A
         // refused one does not redraw. The last save's "Saved." would otherwise stand above this
         // one's refusal, where it reads as a claim about that.
@@ -107,7 +107,7 @@ final class FirstRunCard {
                                final Consumer<@Nullable String> onFinished, final SettingsRows.FolderRow workingRoot,
                                final SettingsRows.FolderRow libraryRoot, final SettingsRows.FolderRow inbox,
                                final SettingsView.ProviderChoice provider, final VBox container,
-                               final Label status, final Runnable dismissBanner,
+                               final TextArea status, final Runnable dismissBanner,
                                final Consumer<FirstRunPresenter.IncompleteSave> redraw) {
         final SaveOutcome outcome = presenter.saveFolderRootsAndProvider(workingRoot.field().getText(),
                 libraryRoot.field().getText(), inbox.field().getText(), provider.id());
@@ -150,15 +150,14 @@ final class FirstRunCard {
         }
     }
 
-    private static Label headline() {
-        final var headline = new Label("Sluice needs to know where your photos live.");
+    private static TextArea headline() {
+        final TextArea headline = SelectableText.prose("Sluice needs to know where your photos live.");
         headline.getStyleClass().add("first-run-headline");
         return headline;
     }
 
-    private static Label opening(final String said) {
-        final var opening = new Label(said);
-        opening.setWrapText(true);
+    private static TextArea opening(final String said) {
+        final TextArea opening = SelectableText.prose(said);
         opening.getStyleClass().add("first-run-opening");
         return opening;
     }
@@ -190,13 +189,13 @@ final class FirstRunCard {
      * fills, and taking them somewhere else would move them away from the control they just used.
      * Which field is at fault is said by the mark on that field.
      *
-     * @param status {@link Label} the header's own line
+     * @param status {@link TextArea} the header's own line
      * @param message what was refused, or null where nothing was
      */
-    private static void showRefusal(final VBox container, final Label status,
+    private static void showRefusal(final VBox container, final TextArea status,
                                     final @Nullable String message, final boolean warning) {
         status.setText("");
-        status.getStyleClass().setAll("settings-save-status");
+        SelectableText.dressAs(status, "settings-save-status");
         if (message != null) {
             SettingsRows.report(container, warning ? "settings-banner-caution" : "settings-banner-violation",
                     message, false);

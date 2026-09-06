@@ -2,7 +2,7 @@ package photos.sluice.adapter.ui.view;
 
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import org.junit.jupiter.api.AfterEach;
@@ -221,7 +221,7 @@ class SettingsPaneTest {
 
     private static String bannerText(final Parent pane) {
         final var banner = (HBox) pane.lookup("#settings-report-banner");
-        return ((Label) banner.getChildren().getFirst()).getText();
+        return ((TextArea) banner.getChildren().getFirst()).getText();
     }
 
     // The presenter pair this screen reads and writes through.

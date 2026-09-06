@@ -4,7 +4,8 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.Region;
@@ -235,7 +236,7 @@ class RunsPaneTest {
 
         assertThat(pane.lookup("#runs-nothing-yet").isManaged()).isTrue();
         assertThat(pane.lookup("#runs-unreadable").isManaged()).isFalse();
-        assertThat(((Label) pane.lookup("#runs-nothing-yet")).getText()).contains("No sifts");
+        assertThat(((TextArea) pane.lookup("#runs-nothing-yet")).getText()).contains("No sifts");
     }
 
     @Test
@@ -262,8 +263,8 @@ class RunsPaneTest {
     }
 
     private static List<String> textsIn(final Parent pane, final String id) {
-        return pane.lookup(id).lookupAll(".label").stream()
-                .map(node -> ((Label) node).getText())
+        return pane.lookup(id).lookupAll(".selectable-text").stream()
+                .map(node -> ((TextInputControl) node).getText())
                 .toList();
     }
 

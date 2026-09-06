@@ -13,6 +13,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
@@ -101,18 +102,18 @@ final class RunLauncherPane {
      */
     static Node pane(final RunLauncherPresenter presenter) {
         final RunSetupPresenter setup = presenter.setup();
-        final var heading = new Label("Dashboard");
+        final TextField heading = SelectableText.line("Dashboard");
         heading.getStyleClass().add("pane-heading");
 
         final var modeRow = new HBox();
         modeRow.getStyleClass().add("run-mode-row");
-        final Label modeHint = SettingsRows.emptyHelpLine("run-mode-hint");
+        final TextArea modeHint = SettingsRows.emptyHelpLine("run-mode-hint");
         modeHint.getStyleClass().add("run-mode-hint");
 
-        final var inboxHeadline = new Label();
+        final TextField inboxHeadline = SelectableText.line();
         inboxHeadline.setId("run-inbox-headline");
         inboxHeadline.getStyleClass().add("run-card-headline");
-        final Label inboxDetail = SettingsRows.emptyHelpLine("run-inbox-detail");
+        final TextArea inboxDetail = SettingsRows.emptyHelpLine("run-inbox-detail");
         final var importPhotos = new Button();
         importPhotos.setId("run-import");
         importPhotos.getStyleClass().add("button-quiet");
@@ -120,7 +121,7 @@ final class RunLauncherPane {
         // sits to the right, and a second right-aligned button would read as its equal.
         final var importRow = new HBox(importPhotos);
         importRow.getStyleClass().add("run-import-row");
-        final Label importHint = SettingsRows.emptyHelpLine("run-import-hint");
+        final TextArea importHint = SettingsRows.emptyHelpLine("run-import-hint");
         final VBox inboxCard = SettingsRows.card("INBOX", null, inboxHeadline, inboxDetail, importRow,
                 importHint);
 
@@ -128,7 +129,7 @@ final class RunLauncherPane {
         yearRows.getStyleClass().add("run-year-rows");
         final var undatedRow = new VBox();
         undatedRow.getStyleClass().add("run-undated-rows");
-        final Label nothingStaged = SettingsRows.emptyHelpLine("run-nothing-staged");
+        final TextArea nothingStaged = SettingsRows.emptyHelpLine("run-nothing-staged");
         final Hyperlink openRuns = SettingsRows.inAppLink("run-scope-legend-link", presenter::showRuns);
         final SettingsRows.LinkedLine scopeLegend =
                 SettingsRows.linkedHelpLine("run-scope-legend", openRuns);
@@ -140,7 +141,7 @@ final class RunLauncherPane {
         final var body = new VBox(inboxCard, sortedCard);
         body.getStyleClass().add("run-launcher-body");
 
-        final var scopeLabel = new Label();
+        final TextField scopeLabel = SelectableText.line();
         scopeLabel.getStyleClass().add("settings-field-label");
         final var scopeField = new TextField();
         scopeField.setId("run-scope-field");
@@ -152,23 +153,22 @@ final class RunLauncherPane {
         startRow.getStyleClass().add("run-start-row");
         startRow.setAlignment(Pos.CENTER_RIGHT);
 
-        final Label hint = SettingsRows.emptyHelpLine("run-scope-hint");
-        final var refusal = new Label();
+        final TextArea hint = SettingsRows.emptyHelpLine("run-scope-hint");
+        final TextArea refusal = SelectableText.prose();
         refusal.setId("run-scope-refusal");
-        SettingsRows.wrapping(refusal);
         // The class that draws a refusal at length rather than the one that draws it in a phrase.
         // What this says of a gapped month list runs to a short paragraph. The bold weight that
         // suits a single line under a field turns a paragraph into shouting.
         refusal.getStyleClass().add("settings-violation-detail");
         SettingsRows.showWhileItSaysSomething(refusal);
 
-        final var figure = new Label();
+        final TextField figure = SelectableText.line();
         figure.setId("run-estimate-figure");
         figure.getStyleClass().add("run-estimate-figure");
-        final Label disclaimer = SettingsRows.emptyHelpLine("run-estimate-disclaimer");
+        final TextArea disclaimer = SettingsRows.emptyHelpLine("run-estimate-disclaimer");
         // On its own ground rather than as another muted line under the figure. The disclaimer
         // above it is true of every estimate, and a reader who skims that one skims this too.
-        final Label warning = SettingsRows.emptyHelpLine("run-estimate-warning");
+        final TextArea warning = SettingsRows.emptyHelpLine("run-estimate-warning");
         final var repair = new Button();
         repair.setId("run-estimate-repair");
         repair.getStyleClass().add("button-quiet");
@@ -185,20 +185,18 @@ final class RunLauncherPane {
 
         // The same box Settings puts a standing fact in, for the same reason. This one stays on the
         // page rather than fading, and it warns about nothing.
-        final var freeHeadline = new Label();
+        final TextArea freeHeadline = SelectableText.prose();
         freeHeadline.setId("run-free-headline");
-        SettingsRows.wrapping(freeHeadline);
         freeHeadline.getStyleClass().add("run-free-headline");
-        final Label freeDetail = SettingsRows.emptyHelpLine("run-free-detail");
+        final TextArea freeDetail = SettingsRows.emptyHelpLine("run-free-detail");
         final var freeBox = new VBox(freeHeadline, freeDetail);
         final Node free = SettingsRows.badgedCallout(freeBox);
         free.setId("run-free");
         free.managedProperty().bind(free.visibleProperty());
         free.visibleProperty().bind(freeHeadline.textProperty().isNotEmpty());
 
-        final var message = new Label();
+        final TextArea message = SelectableText.prose();
         message.setId("run-message");
-        SettingsRows.wrapping(message);
         SettingsRows.showWhileItSaysSomething(message);
 
         final var action = new VBox(scopeLabel, scopeField, hint, refusal, estimate, free, message,
@@ -563,41 +561,42 @@ final class RunLauncherPane {
      * Every control the screen fills in after a change.
      *
      * @param modeRow {@link HBox} the row of mode buttons
-     * @param modeHint {@link Label} what the chosen mode does
-     * @param inboxHeadline {@link Label} the Inbox card's first line
-     * @param inboxDetail {@link Label} the Inbox card's second line
+     * @param modeHint {@link TextArea} what the chosen mode does
+     * @param inboxHeadline {@link TextField} the Inbox card's first line
+     * @param inboxDetail {@link TextArea} the Inbox card's second line
      * @param importPhotos {@link Button}
-     * @param importHint {@link Label} the line naming the drop as the other way in
+     * @param importHint {@link TextArea} the line naming the drop as the other way in
      * @param yearRows {@link VBox} the Sorted card's rows
      * @param undatedRow {@link VBox} holds the row for what is sorted without a date, empty where
      *     nothing is
-     * @param nothingStaged {@link Label} what the Sorted card says with no rows to show
+     * @param nothingStaged {@link TextArea} what the Sorted card says with no rows to show
      * @param scopeLegend {@link SettingsRows.LinkedLine} what a mark on one of those rows means
      * @param openRuns {@link Hyperlink} the word inside it that opens the runs screen
-     * @param scopeLabel {@link Label} the label above the scope field
+     * @param scopeLabel {@link TextField} the label above the scope field
      * @param scopeField {@link TextField} the scope field
      * @param start {@link Button} the start button
-     * @param hint {@link Label} what the field accepts
-     * @param refusal {@link Label} what is wrong with what was typed
-     * @param figure {@link Label} the estimated cost
-     * @param disclaimer {@link Label} what that figure is worth
-     * @param warning {@link Label} what is holding that figure back
+     * @param hint {@link TextArea} what the field accepts
+     * @param refusal {@link TextArea} what is wrong with what was typed
+     * @param figure {@link TextField} the estimated cost
+     * @param disclaimer {@link TextArea} what that figure is worth
+     * @param warning {@link TextArea} what is holding that figure back
      * @param repair {@link Button} the way out of it
-     * @param freeHeadline {@link Label} the first line of the box saying this provider spends nothing
-     * @param freeDetail {@link Label} why that box has no figure in it
-     * @param message {@link Label} what the screen has to report
+     * @param freeHeadline {@link TextArea} the first line of the box saying this provider spends nothing
+     * @param freeDetail {@link TextArea} why that box has no figure in it
+     * @param message {@link TextArea} what the screen has to report
      * @param scroll {@link ScrollPane} the pane the cards sit in
      * @param unfolded a {@link Set} of {@link VBox} the month boxes now showing
      * @param folding a {@link Map} of {@link VBox} to {@link Timeline} the folds still running
      */
-    private record Controls(HBox modeRow, Label modeHint, Label inboxHeadline, Label inboxDetail,
-                            Button importPhotos, Label importHint, VBox yearRows, VBox undatedRow,
-                            Label nothingStaged,
+    private record Controls(HBox modeRow, TextArea modeHint, TextField inboxHeadline, TextArea inboxDetail,
+                            Button importPhotos, TextArea importHint, VBox yearRows, VBox undatedRow,
+                            TextArea nothingStaged,
                             SettingsRows.LinkedLine scopeLegend, Hyperlink openRuns,
-                            Label scopeLabel, TextField scopeField,
-                            Button start, Label hint, Label refusal, Label figure, Label disclaimer,
-                            Label warning, Button repair, Label freeHeadline, Label freeDetail,
-                            Label message,
+                            TextField scopeLabel, TextField scopeField,
+                            Button start, TextArea hint, TextArea refusal, TextField figure,
+                            TextArea disclaimer,
+                            TextArea warning, Button repair, TextArea freeHeadline, TextArea freeDetail,
+                            TextArea message,
                             ScrollPane scroll, Set<VBox> unfolded, Map<VBox, Timeline> folding) {
 
         /**
@@ -1239,7 +1238,7 @@ final class RunLauncherPane {
          */
         private void drawMessage(final RunLauncherView.@Nullable Message said) {
             this.message.setText(said == null ? "" : said.text());
-            this.message.getStyleClass().setAll("run-message",
+            SelectableText.dressAs(this.message, "run-message",
                     said != null && said.refused() ? "settings-violation" : "settings-confirmation");
         }
 

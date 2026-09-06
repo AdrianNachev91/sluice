@@ -53,6 +53,11 @@
        config choice this app worked around, and orange already carries that second meaning. */
     -sluice-info: #1d6fa8;
     -sluice-info-bg: #e8f1f8;
+    /* Behind text a reader has dragged over. The toolkit's own default is a mid-cyan in neither
+       palette, and a selection is on screen only while somebody is reaching for something, so it
+       carries the brand rather than announcing a colour of its own. Its own token, because the
+       tint has to sit under dark text in one look and light text in the other. */
+    -sluice-selection: #cfe3d8;
 
     -sluice-mark-bg: #2f6f4f;
     -sluice-mark-glyph: #ffffff;
@@ -72,6 +77,49 @@
     -fx-font-family: "Segoe UI", "SF Pro Text", "Ubuntu", "Helvetica Neue", sans-serif;
     -fx-font-size: 14px;
     -fx-background-color: -sluice-bg;
+}
+
+/* Text a reader can select, drawn as a label. A field's skin brings a ground, an outline, padding
+   and a text cursor, all of which say an edit is on offer. Every one is taken off, so what is left
+   is words on the page behind them.
+
+   First in the file, and one class rather than two, so every style class a screen adds to a line
+   outranks it. Those classes carry the colour, the size and the padding of the line they name, and
+   a two-class selector here would take all three off them. Modena is outranked whatever the
+   specificity, so one class is still enough to undo the field look. */
+.selectable-text {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+    -fx-cursor: default;
+    -fx-highlight-fill: -sluice-selection;
+    -fx-highlight-text-fill: -sluice-text;
+    -fx-padding: 0;
+    -fx-text-fill: -sluice-text;
+}
+
+/* The pieces a text area keeps underneath: the pane that would scroll, and the ground behind the
+   words. Both draw their own colour until named.
+
+   The bars are turned off rather than merely hidden, because a bar that might appear is one the
+   viewport reserves width for. Measured: a 360 px area gave its words 344. Sixteen pixels is enough
+   to wrap a sentence onto a line more than a label needed, which grows every card holding one.
+   These blocks are as tall as their words, so a bar is never wanted. */
+.selectable-text > .scroll-pane,
+.selectable-text > .scroll-pane > .viewport,
+.selectable-text .content {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    /* The text cursor is set on the content rather than on the control, so the rule above reaches
+       every pixel of a single line and none of a wrapped block. A cursor set on a child is the
+       child's, whatever the parent asks for. */
+    -fx-cursor: default;
+    -fx-padding: 0;
+}
+
+.selectable-text > .scroll-pane {
+    -fx-hbar-policy: never;
+    -fx-vbar-policy: never;
 }
 
 /* Every screen's outer container. Padding only, so the screen fills whatever space it is given. */
@@ -599,6 +647,10 @@
    to it and the suggestion all but disappears. Named outright instead, so it resolves per look
    against the same muted fill the help lines use. It is the empty folder fields that make this
    load-bearing: on a fresh install they are the only thing telling a user where their photos go. */
+/* This rule also matches every disguised line, which is a text field too. It is one class like
+   .selectable-text and sits later in the file, so it wins the tie. A prompt fill is invisible on a
+   control with no prompt, so nothing shows today. Anything else added here lands on every heading
+   and help line in the app. Add it to .text-field:not(.selectable-text) instead. */
 .text-field, .password-field {
     -fx-prompt-text-fill: -sluice-prompt;
 }
@@ -636,6 +688,24 @@
    has focus. */
 /*noinspection CssInvalidPseudoSelector*/
 .spinner .text-field:focused {
+    -fx-border-width: 0;
+}
+
+/* The banner centres what it says across the whole width. A text area has no alignment of its own,
+   so the words inside it are what carries this. */
+.settings-banner-text .text {
+    -fx-text-alignment: center;
+}
+
+/* A click is how a selection starts, so these take focus and must not look as though they did.
+   Modena's focus halo and the border the fields above draw are both suppressed. Two classes here,
+   unlike the disguise itself, because this one has a rule of equal weight to beat rather than to
+   defer to: the field's own focus border, a few lines up in this same file. */
+/*noinspection CssInvalidPseudoSelector*/
+.selectable-text.text-field:focused,
+.selectable-text.text-area:focused {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
     -fx-border-width: 0;
 }
 
@@ -873,7 +943,7 @@
     -fx-alignment: center-left;
 }
 
-.settings-banner .label {
+.settings-banner .settings-banner-text {
     -fx-text-fill: -sluice-accent;
     -fx-font-weight: bold;
 }
@@ -886,7 +956,7 @@
     -fx-border-color: -sluice-danger;
 }
 
-.settings-banner-violation .label {
+.settings-banner-violation .settings-banner-text {
     -fx-text-fill: -sluice-danger;
 }
 
@@ -898,8 +968,26 @@
     -fx-border-color: -sluice-caution;
 }
 
-.settings-banner-caution .label {
+.settings-banner-caution .settings-banner-text {
     -fx-text-fill: -sluice-caution;
+}
+
+/* The two boxes that give a passage its own ground: one informs, one cautions. They differ in
+   colour and in nothing else, so the shape is stated once here and each names only its own two
+   colours below. */
+.settings-callout, .warning-box {
+    -fx-background-radius: 6px;
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+    -fx-padding: 10px 14px;
+}
+
+/* A box dresses its own text, so every one reads the same however its content was built. Sized off
+   the parent rather than in pixels, so a box holding a help line does not keep that line's smaller
+   size. */
+.settings-callout .selectable-text, .warning-box .selectable-text {
+    -fx-font-size: 1em;
+    -fx-font-weight: bold;
 }
 
 /* A fact worth a reader's own ground, not just its own colour, for something that stays on the
@@ -908,17 +996,35 @@
    neither line. */
 .settings-callout {
     -fx-background-color: -sluice-info-bg;
-    -fx-background-radius: 6px;
     -fx-border-color: -sluice-info;
-    -fx-border-radius: 6px;
-    -fx-border-width: 1px;
-    -fx-padding: 10px 14px;
     -fx-spacing: 7px;
     -fx-alignment: top-left;
 }
 
-.settings-callout .settings-caution {
+.settings-callout .selectable-text {
     -fx-text-fill: -sluice-info;
+}
+
+/* Text on its own caution ground. A line of coloured text among ordinary lines reads as one of
+   them, and the ground is what stops that. */
+.warning-box {
+    -fx-background-color: -sluice-caution-bg;
+    -fx-border-color: -sluice-caution;
+    -fx-spacing: 4px;
+}
+
+.warning-box .selectable-text {
+    -fx-text-fill: -sluice-caution;
+}
+
+/* A heading inside one of these names what the sentences under it are about, so it keeps the colour
+   a heading has everywhere else. Coloured with them it stops reading as their heading. Last of the
+   four, since it carries the same weight as the two above and a tie goes to whichever is later. */
+.settings-callout .run-free-headline,
+.settings-callout .settings-subsection-heading,
+.warning-box .run-free-headline,
+.warning-box .settings-subsection-heading {
+    -fx-text-fill: -sluice-text;
 }
 
 .info-ring {
@@ -937,7 +1043,9 @@
 .settings-banner-dismiss {
     -fx-background-color: transparent;
     -fx-border-color: transparent;
-    -fx-text-fill: -sluice-accent;
+    /* Neutral in all three tones. Wearing the banner's own colour would make it a second thing
+       carrying the message, and it is only the way out of one. */
+    -fx-text-fill: -sluice-text-muted;
     -fx-font-size: 16px;
     -fx-font-weight: bold;
     -fx-padding: 0 4px;
@@ -1685,24 +1793,16 @@
     -fx-text-fill: -sluice-text;
 }
 
-/* Text on its own caution ground, bordered the way the info callout is. A line of coloured text
-   among ordinary lines reads as one of them, and the ground is what stops that. */
+/* Text on its own caution ground. A line of coloured text among ordinary lines reads as one of
+   them, and the ground is what stops that. */
 .warning-box {
     -fx-background-color: -sluice-caution-bg;
-    -fx-background-radius: 6px;
     -fx-border-color: -sluice-caution;
-    -fx-border-radius: 6px;
-    -fx-border-width: 1px;
-    -fx-padding: 10px 14px;
     -fx-spacing: 4px;
 }
 
-/* What the stripe's headline means, under it and in the page's own text colour. The stripe carries
-   its weight through its ground and its border, so the caution colour and the bold above are for
-   the one line a reader takes in at a glance. A whole paragraph set that way is shouting, which
-   this stylesheet says twice already about a refusal that runs past one line. */
-.run-result-warning-detail {
-    -fx-text-fill: -sluice-text;
+.warning-box .selectable-text {
+    -fx-text-fill: -sluice-caution;
 }
 
 /* What the reader is asked before carrying a stopped run on. It sits in the card's body with

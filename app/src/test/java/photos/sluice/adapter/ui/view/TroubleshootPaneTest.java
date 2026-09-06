@@ -4,7 +4,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -217,8 +217,8 @@ class TroubleshootPaneTest {
     }
 
     private static List<String> textsIn(final Parent pane, final String id) {
-        return pane.lookup(id).lookupAll(".label").stream()
-                .map(node -> ((Label) node).getText())
+        return pane.lookup(id).lookupAll(".selectable-text").stream()
+                .map(node -> ((TextInputControl) node).getText())
                 .toList();
     }
 

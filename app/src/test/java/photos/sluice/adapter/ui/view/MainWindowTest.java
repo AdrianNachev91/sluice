@@ -6,6 +6,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.BorderPane;
@@ -212,8 +213,8 @@ class MainWindowTest {
         clickNav(root, "#nav-dashboard");
 
         assertThat(currentScreen(root).getId()).isEqualTo("Dashboard");
-        assertThat(currentScreen(root).lookupAll(".label").stream()
-                .map(label -> ((Label) label).getText()))
+        assertThat(currentScreen(root).lookupAll(".selectable-text").stream()
+                .map(label -> ((TextInputControl) label).getText()))
                 .anySatisfy(text -> assertThat(text).isEqualTo("Dashboard"))
                 .anySatisfy(text -> assertThat(text).startsWith("This screen would not open"));
     }
@@ -278,8 +279,8 @@ class MainWindowTest {
                 built(new FirstRunPresenter(alwaysThrows()), settingsPresenter()));
 
         assertThat(currentScreen(root).getId()).isEqualTo("Dashboard");
-        assertThat(currentScreen(root).lookupAll(".label").stream()
-                .map(label -> ((Label) label).getText()))
+        assertThat(currentScreen(root).lookupAll(".selectable-text").stream()
+                .map(label -> ((TextInputControl) label).getText()))
                 .anySatisfy(text -> assertThat(text).startsWith("This screen would not open"));
     }
 
@@ -384,7 +385,7 @@ class MainWindowTest {
     }
 
     private static String headingText(final Node screen) {
-        return ((Label) screen.lookup(".pane-heading")).getText();
+        return ((TextInputControl) screen.lookup(".pane-heading")).getText();
     }
 
     // The presenter pair the Settings screen and its VISION PROVIDER card read and write through.

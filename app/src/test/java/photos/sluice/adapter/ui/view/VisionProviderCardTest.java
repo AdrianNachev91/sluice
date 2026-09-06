@@ -5,10 +5,11 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Hyperlink;
-import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.text.Text;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -531,7 +532,7 @@ class VisionProviderCardTest {
     }
 
     private static String testResultText(final Parent pane) {
-        return ((Label) pane.lookup("#settings-test-result")).getText();
+        return ((TextArea) pane.lookup("#settings-test-result")).getText();
     }
 
     private static String selectedModelId(final Parent pane) {
@@ -568,7 +569,8 @@ class VisionProviderCardTest {
     }
 
     private static List<String> labelsIn(final Node root) {
-        return root.lookupAll(".label").stream().map(node -> ((Label) node).getText()).toList();
+        return root.lookupAll(".selectable-text").stream()
+                .map(node -> ((TextInputControl) node).getText()).toList();
     }
 
     private static List<String> buttonsIn(final Node root) {

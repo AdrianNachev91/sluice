@@ -4,8 +4,9 @@ import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -50,12 +51,11 @@ final class RunResultPane {
      * @return {@link Mounted} the card and the way to fill it in
      */
     static Mounted mount(final RunLauncherPresenter presenter, final Runnable redraw) {
-        final var heading = new Label();
+        final TextArea heading = SelectableText.prose();
         heading.setId("run-result-heading");
-        SettingsRows.wrapping(heading);
         heading.getStyleClass().add("pane-heading");
 
-        final Label detail = SettingsRows.emptyHelpLine("run-result-detail");
+        final TextArea detail = SettingsRows.emptyHelpLine("run-result-detail");
         detail.getStyleClass().add("run-result-detail");
         // Given its own ground only where the run failed, which tone() decides. On every other
         // ending this line introduces the counts under it. On a failure it is the whole card, and
@@ -69,12 +69,10 @@ final class RunResultPane {
         counts.setId("run-result-counts");
         counts.getStyleClass().add("run-result-counts");
 
-        final var warningHeadline = new Label();
-        SettingsRows.wrapping(warningHeadline);
+        final TextArea warningHeadline = SelectableText.prose();
         warningHeadline.getStyleClass().add("settings-caution");
-        final var warningDetail = new Label();
-        SettingsRows.wrapping(warningDetail);
-        warningDetail.getStyleClass().add("run-result-warning-detail");
+        final TextArea warningDetail = SelectableText.prose();
+        warningDetail.setId("run-result-warning-detail");
         final var warning = new VBox(warningHeadline, warningDetail);
         warning.setId("run-result-warning");
         warning.getStyleClass().add("warning-box");
@@ -83,8 +81,7 @@ final class RunResultPane {
 
         // The question sits in the body with everything else the card has to say, and only its
         // button joins the row of actions. In that row the sentence reads as a label on Done.
-        final var actionQuestion = new Label();
-        SettingsRows.wrapping(actionQuestion);
+        final TextArea actionQuestion = SelectableText.prose();
         final var question = new VBox(actionQuestion);
         question.setId("run-result-resume");
         question.getStyleClass().add("run-result-resume");
@@ -95,9 +92,8 @@ final class RunResultPane {
         // scrolling body, next to the button it answers. Inside it, a card with counts enough to
         // scroll would put the refusal below the fold while the button that drew it stayed in
         // view. That reads as a press that did nothing.
-        final var message = new Label();
+        final TextArea message = SelectableText.prose();
         message.setId("run-result-message");
-        SettingsRows.wrapping(message);
         SettingsRows.showWhileItSaysSomething(message);
 
         // Its weight is the arm's, set on every fill, so the class goes on there rather than here.
@@ -197,9 +193,9 @@ final class RunResultPane {
      * and the padding. A label hidden inside a shown box leaves an empty stripe.
      *
      * @param region {@link Region} the box
-     * @param says {@link Label} the label that decides
+     * @param says {@link TextArea} the label that decides
      */
-    private static void showWhile(final Region region, final Label says) {
+    private static void showWhile(final Region region, final TextArea says) {
         region.managedProperty().bind(region.visibleProperty());
         region.visibleProperty().bind(says.textProperty().isNotEmpty());
     }
@@ -219,20 +215,21 @@ final class RunResultPane {
      * Every control the card fills in after a run ends.
      *
      * @param page {@link VBox} the card itself, which carries the tone
-     * @param heading {@link Label} how the run ended
-     * @param detail {@link Label} the sentence under it
+     * @param heading {@link TextArea} how the run ended
+     * @param detail {@link TextArea} the sentence under it
      * @param detailBox {@link VBox} what wears that sentence's own ground on a failed card
      * @param counts {@link VBox} the rows saying what the run did
-     * @param warningHeadline {@link Label} what a reader needs to know about it, in one line
-     * @param warningDetail {@link Label} what caused it and what Sluice did instead
-     * @param actionQuestion {@link Label} what the reader is asked before the card's own action
+     * @param warningHeadline {@link TextArea} what a reader needs to know about it, in one line
+     * @param warningDetail {@link TextArea} what caused it and what Sluice did instead
+     * @param actionQuestion {@link TextArea} what the reader is asked before the card's own action
      * @param actionButton {@link Button} the card's own action, beside Done
-     * @param message {@link Label} what a refused press on this card has to report
+     * @param message {@link TextArea} what a refused press on this card has to report
      * @param done {@link Button} the button back to the launcher
      */
-    private record Controls(VBox page, Label heading, Label detail, VBox detailBox, VBox counts,
-                            Label warningHeadline, Label warningDetail,
-                            Label actionQuestion, Button actionButton, Label message, Button done) {
+    private record Controls(VBox page, TextArea heading, TextArea detail, VBox detailBox, VBox counts,
+                            TextArea warningHeadline, TextArea warningDetail,
+                            TextArea actionQuestion, Button actionButton, TextArea message,
+                            Button done) {
 
         /**
          * Puts everything the presenter says onto the card.
@@ -345,7 +342,7 @@ final class RunResultPane {
          */
         private void drawMessage(final RunLauncherView.@Nullable Message said) {
             this.message.setText(said == null ? "" : said.text());
-            this.message.getStyleClass().setAll("run-message",
+            SelectableText.dressAs(this.message, "run-message",
                     said != null && said.refused() ? "settings-violation" : "settings-confirmation");
         }
 
@@ -356,9 +353,9 @@ final class RunResultPane {
          * @return {@link Node} the row
          */
         private static Node countRow(final Count count) {
-            final var label = new Label(count.label());
+            final TextField label = SelectableText.line(count.label());
             label.getStyleClass().add("run-result-count-label");
-            final var value = new Label(count.value());
+            final TextField value = SelectableText.line(count.value());
             value.getStyleClass().add("run-result-count-value");
             final var row = new HBox(label, spacer(), value);
             row.setId(count.id());

@@ -7,9 +7,9 @@ import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -123,12 +123,12 @@ final class VisionProviderCard {
      * @param endpoint {@link TextField} the endpoint value
      * @param endpointField {@link HBox} the row the endpoint sits in, hidden and shown as a whole
      * @param testConnection {@link Button} runs a live check against the provider
-     * @param testResult {@link Label} what that check answered
-     * @param modelViolation {@link Label} what a refused save says about the model
+     * @param testResult {@link TextArea} what that check answered
+     * @param modelViolation {@link TextArea} what a refused save says about the model
      */
     record ProviderFieldControls(ComboBox<SettingsView.ModelChoice> model, VBox modelInfo,
                                  TextField endpoint, HBox endpointField, Button testConnection,
-                                 Label testResult, Label modelViolation) {
+                                 TextArea testResult, TextArea modelViolation) {
     }
 
     /**
@@ -262,14 +262,13 @@ final class VisionProviderCard {
         // mistaken for the page's own Save, pinned in the bar above.
         final var saveButton = new Button(secret.hasStoredValue() ? "Replace key" : "Activate key");
         saveButton.setId("settings-api-key-save");
-        final var result = new Label();
-        result.setWrapText(true);
+        final TextArea result = SelectableText.prose();
         final ProviderFieldControls controls = controlsOf(providerFields);
         saveButton.setOnAction(_ -> {
             final String error = visionProvider.saveSecret(providerId, entry.getText());
             if (error != null) {
                 result.setText(error);
-                result.getStyleClass().setAll("settings-violation");
+                SelectableText.dressAs(result, "settings-violation");
             } else {
                 onChanged.accept("API key saved.");
                 refreshModelPicker(controls.model(), controls.modelInfo(), visionProvider, providerId, providerBox);
@@ -297,7 +296,7 @@ final class VisionProviderCard {
             final String error = visionProvider.removeSecret(providerId);
             if (error != null) {
                 result.setText(error);
-                result.getStyleClass().setAll("settings-violation");
+                SelectableText.dressAs(result, "settings-violation");
             } else {
                 onChanged.accept(removal.removed());
                 refreshModelPicker(controls.model(), controls.modelInfo(), visionProvider, providerId, providerBox);
@@ -308,7 +307,7 @@ final class VisionProviderCard {
         // reader is standing. Taken away again on its own, the way the page's own banner is.
         if (said != null) {
             result.setText(said);
-            result.getStyleClass().setAll("settings-confirmation");
+            SelectableText.dressAs(result, "settings-confirmation");
             takeAwayAfterFourSeconds(result);
         }
 
@@ -319,8 +318,7 @@ final class VisionProviderCard {
         HBox.setHgrow(entry, Priority.ALWAYS);
         HBox.setHgrow(reveal, Priority.ALWAYS);
 
-        final var reassurance = new Label(secret.reassurance());
-        reassurance.setWrapText(true);
+        final TextArea reassurance = SelectableText.prose(secret.reassurance());
         reassurance.getStyleClass().add("settings-reassurance");
 
         final String setupGuide = providerChoiceOf(providerBox).setupGuide();
@@ -329,9 +327,9 @@ final class VisionProviderCard {
         // This card only ever shows for a provider that calls a model with this key, so the spend
         // is real every time it does. Its own bordered ground, not just a line of text, since a
         // spend is worth noticing rather than reading past.
-        final var billingText = new Label("Every run spends from your provider account balance. "
-                + "Checking your key or its models costs nothing.");
-        billingText.setWrapText(true);
+        final TextArea billingText = SelectableText.prose(
+                "Every run spends from your provider account balance. "
+                        + "Checking your key or its models costs nothing.");
         billingText.getStyleClass().add("settings-caution");
         final Node billing = SettingsRows.badgedCallout(new VBox(billingText));
 
@@ -340,8 +338,7 @@ final class VisionProviderCard {
         // still be written to. Taking the field away leaves a user who cannot read their key with
         // no way to set another one.
         if (secret.errorMessage() != null) {
-            final var error = new Label(secret.errorMessage());
-            error.setWrapText(true);
+            final TextArea error = SelectableText.prose(secret.errorMessage());
             error.getStyleClass().add("settings-violation-detail");
             children.add(error);
         }
@@ -402,9 +399,9 @@ final class VisionProviderCard {
      * again the next time something happens to the key. Its opacity is put back for the same
      * reason.
      *
-     * @param line {@link Label} the line to take away
+     * @param line {@link TextArea} the line to take away
      */
-    private static void takeAwayAfterFourSeconds(final Label line) {
+    private static void takeAwayAfterFourSeconds(final TextArea line) {
         final var fade = new FadeTransition(Duration.millis(400), line);
         fade.setFromValue(1);
         fade.setToValue(0);
@@ -474,9 +471,8 @@ final class VisionProviderCard {
         final var testConnection = new Button("Test connection");
         testConnection.setId("settings-test-connection");
         testConnection.getStyleClass().add("button-quiet");
-        final var testResult = new Label();
+        final TextArea testResult = SelectableText.prose();
         testResult.setId("settings-test-result");
-        testResult.setWrapText(true);
         testResult.getStyleClass().add("settings-help");
         // Nothing has been tested until the button is pressed, so this label starts empty and
         // would otherwise leave a line's gap below the Endpoint row.
@@ -484,7 +480,7 @@ final class VisionProviderCard {
         enableTestIfThereIsSomethingToTry(testConnection, visionProvider, providerBox);
         testConnection.setOnAction(_ -> {
             testResult.setText("Checking...");
-            testResult.getStyleClass().setAll("settings-help");
+            SelectableText.dressAs(testResult, "settings-help");
             final String providerId = providerChoiceOf(providerBox).id();
             final String typed = endpoint.getText();
             final var task = new Task<VisionProviderPresenter.ConnectionCheckResult>() {
@@ -499,13 +495,14 @@ final class VisionProviderCard {
                 if (providerChoiceOf(providerBox).id().equals(providerId)) {
                     final VisionProviderPresenter.ConnectionCheckResult result = task.getValue();
                     testResult.setText(result.message());
-                    testResult.getStyleClass().setAll(result.succeeded() ? "settings-help" : "settings-violation");
+                    SelectableText.dressAs(testResult,
+                            result.succeeded() ? "settings-help" : "settings-violation");
                 }
             });
             task.setOnFailed(_ -> {
                 if (providerChoiceOf(providerBox).id().equals(providerId)) {
                     testResult.setText("Sluice could not check this connection.");
-                    testResult.getStyleClass().setAll("settings-violation");
+                    SelectableText.dressAs(testResult, "settings-violation");
                 }
             });
             Thread.ofVirtual().start(task);
@@ -607,8 +604,7 @@ final class VisionProviderCard {
                 // a custom cell factory to draw the empty case. Confirmed by rendering: the cell's
                 // own text for a null item never appeared on screen.
                 model.setPromptText("Nothing to choose from");
-                final var violation = new Label(unavailable.violation());
-                violation.setWrapText(true);
+                final TextArea violation = SelectableText.prose(unavailable.violation());
                 violation.getStyleClass().add("settings-violation");
                 final var retry = new Button("Retry");
                 retry.setId("settings-model-retry");

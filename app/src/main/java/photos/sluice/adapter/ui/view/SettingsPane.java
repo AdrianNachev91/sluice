@@ -2,7 +2,7 @@ package photos.sluice.adapter.ui.view;
 
 import javafx.concurrent.Task;
 import javafx.scene.Node;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.SettingsPresenter;
@@ -135,7 +135,7 @@ final class SettingsPane {
         final AppearanceCard.Result appearance = AppearanceCard.build(view, presenter);
         onScreen.set(new OnScreen(folders, provider, montage));
 
-        final Label status = header.status();
+        final TextArea status = header.status();
 
         provider.providerBox().getSelectionModel().selectedItemProperty().addListener((_, _, chosen) -> {
             // A refusal answers one press of Save against one set of choices. Changing the provider
@@ -191,7 +191,8 @@ final class SettingsPane {
                                final SettingsRows.FolderRow libraryRoot, final SettingsRows.FolderRow inbox,
                                final SettingsView.ProviderChoice provider, final VBox providerFields,
                                final int tileSize, final int tilesPerRow,
-                               final String themeId, final Label status, final Consumer<String> showBanner) {
+                               final String themeId, final TextArea status,
+                               final Consumer<String> showBanner) {
         final VisionProviderCard.ProviderFieldControls controls = VisionProviderCard.controlsOf(providerFields);
         final SaveOutcome outcome = presenter.save(workingRoot.field().getText(), libraryRoot.field().getText(),
                 inbox.field().getText(), provider.id(), VisionProviderCard.selectedModelId(controls.model()),
@@ -238,13 +239,13 @@ final class SettingsPane {
      * <p>The page is not moved. Save is pinned, so the reader is already looking at this line, and
      * which field is at fault is said by the mark on that field.
      *
-     * @param status {@link Label} the line beside Save
+     * @param status {@link TextArea} the line beside Save
      * @param message what was refused, or null where nothing was
      */
-    private static void showRefusal(final VBox container, final Label status,
+    private static void showRefusal(final VBox container, final TextArea status,
                                     final @Nullable String message, final boolean warning) {
         status.setText("");
-        status.getStyleClass().setAll("settings-save-status");
+        SelectableText.dressAs(status, "settings-save-status");
         if (message != null) {
             SettingsRows.report(container, warning ? "settings-banner-caution" : "settings-banner-violation",
                     message, false);
@@ -259,11 +260,11 @@ final class SettingsPane {
      * back the values on disk over the top of it.
      *
      * @param outcome {@link SettingsPresenter.MoveOutcome} what the move reported
-     * @param status {@link Label} the line beside Save
+     * @param status {@link TextArea} the line beside Save
      * @param showBanner {@link Consumer} of {@link String} redraws the page and says what happened
      */
     private static void reportTheMove(final VBox container, final SettingsPresenter.MoveOutcome outcome,
-                                      final Label status,
+                                      final TextArea status,
                                       final Consumer<String> showBanner) {
         switch (outcome) {
             case final SettingsPresenter.MoveOutcome.Moved moved -> showBanner.accept(moved.message());
@@ -276,24 +277,24 @@ final class SettingsPane {
     /**
      * Says what the screen is busy with, in the line beside Save.
      *
-     * @param status {@link Label} the line beside Save
+     * @param status {@link TextArea} the line beside Save
      * @param said {@link String} what is happening, or nothing at all
      */
-    private static void working(final Label status, final String said) {
+    private static void working(final TextArea status, final String said) {
         status.setText(said);
-        status.getStyleClass().setAll("settings-save-status");
+        SelectableText.dressAs(status, "settings-save-status");
     }
 
     /**
      * Takes a refusal back off the screen: its summary, and every mark it left on a field.
      *
-     * @param status {@link Label} the line under Save
+     * @param status {@link TextArea} the line under Save
      * @param marks the field marks a refusal can set
      */
-    private static void clearRefusal(final Label status, final Label... marks) {
+    private static void clearRefusal(final TextArea status, final TextArea... marks) {
         status.setText("");
-        status.getStyleClass().setAll("settings-save-status");
-        for (final Label mark : marks) {
+        SelectableText.dressAs(status, "settings-save-status");
+        for (final TextArea mark : marks) {
             SettingsRows.say(mark, null);
         }
     }

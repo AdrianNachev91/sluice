@@ -6,7 +6,7 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.Region;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -400,14 +400,9 @@ final class Dialogs {
         // a fact rather than an outcome. The bound goes on the PREFERRED width, because that is
         // what the window sizes itself to. A wrapping label still prefers its full single-line
         // width. A maximum only caps the node after the window has already grown around it.
-        final var body = new Label(alert.getContentText());
-        body.setWrapText(true);
+        final TextArea body = SelectableText.prose(alert.getContentText());
         body.setPrefWidth(BODY_WIDTH);
         body.setMaxWidth(BODY_WIDTH);
-        // The height half of the same fight: a wrapping label shorted on rows ellipsizes exactly
-        // like an unwrapped one. Pinning the minimum to the preferred height makes the dialog grow
-        // tall enough for every row the fold produces.
-        body.setMinHeight(Region.USE_PREF_SIZE);
         alert.getDialogPane().setContent(body);
         alert.setOnShowing(_ -> {
             if (alert.getDialogPane().getScene().getWindow() instanceof final Stage stage) {

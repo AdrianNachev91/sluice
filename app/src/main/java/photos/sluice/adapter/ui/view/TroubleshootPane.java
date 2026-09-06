@@ -4,9 +4,9 @@ import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -49,7 +49,7 @@ final class TroubleshootPane {
      * @return {@link Node} the screen
      */
     static Node pane(final TroubleshootPresenter presenter) {
-        final var heading = new Label();
+        final TextField heading = SelectableText.line();
         heading.setId("troubleshoot-heading");
         heading.getStyleClass().add("pane-heading");
 
@@ -58,9 +58,9 @@ final class TroubleshootPane {
         final var header = new VBox(back, heading);
         header.getStyleClass().add("pane-header");
 
-        final Label checking = SettingsRows.emptyHelpLine("troubleshoot-checking");
-        final Label summary = SettingsRows.emptyHelpLine("troubleshoot-summary");
-        final Label nothingLeft = SettingsRows.emptyHelpLine("troubleshoot-nothing-left");
+        final TextArea checking = SettingsRows.emptyHelpLine("troubleshoot-checking");
+        final TextArea summary = SettingsRows.emptyHelpLine("troubleshoot-summary");
+        final TextArea nothingLeft = SettingsRows.emptyHelpLine("troubleshoot-nothing-left");
 
         final var problems = new VBox();
         problems.setId("troubleshoot-problems");
@@ -125,12 +125,12 @@ final class TroubleshootPane {
      * Every control the screen fills in.
      *
      * @param back {@link Button} the way out
-     * @param heading {@link Label} the screen's own name
+     * @param heading {@link TextField} the screen's own name
      * @param page {@link VBox} the screen itself, which a report is put at the top of
-     * @param checking {@link Label} what to say while the pass runs
-     * @param summary {@link Label} what the pass found
+     * @param checking {@link TextArea} what to say while the pass runs
+     * @param summary {@link TextArea} what the pass found
      * @param problems {@link VBox} one row per problem
-     * @param nothingLeft {@link Label} what to say in place of the rows
+     * @param nothingLeft {@link TextArea} what to say in place of the rows
      * @param detail {@link VBox} the technical report and its controls
      * @param detailToggle {@link Button} folds the report open and shut
      * @param detailCopy {@link Button} puts the report on the clipboard
@@ -143,8 +143,9 @@ final class TroubleshootPane {
      *     from, empty before the first draw. Held so a redraw leaves the banner it already put up
      *     alone rather than restarting its four seconds
      */
-    private record Controls(Button back, Label heading, VBox page, Label checking, Label summary,
-                            VBox problems, Label nothingLeft, VBox detail, Button detailToggle,
+    private record Controls(Button back, TextField heading, VBox page, TextArea checking,
+                            TextArea summary,
+                            VBox problems, TextArea nothingLeft, VBox detail, Button detailToggle,
                             Button detailCopy, TextArea trace, HBox actions, SectionFold fold,
                             List<VBox> unfolded, List<Integer> reported) {
 
@@ -274,12 +275,11 @@ final class TroubleshootPane {
          * The line above one kind's rows, counting them.
          *
          * @param said {@link String} what it says
-         * @return {@link Label} the heading
+         * @return {@link TextArea} the heading
          */
-        private static Label heading(final String said) {
-            final var heading = new Label(said);
+        private static TextArea heading(final String said) {
+            final TextArea heading = SelectableText.prose(said);
             heading.getStyleClass().add("troubleshoot-stack-heading");
-            SettingsRows.wrapping(heading);
             return heading;
         }
 
@@ -394,8 +394,7 @@ final class TroubleshootPane {
             if (value == null) {
                 return;
             }
-            final var line = new Label(value);
-            SettingsRows.wrapping(line);
+            final TextArea line = SelectableText.prose(value);
             line.getStyleClass().add(styleClass);
             into.getChildren().add(line);
         }

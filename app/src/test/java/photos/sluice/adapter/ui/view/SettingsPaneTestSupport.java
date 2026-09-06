@@ -7,8 +7,9 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.DialogPane;
-import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -110,7 +111,7 @@ final class SettingsPaneTestSupport {
     // what it claims.
     static String reportText(final Parent pane) {
         final var banner = (HBox) pane.lookup("#settings-report-banner");
-        return banner == null ? "" : ((Label) banner.lookup(".label")).getText();
+        return banner == null ? "" : ((TextArea) banner.lookup(".settings-banner-text")).getText();
     }
 
     static boolean reportIsARefusal(final Parent pane) {
@@ -332,8 +333,8 @@ final class SettingsPaneTestSupport {
     // messages.
     static List<String> textsOfClass(final Parent pane, final String styleClass) {
         return pane.lookupAll("." + styleClass).stream()
-                .filter(Label.class::isInstance)
-                .map(node -> ((Label) node).getText())
+                .filter(TextInputControl.class::isInstance)
+                .map(node -> ((TextInputControl) node).getText())
                 .filter(text -> !text.isEmpty())
                 .toList();
     }

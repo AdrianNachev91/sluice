@@ -5,9 +5,10 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBoxBase;
-import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -37,20 +38,20 @@ final class PageHeader {
      *
      * @param header {@link VBox} the bar itself, to sit above the scrolling body
      * @param save {@link Button} the page's Save
-     * @param status {@link Label} where a refusal or a report lands
+     * @param status {@link TextArea} where a refusal or a report lands
      */
-    record Result(VBox header, Button save, Label status) {
+    record Result(VBox header, Button save, TextArea status) {
 
         /**
          * Takes the last operation's message off the bar.
          *
-         * <p>Called by a page as it redraws. The bar is built once and outlives every rebuild, so
-         * without this a line saying the key is being checked, or that a save was refused, stands
-         * over the page that has since replaced the one it was about.
+         * <p>Called by a page as it redraws. The bar is built once and outlives every rebuild.
+         * Without this, a line about the last page stands over the one that has replaced it. A
+         * key being checked, say, or a save that was refused.
          */
         void clearStatus() {
             this.status.setText("");
-            this.status.getStyleClass().setAll("settings-save-status");
+            SelectableText.dressAs(this.status, "settings-save-status");
         }
     }
 
@@ -69,7 +70,7 @@ final class PageHeader {
      * @return {@link Result} the bar and its controls
      */
     static Result build(final String heading, final String saveId, final @Nullable Node above) {
-        final var name = new Label(heading);
+        final TextField name = SelectableText.line(heading);
         name.getStyleClass().add("pane-heading");
 
         final var save = new Button("Save");
@@ -83,11 +84,10 @@ final class PageHeader {
         StackPane.setAlignment(save, Pos.CENTER_RIGHT);
         actions.getStyleClass().add("pane-header-actions");
 
-        final var status = new Label();
-        status.setWrapText(true);
+        final TextArea status = SelectableText.prose();
         status.getStyleClass().add("settings-save-status");
         // No text, no line. A bar that always reserved a row for a message would put a permanent
-        // gap between the heading and the page on every screen that has nothing to say.
+        // gap between the heading and the page. Every screen with nothing to say would carry it.
         SettingsRows.showWhileItSaysSomething(status);
 
         final var header = new VBox();
@@ -157,12 +157,12 @@ final class PageHeader {
      * button takes Enter from anywhere, including a folder path someone is halfway through typing,
      * so the page saves what they have not finished writing.
      *
-     * <p>Filtered on the way down rather than handled on the way up, because a button, a checkbox
-     * and a radio all consume Enter without doing anything with it. Listening on the way up would
-     * hear the key only from the controls that must not save, which is the opposite of the rule.
+     * <p>Filtered on the way down rather than handled on the way up. A button, a checkbox and a
+     * radio all consume Enter without doing anything with it. Listening on the way up would hear
+     * the key only from the controls that must not save, which is the opposite of the rule.
      *
-     * <p>A control that owes the reader the key still gets it: {@link #midInput} answers true there,
-     * and this returns without consuming, so the event carries on down to it untouched.
+     * <p>A control that owes the reader the key still gets it. {@link #midInput} answers true
+     * there, and this returns without consuming, so the event carries on down to it untouched.
      *
      * @param page {@link VBox} the whole page, header and scrolling body alike
      * @param save {@link Button} the button Enter stands in for
@@ -180,13 +180,13 @@ final class PageHeader {
     /**
      * Lets go of a field once the reader clicks somewhere that is not one.
      *
-     * <p>A click on a heading, a help line or any other piece of chrome lands on something that
-     * cannot hold focus, so the toolkit leaves it where it was. The field the reader has visibly
-     * left still owns the keyboard, and Enter still reads as the end of a line nobody is writing.
+     * <p>A click on a heading, a help line or any other piece of chrome takes focus. Text a reader
+     * can select has to be focusable to be selected. Without this the field they have visibly left
+     * would keep the keyboard, and Enter would still read as the end of a line nobody is writing.
      *
      * <p>Only a field is let go of, and only when the click landed outside it. A control that took
      * the click for itself, a radio button or a checkbox, is holding focus because the reader chose
-     * it, and taking that away would cost them the focus ring and the arrow keys between options.
+     * it. Taking that away would cost them the focus ring and the arrow keys between options.
      *
      * @param page {@link VBox} the whole page, header and scrolling body alike
      */
@@ -210,6 +210,9 @@ final class PageHeader {
      * @return boolean true for a text control, a dropdown or a spinner
      */
     private static boolean isAField(final @Nullable Node node) {
+        if (SelectableText.drawsAsText(node)) {
+            return false;
+        }
         return node instanceof TextInputControl || node instanceof ComboBoxBase<?>
                 || node instanceof Spinner<?>;
     }
@@ -235,7 +238,7 @@ final class PageHeader {
      *
      * <p>Four controls answer Enter for themselves. A text field and a text area take it as the end
      * of a line. A dropdown takes it as the choice being made. A spinner takes it as the number
-     * being finished, but only while one is being typed: the arrows produce a whole value at every
+     * being finished, but only while one is being typed. The arrows produce a whole value at every
      * step, so Enter after one has nothing left to end.
      *
      * <p>A spinner is the reason this cannot be a type check alone. It reports itself as holding
@@ -249,6 +252,9 @@ final class PageHeader {
             return false;
         }
         final Node owner = page.getScene().getFocusOwner();
+        if (SelectableText.drawsAsText(owner)) {
+            return false;
+        }
         final Spinner<?> spinner = spinnerAround(owner);
         if (spinner != null) {
             return SettingsRows.beingTypedInto(spinner);

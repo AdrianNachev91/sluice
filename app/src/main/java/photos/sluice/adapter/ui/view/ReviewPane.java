@@ -4,8 +4,9 @@ import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -44,7 +45,7 @@ final class ReviewPane {
      * @return {@link Node} the screen
      */
     static Node pane(final ReviewPresenter presenter) {
-        final var heading = new Label();
+        final TextField heading = SelectableText.line();
         heading.setId("review-heading");
         heading.getStyleClass().add("pane-heading");
 
@@ -54,13 +55,13 @@ final class ReviewPane {
 
         // Each on its own ground rather than in the caution colour. Both are paragraphs, and a
         // whole paragraph set in that colour shouts where a box says the same thing once.
-        final Label unreadable = SettingsRows.emptyHelpLine("review-unreadable");
+        final TextArea unreadable = SettingsRows.emptyHelpLine("review-unreadable");
         final VBox unreadableBox = boxed(unreadable, "review-unreadable-box");
-        final Label message = SettingsRows.emptyHelpLine("review-message");
+        final TextArea message = SettingsRows.emptyHelpLine("review-message");
         final VBox messageBox = boxed(message, "review-message-box");
-        final Label nothingYet = SettingsRows.emptyHelpLine("review-nothing-yet");
+        final TextArea nothingYet = SettingsRows.emptyHelpLine("review-nothing-yet");
 
-        final Label explained = SettingsRows.emptyHelpLine("review-explained");
+        final TextArea explained = SettingsRows.emptyHelpLine("review-explained");
         // The badge stands on the callout's own edge, so the whole thing has to go together. Bound
         // on the outside: hiding only the box inside would leave the badge floating on the page.
         final Node explainer = SettingsRows.badgedCallout(new VBox(explained));
@@ -111,11 +112,11 @@ final class ReviewPane {
     /**
      * One help line inside the box that gives it its own ground.
      *
-     * @param line {@link Label} the line, which shows itself only while it says something
+     * @param line {@link TextArea} the line, which shows itself only while it says something
      * @param id {@link String} the box's own id
      * @return {@link VBox} the box, which collapses with the line
      */
-    private static VBox boxed(final Label line, final String id) {
+    private static VBox boxed(final TextArea line, final String id) {
         final var box = new VBox(line);
         box.setId(id);
         box.getStyleClass().add("warning-box");
@@ -127,15 +128,16 @@ final class ReviewPane {
     /**
      * Every control the screen fills in.
      *
-     * @param heading {@link Label} the screen's own name
-     * @param explained {@link Label} what the screen is and what to do with it
-     * @param unreadable {@link Label} what to say where a folder could not be read
-     * @param nothingYet {@link Label} what to say where nothing at all is waiting
-     * @param message {@link Label} what the screen has to report
+     * @param heading {@link TextField} the screen's own name
+     * @param explained {@link TextArea} what the screen is and what to do with it
+     * @param unreadable {@link TextArea} what to say where a folder could not be read
+     * @param nothingYet {@link TextArea} what to say where nothing at all is waiting
+     * @param message {@link TextArea} what the screen has to report
      * @param groups {@link VBox} one node per section
      */
-    private record Controls(Label heading, Label explained, Label unreadable, Label nothingYet,
-                            Label message, VBox groups, ScrollPane scroll) {
+    private record Controls(TextField heading, TextArea explained, TextArea unreadable,
+                            TextArea nothingYet,
+                            TextArea message, VBox groups, ScrollPane scroll) {
 
         /**
          * Puts everything the presenter says onto the controls.
@@ -167,10 +169,9 @@ final class ReviewPane {
          */
         private static Node section(final Group group, final ReviewPresenter presenter,
                                     final Runnable redraw, final ScrollPane scroll) {
-            final var heading = new Label(group.heading());
+            final TextField heading = SelectableText.line(group.heading());
             heading.getStyleClass().add("review-group-heading");
-            final var explained = new Label(group.explained());
-            SettingsRows.wrapping(explained);
+            final TextArea explained = SelectableText.prose(group.explained());
             explained.getStyleClass().add("review-group-explained");
 
             final var cards = new VBox();
@@ -196,11 +197,11 @@ final class ReviewPane {
          */
         private static Node card(final FolderCard folder, final ReviewPresenter presenter,
                                  final Runnable redraw, final ScrollPane scroll) {
-            final var name = new Label(folder.name());
+            final TextField name = SelectableText.line(folder.name());
             name.getStyleClass().add("review-card-name");
-            final var held = new Label(folder.held());
+            final TextField held = SelectableText.line(folder.held());
             held.getStyleClass().add("review-card-held");
-            final var age = new Label(folder.age());
+            final TextField age = SelectableText.line(folder.age());
             age.getStyleClass().add("review-card-age");
 
             final var lines = new VBox(name, held, age);
@@ -221,7 +222,7 @@ final class ReviewPane {
             written.getStyleClass().add("review-notes-lines");
             fillNotes(written, notes);
             card.getChildren().addAll(
-                    foldRow(folder.path(), notes, presenter, redraw, card, written, scroll, buttons),
+                    foldRow(folder.path(), notes, presenter, card, written, scroll, buttons),
                     written);
             return card;
         }
@@ -232,7 +233,6 @@ final class ReviewPane {
          * @param folder {@link Path} which folder a press acts on
          * @param notes {@link Notes} what the fold says and holds
          * @param presenter {@link ReviewPresenter} reads the notes and remembers which fold is open
-         * @param redraw {@link Runnable} draws the screen again once the presenter has been told
          * @param card {@link Node} the whole card, whose foot has to end on screen once it opens
          * @param written {@link VBox} the box the note's lines are drawn into
          * @param scroll {@link ScrollPane} the pane the page sits in, which the fold takes with it
@@ -240,9 +240,9 @@ final class ReviewPane {
          * @return {@link Node} the row
          */
         private static Node foldRow(final Path folder, final Notes notes,
-                                    final ReviewPresenter presenter, final Runnable redraw,
-                                    final Node card, final VBox written,
-                                    final @Nullable ScrollPane scroll, final Node buttons) {
+                                    final ReviewPresenter presenter, final Node card,
+                                    final VBox written, final @Nullable ScrollPane scroll,
+                                    final Node buttons) {
             final var toggle = new Button(notes.label());
             toggle.setId(notes.id());
             toggle.getStyleClass().add("review-notes-toggle");
@@ -310,8 +310,7 @@ final class ReviewPane {
          * @return {@link Node} it, drawn
          */
         private static Node noteLine(final String line) {
-            final var label = new Label(line);
-            SettingsRows.wrapping(label);
+            final TextArea label = SelectableText.prose(line);
             label.getStyleClass().add("review-note-line");
             return label;
         }

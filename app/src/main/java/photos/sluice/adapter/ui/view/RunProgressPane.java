@@ -3,8 +3,9 @@ package photos.sluice.adapter.ui.view;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -41,13 +42,12 @@ final class RunProgressPane {
      * @return {@link Mounted} the area and the way to fill it in
      */
     static Mounted mount(final RunLauncherPresenter presenter, final Runnable redraw) {
-        final var heading = new Label();
+        final TextField heading = SelectableText.line();
         heading.setId("run-progress-heading");
         heading.getStyleClass().add("pane-heading");
 
-        final var scope = new Label();
+        final TextArea scope = SelectableText.prose();
         scope.setId("run-progress-scope");
-        SettingsRows.wrapping(scope);
         scope.getStyleClass().add("run-progress-scope");
 
         final var bars = new VBox();
@@ -86,15 +86,15 @@ final class RunProgressPane {
      * Puts everything the presenter says onto the area.
      *
      * @param view {@link RunProgressView} what the area shows now
-     * @param heading {@link Label} what is running
-     * @param scope {@link Label} what this run covers
+     * @param heading {@link TextField} what is running
+     * @param scope {@link TextArea} what this run covers
      * @param bars {@link VBox} the phase bars
-     * @param waiting {@link Label} what to say before the first phase arrives
-     * @param cancelling {@link Label} what to say once a stop has been asked for
+     * @param waiting {@link TextArea} what to say before the first phase arrives
+     * @param cancelling {@link TextArea} what to say once a stop has been asked for
      * @param cancel {@link Button} the button that asks
      */
-    private static void fill(final RunProgressView view, final Label heading, final Label scope,
-                             final VBox bars, final Label waiting, final Label cancelling,
+    private static void fill(final RunProgressView view, final TextField heading, final TextArea scope,
+                             final VBox bars, final TextArea waiting, final TextArea cancelling,
                              final Button cancel) {
         heading.setText(view.heading());
         scope.setText(view.scope());
@@ -151,9 +151,9 @@ final class RunProgressPane {
      * @return {@link Node} the row
      */
     private static Node barRow(final PhaseBar phase) {
-        final var label = new Label(phase.label());
+        final TextField label = SelectableText.line(phase.label());
         label.getStyleClass().add("run-phase-label");
-        final var counts = new Label(SettingsRows.orNothing(phase.counts()));
+        final TextField counts = SelectableText.line(SettingsRows.orNothing(phase.counts()));
         counts.getStyleClass().add("run-phase-counts");
         final var spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);

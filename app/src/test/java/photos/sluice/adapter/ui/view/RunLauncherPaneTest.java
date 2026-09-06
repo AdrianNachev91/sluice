@@ -6,7 +6,9 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
@@ -500,7 +502,7 @@ class RunLauncherPaneTest {
 
         assertThat(((Button) pane.lookup("#run-import")).getText()).isEqualTo("Import a folder...");
         assertThat(pane.lookup("#run-import").isDisabled()).isFalse();
-        assertThat(((Label) pane.lookup("#run-import-hint")).getText())
+        assertThat(((TextArea) pane.lookup("#run-import-hint")).getText())
                 .isEqualTo("Or drop folders and files anywhere on this screen.");
     }
 
@@ -569,7 +571,7 @@ class RunLauncherPaneTest {
     }
 
     private static String text(final Parent pane, final String id) {
-        return ((Label) pane.lookup(id)).getText();
+        return ((TextInputControl) pane.lookup(id)).getText();
     }
 
     // The mark is a label of its own beside the sentence, which is what lets it wear its own
@@ -577,7 +579,7 @@ class RunLauncherPaneTest {
     @SuppressWarnings("SameParameterValue")
     private static String markOpening(final Parent pane, final String id) {
         final Parent row = pane.lookup(id).getParent();
-        return ((Label) row.getChildrenUnmodifiable().getFirst()).getText();
+        return ((TextField) row.getChildrenUnmodifiable().getFirst()).getText();
     }
 
     private static Node chooseAModeTheRowsScope(final Parent pane) {
@@ -665,7 +667,7 @@ class RunLauncherPaneTest {
     }
 
     private static String headlineOf(final Parent pane) {
-        return ((Label) pane.lookup("#run-inbox-headline")).getText();
+        return ((TextField) pane.lookup("#run-inbox-headline")).getText();
     }
 
     private static RunLauncherPresenter presenterOverAnUnfinishedSiftOf2019() {

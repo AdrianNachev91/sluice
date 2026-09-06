@@ -3,7 +3,7 @@ package photos.sluice.adapter.ui.view;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import photos.sluice.adapter.ui.PhotoCategoriesPresenter;
@@ -86,7 +86,7 @@ final class PhotoCategoriesPane {
         final PhotoCategoriesView view = presenter.view();
         header.clearStatus();
         container.getChildren().clear();
-        final Label summary = header.status();
+        final TextArea summary = header.status();
         summary.setId("photo-categories-summary");
 
         final var intro = SettingsRows.helpLine(view.disposition());
@@ -179,13 +179,13 @@ final class PhotoCategoriesPane {
      * @param container {@link VBox} the pane's own body, redrawn once a save takes
      * @param onBack {@link Runnable} returns to the screen this was opened from
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @param summary {@link Label} the bar's own line, where a refusal lands
+     * @param summary {@link TextArea} the bar's own line, where a refusal lands
      * @param onScreen an {@link AtomicReference} to the cards now drawn, replaced by a save that took
      */
     private static void onSave(final PhotoCategoriesPresenter presenter, final VBox container,
                                final PageHeader.Result header,
                                final Runnable onBack, final List<CategoryCard.Result> built,
-                               final Label summary,
+                               final TextArea summary,
                                final AtomicReference<List<CategoryCard.Result>> onScreen) {
         final List<CategoryEdit> edits = editsOf(built);
         clearRefusal(built, summary);
@@ -218,13 +218,13 @@ final class PhotoCategoriesPane {
      *
      * @param container {@link VBox} the page, which carries the banner
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @param summary {@link Label} the page-level message
+     * @param summary {@link TextArea} the page-level message
      * @param refused {@link SaveOutcome.Refused} what came back
      */
     private static void showRefusal(final VBox container, final List<CategoryCard.Result> built,
-                                    final Label summary, final SaveOutcome.Refused refused) {
+                                    final TextArea summary, final SaveOutcome.Refused refused) {
         summary.setText("");
-        summary.getStyleClass().setAll("settings-save-status");
+        SelectableText.dressAs(summary, "settings-save-status");
         SettingsRows.report(container, "settings-banner-violation", refused.summary(), false);
         CategoryCard.Result firstAtFault = null;
         for (int i = 0; i < built.size() && i < refused.cards().size(); i++) {
@@ -247,13 +247,13 @@ final class PhotoCategoriesPane {
      * keep the mark it earned two saves ago.
      *
      * @param built a {@link List} of {@link CategoryCard.Result} the controls behind each card
-     * @param summary {@link Label} the page-level message
+     * @param summary {@link TextArea} the page-level message
      */
-    private static void clearRefusal(final List<CategoryCard.Result> built, final Label summary) {
+    private static void clearRefusal(final List<CategoryCard.Result> built, final TextArea summary) {
         // The class goes with the text. The bar is built once and outlives every rebuild, so a
         // refusal's red would otherwise stay on it under whatever the next press has to say.
         summary.setText("");
-        summary.getStyleClass().setAll("settings-save-status");
+        SelectableText.dressAs(summary, "settings-save-status");
         for (final CategoryCard.Result card : built) {
             SettingsRows.say(card.nameViolation(), null);
             SettingsRows.say(card.descriptionViolation(), null);

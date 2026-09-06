@@ -6,7 +6,6 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
-import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.Region;
@@ -369,18 +368,18 @@ class PhotoCategoriesPaneTest {
     private static String violationUnder(final Node card, final String fieldId) {
         final Parent row = card.lookup(fieldId).getParent();
         return row.getChildrenUnmodifiable().stream()
-                .filter(Label.class::isInstance).map(Label.class::cast)
+                .filter(TextArea.class::isInstance).map(TextArea.class::cast)
                 .filter(label -> label.getStyleClass().contains("settings-violation"))
-                .map(Label::getText).findFirst().orElseGet(() -> siblingViolation(card));
+                .map(TextArea::getText).findFirst().orElseGet(() -> siblingViolation(card));
     }
 
     // A name field's own violation sits beside its row rather than inside it, since the row groups
     // the label, the rule and the field. Falling through to the card's own is what finds it.
     private static String siblingViolation(final Node card) {
         return ((Parent) card).getChildrenUnmodifiable().stream()
-                .filter(Label.class::isInstance).map(Label.class::cast)
+                .filter(TextArea.class::isInstance).map(TextArea.class::cast)
                 .filter(label -> label.getStyleClass().contains("settings-violation"))
-                .map(Label::getText).findFirst().orElse("");
+                .map(TextArea::getText).findFirst().orElse("");
     }
 
     private static List<Node> cards(final Parent pane) {

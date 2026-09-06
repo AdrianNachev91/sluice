@@ -13,9 +13,10 @@ import javafx.scene.Parent;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
-import javafx.scene.control.Label;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.control.TextInputControl;
@@ -95,8 +96,7 @@ final class SettingsRows {
     static VBox card(final String eyebrow, final @Nullable String description, final Node... rows) {
         final var card = new VBox(sectionEyebrow(eyebrow));
         if (description != null) {
-            final var says = new Label(description);
-            says.setWrapText(true);
+            final TextArea says = SelectableText.prose(description);
             says.getStyleClass().add("settings-card-intro");
             card.getChildren().add(says);
         }
@@ -170,12 +170,11 @@ final class SettingsRows {
      * would show at a call site.
      *
      * @param id {@link String} the control's id
-     * @return {@link Label} the line
+     * @return {@link TextArea} the line
      */
-    static Label emptyHelpLine(final String id) {
-        final var line = new Label();
+    static TextArea emptyHelpLine(final String id) {
+        final TextArea line = SelectableText.prose();
         line.setId(id);
-        wrapping(line);
         line.getStyleClass().add("settings-help");
         showWhileItSaysSomething(line);
         return line;
@@ -187,11 +186,11 @@ final class SettingsRows {
      * <p>Only a refusal wears the caution colour, and the class comes off again on every fill. A
      * report that worked would otherwise be dressed as whatever the last refusal was.
      *
-     * @param line {@link Label} the screen's own report line
+     * @param line {@link TextArea} the screen's own report line
      * @param said {@link Message} what to report, or null for nothing
      * @param caution {@link String} the style class a refusal wears on this screen
      */
-    static void report(final Label line, final @Nullable Message said, final String caution) {
+    static void report(final TextArea line, final @Nullable Message said, final String caution) {
         line.setText(said == null ? "" : said.text());
         line.getStyleClass().remove(caution);
         if (said != null && said.refused()) {
@@ -264,7 +263,7 @@ final class SettingsRows {
      * @return {@link HBox} the line, taking room only while the sentence says something
      */
     static HBox markedHelpLine(final Region line, final String glyph, final String... markClasses) {
-        final var mark = new Label(glyph);
+        final TextField mark = SelectableText.line(glyph);
         mark.getStyleClass().add("settings-help");
         mark.getStyleClass().addAll(markClasses);
         final var row = new HBox(mark, line);
@@ -330,26 +329,21 @@ final class SettingsRows {
     }
 
     /**
-     * Makes a label wrap, and hold the height its wrapping needs.
+     * Has a label take up room only while it carries text.
      *
-     * <p>Wrapping alone is not enough. A wrapped label's minimum height is one line. A column short
-     * of room shrinks it to that, and the sentence comes out on one line with an ellipsis rather
-     * than wrapped. Pinning the minimum to the preferred height moves the shrinking onto whichever
-     * control is built to give room up.
-     *
-     * @param line {@link Label} the label to wrap
+     * @param line {@link TextInputControl} the line to bind
      */
-    static void wrapping(final Label line) {
-        line.setWrapText(true);
-        line.setMinHeight(Region.USE_PREF_SIZE);
+    static void showWhileItSaysSomething(final TextInputControl line) {
+        line.managedProperty().bind(line.visibleProperty());
+        line.visibleProperty().bind(line.textProperty().isNotEmpty());
     }
 
     /**
      * Has a label take up room only while it carries text.
      *
-     * @param line {@link Label} the label to bind
+     * @param line {@link Labeled} the line to bind
      */
-    static void showWhileItSaysSomething(final Label line) {
+    static void showWhileItSaysSomething(final Labeled line) {
         line.managedProperty().bind(line.visibleProperty());
         line.visibleProperty().bind(line.textProperty().isNotEmpty());
     }
@@ -561,12 +555,12 @@ final class SettingsRows {
      * authenticates and means nothing beside a provider that takes none.
      *
      * @param text {@link String} what the block is called
-     * @return {@link Label} the heading
+     * @return {@link TextField} the heading
      */
-    static Label subsectionHeading(final String text) {
-        final var label = new Label(text);
-        label.getStyleClass().add("settings-subsection-heading");
-        return label;
+    static TextField subsectionHeading(final String text) {
+        final TextField heading = SelectableText.line(text);
+        heading.getStyleClass().add("settings-subsection-heading");
+        return heading;
     }
 
     /**
@@ -574,10 +568,10 @@ final class SettingsRows {
      * unstyled draws its text in a fixed grey that only suits the light look.
      *
      * @param text {@link String} what the label says
-     * @return {@link Label} the styled label
+     * @return {@link TextField} the styled label
      */
-    static Label fieldLabel(final String text) {
-        final var label = new Label(text);
+    static TextField fieldLabel(final String text) {
+        final TextField label = SelectableText.line(text);
         label.getStyleClass().add("settings-field-label");
         return label;
     }
@@ -587,9 +581,10 @@ final class SettingsRows {
      *
      * @param row {@link VBox} the row itself, label and field and violation together
      * @param field {@link TextField} the path as typed
-     * @param violation {@link Label} what a refused save says about this root, blank when it passed
+     * @param violation {@link TextArea} what a refused save says about this root, blank when it
+     *                  passed
      */
-    record FolderRow(VBox row, TextField field, Label violation) {
+    record FolderRow(VBox row, TextField field, TextArea violation) {
     }
 
     static FolderRow folderRow(final String label, final String explanation, final String id,
@@ -673,12 +668,11 @@ final class SettingsRows {
      * <p>Placed by whichever card draws the rows, and never further away than the rows themselves.
      * A mark whose legend is on another screen explains nothing.
      *
-     * @return {@link Label} the legend
+     * @return {@link TextArea} the legend
      */
-    static Label requiredLegend() {
-        final var legend = new Label("Sluice cannot start any work on your photos until all three are "
-                + "set. You can fill them in one at a time and save as you go.");
-        legend.setWrapText(true);
+    static TextArea requiredLegend() {
+        final TextArea legend = SelectableText.prose("Sluice cannot start any work on your photos "
+                + "until all three are set. You can fill them in one at a time and save as you go.");
         legend.setId("folder-roots-required-legend");
         legend.getStyleClass().add("settings-required-legend");
         return legend;
@@ -687,10 +681,10 @@ final class SettingsRows {
     /**
      * Puts a message under a field, or takes the one that is there away.
      *
-     * @param violation {@link Label} the row's own violation label
+     * @param violation {@link TextArea} the row's own violation label
      * @param message what is wrong with this field, or null when nothing is
      */
-    static void say(final Label violation, final @Nullable String message) {
+    static void say(final TextArea violation, final @Nullable String message) {
         violation.setText(message == null ? "" : message);
     }
 
@@ -705,9 +699,9 @@ final class SettingsRows {
      * marked too.
      *
      * @param field {@link Node} the control the message is about
-     * @param violation {@link Label} the message under it
+     * @param violation {@link TextArea} the message under it
      */
-    static void markWhileSomethingIsWrong(final Node field, final Label violation) {
+    static void markWhileSomethingIsWrong(final Node field, final TextArea violation) {
         violation.textProperty().addListener((_, _, message) ->
                 field.pseudoClassStateChanged(REFUSED, !message.isEmpty()));
     }
@@ -758,11 +752,10 @@ final class SettingsRows {
      * A field's own violation message, built empty and taking no space until it has something to
      * say. A label that appears and disappears moves everything under it.
      *
-     * @return {@link Label} the label a refusal fills
+     * @return {@link TextArea} the line a refusal fills
      */
-    static Label violationLabel() {
-        final var violation = new Label();
-        violation.setWrapText(true);
+    static TextArea violationLabel() {
+        final TextArea violation = SelectableText.prose();
         violation.getStyleClass().add("settings-violation");
         showWhileItSaysSomething(violation);
         return violation;
@@ -785,13 +778,12 @@ final class SettingsRows {
      * @return {@link HBox} the banner
      */
     static HBox banner(final VBox container, final String id, final String text, final boolean fades) {
-        final var said = new Label(text);
-        said.setWrapText(true);
+        final TextArea said = SelectableText.prose(text);
+        said.getStyleClass().add("settings-banner-text");
         // Hgrow offers a node the spare room; a maximum width is what lets it take any. A label
         // stops at the width of its own text, leaving the dismiss button against the last word
         // rather than at the end of the banner.
         said.setMaxWidth(Double.MAX_VALUE);
-        said.setAlignment(Pos.CENTER);
         HBox.setHgrow(said, Priority.ALWAYS);
 
         final var dismiss = new Button("×");
@@ -801,6 +793,10 @@ final class SettingsRows {
         banner.setId(id);
         banner.setMaxWidth(Double.MAX_VALUE);
         banner.getStyleClass().add("settings-banner");
+        // A row stretches its children to the tallest of them, which here is the dismiss button.
+        // Wrapping text lays its words against its own top edge. Stretched past what they need,
+        // the sentence sits above the middle of the ground behind it.
+        banner.setFillHeight(false);
 
         final Runnable remove = () -> container.getChildren().remove(banner);
         dismiss.setOnAction(_ -> remove.run());
@@ -827,8 +823,7 @@ final class SettingsRows {
      * @return {@link HBox} the glyph and the message, the glyph beside the first line
      */
     static HBox cautionRow(final String text) {
-        final var label = new Label(text);
-        label.setWrapText(true);
+        final TextArea label = SelectableText.prose(text);
         label.getStyleClass().add("settings-caution");
         HBox.setHgrow(label, Priority.ALWAYS);
         final var row = new HBox(cautionGlyph(), label);
@@ -879,9 +874,8 @@ final class SettingsRows {
         return framed;
     }
 
-    static Label overrideLabel(final String text) {
-        final var label = new Label(text);
-        label.setWrapText(true);
+    static TextArea overrideLabel(final String text) {
+        final TextArea label = SelectableText.prose(text);
         label.getStyleClass().add("settings-override-note");
         return label;
     }
@@ -890,11 +884,10 @@ final class SettingsRows {
      * One line of quiet explanation under a control.
      *
      * @param text {@link String} what it says
-     * @return {@link Label} the line, wrapping at the row's width
+     * @return {@link TextArea} the line, wrapping at the row's width
      */
-    static Label helpLine(final String text) {
-        final var line = new Label(text);
-        line.setWrapText(true);
+    static TextArea helpLine(final String text) {
+        final TextArea line = SelectableText.prose(text);
         line.getStyleClass().add("settings-help");
         return line;
     }
@@ -979,10 +972,10 @@ final class SettingsRows {
         return "Anything from " + range.least() + " to " + range.most() + ".";
     }
 
-    private static Label sectionEyebrow(final String text) {
-        final var label = new Label(text);
-        label.getStyleClass().addAll("eyebrow", "settings-card-title");
-        return label;
+    private static TextField sectionEyebrow(final String text) {
+        final TextField eyebrow = SelectableText.line(text);
+        eyebrow.getStyleClass().addAll("eyebrow", "settings-card-title");
+        return eyebrow;
     }
 
     /**

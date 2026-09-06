@@ -1,6 +1,6 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.Node;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,7 +39,7 @@ class FolderRootsHelpTest {
 
         assertThat(panel.lookupAll(".folder-roots-help-rule"))
                 .isNotEmpty()
-                .allMatch(node -> ((Label) node).isWrapText());
+                .allMatch(node -> ((TextArea) node).isWrapText());
     }
 
     @Test
@@ -52,7 +52,7 @@ class FolderRootsHelpTest {
     private static List<String> rules() throws Exception {
         final Node panel = onFxThread(FolderRootsHelp::panel);
         return panel.lookupAll(".folder-roots-help-rule").stream()
-                .map(node -> ((Label) node).getText())
+                .map(node -> ((TextArea) node).getText())
                 .toList();
     }
 }

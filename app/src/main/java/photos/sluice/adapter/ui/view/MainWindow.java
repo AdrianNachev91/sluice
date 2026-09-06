@@ -6,6 +6,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
@@ -313,8 +315,7 @@ final class MainWindow {
             // Headed by the screen that was asked for, so a reader who pressed Runs is not left
             // working out which press this answers.
             final var panel = headingPane(screen);
-            final var message = new Label(ScreenFailure.wouldNotOpen());
-            message.setWrapText(true);
+            final TextArea message = SelectableText.prose(ScreenFailure.wouldNotOpen());
             panel.getChildren().addAll(message, CopyableTrace.fold("screen-failure",
                     ScreenFailure.showTheDetails(), ScreenFailure.copy(), ScreenFailure.copied(),
                     ScreenFailure.trace(e)));
@@ -409,7 +410,7 @@ final class MainWindow {
      * @return {@link VBox} the placeholder pane
      */
     private static VBox headingPane(final String heading) {
-        final var label = new Label(heading);
+        final TextField label = SelectableText.line(heading);
         label.getStyleClass().add("pane-heading");
 
         final var pane = new VBox(label);

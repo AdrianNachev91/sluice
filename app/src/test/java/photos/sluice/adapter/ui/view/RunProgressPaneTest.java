@@ -4,7 +4,8 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -191,7 +192,7 @@ class RunProgressPaneTest {
     private static List<String> shownPhaseLabels(final Parent pane) {
         return pane.lookupAll(".run-phase").stream()
                 .filter(Node::isVisible)
-                .map(row -> ((Label) row.lookup(".run-phase-label")).getText())
+                .map(row -> ((TextField) row.lookup(".run-phase-label")).getText())
                 .toList();
     }
 
@@ -204,7 +205,7 @@ class RunProgressPaneTest {
     }
 
     private static String text(final Parent pane, final String selector) {
-        return ((Label) pane.lookup(selector)).getText();
+        return ((TextInputControl) pane.lookup(selector)).getText();
     }
 
     private static Parent shown(final RunProgressView view) {

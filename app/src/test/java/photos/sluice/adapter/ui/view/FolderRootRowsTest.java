@@ -1,7 +1,7 @@
 package photos.sluice.adapter.ui.view;
 
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -57,7 +57,7 @@ class FolderRootRowsTest {
                 FolderRootRows::libraryRoot, FolderRootRows::inbox)) {
             final VBox built = onFxThread(() -> row.apply(view()).row());
             assertThat(built.lookupAll(".settings-help")).hasSize(1);
-            assertThat(((Label) built.lookup(".settings-help")).getText()).isNotBlank();
+            assertThat(((TextArea) built.lookup(".settings-help")).getText()).isNotBlank();
         }
     }
 
@@ -133,7 +133,7 @@ class FolderRootRowsTest {
 
     private static String labelOf(final Function<SettingsView, SettingsRows.FolderRow> row) throws Exception {
         final VBox built = onFxThread(() -> row.apply(view()).row());
-        return ((Label) built.lookup(".settings-field-label")).getText();
+        return ((TextField) built.lookup(".settings-field-label")).getText();
     }
 
     private static SettingsView view() {

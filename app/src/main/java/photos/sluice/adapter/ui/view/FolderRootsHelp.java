@@ -2,7 +2,7 @@ package photos.sluice.adapter.ui.view;
 
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -68,8 +68,7 @@ final class FolderRootsHelp {
      * @return {@link HBox} the bullet and its line, wrapping at the panel's width
      */
     private static HBox rule(final String text) {
-        final var line = new Label(text);
-        line.setWrapText(true);
+        final TextArea line = SelectableText.prose(text);
         line.getStyleClass().addAll("folder-roots-help-rule", "settings-caution");
         HBox.setHgrow(line, Priority.ALWAYS);
 
@@ -99,9 +98,9 @@ final class FolderRootsHelp {
      * offset is only right for the size it was worked out from.
      *
      * @param dot {@link Circle} the bullet
-     * @param line {@link Label} the rule, whose font decides everything here
+     * @param line {@link TextArea} the rule, whose font decides everything here
      */
-    private static void sitOnTheLetter(final Circle dot, final Label line) {
+    private static void sitOnTheLetter(final Circle dot, final TextArea line) {
         line.fontProperty().addListener((_, _, _) -> place(dot, line));
         // The rule's baseline is only known once it has a skin and has been laid out. Asking a Text
         // node for the font's ascent instead lands a pixel high: a label puts its own leading above
@@ -120,9 +119,9 @@ final class FolderRootsHelp {
      * is what the eye settles on.
      *
      * @param dot {@link Circle} the bullet, laid out with its top against the row
-     * @param line {@link Label} the rule it belongs to
+     * @param line {@link TextArea} the rule it belongs to
      */
-    private static void place(final Circle dot, final Label line) {
+    private static void place(final Circle dot, final TextArea line) {
         final double baseline = line.getBaselineOffset();
         if (baseline <= 0) {
             return;
@@ -139,10 +138,10 @@ final class FolderRootsHelp {
      * line tall, and would place the bullet nowhere near it.
      *
      * @param letter {@link String} the letter to measure
-     * @param line {@link Label} the rule, for its font
+     * @param line {@link TextArea} the rule, for its font
      * @return double the ink height
      */
-    private static double inkHeight(final String letter, final Label line) {
+    private static double inkHeight(final String letter, final TextArea line) {
         final var ink = new Text(letter);
         ink.setFont(line.getFont());
         ink.setBoundsType(TextBoundsType.VISUAL);

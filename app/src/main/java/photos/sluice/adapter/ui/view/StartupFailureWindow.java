@@ -3,12 +3,10 @@ package photos.sluice.adapter.ui.view;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TitledPane;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import org.jspecify.annotations.Nullable;
@@ -60,10 +58,10 @@ final class StartupFailureWindow {
      * @return {@link VBox} the card
      */
     private static VBox card(final StartupFailurePresenter presenter, final StartupFailureActions actions) {
-        final var eyebrow = new Label("STARTUP");
+        final TextField eyebrow = SelectableText.line("STARTUP");
         eyebrow.getStyleClass().add("eyebrow");
 
-        final var headline = new Label(presenter.headline());
+        final TextField headline = SelectableText.line(presenter.headline());
         headline.getStyleClass().add("failure-headline");
 
         final var rule = new Separator();
@@ -120,8 +118,7 @@ final class StartupFailureWindow {
         final var detail = detailLabel(unparsable.detail());
         final var spot = spotLabel(unparsable.file(), unparsable.position());
 
-        final var problem = new Label(unparsable.problem());
-        problem.setWrapText(true);
+        final TextArea problem = SelectableText.prose(unparsable.problem());
         problem.getStyleClass().add("failure-snippet");
 
         final var setAside = new Button("Start fresh");
@@ -135,18 +132,16 @@ final class StartupFailureWindow {
         return new VBox(detailLabel(generic.detail()), traceRow(generic.trace()));
     }
 
-    private static Label detailLabel(final String text) {
-        final var detail = new Label(text);
+    private static TextArea detailLabel(final String text) {
+        final TextArea detail = SelectableText.prose(text);
         detail.getStyleClass().add("failure-detail");
-        detail.setWrapText(true);
         return detail;
     }
 
-    private static Label spotLabel(final String file, final @Nullable String position) {
+    private static TextArea spotLabel(final String file, final @Nullable String position) {
         final var text = position == null ? file : "%s (%s)".formatted(file, position);
-        final var spot = new Label(text);
+        final TextArea spot = SelectableText.prose(text);
         spot.getStyleClass().add("failure-spot");
-        spot.setWrapText(true);
         return spot;
     }
 
@@ -180,9 +175,7 @@ final class StartupFailureWindow {
     }
 
     private static void copyToClipboard(final String trace, final Button copy) {
-        final var content = new ClipboardContent();
-        content.putString(trace);
-        Clipboard.getSystemClipboard().setContent(content);
+        CopyableTrace.putOnTheClipboard(trace);
         copy.setText("Copied");
     }
 
@@ -194,7 +187,7 @@ final class StartupFailureWindow {
     private static HBox brand() {
         final var mark = BrandMark.styled();
 
-        final var name = new Label("Sluice");
+        final TextField name = SelectableText.line("Sluice");
         name.getStyleClass().add("brand-name");
 
         final var brand = new HBox(mark, name);

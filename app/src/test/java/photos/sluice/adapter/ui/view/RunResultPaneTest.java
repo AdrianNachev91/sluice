@@ -4,7 +4,8 @@ import javafx.css.PseudoClass;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterEach;
@@ -55,9 +56,9 @@ class RunResultPaneTest {
                 new Count("result-photos-sorted", "Photos sorted", "980"),
                 new Count("result-videos-sorted", "Videos sorted", "122")))));
 
-        assertThat(pane.lookupAll(".run-result-count-label")).extracting(node -> ((Label) node).getText())
+        assertThat(pane.lookupAll(".run-result-count-label")).extracting(node -> ((TextField) node).getText())
                 .containsExactly("Photos sorted", "Videos sorted");
-        assertThat(pane.lookupAll(".run-result-count-value")).extracting(node -> ((Label) node).getText())
+        assertThat(pane.lookupAll(".run-result-count-value")).extracting(node -> ((TextField) node).getText())
                 .containsExactly("980", "122");
     }
 
@@ -76,7 +77,7 @@ class RunResultPaneTest {
         assertThat(pane.lookup("#run-result-warning").isManaged()).isTrue();
         assertThat(text(pane, "#run-result-warning .settings-caution"))
                 .isEqualTo("The dates on these photos may be wrong.");
-        assertThat(text(pane, ".run-result-warning-detail"))
+        assertThat(text(pane, "#run-result-warning-detail"))
                 .isEqualTo("They came with date files alongside them.");
     }
 
@@ -91,7 +92,7 @@ class RunResultPaneTest {
     void anOfferToContinueDrawsItsQuestionInTheBodyAndItsButtonInTheActionRow() throws Exception {
         final Parent pane = onFxThread(() -> shown(offering()));
 
-        assertThat(text(pane, "#run-result-resume .label")).isEqualTo("Continue?");
+        assertThat(text(pane, "#run-result-resume .selectable-text")).isEqualTo("Continue?");
         assertThat(resume(pane).getText()).isEqualTo("Continue sifting");
         assertThat(resume(pane).isManaged()).isTrue();
     }
@@ -267,7 +268,7 @@ class RunResultPaneTest {
     }
 
     private static String text(final Parent pane, final String selector) {
-        return ((Label) pane.lookup(selector)).getText();
+        return ((TextInputControl) pane.lookup(selector)).getText();
     }
 
     private static Parent shown(final RunResultView view) {

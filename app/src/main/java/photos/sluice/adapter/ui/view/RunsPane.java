@@ -4,8 +4,9 @@ import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -46,7 +47,7 @@ final class RunsPane {
      * @return {@link Node} the screen
      */
     static Node pane(final RunsPresenter presenter, final Runnable recount) {
-        final var heading = new Label();
+        final TextField heading = SelectableText.line();
         heading.setId("runs-heading");
         heading.getStyleClass().add("pane-heading");
 
@@ -58,15 +59,13 @@ final class RunsPane {
         headerRow.setAlignment(Pos.CENTER_LEFT);
         headerRow.getStyleClass().add("runs-header");
 
-        // On its own ground rather than in the caution colour. This is a paragraph, and a whole
-        // paragraph set in that colour shouts where a box says the same thing once.
-        final Label unreadable = SettingsRows.emptyHelpLine("runs-unreadable");
+        final TextArea unreadable = SettingsRows.emptyHelpLine("runs-unreadable");
         final var unreadableBox = new VBox(unreadable);
         unreadableBox.getStyleClass().add("warning-box");
         unreadableBox.managedProperty().bind(unreadableBox.visibleProperty());
         unreadableBox.visibleProperty().bind(unreadable.visibleProperty());
-        final Label nothingYet = SettingsRows.emptyHelpLine("runs-nothing-yet");
-        final Label message = SettingsRows.emptyHelpLine("runs-message");
+        final TextArea nothingYet = SettingsRows.emptyHelpLine("runs-nothing-yet");
+        final TextArea message = SettingsRows.emptyHelpLine("runs-message");
 
         final var cards = new VBox();
         cards.setId("runs-cards");
@@ -161,19 +160,19 @@ final class RunsPane {
     /**
      * Every control the screen fills in.
      *
-     * @param heading {@link Label} the screen's own name
+     * @param heading {@link TextField} the screen's own name
      * @param clear {@link Button} clears the finished runs
-     * @param unreadable {@link Label} what to say where the folder could not be read
-     * @param nothingYet {@link Label} what to say where there are no runs at all
-     * @param message {@link Label} what the screen has to report
+     * @param unreadable {@link TextArea} what to say where the folder could not be read
+     * @param nothingYet {@link TextArea} what to say where there are no runs at all
+     * @param message {@link TextArea} what the screen has to report
      * @param cards {@link VBox} one card per unfinished run
      * @param completedToggle {@link Button} folds the finished runs open and shut
      * @param completedCards {@link VBox} one card per finished run
      * @param completed {@link VBox} the whole folded section
      * @param fold {@link SectionFold} opens and shuts that section
      */
-    private record Controls(Label heading, Button clear, Label unreadable, Label nothingYet,
-                            Label message, VBox cards, Button completedToggle,
+    private record Controls(TextField heading, Button clear, TextArea unreadable, TextArea nothingYet,
+                            TextArea message, VBox cards, Button completedToggle,
                             VBox completedCards, VBox completed, SectionFold fold) {
 
         /**
@@ -250,9 +249,9 @@ final class RunsPane {
          */
         private static Node card(final RunCard run, final RunsPresenter presenter,
                                  final Runnable redraw) {
-            final var scope = new Label(run.scope());
+            final TextField scope = SelectableText.line(run.scope());
             scope.getStyleClass().add("runs-card-scope");
-            final var headline = new Label(run.headline());
+            final TextField headline = SelectableText.line(run.headline());
             headline.getStyleClass().add("runs-card-headline");
 
             final var lines = new VBox(scope, headline);
@@ -295,12 +294,10 @@ final class RunsPane {
          */
         private static Node waitingBlock(final RunsView.Waiting waiting,
                                          final RunsPresenter presenter, final Runnable redraw) {
-            final var note = new Label(waiting.note());
-            SettingsRows.wrapping(note);
+            final TextArea note = SelectableText.prose(waiting.note());
             note.getStyleClass().add("runs-card-detail");
 
-            final var folder = new Label(waiting.folder().toString());
-            SettingsRows.wrapping(folder);
+            final TextArea folder = SelectableText.prose(waiting.folder().toString());
             folder.getStyleClass().add("runs-card-folder");
 
             final var block = new VBox(note, folder);
@@ -449,8 +446,7 @@ final class RunsPane {
             if (value == null) {
                 return;
             }
-            final var line = new Label(value);
-            SettingsRows.wrapping(line);
+            final TextArea line = SelectableText.prose(value);
             line.getStyleClass().add(styleClass);
             into.getChildren().add(line);
         }

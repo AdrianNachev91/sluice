@@ -5,6 +5,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -58,6 +59,30 @@ class PageHeaderTest {
         assertThat(page.saves[0]).isZero();
     }
 
+    // Text a reader can select has to hold focus to be selected, and it is a text input control
+    // like the fields are. Read as one, a click on a help line would leave Enter dead until the
+    // reader clicked back into something they could type in.
+    @Test
+    void enterStillSavesAfterAClickOnTextThatIsOnlyForReading() throws Exception {
+        final Page page = onFxThread(PageHeaderTest::aPage);
+        onFxThread(page.prose::requestFocus);
+
+        onFxThread(() -> press(page));
+
+        assertThat(page.saves[0]).isOne();
+    }
+
+    @Test
+    void clickingAwayOntoReadableTextStillReleasesTheField() throws Exception {
+        final Page page = onFxThread(PageHeaderTest::aPage);
+        onFxThread(page.field::requestFocus);
+
+        onFxThread(() -> clickOn(page.prose));
+        onFxThread(() -> press(page));
+
+        assertThat(page.saves[0]).isOne();
+    }
+
     @Test
     void enterSavesFromARadioTheReaderJustChose() throws Exception {
         final Page page = onFxThread(PageHeaderTest::aPage);
@@ -68,8 +93,8 @@ class PageHeaderTest {
         assertThat(page.saves[0]).isOne();
     }
 
-    // A spinner answers the focus owner as itself whether the caret is in its text or the reader is
-    // on its arrows, so these two cases are indistinguishable from state alone.
+    // A spinner answers the focus owner as itself, whether the caret is in its text or the reader
+    // is on its arrows. So the two cases are indistinguishable from state alone.
     @Test
     void enterDoesNothingOnceTheCaretIsInASpinner() throws Exception {
         final Page page = onFxThread(PageHeaderTest::aPage);
@@ -107,12 +132,6 @@ class PageHeaderTest {
         assertThat(page.saves[0]).isOne();
     }
 
-    // Fired at whatever holds focus, not at the page. A key pressed at the page would reach the
-    // page's own handler however the app routes it, so the assertion would hold with the rule
-    // wired to nothing.
-    // Fired at whatever holds focus, not at the page. A key pressed at the page would reach the
-    // page's own rule however the app routes it, so the assertion would hold with the rule wired to
-    // a control that never sees the key.
     private static void clickOn(final javafx.scene.Node target) {
         target.fireEvent(new MouseEvent(MouseEvent.MOUSE_PRESSED, 0, 0, 0, 0, MouseButton.PRIMARY, 1,
                 false, false, false, false, true, false, false, false, false, false, null));
@@ -122,13 +141,16 @@ class PageHeaderTest {
         return new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.UP, false, false, false, false);
     }
 
+    // Fired at whatever holds focus, not at the page. A key pressed at the page would reach the
+    // page's own rule however the app routes it. The assertion would then hold even with that rule
+    // wired to a control that never sees the key.
     private static void press(final Page page) {
         page.root.getScene().getFocusOwner().fireEvent(
                 new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.ENTER, false, false, false, false));
     }
 
     private record Page(VBox root, Button save, TextField field, CheckBox elsewhere,
-                        RadioButton radio, Spinner<Integer> spinner, int[] saves) {
+                        RadioButton radio, Spinner<Integer> spinner, TextArea prose, int[] saves) {
     }
 
     private static Page aPage() {
@@ -141,13 +163,14 @@ class PageHeaderTest {
         final var radio = new RadioButton("a radio the reader just chose");
         final Spinner<Integer> spinner =
                 SettingsRows.numberField(new SettingsView.NumberRange(1, 12, 1), 5);
-        final var body = new VBox(field, elsewhere, radio, spinner);
+        final TextArea prose = SelectableText.prose("a help line the reader can select");
+        final var body = new VBox(field, elsewhere, radio, spinner, prose);
         final VBox root = PageHeader.pinnedOver(header, body);
 
         final var stage = new Stage();
         stage.setScene(new Scene(root, 400, 300));
         stage.show();
-        return new Page(root, header.save(), field, elsewhere, radio, spinner, saves);
+        return new Page(root, header.save(), field, elsewhere, radio, spinner, prose, saves);
     }
 
     private static <T> T onFxThread(final Callable<T> work) throws Exception {

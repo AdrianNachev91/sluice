@@ -3,7 +3,8 @@ package photos.sluice.adapter.ui.view;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import org.jspecify.annotations.Nullable;
@@ -156,7 +157,7 @@ class ReviewPaneTest {
 
         onFxThread(() -> press(pane, "#review-notes-review-food"));
 
-        assertThat(pane.lookupAll(".review-note-line")).extracting(node -> ((Label) node).getText())
+        assertThat(pane.lookupAll(".review-note-line")).extracting(node -> ((TextArea) node).getText())
                 .containsExactly("a.jpg - a plate of food", "b.jpg - restaurant table");
     }
 
@@ -164,13 +165,13 @@ class ReviewPaneTest {
     void nothingWaitingIsSaidOnTheScreenRatherThanLeavingItBlank() throws Exception {
         final Parent pane = onFxThread(ReviewPaneTest::built);
 
-        assertThat(((Label) pane.lookup("#review-nothing-yet")).getText())
+        assertThat(((TextArea) pane.lookup("#review-nothing-yet")).getText())
                 .startsWith("Nothing is waiting for you.");
         assertThat(pane.lookupAll(".card")).isEmpty();
     }
 
     private static List<String> headings(final Parent pane, final String styleClass) {
-        return pane.lookupAll(styleClass).stream().map(node -> ((Label) node).getText()).toList();
+        return pane.lookupAll(styleClass).stream().map(node -> ((TextField) node).getText()).toList();
     }
 
     private static boolean press(final Parent pane, final String id) {
