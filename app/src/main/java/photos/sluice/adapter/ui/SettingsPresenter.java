@@ -612,7 +612,8 @@ public class SettingsPresenter {
         final String skipped = alreadyThere <= 0 ? ""
                 : " " + alreadyThere + " file(s) were already in the new folder and were left as they were.";
         return "Copied " + copied.filesCopied() + " file(s) into the new library." + skipped
-                + " The old folder is untouched; remove it by hand once you have checked it.";
+                + " Every one of them is still in " + copied.copiedFrom()
+                + ", so remove that folder by hand once you have checked the new one.";
     }
 
     private static SettingsView.FolderField folderField(final @Nullable String value, final String suggestion,
@@ -889,6 +890,7 @@ public class SettingsPresenter {
             static Refused markingTheModel(final String message) {
                 return new Refused(FIELDS_ARE_MARKED, null, null, null, message, false);
             }
+
         }
     }
 

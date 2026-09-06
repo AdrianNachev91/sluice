@@ -1171,7 +1171,8 @@ class RunSetupPresenterTest {
 
         assertThat(this.presenter.view().scopeRefusal())
                 .isEqualTo("2019 overlaps June 2019, which is a sift you have not finished. "
-                        + "Finish or discard it in Runs, then you can sift this.");
+                        + "Finish or discard it first.");
+        assertThat(this.presenter.view().scopeRefusalWayThere()).isEqualTo(Location.RUNS);
         assertThat(this.presenter.view().canStart()).isFalse();
     }
 
@@ -1195,7 +1196,8 @@ class RunSetupPresenterTest {
 
         assertThat(this.presenter.view().scopeRefusal())
                 .isEqualTo("June 2019 overlaps 2019, which is a sift you have not finished. "
-                        + "Finish or discard it in Runs, then you can sift this.");
+                        + "Finish or discard it first.");
+        assertThat(this.presenter.view().scopeRefusalWayThere()).isEqualTo(Location.RUNS);
         assertThat(this.presenter.view().canStart()).isFalse();
     }
 

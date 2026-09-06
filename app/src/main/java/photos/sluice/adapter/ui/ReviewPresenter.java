@@ -101,7 +101,7 @@ public class ReviewPresenter {
     // Says the keeper here is a copy, or a reader keeps it and ends up holding that photo twice.
     private static final String DUPLICATES_EXPLAINED = "Each folder holds the photos that looked "
             + "like near-copies of one that was kept. A copy of the kept one is in there too, with "
-            + "a note saying why, and the one that was kept is safe somewhere else. So the whole "
+            + "a note saying why, and the one that was kept is still in Sorted. So the whole "
             + "folder can go once you have compared them.";
 
     private static final String UNREVIEWABLE_HEADING = "A sift could not judge these";
@@ -190,7 +190,7 @@ public class ReviewPresenter {
             // under a line saying the folders cannot be read. Each would still offer to move a
             // count nothing can vouch for.
             this.listing = new ReviewListing(List.of(), List.of());
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.message = RunRefusals.refusing(e);
         }
         this.read = true;
         this.closeNotes();

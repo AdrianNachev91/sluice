@@ -128,7 +128,7 @@ class SettingsPaneTest {
         final var received = new ArrayList<LibraryRootResolution>();
         final LibraryRootUseCase library = (_, resolution) -> {
             received.add(resolution);
-            return jobRunner.submit(_ -> new CopiedAndMoved(5, 5));
+            return jobRunner.submit(_ -> new CopiedAndMoved(5, 5, Path.of("/old-library")));
         };
         final Presenters presenters = presenterNeedingLibraryRootResolution(library);
         final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
@@ -139,8 +139,9 @@ class SettingsPaneTest {
         WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> pane.lookup("#settings-report-banner") != null);
 
         assertThat(received).containsExactly(LibraryRootResolution.COPY_AND_KEEP_INDEX);
-        assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("Copied 5 file(s) into the new library. "
-                + "The old folder is untouched; remove it by hand once you have checked it.");
+        assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("Copied 5 file(s) into the new library. Every one of them is still in "
+                + Path.of("/old-library") + ", so remove that folder by hand once you have "
+                + "checked the new one.");
     }
 
     @Test
@@ -174,7 +175,7 @@ class SettingsPaneTest {
         final var received = new ArrayList<LibraryRootResolution>();
         final LibraryRootUseCase library = (_, resolution) -> {
             received.add(resolution);
-            return jobRunner.submit(_ -> new CopiedAndMoved(1, 1));
+            return jobRunner.submit(_ -> new CopiedAndMoved(1, 1, Path.of("/old-library")));
         };
         final Presenters presenters = presenterNeedingLibraryRootResolution(library);
         final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));

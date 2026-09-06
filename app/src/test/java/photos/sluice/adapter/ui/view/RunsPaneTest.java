@@ -4,6 +4,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.input.Clipboard;
@@ -19,6 +20,10 @@ import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.RunLauncherPresenter;
 import photos.sluice.adapter.ui.RunsPresenter;
+import photos.sluice.adapter.ui.Location;
+import photos.sluice.application.port.in.PathsMisconfiguredException;
+import photos.sluice.domain.paths.PathRole;
+import photos.sluice.domain.paths.PathViolation.NotADirectory;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
@@ -274,6 +279,59 @@ class RunsPaneTest {
         return found;
     }
 
+    // A refusal names its screen in the control under the line rather than in its own words, so
+    // that control is the whole of the way there. One built and wired but never added to the scene
+    // draws nothing, and no presenter test can see that.
+    @Test
+    void aRefusalNamingAScreenPutsTheWayThereOnTheScreen() throws Exception {
+        final Pipeline pipeline = stalledPipeline();
+        when(pipeline.launchPromptFor(any())).thenThrow(new PathsMisconfiguredException(
+                List.of(new NotADirectory(PathRole.INBOX, Path.of("gone")))));
+        final var opened = new ArrayList<Location>();
+        final Parent pane = onFxThread(() -> builtGoingTo(runsPresenter(pipeline), opened::add));
+
+        onFxThread(() -> fire(pane, "#run-copy-prompt"));
+
+        final var link = (Hyperlink) pane.lookup("#runs-message-link");
+        assertThat(link).isNotNull();
+        assertThat(onFxThread(link::isVisible)).isTrue();
+        assertThat(onFxThread(link::getText)).isEqualTo(Location.SETTINGS.label());
+
+        onFxThread(() -> {
+            link.fire();
+            return link;
+        });
+
+        assertThat(opened).containsExactly(Location.SETTINGS);
+    }
+
+    // The same control, on a screen with nothing to report. It has to take no room at all, or every
+    // screen carries a gap where a refusal would have gone.
+    @Test
+    void withNothingToReportTheWayThereTakesNoRoom() throws Exception {
+        final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
+
+        final var link = (Hyperlink) pane.lookup("#runs-message-link");
+        assertThat(link).isNotNull();
+        assertThat(onFxThread(link::isVisible)).isFalse();
+        assertThat(onFxThread(link::isManaged)).isFalse();
+    }
+
+    private static Parent builtGoingTo(final RunsPresenter presenter, final ScreenNavigation navigation) {
+        presenter.refresh();
+        final var page = (Parent) RunsPane.pane(presenter, () -> { }, navigation);
+        final var scene = new Scene(new StackPane(page), 900, 700);
+        scene.getStylesheets().add(
+                Objects.requireNonNull(RunsPaneTest.class.getResource("/ui/sluice.css"),
+                        "the app stylesheet is missing from the test classpath").toExternalForm());
+        final var stage = new Stage();
+        stage.setScene(scene);
+        stage.show();
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        return page;
+    }
+
     private static RunsPresenter runsPresenter(final Pipeline pipeline) {
         return new RunsPresenter(pipeline, new RunLauncherPresenter(pipeline, new FxProgressPort()));
     }
@@ -323,7 +381,7 @@ class RunsPaneTest {
     // here depends on which of the two lands first.
     private static Parent built(final RunsPresenter presenter) {
         presenter.refresh();
-        final var page = (Parent) RunsPane.pane(presenter, () -> { });
+        final var page = (Parent) RunsPane.pane(presenter, () -> { }, _ -> { });
         final var scene = new Scene(new StackPane(page), 900, 700);
         scene.getStylesheets().add(
                 Objects.requireNonNull(RunsPaneTest.class.getResource("/ui/sluice.css"),

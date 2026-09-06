@@ -354,7 +354,7 @@ public class RunsPresenter {
             return this.pipeline.launchPromptFor(prepDir);
         } catch (final RuntimeException e) {
             log.info("Could not write the instructions for {}", prepDir, e);
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.message = RunRefusals.refusing(e);
             return null;
         }
     }
@@ -387,7 +387,7 @@ public class RunsPresenter {
             this.pipeline.redoRejectedAnswers(prepDir);
         } catch (final RuntimeException e) {
             log.info("Could not set the rejected answers aside for {}", prepDir, e);
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.message = RunRefusals.refusing(e);
             return null;
         }
         // The freed sheets are what this press exists to judge, so it never goes on without them.
@@ -509,7 +509,7 @@ public class RunsPresenter {
             handle.onComplete().whenComplete((_, failure) -> this.ended(action, failure));
         } catch (final RuntimeException e) {
             log.info("Refused to {}", action, e);
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.message = RunRefusals.refusing(e);
         }
     }
 
@@ -525,7 +525,7 @@ public class RunsPresenter {
     private void ended(final String action, final @Nullable Throwable failure) {
         if (failure != null) {
             log.warn("Could not {}", action, failure);
-            this.message = new Message(RunRefusals.plainly(RunRefusals.rootOf(failure)), true);
+            this.message = RunRefusals.refusing(RunRefusals.rootOf(failure));
         }
         this.working = false;
         final Runnable draw = this.repaint;
@@ -1044,11 +1044,11 @@ public class RunsPresenter {
             // A trace here fills the log a reader would send about something else.
             log.info("Could not read the runs: {}", unset.getMessage());
             this.runs = new CullRuns.Listed(List.of());
-            this.readFailure = new Message(RunRefusals.plainly(unset), true);
+            this.readFailure = RunRefusals.refusing(unset);
         } catch (final RuntimeException e) {
             log.info("Could not read the runs", e);
             this.runs = new CullRuns.Listed(List.of());
-            this.readFailure = new Message(RunRefusals.plainly(e), true);
+            this.readFailure = RunRefusals.refusing(e);
         }
     }
 }

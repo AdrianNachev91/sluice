@@ -99,8 +99,11 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
          *
          * @param violation {@link String} what went wrong, in the provider's own words where it has
          *     them
+         * @param savedModel the model already configured, or null where none is. Carried because
+         *     the picker cannot hold it. An empty picker is what says nothing here was confirmed,
+         *     so the saved model is named beside it rather than sat in it
          */
-        record Unavailable(String violation) implements ModelPicker {
+        record Unavailable(String violation, @Nullable String savedModel) implements ModelPicker {
         }
 
         /**

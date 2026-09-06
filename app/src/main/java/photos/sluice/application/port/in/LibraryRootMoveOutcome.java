@@ -26,8 +26,12 @@ public sealed interface LibraryRootMoveOutcome {
      * @param filesCopied int how many files were written into the new library
      * @param filesFound int how many the old library held; any above the copied count were already
      *        in the new folder and were left as they were
+     * @param copiedFrom {@link Path} the folder those files came from, which still holds every one
+     *        of them. Carried so a report can name it: nothing here removes it, and whoever asked
+     *        for the move is the one who decides whether it goes
      */
-    record CopiedAndMoved(int filesCopied, int filesFound) implements LibraryRootMoveOutcome {
+    record CopiedAndMoved(int filesCopied, int filesFound, Path copiedFrom)
+            implements LibraryRootMoveOutcome {
     }
 
     /**

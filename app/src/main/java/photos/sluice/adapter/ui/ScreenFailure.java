@@ -27,8 +27,8 @@ public final class ScreenFailure {
      * @return {@link String} the sentence to show
      */
     public static String wouldNotOpen() {
-        return "This screen would not open. Try closing and reopening Sluice, and if it keeps "
-                + "happening, report this as a bug, quoting this:";
+        return "This screen would not open. Opening it again is worth a try. If it keeps happening, "
+                + "report this as a bug, quoting this:";
     }
 
     /**

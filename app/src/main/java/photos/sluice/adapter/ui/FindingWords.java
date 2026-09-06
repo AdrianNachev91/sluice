@@ -3,7 +3,9 @@ package photos.sluice.adapter.ui;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.TroubleshootView.Answer;
+import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.cull.Verdict;
 
 import java.util.List;
 import java.util.regex.Matcher;
@@ -108,7 +110,7 @@ final class FindingWords {
                     "One photo was both judged and listed as one nobody could judge.",
                     "{} photos were both judged and listed as ones nobody could judge.",
                     overlap.verdict().file().toString(),
-                    List.of(new Choice(Answer.TRUST_DECISION, "Use the judgement", true, null),
+                    List.of(new Choice(Answer.TRUST_DECISION, usingIt(overlap.verdict()), true, null),
                             new Choice(Answer.TREAT_AS_UNREVIEWABLE, "Leave the photo unjudged",
                                     false, null)));
             case final Finding.CorruptSidecar sidecar -> new Told(
@@ -199,9 +201,13 @@ final class FindingWords {
                     "{} answers name photos this sift never showed.",
                     photoOn(outOfScope.montage(), outOfScope.index()) + ", "
                             + outOfScope.file(), List.of());
+            // Names the mismatch rather than asserting a category the path appears to contradict.
+            // These paths end in a Sorted folder of their own, under a working folder that is not
+            // the one in force. "Outside your Sorted folder" then reads as wrong to anyone checking
+            // the sentence against the path beside it.
             case final Finding.SourceOutsideSorted outside -> new Told(
-                    "This sift was asked to move a file from outside your Sorted folder.",
-                    "This sift was asked to move {} files from outside your Sorted folder.",
+                    "A photo this sift wants to move is not under the Sorted folder in force now.",
+                    "{} photos this sift wants to move are not under the Sorted folder in force now.",
                     outside.file().toString(), List.of());
         };
     }
@@ -221,10 +227,26 @@ final class FindingWords {
             case TRUST_DECISION -> "The judgement stands, and this sift will do what it says.";
             case TREAT_AS_UNREVIEWABLE -> "The judgement is dropped, and the photo joins the ones a "
                     + "sift could not judge.";
-            case SET_ASIDE_SHEET -> "The sift will go on without that sheet. Its photos stay where "
-                    + "they are, so a later sift can judge them afresh.";
+            case SET_ASIDE_SHEET -> "The sift will go on without that sheet. Its photos stay "
+                    + "in Sorted, so a later sift can judge them afresh.";
             case APPLY_SHEET_ANYWAY -> "That sheet's answers will be used as they are.";
             case SET_ASIDE_STRAY_ANSWERS -> "The sift will go on without those answers.";
+        };
+    }
+
+    /**
+     * What using the judgement will do to the photo, which is not the same thing for every verdict.
+     *
+     * <p>A near-duplicate keeper is copied and its source never removed, so it stays in Sorted
+     * exactly as a keep does. Only a classification and a rejected near-duplicate move.
+     *
+     * @param verdict {@link Verdict} what the sift said about the photo
+     * @return {@link String} what the button says
+     */
+    private static String usingIt(final Verdict verdict) {
+        return switch (verdict) {
+            case Verdict.Keep _, Decision.NearDupChosen _ -> "Keep it in Sorted";
+            case Decision.Classification _, Decision.NearDupReject _ -> "Move it where the sift said";
         };
     }
 

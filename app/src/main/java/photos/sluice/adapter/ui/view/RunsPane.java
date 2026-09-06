@@ -4,6 +4,7 @@ import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -44,9 +45,10 @@ final class RunsPane {
      * @param presenter {@link RunsPresenter} supplies what to draw and takes every press
      * @param recount {@link Runnable} redraws the sidebar's own count, since what this screen does
      *     is what changes it
+     * @param navigation {@link ScreenNavigation} how this screen opens another
      * @return {@link Node} the screen
      */
-    static Node pane(final RunsPresenter presenter, final Runnable recount) {
+    static Node pane(final RunsPresenter presenter, final Runnable recount, final ScreenNavigation navigation) {
         final TextField heading = SelectableText.line();
         heading.setId("runs-heading");
         heading.getStyleClass().add("pane-heading");
@@ -66,6 +68,7 @@ final class RunsPane {
         unreadableBox.visibleProperty().bind(unreadable.visibleProperty());
         final TextArea nothingYet = SettingsRows.emptyHelpLine("runs-nothing-yet");
         final TextArea message = SettingsRows.emptyHelpLine("runs-message");
+        final Hyperlink messageWayThere = SettingsRows.wayThereLink("runs-message-link");
 
         final var cards = new VBox();
         cards.setId("runs-cards");
@@ -91,7 +94,8 @@ final class RunsPane {
         completed.setId("runs-completed");
         completed.getStyleClass().add("runs-completed");
 
-        final var body = new VBox(message, unreadableBox, nothingYet, cards, completed);
+        final var body = new VBox(SettingsRows.wayThereLines(message, messageWayThere),
+                unreadableBox, nothingYet, cards, completed);
         body.getStyleClass().add("runs-body");
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
@@ -101,7 +105,7 @@ final class RunsPane {
         page.setId("runs");
         page.getStyleClass().add("runs");
 
-        final var controls = new Controls(heading, clear, unreadable, nothingYet, message, cards,
+        final var controls = new Controls(heading, clear, unreadable, nothingYet, message, messageWayThere, navigation, cards,
                 completedToggle, completedCards, completed,
                 new SectionFold(completedCards, completed, scroll));
         final Runnable redraw = new Runnable() {
@@ -172,7 +176,8 @@ final class RunsPane {
      * @param fold {@link SectionFold} opens and shuts that section
      */
     private record Controls(TextField heading, Button clear, TextArea unreadable, TextArea nothingYet,
-                            TextArea message, VBox cards, Button completedToggle,
+                            TextArea message, Hyperlink messageWayThere, ScreenNavigation navigation,
+                            VBox cards, Button completedToggle,
                             VBox completedCards, VBox completed, SectionFold fold) {
 
         /**
@@ -210,7 +215,7 @@ final class RunsPane {
             this.clear.setDisable(!view.canClearCompleted());
             this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
             this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
-            SettingsRows.report(this.message, view.message(), CAUTION);
+            SettingsRows.report(this.message, view.message(), CAUTION, this.messageWayThere, this.navigation);
             this.draw(this.cards, view.unfinished(), presenter, redraw);
             this.completedToggle.setText(view.completedHeading());
             SettingsRows.pointing(this.completedToggle, view.completedShown());

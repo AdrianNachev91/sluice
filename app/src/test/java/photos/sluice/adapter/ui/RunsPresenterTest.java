@@ -712,8 +712,8 @@ class RunsPresenterTest {
 
         assertThat(presenter.instructionsFor(Path.of("logs", "sift-prep", "2019"), false)).isNull();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .isEqualTo("There are no instructions to copy for that sift, because its records "
-                        + "are damaged.")
+                .isEqualTo("Sluice could not read that sift's own records, because what is in "
+                        + "them is damaged.")
                 .doesNotContain(MalformedPrepJsonException.class.getName());
     }
 

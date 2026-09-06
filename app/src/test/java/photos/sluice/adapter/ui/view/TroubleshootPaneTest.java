@@ -240,7 +240,7 @@ class TroubleshootPaneTest {
         final var presenter = new TroubleshootPresenter(pipeline,
                 new RunLauncherPresenter(pipeline, new FxProgressPort()));
         presenter.open(PREP_DIR, "2019");
-        final var page = (Parent) TroubleshootPane.pane(presenter);
+        final var page = (Parent) TroubleshootPane.pane(presenter, _ -> { });
         final var scene = new Scene(new StackPane(page), 900, 700);
         scene.getStylesheets().add(
                 Objects.requireNonNull(TroubleshootPaneTest.class.getResource("/ui/sluice.css"),

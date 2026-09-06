@@ -1,31 +1,20 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.scene.Node;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.shape.SVGPath;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
- * A sentence with any web address in it drawn as a link.
+ * The web address in a sentence, and the control that opens it.
  *
- * <p>JavaFX has no control that does this. {@code Hyperlink} is one a caller builds, and {@code
- * TextFlow} is what lets one sit inside a sentence. Nothing in the toolkit reads text looking for
- * an address, so the reading is here.
- *
- * <p>The address stays visible as itself rather than hiding behind words. One that has since moved
- * then still leaves the reader something to copy or search for. That is the whole of what a link
- * going nowhere would otherwise cost them.
+ * <p>Nothing in the toolkit reads text looking for an address, so the reading is here.
  */
 final class LinkedText {
 
     // What marks a word as an address. One scheme rather than a general parser: the only text this
-    // reads is written by this app's own providers. An address offered over anything else is still
-    // shown, as the plain words it was written as, and this app does not put a reader on it.
+    // reads is written by this app's own providers. An address offered over anything else is left
+    // as the plain words it was written as, and this app does not put a reader on it.
     private static final String SCHEME = "https://";
 
     // A box with an arrow leaving it, drawn rather than taken from a font. A character that renders
@@ -37,75 +26,43 @@ final class LinkedText {
     // full stop closing the sentence would otherwise be opened as part of the address.
     private static final String TRAILING_PUNCTUATION = ".,;:!?)]}\"'";
 
+    // The sentence beside it already shows the address, so naming it again would put it on the
+    // screen twice.
+    private static final String OPENS_IT = "Open in your browser";
+
     private LinkedText() {}
 
     /**
-     * Reads one sentence and lays it out, every address in it clickable.
+     * The first web address in a sentence, if it holds one.
      *
-     * @param sentence {@link String} the words to draw
-     * @return {@link TextFlow} those words, with each address drawn as a link
+     * @param sentence {@link String} the words to read
+     * @return {@link String} the address, stripped of any sentence punctuation, or null where the
+     *         sentence offers none
      */
-    static TextFlow of(final String sentence) {
-        final var parts = new ArrayList<Node>();
+    static @Nullable String addressIn(final String sentence) {
         for (final String word : sentence.split(" ", -1)) {
-            if (!parts.isEmpty()) {
-                parts.add(word(" "));
+            if (word.startsWith(SCHEME)) {
+                int end = word.length();
+                while (end > 0 && TRAILING_PUNCTUATION.indexOf(word.charAt(end - 1)) >= 0) {
+                    end--;
+                }
+                return word.substring(0, end);
             }
-            parts.addAll(read(word));
         }
-        final var flow = new TextFlow(parts.toArray(Node[]::new));
-        flow.getStyleClass().add("linked-text");
-        return flow;
+        return null;
     }
 
     /**
-     * One word, as either plain text or a link and whatever punctuation followed it.
-     *
-     * @param word {@link String} the word to read
-     * @return a {@link List} of {@link Node} what to draw for it
-     */
-    private static List<Node> read(final String word) {
-        if (!word.startsWith(SCHEME)) {
-            return List.of(word(word));
-        }
-        int end = word.length();
-        while (end > 0 && TRAILING_PUNCTUATION.indexOf(word.charAt(end - 1)) >= 0) {
-            end--;
-        }
-        final String address = word.substring(0, end);
-        final String after = word.substring(end);
-        final Node link = link(address);
-        return after.isEmpty() ? List.of(link) : List.of(link, word(after));
-    }
-
-    /**
-     * Plain words, carrying a class of their own so a stylesheet can reach them.
-     *
-     * <p>A {@link Text} built here has no style class at all. The {@code text} class belongs to the
-     * ones JavaFX makes inside a {@link javafx.scene.control.Labeled}'s skin, so a rule written
-     * against that reaches every label on the screen and none of these. Unreached, they draw at the
-     * default black, which is legible on a light ground and almost invisible on a dark one.
-     *
-     * @param words {@link String} what to draw
-     * @return {@link Text} those words, styleable
-     */
-    private static Text word(final String words) {
-        final var text = new Text(words);
-        text.getStyleClass().add("linked-text-word");
-        return text;
-    }
-
-    /**
-     * One address, drawn as a link that leaves this app.
+     * A control that opens one address, marked as leaving this app.
      *
      * @param address {@link String} the address, already stripped of any sentence punctuation
-     * @return {@link Node} the link
+     * @return {@link Hyperlink} the control
      */
-    private static Node link(final String address) {
+    static Hyperlink opening(final String address) {
         final var mark = new SVGPath();
         mark.setContent(LEAVES_THE_APP);
         mark.getStyleClass().add("linked-text-mark");
-        final var link = new Hyperlink(address, mark);
+        final var link = new Hyperlink(OPENS_IT, mark);
         link.setContentDisplay(ContentDisplay.RIGHT);
         link.getStyleClass().add("linked-text-link");
         link.setOnAction(_ -> ExternalBrowser.open(address));

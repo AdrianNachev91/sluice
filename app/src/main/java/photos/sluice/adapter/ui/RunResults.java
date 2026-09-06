@@ -51,16 +51,14 @@ final class RunResults {
             + "account balance. Continuing on sends "
             + "the sheets it had not reached, under a fresh limit.";
 
-    // Ends by naming where to go, because this is the one ending that offers no button. Without it
-    // a reader who did nothing wrong is left to find the Runs screen on their own.
     private static final String SHARDS_OUTSTANDING = "The sheets are ready, waiting for your "
-            + "agent's decisions on them. Nothing moves until they arrive. Once they have, pick "
-            + "this sift up again from Runs.";
+            + "agent's decisions on them. Nothing moves until those decisions arrive. Pick this "
+            + "sift up again once they have.";
 
     // Opens on what came back rather than on every sheet being judged. A sheet whose answer covers
     // only some of its photos has a decisions file and has not been judged, and the clause that
     // follows says exactly that.
-    private static final String BLOCKED = "Every sheet came back. %s. Nothing was moved.";
+    private static final String BLOCKED = "Every sheet came back. %s. Your photos are still in Sorted.";
 
     private static final String CANCELLED = "You can continue at any time.";
 
@@ -138,14 +136,15 @@ final class RunResults {
      * What the card says about a job that threw.
      *
      * @param ran {@link RunMode} the mode the job was started in
-     * @param said {@link String} the failure as a sentence, already put into plain words
+     * @param said {@link RunRefusals.Refusal} the failure in plain words, and any screen it can be
+     *         acted on from
      * @return {@link RunResultView} the card
      */
-    static RunResultView failed(final RunMode ran, final String said) {
+    static RunResultView failed(final RunMode ran, final RunRefusals.Refusal said) {
         // Not "stopped", which heads a run the reader stopped on purpose. A reader cannot be left
         // reading one word for both, with only the colour behind it telling them which happened.
-        return new RunResultView(ran.verb() + " could not finish.", Tone.FAILED, said,
-                List.of(), null, null, DONE);
+        return new RunResultView(ran.verb() + " could not finish.", Tone.FAILED, said.sentence(),
+                List.of(), null, null, DONE, said.wayThere());
     }
 
     /**
@@ -503,11 +502,11 @@ final class RunResults {
             case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _) ->
                     new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED, waitingDetail(why),
                             sheetCounts(job.shards()), null,
-                            resumeOffer(why, job.prepDir()), DONE);
+                            resumeOffer(why, job.prepDir()), DONE, wayOnFrom(why));
             case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
                     new RunResultView(ran.verb() + " stopped and needs a look.",
                             Tone.UNFINISHED, BLOCKED.formatted(FindingFamily.wentWrong(findings)),
-                            sheetCounts(job.shards()), null, null, DONE);
+                            sheetCounts(job.shards()), null, null, DONE, Location.RUNS);
             // The one case with no prep dir behind it, so nothing counted the sheets. It is reached
             // only before rendering finished, which is why there are none to count.
             case CullJobOutcome.Cancelled _ ->
@@ -591,6 +590,22 @@ final class RunResults {
             case CEILING_REACHED -> new CardAction.ContinueRun(CEILING_QUESTION, CONTINUE, prepDir);
             case CANCELLED -> new CardAction.ContinueRun(CANCELLED, CONTINUE, prepDir);
             case SHARDS_OUTSTANDING -> null;
+        };
+    }
+
+    /**
+     * Where a paused sift is picked up again, for the pause that offers no button of its own.
+     *
+     * <p>The other two carry Continue on the card, so the reader has what they need without
+     * leaving. One waiting on somebody's agent has nothing to press until the decisions land.
+     *
+     * @param why {@link WaitingReason} why the sift paused
+     * @return {@link Location} the runs screen, or null where the card offers the way on itself
+     */
+    private static @Nullable Location wayOnFrom(final WaitingReason why) {
+        return switch (why) {
+            case SHARDS_OUTSTANDING -> Location.RUNS;
+            case CEILING_REACHED, CANCELLED -> null;
         };
     }
 

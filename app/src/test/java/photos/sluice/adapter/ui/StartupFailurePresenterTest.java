@@ -84,7 +84,7 @@ class StartupFailurePresenterTest {
         assertThat(presenter.card()).isEqualTo(new Unparsable(
                 "Sluice could not read your settings file. It likely has a typo or a formatting mistake, "
                         + "often a missing or extra bracket or quote mark. Starting fresh renames the file "
-                        + "aside rather than deleting it, so nothing is lost, and Sluice starts over with "
+                        + "aside rather than deleting it, and Sluice starts over with "
                         + "nothing configured. You can still open the old file afterward in a text editor to "
                         + "copy anything you typed by hand, like your category descriptions.",
                 "config.yml", null, "expected ',' or ']'", "trace"));

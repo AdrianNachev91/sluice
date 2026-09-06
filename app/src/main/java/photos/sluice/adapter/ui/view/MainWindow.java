@@ -49,6 +49,8 @@ final class MainWindow {
     private static final String PHOTO_CATEGORIES = "Photo categories";
     private static final String TROUBLESHOOT = "Troubleshoot";
 
+    private static final String FAILED = "screen-failed";
+
     // What the count on the Runs entry means, for a reader who meets a number beside a word and no
     // explanation. The screen it leads to says the same thing per run.
     private static final String RUNS_COUNT_MEANS =
@@ -110,11 +112,17 @@ final class MainWindow {
         // showing Settings as current. Arriving there with Dashboard still marked would leave the
         // two disagreeing about which screen this is.
         final Runnable openSettings = settings::fire;
+        final ScreenNavigation navigation = there -> {
+            switch (there) {
+                case SETTINGS -> openSettings.run();
+                case RUNS -> runs.fire();
+            }
+        };
 
         final var content = new VBox();
         content.getStyleClass().add("shell-content");
         final var leaving = new Leaving(leavingLosesWork);
-        drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter, null);
+        drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter, null, navigation);
         // A ToggleGroup lets its own selected toggle be clicked back to unselected, unlike a radio
         // group. Clicking the active nav entry would otherwise leave the sidebar showing none of
         // the three as current. Its content pane would still be the one on screen.
@@ -131,7 +139,7 @@ final class MainWindow {
         final Runnable markStaysWhereItWas = () -> settings.setSelected(true);
         dashboard.setOnAction(_ -> {
             if (!show(content, DASHBOARD, leaving,
-                    () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, null))) {
+                    () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, null, navigation))) {
                 markStaysWhereItWas.run();
             }
         });
@@ -150,7 +158,7 @@ final class MainWindow {
             return filling(mounted.node());
         }));
         review.setOnAction(_ -> {
-            if (!show(content, REVIEW, leaving, () -> filling(ReviewPane.pane(reviewPresenter)))) {
+            if (!show(content, REVIEW, leaving, () -> filling(ReviewPane.pane(reviewPresenter, navigation)))) {
                 markStaysWhereItWas.run();
             }
         });
@@ -181,7 +189,7 @@ final class MainWindow {
             Platform.runLater(() -> runsCount.setText(outstanding));
         });
         runs.setOnAction(_ -> {
-            if (!show(content, RUNS, leaving, () -> filling(RunsPane.pane(runsPresenter, drawCount)))) {
+            if (!show(content, RUNS, leaving, () -> filling(RunsPane.pane(runsPresenter, drawCount, navigation)))) {
                 markStaysWhereItWas.run();
             }
         });
@@ -191,7 +199,7 @@ final class MainWindow {
         // before it.
         runsPresenter.setOpenTroubleshoot((prepDir, scope) -> {
             troubleshootPresenter.open(prepDir, scope);
-            show(content, TROUBLESHOOT, leaving, () -> filling(TroubleshootPane.pane(troubleshootPresenter)));
+            show(content, TROUBLESHOOT, leaving, () -> filling(TroubleshootPane.pane(troubleshootPresenter, navigation)));
         });
         // Hopped, unlike the wirings around it. A discard that works hands the reader back from the
         // job's own completion callback, which is not the thread that paints. Firing a sidebar
@@ -266,7 +274,11 @@ final class MainWindow {
     private static boolean show(final VBox content, final String screen, final Leaving leaving,
                                 final Supplier<Node> draw) {
         final Node current = content.getChildren().isEmpty() ? null : content.getChildren().getFirst();
-        if (current != null && screen.equals(current.getId())) {
+        // A panel saying the screen would not open carries that screen's own id. A second press on
+        // the same entry would be read as already being there. Pressing again is the only way out
+        // of that panel, so it has to reach the build.
+        if (current != null && screen.equals(current.getId())
+                && !current.getStyleClass().contains(FAILED)) {
             return true;
         }
         if (leaving.loseWork().get().getAsBoolean()
@@ -315,6 +327,7 @@ final class MainWindow {
             // Headed by the screen that was asked for, so a reader who pressed Runs is not left
             // working out which press this answers.
             final var panel = headingPane(screen);
+            panel.getStyleClass().add(FAILED);
             final TextArea message = SelectableText.prose(ScreenFailure.wouldNotOpen());
             panel.getChildren().addAll(message, CopyableTrace.fold("screen-failure",
                     ScreenFailure.showTheDetails(), ScreenFailure.copy(), ScreenFailure.copied(),
@@ -348,18 +361,19 @@ final class MainWindow {
      * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
      * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the launcher
      * @param said what the save that led here had to report, or null where nothing did
+     * @param navigation {@link ScreenNavigation} how a screen it holds opens another
      * @return {@link Node} a pane ready to sit in the content area
      */
     private static Node dashboardPane(final VBox content, final FirstRunPresenter presenter,
                                       final SettingsPresenter settingsPresenter,
                                       final RunLauncherPresenter runLauncherPresenter,
-                                      final @Nullable String said) {
+                                      final @Nullable String said, final ScreenNavigation navigation) {
         if (presenter.unfinished()) {
             return filling(FirstRunCard.pane(settingsPresenter, presenter,
                     reported -> drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter,
-                            reported)));
+                            reported, navigation)));
         }
-        final Node launcher = RunLauncherPane.pane(runLauncherPresenter);
+        final Node launcher = RunLauncherPane.pane(runLauncherPresenter, navigation);
         if (said == null) {
             return filling(launcher);
         }
@@ -388,17 +402,19 @@ final class MainWindow {
      * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
      * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the launcher
      * @param said what the save that led here had to report, or null where nothing did
+     * @param navigation {@link ScreenNavigation} how a screen it holds opens another
      */
     private static void drawDashboard(final VBox content, final FirstRunPresenter presenter,
                                       final SettingsPresenter settingsPresenter,
                                       final RunLauncherPresenter runLauncherPresenter,
-                                      final @Nullable String said) {
+                                      final @Nullable String said, final ScreenNavigation navigation) {
         final Node current = content.getChildren().isEmpty() ? null : content.getChildren().getFirst();
         if (current != null && !DASHBOARD.equals(current.getId())) {
             return;
         }
         final Node pane = buildOrSayItFailed(DASHBOARD,
-                () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, said));
+                () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, said,
+                        navigation));
         pane.setId(DASHBOARD);
         content.getChildren().setAll(pane);
     }

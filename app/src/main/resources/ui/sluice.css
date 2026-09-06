@@ -345,6 +345,14 @@
     -fx-text-fill: -sluice-accent;
 }
 
+/* A sentence and the control that leads where it points. Tighter than anything separating this pair
+   from what follows it, so the two read as one thought. The size is set here rather than on
+   .in-app-link, which the mode row also uses at button size. */
+.way-there-lines {
+    -fx-spacing: 3px;
+    -fx-font-size: 12px;
+}
+
 .in-app-link:hover {
     -fx-opacity: 1.0;
 }
@@ -1106,13 +1114,6 @@
     -fx-text-fill: -sluice-text-muted;
     -fx-font-size: 12px;
     -fx-padding: 0 0 2px 0;
-}
-
-/* A sentence with an address in it. A Text takes its colour from -fx-fill where a Label takes
-   -fx-text-fill, so the muted fill the surrounding help lines use has to be said again here or the
-   words come out at the default black. Font size is inherited and does not. */
-.linked-text-word {
-    -fx-fill: -sluice-text-muted;
 }
 
 /* Underlined standing rather than on hover, so the address reads as clickable before the pointer

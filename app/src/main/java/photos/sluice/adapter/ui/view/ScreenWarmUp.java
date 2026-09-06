@@ -29,7 +29,6 @@ import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
 import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
 
 import java.util.List;
 
@@ -62,7 +61,7 @@ final class ScreenWarmUp {
                 new Label(), new PasswordField(), new ProgressBar(), new RadioButton(), new ScrollPane(),
                 new Separator(), new Spinner<Integer>(), new TextArea(), new TextField(),
                 new TitledPane(), new ToggleButton(),
-                new Circle(), new Polygon(), new Rectangle(), new SVGPath(), new Text(), new TextFlow(),
+                new Circle(), new Polygon(), new Rectangle(), new SVGPath(), new Text(),
                 new ListCell<String>(), new VisionProviderCard.ModelChoiceCell(),
                 // Through the factory, since what the screens draw is its own subclass of each of
                 // these rather than the plain control two rows up.

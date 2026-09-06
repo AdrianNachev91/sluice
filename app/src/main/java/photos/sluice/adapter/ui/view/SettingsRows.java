@@ -31,14 +31,13 @@ import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
 import javafx.stage.DirectoryChooser;
 import javafx.util.Duration;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.SettingsView;
+import photos.sluice.adapter.ui.Location;
 
 import java.io.File;
 import java.nio.file.InvalidPathException;
@@ -190,12 +189,95 @@ final class SettingsRows {
      * @param said {@link Message} what to report, or null for nothing
      * @param caution {@link String} the style class a refusal wears on this screen
      */
-    static void report(final TextArea line, final @Nullable Message said, final String caution) {
+    private static void report(final TextArea line, final @Nullable Message said, final String caution) {
         line.setText(said == null ? "" : said.text());
         line.getStyleClass().remove(caution);
         if (said != null && said.refused()) {
             line.getStyleClass().add(caution);
         }
+    }
+
+    /**
+     * Puts what a screen has to report on its report line, and offers the screen it leads to.
+     *
+     * @param line {@link TextArea} the screen's own report line
+     * @param said {@link Message} what to report, or null for nothing
+     * @param caution {@link String} the style class a refusal wears on this screen
+     * @param wayThere {@link Hyperlink} the control under that line
+     * @param navigation {@link ScreenNavigation} how this screen opens another
+     */
+    static void report(final TextArea line, final @Nullable Message said, final String caution,
+                       final Hyperlink wayThere, final ScreenNavigation navigation) {
+        report(line, said, caution);
+        offering(wayThere, said == null ? null : said.wayThere(), navigation);
+    }
+
+    /**
+     * Puts what a run has to report on its own line, in the colour its kind earns, and points the
+     * control under it.
+     *
+     * @param line {@link TextArea} the report line
+     * @param wayThere {@link Hyperlink} the control under it
+     * @param said {@link Message} what to report, or null for nothing
+     * @param navigation {@link ScreenNavigation} how this screen opens another
+     */
+    static void reportRun(final TextArea line, final Hyperlink wayThere,
+                          final @Nullable Message said, final ScreenNavigation navigation) {
+        line.setText(said == null ? "" : said.text());
+        SelectableText.dressAs(line, "run-message",
+                said != null && said.refused() ? "settings-violation" : "settings-confirmation");
+        offering(wayThere, said == null ? null : said.wayThere(), navigation);
+    }
+
+    /**
+     * Points a way-there control at a screen, or takes it off the page where there is none.
+     *
+     * @param link {@link Hyperlink} the control to point
+     * @param there {@link Location} the screen it should open, or null to take it off the page
+     * @param navigation {@link ScreenNavigation} how this screen opens another
+     */
+    static void offering(final Hyperlink link, final @Nullable Location there, final ScreenNavigation navigation) {
+        link.setText(there == null ? "" : there.label());
+        // Re-pointed on every fill. The same control serves whichever screen the line now names,
+        // and an action left over from the last one would open a screen this sentence never named.
+        link.setOnAction(there == null ? null : _ -> navigation.setScreen(there));
+    }
+
+    /**
+     * A link to another screen, taking room only while a message names one.
+     *
+     * @param id {@link String} the control's id
+     * @return {@link Hyperlink} the control, pointing nowhere until it is offered a screen
+     */
+    static Hyperlink wayThereLink(final String id) {
+        final var link = new Hyperlink();
+        link.setId(id);
+        link.getStyleClass().add("in-app-link");
+        link.managedProperty().bind(link.visibleProperty());
+        link.visibleProperty().bind(link.textProperty().isNotEmpty());
+        return link;
+    }
+
+    /**
+     * A sentence and the control that leads where it points, bound together as one block.
+     *
+     * <p>The pair has to read as one thought, so its own gap is tighter than the gap to whatever
+     * follows. Left to the containers they land in, the same two nodes sit 0px apart on one card
+     * and 14px apart on the next.
+     *
+     * <p>Takes the whole block off the page while the sentence says nothing, so a screen with
+     * nothing to report carries no gap where this would be.
+     *
+     * @param sentence {@link TextArea} the words
+     * @param wayThere {@link Hyperlink} the control under them
+     * @return {@link VBox} the pair
+     */
+    static VBox wayThereLines(final TextArea sentence, final Hyperlink wayThere) {
+        final var pair = new VBox(sentence, wayThere);
+        pair.getStyleClass().add("way-there-lines");
+        pair.managedProperty().bind(pair.visibleProperty());
+        pair.visibleProperty().bind(sentence.textProperty().isNotEmpty());
+        return pair;
     }
 
     /**
@@ -272,40 +354,6 @@ final class SettingsRows {
         row.managedProperty().bind(row.visibleProperty());
         row.visibleProperty().bind(line.visibleProperty());
         return row;
-    }
-
-    /**
-     * A help line with a word or two inside it leading somewhere else in this app.
-     *
-     * <p>A flow rather than a row, so the sentence wraps across the link the way prose does. Three
-     * pieces, because a label draws its whole text one way and only the middle should look
-     * pressable.
-     *
-     * @param id {@link String} the line's own id
-     * @param link {@link Hyperlink} the words that lead there, already wired
-     * @return {@link LinkedLine} the line and the two stretches of prose around the link
-     */
-    static LinkedLine linkedHelpLine(final String id, final Hyperlink link) {
-        final var before = new Text();
-        final var after = new Text();
-        before.getStyleClass().add("linked-text-word");
-        after.getStyleClass().add("linked-text-word");
-        final var flow = new TextFlow(before, link, after);
-        flow.setId(id);
-        flow.getStyleClass().add("settings-help");
-        flow.managedProperty().bind(flow.visibleProperty());
-        flow.visibleProperty().bind(before.textProperty().isNotEmpty());
-        return new LinkedLine(flow, before, after);
-    }
-
-    /**
-     * A help line built around a link, and the prose either side of it.
-     *
-     * @param flow {@link TextFlow} the line itself
-     * @param before {@link Text} what is said ahead of the link
-     * @param after {@link Text} what is said after it
-     */
-    record LinkedLine(TextFlow flow, Text before, Text after) {
     }
 
     /**

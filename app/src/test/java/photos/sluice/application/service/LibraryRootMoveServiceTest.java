@@ -53,7 +53,7 @@ class LibraryRootMoveServiceTest {
 
             final LibraryRootMoveOutcome outcome = fixture.move(newLibrary, LibraryRootResolution.COPY_AND_KEEP_INDEX);
 
-            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.CopiedAndMoved(1, 1));
+            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.CopiedAndMoved(1, 1, fixture.library));
             assertThat(newLibrary.resolve("2019/06/holiday.jpg")).hasContent("holiday");
             assertThat(fixture.libraryRootInForce()).isEqualTo(newLibrary.toString());
         }

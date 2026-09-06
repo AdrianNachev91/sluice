@@ -112,7 +112,7 @@ class RunResultPaneTest {
         final RunLauncherPresenter presenter = mock(RunLauncherPresenter.class);
         final var redraws = new AtomicInteger();
         final RunResultPane.Mounted mounted = onFxThread(
-                () -> RunResultPane.mount(presenter, redraws::incrementAndGet));
+                () -> RunResultPane.mount(presenter, redraws::incrementAndGet, _ -> { }));
         final Path second = Path.of("logs", "sift-prep", "2018");
         onFxThread(() -> {
             mounted.fill().accept(card(offering()));
@@ -161,7 +161,7 @@ class RunResultPaneTest {
     @Test
     void theActionButtonDropsTheWeightOfTheCardBeforeIt() throws Exception {
         final RunResultPane.Mounted mounted = onFxThread(
-                () -> RunResultPane.mount(mock(RunLauncherPresenter.class), () -> { }));
+                () -> RunResultPane.mount(mock(RunLauncherPresenter.class), () -> { }, _ -> { }));
 
         onFxThread(() -> mounted.fill().accept(card(offeringASift())));
         onFxThread(() -> mounted.fill().accept(card(offering())));
@@ -225,7 +225,7 @@ class RunResultPaneTest {
     @Test
     void aCardThatShowedAFailureDropsTheFailureMarkWhenTheNextRunEndsWell() throws Exception {
         final RunResultPane.Mounted mounted = onFxThread(
-                () -> RunResultPane.mount(mock(RunLauncherPresenter.class), () -> { }));
+                () -> RunResultPane.mount(mock(RunLauncherPresenter.class), () -> { }, _ -> { }));
         onFxThread(() -> mounted.fill().accept(card(new RunResultView("Sorting stopped.", Tone.FAILED,
                 "Broke.", List.of(), null, null, "Done"))));
 
@@ -279,7 +279,7 @@ class RunResultPaneTest {
     // and the assertions above read style classes the sheet is what gives meaning to.
     private static Parent shown(final RunLauncherPresenter presenter, final Runnable redraw,
                                 final RunStage.Finished showing) {
-        final RunResultPane.Mounted mounted = RunResultPane.mount(presenter, redraw);
+        final RunResultPane.Mounted mounted = RunResultPane.mount(presenter, redraw, _ -> { });
         mounted.fill().accept(showing);
         final var page = (Parent) mounted.node();
         final var scene = new Scene(new StackPane(page), 900, 700);

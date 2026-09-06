@@ -23,10 +23,30 @@ import java.util.List;
  * @param action {@link CardAction} the one thing this card offers beyond Done, or null where it
  *     offers nothing
  * @param doneLabel {@link String} what the button back to the launcher says
+ * @param wayThere {@link Location} the screen the detail can be acted on from, or null where it
+ *     names nowhere to go
  */
 public record RunResultView(String heading, Tone tone, @Nullable String detail, List<Count> counts,
                             @Nullable Warning warning,
-                            @Nullable CardAction action, String doneLabel) {
+                            @Nullable CardAction action, String doneLabel,
+                            @Nullable Location wayThere) {
+
+    /**
+     * A card whose detail names nowhere to go.
+     *
+     * @param heading {@link String} how the run ended
+     * @param tone {@link Tone} how the heading should read
+     * @param detail a sentence about the ending, or null
+     * @param counts a {@link List} of {@link Count} what the run did
+     * @param warning {@link Warning} something worth attention that stopped nothing, or null
+     * @param action {@link CardAction} the one thing offered beyond Done, or null
+     * @param doneLabel {@link String} what the button back to the launcher says
+     */
+    public RunResultView(final String heading, final Tone tone, final @Nullable String detail,
+                         final List<Count> counts, final @Nullable Warning warning,
+                         final @Nullable CardAction action, final String doneLabel) {
+        this(heading, tone, detail, counts, warning, action, doneLabel, null);
+    }
 
     /**
      * Defensively copies the mutable collection component.
@@ -38,6 +58,7 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
      * @param warning {@link Warning} something worth attention that stopped nothing, or null
      * @param action {@link CardAction} the one thing offered beyond Done, or null
      * @param doneLabel {@link String} what the button back to the launcher says
+     * @param wayThere {@link Location} the screen the detail can be acted on from, or null
      */
     public RunResultView {
         counts = List.copyOf(counts);

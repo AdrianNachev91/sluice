@@ -71,6 +71,8 @@ class SettingsPresenterTest {
     // leave the tests using this proving nothing on the other two runners.
     private static final String UNUSABLE_PATH = "photos" + (char) 0 + "inbox";
 
+    private static final Path OLD_LIBRARY = Path.of("/old-library");
+
     @BeforeAll
     static void startToolkit() throws Exception {
         FxToolkit.registerPrimaryStage();
@@ -139,7 +141,7 @@ class SettingsPresenterTest {
                 new MontageConfig(224, 5), ThemeChoice.SYSTEM));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", 224, 5, "SYSTEM");
+        presenter.save("/repo", "/library", "/inbox", "anthropic", "claude-opus-5", "", 224, 5, "SYSTEM");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
@@ -157,7 +159,7 @@ class SettingsPresenterTest {
                 ThemeChoice.SYSTEM));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "external-agent", "", "", 224, 5, "SYSTEM");
+        presenter.save("/repo", "/library", "/inbox", "external-agent", "", "", 224, 5, "SYSTEM");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
@@ -173,7 +175,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(configured);
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "anthropic", "claude-haiku-4-5", "https://mine.invalid", 224, 5, "SYSTEM");
+        presenter.save("/repo", "/library", "/inbox", "anthropic", "claude-haiku-4-5", "https://mine.invalid", 224, 5, "SYSTEM");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
@@ -352,7 +354,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        final var outcome = presenter.save("/repo", "", "", "anthropic", "  ", "", 224, 5,
+        final var outcome = presenter.save("/repo", "/library", "/inbox", "anthropic", "  ", "", 224, 5,
                 "SYSTEM");
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Refused.class);
@@ -397,7 +399,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        final var outcome = presenter.save("/repo", "", "", "external-agent", "", "", 224, 5,
+        final var outcome = presenter.save("/repo", "/library", "/inbox", "external-agent", "", "", 224, 5,
                 "SYSTEM");
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.SaveOutcome.Saved.class);
@@ -420,7 +422,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings(null, null, null));
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", 224, 5, "DARK");
+        presenter.save("/repo", "/library", "/inbox", "anthropic", "claude-opus-5", "", 224, 5, "DARK");
 
         final Settings saved = settingsUseCase.saved;
         assertThat(saved).isNotNull();
@@ -435,7 +437,7 @@ class SettingsPresenterTest {
 
         assertThat(onFxThread(() -> {
             ThemeSelection.set(ThemeChoice.LIGHT);
-            presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", 224, 5, "DARK");
+            presenter.save("/repo", "/library", "/inbox", "anthropic", "claude-opus-5", "", 224, 5, "DARK");
             return ThemeSelection.effectiveTheme().getValue();
         })).isEqualTo(Theme.DARK);
     }
@@ -450,7 +452,7 @@ class SettingsPresenterTest {
 
         assertThat(onFxThread(() -> {
             ThemeSelection.set(ThemeChoice.LIGHT);
-            presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", 224, 5, "DARK");
+            presenter.save("/repo", "/library", "/inbox", "anthropic", "claude-opus-5", "", 224, 5, "DARK");
             return ThemeSelection.effectiveTheme().getValue();
         })).isEqualTo(Theme.LIGHT);
     }
@@ -537,7 +539,7 @@ class SettingsPresenterTest {
         settingsUseCase.saveFailure = new JobInProgressException("Sluice is busy");
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
-        final var outcome = presenter.save("/repo", "", "", "anthropic", "claude-opus-5", "", 224, 5, "SYSTEM");
+        final var outcome = presenter.save("/repo", "/library", "/inbox", "anthropic", "claude-opus-5", "", 224, 5, "SYSTEM");
 
         assertThat(outcome).isEqualTo(new SettingsPresenter.SaveOutcome.Refused("Sluice is busy"));
     }
@@ -548,11 +550,11 @@ class SettingsPresenterTest {
     void eachNamedMoveSendsItsOwnResolution() {
         final Path destination = Path.of("/new-library");
 
-        final var copying = new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3));
+        final var copying = new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3, OLD_LIBRARY));
         presenterMoving(copying).moveLibraryRootCopyingTheIndex(refusedMoveTo(destination.toString()));
         assertThat(copying.received).isEqualTo(LibraryRootResolution.COPY_AND_KEEP_INDEX);
 
-        final var starting = new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(0, 0));
+        final var starting = new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(0, 0, OLD_LIBRARY));
         presenterMoving(starting).moveLibraryRootWithAFreshIndex(refusedMoveTo(destination.toString()));
         assertThat(starting.received).isEqualTo(LibraryRootResolution.START_A_FRESH_INDEX);
     }
@@ -560,7 +562,7 @@ class SettingsPresenterTest {
     @Test
     void moveLibraryRootReportsAFilesCopiedOutcome() {
         final var jobRunner = new JobRunner();
-        final var library = new SucceedingLibraryRootUseCase(jobRunner, new CopiedAndMoved(12, 12));
+        final var library = new SucceedingLibraryRootUseCase(jobRunner, new CopiedAndMoved(12, 12, OLD_LIBRARY));
         final var presenter = presenterOverLibrary(new FixedSettingsUseCase(settings(null, null, null)), library);
 
         final var outcome =
@@ -587,7 +589,7 @@ class SettingsPresenterTest {
     void aMoveStoresTheRestOfTheSaveItWasAskedAbout() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
         final var presenter = presenterOverLibrary(settingsUseCase,
-                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)));
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3, OLD_LIBRARY)));
         final Settings pending = settings("/new-repo", "/new-library", "/new-inbox");
 
         final var outcome = presenter.moveLibraryRoot(
@@ -624,7 +626,7 @@ class SettingsPresenterTest {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
         settingsUseCase.saveFailure = new JobInProgressException("Sluice is running a job. Finish it first.");
         final var presenter = presenterOverLibrary(settingsUseCase,
-                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3)));
+                new SucceedingLibraryRootUseCase(new JobRunner(), new CopiedAndMoved(3, 3, OLD_LIBRARY)));
 
         final var outcome = presenter.moveLibraryRoot(refusedMoveTo("/new-library"),
                 LibraryRootResolution.COPY_AND_KEEP_INDEX);

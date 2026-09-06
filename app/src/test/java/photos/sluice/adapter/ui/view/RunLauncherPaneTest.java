@@ -277,7 +277,7 @@ class RunLauncherPaneTest {
         final Parent pane = onFxThread(() -> built(presenterOverAnUnfinishedSiftOf2019()));
 
         assertThat(insideText(pane, "#run-year-2019")).last().isEqualTo("*");
-        assertThat(markOpening(pane, "#run-scope-legend")).isEqualTo("*");
+        assertThat(markOpening(pane, ".run-legend-mark")).isEqualTo("*");
     }
 
     @Test
@@ -574,12 +574,12 @@ class RunLauncherPaneTest {
         return ((TextInputControl) pane.lookup(id)).getText();
     }
 
-    // The mark is a label of its own beside the sentence, which is what lets it wear its own
-    // colour. So it is reached through the row the two share.
+    // The mark is a line of its own beside the sentence, which is what lets it wear its own colour.
+    // Reached by that class rather than through the sentence's parent, which is the row on one
+    // screen and a column of sentence-then-link on another.
     @SuppressWarnings("SameParameterValue")
-    private static String markOpening(final Parent pane, final String id) {
-        final Parent row = pane.lookup(id).getParent();
-        return ((TextField) row.getChildrenUnmodifiable().getFirst()).getText();
+    private static String markOpening(final Parent pane, final String markClass) {
+        return ((TextInputControl) pane.lookup(markClass)).getText();
     }
 
     private static Node chooseAModeTheRowsScope(final Parent pane) {
@@ -698,7 +698,7 @@ class RunLauncherPaneTest {
 
     private static Parent built(final RunLauncherPresenter presenter, final int height) {
         presenter.setup().refreshCounts();
-        final var page = (Parent) RunLauncherPane.pane(presenter);
+        final var page = (Parent) RunLauncherPane.pane(presenter, _ -> { });
         final var scene = new Scene(new StackPane(page), 900, height);
         scene.getStylesheets().add(
                 Objects.requireNonNull(RunLauncherPaneTest.class.getResource("/ui/sluice.css"),

@@ -312,10 +312,10 @@ public class TroubleshootPresenter {
             handle.onComplete().whenComplete((pass, failure) -> this.checked(run, pass, failure));
         } catch (final RuntimeException e) {
             log.info("Could not look through {}", run, e);
-            final String refused = RunRefusals.plainly(e);
+            final RunRefusals.Refusal refused = RunRefusals.said(e);
             this.checking = false;
-            this.checkRefusedReason = refused;
-            this.report(new Message(refused, true));
+            this.checkRefusedReason = refused.sentence();
+            this.report(RunRefusals.refusing(e));
             this.draw();
         }
     }
@@ -337,9 +337,9 @@ public class TroubleshootPresenter {
             this.checkRefusedReason = null;
         } else {
             log.warn("Could not look through {}", run, failure);
-            final String refused = RunRefusals.plainly(RunRefusals.rootOf(failure));
-            this.checkRefusedReason = refused;
-            this.report(new Message(refused, true));
+            final Throwable root = RunRefusals.rootOf(failure);
+            this.checkRefusedReason = RunRefusals.plainly(root);
+            this.report(RunRefusals.refusing(root));
         }
         this.report = pass;
         this.checking = false;
@@ -361,7 +361,7 @@ public class TroubleshootPresenter {
             this.pipeline.answer(run, answer, AnswerSource.DESKTOP);
         } catch (final RuntimeException e) {
             log.info("Could not answer {} on {}", chosen, run, e);
-            this.report(new Message(RunRefusals.plainly(e), true));
+            this.report(RunRefusals.refusing(e));
             return;
         }
         this.report(new Message(requireNonNull(FindingWords.settled(chosen)), false));
@@ -438,11 +438,10 @@ public class TroubleshootPresenter {
             return landed;
         } catch (final RuntimeException e) {
             log.info("Could not read {}", run, e);
-            final String refused = RunRefusals.plainly(e);
             // Moved off READY with the findings it was read from, or Finish stays on offer over a
             // run this cannot see.
-            this.reading.set(new Reading(List.of(), State.DAMAGED, refused));
-            this.report(new Message(refused, true));
+            this.reading.set(new Reading(List.of(), State.DAMAGED, RunRefusals.plainly(e)));
+            this.report(RunRefusals.refusing(e));
             return null;
         }
     }
@@ -493,7 +492,7 @@ public class TroubleshootPresenter {
             handle = this.pipeline.discard(run);
         } catch (final RuntimeException e) {
             log.info("Refused to discard {}", run, e);
-            this.report(new Message(RunRefusals.plainly(e), true));
+            this.report(RunRefusals.refusing(e));
             this.draw();
             return;
         }
@@ -512,7 +511,7 @@ public class TroubleshootPresenter {
         this.discarding = false;
         if (failure != null) {
             log.warn("Could not discard {}", run, failure);
-            this.report(new Message(RunRefusals.plainly(RunRefusals.rootOf(failure)), true));
+            this.report(RunRefusals.refusing(RunRefusals.rootOf(failure)));
             this.draw();
             return;
         }

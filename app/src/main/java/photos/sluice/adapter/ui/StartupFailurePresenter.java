@@ -29,7 +29,7 @@ public class StartupFailurePresenter {
     private static final String REJECTED_SETTING = "Sluice could not use the setting ";
     private static final String UNPARSABLE_CONFIG = "Sluice could not read your settings file. It likely has a "
             + "typo or a formatting mistake, often a missing or extra bracket or quote mark. Starting fresh "
-            + "renames the file aside rather than deleting it, so nothing is lost, and Sluice starts over "
+            + "renames the file aside rather than deleting it, and Sluice starts over "
             + "with nothing configured. You can still open the old file afterward in a text editor to copy "
             + "anything you typed by hand, like your category descriptions.";
     private static final String GENERIC = "Sluice hit a problem it has no explanation for. Report this as a "

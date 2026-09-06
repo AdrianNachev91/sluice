@@ -4,6 +4,7 @@ import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -48,9 +49,11 @@ final class RunResultPane {
      *
      * @param presenter {@link RunLauncherPresenter} takes the press on either button
      * @param redraw {@link Runnable} draws the dashboard again once the presenter has been told
+     * @param navigation {@link ScreenNavigation} how this card opens another screen
      * @return {@link Mounted} the card and the way to fill it in
      */
-    static Mounted mount(final RunLauncherPresenter presenter, final Runnable redraw) {
+    static Mounted mount(final RunLauncherPresenter presenter, final Runnable redraw,
+                         final ScreenNavigation navigation) {
         final TextArea heading = SelectableText.prose();
         heading.setId("run-result-heading");
         heading.getStyleClass().add("pane-heading");
@@ -60,10 +63,9 @@ final class RunResultPane {
         // Given its own ground only where the run failed, which tone() decides. On every other
         // ending this line introduces the counts under it. On a failure it is the whole card, and
         // it names a file the reader has to go and deal with.
-        final var detailBox = new VBox(detail);
+        final Hyperlink detailWayThere = SettingsRows.wayThereLink("run-result-detail-link");
+        final VBox detailBox = SettingsRows.wayThereLines(detail, detailWayThere);
         detailBox.setId("run-result-detail-box");
-        detailBox.managedProperty().bind(detailBox.visibleProperty());
-        detailBox.visibleProperty().bind(detail.visibleProperty());
 
         final var counts = new VBox();
         counts.setId("run-result-counts");
@@ -95,6 +97,7 @@ final class RunResultPane {
         final TextArea message = SelectableText.prose();
         message.setId("run-result-message");
         SettingsRows.showWhileItSaysSomething(message);
+        final Hyperlink messageWayThere = SettingsRows.wayThereLink("run-result-message-link");
 
         // Its weight is the arm's, set on every fill, so the class goes on there rather than here.
         final var actionButton = new Button();
@@ -126,12 +129,14 @@ final class RunResultPane {
         // scrollbar over rows that already fit.
         scroll.prefViewportHeightProperty().bind(body.heightProperty());
 
-        final var page = new VBox(heading, scroll, message, doneRow);
+        final var page = new VBox(heading, scroll,
+                SettingsRows.wayThereLines(message, messageWayThere), doneRow);
         page.setId("run-result");
         page.getStyleClass().add("run-result");
 
         final var controls = new Controls(page, heading, detail, detailBox, counts, warningHeadline,
-                warningDetail, actionQuestion, actionButton, message, done);
+                warningDetail, actionQuestion, actionButton, message, done,
+                detailWayThere, messageWayThere, navigation);
         return new Mounted(page, showing -> controls.fill(showing, presenter, redraw));
     }
 
@@ -225,11 +230,15 @@ final class RunResultPane {
      * @param actionButton {@link Button} the card's own action, beside Done
      * @param message {@link TextArea} what a refused press on this card has to report
      * @param done {@link Button} the button back to the launcher
+     * @param detailWayThere {@link Hyperlink} the control under the detail, where it names a screen
+     * @param messageWayThere {@link Hyperlink} the control under that report, where it names one
+     * @param navigation {@link ScreenNavigation} how this card opens another screen
      */
     private record Controls(VBox page, TextArea heading, TextArea detail, VBox detailBox, VBox counts,
                             TextArea warningHeadline, TextArea warningDetail,
                             TextArea actionQuestion, Button actionButton, TextArea message,
-                            Button done) {
+                            Button done, Hyperlink detailWayThere, Hyperlink messageWayThere,
+                            ScreenNavigation navigation) {
 
         /**
          * Puts everything the presenter says onto the card.
@@ -248,6 +257,7 @@ final class RunResultPane {
             this.warningHeadline.setText(view.warning() == null ? "" : view.warning().headline());
             this.warningDetail.setText(view.warning() == null ? "" : view.warning().detail());
             this.drawAction(view.action(), presenter, redraw);
+            SettingsRows.offering(this.detailWayThere, view.wayThere(), this.navigation);
             this.drawMessage(showing.message());
             this.done.setText(view.doneLabel());
         }
@@ -341,9 +351,7 @@ final class RunResultPane {
          * @param said {@link RunLauncherView.Message} what to report, or null for nothing
          */
         private void drawMessage(final RunLauncherView.@Nullable Message said) {
-            this.message.setText(said == null ? "" : said.text());
-            SelectableText.dressAs(this.message, "run-message",
-                    said != null && said.refused() ? "settings-violation" : "settings-confirmation");
+            SettingsRows.reportRun(this.message, this.messageWayThere, said, this.navigation);
         }
 
         /**

@@ -99,7 +99,7 @@ class TroubleshootPresenterTest {
 
         assertThat(presenter.view().problems()).hasSize(1);
         assertThat(stacked.heading())
-                .isEqualTo("This sift was asked to move 3 files from outside your Sorted folder.");
+                .isEqualTo("3 photos this sift wants to move are not under the Sorted folder in force now.");
         assertThat(stacked.rows()).extracting(Problem::problem).containsOnlyNulls();
         assertThat(stacked.rows()).extracting(Problem::about)
                 .containsExactly(PHOTO.toString(), "b.jpg", "c.jpg");
@@ -114,7 +114,7 @@ class TroubleshootPresenterTest {
 
         assertThat(alone.heading()).isNull();
         assertThat(alone.rows()).extracting(Problem::problem)
-                .containsExactly("This sift was asked to move a file from outside your Sorted folder.");
+                .containsExactly("A photo this sift wants to move is not under the Sorted folder in force now.");
     }
 
     @Test
@@ -581,7 +581,7 @@ class TroubleshootPresenterTest {
         assertThat(left.get()).isZero();
         assertThat(presenter.working()).isFalse();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .isEqualTo("That sift is at " + outside + ", which is not inside the folders Sluice "
+                .isEqualTo("This sift is at " + outside + ", which is not inside the folders Sluice "
                         + "is set up with now. Point your working folder back at the one holding "
                         + "it to work on it again.")
                 .doesNotContain(Pipeline.RunOutsideWorkingRootException.class.getName());
@@ -634,7 +634,7 @@ class TroubleshootPresenterTest {
 
         assertThat(requireNonNull(presenter.view().message()).text())
                 .isEqualTo("Sluice could not work on this sift, because the answers in it do not "
-                        + "hold together.")
+                        + "hold together. Your photos are still in Sorted.")
                 .doesNotContain(ApplyException.class.getName());
     }
 
@@ -696,7 +696,7 @@ class TroubleshootPresenterTest {
 
         assertThat(presenter.view().summary())
                 .isEqualTo("Sluice could not work on this sift, because the answers in it do not "
-                        + "hold together.");
+                        + "hold together. Your photos are still in Sorted.");
         assertThat(presenter.view().summary())
                 .isEqualTo(requireNonNull(presenter.view().message()).text());
         assertThat(rows(presenter)).hasSize(1);

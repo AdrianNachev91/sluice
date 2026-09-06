@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.TroubleshootView.Answer;
 import photos.sluice.domain.cull.Decision;
 import photos.sluice.domain.cull.Finding;
+import photos.sluice.domain.cull.Verdict;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -182,11 +183,22 @@ class FindingWordsTest {
                 .containsExactlyInAnyOrder(
                         "Look again",
                         "Go on without this photo",
-                        "Use the judgement",
+                        "Move it where the sift said",
                         "Leave the photo unjudged",
                         "Go on without this sheet",
                         "Use this sheet's answers as they are",
                         "Go on without them");
+    }
+
+    // The same finding, and the press does opposite things to the photo. A shared label would have
+    // a reader pressing for a move and getting the photo left alone.
+    @Test
+    void anOverlapOnAKeptPhotoSaysThePhotoStaysRatherThanMoves() {
+        final Finding kept = new Finding.VerdictUnreviewableOverlap(new Verdict.Keep(PHOTO));
+
+        assertThat(FindingWords.of(kept).choices())
+                .extracting(FindingWords.Choice::label)
+                .containsExactly("Keep it in Sorted", "Leave the photo unjudged");
     }
 
     // Only the sheet says what survives. Photos left behind are the reader's, where a set of
@@ -194,6 +206,6 @@ class FindingWordsTest {
     @Test
     void leavingASheetOutSaysItsPhotosSurvive() {
         assertThat(requireNonNull(FindingWords.settled(Answer.SET_ASIDE_SHEET)))
-                .contains("Its photos stay where they are");
+                .contains("Its photos stay in Sorted");
     }
 }

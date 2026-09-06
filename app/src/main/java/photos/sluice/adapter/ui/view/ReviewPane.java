@@ -4,6 +4,7 @@ import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -42,9 +43,10 @@ final class ReviewPane {
      * Builds the screen, ready to sit in the shell's content area.
      *
      * @param presenter {@link ReviewPresenter} supplies what to draw and takes every press
+     * @param navigation {@link ScreenNavigation} how this screen opens another
      * @return {@link Node} the screen
      */
-    static Node pane(final ReviewPresenter presenter) {
+    static Node pane(final ReviewPresenter presenter, final ScreenNavigation navigation) {
         final TextField heading = SelectableText.line();
         heading.setId("review-heading");
         heading.getStyleClass().add("pane-heading");
@@ -58,7 +60,12 @@ final class ReviewPane {
         final TextArea unreadable = SettingsRows.emptyHelpLine("review-unreadable");
         final VBox unreadableBox = boxed(unreadable, "review-unreadable-box");
         final TextArea message = SettingsRows.emptyHelpLine("review-message");
-        final VBox messageBox = boxed(message, "review-message-box");
+        final Hyperlink messageWayThere = SettingsRows.wayThereLink("review-message-link");
+        final var messageBox = new VBox(SettingsRows.wayThereLines(message, messageWayThere));
+        messageBox.setId("review-message-box");
+        messageBox.getStyleClass().add("warning-box");
+        messageBox.managedProperty().bind(messageBox.visibleProperty());
+        messageBox.visibleProperty().bind(message.visibleProperty());
         final TextArea nothingYet = SettingsRows.emptyHelpLine("review-nothing-yet");
 
         final TextArea explained = SettingsRows.emptyHelpLine("review-explained");
@@ -84,7 +91,7 @@ final class ReviewPane {
         page.getStyleClass().add("review");
 
         final var controls = new Controls(heading, explained, unreadable, nothingYet, message,
-                groups, scroll);
+                messageWayThere, navigation, groups, scroll);
         final Runnable redraw = new Runnable() {
             @Override
             public void run() {
@@ -133,11 +140,14 @@ final class ReviewPane {
      * @param unreadable {@link TextArea} what to say where a folder could not be read
      * @param nothingYet {@link TextArea} what to say where nothing at all is waiting
      * @param message {@link TextArea} what the screen has to report
+     * @param messageWayThere {@link Hyperlink} the control under it, where that report names a screen
+     * @param navigation {@link ScreenNavigation} how this screen opens another
      * @param groups {@link VBox} one node per section
      */
     private record Controls(TextField heading, TextArea explained, TextArea unreadable,
                             TextArea nothingYet,
-                            TextArea message, VBox groups, ScrollPane scroll) {
+                            TextArea message, Hyperlink messageWayThere, ScreenNavigation navigation,
+                            VBox groups, ScrollPane scroll) {
 
         /**
          * Puts everything the presenter says onto the controls.
@@ -153,6 +163,8 @@ final class ReviewPane {
             this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
             this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
             this.message.setText(view.message() == null ? "" : view.message().text());
+            SettingsRows.offering(this.messageWayThere,
+                    view.message() == null ? null : view.message().wayThere(), this.navigation);
             final List<Node> drawn = new ArrayList<>();
             view.groups().forEach(group -> drawn.add(section(group, presenter, redraw, this.scroll)));
             this.groups.getChildren().setAll(drawn);

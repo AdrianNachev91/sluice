@@ -39,14 +39,14 @@ class RunResultsTest {
     private static final Path PREP_DIR = Path.of("logs", "sift-prep", "2019");
 
     @Test
-    void aSiftBlockedByItsOwnValidationSaysNothingWasMoved() {
+    void aSiftBlockedByItsOwnValidationSaysWhereThePhotosStillAre() {
         final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
                 waitingJob(new ShardTally(28, 28, 28)), List.of(new Finding.MissingMontageField("montage-003")),
                 CullReport.nothingSpent("anthropic", 0), null));
 
         assertThat(card.heading()).isEqualTo("Sifting stopped and needs a look.");
         assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
-        assertThat(requireNonNull(card.detail())).contains("Nothing was moved");
+        assertThat(requireNonNull(card.detail())).contains("Your photos are still in Sorted");
         assertThat(card.action()).isNull();
     }
 
@@ -251,7 +251,7 @@ class RunResultsTest {
     // apart while both headings read the same.
     @Test
     void aRunThatThrewIsNotHeadedTheWayAStoppedRunIs() {
-        final RunResultView failure = RunResults.failed(RunMode.SORT, "Something broke.");
+        final RunResultView failure = RunResults.failed(RunMode.SORT, new RunRefusals.Refusal("Something broke.", null));
 
         assertThat(failure.heading()).isEqualTo("Sorting could not finish.")
                 .isNotEqualTo(card(RunMode.SORT, sortedInto(Set.of(2019), true)).heading());

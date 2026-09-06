@@ -480,7 +480,7 @@ public class RunLauncherPresenter {
             // already running, an app on its way out, a folder root gone bad since this screen was
             // drawn. Each carries a sentence written for the person reading it.
             log.info("Refused to start {}", ran, e);
-            this.report(new Message(RunRefusals.plainly(e), true));
+            this.report(RunRefusals.refusing(e));
         }
     }
 
@@ -527,7 +527,7 @@ public class RunLauncherPresenter {
         this.inFlight = null;
         this.ended = failure == null
                 ? RunResults.of(ran, outcome, this.narrowedTo)
-                : RunResults.failed(ran, RunRefusals.plainly(RunRefusals.rootOf(failure)));
+                : RunResults.failed(ran, RunRefusals.said(RunRefusals.rootOf(failure)));
         this.running = false;
         this.repaint();
         this.recount();

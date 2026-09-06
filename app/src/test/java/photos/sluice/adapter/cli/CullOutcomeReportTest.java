@@ -116,7 +116,7 @@ class CullOutcomeReportTest {
 
         assertThat(outcome.status()).isEqualTo(CommandStatus.BLOCKED);
         assertThat(outcome.resultLines()).containsExactly(
-                "Every sheet came back, but there are problems with some. Nothing was moved. Run "
+                "Every sheet came back, but there are problems with some. Your photos are still in Sorted. Run "
                         + "'troubleshoot 2019' to see what went wrong.");
         assertThat(CullOutcomeReport.of(twoFindings, DUPLICATES, INSTRUCTIONS).resultLines())
                 .isEqualTo(outcome.resultLines());

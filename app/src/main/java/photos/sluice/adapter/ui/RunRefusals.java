@@ -1,5 +1,7 @@
 package photos.sluice.adapter.ui;
 
+import org.jspecify.annotations.Nullable;
+import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.NoteIsNotTextException;
@@ -34,22 +36,57 @@ final class RunRefusals {
     }
 
     /**
-     * A failure as a sentence, falling back to the type where it carries none.
+     * What to tell the reader, and where to send them if anywhere.
      *
-     * <p>Most of what reaches here was written for the person reading it, and those messages are
-     * better than anything composed out here. What has none would otherwise render as a blank, so
-     * the type's own name stands in as something to search for.
+     * @param sentence {@link String} the words to show
+     * @param wayThere {@link Location} the screen that can be done something about, or null where
+     *         the sentence names nowhere to go
+     */
+    record Refusal(String sentence, @Nullable Location wayThere) {
+    }
+
+    /**
+     * A failure as a sentence, falling back to the type where it carries none.
      *
      * @param failure {@link Throwable} what went wrong
      * @return {@link String} the sentence to show
      */
     static String plainly(final Throwable failure) {
+        return said(failure).sentence();
+    }
+
+    /**
+     * A failure as a line a screen reports, dressed as a refusal.
+     *
+     * @param failure {@link Throwable} what went wrong
+     * @return {@link Message} the line, carrying any way there the sentence earned
+     */
+    static Message refusing(final Throwable failure) {
+        final Refusal refusal = said(failure);
+        return new Message(refusal.sentence(), true, refusal.wayThere());
+    }
+
+    /**
+     * A failure as a sentence and, where the fault can be acted on, the screen to act on it from.
+     *
+     * <p>Most of what reaches here was written for the person reading it, and those messages are
+     * better than anything composed out here. What has none would otherwise render as a blank, so
+     * the type's own name stands in as something to search for.
+     *
+     * <p>One switch answers both halves. Split across two, an exception type added later takes an
+     * arm in one and falls through the other. The reader is then either sent somewhere the sentence
+     * never names, or left with no way to the screen that would fix it.
+     *
+     * @param failure {@link Throwable} what went wrong
+     * @return {@link Refusal} the sentence, and the way there where there is one
+     */
+    static Refusal said(final Throwable failure) {
         return switch (failure) {
             // These three are refusals this app writes for the person meeting them, and each says
             // what to do about itself.
-            case final JobInProgressException refused -> messageOf(refused);
-            case final ShuttingDownException closing -> messageOf(closing);
-            case final ImportSourceException unusable -> messageOf(unusable);
+            case final JobInProgressException refused -> nowhereToGo(messageOf(refused));
+            case final ShuttingDownException closing -> nowhereToGo(messageOf(closing));
+            case final ImportSourceException unusable -> nowhereToGo(messageOf(unusable));
             // This one carries a message built for a log, down to the configuration key that is
             // wrong. Which folder is at fault is the part a reader needs, in the words the rest of
             // this app calls that folder by.
@@ -57,52 +94,89 @@ final class RunRefusals {
             // Several throw sites raise this, and their messages differ: one names the environment
             // variable that would override the key, another only the provider. Its type and its id
             // are the contract, so the words are composed here instead of taken from any of them.
-            case final MissingCredentialException _ -> "A sift cannot be started because your "
-                    + "provider key is not set. Add one in Settings.";
+            case final MissingCredentialException _ -> new Refusal("A sift cannot be started because "
+                    + "your provider key is not set.", Location.SETTINGS);
             // A store that answers neither yes nor no. Worded as Settings words the same fault, and
             // carrying the same remedy, since one broken store must not read as two problems.
-            case final SecretStoreException broken -> "Sluice could not read your key. The credential "
-                    + "store on this computer refused to answer. Nothing else you have configured is "
-                    + "affected. Open Settings and save your key again: that alone often fixes it. "
+            case final SecretStoreException broken -> new Refusal("Sluice could not read your key. "
+                    + "The credential store on this computer refused to answer. Nothing else you "
+                    + "have configured is affected. Saving your key again often fixes it on its own. "
                     + "If it keeps happening, report this as a bug in Sluice, quoting this: "
-                    + broken.getMessage();
+                    + broken.getMessage(), Location.SETTINGS);
             case final Pipeline.ScopeOccupiedException occupied -> occupiedBy(occupied);
             case final Pipeline.ScopeOverlapsException overlaps -> overlapping(overlaps);
             // Written for the person meeting it, like the three above. A run finishing between a
             // screen being drawn and its button being pressed is the ordinary way here.
-            case final Pipeline.RunAlreadyFinishedException finished -> messageOf(finished);
-            case final Pipeline.NothingToRedoException nothing -> messageOf(nothing);
-            case final Pipeline.ScopeUnreadableException unreadable -> "Sluice doesn't know whether a "
-                    + "sift is already running for that timeframe, because " + unreadable.prepDir()
-                    + " cannot be read. Most likely the folder is held by another process or not "
-                    + "there anymore.";
-            // Names no way out but the working folder. Several calls raise this, discarding among
-            // them, so offering a discard here would name the press that just refused.
-            case final Pipeline.RunOutsideWorkingRootException outside -> "That sift is at "
-                    + outside.prepDir() + ", which is not inside the folders Sluice is set up with "
-                    + "now. Point your working folder back at the one holding it to work on it again.";
-            case final MalformedPrepJsonException _ -> "There are no instructions to copy for that "
-                    + "sift, because its records are damaged.";
+            case final Pipeline.RunAlreadyFinishedException finished -> nowhereToGo(messageOf(finished));
+            case final Pipeline.NothingToRedoException nothing -> nowhereToGo(messageOf(nothing));
+            case final Pipeline.ScopeUnreadableException unreadable -> nowhereToGo("Sluice doesn't "
+                    + "know whether a sift is already running for that timeframe, because "
+                    + unreadable.prepDir() + " cannot be read. Most likely the folder is held by "
+                    + "another process or not there anymore.");
+            // Discarding is one of the calls that raise this, so offering a discard here would name
+            // the press that just refused.
+            case final Pipeline.RunOutsideWorkingRootException outside -> nowhereToGo("This sift is "
+                    + "at " + outside.prepDir() + ", which is not inside the folders Sluice is set "
+                    + "up with now. Point your working folder back at the one holding it to work on "
+                    + "it again.");
+            case final MalformedPrepJsonException _ -> nowhereToGo("Sluice could not read that sift's "
+                    + "own records, because what is in them is damaged.");
             // Says nothing about which answer is wrong. What this carries is the engine's own list,
             // written for a report rather than for a reader.
-            case final ApplyException _ -> "Sluice could not work on this sift, because the answers "
-                    + "in it do not hold together.";
-            case final NoteIsNotTextException note -> noteIsNotText(note.file());
+            case final ApplyException _ -> nowhereToGo("Sluice could not work on this sift, because "
+                    + "the answers in it do not hold together. Your photos are still in Sorted.");
+            case final NoteIsNotTextException note -> nowhereToGo(noteIsNotText(note.file()));
             // Above the two arms below it, since a file whose bytes are not text was reached, and
             // neither of the reasons they offer is true of it.
-            case final CharacterCodingException damaged -> fileIsNotText(damaged.toString());
-            case final UncheckedIOException failed -> fileOutOfReach(failed.getMessage());
+            case final CharacterCodingException damaged -> nowhereToGo(fileIsNotText(damaged.toString()));
+            case final UncheckedIOException failed -> nowhereToGo(fileOutOfReach(failed.getMessage()));
             // The same fault one level down. A job's failure arrives here through rootOf, which
             // answers with a throwable's cause, and an UncheckedIOException always has one. Without
             // this arm every filesystem failure a job reports falls to the default below and
             // reaches the reader as a Java class name.
-            case final IOException failed -> fileOutOfReach(failed.toString());
+            case final IOException failed -> nowhereToGo(fileOutOfReach(failed.toString()));
             // Nothing here was written for a reader, so the words are the app's own and the
             // technical text rides along verbatim. Quoting it is what makes the bug report worth
             // filing, and the dashboard is where the user can copy it from.
-            default -> "Sluice could not do that, and has no plain words for why. "
-                    + "Report this as a bug in Sluice, quoting this: " + failure;
+            default -> nowhereToGo("Sluice could not do that, and has no plain words for why. "
+                    + "Report this as a bug in Sluice, quoting this: " + failure);
         };
+    }
+
+    /**
+     * A failure's own cause where it has one, since what a job threw is usually a wrapper.
+     *
+     * @param failure {@link Throwable} what the job's promise completed with
+     * @return {@link Throwable} the one carrying the sentence worth showing
+     */
+    static Throwable rootOf(final Throwable failure) {
+        return failure.getCause() == null ? failure : failure.getCause();
+    }
+
+    /**
+     * What to say where the chosen timeframe shares photos with unfinished sifts without being one of
+     * them.
+     *
+     * @param across a {@link List} of {@link String} the scopes in the way, as their runs name them
+     * @param chosen {@link String} the timeframe the reader picked
+     * @return {@link Refusal} the sentence, and the runs screen to deal with them from
+     */
+    static Refusal coveringUnfinished(final CullScope.Year chosen, final List<CullScope.Year> across) {
+        return new Refusal(RunWords.spelledScope(chosen) + " overlaps "
+                + RunWords.listed(across.stream().map(RunWords::spelledScope).toList())
+                + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
+                + " you have not finished. Finish or discard "
+                + (across.size() == 1 ? "it" : "them") + " first.", Location.RUNS);
+    }
+
+    /**
+     * A sentence that names no screen anything can be done from.
+     *
+     * @param sentence {@link String} the words to show
+     * @return {@link Refusal} those words, with no way there
+     */
+    private static Refusal nowhereToGo(final String sentence) {
+        return new Refusal(sentence, null);
     }
 
     /**
@@ -142,39 +216,6 @@ final class RunRefusals {
     }
 
     /**
-     * A failure's own cause where it has one, since what a job threw is usually a wrapper.
-     *
-     * @param failure {@link Throwable} what the job's promise completed with
-     * @return {@link Throwable} the one carrying the sentence worth showing
-     */
-    static Throwable rootOf(final Throwable failure) {
-        return failure.getCause() == null ? failure : failure.getCause();
-    }
-
-    /**
-     * What to say where the chosen timeframe shares photos with unfinished sifts without being one of
-     * them.
-     *
-     * <p>Takes the scopes rather than the refusal, because two callers word it. The facade refuses
-     * on the same fault, and the launcher greys Start before anybody presses it. One sentence, so
-     * the screen and the refusal cannot drift apart.
-     *
-     * <p>Names every one of them rather than the first. A reader told about one deals with it,
-     * comes back, and is refused by the next.
-     *
-     * @param across a {@link List} of {@link String} the scopes in the way, as their runs name them
-     * @param chosen {@link String} the timeframe the reader picked
-     * @return {@link String} the sentence to show
-     */
-    static String coveringUnfinished(final CullScope.Year chosen, final List<CullScope.Year> across) {
-        return RunWords.spelledScope(chosen) + " overlaps "
-                + RunWords.listed(across.stream().map(RunWords::spelledScope).toList())
-                + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
-                + " you have not finished. Finish or discard "
-                + (across.size() == 1 ? "it" : "them") + " in Runs, then you can sift this.";
-    }
-
-    /**
      * What to say about a timeframe a sift is already sitting on.
      *
      * <p>The exception's own message names the prep dir and the raw state, which is what a log
@@ -186,12 +227,12 @@ final class RunRefusals {
      * a run that appeared between the screen being drawn and the button being pressed.
      *
      * @param occupied {@link Pipeline.ScopeOccupiedException} the refusal, carrying the run
-     * @return {@link String} the sentence to show
+     * @return {@link Refusal} the sentence, and the runs screen to deal with it from
      */
-    private static String occupiedBy(final Pipeline.ScopeOccupiedException occupied) {
-        return "You already have a sift of " + occupied.occupant().scope() + " that has not finished. "
-                + "Another cannot be started for the same timeframe while that one is there. "
-                + "Open Runs to continue or discard it.";
+    private static Refusal occupiedBy(final Pipeline.ScopeOccupiedException occupied) {
+        return new Refusal("You already have a sift of " + occupied.occupant().scope()
+                + " that has not finished. Another cannot be started for the same timeframe while "
+                + "that one is there. Continue it or discard it first.", Location.RUNS);
     }
 
     /**
@@ -202,14 +243,17 @@ final class RunRefusals {
      * back to its own message rather than saying a timeframe overlaps an empty list.
      *
      * @param overlaps {@link Pipeline.ScopeOverlapsException} the refusal
-     * @return {@link String} the sentence to show
+     * @return {@link Refusal} the sentence, and the way there where the runs could be named
      */
-    private static String overlapping(final Pipeline.ScopeOverlapsException overlaps) {
+    private static Refusal overlapping(final Pipeline.ScopeOverlapsException overlaps) {
         final List<CullScope.Year> across = overlaps.across().stream()
                 .map(run -> CullScope.yearScopeOf(run.scope()))
                 .filter(Objects::nonNull)
                 .toList();
-        return across.isEmpty() ? messageOf(overlaps) : coveringUnfinished(overlaps.chosen(), across);
+        // Nothing to send the reader to where none of them could be read back.
+        return across.isEmpty()
+                ? nowhereToGo(messageOf(overlaps))
+                : coveringUnfinished(overlaps.chosen(), across);
     }
 
     /**
@@ -232,19 +276,19 @@ final class RunRefusals {
      * than the folder. A reader has never seen that key and cannot act on it.
      *
      * @param misconfigured {@link PathsMisconfiguredException} what the facade refused with
-     * @return {@link String} the sentence to show
+     * @return {@link Refusal} the sentence, and the screen the folders are set on
      */
-    private static String foldersAtFault(final PathsMisconfiguredException misconfigured) {
+    private static Refusal foldersAtFault(final PathsMisconfiguredException misconfigured) {
         final List<String> folders = misconfigured.violations().stream()
                 .flatMap(violation -> rolesIn(violation).stream())
                 .distinct()
                 .sorted()
                 .map(PathRoleLabels::of)
                 .toList();
-        return folders.isEmpty()
-                ? "Sluice cannot work with your folder settings. Check them in Settings."
-                : "Sluice cannot use your " + RunWords.listed(folders) + " any more. "
-                        + (folders.size() == 1 ? "Check it in Settings." : "Check them in Settings.");
+        return new Refusal(folders.isEmpty()
+                ? "Sluice cannot work with your folder settings."
+                : "Sluice cannot use your " + RunWords.listed(folders) + " any more.",
+                Location.SETTINGS);
     }
 
     /**

@@ -79,8 +79,10 @@ public class RunSetupPresenter {
     private static final String IMPORT_CANCEL = "Cancel";
     // One card reports a failed read for both, so it names neither. Any of the three folder
     // settings can be what broke, and this card cannot tell which.
-    private static final String INBOX_UNREADABLE = "Sluice could not read your folders. Check them "
-            + "in Settings.";
+    private static final String FOLDERS_UNREADABLE = "Sluice could not read your folders.";
+    // The card has no control on it, so the way to Settings has to be words there. The report line
+    // below the field says the same thing and offers the screen itself.
+    private static final String INBOX_UNREADABLE = FOLDERS_UNREADABLE + " Check them in Settings.";
 
     private static final String BUSY_ELSEWHERE = "Something else is running now, and Sluice works "
             + "on one thing at a time. Try again once it has finished.";
@@ -90,12 +92,8 @@ public class RunSetupPresenter {
 
     // What the mark means, once under the rows. A reader who never hovers a row would otherwise
     // meet a bare asterisk. The screen opens this line with the mark itself, in its own colour.
-    // Three pieces because the middle one is pressable. Split here rather than on the screen, which
-    // would have to read the sentence to find the word that leads anywhere.
-    private static final String UNFINISHED_LEGEND = "This timeframe already has a sift that has not "
-            + "finished. Open ";
-    private static final String UNFINISHED_WAY_THERE = "Runs";
-    private static final String UNFINISHED_LEGEND_AFTER = " to see it.";
+    private static final String UNFINISHED_LEGEND =
+            "This timeframe already has a sift that has not finished.";
 
     // A run scoped to a whole year covers every month a row could stand for.
     private static final Set<Integer> WHOLE_YEAR =
@@ -190,12 +188,13 @@ public class RunSetupPresenter {
         final RunScope scope = this.scope();
         final List<YearChoice> years = this.yearChoices();
         final StartAction action = this.startAction(scope);
+        final RunRefusals.@Nullable Refusal refused = this.refusalOf(scope);
         return new RunLauncherView(this.modes(), REVIEW_STEP, this.chosen.explained(), this.inboxCard(),
                 years, this.undatedChoice(), this.readsSorted(),
                 this.nothingStagedLine(), SCOPE_LABEL, this.scopeText, this.chosen.scopeHint(),
-                this.refusalOf(scope), this.cost(scope), legendFor(years),
-                legendFor(years) == null ? null : UNFINISHED_WAY_THERE,
-                legendFor(years) == null ? null : UNFINISHED_LEGEND_AFTER,
+                refused == null ? null : refused.sentence(),
+                refused == null ? null : refused.wayThere(),
+                this.cost(scope), legendFor(years),
                 this.startLabel(action), this.canStart(scope), action, this.message);
     }
 
@@ -493,7 +492,9 @@ public class RunSetupPresenter {
         if (this.folders.isCounting()) {
             return new Message(STILL_READING, true);
         }
-        return this.folders.unreadable() ? new Message(INBOX_UNREADABLE, true) : null;
+        return this.folders.unreadable()
+                ? new Message(FOLDERS_UNREADABLE, true, Location.SETTINGS)
+                : null;
     }
 
     /**
@@ -598,7 +599,7 @@ public class RunSetupPresenter {
                     : new Message(FRESH_RECORD_STARTED, false);
         } catch (final RuntimeException e) {
             log.info("Could not file the unreadable spend record away", e);
-            this.message = new Message(RunRefusals.plainly(e), true);
+            this.message = RunRefusals.refusing(e);
         }
     }
 
@@ -1103,11 +1104,13 @@ public class RunSetupPresenter {
      * What is wrong with the scope, where anything is.
      *
      * @param scope {@link RunScope} what the field and mode come to
-     * @return {@link String} the refusal, or null while nothing is wrong
+     * @return {@link RunRefusals.Refusal} the refusal, or null while nothing is wrong
      */
-    private @Nullable String refusalOf(final RunScope scope) {
+    private RunRefusals.@Nullable Refusal refusalOf(final RunScope scope) {
+        // What is wrong with the typed timeframe is wrong on this screen, so there is nowhere to
+        // send anybody.
         if (scope instanceof RunScope.Refused(final String reason)) {
-            return reason;
+            return new RunRefusals.Refusal(reason, null);
         }
         return this.overlapRefusal(scope);
     }
@@ -1122,9 +1125,10 @@ public class RunSetupPresenter {
      * screen and the sentence in the refusal cannot drift apart.
      *
      * @param scope {@link RunScope} what the field and mode come to
-     * @return {@link String} the sentence to show, or null where nothing overlaps
+     * @return {@link RunRefusals.Refusal} the sentence and the way there, or null where nothing
+     *         overlaps
      */
-    private @Nullable String overlapRefusal(final RunScope scope) {
+    private RunRefusals.@Nullable Refusal overlapRefusal(final RunScope scope) {
         final CullScope.Year chosenYear = this.siftedYear(scope);
         if (chosenYear == null) {
             return null;

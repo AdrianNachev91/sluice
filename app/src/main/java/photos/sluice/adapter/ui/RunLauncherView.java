@@ -26,11 +26,11 @@ import java.util.List;
  * @param scopeText {@link String} what the scope field should read
  * @param scopeHint {@link String} what the field accepts for the mode now chosen
  * @param scopeRefusal what is wrong with what has been typed, or null while nothing is
+ * @param scopeRefusalWayThere {@link Location} the screen that refusal can be acted on from, or
+ *     null where it names nowhere to go
  * @param cost {@link Cost} what the screen says about money, or null where this mode never reaches
  *     a vision provider
  * @param scopeLegend what the mark on a timeframe row means, or null where no row carries one
- * @param scopeLegendWayThere the word inside it that leads to that sift, or null with the legend
- * @param scopeLegendAfter what the legend says after that word, or null with the legend
  * @param startLabel {@link String} what the start button says
  * @param canStart boolean whether the start button is live
  * @param startAction {@link StartAction} what pressing it does
@@ -41,10 +41,9 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
                               boolean scopeNamesTheRun,
                               @Nullable String nothingStaged,
                               String scopeLabel, String scopeText, String scopeHint,
-                              @Nullable String scopeRefusal, @Nullable Cost cost,
+                              @Nullable String scopeRefusal,
+                              @Nullable Location scopeRefusalWayThere, @Nullable Cost cost,
                               @Nullable String scopeLegend,
-                              @Nullable String scopeLegendWayThere,
-                              @Nullable String scopeLegendAfter,
                               String startLabel, boolean canStart, StartAction startAction,
                               @Nullable Message message) {
 
@@ -63,10 +62,9 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      * @param scopeText {@link String} what the scope field should read
      * @param scopeHint {@link String} what the field accepts for the mode now chosen
      * @param scopeRefusal what is wrong with what has been typed, or null
+     * @param scopeRefusalWayThere {@link Location} the screen that refusal leads to, or null
      * @param cost {@link Cost} what the screen says about money, or null
      * @param scopeLegend what the mark on a timeframe row means, or null
-     * @param scopeLegendWayThere the word leading to that sift, or null
-     * @param scopeLegendAfter what follows it, or null
      * @param startLabel {@link String} what the start button says
      * @param canStart boolean whether the start button is live
      * @param startAction {@link StartAction} what pressing it does
@@ -294,7 +292,19 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      *
      * @param text {@link String} what to say
      * @param refused boolean whether this is a refusal rather than an ordinary report
+     * @param wayThere {@link Location} the screen this can be acted on from, or null where the
+     *         reader has nowhere to go about it
      */
-    public record Message(String text, boolean refused) {
+    public record Message(String text, boolean refused, @Nullable Location wayThere) {
+
+        /**
+         * Something to report that names nowhere to go.
+         *
+         * @param text {@link String} what to say
+         * @param refused boolean whether this is a refusal rather than an ordinary report
+         */
+        public Message(final String text, final boolean refused) {
+            this(text, refused, null);
+        }
     }
 }

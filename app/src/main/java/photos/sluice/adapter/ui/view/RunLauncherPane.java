@@ -38,6 +38,7 @@ import photos.sluice.adapter.ui.RunLauncherView.YearChoice;
 import photos.sluice.adapter.ui.RunProgressView;
 import photos.sluice.adapter.ui.RunSetupPresenter;
 import photos.sluice.adapter.ui.RunStage;
+import photos.sluice.adapter.ui.Location;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -98,9 +99,10 @@ final class RunLauncherPane {
      *
      * @param presenter {@link RunLauncherPresenter} says which face is up, and holds the one that
      *     decides what the launcher shows
+     * @param navigation {@link ScreenNavigation} how this screen opens another
      * @return {@link Node} the launcher
      */
-    static Node pane(final RunLauncherPresenter presenter) {
+    static Node pane(final RunLauncherPresenter presenter, final ScreenNavigation navigation) {
         final RunSetupPresenter setup = presenter.setup();
         final TextField heading = SelectableText.line("Dashboard");
         heading.getStyleClass().add("pane-heading");
@@ -131,9 +133,9 @@ final class RunLauncherPane {
         undatedRow.getStyleClass().add("run-undated-rows");
         final TextArea nothingStaged = SettingsRows.emptyHelpLine("run-nothing-staged");
         final Hyperlink openRuns = SettingsRows.inAppLink("run-scope-legend-link", presenter::showRuns);
-        final SettingsRows.LinkedLine scopeLegend =
-                SettingsRows.linkedHelpLine("run-scope-legend", openRuns);
-        final HBox scopeLegendRow = SettingsRows.markedHelpLine(scopeLegend.flow(), UNFINISHED_MARK,
+        final TextArea scopeLegend = SettingsRows.emptyHelpLine("run-scope-legend");
+        final VBox scopeLegendLines = SettingsRows.wayThereLines(scopeLegend, openRuns);
+        final HBox scopeLegendRow = SettingsRows.markedHelpLine(scopeLegendLines, UNFINISHED_MARK,
                 "run-unfinished-mark", "run-legend-mark");
         final VBox sortedCard = SettingsRows.card("SORTED", null, yearRows, undatedRow, nothingStaged,
                 scopeLegendRow);
@@ -161,6 +163,7 @@ final class RunLauncherPane {
         // suits a single line under a field turns a paragraph into shouting.
         refusal.getStyleClass().add("settings-violation-detail");
         SettingsRows.showWhileItSaysSomething(refusal);
+        final Hyperlink refusalWayThere = SettingsRows.wayThereLink("run-scope-refusal-link");
 
         final TextField figure = SelectableText.line();
         figure.setId("run-estimate-figure");
@@ -198,9 +201,11 @@ final class RunLauncherPane {
         final TextArea message = SelectableText.prose();
         message.setId("run-message");
         SettingsRows.showWhileItSaysSomething(message);
+        final Hyperlink messageWayThere = SettingsRows.wayThereLink("run-message-link");
 
-        final var action = new VBox(scopeLabel, scopeField, hint, refusal, estimate, free, message,
-                startRow);
+        final var action = new VBox(scopeLabel, scopeField, hint,
+                SettingsRows.wayThereLines(refusal, refusalWayThere), estimate, free,
+                SettingsRows.wayThereLines(message, messageWayThere), startRow);
         action.getStyleClass().add("run-action");
 
         // No grow priority, and a floor of nothing. With the cards short the pane takes only their
@@ -212,6 +217,7 @@ final class RunLauncherPane {
 
         final var controls = new Controls(modeRow, modeHint, inboxHeadline, inboxDetail, importPhotos,
                 importHint, yearRows, undatedRow, nothingStaged, scopeLegend, openRuns,
+                refusalWayThere, messageWayThere, navigation,
                 scopeLabel, scopeField, start, hint, refusal, figure, disclaimer, warning, repair,
                 freeHeadline, freeDetail, message, scroll, new HashSet<>(), new HashMap<>());
         controls.buildModeRow(setup, presenter::showReview);
@@ -230,7 +236,7 @@ final class RunLauncherPane {
         // after the other is built.
         final var redraw = new Redraw();
         final RunProgressPane.Mounted progress = RunProgressPane.mount(presenter, redraw);
-        final RunResultPane.Mounted result = RunResultPane.mount(presenter, redraw);
+        final RunResultPane.Mounted result = RunResultPane.mount(presenter, redraw, navigation);
 
         // No id of its own. The shell names whichever screen it puts in the content area, so one set
         // here would be overwritten.
@@ -570,8 +576,13 @@ final class RunLauncherPane {
      * @param undatedRow {@link VBox} holds the row for what is sorted without a date, empty where
      *     nothing is
      * @param nothingStaged {@link TextArea} what the Sorted card says with no rows to show
-     * @param scopeLegend {@link SettingsRows.LinkedLine} what a mark on one of those rows means
-     * @param openRuns {@link Hyperlink} the word inside it that opens the runs screen
+     * @param scopeLegend {@link TextArea} what a mark on one of those rows means
+     * @param openRuns {@link Hyperlink} the control under it that opens the runs screen
+     * @param refusalWayThere {@link Hyperlink} the control under the scope refusal, where it names
+     *     a screen
+     * @param messageWayThere {@link Hyperlink} the control under the report line, where it names a
+     *     screen
+     * @param navigation {@link ScreenNavigation} how this screen opens another
      * @param scopeLabel {@link TextField} the label above the scope field
      * @param scopeField {@link TextField} the scope field
      * @param start {@link Button} the start button
@@ -591,7 +602,8 @@ final class RunLauncherPane {
     private record Controls(HBox modeRow, TextArea modeHint, TextField inboxHeadline, TextArea inboxDetail,
                             Button importPhotos, TextArea importHint, VBox yearRows, VBox undatedRow,
                             TextArea nothingStaged,
-                            SettingsRows.LinkedLine scopeLegend, Hyperlink openRuns,
+                            TextArea scopeLegend, Hyperlink openRuns,
+                            Hyperlink refusalWayThere, Hyperlink messageWayThere, ScreenNavigation navigation,
                             TextField scopeLabel, TextField scopeField,
                             Button start, TextArea hint, TextArea refusal, TextField figure,
                             TextArea disclaimer,
@@ -753,9 +765,8 @@ final class RunLauncherPane {
             this.selectUndated(view.undated());
             this.scopeField.setDisable(!view.scopeNamesTheRun());
             this.nothingStaged.setText(SettingsRows.orNothing(view.nothingStaged()));
-            this.scopeLegend.before().setText(SettingsRows.orNothing(view.scopeLegend()));
-            this.openRuns.setText(SettingsRows.orNothing(view.scopeLegendWayThere()));
-            this.scopeLegend.after().setText(SettingsRows.orNothing(view.scopeLegendAfter()));
+            this.scopeLegend.setText(SettingsRows.orNothing(view.scopeLegend()));
+            this.openRuns.setText(view.scopeLegend() == null ? "" : Location.RUNS.label());
             this.scopeLabel.setText(view.scopeLabel());
             // Only when it differs. Setting it fires the listener that got here, and an unguarded
             // write would go round again. It also moves the caret, which a reader mid-word notices.
@@ -764,6 +775,7 @@ final class RunLauncherPane {
             }
             this.hint.setText(view.scopeHint());
             this.refusal.setText(SettingsRows.orNothing(view.scopeRefusal()));
+            SettingsRows.offering(this.refusalWayThere, view.scopeRefusalWayThere(), this.navigation);
             this.drawCost(view.cost());
             this.start.setText(view.startLabel());
             this.start.setDisable(!view.canStart());
@@ -1237,9 +1249,7 @@ final class RunLauncherPane {
          * @param said {@link RunLauncherView.Message} what to report, or null for nothing
          */
         private void drawMessage(final RunLauncherView.@Nullable Message said) {
-            this.message.setText(said == null ? "" : said.text());
-            SelectableText.dressAs(this.message, "run-message",
-                    said != null && said.refused() ? "settings-violation" : "settings-confirmation");
+            SettingsRows.reportRun(this.message, this.messageWayThere, said, this.navigation);
         }
 
     }

@@ -7,6 +7,7 @@ import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextArea;
@@ -347,10 +348,19 @@ final class VisionProviderCard {
         // with no key yet needs them in: they cannot act on where a key is stored until they have
         // one.
         if (setupGuide != null) {
-            final var whereToGetOne = LinkedText.of(setupGuide);
+            final TextArea whereToGetOne = SelectableText.prose(setupGuide);
             whereToGetOne.setId("settings-api-key-setup-guide");
             whereToGetOne.getStyleClass().add("settings-help");
-            children.add(whereToGetOne);
+            // A text input control cannot hold a link, so the address is selectable in the
+            // sentence and the control under it is what presses.
+            final String address = LinkedText.addressIn(setupGuide);
+            if (address == null) {
+                children.add(whereToGetOne);
+            } else {
+                final Hyperlink opensIt = LinkedText.opening(address);
+                opensIt.setId("settings-api-key-setup-guide-link");
+                children.add(SettingsRows.wayThereLines(whereToGetOne, opensIt));
+            }
         }
         children.addAll(List.of(reassurance, billing));
         if (secret.environmentOverride() != null) {
@@ -606,6 +616,13 @@ final class VisionProviderCard {
                 model.setPromptText("Nothing to choose from");
                 final TextArea violation = SelectableText.prose(unavailable.violation());
                 violation.getStyleClass().add("settings-violation");
+                if (unavailable.savedModel() != null) {
+                    final TextArea saved = SettingsRows.helpLine("You have '"
+                            + unavailable.savedModel() + "' saved. Nothing has confirmed your "
+                            + "provider can run it.");
+                    saved.setId("settings-model-saved");
+                    modelInfo.getChildren().add(saved);
+                }
                 final var retry = new Button("Retry");
                 retry.setId("settings-model-retry");
                 retry.getStyleClass().add("button-quiet");

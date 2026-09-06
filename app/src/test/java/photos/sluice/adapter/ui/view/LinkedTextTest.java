@@ -1,12 +1,6 @@
 package photos.sluice.adapter.ui.view;
 
-import javafx.scene.Node;
-import javafx.scene.Scene;
 import javafx.scene.control.Hyperlink;
-import javafx.scene.layout.StackPane;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -17,13 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// What a reader ends up with has to be the sentence they were given, whatever this split it into.
-// Several tests check that alongside whatever they are really about. A splitter that drops or
-// doubles a character is the failure nobody would catch reading the parts.
 class LinkedTextTest {
 
     @BeforeAll
@@ -39,106 +29,66 @@ class LinkedTextTest {
     }
 
     @Test
-    void aSentenceWithNoAddressInItIsAllPlainText() throws Exception {
-        final TextFlow flow = onFxThread(() -> LinkedText.of("Ask whoever runs it for a key."));
-
-        assertThat(linksIn(flow)).isEmpty();
-        assertThat(sentenceOf(flow)).isEqualTo("Ask whoever runs it for a key.");
+    void aSentenceWithNoAddressInItOffersNothingToOpen() {
+        assertThat(LinkedText.addressIn("Ask whoever runs it for a key.")).isNull();
     }
 
     @Test
-    void anAddressBecomesALinkOnItsOwnWords() throws Exception {
-        final TextFlow flow = onFxThread(() -> LinkedText.of("Keys live at https://console.example.test today"));
-
-        assertThat(linksIn(flow)).containsExactly("https://console.example.test");
-        assertThat(sentenceOf(flow)).isEqualTo("Keys live at https://console.example.test today");
+    void anAddressIsFoundWhereverItSitsInTheSentence() {
+        assertThat(LinkedText.addressIn("Keys live at https://console.example.test today"))
+                .isEqualTo("https://console.example.test");
     }
 
     @Test
-    void punctuationClosingTheSentenceStaysOutOfTheAddress() throws Exception {
-        final TextFlow flow = onFxThread(() -> LinkedText.of("Keys live at https://console.example.test."));
-
-        assertThat(linksIn(flow)).containsExactly("https://console.example.test");
-        assertThat(sentenceOf(flow)).isEqualTo("Keys live at https://console.example.test.");
+    void punctuationClosingTheSentenceStaysOutOfTheAddress() {
+        assertThat(LinkedText.addressIn("Keys live at https://console.example.test."))
+                .isEqualTo("https://console.example.test");
     }
 
     @Test
-    void anAddressOfferedOverPlainHttpIsLeftAsWords() throws Exception {
-        final TextFlow flow = onFxThread(() -> LinkedText.of("Try http://localhost:8080 first"));
-
-        assertThat(linksIn(flow)).isEmpty();
-        assertThat(sentenceOf(flow)).isEqualTo("Try http://localhost:8080 first");
+    void anAddressOfferedOverPlainHttpIsNotOffered() {
+        assertThat(LinkedText.addressIn("Try http://localhost:8080 first")).isNull();
     }
 
     @Test
-    void aSchemeInTheMiddleOfAWordIsNotAnAddress() throws Exception {
-        final TextFlow flow = onFxThread(() -> LinkedText.of("mailto:someone@https://nope.test"));
-
-        assertThat(linksIn(flow)).isEmpty();
+    void aSchemeInTheMiddleOfAWordIsNotAnAddress() {
+        assertThat(LinkedText.addressIn("mailto:someone@https://nope.test")).isNull();
     }
 
     @Test
-    void pressingALinkHandsTheAddressToTheBrowser() throws Exception {
+    void theFirstAddressWinsWhereASentenceOffersTwo() {
+        assertThat(LinkedText.addressIn("Either https://one.example.test or https://two.example.test"))
+                .isEqualTo("https://one.example.test");
+    }
+
+    // The address stays in the sentence beside it, so the control says what pressing does instead of
+    // putting the same address on the screen twice.
+    @Test
+    void theControlDoesNotRepeatTheAddress() throws Exception {
+        final Hyperlink link = onFxThread(() -> LinkedText.opening("https://console.example.test"));
+
+        assertThat(link.getText()).doesNotContain("console.example.test").isNotBlank();
+    }
+
+    @Test
+    void pressingItHandsTheAddressToTheBrowser() throws Exception {
         final List<String> opened = new ArrayList<>();
         ExternalBrowser.openWith(opened::add);
-        final TextFlow flow = onFxThread(() -> LinkedText.of("Keys live at https://console.example.test."));
+        final Hyperlink link = onFxThread(() -> LinkedText.opening("https://console.example.test"));
 
-        pressTheLinkIn(flow);
+        onFxThread(link::fire);
 
         assertThat(opened).containsExactly("https://console.example.test");
     }
 
     // Nothing set to open an address is every render and every test that did not ask for one.
     @Test
-    void pressingALinkWithNoBrowserSetDoesNothing() throws Exception {
-        final TextFlow flow = onFxThread(() -> LinkedText.of("Keys live at https://console.example.test."));
+    void pressingItWithNoBrowserSetDoesNothing() throws Exception {
+        final Hyperlink link = onFxThread(() -> LinkedText.opening("https://console.example.test"));
 
-        pressTheLinkIn(flow);
+        onFxThread(link::fire);
 
-        assertThat(linksIn(flow)).containsExactly("https://console.example.test");
-    }
-
-    // A Text built by hand carries no style class, so a stylesheet rule written against the one
-    // JavaFX puts on a Labeled's own Text reaches every label and none of these. Left unreached they
-    // draw at the default black, which reads fine on a light ground and vanishes on a dark one.
-    @Test
-    void theWordsTakeTheirColourFromTheStylesheet() throws Exception {
-        final TextFlow flow = onFxThread(() -> LinkedText.of("Keys live at https://console.example.test."));
-
-        onFxThread(() -> {
-            final var scene = new Scene(new StackPane(flow));
-            Stylesheet.applyTo(scene);
-            scene.getRoot().applyCss();
-            scene.getRoot().layout();
-        });
-
-        assertThat(wordsIn(flow)).isNotEmpty()
-                .allSatisfy(word -> assertThat(word.getFill()).isNotEqualTo(Color.BLACK));
-    }
-
-    private static List<Text> wordsIn(final TextFlow flow) {
-        return flow.getChildrenUnmodifiable().stream()
-                .filter(Text.class::isInstance)
-                .map(Text.class::cast)
-                .toList();
-    }
-
-    private static void pressTheLinkIn(final TextFlow flow) throws Exception {
-        onFxThread(() -> ((Hyperlink) linkNodesIn(flow).getFirst()).fire());
-    }
-
-    private static List<Node> linkNodesIn(final TextFlow flow) {
-        return flow.getChildrenUnmodifiable().stream().filter(Hyperlink.class::isInstance).toList();
-    }
-
-    private static List<String> linksIn(final TextFlow flow) {
-        return linkNodesIn(flow).stream().map(node -> ((Hyperlink) node).getText()).toList();
-    }
-
-    private static String sentenceOf(final TextFlow flow) {
-        return flow.getChildrenUnmodifiable().stream()
-                .map(part -> part instanceof final Hyperlink link ? link.getText() : ((Text) part).getText())
-                .collect(Collectors.joining());
+        assertThat(link.getText()).isNotBlank();
     }
 
     private static <T> T onFxThread(final Callable<T> work) throws Exception {

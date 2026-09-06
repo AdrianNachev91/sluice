@@ -134,8 +134,8 @@ public class RefusalClassifier {
                     refused.getMessage());
             case final UnrecognisedProviderException unrecognised -> providerUnrecognised(unrecognised);
             case final ApplyException _ -> Refusal.of(RefusalKind.ANSWERS_DO_NOT_HOLD,
-                    "This sift's answers do not hold together, so nothing was moved. Run "
-                            + "'troubleshoot' on it to see what is wrong.");
+                    "This sift's answers do not hold together, so your photos are still in Sorted. "
+                            + "Run 'troubleshoot' on it to see what is wrong.");
             case final ShuttingDownException _ -> Refusal.of(RefusalKind.SHUTTING_DOWN,
                     "Shutdown in progress. This was not started.");
             case final NoteIsNotTextException note -> noteIsNotText(note);

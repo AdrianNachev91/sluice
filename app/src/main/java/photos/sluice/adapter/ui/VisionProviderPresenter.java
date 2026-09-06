@@ -475,7 +475,7 @@ public class VisionProviderPresenter {
             return this.picked(live, savedModel, "What your account can run, from the last connection or test.");
         }
         // NoCredential is handled above; reaching here it is one of the four failure outcomes.
-        return new ModelPickerResult(new SettingsView.ModelPicker.Unavailable(wordCheckOutcome(last)), null);
+        return new ModelPickerResult(new SettingsView.ModelPicker.Unavailable(wordCheckOutcome(last), savedModel), null);
     }
 
     /**

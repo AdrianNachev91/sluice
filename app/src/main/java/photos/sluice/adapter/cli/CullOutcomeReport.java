@@ -145,7 +145,8 @@ final class CullOutcomeReport {
      * @return {@link CommandOutcome} the outcome
      */
     private static CommandOutcome blockedOutcome(final CullJobOutcome.Blocked blocked) {
-        final String line = "Every sheet came back, but there are problems with some. Nothing was moved. "
+        final String line = "Every sheet came back, but there are problems with some. Your photos are still "
+                + "in Sorted. "
                 + "Run 'troubleshoot " + blocked.job().scope() + "' to see what went wrong.";
         return CommandOutcome.blocked(CullPayloads.outcome(blocked), List.of(line), notes(blocked));
     }

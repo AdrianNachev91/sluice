@@ -4,6 +4,7 @@ import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -46,9 +47,10 @@ final class TroubleshootPane {
      * Builds the screen, ready to sit in the shell's content area.
      *
      * @param presenter {@link TroubleshootPresenter} supplies what to draw and takes every press
+     * @param navigation {@link ScreenNavigation} how this screen opens another
      * @return {@link Node} the screen
      */
-    static Node pane(final TroubleshootPresenter presenter) {
+    static Node pane(final TroubleshootPresenter presenter, final ScreenNavigation navigation) {
         final TextField heading = SelectableText.line();
         heading.setId("troubleshoot-heading");
         heading.getStyleClass().add("pane-heading");
@@ -96,7 +98,7 @@ final class TroubleshootPane {
         page.getStyleClass().add("runs");
 
         final var controls = new Controls(back, heading, page, checking, summary, problems,
-                nothingLeft, detail, detailToggle, detailCopy, trace, actions, fold,
+                nothingLeft, detail, detailToggle, detailCopy, trace, actions, fold, navigation,
                 new ArrayList<>(), new ArrayList<>());
         final Runnable redraw = new Runnable() {
             @Override
@@ -137,6 +139,7 @@ final class TroubleshootPane {
      * @param trace {@link TextArea} the report itself
      * @param actions {@link HBox} the buttons acting on the whole run
      * @param fold {@link SectionFold} opens and shuts the report
+     * @param navigation {@link ScreenNavigation} how this screen opens another
      * @param unfolded a {@link List} of {@link VBox} holding the report while it is open, empty
      *     while it is shut
      * @param reported a {@link List} of {@link Integer} the report number the banner now up came
@@ -147,7 +150,7 @@ final class TroubleshootPane {
                             TextArea summary,
                             VBox problems, TextArea nothingLeft, VBox detail, Button detailToggle,
                             Button detailCopy, TextArea trace, HBox actions, SectionFold fold,
-                            List<VBox> unfolded, List<Integer> reported) {
+                            ScreenNavigation navigation, List<VBox> unfolded, List<Integer> reported) {
 
         /**
          * Wires the fold, which is the one control whose press changes nothing on disk.
@@ -210,11 +213,19 @@ final class TroubleshootPane {
             if (said == null) {
                 return;
             }
-            // Every report this screen has is one short sentence about the press just made, so all
-            // of them leave on their own. Nothing here names a path or a count to be read twice.
-            final HBox banner = SettingsRows.banner(this.page, BANNER, said.text(), true);
+            // A report with nothing to press is one short sentence about the press just made, so it
+            // leaves on its own. One offering a screen stays: four seconds is not long enough to
+            // read a sentence and reach for what it offers.
+            final HBox banner =
+                    SettingsRows.banner(this.page, BANNER, said.text(), said.wayThere() == null);
             if (said.refused()) {
                 banner.getStyleClass().add("settings-banner-caution");
+            }
+            if (said.wayThere() != null) {
+                final Hyperlink wayThere = SettingsRows.wayThereLink("troubleshoot-message-link");
+                SettingsRows.offering(wayThere, said.wayThere(), this.navigation);
+                // Before the dismiss button, which sits at the far end of every banner.
+                banner.getChildren().add(banner.getChildren().size() - 1, wayThere);
             }
             this.page.getChildren().addFirst(banner);
         }

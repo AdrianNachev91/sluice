@@ -209,7 +209,7 @@ class ReviewPaneTest {
         final var presenter = new ReviewPresenter(pipeline,
                 new RunLauncherPresenter(pipeline, new FxProgressPort()));
         presenter.refresh();
-        final var page = (Parent) ReviewPane.pane(presenter);
+        final var page = (Parent) ReviewPane.pane(presenter, _ -> { });
         final var scene = new Scene(new StackPane(page), 900, 700);
         scene.getStylesheets().add(
                 Objects.requireNonNull(ReviewPaneTest.class.getResource("/ui/sluice.css"),

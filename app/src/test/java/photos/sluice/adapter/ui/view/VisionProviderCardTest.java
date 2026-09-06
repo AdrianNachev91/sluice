@@ -4,13 +4,11 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.Hyperlink;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
-import javafx.scene.text.Text;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -39,7 +37,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.ANTHROPIC_KEY;
@@ -316,7 +313,8 @@ class VisionProviderCardTest {
     void theCredentialCardSaysWhereThisProvidersKeyComesFrom() throws Exception {
         final Parent pane = onFxThread(() -> built(presenterOn("anthropic"), visionProviderPresenterOn("anthropic")));
 
-        assertThat(sentenceOf(pane.lookup("#settings-api-key-setup-guide"))).isEqualTo(SETUP_GUIDE);
+        assertThat(((TextInputControl) pane.lookup("#settings-api-key-setup-guide")).getText())
+                .isEqualTo(SETUP_GUIDE);
 
         runOnFxThread(() -> select(pane, "other-api"));
 
@@ -586,14 +584,6 @@ class VisionProviderCardTest {
             Thread.currentThread().interrupt();
             throw new AssertionError(e);
         }
-    }
-
-    // The words as a reader sees them, whether they were drawn as plain text or as a link. Reading
-    // only the Text nodes would silently drop every address out of the sentence.
-    private static String sentenceOf(final Node flow) {
-        return ((Parent) flow).getChildrenUnmodifiable().stream()
-                .map(part -> part instanceof final Hyperlink link ? link.getText() : ((Text) part).getText())
-                .collect(Collectors.joining());
     }
 
     // How far the mark's centre sits from the ring's, in the pane both are laid out in. Measured

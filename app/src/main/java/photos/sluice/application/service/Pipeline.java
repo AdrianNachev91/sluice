@@ -968,7 +968,7 @@ public class Pipeline {
          * @param prepDir {@link Path} the run that was asked to be thrown away
          */
         public RunAlreadyFinishedException(final Path prepDir) {
-            super("This sift finished before it could be discarded, so nothing was lost. "
+            super("This sift finished before it could be discarded. "
                     + "Clear it with the finished runs instead. Its records are at " + prepDir + ".");
         }
     }
