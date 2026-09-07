@@ -15,6 +15,8 @@ import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.domain.cull.CullCategory;
 import photos.sluice.domain.cull.MontageConfig;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -88,6 +90,22 @@ class PhotoCategoriesPresenterTest {
         assertThat(store.saved.provider()).isEqualTo("anthropic");
         assertThat(store.saved.montage()).isEqualTo(new MontageConfig(224, 5));
         assertThat(store.saved.theme()).isEqualTo(ThemeChoice.SYSTEM);
+    }
+
+    // Every refusal this screen puts up is one it worked out itself, so the save call reads as the
+    // part that cannot fail. Let out of here it escapes into a button press.
+    @Test
+    void aSaveTheSettingsFileRefusesIsReportedRatherThanThrown() {
+        final var store = new RecordingSettings(BLURRY, FUNNY);
+        store.refusal = new UncheckedIOException(new IOException("the settings file is held open"));
+
+        final SaveOutcome outcome = new PhotoCategoriesPresenter(store).save(List.of(
+                new CategoryEdit("blurry", "Blurry and accidental", List.of(), true),
+                new CategoryEdit("funny", "Worth a laugh later", List.of(), true)));
+
+        assertThat(((SaveOutcome.Refused) outcome).summary())
+                .startsWith("Your photo categories were not saved")
+                .contains("Try again");
     }
 
     @Test
@@ -328,6 +346,7 @@ class PhotoCategoriesPresenterTest {
         private final List<CullCategory> cards;
 
         private @Nullable Settings saved;
+        private @Nullable RuntimeException refusal;
 
         private RecordingSettings(final CullCategory... cards) {
             this.cards = new ArrayList<>(List.of(cards));
@@ -347,6 +366,9 @@ class PhotoCategoriesPresenterTest {
 
         @Override
         public void save(final Settings settings) {
+            if (this.refusal != null) {
+                throw this.refusal;
+            }
             this.saved = settings;
         }
     }

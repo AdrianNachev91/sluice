@@ -1,9 +1,10 @@
 package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
-import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome;
 import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
 import photos.sluice.application.port.in.LibraryRootResolution;
@@ -55,6 +56,8 @@ import java.util.function.Consumer;
 @Component
 @Profile("!cli")
 public class SettingsPresenter {
+
+    private static final Logger log = LoggerFactory.getLogger(SettingsPresenter.class);
 
     private static final List<SettingsView.ThemeOption> THEMES = Arrays.stream(ThemeChoice.values())
             .map(choice -> new SettingsView.ThemeOption(choice.name(), themeLabel(choice)))
@@ -210,19 +213,47 @@ public class SettingsPresenter {
      * <p>Built from the settings already on disk with only the theme swapped, never from what the
      * screen currently shows. An unsaved folder path or a typed-but-not-yet-saved model is then
      * never persisted by clicking a radio. The paths carried through are therefore always equal to
-     * what is already in force. That is what lets the save seam take its unchanged-paths fast path.
-     * No path validation, no job-in-progress check, nothing that could refuse a theme for a reason
-     * that has nothing to do with it.
+     * what is already in force. That is what lets the save seam take its unchanged-paths fast path,
+     * with no path validation and no job-in-progress check.
+     *
+     * <p>The file is still written, so a settings file that cannot be read, or one another program
+     * is holding, refuses this as it refuses any other save. The look changes only once the file
+     * has taken it. Changed first, a refused write would leave the app wearing a look its own
+     * settings do not name, and the next start would undo it.
      *
      * @param themeId {@link String} the id of the {@link SettingsView.ThemeOption} just picked
+     * @return {@link ThemeOutcome} the theme now in force, and what to say where the save was
+     *         refused
      */
-    public void chooseTheme(final String themeId) {
+    public ThemeOutcome chooseTheme(final String themeId) {
         final ThemeChoice theme = ThemeChoice.valueOf(themeId);
-        ThemeSelection.set(theme);
         final Settings current = this.settingsUseCase.settings();
-        this.settingsUseCase.save(new Settings(current.paths(), current.provider(),
-                current.providerSettingsById(), current.categories(),
-                current.montage(), theme));
+        try {
+            this.settingsUseCase.save(new Settings(current.paths(), current.provider(),
+                    current.providerSettingsById(), current.categories(),
+                    current.montage(), theme));
+        } catch (final RuntimeException e) {
+            log.warn("Could not save the {} theme", themeId, e);
+            // Names the theme rather than the settings. This save carries what is already stored
+            // with only the theme swapped, so nothing typed on this screen was ever in it.
+            return new ThemeOutcome(current.theme().name(),
+                    SettingsRefusals.wordedForAUser(e, "Your theme was not saved."));
+        }
+        ThemeSelection.set(theme);
+        return new ThemeOutcome(theme.name(), null);
+    }
+
+    /**
+     * What a theme press came to.
+     *
+     * <p>Carries the theme rather than whether the press worked, so the screen draws what is stored
+     * instead of deciding what to do about a refusal. A refused press leaves the stored theme
+     * unchanged, and drawing it is what puts the radio back.
+     *
+     * @param inForce {@link String} the id of the theme the stored settings now name
+     * @param refusal {@link String} what to tell the reader, or null where the save landed
+     */
+    public record ThemeOutcome(String inForce, @Nullable String refusal) {
     }
 
     /**
@@ -723,22 +754,11 @@ public class SettingsPresenter {
     /**
      * What to put at the foot of the page for a refusal no field is carrying.
      *
-     * <p>One refusal is written for a user and is shown as it is: a job in progress, which says to
-     * finish the run first.
-     *
-     * <p>Everything else carries a message written for a log, or none at all. An unforeseen failure
-     * says so in this app's voice instead, and offers the one thing a user can do about it. A
-     * stack's own words under the Save button offer nothing.
-     *
      * @param refusal {@link RuntimeException} what the save seam threw
      * @return {@link String} what to show
      */
     private static String wordedForAUser(final RuntimeException refusal) {
-        if (refusal instanceof JobInProgressException) {
-            return refusal.getMessage();
-        }
-        return "These settings were not saved, and it's not known why. Nothing you had configured "
-                + "has changed. Report this as a bug, quoting this: " + refusal;
+        return SettingsRefusals.wordedForAUser(refusal, "Your settings were not saved.");
     }
 
     private static String wordOverlap(final PathRole other) {

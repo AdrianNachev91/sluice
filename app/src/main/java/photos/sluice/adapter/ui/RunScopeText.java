@@ -73,7 +73,9 @@ final class RunScopeText {
      */
     private static Typed months(final int year, final String text) {
         final List<Integer> months = new ArrayList<>();
-        for (final String part : text.split(",")) {
+        // Keeping the empty pieces, so a trailing comma is refused the way a leading one already
+        // is. Dropped, "2019 ," reads as the bare year and starts a paid sift of all twelve months.
+        for (final String part : text.split(",", -1)) {
             final String piece = part.trim();
             final Typed refusal = refusedFormat(piece);
             if (refusal != null) {

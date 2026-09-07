@@ -204,9 +204,9 @@ class RunProgressPresenterTest {
     @Test
     void theAreaHoldsRoomForAsManyBarsAsTheModeCanReport() {
         assertThat(this.presenter.view(RunMode.SIFT, "2019", false, false, null).reservedBars())
-                .isEqualTo(RunMode.SIFT.phases());
+                .isEqualTo(3);
         assertThat(this.presenter.view(RunMode.MOVE_TO_LIBRARY, "2019", false, false, null).reservedBars())
-                .isEqualTo(RunMode.MOVE_TO_LIBRARY.phases());
+                .isEqualTo(1);
     }
 
     @Test

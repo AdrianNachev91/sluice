@@ -277,9 +277,9 @@ class AnthropicCullerLiveTest {
         return response;
     }
 
-    // Revoked the same day it was drawn from a real account, per the devlog. Reading it here costs
-    // no money and needs no fresh credential. A rejected key answers the same way whether it was
-    // ever valid or made up, as long as the service has never seen it accepted.
+    // Revoked the same day it was drawn from a real account. Reading it here costs no money and
+    // needs no fresh credential. A rejected key answers the same way whether it was ever valid or
+    // made up, as long as the service has never seen it accepted.
     private static String revokedKeyFixture() throws IOException {
         return Files.readString(Path.of("..", "tools", "anthropic-api-key.txt")).strip();
     }

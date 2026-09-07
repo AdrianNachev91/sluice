@@ -204,9 +204,10 @@ public class ReviewPresenter {
     public ReviewView view() {
         final ReviewListing listed = this.listing;
         final Message said = this.message;
+        final boolean busy = this.pipeline.isBusy();
         final List<Group> groups = new ArrayList<>();
         for (final Section section : SECTIONS) {
-            this.group(listed, section).ifPresent(groups::add);
+            this.group(listed, section, busy).ifPresent(groups::add);
         }
         if (!this.hasRead) {
             return new ReviewView(HEADING, null, null, LOOKING, List.of(), null);
@@ -311,14 +312,16 @@ public class ReviewPresenter {
      *     field again would answer about a second moment, since a fresh reading lands from a thread
      *     of its own
      * @param section {@link Section} which section
+     * @param busy boolean whether a job holds the slot
      * @return an {@link Optional} of {@link Group} the section
      */
-    private Optional<Group> group(final ReviewListing listing, final Section section) {
+    private Optional<Group> group(final ReviewListing listing, final Section section,
+                                  final boolean busy) {
         final List<FolderCard> cards = listing.folders().stream()
                 .filter(folder -> folder.root() == section.root()
                         && folder.filedBy() == section.filedBy()
                         && section.named().test(folder.name()))
-                .map(this::card)
+                .map(folder -> this.card(folder, busy))
                 .toList();
         return cards.isEmpty()
                 ? Optional.empty()
@@ -344,9 +347,10 @@ public class ReviewPresenter {
      * One folder's card.
      *
      * @param folder {@link Folder} the folder as the facade described it
+     * @param busy boolean whether a job holds the slot
      * @return {@link FolderCard} the card
      */
-    private FolderCard card(final Folder folder) {
+    private FolderCard card(final Folder folder, final boolean busy) {
         final Fold open = this.folds.get(folder.path());
         final boolean shown = open != null;
         final String failed = shown ? open.failed() : null;
@@ -361,7 +365,7 @@ public class ReviewPresenter {
                 Instant.EPOCH.equals(folder.changed())
                         ? "When it last changed is not known"
                         : "Last changed " + RunWords.howLongAgo(folder.changed()),
-                notes, this.actions(folder));
+                notes, actions(folder, busy));
     }
 
     /**
@@ -414,14 +418,15 @@ public class ReviewPresenter {
      * press then would put a question whose answer is a refusal.
      *
      * @param folder {@link Folder} the folder
+     * @param busy boolean whether a job holds the slot
      * @return a {@link List} of {@link Action} its buttons, in the order drawn
      */
-    private List<Action> actions(final Folder folder) {
+    private static List<Action> actions(final Folder folder, final boolean busy) {
         return List.of(
                 new Action(idFor(folder, "open"), OPEN, Kind.OPEN, true, true,
                         folder.name(), folder.name(), folder.path(), null, null),
                 new Action(idFor(folder, "move"), RESCUE_TO_SORTED, Kind.RESCUE, false,
-                        !this.pipeline.isBusy(), folder.name(), folder.name(), folder.path(),
+                        !busy, folder.name(), folder.name(), folder.path(),
                         rescueQuestion(folder), folder.root().rescueRoot()));
     }
 

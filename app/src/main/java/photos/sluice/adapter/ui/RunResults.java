@@ -6,11 +6,13 @@ import photos.sluice.adapter.ui.RunResultView.Count;
 import photos.sluice.adapter.ui.RunResultView.Tone;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
+import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.cull.ApplyReport;
+import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
@@ -59,6 +61,18 @@ final class RunResults {
     // only some of its photos has a decisions file and has not been judged, and the clause that
     // follows says exactly that.
     private static final String BLOCKED_DETAIL = "Every sheet came back. %s. Your photos are still in Sorted.";
+
+    // The same card for a run stopped with sheets still owed. Names how many never arrived, because
+    // the row below counts the sheets that came back AND passed. Without the count a reader
+    // subtracts that row from the total and reads every one of the difference as missing, when some
+    // of it came back wrong.
+    private static final String BLOCKED_SHORT_DETAIL =
+            "%s never came back. %s. Your photos are still in Sorted.";
+
+    // Reached only on a paying provider, which is what lets this name one. The other kind hands an
+    // incomplete set back as a sift still waiting, not as one that stopped.
+    private static final String INCOMPLETE_DETAIL = "Your provider could not judge every sheet, so "
+            + "nothing was moved. Your photos are still in Sorted.";
 
     private static final String CANCELLED_CONTINUE_NOTE = "You can continue at any time.";
 
@@ -146,6 +160,67 @@ final class RunResults {
         // reading one word for both, with only the colour behind it telling them which happened.
         return new RunResultView(ran.verb() + " could not finish.", Tone.FAILED, said.sentence(),
                 List.of(), null, null, DONE, said.location());
+    }
+
+    /**
+     * What the card says about a sift the provider could not finish.
+     *
+     * <p>Not a failed card, although it arrives as a throw. The run reached the provider and was
+     * billed for what it sent. A card claiming nothing happened would be false about the one part
+     * that costs money. It ends where a blocked sift ends: a run left on disk, and the runs screen
+     * as the way to look at it.
+     *
+     * <p>The refusal's own message names which sheets came back wrong, in the words a report wants.
+     * A reader acts on the run rather than on the sheet, so the counts carry what they can use and
+     * the message stays out.
+     *
+     * @param ran {@link RunMode} the mode the job was started in
+     * @param incomplete {@link CullException} what the provider could not finish, carrying whatever
+     *         the run had judged and spent
+     * @return {@link RunResultView} the card
+     */
+    static RunResultView incompleteResult(final RunMode ran, final CullException incomplete) {
+        return new RunResultView(ran.verb() + " stopped and needs a look.", Tone.UNFINISHED,
+                INCOMPLETE_DETAIL, abandonedCounts(incomplete.report()), null, null, DONE,
+                Location.RUNS);
+    }
+
+    /**
+     * What a sift the provider gave up on can still count.
+     *
+     * <p>Every row is dropped at zero. A provider that failed on its first sheet judged nothing and
+     * spent nothing, and rows of zeroes would be three lines saying so.
+     *
+     * @param report {@link CullReport} what the run had judged and consumed. Null only because the
+     *         exception's own field allows it; the one provider that can reach this card always
+     *         builds one
+     * @return a {@link List} of {@link Count} the rows
+     */
+    private static List<Count> abandonedCounts(final @Nullable CullReport report) {
+        if (report == null) {
+            return List.of();
+        }
+        final List<Count> rows = new ArrayList<>();
+        addWhenAny(rows, "result-sheets-judged", "Sheets judged", report.montagesCulled());
+        addWhenAny(rows, "result-calls", "Calls to your provider", report.apiCalls());
+        addWhenAny(rows, "result-tokens", "Tokens used",
+                report.spend().inputTokens() + report.spend().outputTokens());
+        return rows;
+    }
+
+    /**
+     * Adds a row where there is anything to count.
+     *
+     * @param rows a {@link List} of {@link Count} the rows so far
+     * @param id {@link String} the control's id
+     * @param label {@link String} what was counted
+     * @param value long the count
+     */
+    private static void addWhenAny(final List<Count> rows, final String id, final String label,
+                                   final long value) {
+        if (value > 0) {
+            rows.add(new Count(id, label, RunWords.grouped(value)));
+        }
     }
 
     /**
@@ -505,8 +580,8 @@ final class RunResults {
                             sheetCounts(job.shards()), null,
                             resumeOffer(why, job.prepDir()), DONE, resumeLocation(why));
             case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
-                    new RunResultView(ran.verb() + " stopped and needs a look.",
-                            Tone.UNFINISHED, BLOCKED_DETAIL.formatted(FindingFamily.wentWrong(findings)),
+                    new RunResultView(ran.verb() + " stopped and needs a look.", Tone.UNFINISHED,
+                            blockedDetail(job.shards(), findings),
                             sheetCounts(job.shards()), null, null, DONE, Location.RUNS);
             // The one case with no prep dir behind it, so nothing counted the sheets. It is reached
             // only before rendering finished, which is why there are none to count.
@@ -514,6 +589,29 @@ final class RunResults {
                     new RunResultView(headingFor(ran, true), toneFor(true),
                             CANCELLED_BEFORE_ANY_SHEET, List.of(), null, null, DONE);
         };
+    }
+
+    /**
+     * What a blocked sift's card says, by whether the sheets it stopped on had all come back.
+     *
+     * <p>Both are reachable. One is a reader who chose to go on without the sheets still owed. The
+     * other is an apply refused on those same missing sheets.
+     *
+     * <p>The count is of sheets that never arrived, which is not the difference the card's own row
+     * shows. That row counts the ones that came back and passed. A sheet that arrived damaged is in
+     * neither number, so the two have to be said separately.
+     *
+     * @param sheets {@link ShardTally} how many of the run's sheets came back
+     * @param findings a {@link List} of {@link Finding} what apply refused on
+     * @return {@link String} the sentence to show
+     */
+    private static String blockedDetail(final ShardTally sheets, final List<Finding> findings) {
+        final String wentWrong = FindingFamily.wentWrong(findings);
+        final int neverArrived = sheets.total() - sheets.present();
+        return neverArrived > 0
+                ? BLOCKED_SHORT_DETAIL.formatted(
+                        RunWords.counted(neverArrived, "sheet", "sheets"), wentWrong)
+                : BLOCKED_DETAIL.formatted(wentWrong);
     }
 
     /**

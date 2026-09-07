@@ -9,6 +9,7 @@ import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.application.port.in.RescueRoot;
+import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.imports.ImportKind;
@@ -237,12 +238,14 @@ public class RunLauncherPresenter {
      *     has just crossed from one screen to the other, so the two naming it differently would
      *     read as two different runs
      * @param waiveMissing boolean whether to go on without the sheets still owed
+     * @return boolean false where a job already holds the slot and nothing was started
      */
-    public void continueRunFromRuns(final Path prepDir, final String scope, final boolean waiveMissing) {
+    public boolean continueRunFromRuns(final Path prepDir, final String scope, final boolean waiveMissing) {
         if (this.running) {
-            return;
+            return false;
         }
         this.begin(RunMode.SIFT, scope, null, null, () -> this.pipeline.resume(prepDir, waiveMissing));
+        return true;
     }
 
     /**
@@ -527,10 +530,28 @@ public class RunLauncherPresenter {
         this.inFlight = null;
         this.endedCard = failure == null
                 ? RunResults.of(ran, outcome, this.narrowedTo)
-                : RunResults.failedResult(ran, RunRefusals.said(RunRefusals.rootOf(failure)));
+                : cardFor(ran, JobHandle.failureIn(failure));
         this.running = false;
         this.repaint();
         this.recount();
+    }
+
+    /**
+     * The card for a job that threw.
+     *
+     * <p>A sift the provider gave up on is read first, and it is the one throw here that is not a
+     * refusal. It reached the provider and spent from the reader's balance, so it leaves a run on
+     * disk and counts to show. Everything else is worded as a refusal.
+     *
+     * @param ran {@link RunMode} the mode the job was started in
+     * @param failure {@link Throwable} what it threw, already out of any completion wrapper
+     * @return {@link RunResultView} the card
+     */
+    private static RunResultView cardFor(final RunMode ran, final Throwable failure) {
+        if (failure instanceof final CullException incomplete) {
+            return RunResults.incompleteResult(ran, incomplete);
+        }
+        return RunResults.failedResult(ran, RunRefusals.said(failure));
     }
 
     /**

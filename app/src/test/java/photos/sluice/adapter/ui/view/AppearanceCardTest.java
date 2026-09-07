@@ -3,6 +3,7 @@ package photos.sluice.adapter.ui.view;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.TextArea;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -18,10 +19,13 @@ import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.ThemeChoice;
 import photos.sluice.domain.cull.MontageConfig;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static photos.sluice.adapter.ui.view.SettingsPaneTestSupport.built;
@@ -82,6 +86,27 @@ class AppearanceCardTest {
         assertThat(saved).singleElement().extracting(Settings::theme).isEqualTo(ThemeChoice.LIGHT);
     }
 
+    // A theme saves the instant it is picked, so a refused save has to say so on its own. Silence
+    // plus a radio flicking back reads as the screen ignoring the press.
+    //
+    // The attempt count is what pins the re-entrancy guard. Putting the radio back notifies the same
+    // listener, so without the guard the press saves a second time through the file that just
+    // refused it. Every other assertion here passes either way.
+    @Test
+    void aThemeTheFileWouldNotTakeLeavesTheRadioWhereItWasAndSaysWhy() throws Exception {
+        final List<Settings> attempted = new ArrayList<>();
+        final Presenters presenters = presenterRefusingEverySave(attempted);
+        final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
+
+        runOnFxThread(() -> themeButton(pane, "LIGHT").setSelected(true));
+
+        assertThat(attempted).singleElement().extracting(Settings::theme).isEqualTo(ThemeChoice.LIGHT);
+        assertThat(onFxThread(() -> selectedTheme(pane))).isEqualTo("DARK");
+        assertThat(onFxThread(() -> ((TextArea) pane.lookup(".settings-banner-text")).getText()))
+                .startsWith("Your theme was not saved.")
+                .contains("could not be reached");
+    }
+
     private static RadioButton themeButton(final Parent pane, final String themeId) {
         return ((Parent) pane.lookup("#settings-theme")).getChildrenUnmodifiable().stream()
                 .map(RadioButton.class::cast)
@@ -106,6 +131,17 @@ class AppearanceCardTest {
     // Its own presenter because the shared one refuses every save. That is what the refusal test
     // above needs, and it leaves nothing for a test reading a saved value to read.
     private static Presenters presenterSavingInto(final List<Settings> saved) {
+        return presenterOver(saved::add);
+    }
+
+    private static Presenters presenterRefusingEverySave(final List<Settings> attempted) {
+        return presenterOver(settings -> {
+            attempted.add(settings);
+            throw new UncheckedIOException(new IOException("the settings file is held open"));
+        });
+    }
+
+    private static Presenters presenterOver(final Consumer<Settings> save) {
         final var settings = new Settings(new PathSettings("D:\\repo", "D:\\library", "D:\\repo\\Inbox"),
                 "anthropic", Map.of("anthropic", new CullProviderSettings("a-model", null, 2)), List.of(),
                 new MontageConfig(224, 5), ThemeChoice.DARK);
@@ -122,7 +158,7 @@ class AppearanceCardTest {
 
             @Override
             public void save(final Settings toSave) {
-                saved.add(toSave);
+                save.accept(toSave);
             }
         };
         final var vision = new VisionProviderPresenter(oneStoredKey(), threeProviders(), useCase);

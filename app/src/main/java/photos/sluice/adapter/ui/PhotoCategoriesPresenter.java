@@ -1,6 +1,8 @@
 package photos.sluice.adapter.ui;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.adapter.ui.PhotoCategoriesView.CardRefusal;
@@ -36,6 +38,8 @@ import java.util.Set;
 @Component
 @Profile("!cli")
 public class PhotoCategoriesPresenter {
+
+    private static final Logger log = LoggerFactory.getLogger(PhotoCategoriesPresenter.class);
 
     // Says what a category does before saying what one may be called. That is the part a reader
     // cannot change, and the part they would otherwise assume.
@@ -145,9 +149,16 @@ public class PhotoCategoriesPresenter {
                 .map(edit -> new CullCategory(edit.name().strip(), edit.description().strip(),
                         edit.examples(), edit.enabled()))
                 .toList();
-        this.settingsUseCase.save(new Settings(current.paths(), current.provider(),
-                current.providerSettingsById(), cards, current.montage(),
-                current.theme()));
+        try {
+            this.settingsUseCase.save(new Settings(current.paths(), current.provider(),
+                    current.providerSettingsById(), cards, current.montage(),
+                    current.theme()));
+        } catch (final RuntimeException e) {
+            log.warn("Could not save the photo categories", e);
+            return new SaveOutcome.Refused(
+                    SettingsRefusals.wordedForAUser(e, "Your photo categories were not saved."),
+                    refusals);
+        }
         return new SaveOutcome.Saved();
     }
 

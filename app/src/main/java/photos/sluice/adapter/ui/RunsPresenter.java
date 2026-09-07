@@ -105,6 +105,10 @@ public class RunsPresenter {
     private static final String WAITING_ON_A_PROVIDER_BLAMED = "The sheets that are left cannot be "
             + "judged until the ones that came back wrong are dealt with.";
 
+    private static final String ALREADY_RUNNING = "Something else started running just now, and "
+            + "only one job runs at a time. This sift was not continued. Try again once it "
+            + "finishes.";
+
     private final Pipeline pipeline;
     private final RunLauncherPresenter launcher;
 
@@ -457,11 +461,16 @@ public class RunsPresenter {
      * @param withoutTheMissing boolean whether to go on without the sheets still owed
      */
     private void carryOn(final Path prepDir, final String scope, final boolean withoutTheMissing) {
-        this.message = null;
-        this.launcher.continueRunFromRuns(prepDir, scope, withoutTheMissing);
-        final Runnable open = this.openDashboard;
-        if (open != null) {
-            open.run();
+        if (this.launcher.continueRunFromRuns(prepDir, scope, withoutTheMissing)) {
+            this.message = null;
+            final Runnable open = this.openDashboard;
+            if (open != null) {
+                open.run();
+            }
+        } else {
+            // Stays on this screen. The dashboard would show the run that took the slot, which is
+            // not the one this press was about.
+            this.message = new Message(ALREADY_RUNNING, true);
         }
     }
 
@@ -523,7 +532,7 @@ public class RunsPresenter {
     private void ended(final String action, final @Nullable Throwable failure) {
         if (failure != null) {
             log.warn("Could not {}", action, failure);
-            this.message = RunRefusals.refuseMessage(RunRefusals.rootOf(failure));
+            this.message = RunRefusals.refuseMessage(JobHandle.failureIn(failure));
         }
         this.working = false;
         final Runnable draw = this.repaint;

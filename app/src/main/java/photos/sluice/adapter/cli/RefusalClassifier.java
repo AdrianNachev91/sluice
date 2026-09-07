@@ -17,6 +17,7 @@ import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
+import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
@@ -26,8 +27,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.NoSuchFileException;
 import java.util.List;
 import java.util.SequencedMap;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 /**
@@ -56,11 +55,6 @@ import java.util.stream.Collectors;
 @Profile("cli")
 public class RefusalClassifier {
 
-    /**
-     * Bounds the unwrapping, so a cause chain that holds itself still terminates.
-     */
-    private static final int MAX_WRAPPERS = 100;
-
     private final SecretStore secrets;
 
     /**
@@ -79,27 +73,7 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal, or null when nothing here recognises it
      */
     public @Nullable Refusal refusalFor(final Throwable failure) {
-        return this.recognisedRefusal(unwrapped(failure));
-    }
-
-    /**
-     * The failure a job actually met, from inside whatever the waiting machinery wrapped it in.
-     *
-     * <p>Waiting on a job hands back the failure wrapped, so a typed refusal arrives one layer
-     * down.
-     *
-     * @param failure {@link Throwable} what the command raised
-     * @return {@link Throwable} the failure underneath the wrappers
-     */
-    static Throwable unwrapped(final Throwable failure) {
-        Throwable current = failure;
-        int remaining = MAX_WRAPPERS;
-        while (remaining > 0 && current.getCause() != null
-                && (current instanceof CompletionException || current instanceof ExecutionException)) {
-            current = current.getCause();
-            remaining--;
-        }
-        return current;
+        return this.recognisedRefusal(JobHandle.failureIn(failure));
     }
 
     /**

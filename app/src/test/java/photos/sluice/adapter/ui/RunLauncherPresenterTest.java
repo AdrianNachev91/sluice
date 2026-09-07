@@ -8,6 +8,7 @@ import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
+import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.CullRunSummary;
@@ -26,6 +27,7 @@ import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStoreException;
+import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
@@ -351,6 +353,26 @@ class RunLauncherPresenterTest {
                 .contains("Report this as a bug")
                 .contains("Malformed hash index line: 7");
         assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FAILED);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void aSiftTheProviderGaveUpOnIsNotReportedAsABugInSluice() {
+        this.choose(RunMode.SIFT, "2019");
+        final JobHandle<Object> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(CompletableFuture.failedFuture(new CullException(
+                "The sifting for 2019 failed at sheet montage-003",
+                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false))));
+        when(this.pipeline.cull(any())).thenReturn(retyped(handle));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.UNFINISHED);
+        assertThat(requireNonNull(this.finishedView().detail()))
+                .doesNotContain("Report this as a bug")
+                .contains("Your photos are still in Sorted");
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label)
+                .contains("Calls to your provider", "Tokens used");
     }
 
     // A rescue stops on a note it cannot read as text. The out-of-reach sentence offers two

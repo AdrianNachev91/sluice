@@ -1820,8 +1820,8 @@
 
 /* What the reader is asked before carrying a stopped run on. It sits in the card's body with
    everything else that card has to say, and only its button joins the row of actions. No measure
-   of its own: the counts and the archived note beside it run the card's full width, and a
-   paragraph wrapping short of them makes one card argue with itself about where its text ends. */
+   of its own: the counts beside it run the card's full width, and a paragraph wrapping short of
+   them makes one card argue with itself about where its text ends. */
 .run-result-resume {
     -fx-spacing: 6px;
 }

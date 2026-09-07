@@ -7,6 +7,7 @@ import photos.sluice.adapter.ui.RunResultView.Count;
 import photos.sluice.adapter.ui.RunResultView.Tone;
 import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.WaitingReason;
+import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.domain.commit.CommitSummary;
@@ -424,6 +425,87 @@ class RunResultsTest {
                 new ImportSummary(1204, 1190, 4, 2, 3, 5, false));
 
         assertThat(card.warning()).isNull();
+    }
+
+    // The graveyard is a folder the reader never chose, and nothing was lost, so the card says
+    // nothing about it. Every arm gets one, because the archive happens before the sheets are built
+    // and all four endings are reachable with it already done.
+    @Test
+    void aSiftThatMovedAPreviousRunOutOfTheWaySaysNothingAboutIt() {
+        final Path graveyard = Path.of("logs", "sift-prep", "graveyard", "2019");
+
+        assertThat(List.of(
+                card(RunMode.SIFT, new CullJobOutcome.Applied(
+                        CullReport.nothingSpent("anthropic", 0),
+                        new ApplyReport(25, Map.of(), 0, 0, 0, List.of()), graveyard, null)),
+                card(RunMode.SIFT, new CullJobOutcome.Waiting(waitingJob(new ShardTally(0, 0, 28)),
+                        WaitingReason.SHARDS_OUTSTANDING, CullReport.nothingSpent("anthropic", 28),
+                        graveyard)),
+                card(RunMode.SIFT, new CullJobOutcome.Blocked(waitingJob(new ShardTally(28, 28, 28)),
+                        List.of(), CullReport.nothingSpent("anthropic", 0), graveyard)),
+                card(RunMode.SIFT, new CullJobOutcome.Cancelled(
+                        CullReport.nothingSpent("anthropic", 0), graveyard))))
+                .allSatisfy(card -> assertThat(String.valueOf(card.detail()))
+                        .doesNotContain(graveyard.toString()));
+    }
+
+    // Reached by going on without the sheets still owed, and by an apply refused on those same
+    // missing sheets. Opening on every sheet having come back is false on both.
+    @Test
+    void aSiftBlockedWithSheetsStillOwedDoesNotClaimTheyAllCameBack() {
+        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                waitingJob(new ShardTally(26, 26, 28)), List.of(),
+                CullReport.nothingSpent("anthropic", 0), null));
+
+        assertThat(requireNonNull(card.detail()))
+                .startsWith("2 sheets never came back")
+                .doesNotContain("Every sheet came back");
+    }
+
+    // The tally is deliberately three different numbers: 1 sheet never arrived, 3 came back wrong,
+    // and 24 of 28 passed. Any two of them being equal would let a wrong reading look right.
+    @Test
+    void aBlockedSiftSeparatesTheSheetsThatNeverCameFromTheOnesThatCameBackWrong() {
+        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                waitingJob(new ShardTally(27, 24, 28)), List.of(),
+                CullReport.nothingSpent("anthropic", 0), null));
+
+        assertThat(requireNonNull(card.detail())).startsWith("1 sheet never came back");
+        assertThat(labelled(card, "Sheets judged")).isEqualTo("24 of 28");
+    }
+
+    @Test
+    void aSiftBlockedWithEverySheetInSaysSo() {
+        final RunResultView card = card(RunMode.SIFT, new CullJobOutcome.Blocked(
+                waitingJob(new ShardTally(28, 28, 28)), List.of(),
+                CullReport.nothingSpent("anthropic", 0), null));
+
+        assertThat(requireNonNull(card.detail())).startsWith("Every sheet came back");
+    }
+
+    // A failed card counts nothing, so what the run did reach would appear on no screen at all.
+    @Test
+    void aSiftTheProviderGaveUpOnStillCountsWhatItSpent() {
+        final RunResultView card = RunResults.incompleteResult(RunMode.SIFT, new CullException(
+                "sheet 3 came back wrong twice",
+                new CullReport(4, 0, 6, new TokenSpend(9_000, 1_500, "anthropic", "a-model"), false)));
+
+        assertThat(card.tone()).isEqualTo(Tone.UNFINISHED);
+        assertThat(card.location()).isEqualTo(Location.RUNS);
+        assertThat(labelled(card, "Sheets judged")).isEqualTo("4");
+        assertThat(labelled(card, "Calls to your provider")).isEqualTo("6");
+        assertThat(labelled(card, "Tokens used")).isEqualTo("10,500");
+    }
+
+    @Test
+    void aSiftTheProviderGaveUpOnDoesNotQuoteTheReportItRaised() {
+        final RunResultView card = RunResults.incompleteResult(RunMode.SIFT,
+                new CullException("montage-003: 26 verdicts for 25 tiles", (CullReport) null));
+
+        assertThat(requireNonNull(card.detail()))
+                .doesNotContain("montage-003")
+                .contains("Your photos are still in Sorted");
+        assertThat(card.counts()).isEmpty();
     }
 
     private static String labelled(final RunResultView card, final String label) {

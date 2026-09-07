@@ -532,6 +532,26 @@ class TroubleshootPresenterTest {
     }
 
     @Test
+    void aFinishThatCouldNotStartAnythingSaysSoAndStaysOnThisScreen() {
+        final Pipeline pipeline = pipelineReporting(State.READY, List.of());
+        final JobHandle<CullJobOutcome> job = neverFinishes();
+        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
+        final TroubleshootPresenter presenter = opened(pipeline);
+        final var dashboard = new AtomicInteger();
+        presenter.setOpenDashboard(dashboard::incrementAndGet);
+        // The first press takes the slot and is the run the second one would be shown instead of.
+        presenter.press(actionOf(presenter, Deed.FINISH));
+
+        presenter.press(actionOf(presenter, Deed.FINISH));
+
+        assertThat(requireNonNull(presenter.view().message()).text())
+                .contains("only one job runs at a time")
+                .contains("was not continued");
+        assertThat(dashboard.get()).isEqualTo(1);
+        verify(pipeline, times(1)).resume(any(), anyBoolean());
+    }
+
+    @Test
     void discardingRunsThroughTheFacadeAndLeavesTheScreenOnceItHasFinished() {
         final Pipeline pipeline = pipelineReporting(State.BLOCKED, List.of());
         final JobHandle<DiscardReport> job = reporting(new DiscardReport(PREP_DIR, 3));

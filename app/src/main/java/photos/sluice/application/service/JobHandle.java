@@ -3,7 +3,9 @@ package photos.sluice.application.service;
 import photos.sluice.domain.job.CancellationSignal;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -19,6 +21,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @param <T> the type of result the job produces
  */
 public final class JobHandle<T> {
+
+    /**
+     * Bounds the unwrapping, so a cause chain that holds itself still terminates.
+     */
+    private static final int MAX_WRAPPERS = 100;
 
     private final CompletableFuture<T> result;
     private final AtomicBoolean cancellationRequested = new AtomicBoolean(false);
@@ -106,5 +113,32 @@ public final class JobHandle<T> {
      */
     public CompletionStage<T> onComplete() {
         return this.result.minimalCompletionStage();
+    }
+
+    /**
+     * The failure a job met, from inside whatever the waiting machinery wrapped it in.
+     *
+     * <p>{@link #join} wraps what the job threw in a {@link CompletionException}. A
+     * {@code whenComplete} on {@link #onComplete} does not, because this handle's future is
+     * completed directly rather than as a stage depending on another. The two ways of waiting
+     * therefore hand the same failure over at different depths. A caller wanting the typed refusal
+     * has to ask for it rather than assume one.
+     *
+     * <p>Unwraps only the two types the machinery itself raises. Every refusal this app defines may
+     * carry a cause of its own. Going one level past such a refusal answers with the I/O failure
+     * underneath it, when the refusal is the half written for a reader.
+     *
+     * @param failure {@link Throwable} what a join threw or a completion handed over
+     * @return {@link Throwable} the failure underneath the wrappers
+     */
+    public static Throwable failureIn(final Throwable failure) {
+        Throwable current = failure;
+        int remaining = MAX_WRAPPERS;
+        while (remaining > 0 && current.getCause() != null
+                && (current instanceof CompletionException || current instanceof ExecutionException)) {
+            current = current.getCause();
+            remaining--;
+        }
+        return current;
     }
 }

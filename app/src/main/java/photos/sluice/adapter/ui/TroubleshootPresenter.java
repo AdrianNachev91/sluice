@@ -68,6 +68,10 @@ public class TroubleshootPresenter {
 
     private static final String FINISH = "Finish this sift";
 
+    private static final String ALREADY_RUNNING = "Something else started running just now, and "
+            + "only one job runs at a time. This sift was not continued. Try again once it "
+            + "finishes.";
+
     // Said where the pass has run and every problem left is one no answer can settle. Naming what
     // to do matters more than naming the count, since neither control is on this screen.
     private static final String NOTHING_TO_ANSWER_WITH_SHEETS_TO_REDO =
@@ -193,8 +197,6 @@ public class TroubleshootPresenter {
         final Reading last = this.reading.get();
         final TroubleshootReport pass = this.report;
         final Notice reported = this.notice.get();
-        // Both asked once for the whole draw. A job starting or ending partway through would
-        // otherwise put answers on some rows and take the buttons off the rest.
         final boolean stillChecking = this.checking;
         final boolean busy = stillChecking || this.discarding || this.pipeline.isBusy();
         return new TroubleshootView("Troubleshoot " + this.scope, BACK,
@@ -337,7 +339,7 @@ public class TroubleshootPresenter {
             this.checkRefusedReason = null;
         } else {
             log.warn("Could not look through {}", run, failure);
-            final Throwable root = RunRefusals.rootOf(failure);
+            final Throwable root = JobHandle.failureIn(failure);
             this.checkRefusedReason = RunRefusals.refuseSentence(root);
             this.announce(RunRefusals.refuseMessage(root));
         }
@@ -468,11 +470,16 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void finish(final Path run) {
-        this.announce(null);
-        this.launcher.continueRunFromRuns(run, this.scope, false);
-        final Runnable dashboard = this.openDashboard;
-        if (dashboard != null) {
-            dashboard.run();
+        if (this.launcher.continueRunFromRuns(run, this.scope, false)) {
+            this.announce(null);
+            final Runnable dashboard = this.openDashboard;
+            if (dashboard != null) {
+                dashboard.run();
+            }
+        } else {
+            // Stays on this screen. The dashboard would show the run that took the slot, which is
+            // not the one this press was about.
+            this.announce(new Message(ALREADY_RUNNING, true));
         }
     }
 
@@ -511,7 +518,7 @@ public class TroubleshootPresenter {
         this.discarding = false;
         if (failure != null) {
             log.warn("Could not discard {}", run, failure);
-            this.announce(RunRefusals.refuseMessage(RunRefusals.rootOf(failure)));
+            this.announce(RunRefusals.refuseMessage(JobHandle.failureIn(failure)));
             this.draw();
             return;
         }

@@ -72,8 +72,8 @@ class ApplyEngineTest {
 
     // Exercises recordThenMove()'s own resolveDestination-then-moveTo pair, not just the media
     // store directly. On a case-insensitive volume the second decision's destination check folds
-    // onto the first's, so it lands on the collision suffix instead of overwriting it. See
-    // docs/plans/macos-verification-plan.md for why this only proves anything on such a volume.
+    // onto the first's, so it lands on the collision suffix instead of overwriting it. A
+    // case-sensitive volume makes them two names that never meet, which is why this skips there.
     @Test
     void twoJunkDecisionsWhoseSourceNamesDifferOnlyInCaseBothSurviveTheMoveIntoOneReviewFolder(@TempDir final Path root)
             throws IOException, ApplyException {

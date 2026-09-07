@@ -42,6 +42,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -664,6 +665,30 @@ class RunsPresenterTest {
         presenter.press(onlyActionOfKind(presenter, Kind.CONTINUE));
 
         verify(pipeline).resume(prepDir, false);
+    }
+
+    @Test
+    void aPressThatCouldNotStartAnythingSaysSoRatherThanOpeningTheDashboard() {
+        final Pipeline pipeline = pipeline();
+        when(pipeline.cullRuns()).thenReturn(new CullRuns.Listed(List.of(run("2019", State.WAITING))));
+        final JobHandle<CullJobOutcome> job = neverFinishes();
+        when(pipeline.resume(any(), anyBoolean())).thenReturn(job);
+        final RunLauncherPresenter dashboard = dashboard(pipeline);
+        final var presenter = new RunsPresenter(pipeline, dashboard);
+        final var opened = new AtomicInteger();
+        presenter.setOpenDashboard(opened::incrementAndGet);
+        presenter.refresh();
+        // The first press takes the slot and is the run the second one would be shown instead of.
+        presenter.press(onlyActionOfKind(presenter, Kind.CONTINUE));
+        presenter.refresh();
+
+        presenter.press(onlyActionOfKind(presenter, Kind.CONTINUE));
+
+        assertThat(requireNonNull(presenter.view().message()).text())
+                .contains("only one job runs at a time")
+                .contains("was not continued");
+        assertThat(opened).hasValue(1);
+        verify(pipeline, times(1)).resume(any(), anyBoolean());
     }
 
     // A run with every sheet in can still be waiting, and the press would then do what Finish does

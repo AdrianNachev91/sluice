@@ -11,6 +11,7 @@ import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretStoreException;
+import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathRole;
@@ -126,14 +127,13 @@ final class RunRefusals {
             case final ApplyException _ -> refusalWithoutLocation("This sift's answers do not hold together, "
                     + "so nothing was moved. Your photos are still in Sorted.");
             case final NoteIsNotTextException note -> refusalWithoutLocation(noteNotTextSentence(note.file()));
-            // Above the two arms below it, since a file whose bytes are not text was reached, and
-            // neither of the reasons they offer is true of it.
-            case final CharacterCodingException damaged -> refusalWithoutLocation(fileNotTextSentence(damaged.toString()));
+            case final UnrecognisedProviderException unrecognised -> providerUnrecognised(unrecognised);
+            // Above the arm below it, since a file whose bytes are not text was reached, and
+            // neither of the reasons that one offers is true of it.
+            case final UncheckedIOException damaged
+                    when damaged.getCause() instanceof CharacterCodingException ->
+                    refusalWithoutLocation(fileNotTextSentence(String.valueOf(damaged.getCause())));
             case final UncheckedIOException failed -> refusalWithoutLocation(fileOutOfReach(failed.getMessage()));
-            // The same fault one level down. A job's failure arrives here through rootOf, which
-            // answers with a throwable's cause, and an UncheckedIOException always has one. Without
-            // this arm every filesystem failure a job reports falls to the default below and
-            // reaches the reader as a Java class name.
             case final IOException failed -> refusalWithoutLocation(fileOutOfReach(failed.toString()));
             // Nothing here was written for a reader, so the words are the app's own and the
             // technical text rides along verbatim. Quoting it is what makes the bug report worth
@@ -141,16 +141,6 @@ final class RunRefusals {
             default -> refusalWithoutLocation("That did not work, and it's not known why. "
                     + "Report this as a bug, quoting this: " + failure);
         };
-    }
-
-    /**
-     * A failure's own cause where it has one, since what a job threw is usually a wrapper.
-     *
-     * @param failure {@link Throwable} what the job's promise completed with
-     * @return {@link Throwable} the one carrying the sentence worth showing
-     */
-    static Throwable rootOf(final Throwable failure) {
-        return failure.getCause() == null ? failure : failure.getCause();
     }
 
     /**
@@ -167,6 +157,24 @@ final class RunRefusals {
                 + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
                 + " you have not finished. Finish or discard "
                 + (across.size() == 1 ? "it" : "them") + " first.", Location.RUNS);
+    }
+
+    /**
+     * What to say where the configured vision provider is one this build has never heard of.
+     *
+     * <p>Names the ids that would have worked. Settings shows a provider it recognises whatever is
+     * configured, so a reader sent there with nothing else to go on finds a screen that looks
+     * right.
+     *
+     * @param unrecognised {@link UnrecognisedProviderException} the refused lookup, carrying the id
+     *         asked for and the ids this build answers to
+     * @return {@link Refusal} the sentence, and the screen the provider is chosen on
+     */
+    private static Refusal providerUnrecognised(final UnrecognisedProviderException unrecognised) {
+        return new Refusal("There is no vision provider called '" + unrecognised.provider()
+                + "'. The ones Sluice has are "
+                + RunWords.listed(unrecognised.registered().stream().sorted().toList())
+                + ". Pick one of those in Settings.", Location.SETTINGS);
     }
 
     /**

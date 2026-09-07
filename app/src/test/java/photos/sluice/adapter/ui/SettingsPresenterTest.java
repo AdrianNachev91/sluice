@@ -344,7 +344,7 @@ class SettingsPresenterTest {
                 "anthropic", "claude-opus-5", "", 224, 5, "SYSTEM");
 
         assertThat(outcome.message())
-                .startsWith("These settings were not saved")
+                .startsWith("Your settings were not saved")
                 .contains("bug")
                 .contains("NoSuchFileException");
     }

@@ -593,6 +593,28 @@ class ReviewPresenterTest {
                 Instant.now());
     }
 
+    // The stub counts rather than returning a constant. A constant answers the same on the first
+    // card and the seventh, so it cannot show a job arriving mid-draw at all.
+    @Test
+    void everyFolderCardIsDrawnAgainstOneReadingOfWhetherAJobIsRunning() {
+        final Pipeline pipeline = pipeline();
+        final var answers = new AtomicInteger();
+        when(pipeline.isBusy()).thenAnswer(_ -> answers.getAndIncrement() > 0);
+        final ReviewPresenter presenter = over(pipeline,
+                folder(Root.REVIEW, "junk"), folder(Root.REVIEW, "Food"),
+                folder(Root.DUPLICATES, "2019-06_beach"), folder(Root.UNREVIEWABLE, "2019/06"));
+
+        final List<Boolean> rescueLive = presenter.view().groups().stream()
+                .flatMap(group -> group.folders().stream())
+                .flatMap(card -> card.actions().stream())
+                .filter(action -> action.kind() == Kind.RESCUE)
+                .map(Action::live)
+                .toList();
+
+        assertThat(rescueLive).hasSizeGreaterThan(1).containsOnly(rescueLive.getFirst());
+        verify(pipeline).isBusy();
+    }
+
     private static ReviewPresenter over(final Folder... folders) {
         return over(pipeline(), folders);
     }

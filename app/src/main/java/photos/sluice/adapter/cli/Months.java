@@ -11,12 +11,12 @@ import java.util.stream.IntStream;
  * takes one.
  *
  * <p>Two spellings, and every verb on this surface takes both. A span, {@code 6-8}. A list,
- * {@code 6,8,11}. A single month is either one written short.
- *
- * <p>Mixing them, as in {@code 6-8,11}, is refused.
+ * {@code 6,8,11}. A single month is either one written short. A list may hold spans, as in
+ * {@code 6-8,11}, which is the same set the desktop's own scope field reads out of that text.
  *
  * <p>What comes back is sorted and holds no month twice, so a caller sees one shape whichever
- * spelling produced it.
+ * spelling produced it. Whether a verb can act on a set with a gap in it is that verb's question,
+ * answered by {@link #spanOf}.
  */
 final class Months {
 
@@ -50,12 +50,28 @@ final class Months {
      *
      * @param text {@link String} what was typed after the option
      * @return a {@link List} of {@link Integer} the months, sorted, each appearing once
-     * @throws ScopeRefusedException when the value is not one of the two spellings, or names
-     *         something outside the calendar
+     * @throws ScopeRefusedException when a piece of the value is neither a month nor a span, or
+     *         names something outside the calendar
      */
     static List<Integer> of(final String text) {
-        final List<Integer> months = text.contains(SPAN) ? span(text) : list(text);
-        return months.stream().distinct().sorted().toList();
+        return Arrays.stream(text.split(LIST, -1))
+                .map(piece -> monthsIn(piece, text))
+                .flatMap(List::stream)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /**
+     * The months one comma-separated piece names, that piece being a span or a single month.
+     *
+     * @param piece {@link String} one piece of the value
+     * @param text {@link String} the whole value, for the refusal to show
+     * @return a {@link List} of {@link Integer} the months it names
+     * @throws ScopeRefusedException when the piece is not months
+     */
+    private static List<Integer> monthsIn(final String piece, final String text) {
+        return piece.contains(SPAN) ? span(piece, text) : List.of(month(piece, text));
     }
 
     /**
@@ -83,14 +99,15 @@ final class Months {
     }
 
     /**
-     * The span a value names, from its first month to its last.
+     * The months one span covers, from its first to its last.
      *
-     * @param text {@link String} what was typed after the option
+     * @param piece {@link String} the span, as one piece of the value
+     * @param text {@link String} the whole value, for the refusal to show
      * @return a {@link List} of {@link Integer} every month the span covers
      * @throws ScopeRefusedException when it is not a span of two months, or runs backwards
      */
-    private static List<Integer> span(final String text) {
-        final String[] ends = text.split(SPAN, -1);
+    private static List<Integer> span(final String piece, final String text) {
+        final String[] ends = piece.split(SPAN, -1);
         if (ends.length != 2) {
             throw refused(text);
         }
@@ -100,17 +117,6 @@ final class Months {
             throw refused(text);
         }
         return IntStream.rangeClosed(from, to).boxed().toList();
-    }
-
-    /**
-     * The months a comma-separated value names.
-     *
-     * @param text {@link String} what was typed after the option
-     * @return a {@link List} of {@link Integer} the months it names
-     * @throws ScopeRefusedException when any of them is not a month
-     */
-    private static List<Integer> list(final String text) {
-        return Arrays.stream(text.split(LIST, -1)).map(part -> month(part, text)).toList();
     }
 
     /**
@@ -146,8 +152,8 @@ final class Months {
      */
     private static ScopeRefusedException refused(final String text) {
         return new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
-                "Not months: " + Refusal.shown(text) + ". Write either a span, like 6-8, "
-                        + "or a list, like 6,8,11, never the two together.",
+                "Not months: " + Refusal.shown(text) + ". Write a span, like 6-8, or a list, "
+                        + "like 6,8,11, or both, like 6-8,11.",
                 Fields.of("option", "--months", "value", text)));
     }
 }

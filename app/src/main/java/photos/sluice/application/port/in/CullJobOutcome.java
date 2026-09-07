@@ -30,8 +30,12 @@ import java.util.List;
  * <p>Every case also carries {@code archivedPriorRun}, non-null when starting this run archived a
  * completed run of the same scope into the graveyard. It sits on all four rather than just
  * {@link Applied} because the archive happens before montage rendering. So every later way the run
- * can end, cancellation included, is reachable with the archive already done. A result card that
- * did not mention it would leave the user's previous record looking like it vanished.
+ * can end, cancellation included, is reachable with the archive already done.
+ *
+ * <p>Whether to report it is each surface's own decision rather than something this type asks for.
+ * The command line names the folder, having no other way to show one. The desktop deliberately says
+ * nothing about it: housekeeping that succeeded is not news, nothing was lost, and the folder is
+ * one the reader never chose.
  *
  * <p>Every case carries {@code cullReport} for the same reason, one axis over. Three of the four
  * are reachable after the vision pass has already called a model, so a spend attaches to them.

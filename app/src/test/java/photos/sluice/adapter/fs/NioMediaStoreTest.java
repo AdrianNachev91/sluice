@@ -121,8 +121,8 @@ class NioMediaStoreTest {
     }
 
     // On a case-insensitive volume, Files.exists folds the two names to one lookup, so the second
-    // move lands on the collision path instead of silently overwriting the first. See
-    // docs/plans/macos-verification-plan.md for why this only proves anything on such a volume.
+    // move lands on the collision path instead of silently overwriting the first. A case-sensitive
+    // volume makes them two names that never meet, which is why this skips itself there.
     @Test
     void moveDoesNotOverwriteAFileWhoseNameDiffersOnlyInCase(@TempDir final Path root) throws IOException {
         final Path destDir = Files.createDirectories(root.resolve("dest"));

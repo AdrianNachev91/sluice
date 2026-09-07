@@ -3,6 +3,7 @@ package photos.sluice.adapter.cli;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.out.CullException;
+import photos.sluice.application.service.JobHandle;
 import picocli.CommandLine;
 import picocli.CommandLine.Model.CommandSpec;
 import tools.jackson.databind.json.JsonMapper;
@@ -100,7 +101,7 @@ public class CommandReports {
      */
     private static CommandOutcome reading(final RuntimeException failure, final RefusalClassifier classifier) {
         try {
-            if (RefusalClassifier.unwrapped(failure) instanceof final CullException incomplete) {
+            if (JobHandle.failureIn(failure) instanceof final CullException incomplete) {
                 return CullOutcomeReport.incompleteOutcome(incomplete);
             }
             final Refusal refusal = classifier.refusalFor(failure);

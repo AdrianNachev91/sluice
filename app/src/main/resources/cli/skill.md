@@ -231,16 +231,17 @@ JSON document. `--quiet` reports no progress and leaves the result unchanged.
 Three verbs take a scope, and no two take it alike. Reading the wrong row is the commonest
 way to get a refusal here.
 
-| Verb     | Bare, with no scope          | Year | `--months`                 | `--oldest N`                   |
-|----------|------------------------------|------|----------------------------|--------------------------------|
-| `sort`   | The oldest year in the Inbox | yes  | a span only: `6-8`         | yes, ordered by date           |
-| `commit` | Refused. Write `commit all`  | yes  | a span only: `6-8`         | not accepted                   |
-| `sift`   | Refused                      | yes  | a span or a list: `6,8,11` | yes, ordered by file timestamp |
+| Verb     | Bare, with no scope          | Year | `--months`                        | `--oldest N`                   |
+|----------|------------------------------|------|-----------------------------------|--------------------------------|
+| `sort`   | The oldest year in the Inbox | yes  | a span only: `6-8`                | yes, ordered by date           |
+| `commit` | Refused. Write `commit all`  | yes  | a span only: `6-8`                | not accepted                   |
+| `sift`   | Refused                      | yes  | a span, a list, or both: `6-8,11` | yes, ordered by file timestamp |
 
-A year is four digits with no leading zero. `--months` refuses a value mixing the two
-spellings, such as `6-8,11`, on every verb. `sift` is the one that takes a gapped list,
-because sifting spends from the user's account balance and skipping a month is worth the
-extra spelling there. `sort` and `commit` take a span.
+A year is four digits with no leading zero. `--months` reads a span, a list, or a list holding
+spans, such as `6-8,11`, on every verb. What differs is what each verb can then act on. `sift`
+takes a gapped set, because sifting spends from the user's account balance and skipping a month
+is worth naming. `sort` and `commit` narrow to a span, so they refuse a set with a gap in it and
+say so.
 
 A year and `--oldest` name different photos, so no verb takes both.
 

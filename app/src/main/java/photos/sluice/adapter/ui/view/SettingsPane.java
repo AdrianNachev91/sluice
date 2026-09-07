@@ -132,10 +132,12 @@ final class SettingsPane {
         final FoldersCard.Result folders = FoldersCard.build(view);
         final VisionProviderCard.Result provider = VisionProviderCard.build(view, visionProvider);
         final PhotoSheetsCard.Result montage = PhotoSheetsCard.build(view);
-        final AppearanceCard.Result appearance = AppearanceCard.build(view, presenter);
-        onScreen.set(new OnScreen(folders, provider, montage));
-
         final TextArea status = header.status();
+        // The same bar a refused Save writes to. A theme saves on its own press, so its refusal has
+        // no Save button to sit under. This is the one place the page reports anything.
+        final AppearanceCard.Result appearance = AppearanceCard.build(view, presenter,
+                refused -> showRefusal(container, status, refused, false));
+        onScreen.set(new OnScreen(folders, provider, montage));
 
         provider.providerBox().getSelectionModel().selectedItemProperty().addListener((_, _, chosen) -> {
             // A refusal answers one press of Save against one set of choices. Changing the provider
@@ -236,8 +238,8 @@ final class SettingsPane {
     /**
      * Puts a refusal on the bar, beside the button that produced it.
      *
-     * <p>The page is not moved. Save is pinned, so the reader is already looking at this line, and
-     * which field is at fault is said by the mark on that field.
+     * <p>The page travels to the bar, which is where a refusal has to be read from. Which field is
+     * at fault is said by the mark on that field, so the reader goes back down to it.
      *
      * @param status {@link TextArea} the line beside Save
      * @param message what was refused, or null where nothing was

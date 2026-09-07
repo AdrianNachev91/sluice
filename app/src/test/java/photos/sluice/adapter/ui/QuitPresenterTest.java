@@ -112,16 +112,23 @@ class QuitPresenterTest {
         assertThat(asked.question()).startsWith("Something is still running.");
     }
 
-    // Three branches, and what a test can hold is that each reaches its own line. The words
-    // themselves are a wording call rather than a property of this class.
+    // The other two are held apart from the sift's line itself rather than from a phrase inside it.
+    // Rewording that phrase would otherwise leave them passing over nothing.
     @Test
     void aSiftAFileAndAJobWithNoModeEachGetTheirOwnWaitingLine() {
         when(this.pipeline.isBusy()).thenReturn(true);
         final QuitView noMode = this.presenter.quitDialog();
         assertThat(noMode).isNotNull();
+        final String sift = this.quitView(RunMode.SIFT, "2019").waiting();
 
-        assertThat(List.of(noMode.waiting(), this.quitView(RunMode.SIFT, "2019").waiting(),
-                this.quitView(RunMode.SORT, "").waiting())).doesNotHaveDuplicates();
+        assertThat(sift).contains("sheet").contains("provider account balance");
+        assertThat(noMode.waiting())
+                .contains("Finishing what was already started")
+                .isNotEqualTo(sift);
+        assertThat(this.quitView(RunMode.SORT, "").waiting())
+                .contains("file")
+                .contains("picked up again next time")
+                .isNotEqualTo(sift);
     }
 
     @Test
