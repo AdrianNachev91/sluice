@@ -23,7 +23,7 @@ public enum RunMode {
     /** Has a vision provider look at what is in Sorted and set aside what it will not keep. */
     SIFT("Sift", "Sifting",
             "Looks at your sorted photos and moves anything it does not keep out of Sorted.",
-            "Type a year, or click one below. Add a run of months after it like 2019 6-8, or pick "
+            "Type a year, or click one below. Add a span of months after it like 2019 6-8, or pick "
                     + "months out like 2019 6,8,11.", 3),
 
     /**
@@ -33,9 +33,9 @@ public enum RunMode {
      * progress area shows is "Moving to library...", which is the phrase that table names.
      */
     MOVE_TO_LIBRARY("Move to library", "Moving to library",
-            "Moves what is in Sorted into your library. That is the photos a sift left alone, plus "
+            "Moves what is in Sorted into your Library. That is the photos a sift left alone, plus "
                     + "any it has not seen.",
-            "Leave this empty to move everything in Sorted. Or type a year, and a run of months "
+            "Leave this empty to move everything in Sorted. Or type a year, and a span of months "
                     + "after it if you want less, like 2019 6-8. Or pick Unsorted above, for "
                     + "whatever nothing could date.", 1),
 

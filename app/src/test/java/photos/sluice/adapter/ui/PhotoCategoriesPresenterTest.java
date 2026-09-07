@@ -49,7 +49,7 @@ class PhotoCategoriesPresenterTest {
     void theLibraryCategoryIsTheOnlyOneDrawnAsFixed() {
         final PhotoCategoriesView view = presenterOver(BLURRY, FUNNY).view();
 
-        assertThat(view.categories().getFirst().fixed()).contains("library");
+        assertThat(view.categories().getFirst().fixed()).contains("Library");
         assertThat(view.categories().getLast().fixed()).isNull();
     }
 

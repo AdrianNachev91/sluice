@@ -129,7 +129,7 @@ class RefusalClassifierTest {
         assertThat(refusal).isNotNull();
         assertThat(refusal.kind()).isEqualTo(RefusalKind.JOB_IN_PROGRESS);
         assertThat(refusal.sentence())
-                .isEqualTo("Something else is running. Wait for it to finish, then start this one.");
+                .isEqualTo("Something else is running. Wait for it to finish, then try again.");
     }
 
     @Test

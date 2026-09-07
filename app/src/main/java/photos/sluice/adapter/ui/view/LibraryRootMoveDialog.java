@@ -54,11 +54,11 @@ final class LibraryRootMoveDialog {
                         final Consumer<SettingsPresenter.MoveOutcome> report) {
         // The copy leads: it is the resolution that keeps what the record already knows, and the
         // one a reader who is unsure should land on.
-        final var copyAndKeep = new Dialogs.Choice("Copy the old library across",
+        final var copyAndKeep = new Dialogs.Choice("Copy the old Library across",
                 Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.LOUD);
         final var startFresh = new Dialogs.Choice("Start the record fresh",
                 Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET);
-        final Optional<Dialogs.Choice> chosen = Dialogs.ask(opensOver, "Moving the library root",
+        final Optional<Dialogs.Choice> chosen = Dialogs.ask(opensOver, "Moving the Library root",
                 needsResolution.message(), copyAndKeep, startFresh,
                 new Dialogs.Choice("Cancel", Dialogs.Role.CANCEL, Dialogs.Emphasis.QUIET));
         if (chosen.isEmpty()) {
@@ -86,8 +86,8 @@ final class LibraryRootMoveDialog {
         task.setOnFailed(_ -> {
             stopWatching(watching);
             report.accept(new SettingsPresenter.MoveOutcome.Failed(
-                    "The library move stopped, and Sluice cannot say why. Report this as a bug in "
-                            + "Sluice, quoting this: " + task.getException()));
+                    "The Library move stopped, and it's not known why. Report this as "
+                            + "a bug, quoting this: " + task.getException()));
         });
         Thread.ofVirtual().start(task);
     }

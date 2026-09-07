@@ -884,8 +884,11 @@ public class Pipeline {
          * @param across a {@link List} of {@link CullRunSummary} the unfinished runs it overlaps
          */
         public ScopeOverlapsException(final CullScope.Year chosen, final List<CullRunSummary> across) {
-            super(CullScope.tag(chosen) + " overlaps " + across.stream().map(CullRunSummary::scope).toList()
-                    + ", which have not finished - finish or discard them before sifting it.");
+            super(CullScope.tag(chosen) + " overlaps "
+                    + String.join(", ", across.stream().map(CullRunSummary::scope).toList())
+                    + (across.size() == 1
+                    ? ", which is a sift you have not finished. Finish or discard it first."
+                    : ", which are sifts you have not finished. Finish or discard them first."));
             this.chosen = chosen;
             this.across = List.copyOf(across);
         }
@@ -1065,8 +1068,8 @@ public class Pipeline {
          * @param prepDir {@link Path} the prep dir that could not be worked
          */
         public RunOutsideWorkingRootException(final Path prepDir) {
-            super("The sift at " + prepDir + " is not inside the working root Sluice is set up with "
-                    + "now. Point the working root back at the folder holding it to work on it again.");
+            super("The sift at " + prepDir + " is not inside the Working root currently saved. "
+                    + "Point the Working root back at the folder holding it to work on it again.");
             this.prepDir = prepDir;
         }
 

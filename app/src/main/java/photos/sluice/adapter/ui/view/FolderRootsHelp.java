@@ -19,14 +19,14 @@ import javafx.scene.text.TextBoundsType;
 final class FolderRootsHelp {
 
     private static final String[] RULES = {
-            "Keep your library and your inbox apart. Neither may sit inside the other, and they may "
+            "Keep your Library and your Inbox apart. Neither may sit inside the other, and they may "
                     + "not be the same folder.",
-            "Your inbox usually sits inside your working root, which is fine. It must not be the working "
+            "Your Inbox usually sits inside your Working root, which is fine. It must not be the Working "
                     + "root itself, or a folder that holds it.",
-            "Pick a working root that is not synced to the cloud. Sluice moves a lot of files through it, "
+            "Pick a Working root that is not synced to the cloud. Sluice moves a lot of files through it, "
                     + "and a sync client would copy every one of them.",
-            "Choose your library carefully. It is where your photos live from then on, and moving it "
-                    + "later means copying the whole library across.",
+            "Choose your Library carefully. It is where your photos live from then on, and moving it "
+                    + "later means copying the whole Library across.",
     };
 
     /**

@@ -133,8 +133,8 @@ class RunLauncherPresenterTest {
         this.choose(RunMode.MOVE_TO_LIBRARY, "2019 6,11");
 
         assertThat(this.setup.view().scopeRefusal())
-                .isEqualTo("Moving to library narrows to a run of months, not a list. Reading "
-                        + "6,11 as 6-11 would take July too. Choose months that run together, like "
+                .isEqualTo("Moving to library narrows to a span of months, not a list. Reading "
+                        + "6,11 as 6-11 would take July too. Choose a span of months, like "
                         + "6-8, or none at all for the whole year.");
         this.presenter.start();
         verify(this.pipeline, never()).commit(any());
@@ -348,7 +348,7 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(requireNonNull(this.finishedView().detail()))
-                .contains("Report this as a bug in Sluice")
+                .contains("Report this as a bug")
                 .contains("Malformed hash index line: 7");
         assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FAILED);
     }
@@ -367,7 +367,7 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(requireNonNull(this.finishedView().detail()))
-                .contains("does not hold text any more")
+                .contains("holds something other than text")
                 .doesNotContain("could not be reached")
                 .doesNotContain("not there anymore");
         assertThat(this.finishedView().tone()).isEqualTo(RunResultView.Tone.FAILED);
@@ -510,7 +510,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(this.reported().text()).contains("one thing at a time");
+        assertThat(this.reported().text()).contains("one job runs at a time");
         assertThat(this.reported().refused()).isTrue();
         verify(this.pipeline, never()).commit(any());
     }
@@ -524,7 +524,7 @@ class RunLauncherPresenterTest {
         counting.start();
 
         assertThat(requireNonNull(counting.setup().view().message()).text())
-                .contains("still reading your folders");
+                .contains("Still reading your folders");
         verify(this.pipeline, never()).sort(any());
     }
 
@@ -603,7 +603,7 @@ class RunLauncherPresenterTest {
         assertThat(this.finishedView().heading()).isEqualTo("Sifting finished.");
         assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label, RunResultView.Count::value)
                 .contains(tuple("Photos looked at", "25"), tuple("Keep", "20"),
-                        tuple("Copies set aside", "3"));
+                        tuple("Copies moved to Duplicates", "3"));
     }
 
     @Test
@@ -638,8 +638,8 @@ class RunLauncherPresenterTest {
 
         assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label, RunResultView.Count::value)
                 .containsExactly(tuple("Photos sorted", "5"), tuple("Videos sorted", "1"),
-                        tuple("Already in your library", "1"), tuple("Identical copies removed", "2"),
-                        tuple("Set aside for review", "2"), tuple("Could not be dated", "1"));
+                        tuple("Already in your Library", "1"), tuple("Identical copies removed", "2"),
+                        tuple("Moved to Review", "2"), tuple("Could not be dated", "1"));
     }
 
     @Test
@@ -663,7 +663,7 @@ class RunLauncherPresenterTest {
 
         assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label, RunResultView.Count::value)
                 .containsExactly(tuple("Photos", "6"), tuple("Videos", "2"), tuple("Funny", "1"),
-                        tuple("Moved to your library", "9"));
+                        tuple("Moved to your Library", "9"));
     }
 
     // The confirm names the years and the file count, and a failed read knows neither. Offering the
@@ -848,7 +848,7 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(this.finishedView().detail())
-                .startsWith("Sluice could not read your key. The credential store on this computer "
+                .startsWith("Your key could not be read. The credential store on this computer "
                         + "refused to answer.")
                 .endsWith("the keyring returned 0x80070005");
     }
@@ -863,7 +863,7 @@ class RunLauncherPresenterTest {
 
         assertThat(this.reported().text())
                 .contains("cannot be read")
-                .contains("whether a sift is already running");
+                .contains("Cannot determine the sifts for this timeframe");
     }
 
     @Test
@@ -877,7 +877,7 @@ class RunLauncherPresenterTest {
 
         assertThat(this.reported().text())
                 .isEqualTo("This sift is at " + outside + ", which is not inside the "
-                        + "folders Sluice is set up with now. Point your working folder back at "
+                        + "folders currently saved. Point your working folder back at "
                         + "the one holding it to work on it again.");
     }
 
@@ -1032,7 +1032,7 @@ class RunLauncherPresenterTest {
 
         verify(this.pipeline, never()).cull(any());
         assertThat(this.reportedOnTheCard().text())
-                .isEqualTo("Sluice could not read your folders.");
+                .isEqualTo("Your folders could not be read.");
         assertThat(this.reportedOnTheCard().location()).isEqualTo(Location.SETTINGS);
     }
 

@@ -247,7 +247,7 @@ class RunLauncherPaneTest {
 
         onFxThread(() -> fire(pane, "#run-mode-move"));
 
-        assertThat(text(pane, "#run-mode-hint")).contains("into your library");
+        assertThat(text(pane, "#run-mode-hint")).contains("into your Library");
     }
 
     @Test
@@ -266,7 +266,7 @@ class RunLauncherPaneTest {
 
         onFxThread(() -> type(pane, "2019 6,8,11"));
 
-        assertThat(text(pane, "#run-scope-refusal")).contains("run of months");
+        assertThat(text(pane, "#run-scope-refusal")).contains("span of months");
         assertThat(pane.lookup("#run-start").isDisabled()).isTrue();
     }
 

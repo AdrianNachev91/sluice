@@ -173,7 +173,7 @@ final class FirstRunCard {
      */
     private static VBox providerBlock(final ComboBox<SettingsView.ProviderChoice> provider) {
         final var block = new VBox(SettingsRows.subsectionHeading("What looks at your photos"),
-                SettingsRows.helpLine("Sluice has no judgement of its own. It either calls a model you pay "
+                SettingsRows.helpLine("Sluice does not handle the judgement by itself. It either calls a model you pay "
                         + "for, or waits for an agent you already run to do the looking. Calling a model "
                         + "needs an API key, which you add in Settings."),
                 provider);

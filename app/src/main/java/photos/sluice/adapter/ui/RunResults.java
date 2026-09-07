@@ -46,7 +46,7 @@ final class RunResults {
 
     private static final String CONTINUE = "Continue sifting";
 
-    private static final String CEILING_NOTE = "Sluice stopped this sift because it went far "
+    private static final String CEILING_NOTE = "This sift stopped because it went far "
             + "past what it was expected to cost. Nothing more has been spent from your provider "
             + "account balance. Continuing on sends "
             + "the sheets it had not reached, under a fresh limit.";
@@ -97,7 +97,8 @@ final class RunResults {
 
     // Its own words because the Continue offer above is not on this card. A reader told they can
     // continue would go looking for a button that is not there.
-    private static final String CANCELLED_BEFORE_ANY_SHEET = "No sheets were built yet.";
+    private static final String CANCELLED_BEFORE_ANY_SHEET = "No sheets were built yet, and nothing "
+            + "was sent to your provider.";
 
     private RunResults() {
     }
@@ -271,7 +272,7 @@ final class RunResults {
                     + "file them under. They are in Review, under Unsorted.";
         }
         if (sorted.reimportsDeleted() == all) {
-            return "They are all in your library already, so the copies in your Inbox were removed.";
+            return "They are all in your Library already, so the copies in your Inbox were removed.";
         }
         return "The rows below say what became of each one.";
     }
@@ -309,9 +310,9 @@ final class RunResults {
         addGuessed(rows, "result-photos-sorted-guessed", guessed.photosSorted());
         rows.add(new Count("result-videos-sorted", VIDEOS_SORTED, RunWords.grouped(sorted.videosSorted())));
         addGuessed(rows, "result-videos-sorted-guessed", guessed.videosSorted());
-        addWhenAny(rows, "result-reimports", "Already in your library", sorted.reimportsDeleted());
+        addWhenAny(rows, "result-reimports", "Already in your Library", sorted.reimportsDeleted());
         addWhenAny(rows, "result-byte-dups", "Identical copies removed", sorted.byteDupsDeleted());
-        addWhenAny(rows, "result-low-res", "Set aside for review", sorted.lowRes());
+        addWhenAny(rows, "result-low-res", "Moved to Review", sorted.lowRes());
         addGuessed(rows, "result-low-res-guessed", guessed.lowRes());
         addWhenAny(rows, "result-unsorted", "Could not be dated", sorted.unsorted());
         return rows;
@@ -382,7 +383,7 @@ final class RunResults {
                         bucketLabel(bucket.getKey()), RunWords.grouped(bucket.getValue()))));
         // Drawn even where every bucket read zero, since a move that moved nothing has to say so
         // rather than showing an empty card.
-        rows.add(new Count("result-moved-total", "Moved to your library", RunWords.grouped(moved.committed())));
+        rows.add(new Count("result-moved-total", "Moved to your Library", RunWords.grouped(moved.committed())));
         return rows;
     }
 
@@ -401,7 +402,7 @@ final class RunResults {
             // Nothing in the pipeline files anything here, and the bucket exists because a first
             // path segment has to land somewhere. A card meeting one says what it can rather than
             // dropping the count.
-            case OTHER -> "Elsewhere in your library";
+            case OTHER -> "Elsewhere in your Library";
         };
     }
 
@@ -546,7 +547,7 @@ final class RunResults {
                         "result-category-" + category.getKey().toLowerCase(Locale.UK),
                         category.getKey(), RunWords.grouped(category.getValue()))));
         addWhenAny(rows, "result-near-dup-groups", "Near-duplicate groups", applied.nearDupGroups());
-        addWhenAny(rows, "result-near-dup-rejects", "Copies set aside", applied.nearDupRejects());
+        addWhenAny(rows, "result-near-dup-rejects", "Copies moved to Duplicates", applied.nearDupRejects());
         addWhenAny(rows, "result-unreviewable", "Could not be judged", applied.unreviewable());
         return rows;
     }
@@ -665,7 +666,7 @@ final class RunResults {
                 ? null
                 : new RunResultView.Warning("The dates on these photos may be wrong.",
                         "They came with date files alongside them, and almost none of those matched "
-                                + "a photo. Sluice fell back to the date each file was last written.");
+                                + "a photo, so the date each file was last written was used instead.");
     }
 
     /**

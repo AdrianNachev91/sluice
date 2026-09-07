@@ -139,7 +139,7 @@ final class FindingWords {
             // A diagnosis builds CorruptIndex and UnreadablePrepDir as the sole finding it answers
             // with, so neither can ever turn up beside another of its own kind.
             case final Finding.CorruptIndex corrupt -> new Statement(
-                    "Sluice cannot read its own record of what this sift covers.",
+                    "The record of what this sift covers is damaged.",
                     null, corrupt.indexPath().toString(), List.of());
             case final Finding.UnreadablePrepDir unreadable -> new Statement(
                     "This sift's records could not be read at all.",
@@ -202,8 +202,8 @@ final class FindingWords {
                     photoOn(outOfScope.montage(), outOfScope.index()) + ", "
                             + outOfScope.file(), List.of());
             case final Finding.SourceOutsideSorted outside -> new Statement(
-                    "A photo this sift wants to move is not under the Sorted folder in force now.",
-                    "{} photos this sift wants to move are not under the Sorted folder in force now.",
+                    "A photo this sift wants to move is not under the Sorted folder currently saved.",
+                    "{} photos this sift wants to move are not under the Sorted folder currently saved.",
                     outside.file().toString(), List.of());
         };
     }

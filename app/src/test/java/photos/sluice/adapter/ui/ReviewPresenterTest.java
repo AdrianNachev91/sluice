@@ -245,8 +245,8 @@ class ReviewPresenterTest {
 
         assertThat(presenter.view().nothingYet()).isNull();
         assertThat(presenter.view().unreadable())
-                .isEqualTo("What is waiting in " + WORKING_ROOT.resolve("Duplicates")
-                        + " is unknown, because it cannot be read. Opening it yourself is the "
+                .isEqualTo("Cannot determine what is waiting in " + WORKING_ROOT.resolve("Duplicates")
+                        + ": it cannot be read. Opening it yourself is the "
                         + "quickest way to find out why.");
     }
 

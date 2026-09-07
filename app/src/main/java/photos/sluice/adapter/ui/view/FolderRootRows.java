@@ -21,7 +21,7 @@ final class FolderRootRows {
     static SettingsRows.FolderRow workingRoot(final SettingsView view) {
         return SettingsRows.folderRow(PathRoleLabels.WORKING_ROOT,
                 "Where Sluice does its work. It makes folders here for what it has sorted, what it wants "
-                        + "you to look at, and the near-duplicates it set aside.",
+                        + "you to look at, and the near-copies it found.",
                 "settings-working-root", view.workingRoot(), view.rootLimit());
     }
 

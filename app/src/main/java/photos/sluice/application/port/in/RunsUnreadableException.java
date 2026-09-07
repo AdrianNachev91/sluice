@@ -26,7 +26,7 @@ public final class RunsUnreadableException extends IllegalStateException {
      * @param root {@link Path} the sift-prep root whose contents are unknown
      */
     public RunsUnreadableException(final Path root) {
-        super("Sluice doesn't know whether any sift is still unfinished, because " + root
+        super("Cannot determine whether any sift is still unfinished: " + root
                 + " cannot be read. Most likely the folder is held by another process or not there "
                 + "anymore.");
         this.root = root;

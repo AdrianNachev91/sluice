@@ -345,7 +345,7 @@ class SettingsPresenterTest {
 
         assertThat(outcome.message())
                 .startsWith("These settings were not saved")
-                .contains("bug in Sluice")
+                .contains("bug")
                 .contains("NoSuchFileException");
     }
 
@@ -376,7 +376,7 @@ class SettingsPresenterTest {
         startUp.join();
 
         assertThat(outcome).isInstanceOfSatisfying(SettingsPresenter.SaveOutcome.Refused.class,
-                refused -> assertThat(refused.model()).doesNotContain("Retry").contains("still asking"));
+                refused -> assertThat(refused.model()).doesNotContain("Retry").contains("Still asking"));
     }
 
     @Test
@@ -617,7 +617,7 @@ class SettingsPresenterTest {
                 .contains("You stopped the copy")
                 .contains("still at its old folder")
                 .contains("continues copying")
-                .contains("never remove a library folder")
+                .contains("never remove a Library folder")
                 .contains(copiedInto.toString());
     }
 
@@ -633,7 +633,7 @@ class SettingsPresenterTest {
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.Failed.class);
         assertThat(outcome.message())
-                .contains("Your library moved")
+                .contains("Your Library moved")
                 .contains("Sluice is running a job");
     }
 
@@ -647,7 +647,7 @@ class SettingsPresenterTest {
 
         assertThat(outcome).isInstanceOf(SettingsPresenter.MoveOutcome.Failed.class);
         assertThat(outcome.message())
-                .contains("The library did not move")
+                .contains("The Library did not move")
                 .contains("IllegalStateException");
     }
 

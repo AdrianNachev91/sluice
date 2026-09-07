@@ -55,11 +55,10 @@ public class RunsPresenter {
     private static final String NOTHING_YET = "No sifts have been started yet. A sift you start "
             + "from the Dashboard shows up here until you finish it or discard it.";
 
-    private static final String UNREADABLE = "Sluice doesn't know what sifts are in %s because it "
-            + "cannot be read. Most likely the folder is held by another process or not there "
-            + "anymore.";
+    private static final String UNREADABLE = "Cannot determine the sifts in %s: it cannot be read. "
+            + "Most likely the folder is held by another process or not there anymore.";
 
-    private static final String CLEAR_COMPLETED = "Clear finished runs";
+    private static final String CLEAR_COMPLETED = "Clear finished sifts";
 
     // How many scopes the clear question spells out before it falls back to the count above it. A
     // scope can be as long as "2019 6,8,11", and a list of eight of those buries the two sentences
@@ -838,7 +837,7 @@ public class RunsPresenter {
                         ? " you have already paid for are set aside with it. "
                         : " are set aside with it. ");
         return new Confirmation("Discard the sift of " + run.scope() + "?",
-                paidFor + "Discarding this run's records will archive them. "
+                paidFor + "Discarding this sift's records will archive them. "
                         + "They will stay on disk in " + this.pipeline.archivesFolder()
                         + " for 30 days.",
                 "Discard", "Keep", false);
@@ -888,8 +887,8 @@ public class RunsPresenter {
      */
     private static @Nullable String waitingOnSomebodyElse(final CullRunSummary run, final State state) {
         return switch (state) {
-            case READY -> "Every sheet was judged. Once you finish the sift the photos will be "
-                    + "moved to their category destinations.";
+            case READY -> "Every sheet was judged. Finishing the sift moves the photos it did not "
+                    + "keep out of Sorted.";
             case BLOCKED -> FindingFamily.nothingMoved(run.health().findings());
             // "Often", because the read failed and nothing here knows why. Naming the usual cause
             // is as far as this can honestly go.
@@ -967,10 +966,10 @@ public class RunsPresenter {
     private static Confirmation clearConfirm(final List<RunCard> completed) {
         final List<String> scopes = completed.stream().map(RunCard::scope).toList();
         return new Confirmation("Clear the records of "
-                + RunWords.counted(completed.size(), "finished run", "finished runs") + "?",
+                + RunWords.counted(completed.size(), "finished sift", "finished sifts") + "?",
                 (scopes.size() > NAMED_IN_A_CLEAR ? "This deletes everything kept about them."
                         : "This deletes everything kept about " + RunWords.listed(scopes) + ".")
-                        + " Your photos are not touched, and neither is any run you have not "
+                        + " Your photos are not touched, and neither is any sift you have not "
                         + "finished. There is no way back to them.",
                 "Clear them", "Keep them", false);
     }
@@ -993,9 +992,9 @@ public class RunsPresenter {
         }
         final int leftBehind = report.skipped().size() + report.unreadable().size();
         final String cleared = report.purged().isEmpty()
-                ? "No finished runs to clear."
-                : "Cleared " + RunWords.counted(report.purged().size(), "finished run", "finished runs") + ".";
-        final String unfinished = RunWords.counted(leftBehind, "run", "runs")
+                ? "No finished sifts to clear."
+                : "Cleared " + RunWords.counted(report.purged().size(), "finished sift", "finished sifts") + ".";
+        final String unfinished = RunWords.counted(leftBehind, "sift", "sifts")
                 + (leftBehind == 1
                 ? " has not finished, so nothing from it was touched."
                 : " have not finished, so nothing from them was touched.");
@@ -1009,7 +1008,7 @@ public class RunsPresenter {
      * @return {@link String} the label
      */
     private static String completedHeading(final int completed) {
-        return "Finished runs (" + RunWords.grouped(completed) + ")";
+        return "Finished sifts (" + RunWords.grouped(completed) + ")";
     }
 
     /**

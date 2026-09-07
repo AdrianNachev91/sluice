@@ -98,10 +98,10 @@ final class RunRefusals {
                     + "your provider key is not set.", Location.SETTINGS);
             // A store that answers neither yes nor no. Worded as Settings words the same fault, and
             // carrying the same remedy, since one broken store must not read as two problems.
-            case final SecretStoreException broken -> new Refusal("Sluice could not read your key. "
+            case final SecretStoreException broken -> new Refusal("Your key could not be read. "
                     + "The credential store on this computer refused to answer. Nothing else you "
                     + "have configured is affected. Saving your key again often fixes it on its own. "
-                    + "If it keeps happening, report this as a bug in Sluice, quoting this: "
+                    + "If it keeps happening, report this as a bug, quoting this: "
                     + broken.getMessage(), Location.SETTINGS);
             case final Pipeline.ScopeOccupiedException occupied -> scopeOccupiedRefusal(occupied);
             case final Pipeline.ScopeOverlapsException overlaps -> scopeOverlapsRefusal(overlaps);
@@ -109,22 +109,22 @@ final class RunRefusals {
             // screen being drawn and its button being pressed is the ordinary way here.
             case final Pipeline.RunAlreadyFinishedException finished -> refusalWithoutLocation(messageOf(finished));
             case final Pipeline.NothingToRedoException nothing -> refusalWithoutLocation(messageOf(nothing));
-            case final Pipeline.ScopeUnreadableException unreadable -> refusalWithoutLocation("Sluice doesn't "
-                    + "know whether a sift is already running for that timeframe, because "
-                    + unreadable.prepDir() + " cannot be read. Most likely the folder is held by "
-                    + "another process or not there anymore.");
+            case final Pipeline.ScopeUnreadableException unreadable -> refusalWithoutLocation("Cannot "
+                    + "determine the sifts for this timeframe: " + unreadable.prepDir()
+                    + " cannot be read. Most likely the folder is held by another process or not "
+                    + "there anymore.");
             // Discarding is one of the calls that raise this, so offering a discard here would name
             // the press that just refused.
             case final Pipeline.RunOutsideWorkingRootException outside -> refusalWithoutLocation("This sift is "
-                    + "at " + outside.prepDir() + ", which is not inside the folders Sluice is set "
-                    + "up with now. Point your working folder back at the one holding it to work on "
-                    + "it again.");
-            case final MalformedPrepJsonException _ -> refusalWithoutLocation("Sluice could not read that sift's "
-                    + "own records, because what is in them is damaged.");
+                    + "at " + outside.prepDir() + ", which is not inside the folders currently "
+                    + "saved. Point your working folder back at the one holding it to work on it "
+                    + "again.");
+            case final MalformedPrepJsonException _ -> refusalWithoutLocation("That sift's own records could "
+                    + "not be read, because what is in them is damaged.");
             // Says nothing about which answer is wrong. What this carries is the engine's own list,
             // written for a report rather than for a reader.
-            case final ApplyException _ -> refusalWithoutLocation("Sluice could not work on this sift, because "
-                    + "the answers in it do not hold together. Your photos are still in Sorted.");
+            case final ApplyException _ -> refusalWithoutLocation("This sift's answers do not hold together, "
+                    + "so nothing was moved. Your photos are still in Sorted.");
             case final NoteIsNotTextException note -> refusalWithoutLocation(noteNotTextSentence(note.file()));
             // Above the two arms below it, since a file whose bytes are not text was reached, and
             // neither of the reasons they offer is true of it.
@@ -138,8 +138,8 @@ final class RunRefusals {
             // Nothing here was written for a reader, so the words are the app's own and the
             // technical text rides along verbatim. Quoting it is what makes the bug report worth
             // filing, and the dashboard is where the user can copy it from.
-            default -> refusalWithoutLocation("Sluice could not do that, and has no plain words for why. "
-                    + "Report this as a bug in Sluice, quoting this: " + failure);
+            default -> refusalWithoutLocation("That did not work, and it's not known why. "
+                    + "Report this as a bug, quoting this: " + failure);
         };
     }
 
@@ -200,8 +200,8 @@ final class RunRefusals {
      * @return {@link String} the sentence to show
      */
     private static String fileNotTextSentence(final String quoting) {
-        return "A file Sluice had to read does not hold text any more. Something else may have "
-                + "written over it. If it keeps happening, report it, quoting this: " + quoting;
+        return "A file that had to be read holds something other than text. Something else may "
+                + "have written over it. If it keeps happening, report it, quoting this: " + quoting;
     }
 
     /**
@@ -211,8 +211,8 @@ final class RunRefusals {
      * @return {@link String} the sentence to show
      */
     private static String noteNotTextSentence(final Path note) {
-        return "Sluice stopped, because " + note + " holds something other than the text it wrote "
-                + "there. Open it to see what is in it, and delete it if it is not worth keeping.";
+        return "The note at " + note + " holds something other than the text that should be in it. "
+                + "Open it to see what is there, and delete it if it is not worth keeping.";
     }
 
     /**
@@ -265,7 +265,7 @@ final class RunRefusals {
     private static String messageOf(final RuntimeException refusal) {
         final String said = refusal.getMessage();
         return said == null || said.isBlank()
-                ? "Sluice stopped, and said nothing about why."
+                ? "That did not work, and it's not known why."
                 : said;
     }
 
@@ -286,8 +286,8 @@ final class RunRefusals {
                 .map(PathRoleLabels::of)
                 .toList();
         return new Refusal(folders.isEmpty()
-                ? "Sluice cannot work with your folder settings."
-                : "Sluice cannot use your " + RunWords.listed(folders) + " any more.",
+                ? "Your folder settings cannot be used."
+                : "Your " + RunWords.listed(folders) + " cannot be used any more.",
                 Location.SETTINGS);
     }
 

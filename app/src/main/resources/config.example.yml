@@ -5,29 +5,29 @@
 # typed here by hand.
 #
 # Folder roots, before any single setting below. Three folders, and how they relate to each other:
-#   - The working root (sluice.paths.repo-root) is where Sluice stages everything: the inbox,
-#     sorted media waiting to be committed, and logs. Transient staging, so it should not ride a
-#     cloud sync - a folder under a OneDrive- or iCloud-synced Documents directory is a common way
-#     to get one by accident.
-#   - The library root (sluice.paths.library-root) is where committed keepers live for good.
-#     Moving it later is a real operation, not a config edit: it copies the whole library or files
+#   - The Working root (sluice.paths.repo-root) is where Sluice stages everything: the Inbox,
+#     sorted media waiting to move to your Library, and logs. Transient staging, so it should not
+#     ride a cloud sync - a folder under a OneDrive- or iCloud-synced Documents directory is a
+#     common way to get one by accident.
+#   - The Library root (sluice.paths.library-root) is where your keepers live for good.
+#     Moving it later is a real operation, not a config edit: it copies the whole Library or files
 #     the hash index aside, and Settings is where that flow lives. Editing this file by hand while
 #     Sluice has any unfinished sift on disk can leave that sift unable to resume.
-#   - The inbox (sluice.paths.inbox) is where new media arrives to be sorted.
-#   - The library and the inbox must not contain each other, in either direction.
-#   - The inbox must not be, or contain, the working root. The working root containing the inbox
-#     is the documented layout and stays legal - the default inbox suggestion is a folder under the
-#     working root.
+#   - The Inbox (sluice.paths.inbox) is where new media arrives to be sorted.
+#   - The Library and the Inbox must not contain each other, in either direction.
+#   - The Inbox must not be, or contain, the Working root. The Working root containing the Inbox
+#     is the documented layout and stays legal - the default Inbox suggestion is a folder under the
+#     Working root.
 #   - Every root is optional until a first run configures it. Sluice starts with nothing set and
 #     refuses jobs until all three are usable.
 
 sluice:
   paths:
-    # The working root. See the folder-roots note above.
+    # The Working root. See the folder-roots note above.
     repo-root: /home/example/Sluice
-    # The library root. See the folder-roots note above.
+    # The Library root. See the folder-roots note above.
     library-root: /home/example/Pictures/Sluice
-    # The inbox. See the folder-roots note above.
+    # The Inbox. See the folder-roots note above.
     inbox: /home/example/Sluice/Inbox
 
   cull:
@@ -87,9 +87,9 @@ sluice:
         description: Photos worth setting aside to laugh at later.
 
   montage:
-    # The pixel size of each square tile in a montage contact sheet.
+    # The pixel size of each square tile on a photo sheet.
     tile-size: 224
-    # How many tiles form a row in a montage contact sheet.
+    # How many tiles form a row on a photo sheet.
     tiles-per-row: 5
 
   imaging:

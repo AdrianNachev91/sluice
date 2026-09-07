@@ -115,7 +115,7 @@ public class RefusalClassifier {
             case final WorkingRootBusyException busy -> workingRootBusy(busy);
             // The condition is what every site raising this shares, and all a caller here can act on.
             case final JobInProgressException _ -> Refusal.of(RefusalKind.JOB_IN_PROGRESS,
-                    "Something else is running. Wait for it to finish, then start this one.");
+                    "Something else is running. Wait for it to finish, then try again.");
             case final MissingCredentialException missing -> this.credentialMissing(missing);
             case final SecretStoreException broken -> credentialStoreFailed(broken);
             case final Pipeline.ScopeOccupiedException occupied -> scopeOccupied(occupied);

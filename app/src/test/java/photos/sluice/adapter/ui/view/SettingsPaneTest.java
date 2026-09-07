@@ -134,12 +134,12 @@ class SettingsPaneTest {
         final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
 
         final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
-        answerDialog("Copy the old library across");
+        answerDialog("Copy the old Library across");
         saveFired.get(10, TimeUnit.SECONDS);
         WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> pane.lookup("#settings-report-banner") != null);
 
         assertThat(received).containsExactly(LibraryRootResolution.COPY_AND_KEEP_INDEX);
-        assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("Copied 5 file(s) into the new library. Every one of them is still in "
+        assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("Copied 5 file(s) into the new Library. Every one of them is still in "
                 + Path.of("/old-library") + ", so remove that folder by hand once you have "
                 + "checked the new one.");
     }
@@ -161,8 +161,8 @@ class SettingsPaneTest {
         WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> pane.lookup("#settings-report-banner") != null);
 
         assertThat(received).containsExactly(LibraryRootResolution.START_A_FRESH_INDEX);
-        assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("The library root moved. Sluice had no record "
-                + "yet of what was already in the library, so there was nothing to set aside.");
+        assertThat(onFxThread(() -> bannerText(pane))).isEqualTo("The Library root moved. There was no record "
+                + "yet of what was already in the Library, so there was nothing to keep.");
     }
 
     // onSave returning after Cancel proves nothing on its own. The library use case runs on its own
@@ -206,7 +206,7 @@ class SettingsPaneTest {
         final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
 
         final var saveFired = WaitForAsyncUtils.asyncFx(() -> saveMovingTheLibraryRoot(pane));
-        answerDialog("Copy the old library across");
+        answerDialog("Copy the old Library across");
         saveFired.get(10, TimeUnit.SECONDS);
         WaitForAsyncUtils.waitFor(10, TimeUnit.SECONDS, () -> reportText(pane).contains("disk full"));
 

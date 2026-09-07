@@ -133,7 +133,7 @@ class FirstRunCardTest {
         });
 
         assertThat(bannerText(built.pane())).isEqualTo(
-                "Saved. Sluice still needs your Inbox before it can start any work on your photos.");
+                "Saved. You still need to set up your Inbox before any work can start on your photos.");
     }
 
     @Test
@@ -210,7 +210,7 @@ class FirstRunCardTest {
                         ThemeChoice.SYSTEM))));
 
         assertThat(textsOfClass(built.card(), "first-run-opening"))
-                .containsExactly("Sluice still needs your Inbox before it can start any work on your photos.");
+                .containsExactly("You still need to set up your Inbox before any work can start on your photos.");
     }
 
     @Test

@@ -32,8 +32,7 @@ public class StartupFailurePresenter {
             + "renames the file aside rather than deleting it, and Sluice starts over "
             + "with nothing configured. You can still open the old file afterward in a text editor to copy "
             + "anything you typed by hand, like your category descriptions.";
-    private static final String GENERIC = "Sluice hit a problem it has no explanation for. Report this as a "
-            + "bug in Sluice.";
+    private static final String GENERIC = "Unknown error. Report this as a bug.";
 
     private final StartupFailure failure;
 
@@ -95,7 +94,7 @@ public class StartupFailurePresenter {
         return REJECTED_SETTING + rejected.property() + ". This usually means the value there has a "
                 + "typo, or is not the kind of value this setting expects. Removing it resets just "
                 + "this one setting to Sluice's own default. Everything else you have configured "
-                + "stays as it is. If the value looks right to you, report this as a bug in Sluice.";
+                + "stays as it is. If the value looks right to you, report this as a bug.";
     }
 
     /**
@@ -109,7 +108,7 @@ public class StartupFailurePresenter {
     private static String rejectedElsewhereDetail(final RejectedSetting rejected) {
         return REJECTED_SETTING + rejected.property() + ". It did not come from your settings file. Check for an "
                 + "environment variable named " + envVarNameFor(rejected.property())
-                + ", or report this as a bug in Sluice if you have not set one.";
+                + ", or report this as a bug if you have not set one.";
     }
 
     /**

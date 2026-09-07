@@ -64,12 +64,12 @@ public class VisionProviderPresenter {
     // unreadable higher up is gone once a save succeeds below it. A remove is what reaches every
     // writable tier, including one a save would skip. Removing alone leaves the user with no key
     // at all, which is why both routes end on saving.
-    private static final String STORE_UNREADABLE = "Sluice could not read the key saved for this provider. "
+    private static final String STORE_UNREADABLE = "The key saved for this provider could not be read. "
             + "The credential store on this computer refused to answer. Nothing else you have configured is "
             + "affected. Paste your key in again and save: that alone often fixes it, because saving also "
             + "clears any copy held somewhere Sluice ranks higher. If saving does not take, use Remove, "
             + "which clears the key from every place Sluice can reach, then save again. If it keeps "
-            + "refusing, report this as a bug in Sluice, quoting this: ";
+            + "refusing, report this as a bug, quoting this: ";
 
     private final SecretStore secretStore;
     private final VisionProviderCatalog providers;
@@ -125,11 +125,11 @@ public class VisionProviderPresenter {
         } catch (final StaleSecretNotClearedException e) {
             return "Your new key was saved, but an older one that would usually take precedence could not "
                     + "be cleared, so the older one may still be what gets used. Try Remove, then save this "
-                    + "key again. If that keeps happening, report it as a bug in Sluice, quoting this: "
+                    + "key again. If that keeps happening, report it as a bug, quoting this: "
                     + e.getMessage();
         } catch (final SecretStoreException e) {
-            return "Sluice could not save this key. The credential store on this computer refused it. "
-                    + "Nothing else you have configured is affected. Report this as a bug in Sluice, "
+            return "This key could not be saved. The credential store on this computer refused it. "
+                    + "Nothing else you have configured is affected. Report this as a bug, "
                     + "quoting this: " + e.getMessage();
         }
     }
@@ -149,9 +149,9 @@ public class VisionProviderPresenter {
             this.secretStore.remove(credential.get());
             return null;
         } catch (final SecretStoreException e) {
-            return "Sluice could not clear this key from everywhere it is held, so it may still be what "
-                    + "gets used. Nothing else you have configured is affected. Report this as a bug in "
-                    + "Sluice, quoting this: " + e.getMessage();
+            return "This key could not be cleared from everywhere it is held, so it may still be what "
+                    + "gets used. Nothing else you have configured is affected. Report this as a bug, "
+                    + "quoting this: " + e.getMessage();
         }
     }
 
@@ -172,12 +172,12 @@ public class VisionProviderPresenter {
                 .isPresent();
         final String consequence = anotherKeyAnswers
                 ? "An environment variable on this computer also holds a key for this provider, and "
-                        + "Sluice will go on using that key."
+                        + "that key will be used instead."
                 : "This provider will stop working until you add a new key and activate it.";
         return new SecretRemoval("Remove your key?",
                 "Sluice will clear this key from everywhere on this computer it can reach. " + consequence,
                 anotherKeyAnswers
-                        ? "Your key is removed. Sluice is now using the key in your environment."
+                        ? "Your key is removed. The key in your environment is used instead."
                         : "Your key is removed. This provider cannot run until you add a new key.");
     }
 
@@ -524,7 +524,7 @@ public class VisionProviderPresenter {
             case ProviderCheck.Refused(final String detail) ->
                     "This key is recognised, but this account is not allowed to do this: " + detail;
             case ProviderCheck.Unreachable(final String detail) ->
-                    "Sluice could not reach this provider: " + detail;
+                    "This provider could not be reached: " + detail;
             case final ProviderCheck.NotApplicable _ -> "This provider takes no key to check.";
         };
     }

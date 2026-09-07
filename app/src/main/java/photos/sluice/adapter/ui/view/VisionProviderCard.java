@@ -72,7 +72,7 @@ final class VisionProviderCard {
         fillSecretCard(secretCard, visionProvider, providerBox, providerFields, null, view.keyLimit());
         final var card = SettingsRows.card("VISION PROVIDER",
                 "What actually looks at your photos and decides where each one belongs. "
-                        + "Sluice has no judgement of its own. It either calls a model you pay for, "
+                        + "Sluice does not handle the judgement by itself. It either calls a model you pay for, "
                         + "or waits for an agent you already run to do the looking. That agent writes its "
                         + "decisions into a folder, so it has to be one that can work with files rather "
                         + "than only chat.",
@@ -511,7 +511,7 @@ final class VisionProviderCard {
             });
             task.setOnFailed(_ -> {
                 if (providerChoiceOf(providerBox).id().equals(providerId)) {
-                    testResult.setText("Sluice could not check this connection.");
+                    testResult.setText("This connection could not be checked.");
                     SelectableText.dressAs(testResult, "settings-violation");
                 }
             });

@@ -79,15 +79,15 @@ public class RunSetupPresenter {
     private static final String IMPORT_CANCEL = "Cancel";
     // One card reports a failed read for both, so it names neither. Any of the three folder
     // settings can be what broke, and this card cannot tell which.
-    private static final String FOLDERS_UNREADABLE = "Sluice could not read your folders.";
+    private static final String FOLDERS_UNREADABLE = "Your folders could not be read.";
     // The card has no control on it, so the way to Settings has to be words there. The report line
     // below the field says the same thing and offers the screen itself.
     private static final String INBOX_UNREADABLE = FOLDERS_UNREADABLE + " Check them in Settings.";
 
-    private static final String BUSY_ELSEWHERE = "Something else is running now, and Sluice works "
-            + "on one thing at a time. Try again once it has finished.";
+    private static final String BUSY_ELSEWHERE = "Something else is running now, and only one "
+            + "job runs at a time. Try again once it has finished.";
 
-    private static final String STILL_READING = "Sluice is still reading your folders. Try again in "
+    private static final String STILL_READING = "Still reading your folders. Try again in "
             + "a moment.";
 
     // What the mark means, once under the rows. A reader who never hovers a row would otherwise
@@ -118,15 +118,15 @@ public class RunSetupPresenter {
 
     // The load-bearing part: what a reader needs is not that the number is right, but that
     // something stops a run that outgrows it. So it closes all three.
-    private static final String ESTIMATE_CEILING = " Sluice will stop and ask whether to continue "
-            + "if the sift goes far past the estimate.";
+    private static final String ESTIMATE_CEILING = " The sift stops and asks whether to continue "
+            + "if it goes far past the estimate.";
 
     private static final String FROM_HISTORY = "It is an average of what sifts like this one have "
             + "cost, and a sift costs more when the model needs a second attempt at a sheet.";
 
     private static final String WITHOUT_HISTORY = "Nothing has finished a sift on this computer "
-            + "yet, so this figure is Sluice's own starting guess rather than an average of your "
-            + "own sifts. It starts showing your actual numbers after a sift or two.";
+            + "yet, so this figure is a starting guess rather than an average of your own sifts. "
+            + "It starts showing your actual numbers after a sift or two.";
 
     // The same figure as the line above, and a different thing to tell somebody. That one resolves
     // itself on the next finished sift. This one does not, because a broken record stays broken,
@@ -386,10 +386,10 @@ public class RunSetupPresenter {
         }
         final List<YearRow> staged = this.folders.stagedYears();
         final int files = staged.stream().mapToInt(YearRow::total).sum();
-        return new Confirmation("Move everything to your library?",
+        return new Confirmation("Move everything to your Library?",
                 "This moves " + RunWords.counted(files, "file", "files") + " from "
                         + RunWords.listed(staged.stream().map(row -> String.valueOf(row.year())).toList())
-                        + " into your library folder.",
+                        + " into your Library folder.",
                 "Move to library", "Cancel", true);
     }
 
@@ -1007,10 +1007,10 @@ public class RunSetupPresenter {
             // rows reach this state without the field being touched, and an answer that only says
             // what to type names nothing the user did.
             return new RunScope.Refused(this.chosen.verb()
-                    + " narrows to a run of months, not a list. Reading "
+                    + " narrows to a span of months, not a list. Reading "
                     + RunWords.joined(months) + " as " + months.getFirst() + "-" + months.getLast()
-                    + " would take " + wouldAlsoTake(blocking) + ". Choose months that run "
-                    + "together, like 6-8, or none at all for the whole year.");
+                    + " would take " + wouldAlsoTake(blocking) + ". Choose a span of months, like "
+                    + "6-8, or none at all for the whole year.");
         }
         return new RunScope.OfYear(year, months);
     }
@@ -1096,8 +1096,8 @@ public class RunSetupPresenter {
             return "Sifting spends from your provider account balance.";
         }
         return "That is about " + RunWords.rounded(expected.totalTokens())
-                + " tokens, and sifting spends from your provider account balance. Sluice will "
-                + "stop and ask if it goes far past that.";
+                + " tokens, and sifting spends from your provider account balance. The sift stops "
+                + "and asks whether to continue if it goes far past that.";
     }
 
     /**

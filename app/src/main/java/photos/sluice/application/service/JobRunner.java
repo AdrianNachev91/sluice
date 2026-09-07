@@ -118,7 +118,7 @@ public class JobRunner {
             }
             if (!this.busy.compareAndSet(false, true)) {
                 throw new JobInProgressException(
-                        "Sluice is already running a job. Wait for it to finish, then start this one.");
+                        "Something else is running. Wait for it to finish, then try again.");
             }
             this.inFlight.set(handle);
         } finally {
@@ -280,7 +280,7 @@ public class JobRunner {
             return new ShuttingDownException(CLOSING);
         }
         return new JobInProgressException(
-                "Sluice is busy finishing something else, so it did not start this job. Try again in a moment.");
+                "Something else is still finishing, so this did not start. Try again in a moment.");
     }
 
     /**

@@ -52,7 +52,7 @@ class UiBootstrapTest {
                 new IllegalStateException("anything"));
 
         assertThat(presenter.card().detail()).isEqualTo(
-                "Sluice hit a problem it has no explanation for. Report this as a bug in Sluice.");
+                "Unknown error. Report this as a bug.");
     }
 
     @Test

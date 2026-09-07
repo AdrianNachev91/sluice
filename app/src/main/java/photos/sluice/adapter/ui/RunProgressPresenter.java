@@ -28,7 +28,7 @@ class RunProgressPresenter {
     private static final String GIVING_UP_ON_THE_FILE =
             " Giving up on the current file. Nothing half-written is left behind.";
     // What survives is the question a stopped run raises, and each mode answers it differently.
-    private static final String CANCELLING_A_MOVE = "What reached your library stays there.";
+    private static final String CANCELLING_A_MOVE = "What reached your Library stays there.";
     private static final String CANCELLING_A_RESCUE = "What reached Sorted stays there.";
     private static final String CANCELLING_A_SORT = "What was sorted stays where it is.";
     // Named in the copy rather than left to a spinner. A model that has been asked a question

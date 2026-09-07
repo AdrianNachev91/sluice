@@ -79,9 +79,9 @@ public class FirstRunPresenter {
      * @return {@link String} the refusal
      */
     public String libraryRootCannotMoveYet() {
-        return "Your library folder cannot be changed until all three folders are chosen, so nothing "
+        return "Your Library folder cannot be changed until all three folders are chosen, so nothing "
                 + "was saved. Choose the ones still needed and save those first. You can change your "
-                + "library folder in Settings afterwards.";
+                + "Library folder in Settings afterwards.";
     }
 
     /**
@@ -136,8 +136,8 @@ public class FirstRunPresenter {
         if (missing.isEmpty()) {
             return null;
         }
-        return "Sluice still needs your " + listed(missing.stream().map(PathRoleLabels::of).toList())
-                + " before it can start any work on your photos.";
+        return "You still need to set up your " + RunWords.listed(missing.stream().map(PathRoleLabels::of).toList())
+                + " before any work can start on your photos.";
     }
 
     /**
@@ -161,18 +161,5 @@ public class FirstRunPresenter {
                 .map(NotConfigured::role)
                 .sorted()
                 .toList();
-    }
-
-    /**
-     * Several names read as one phrase.
-     *
-     * @param names a {@link List} of {@link String} at least one root name
-     * @return {@link String} the names joined the way a sentence joins them
-     */
-    private static String listed(final List<String> names) {
-        if (names.size() == 1) {
-            return names.getFirst();
-        }
-        return String.join(", ", names.subList(0, names.size() - 1)) + " and " + names.getLast();
     }
 }

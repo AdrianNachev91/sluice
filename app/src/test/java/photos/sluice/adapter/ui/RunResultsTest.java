@@ -106,7 +106,8 @@ class RunResultsTest {
                 new CullJobOutcome.Cancelled(CullReport.nothingSpent("anthropic", 0), null));
 
         assertThat(card.action()).isNull();
-        assertThat(card.detail()).isEqualTo("No sheets were built yet.");
+        assertThat(card.detail())
+                .isEqualTo("No sheets were built yet, and nothing was sent to your provider.");
     }
 
     // Its sheets are built and some are judged, so the door back in stays open. What it must not do
@@ -294,7 +295,7 @@ class RunResultsTest {
     void aSortThatFoundEverythingAlreadyInTheLibrarySaysSo() {
         final RunResultView card = card(RunMode.SORT, allOf(7, "reimports"));
 
-        assertThat(requireNonNull(card.detail())).contains("in your library already");
+        assertThat(requireNonNull(card.detail())).contains("in your Library already");
     }
 
     // Naming one bucket where several took a share would describe part of the run as the whole.
@@ -346,7 +347,7 @@ class RunResultsTest {
                 new CommitSummary(0, 0, Map.of(), false));
 
         assertThat(card.counts()).extracting(Count::label, Count::value)
-                .containsExactly(tuple("Moved to your library", "0"));
+                .containsExactly(tuple("Moved to your Library", "0"));
     }
 
     @Test
@@ -354,7 +355,7 @@ class RunResultsTest {
         final RunResultView card = card(RunMode.MOVE_TO_LIBRARY,
                 new CommitSummary(4, 0, Map.of(LibraryBucket.OTHER, 4), false));
 
-        assertThat(labelled(card, "Elsewhere in your library")).isEqualTo("4");
+        assertThat(labelled(card, "Elsewhere in your Library")).isEqualTo("4");
     }
 
     // Nothing produces this today. What it proves is that meeting one leaves the reader a heading

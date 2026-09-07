@@ -327,8 +327,8 @@ public class SettingsPresenter {
             // state for it though: both answers are about what to do with a library arriving
             // somewhere, and a cleared field names nowhere. So it is refused on the field instead.
             if (paths.libraryRoot() == null) {
-                return SaveOutcome.Refused.markingTheLibraryRoot("Your library folder cannot be left "
-                        + "blank once it is set. To move your library, point this at the folder it "
+                return SaveOutcome.Refused.markingTheLibraryRoot("Your Library folder cannot be left "
+                        + "blank once it is set. To move your Library, point this at the folder it "
                         + "should move to instead.");
             }
             // A move checks the roots already in force, so one of those being unset refuses it
@@ -381,14 +381,14 @@ public class SettingsPresenter {
         // thing the summary can do. This one is half a save, and "the fields with a problem are
         // marked" would report the half that landed as a failure.
         if (this.pathValidation.violations(keeping).isEmpty()) {
-            return new SaveOutcome.Refused("Your other folders were saved. Your library folder "
+            return new SaveOutcome.Refused("Your other folders were saved. Your Library folder "
                     + "stayed where it is, because it could not move while another folder was empty. "
                     + "Now that the others are set, save again to move it.",
                     null, "This folder was not saved.", null, null, true);
         }
-        return SaveOutcome.Refused.markingTheLibraryRoot("Your library folder cannot move while "
+        return SaveOutcome.Refused.markingTheLibraryRoot("Your Library folder cannot move while "
                 + "another folder is empty. Fill in the folders that are still empty and save those "
-                + "first. You can move your library afterwards.");
+                + "first. You can move your Library afterwards.");
     }
 
     /**
@@ -451,7 +451,7 @@ public class SettingsPresenter {
             // The move is already done, so this is not a failed move. Said as its own thing, since
             // what the user has to do about it is press Save again rather than answer the question
             // they just answered.
-            return new MoveOutcome.Failed("Your library moved. The rest of what you were saving did not: "
+            return new MoveOutcome.Failed("Your Library moved. The rest of what you were saving did not: "
                     + wordedForAUser(e));
         }
         ThemeSelection.set(refused.pending().theme());
@@ -526,7 +526,7 @@ public class SettingsPresenter {
             return null;
         }
         if (this.visionProvider.checkInFlight(providerId)) {
-            return "Sluice is still asking this provider what your account can run. Try saving again "
+            return "Still asking this provider what your account can run. Try saving again "
                     + "in a moment.";
         }
         return "No model is chosen, and this provider needs one. Use Retry above, or choose a "
@@ -562,10 +562,10 @@ public class SettingsPresenter {
      * @return {@link String} the question, in the same terms as the buttons answering it
      */
     private static String wordLibraryRootMove(final Path previousLibraryRoot) {
-        return "Your library is at " + previousLibraryRoot + ", and Sluice keeps a record of what is "
-                + "already in it. Moving the library leaves that record describing the old folder. "
-                + "Copy the old library across to keep it, or start the record fresh and let Sluice "
-                + "learn the new folder as you go.";
+        return "Your Library is at " + previousLibraryRoot + ", and there is a record of what is "
+                + "already in it. Moving the Library leaves that record describing the old folder. "
+                + "Copy the old Library across to keep it, or start the record fresh and let it "
+                + "fill up as you go.";
     }
 
     private static String wordOverride(final SettingOverride override) {
@@ -583,14 +583,14 @@ public class SettingsPresenter {
             case final LibraryRootMoveOutcome.CopiedAndMoved copied -> copiedAndMoved(copied);
             case final LibraryRootMoveOutcome.CopyCancelled cancelled -> "You stopped the copy after "
                     + cancelled.filesCopied() + " of " + cancelled.filesFound()
-                    + " files. The library is still at its old folder, but the files already copied now "
-                    + "also exist in your new location. Resuming the library move continues copying the "
-                    + "files instead of from the start. Sluice will never remove a library folder. If you "
+                    + " files. The Library is still at its old folder, but the files already copied now "
+                    + "also exist in your new location. Resuming the Library move continues copying the "
+                    + "files instead of from the start. Sluice will never remove a Library folder. If you "
                     + "want to do this you can go to " + cancelled.copiedInto() + " and remove it by hand.";
             case final LibraryRootMoveOutcome.MovedWithAFreshIndex fresh -> fresh.previousIndexFiledAt() == null
-                    ? "The library root moved. Sluice had no record yet of what was already in the library, "
-                            + "so there was nothing to set aside."
-                    : "The library root moved. Sluice's record of what was already in the library described "
+                    ? "The Library root moved. There was no record yet of what was already in the Library, "
+                            + "so there was nothing to keep."
+                    : "The Library root moved. The record of what was already in the Library described "
                             + "the old folder, so it was kept at " + fresh.previousIndexFiledAt()
                             + " and a new one starts empty. Photos you import again will not be spotted as "
                             + "duplicates until it fills up.";
@@ -611,7 +611,7 @@ public class SettingsPresenter {
         final int alreadyThere = copied.filesFound() - copied.filesCopied();
         final String skipped = alreadyThere <= 0 ? ""
                 : " " + alreadyThere + " file(s) were already in the new folder and were left as they were.";
-        return "Copied " + copied.filesCopied() + " file(s) into the new library." + skipped
+        return "Copied " + copied.filesCopied() + " file(s) into the new Library." + skipped
                 + " Every one of them is still in " + copied.copiedFrom()
                 + ", so remove that folder by hand once you have checked the new one.";
     }
@@ -707,13 +707,13 @@ public class SettingsPresenter {
             // One message for every way a path can be malformed. What the filesystem refused is not
             // reported back, so naming a cause would be a guess. A typo is the likely one, and
             // Browse is how somebody stops making them.
-            case final NotAPath _ -> "This isn't a folder path Sluice can use. Most likely a typo, "
-                    + "so try Browse instead.";
+            case final NotAPath _ -> "This isn't a folder path. Most likely a typo, so try Browse "
+                    + "instead.";
             case final NotADirectory _ -> "No folder could be found here.";
             // The folder exists and opening it still failed, so the two causes worth naming are the
             // ones a user can act on. Named as checks rather than as a diagnosis: what the
             // filesystem refused does not reach here, and permissions is one cause of several.
-            case final Unreadable _ -> "This folder is there, but Sluice could not open it. Check that "
+            case final Unreadable _ -> "This folder is there, but it could not be opened. Check that "
                     + "you have permission to open it, and that the drive or network share it sits on "
                     + "is connected.";
             case final Overlap v -> wordOverlap(v.second());
@@ -737,8 +737,8 @@ public class SettingsPresenter {
         if (refusal instanceof JobInProgressException) {
             return refusal.getMessage();
         }
-        return "These settings were not saved, and Sluice cannot say why. Nothing you had configured "
-                + "has changed. Report this as a bug in Sluice, quoting this: " + refusal;
+        return "These settings were not saved, and it's not known why. Nothing you had configured "
+                + "has changed. Report this as a bug, quoting this: " + refusal;
     }
 
     private static String wordOverlap(final PathRole other) {
@@ -983,8 +983,8 @@ public class SettingsPresenter {
     private static MoveOutcome failedMove(final Throwable failure) {
         final String said = failure.getMessage();
         return new MoveOutcome.Failed(said == null || said.isBlank()
-                ? "The library did not move, and Sluice cannot say why. Your photos are still where they "
-                        + "were. Report this as a bug in Sluice, quoting this: " + failure
+                ? "The Library did not move, and it's not known why. Your photos are still where they "
+                        + "were. Report this as a bug, quoting this: " + failure
                 : said);
     }
 

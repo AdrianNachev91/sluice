@@ -85,7 +85,7 @@ class VisionProviderPresenterTest {
         // do, and neither is in a sentence written for a log.
         assertThat(row.errorMessage())
                 .contains("the credential file could not be read")
-                .contains("bug in Sluice");
+                .contains("bug");
     }
 
     @Test
@@ -269,7 +269,7 @@ class VisionProviderPresenterTest {
 
         assertThat(visionProvider.modelPickerFor("anthropic").picker()).isInstanceOfSatisfying(
                 SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.reason()).contains("could not reach").contains("timed out"));
+                unavailable -> assertThat(unavailable.reason()).contains("could not be reached").contains("timed out"));
         answering.countDown();
     }
 
@@ -486,7 +486,7 @@ class VisionProviderPresenterTest {
 
         assertThat(removal.detail()).contains("environment variable");
         assertThat(removal.detail()).doesNotContain("stop working");
-        assertThat(removal.removed()).contains("using the key in your environment");
+        assertThat(removal.removed()).contains("The key in your environment is used instead");
     }
 
     @Test
@@ -535,7 +535,7 @@ class VisionProviderPresenterTest {
 
         assertThat(visionProvider.removeSecret("anthropic"))
                 .contains("the keyring refused this entry")
-                .contains("bug in Sluice");
+                .contains("bug");
     }
 
     private static SettingsView.SecretRow secretRowFor(final SecretStatus status) {

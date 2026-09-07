@@ -148,8 +148,8 @@ class RunSetupPresenterTest {
         assertThat(asked.detail())
                 .isEqualTo("This looks at 100 photos sorted for 2019: 6 from this run and 94 "
                         + "sorted earlier. That is about 150,000 tokens, and sifting spends from "
-                        + "your provider account balance. Sluice will stop and ask if it goes "
-                        + "far past that.");
+                        + "your provider account balance. The sift stops and asks whether to "
+                        + "continue if it goes far past that.");
         assertThat(asked.goAhead()).isEqualTo("Sift 2019");
     }
 
@@ -310,7 +310,9 @@ class RunSetupPresenterTest {
         when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(148_231, 6_402, false, false, false));
         this.choose(RunMode.SIFT, "2019");
 
-        assertThat(this.estimatedCost().disclaimer()).contains("starting guess");
+        assertThat(this.estimatedCost().disclaimer())
+                .contains("Nothing has finished a sift on this computer yet")
+                .contains("starting guess");
     }
 
     // Compared against what the from-history state actually renders, rather than against a phrase
@@ -325,7 +327,7 @@ class RunSetupPresenterTest {
 
         assertThat(this.estimatedCost().disclaimer())
                 .isNotEqualTo(fromHistory)
-                .contains("stop and ask whether to continue");
+                .contains("stops and asks whether to continue");
         assertThat(requireNonNull(this.estimatedCost().warning()).problem())
                 .contains("The record of what your past sifts cost is broken")
                 .contains("a starting guess rather than an average of your own sifts");
@@ -420,7 +422,7 @@ class RunSetupPresenterTest {
 
         assertThat(this.estimatedCost().disclaimer())
                 .contains("average of what sifts like this one have cost")
-                .contains("stop and ask whether to continue");
+                .contains("stops and asks whether to continue");
     }
 
     // The second half compares against what the no-history state actually renders rather than
@@ -445,7 +447,7 @@ class RunSetupPresenterTest {
         this.choose(RunMode.SIFT, "2019");
 
         assertThat(this.estimatedCost().disclaimer())
-                .contains("if the sift goes far past the estimate");
+                .contains("if it goes far past the estimate");
     }
 
     @Test
@@ -643,7 +645,7 @@ class RunSetupPresenterTest {
                 "Reads the dates on what is in your Inbox and moves it into Sorted, by year and "
                         + "month. Takes the oldest year in your Inbox.",
                 "Looks at your sorted photos and moves anything it does not keep out of Sorted.",
-                "Moves what is in Sorted into your library. That is the photos a sift left alone, "
+                "Moves what is in Sorted into your Library. That is the photos a sift left alone, "
                         + "plus any it has not seen.");
     }
 
@@ -763,7 +765,7 @@ class RunSetupPresenterTest {
     void countsThatCannotBeReadAreReportedOnTheCardRatherThanThrown() {
         this.anUnreadableInbox();
 
-        assertThat(this.presenter.view().inbox().headline()).contains("could not read");
+        assertThat(this.presenter.view().inbox().headline()).contains("could not be read");
         assertThat(this.presenter.view().years()).isEmpty();
     }
 

@@ -223,7 +223,7 @@ class RunProgressPresenterTest {
     @Test
     void aCancelledMoveSaysWhatReachedTheLibraryStaysThere() {
         assertThat(this.stopping(RunMode.MOVE_TO_LIBRARY).cancelling())
-                .startsWith("What reached your library stays there.");
+                .startsWith("What reached your Library stays there.");
     }
 
     @Test

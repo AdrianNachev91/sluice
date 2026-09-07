@@ -58,7 +58,7 @@ class RunsPresenterTest {
 
         assertThat(view.unfinished()).extracting(RunCard::scope).containsExactly("2019");
         assertThat(view.completed()).extracting(RunCard::scope).containsExactly("2018");
-        assertThat(view.completedHeading()).isEqualTo("Finished runs (1)");
+        assertThat(view.completedHeading()).isEqualTo("Finished sifts (1)");
     }
 
     @Test
@@ -268,7 +268,7 @@ class RunsPresenterTest {
         final Action discard = presenter.view().unfinished().getFirst().actions().getLast();
 
         assertThat(discard.confirm()).isNotNull();
-        assertThat(discard.confirm().detail()).isEqualTo("Discarding this run's records will archive them. They will "
+        assertThat(discard.confirm().detail()).isEqualTo("Discarding this sift's records will archive them. They will "
                 + "stay on disk in " + ARCHIVES + " for 30 days.");
     }
 
@@ -446,7 +446,7 @@ class RunsPresenterTest {
                 run("2018", State.COMPLETE), run("2020", State.WAITING)).view();
 
         final Confirmation asked = requireNonNull(view.clearConfirm());
-        assertThat(asked.heading()).isEqualTo("Clear the records of 2 finished runs?");
+        assertThat(asked.heading()).isEqualTo("Clear the records of 2 finished sifts?");
         assertThat(asked.detail()).contains("2019").contains("2018").doesNotContain("2020");
         assertThat(asked.goAhead()).isEqualTo("Clear them");
         assertThat(asked.cancel()).isEqualTo("Keep them");
@@ -490,7 +490,7 @@ class RunsPresenterTest {
     void oneRunLeftBehindIsSaidInTheSingular() {
         assertThat(sweptSaying(new PurgeReport(List.of("2018"),
                 Map.of("2019", State.WAITING), Map.of(), null)))
-                .isEqualTo("Cleared 1 finished run. 1 run has not finished, so nothing from it was "
+                .isEqualTo("Cleared 1 finished sift. 1 sift has not finished, so nothing from it was "
                         + "touched.");
     }
 
@@ -498,14 +498,14 @@ class RunsPresenterTest {
     void severalRunsLeftBehindAreSaidInThePlural() {
         assertThat(sweptSaying(new PurgeReport(List.of("2017", "2018"),
                 Map.of("2019", State.WAITING), Map.of("2020", "held open"), null)))
-                .isEqualTo("Cleared 2 finished runs. 2 runs have not finished, so nothing from them "
+                .isEqualTo("Cleared 2 finished sifts. 2 sifts have not finished, so nothing from them "
                         + "was touched.");
     }
 
     @Test
     void aSweepThatLeftNothingBehindSaysOnlyWhatItCleared() {
         assertThat(sweptSaying(new PurgeReport(List.of("2018"), Map.of(), Map.of(), null)))
-                .isEqualTo("Cleared 1 finished run.");
+                .isEqualTo("Cleared 1 finished sift.");
     }
 
     @Test
@@ -712,7 +712,7 @@ class RunsPresenterTest {
 
         assertThat(presenter.instructionsFor(Path.of("logs", "sift-prep", "2019"), false)).isNull();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .isEqualTo("Sluice could not read that sift's own records, because what is in "
+                .isEqualTo("That sift's own records could not be read, because what is in "
                         + "them is damaged.")
                 .doesNotContain(MalformedPrepJsonException.class.getName());
     }

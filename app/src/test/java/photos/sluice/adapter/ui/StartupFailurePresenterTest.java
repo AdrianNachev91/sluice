@@ -19,8 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class StartupFailurePresenterTest {
 
-    private static final String GENERIC = "Sluice hit a problem it has no explanation for. Report this as a "
-            + "bug in Sluice.";
+    private static final String GENERIC = "Unknown error. Report this as a "
+            + "bug.";
 
     @Test
     void headlineNamesWhatHappened() {
@@ -46,8 +46,8 @@ class StartupFailurePresenterTest {
                 "Sluice could not use the setting sluice.montage.tile-size. This usually means the value "
                         + "there has a typo, or is not the kind of value this setting expects. Removing it "
                         + "resets just this one setting to Sluice's own default. Everything else you have "
-                        + "configured stays as it is. If the value looks right to you, report this as a bug "
-                        + "in Sluice.",
+                        + "configured stays as it is. If the value looks right to you, report this as a "
+                        + "bug.",
                 "sluice.montage.tile-size", "config.yml", "line 3, column 16", "trace"));
     }
 
@@ -59,7 +59,7 @@ class StartupFailurePresenterTest {
         assertThat(presenter.card()).isEqualTo(new Generic(
                 "Sluice could not use the setting sluice.montage.tile-size. It did not come from your settings "
                         + "file. Check for an environment variable named SLUICE_MONTAGE_TILE_SIZE, or report this "
-                        + "as a bug in Sluice if you have not set one.",
+                        + "as a bug if you have not set one.",
                 "trace"));
     }
 

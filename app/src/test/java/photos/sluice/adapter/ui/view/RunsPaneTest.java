@@ -89,7 +89,7 @@ class RunsPaneTest {
                 run("2017", State.COMPLETE)));
 
         assertThat(((Button) pane.lookup("#runs-completed-toggle")).getText())
-                .isEqualTo("Finished runs (2)");
+                .isEqualTo("Finished sifts (2)");
     }
 
     @Test

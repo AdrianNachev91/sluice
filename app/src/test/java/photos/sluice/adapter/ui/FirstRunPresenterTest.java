@@ -58,7 +58,7 @@ class FirstRunPresenterTest {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
         assertThat(presenter.savedWhileStillIncomplete(null).message())
-                .isEqualTo("Saved. Sluice still needs your Inbox before it can start any work on your photos.");
+                .isEqualTo("Saved. You still need to set up your Inbox before any work can start on your photos.");
     }
 
     @Test
@@ -67,8 +67,8 @@ class FirstRunPresenterTest {
                 new NotConfigured(PathRole.LIBRARY_ROOT), new NotConfigured(PathRole.INBOX)));
 
         assertThat(presenter.savedWhileStillIncomplete(null).message()).isEqualTo(
-                "Saved. Sluice still needs your Library root and Inbox before it can start any work "
-                        + "on your photos.");
+                "Saved. You still need to set up your Library root and Inbox before any work can "
+                        + "start on your photos.");
     }
 
     @Test
@@ -79,8 +79,8 @@ class FirstRunPresenterTest {
                 new NotConfigured(PathRole.WORKING_ROOT)));
 
         assertThat(presenter.savedWhileStillIncomplete(null).message()).isEqualTo(
-                "Sluice still needs your Working root, Library root and Inbox before it can start any "
-                        + "work on your photos.");
+                "You still need to set up your Working root, Library root and Inbox before any work "
+                        + "can start on your photos.");
     }
 
     // The broken root is in the list on purpose. It is not an unset one, so it neither holds the
@@ -97,7 +97,7 @@ class FirstRunPresenterTest {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
         assertThat(presenter.opening())
-                .isEqualTo("Sluice still needs your Inbox before it can start any work on your photos.");
+                .isEqualTo("You still need to set up your Inbox before any work can start on your photos.");
     }
 
     @Test
@@ -148,9 +148,9 @@ class FirstRunPresenterTest {
     void aSaveThatReportedSomethingKeepsThatReportAndAddsWhatIsLeft() {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete("Copied 12 file(s) into the new library.").message())
-                .isEqualTo("Copied 12 file(s) into the new library. Sluice still needs your Inbox before it "
-                        + "can start any work on your photos.");
+        assertThat(presenter.savedWhileStillIncomplete("Copied 12 file(s) into the new Library.").message())
+                .isEqualTo("Copied 12 file(s) into the new Library. You still need to set up your Inbox "
+                        + "before any work can start on your photos.");
     }
 
     @Test

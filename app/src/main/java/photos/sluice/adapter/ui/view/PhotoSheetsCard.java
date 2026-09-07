@@ -22,7 +22,7 @@ final class PhotoSheetsCard {
         final var card = SettingsRows.card("PHOTO SHEETS",
                 "Photos are not sent one at a time. Sluice tiles them into sheets, and whatever "
                         + "is doing the looking reads a sheet at a time. The defaults are a balance that "
-                        + "works; both settings below trade something away.",
+                        + "works. Both settings below trade something away.",
                 SettingsRows.explainedRow("Tile size (pixels)",
                         "How large each photo is drawn on the sheet. Bigger is easier to judge, so fewer "
                                 + "photos end up in the wrong place, and costs more per photo. What you pay "

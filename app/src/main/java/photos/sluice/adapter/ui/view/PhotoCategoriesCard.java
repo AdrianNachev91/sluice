@@ -26,8 +26,8 @@ final class PhotoCategoriesCard {
         open.setId("settings-open-photo-categories");
         open.setOnAction(_ -> onOpen.run());
         return SettingsRows.card("PHOTO CATEGORIES",
-                "This is where you specify your criteria for the categories into which the vision "
-                        + "model sifts your photos.",
+                "Say what belongs in each category, so the agent looking at your photos knows "
+                        + "where to put them.",
                 open);
     }
 }

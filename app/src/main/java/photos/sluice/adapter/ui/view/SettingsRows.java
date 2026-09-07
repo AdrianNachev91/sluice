@@ -742,7 +742,7 @@ final class SettingsRows {
      * @return {@link TextArea} the legend
      */
     static TextArea requiredLegend() {
-        final TextArea legend = SelectableText.prose("Sluice cannot start any work on your photos "
+        final TextArea legend = SelectableText.prose("You cannot start any work on your photos "
                 + "until all three are set. You can fill them in one at a time and save as you go.");
         legend.setId("folder-roots-required-legend");
         legend.getStyleClass().add("settings-required-legend");

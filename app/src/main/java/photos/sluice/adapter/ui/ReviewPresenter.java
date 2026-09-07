@@ -53,8 +53,8 @@ public class ReviewPresenter {
     private static final String NOTHING_YET = "Nothing is waiting for you. When a sort or a sift "
             + "puts photos somewhere for you to look at, they show here.";
 
-    private static final String UNREADABLE = "What is waiting in %s is unknown, because it cannot "
-            + "be read. Opening it yourself is the quickest way to find out why.";
+    private static final String UNREADABLE = "Cannot determine what is waiting in %s: it cannot be "
+            + "read. Opening it yourself is the quickest way to find out why.";
 
     private static final String OPEN = "Open folder";
 

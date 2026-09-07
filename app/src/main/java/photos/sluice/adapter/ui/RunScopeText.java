@@ -103,7 +103,7 @@ final class RunScopeText {
             return new Typed.Refused("Months are numbers from 1 to 12, like 6 or 6-8.");
         }
         if (last.getAsInt() < first.getAsInt()) {
-            return new Typed.Refused("A run of months goes from the earlier one to the later, like 6-8.");
+            return new Typed.Refused("A span of months goes from the earlier one to the later, like 6-8.");
         }
         return null;
     }

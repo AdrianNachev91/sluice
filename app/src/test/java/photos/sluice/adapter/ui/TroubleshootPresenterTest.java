@@ -99,7 +99,7 @@ class TroubleshootPresenterTest {
 
         assertThat(presenter.view().problems()).hasSize(1);
         assertThat(stacked.heading())
-                .isEqualTo("3 photos this sift wants to move are not under the Sorted folder in force now.");
+                .isEqualTo("3 photos this sift wants to move are not under the Sorted folder currently saved.");
         assertThat(stacked.rows()).extracting(Problem::problem).containsOnlyNulls();
         assertThat(stacked.rows()).extracting(Problem::about)
                 .containsExactly(PHOTO.toString(), "b.jpg", "c.jpg");
@@ -114,7 +114,7 @@ class TroubleshootPresenterTest {
 
         assertThat(alone.heading()).isNull();
         assertThat(alone.rows()).extracting(Problem::problem)
-                .containsExactly("A photo this sift wants to move is not under the Sorted folder in force now.");
+                .containsExactly("A photo this sift wants to move is not under the Sorted folder currently saved.");
     }
 
     @Test
@@ -173,8 +173,8 @@ class TroubleshootPresenterTest {
 
         assertThat(neither.heading()).isNull();
         assertThat(neither.rows()).extracting(Problem::problem)
-                .containsExactly("Sluice cannot read its own record of what this sift covers.",
-                        "Sluice cannot read its own record of what this sift covers.");
+                .containsExactly("The record of what this sift covers is damaged.",
+                        "The record of what this sift covers is damaged.");
     }
 
     @Test
@@ -581,8 +581,8 @@ class TroubleshootPresenterTest {
         assertThat(left.get()).isZero();
         assertThat(presenter.working()).isFalse();
         assertThat(requireNonNull(presenter.view().message()).text())
-                .isEqualTo("This sift is at " + outside + ", which is not inside the folders Sluice "
-                        + "is set up with now. Point your working folder back at the one holding "
+                .isEqualTo("This sift is at " + outside + ", which is not inside the folders "
+                        + "currently saved. Point your working folder back at the one holding "
                         + "it to work on it again.")
                 .doesNotContain(Pipeline.RunOutsideWorkingRootException.class.getName());
     }
@@ -633,8 +633,8 @@ class TroubleshootPresenterTest {
         presenter.open(PREP_DIR, "2019");
 
         assertThat(requireNonNull(presenter.view().message()).text())
-                .isEqualTo("Sluice could not work on this sift, because the answers in it do not "
-                        + "hold together. Your photos are still in Sorted.")
+                .isEqualTo("This sift's answers do not hold together, so nothing was moved. "
+                        + "Your photos are still in Sorted.")
                 .doesNotContain(ApplyException.class.getName());
     }
 
@@ -695,8 +695,8 @@ class TroubleshootPresenterTest {
         presenter.open(PREP_DIR, "2019");
 
         assertThat(presenter.view().summary())
-                .isEqualTo("Sluice could not work on this sift, because the answers in it do not "
-                        + "hold together. Your photos are still in Sorted.");
+                .isEqualTo("This sift's answers do not hold together, so nothing was moved. "
+                        + "Your photos are still in Sorted.");
         assertThat(presenter.view().summary())
                 .isEqualTo(requireNonNull(presenter.view().message()).text());
         assertThat(rows(presenter)).hasSize(1);

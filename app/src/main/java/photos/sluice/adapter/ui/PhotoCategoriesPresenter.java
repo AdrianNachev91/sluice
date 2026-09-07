@@ -43,13 +43,13 @@ public class PhotoCategoriesPresenter {
             + "those photos go to a junk folder under Review. A category you add gives one of those "
             + "photos a better home: where it matches a category, it goes to that folder instead, "
             + "so you can look through one reason at a time. The one exception is the built-in "
-            + "category at the top, whose photos are moved straight to your library. It is also "
+            + "category at the top, whose photos are moved straight to your Library. It is also "
             + "the only one judged on what a photo is rather than on how good it is. A description "
             + "does two jobs: it says what belongs in the category, and it says when a photo of "
             + "that kind should go to the folder rather than stay in Sorted.";
 
     private static final String FIXED_NOTE = "Built in. This is the one category moved straight to "
-            + "your library rather than to Review, and the one judged on what a photo is rather "
+            + "your Library rather than to Review, and the one judged on what a photo is rather "
             + "than on how good it is. It cannot be renamed or deleted. You can switch it off, and "
             + "edit what belongs in it.";
 
@@ -64,7 +64,7 @@ public class PhotoCategoriesPresenter {
             CategoryName.maxLength(), CullCategory.maxDescription(),
             CullCategory.maxExamples() * CullCategory.maxExample());
 
-    private static final String TOO_MANY = "Sluice holds at most " + Settings.maxCategories()
+    private static final String TOO_MANY = "There is room for at most " + Settings.maxCategories()
             + " photo categories. Remove some before saving.";
 
     private static final String NO_NAME = "Give this category a name.";
@@ -222,7 +222,7 @@ public class PhotoCategoriesPresenter {
                 .anyMatch(edit -> isBuiltIn(edit.name().strip()));
         return stillThere ? null : "The built-in '" + CategoryName.LIBRARY_CATEGORY + "' category "
                 + "cannot be renamed or deleted. It is the one category moved straight to your "
-                + "library rather than set aside.";
+                + "Library rather than to Review.";
     }
 
     /**
