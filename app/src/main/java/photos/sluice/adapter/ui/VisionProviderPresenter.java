@@ -185,10 +185,10 @@ public class VisionProviderPresenter {
      * The words a credential removal needs, from the question to what it leaves behind.
      *
      * @param heading {@link String} what the question is about
-     * @param question {@link String} what removing does, and what it leaves
+     * @param detail {@link String} what removing does, and what it leaves
      * @param removed {@link String} what to say once it is gone
      */
-    public record SecretRemoval(String heading, String question, String removed) {
+    public record SecretRemoval(String heading, String detail, String removed) {
     }
 
     /**

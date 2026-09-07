@@ -243,7 +243,7 @@ class RunsPresenterTest {
 
         assertThat(discard.confirm()).isNotNull();
         assertThat(discard.confirm().heading()).isEqualTo("Discard the sift of 2019?");
-        assertThat(discard.confirm().question())
+        assertThat(discard.confirm().detail())
                 .contains("17 sheet decisions you have already paid for")
                 .contains(ARCHIVES.toString())
                 .doesNotContain("graveyard");
@@ -256,7 +256,7 @@ class RunsPresenterTest {
 
         final Action discard = presenter.view().unfinished().getFirst().actions().getLast();
 
-        assertThat(requireNonNull(discard.confirm()).question())
+        assertThat(requireNonNull(discard.confirm()).detail())
                 .contains("17 sheet decisions are set aside with it")
                 .doesNotContain("paid");
     }
@@ -268,7 +268,7 @@ class RunsPresenterTest {
         final Action discard = presenter.view().unfinished().getFirst().actions().getLast();
 
         assertThat(discard.confirm()).isNotNull();
-        assertThat(discard.confirm().question()).isEqualTo("Discarding this run's records will archive them. They will "
+        assertThat(discard.confirm().detail()).isEqualTo("Discarding this run's records will archive them. They will "
                 + "stay on disk in " + ARCHIVES + " for 30 days.");
     }
 
@@ -276,7 +276,7 @@ class RunsPresenterTest {
     void noConfirmPutsAPriceOnWhatIsBeingSetAside() {
         final RunsPresenter presenter = presenterOver(run("2019", State.WAITING));
 
-        assertThat(requireNonNull(presenter.view().unfinished().getFirst().actions().getLast().confirm()).question())
+        assertThat(requireNonNull(presenter.view().unfinished().getFirst().actions().getLast().confirm()).detail())
                 .doesNotContain("cent").doesNotContain("dollar").doesNotContain("$");
     }
 
@@ -447,7 +447,7 @@ class RunsPresenterTest {
 
         final Confirmation asked = requireNonNull(view.clearConfirm());
         assertThat(asked.heading()).isEqualTo("Clear the records of 2 finished runs?");
-        assertThat(asked.question()).contains("2019").contains("2018").doesNotContain("2020");
+        assertThat(asked.detail()).contains("2019").contains("2018").doesNotContain("2020");
         assertThat(asked.goAhead()).isEqualTo("Clear them");
         assertThat(asked.cancel()).isEqualTo("Keep them");
     }
@@ -463,7 +463,7 @@ class RunsPresenterTest {
     void theQuestionSaysWhatIsNotTouched() {
         final RunsView view = presenterOver(run("2019", State.COMPLETE)).view();
 
-        assertThat(requireNonNull(view.clearConfirm()).question())
+        assertThat(requireNonNull(view.clearConfirm()).detail())
                 .contains("Your photos are not touched");
     }
 
@@ -950,7 +950,7 @@ class RunsPresenterTest {
         assertThat(redo.label()).isEqualTo("Judge the faulty sheets again");
         assertThat(redo.note()).contains("Any sheets still missing are judged too")
                 .contains("spends from your provider account balance");
-        assertThat(requireNonNull(redo.confirm()).question())
+        assertThat(requireNonNull(redo.confirm()).detail())
                 .contains("spends from your provider account balance");
     }
 
@@ -971,7 +971,7 @@ class RunsPresenterTest {
 
         final RunsView.Redo redo = requireNonNull(presenter.view().unfinished().getFirst().redo());
 
-        assertThat(requireNonNull(redo.confirm()).question()).startsWith("2 sheets will be judged");
+        assertThat(requireNonNull(redo.confirm()).detail()).startsWith("2 sheets will be judged");
     }
 
     // The tally counts one shard at a time for display, so a fault spanning two of them leaves
@@ -993,7 +993,7 @@ class RunsPresenterTest {
 
         final RunsView.Redo redo = requireNonNull(presenter.view().unfinished().getFirst().redo());
 
-        assertThat(requireNonNull(redo.confirm()).question()).startsWith("2 sheets will be judged");
+        assertThat(requireNonNull(redo.confirm()).detail()).startsWith("2 sheets will be judged");
     }
 
     // Nothing a sheet can answer for means nothing to dispatch, and dispatching is what this press

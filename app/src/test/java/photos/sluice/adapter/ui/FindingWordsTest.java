@@ -78,10 +78,10 @@ class FindingWordsTest {
     @Test
     void noProblemSentenceUsesTheEnginesOwnVocabulary() {
         assertThat(EVERY_KIND).allSatisfy(finding -> {
-            final FindingWords.Told told = FindingWords.of(finding);
-            assertThat(told.problem().toLowerCase())
+            final FindingWords.Statement statement = FindingWords.of(finding);
+            assertThat(statement.problem().toLowerCase())
                     .doesNotContain("montage").doesNotContain("shard").doesNotContain("cull");
-            final String forSeveral = told.forSeveral();
+            final String forSeveral = statement.forSeveral();
             if (forSeveral != null) {
                 assertThat(forSeveral.toLowerCase())
                         .doesNotContain("montage").doesNotContain("shard").doesNotContain("cull");
@@ -127,7 +127,7 @@ class FindingWordsTest {
         final FindingWords.Choice useAnyway =
                 FindingWords.of(new Finding.CorruptSidecar("montage-002")).choices().getLast();
 
-        assertThat(requireNonNull(useAnyway.confirm()).question())
+        assertThat(requireNonNull(useAnyway.confirm()).detail())
                 .contains("about the photos this sheet contained")
                 .contains("whether they cover all of them");
     }

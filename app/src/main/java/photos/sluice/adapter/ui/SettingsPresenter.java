@@ -210,9 +210,9 @@ public class SettingsPresenter {
      * <p>Built from the settings already on disk with only the theme swapped, never from what the
      * screen currently shows. An unsaved folder path or a typed-but-not-yet-saved model is then
      * never persisted by clicking a radio. The paths carried through are therefore always equal to
-     * what is already in force. That is what lets the save seam take its unchanged-paths fast
-     * path: no path validation, no job-in-progress check, nothing that could refuse a theme for a
-     * reason that has nothing to do with it.
+     * what is already in force. That is what lets the save seam take its unchanged-paths fast path.
+     * No path validation, no job-in-progress check, nothing that could refuse a theme for a reason
+     * that has nothing to do with it.
      *
      * @param themeId {@link String} the id of the {@link SettingsView.ThemeOption} just picked
      */
@@ -351,8 +351,8 @@ public class SettingsPresenter {
      * Stores a save that also asked to move the library, keeping everything except the move.
      *
      * <p>The move cannot run: it checks the roots in force, and one of those is unset. Refusing the
-     * whole save would leave the reader unable to fix that, since filling the empty folder in is
-     * itself a save, and it carries the same library root that raised this. The way out would be to
+     * whole save would leave the reader unable to fix that. Filling the empty folder in is itself a
+     * save, and it carries the same library root that raised this. The way out would be to
      * put the library field back by hand, which nothing tells them to do.
      *
      * <p>So the folders land and the library stays where it is. By the time the reader reads the
@@ -773,8 +773,8 @@ public class SettingsPresenter {
      * What happened when the library-root move a settings save asked to resolve was carried out.
      *
      * <p>Three states rather than a boolean, because a screen does three different things with
-     * them. Only {@link Moved} may redraw the page: it is the one state where what is on disk has
-     * changed, so what a redraw reads back is newer than what is on screen. Redrawing on either of
+     * them. Only {@link Moved} may redraw the page, being the one state where what is on disk has
+     * changed. What a redraw reads back is then newer than what is on screen. Redrawing on either of
      * the others would throw away every edit the user made in the same press, having just told them
      * nothing happened.
      *
@@ -799,8 +799,8 @@ public class SettingsPresenter {
         }
 
         /**
-         * Nothing on disk changed. A copy the user cancelled is the case: the library stayed where
-         * it was, so the save it was carrying is still unmade and every field is still as typed.
+         * Nothing on disk changed. A copy the user cancelled is the case, the library having stayed
+         * where it was. The save it was carrying is still unmade and every field is still as typed.
          *
          * @param message {@link String} what stopped, and where that leaves the library
          */
@@ -855,7 +855,7 @@ public class SettingsPresenter {
          * @param inbox what is wrong with the inbox, or null
          * @param model what is wrong with the model, or null
          * @param warning boolean whether this is a caution rather than a plain refusal, which is
-         *     the half-saved case: reporting it in the colour of a failure would have the reader
+         *     the half-saved case. Reporting it in the colour of a failure would have the reader
          *     typing again what is already on disk
          */
         record Refused(@Nullable String message, @Nullable String workingRoot, @Nullable String libraryRoot,
@@ -890,7 +890,6 @@ public class SettingsPresenter {
             static Refused markingTheModel(final String message) {
                 return new Refused(FIELDS_ARE_MARKED, null, null, null, message, false);
             }
-
         }
     }
 
@@ -1038,7 +1037,7 @@ public class SettingsPresenter {
         }
         final ProgressPhase now = phases.getLast();
         return now.total() > 0
-                ? now.label() + "... " + counted(now.current()) + " of " + counted(now.total())
+                ? now.label() + "... " + grouped(now.current()) + " of " + grouped(now.total())
                 : now.label() + "...";
     }
 
@@ -1048,7 +1047,7 @@ public class SettingsPresenter {
      * @param value int the number
      * @return {@link String} the number written out
      */
-    private static String counted(final int value) {
+    private static String grouped(final int value) {
         return String.format(Locale.UK, "%,d", value);
     }
 

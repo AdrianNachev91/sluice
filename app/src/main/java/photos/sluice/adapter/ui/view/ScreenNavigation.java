@@ -11,7 +11,7 @@ interface ScreenNavigation {
     /**
      * Shows another screen.
      *
-     * @param there {@link Location} the screen to open
+     * @param location {@link Location} the screen to open
      */
-    void setScreen(Location there);
+    void setScreen(Location location);
 }

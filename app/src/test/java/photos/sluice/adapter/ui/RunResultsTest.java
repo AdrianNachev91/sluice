@@ -251,7 +251,7 @@ class RunResultsTest {
     // apart while both headings read the same.
     @Test
     void aRunThatThrewIsNotHeadedTheWayAStoppedRunIs() {
-        final RunResultView failure = RunResults.failed(RunMode.SORT, new RunRefusals.Refusal("Something broke.", null));
+        final RunResultView failure = RunResults.failedResult(RunMode.SORT, new RunRefusals.Refusal("Something broke.", null));
 
         assertThat(failure.heading()).isEqualTo("Sorting could not finish.")
                 .isNotEqualTo(card(RunMode.SORT, sortedInto(Set.of(2019), true)).heading());

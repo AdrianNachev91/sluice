@@ -65,7 +65,7 @@ class LinkedTextTest {
     // putting the same address on the screen twice.
     @Test
     void theControlDoesNotRepeatTheAddress() throws Exception {
-        final Hyperlink link = onFxThread(() -> LinkedText.opening("https://console.example.test"));
+        final Hyperlink link = onFxThread(() -> LinkedText.browserLink("https://console.example.test"));
 
         assertThat(link.getText()).doesNotContain("console.example.test").isNotBlank();
     }
@@ -74,7 +74,7 @@ class LinkedTextTest {
     void pressingItHandsTheAddressToTheBrowser() throws Exception {
         final List<String> opened = new ArrayList<>();
         ExternalBrowser.openWith(opened::add);
-        final Hyperlink link = onFxThread(() -> LinkedText.opening("https://console.example.test"));
+        final Hyperlink link = onFxThread(() -> LinkedText.browserLink("https://console.example.test"));
 
         onFxThread(link::fire);
 
@@ -84,7 +84,7 @@ class LinkedTextTest {
     // Nothing set to open an address is every render and every test that did not ask for one.
     @Test
     void pressingItWithNoBrowserSetDoesNothing() throws Exception {
-        final Hyperlink link = onFxThread(() -> LinkedText.opening("https://console.example.test"));
+        final Hyperlink link = onFxThread(() -> LinkedText.browserLink("https://console.example.test"));
 
         onFxThread(link::fire);
 

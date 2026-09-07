@@ -164,7 +164,7 @@ class ReviewPresenterTest {
         final Action move = actionsOn(presenter, 0).getLast();
 
         assertThat(requireNonNull(move.confirm()).heading()).isEqualTo("Rescue Food to Sorted?");
-        assertThat(requireNonNull(move.confirm()).question())
+        assertThat(requireNonNull(move.confirm()).detail())
                 .isEqualTo("The photos and videos still in it go back into Sorted. A photo Sorted "
                         + "already holds is deleted from the folder rather than put back twice.");
     }

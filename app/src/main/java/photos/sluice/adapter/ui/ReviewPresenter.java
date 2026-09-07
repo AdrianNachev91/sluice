@@ -140,7 +140,7 @@ public class ReviewPresenter {
     private volatile ReviewListing listing = new ReviewListing(List.of(), List.of());
     // False until a read has landed. The screen draws once before the first one, off the empty
     // listing above, and an unread root and an empty one are the same value.
-    private volatile boolean read;
+    private volatile boolean hasRead;
     private volatile @Nullable Message message;
     // Every fold that is drawn, by the folder it is over.
     private final Map<Path, Fold> folds = new ConcurrentHashMap<>();
@@ -190,9 +190,9 @@ public class ReviewPresenter {
             // under a line saying the folders cannot be read. Each would still offer to move a
             // count nothing can vouch for.
             this.listing = new ReviewListing(List.of(), List.of());
-            this.message = RunRefusals.refusing(e);
+            this.message = RunRefusals.refuseMessage(e);
         }
-        this.read = true;
+        this.hasRead = true;
         this.closeNotes();
     }
 
@@ -208,7 +208,7 @@ public class ReviewPresenter {
         for (final Section section : SECTIONS) {
             this.group(listed, section).ifPresent(groups::add);
         }
-        if (!this.read) {
+        if (!this.hasRead) {
             return new ReviewView(HEADING, null, null, LOOKING, List.of(), null);
         }
         // Asked of the reading rather than of the sections built from it. A folder no section
@@ -231,7 +231,7 @@ public class ReviewPresenter {
      *
      * <p>Every other card's fold is left as it was.
      *
-     * <p>A read publishes only where its folder is still one the reader has asked for, so a press
+     * <p>A read publishes only where its folder is still one the reader has asked for. A press
      * shutting a fold mid-read leaves that read with nothing to say.
      *
      * @param folder {@link Path} the folder whose notes were pressed
@@ -245,17 +245,17 @@ public class ReviewPresenter {
                 return;
             }
         }
-        Fold read;
+        Fold fold;
         try {
             final List<String> lines = this.pipeline.reviewNotes(folder);
-            read = new Fold(capped(lines), beyondTheFold(lines.size()), null);
+            fold = new Fold(capped(lines), beyondTheFold(lines.size()), null);
         } catch (final RuntimeException e) {
             log.info("Could not read the notes in {}", folder, e);
-            read = new Fold(List.of(), null, NOTES_UNREADABLE);
+            fold = new Fold(List.of(), null, NOTES_UNREADABLE);
         }
         synchronized (this.foldLock) {
             if (this.asked.contains(folder)) {
-                this.folds.put(folder, read);
+                this.folds.put(folder, fold);
             }
         }
     }
@@ -307,14 +307,14 @@ public class ReviewPresenter {
     /**
      * One section, or nothing where none of its folders is waiting.
      *
-     * @param read {@link ReviewListing} the one reading this whole view is drawn from. Asking the
+     * @param listing {@link ReviewListing} the one reading this whole view is drawn from. Asking the
      *     field again would answer about a second moment, since a fresh reading lands from a thread
      *     of its own
      * @param section {@link Section} which section
      * @return an {@link Optional} of {@link Group} the section
      */
-    private Optional<Group> group(final ReviewListing read, final Section section) {
-        final List<FolderCard> cards = read.folders().stream()
+    private Optional<Group> group(final ReviewListing listing, final Section section) {
+        final List<FolderCard> cards = listing.folders().stream()
                 .filter(folder -> folder.root() == section.root()
                         && folder.filedBy() == section.filedBy()
                         && section.named().test(folder.name()))
@@ -447,11 +447,11 @@ public class ReviewPresenter {
     /**
      * What to say where a root could not be read.
      *
-     * @param read {@link ReviewListing} the reading this view is drawn from
+     * @param listing {@link ReviewListing} the reading this view is drawn from
      * @return {@link String} the line, or null where all three were read
      */
-    private static @Nullable String unreadableLine(final ReviewListing read) {
-        final List<Path> failed = read.unreadable();
+    private static @Nullable String unreadableLine(final ReviewListing listing) {
+        final List<Path> failed = listing.unreadable();
         if (failed.isEmpty()) {
             return null;
         }

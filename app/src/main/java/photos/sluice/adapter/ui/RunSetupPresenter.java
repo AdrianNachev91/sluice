@@ -193,7 +193,7 @@ public class RunSetupPresenter {
                 years, this.undatedChoice(), this.readsSorted(),
                 this.nothingStagedLine(), SCOPE_LABEL, this.scopeText, this.chosen.scopeHint(),
                 refused == null ? null : refused.sentence(),
-                refused == null ? null : refused.wayThere(),
+                refused == null ? null : refused.location(),
                 this.cost(scope), legendFor(years),
                 this.startLabel(action), this.canStart(scope), action, this.message);
     }
@@ -413,7 +413,7 @@ public class RunSetupPresenter {
      * @return {@link SiftNow} the question to put first, or the refusal to report instead
      */
     public SiftNow siftNowNeeds(final int year, final int justSorted) {
-        final Message blocked = this.cannotSizeARun();
+        final Message blocked = this.sizingBlockedMessage();
         if (blocked != null) {
             return new SiftNow.Refuse(blocked);
         }
@@ -488,7 +488,7 @@ public class RunSetupPresenter {
      *
      * @return {@link Message} what to say instead of starting, or null where nothing is in the way
      */
-    RunLauncherView.@Nullable Message cannotSizeARun() {
+    RunLauncherView.@Nullable Message sizingBlockedMessage() {
         if (this.folders.isCounting()) {
             return new Message(STILL_READING, true);
         }
@@ -599,7 +599,7 @@ public class RunSetupPresenter {
                     : new Message(FRESH_RECORD_STARTED, false);
         } catch (final RuntimeException e) {
             log.info("Could not file the unreadable spend record away", e);
-            this.message = RunRefusals.refusing(e);
+            this.message = RunRefusals.refuseMessage(e);
         }
     }
 
@@ -721,7 +721,7 @@ public class RunSetupPresenter {
                                   final List<Integer> narrowed) {
         final Set<Integer> sifted = this.siftedMonthsOf(row.year());
         return new YearChoice(row.year(), "run-year-" + row.year(), String.valueOf(row.year()),
-                held(row), row.year() == selected,
+                heldLine(row), row.year() == selected,
                 row.year() == selected && !this.monthsCollapsed, !sifted.isEmpty(),
                 monthChoices(row, row.year() == selected ? narrowed : List.of(), sifted));
     }
@@ -763,7 +763,7 @@ public class RunSetupPresenter {
      * @param row {@link YearRow} the year's counts
      * @return {@link String} the counts written out
      */
-    private static String held(final YearRow row) {
+    private static String heldLine(final YearRow row) {
         return RunWords.held(row.photos(), row.videos());
     }
 
@@ -999,7 +999,7 @@ public class RunSetupPresenter {
         // builds cannot hold a gap. A gapped list is widened to the run that spans it where that
         // takes nothing extra, and refused where it would.
         if (!months.isEmpty() && !RunScopeText.contiguous(months)) {
-            final List<Integer> blocking = this.gapHolds(year, months);
+            final List<Integer> blocking = this.monthsFiledInTheGap(year, months);
             if (blocking != null && blocking.isEmpty()) {
                 return new RunScope.OfYear(year, months);
             }
@@ -1121,11 +1121,11 @@ public class RunSetupPresenter {
      * <p>The screen's half of a guard the facade also makes. This one greys Start while somebody
      * types, off the last reading of the folder. So it can be a moment out of date, and the worst
      * it can do is fail to warn. {@code CullEngine.refuseIfScopeOverlaps} reads freshly and is the
-     * guarantee. Both word it through {@link RunRefusals#coveringUnfinished}, so the sentence on the
+     * guarantee. Both word it through {@link RunRefusals#overlapUnfinishedRefusal}, so the sentence on the
      * screen and the sentence in the refusal cannot drift apart.
      *
      * @param scope {@link RunScope} what the field and mode come to
-     * @return {@link RunRefusals.Refusal} the sentence and the way there, or null where nothing
+     * @return {@link RunRefusals.Refusal} the sentence and the location, or null where nothing
      *         overlaps
      */
     private RunRefusals.@Nullable Refusal overlapRefusal(final RunScope scope) {
@@ -1140,7 +1140,7 @@ public class RunSetupPresenter {
                 .filter(Objects::nonNull)
                 .filter(chosenYear::overlaps)
                 .toList();
-        return across.isEmpty() ? null : RunRefusals.coveringUnfinished(chosenYear, across);
+        return across.isEmpty() ? null : RunRefusals.overlapUnfinishedRefusal(chosenYear, across);
     }
 
     /**
@@ -1156,7 +1156,6 @@ public class RunSetupPresenter {
         }
         return new CullScope.Year(year, months.isEmpty() ? null : months);
     }
-
 
     /**
      * What pressing the button under the field does.
@@ -1214,7 +1213,7 @@ public class RunSetupPresenter {
      * @return {@link String} the legend, or null
      */
     private static @Nullable String legendFor(final List<YearChoice> years) {
-        return years.stream().anyMatch(YearChoice::unfinishedSift) ? UNFINISHED_LEGEND : null;
+        return years.stream().anyMatch(YearChoice::hasUnfinishedSift) ? UNFINISHED_LEGEND : null;
     }
 
     /**
@@ -1257,7 +1256,7 @@ public class RunSetupPresenter {
      * @param months a {@link List} of {@link Integer} the months chosen, sorted and deduplicated
      * @return a {@link List} of {@link Integer} what the gap holds, or null where that cannot be said
      */
-    private @Nullable List<Integer> gapHolds(final int year, final List<Integer> months) {
+    private @Nullable List<Integer> monthsFiledInTheGap(final int year, final List<Integer> months) {
         if (!this.folders.countsAreIn()) {
             return null;
         }
@@ -1295,13 +1294,13 @@ public class RunSetupPresenter {
      * the question itself is about, and a screen asking two of them would otherwise weigh both the
      * same way.
      *
-     * @param heading {@link String} what the question is about
-     * @param question {@link String} the question itself, naming what is about to happen
+     * @param heading {@link String} the question itself
+     * @param detail {@link String} what going ahead would do, in the terms the choices answer it
      * @param goAhead {@link String} what the button that goes ahead says
      * @param cancel {@link String} what the button that backs out says
      * @param goAheadLeads boolean whether going ahead is the loud choice, the one Enter lands on
      */
-    public record Confirmation(String heading, String question, String goAhead, String cancel,
+    public record Confirmation(String heading, String detail, String goAhead, String cancel,
                                boolean goAheadLeads) {
     }
 

@@ -70,7 +70,7 @@ public class StartupFailurePresenter {
             case final WorkingRootBusy _ -> new BusyRoot(BUSY);
             case final RejectedSetting rejected when rejected.spot() != null ->
                     rejectedInFile(rejected, rejected.spot());
-            case final RejectedSetting rejected -> new Generic(rejectedElsewhere(rejected), rejected.trace());
+            case final RejectedSetting rejected -> new Generic(rejectedElsewhereDetail(rejected), rejected.trace());
             case final UnparsableConfigFile unparsable -> new Unparsable(UNPARSABLE_CONFIG,
                     unparsable.spot().file().toString(), positionText(unparsable.spot()), unparsable.problem(),
                     unparsable.trace());
@@ -106,7 +106,7 @@ public class StartupFailurePresenter {
      * @param rejected {@link RejectedSetting} the failure, with no spot in the user's file
      * @return {@link String} the detail line
      */
-    private static String rejectedElsewhere(final RejectedSetting rejected) {
+    private static String rejectedElsewhereDetail(final RejectedSetting rejected) {
         return REJECTED_SETTING + rejected.property() + ". It did not come from your settings file. Check for an "
                 + "environment variable named " + envVarNameFor(rejected.property())
                 + ", or report this as a bug in Sluice if you have not set one.";

@@ -46,21 +46,21 @@ final class RunResults {
 
     private static final String CONTINUE = "Continue sifting";
 
-    private static final String CEILING_QUESTION = "Sluice stopped this sift because it went far "
+    private static final String CEILING_NOTE = "Sluice stopped this sift because it went far "
             + "past what it was expected to cost. Nothing more has been spent from your provider "
             + "account balance. Continuing on sends "
             + "the sheets it had not reached, under a fresh limit.";
 
-    private static final String SHARDS_OUTSTANDING = "The sheets are ready, waiting for your "
+    private static final String SHARDS_OUTSTANDING_DETAIL = "The sheets are ready, waiting for your "
             + "agent's decisions on them. Nothing moves until those decisions arrive. Pick this "
             + "sift up again once they have.";
 
     // Opens on what came back rather than on every sheet being judged. A sheet whose answer covers
     // only some of its photos has a decisions file and has not been judged, and the clause that
     // follows says exactly that.
-    private static final String BLOCKED = "Every sheet came back. %s. Your photos are still in Sorted.";
+    private static final String BLOCKED_DETAIL = "Every sheet came back. %s. Your photos are still in Sorted.";
 
-    private static final String CANCELLED = "You can continue at any time.";
+    private static final String CANCELLED_CONTINUE_NOTE = "You can continue at any time.";
 
     // True because an import keeps no record. The folder it came from is the record, so running it
     // again is the resume.
@@ -140,11 +140,11 @@ final class RunResults {
      *         acted on from
      * @return {@link RunResultView} the card
      */
-    static RunResultView failed(final RunMode ran, final RunRefusals.Refusal said) {
+    static RunResultView failedResult(final RunMode ran, final RunRefusals.Refusal said) {
         // Not "stopped", which heads a run the reader stopped on purpose. A reader cannot be left
         // reading one word for both, with only the colour behind it telling them which happened.
         return new RunResultView(ran.verb() + " could not finish.", Tone.FAILED, said.sentence(),
-                List.of(), null, null, DONE, said.wayThere());
+                List.of(), null, null, DONE, said.location());
     }
 
     /**
@@ -159,7 +159,7 @@ final class RunResults {
                                             final @Nullable String narrowedTo) {
         return new RunResultView(headingFor(ran, sorted.cancelled()), toneFor(sorted.cancelled()),
                 sortNote(sorted, narrowedTo),
-                sortCounts(sorted), canaryLine(sorted), siftNowOffer(sorted), DONE);
+                sortCounts(sorted), datesWarning(sorted), siftNowOffer(sorted), DONE);
     }
 
     /**
@@ -176,7 +176,7 @@ final class RunResults {
     /**
      * How a card is toned, given whether the run stopped short.
      *
-     * <p>Never {@code FAILED}, which {@link #failed} keeps for a run that threw. A run the reader
+     * <p>Never {@code FAILED}, which {@link #failedResult} keeps for a run that threw. A run the reader
      * stopped did what they asked.
      *
      * @param stopped whether the run gave up before reaching the end of its scope
@@ -190,7 +190,7 @@ final class RunResults {
      * What a sort says about itself beyond its counts.
      *
      * <p>A sort stopped before anything moved reports exactly what a sort over an empty Inbox
-     * reports, so the counts alone cannot tell the reader which happened to them.
+     * reports. The counts alone cannot tell the reader which happened to them.
      *
      * @param sorted {@link SortSummary} what the sort did
      * @param narrowedTo what the sort was narrowed to, or null where it took whatever it found
@@ -200,9 +200,9 @@ final class RunResults {
         if (sorted.cancelled()) {
             return sorted.processed() == 0
                     ? "Your Inbox is unchanged."
-                    : sortStopped(sorted.leftBehind());
+                    : sortStoppedSentence(sorted.leftBehind());
         }
-        return sortedNothing(sorted, narrowedTo);
+        return sortedNothingSentence(sorted, narrowedTo);
     }
 
     /**
@@ -211,7 +211,7 @@ final class RunResults {
      * @param leftBehind int in-scope files still in the Inbox
      * @return {@link String} the sentence
      */
-    private static String sortStopped(final int leftBehind) {
+    private static String sortStoppedSentence(final int leftBehind) {
         if (leftBehind == 0) {
             return SORT_STOPPED_NONE;
         }
@@ -236,7 +236,7 @@ final class RunResults {
      * @param narrowedTo what the sort was narrowed to, or null where it took whatever it found
      * @return {@link String} the sentence, or null where something did reach Sorted
      */
-    private static @Nullable String sortedNothing(final SortSummary sorted, final @Nullable String narrowedTo) {
+    private static @Nullable String sortedNothingSentence(final SortSummary sorted, final @Nullable String narrowedTo) {
         if (!sorted.yearsSorted().isEmpty()) {
             return null;
         }
@@ -343,7 +343,7 @@ final class RunResults {
      */
     private static RunResultView movedResult(final RunMode ran, final CommitSummary moved) {
         return new RunResultView(headingFor(ran, moved.cancelled()), toneFor(moved.cancelled()),
-                moved.cancelled() ? moveStopped(moved.leftBehind()) : null,
+                moved.cancelled() ? moveStoppedSentence(moved.leftBehind()) : null,
                 movedCounts(moved), null, null, DONE);
     }
 
@@ -353,7 +353,7 @@ final class RunResults {
      * @param leftBehind int in-scope files still in Sorted
      * @return {@link String} the sentence
      */
-    private static String moveStopped(final int leftBehind) {
+    private static String moveStoppedSentence(final int leftBehind) {
         if (leftBehind == 0) {
             return MOVE_STOPPED_NONE;
         }
@@ -419,7 +419,7 @@ final class RunResults {
         addWhenAny(rows, "result-rescue-already", "Deleted: already in Sorted",
                 rescued.alreadyInSorted());
         return new RunResultView(headingFor(ran, rescued.cancelled()), toneFor(rescued.cancelled()),
-                rescued.cancelled() ? rescueStopped(rescued.leftBehind()) : null, rows, null, null, DONE);
+                rescued.cancelled() ? rescueStoppedSentence(rescued.leftBehind()) : null, rows, null, null, DONE);
     }
 
     /**
@@ -428,7 +428,7 @@ final class RunResults {
      * @param leftBehind int photos and videos still in the folder the run was given
      * @return {@link String} the sentence
      */
-    private static String rescueStopped(final int leftBehind) {
+    private static String rescueStoppedSentence(final int leftBehind) {
         if (leftBehind == 0) {
             return RESCUE_STOPPED_NONE;
         }
@@ -502,10 +502,10 @@ final class RunResults {
             case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _) ->
                     new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED, waitingDetail(why),
                             sheetCounts(job.shards()), null,
-                            resumeOffer(why, job.prepDir()), DONE, wayOnFrom(why));
+                            resumeOffer(why, job.prepDir()), DONE, resumeLocation(why));
             case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
                     new RunResultView(ran.verb() + " stopped and needs a look.",
-                            Tone.UNFINISHED, BLOCKED.formatted(FindingFamily.wentWrong(findings)),
+                            Tone.UNFINISHED, BLOCKED_DETAIL.formatted(FindingFamily.wentWrong(findings)),
                             sheetCounts(job.shards()), null, null, DONE, Location.RUNS);
             // The one case with no prep dir behind it, so nothing counted the sheets. It is reached
             // only before rendering finished, which is why there are none to count.
@@ -587,8 +587,8 @@ final class RunResults {
      */
     private static @Nullable CardAction resumeOffer(final WaitingReason why, final Path prepDir) {
         return switch (why) {
-            case CEILING_REACHED -> new CardAction.ContinueRun(CEILING_QUESTION, CONTINUE, prepDir);
-            case CANCELLED -> new CardAction.ContinueRun(CANCELLED, CONTINUE, prepDir);
+            case CEILING_REACHED -> new CardAction.ContinueRun(CEILING_NOTE, CONTINUE, prepDir);
+            case CANCELLED -> new CardAction.ContinueRun(CANCELLED_CONTINUE_NOTE, CONTINUE, prepDir);
             case SHARDS_OUTSTANDING -> null;
         };
     }
@@ -602,7 +602,7 @@ final class RunResults {
      * @param why {@link WaitingReason} why the sift paused
      * @return {@link Location} the runs screen, or null where the card offers the way on itself
      */
-    private static @Nullable Location wayOnFrom(final WaitingReason why) {
+    private static @Nullable Location resumeLocation(final WaitingReason why) {
         return switch (why) {
             case SHARDS_OUTSTANDING -> Location.RUNS;
             case CEILING_REACHED, CANCELLED -> null;
@@ -636,7 +636,7 @@ final class RunResults {
      */
     private static @Nullable String waitingDetail(final WaitingReason why) {
         return switch (why) {
-            case SHARDS_OUTSTANDING -> SHARDS_OUTSTANDING;
+            case SHARDS_OUTSTANDING -> SHARDS_OUTSTANDING_DETAIL;
             case CEILING_REACHED, CANCELLED -> null;
         };
     }
@@ -660,7 +660,7 @@ final class RunResults {
      * @param sorted {@link SortSummary} what the sort did
      * @return {@link String} the line, or null where nothing tripped
      */
-    private static RunResultView.@Nullable Warning canaryLine(final SortSummary sorted) {
+    private static RunResultView.@Nullable Warning datesWarning(final SortSummary sorted) {
         return sorted.warnings().isEmpty()
                 ? null
                 : new RunResultView.Warning("The dates on these photos may be wrong.",

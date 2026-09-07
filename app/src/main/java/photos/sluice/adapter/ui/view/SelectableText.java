@@ -8,6 +8,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.text.Text;
+import javafx.scene.text.TextBoundsType;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -155,6 +156,14 @@ final class SelectableText {
 
         private final Text measure = new Text();
 
+        private Ruler() {
+            // The bounds a text input control's own skin lays its lines out in. The default drops
+            // the font's leading. That is nothing on Segoe UI and 1.7 px a line on DejaVu Sans. So
+            // measuring in it asks for less height than the words are drawn in, and the last line
+            // comes out cut through the descenders.
+            this.measure.setBoundsType(TextBoundsType.LOGICAL_VERTICAL_CENTER);
+        }
+
         private void take(final TextInputControl control, final double wrapAt) {
             this.measure.setText(control.getText());
             this.measure.setFont(control.getFont());
@@ -205,6 +214,17 @@ final class SelectableText {
             return Orientation.HORIZONTAL;
         }
 
+        // The width the words would take on one line, which is what a wrapping label answers. A
+        // text area answers a column count instead, the same number whatever it holds. Nothing
+        // stretches this block to that width, since a parent gives it the room it has. What the
+        // answer decides is the line count a parent gets back when it asks how tall this would be
+        // at its preferred width. A column count turns one line into two.
+        @Override
+        protected double computePrefWidth(final double height) {
+            this.ruler.take(this, 0);
+            return this.ruler.width() + this.snappedLeftInset() + this.snappedRightInset();
+        }
+
         @Override
         protected double computePrefHeight(final double width) {
             this.ruler.take(this, this.wrapAt(width));
@@ -227,5 +247,4 @@ final class SelectableText {
             return this.computePrefHeight(width);
         }
     }
-
 }

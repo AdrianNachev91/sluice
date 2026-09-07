@@ -26,7 +26,7 @@ public final class ScreenFailure {
      *
      * @return {@link String} the sentence to show
      */
-    public static String wouldNotOpen() {
+    public static String wouldNotOpenSentence() {
         return "This screen would not open. Opening it again is worth a try. If it keeps happening, "
                 + "report this as a bug, quoting this:";
     }
@@ -39,7 +39,7 @@ public final class ScreenFailure {
      *
      * @return {@link String} the label
      */
-    public static String showTheDetails() {
+    public static String showDetailsLabel() {
         return "Show the error details";
     }
 
@@ -66,7 +66,7 @@ public final class ScreenFailure {
      *
      * @return {@link String} the label
      */
-    public static String copy() {
+    public static String copyLabel() {
         return "Copy";
     }
 
@@ -75,7 +75,7 @@ public final class ScreenFailure {
      *
      * @return {@link String} the label
      */
-    public static String copied() {
+    public static String copiedLabel() {
         return "Copied";
     }
 

@@ -280,10 +280,10 @@ class RunsPaneTest {
     }
 
     // A refusal names its screen in the control under the line rather than in its own words, so
-    // that control is the whole of the way there. One built and wired but never added to the scene
+    // that control is the whole of the route. One built and wired but never added to the scene
     // draws nothing, and no presenter test can see that.
     @Test
-    void aRefusalNamingAScreenPutsTheWayThereOnTheScreen() throws Exception {
+    void aRefusalNamingAScreenPutsTheLocationLinkOnTheScreen() throws Exception {
         final Pipeline pipeline = stalledPipeline();
         when(pipeline.launchPromptFor(any())).thenThrow(new PathsMisconfiguredException(
                 List.of(new NotADirectory(PathRole.INBOX, Path.of("gone")))));
@@ -308,7 +308,7 @@ class RunsPaneTest {
     // The same control, on a screen with nothing to report. It has to take no room at all, or every
     // screen carries a gap where a refusal would have gone.
     @Test
-    void withNothingToReportTheWayThereTakesNoRoom() throws Exception {
+    void withNothingToReportTheLocationLinkTakesNoRoom() throws Exception {
         final Parent pane = onFxThread(() -> built(run("2019", State.WAITING)));
 
         final var link = (Hyperlink) pane.lookup("#runs-message-link");

@@ -60,8 +60,8 @@ final class ReviewPane {
         final TextArea unreadable = SettingsRows.emptyHelpLine("review-unreadable");
         final VBox unreadableBox = boxed(unreadable, "review-unreadable-box");
         final TextArea message = SettingsRows.emptyHelpLine("review-message");
-        final Hyperlink messageWayThere = SettingsRows.wayThereLink("review-message-link");
-        final var messageBox = new VBox(SettingsRows.wayThereLines(message, messageWayThere));
+        final Hyperlink locationLink = SettingsRows.locationLink("review-message-link");
+        final var messageBox = new VBox(SettingsRows.locationLines(message, locationLink));
         messageBox.setId("review-message-box");
         messageBox.getStyleClass().add("warning-box");
         messageBox.managedProperty().bind(messageBox.visibleProperty());
@@ -91,7 +91,7 @@ final class ReviewPane {
         page.getStyleClass().add("review");
 
         final var controls = new Controls(heading, explained, unreadable, nothingYet, message,
-                messageWayThere, navigation, groups, scroll);
+                locationLink, navigation, groups, scroll);
         final Runnable redraw = new Runnable() {
             @Override
             public void run() {
@@ -140,13 +140,13 @@ final class ReviewPane {
      * @param unreadable {@link TextArea} what to say where a folder could not be read
      * @param nothingYet {@link TextArea} what to say where nothing at all is waiting
      * @param message {@link TextArea} what the screen has to report
-     * @param messageWayThere {@link Hyperlink} the control under it, where that report names a screen
+     * @param locationLink {@link Hyperlink} the control under it, where that report names a screen
      * @param navigation {@link ScreenNavigation} how this screen opens another
      * @param groups {@link VBox} one node per section
      */
     private record Controls(TextField heading, TextArea explained, TextArea unreadable,
                             TextArea nothingYet,
-                            TextArea message, Hyperlink messageWayThere, ScreenNavigation navigation,
+                            TextArea message, Hyperlink locationLink, ScreenNavigation navigation,
                             VBox groups, ScrollPane scroll) {
 
         /**
@@ -163,8 +163,8 @@ final class ReviewPane {
             this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
             this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
             this.message.setText(view.message() == null ? "" : view.message().text());
-            SettingsRows.offering(this.messageWayThere,
-                    view.message() == null ? null : view.message().wayThere(), this.navigation);
+            SettingsRows.pointAt(this.locationLink,
+                    view.message() == null ? null : view.message().location(), this.navigation);
             final List<Node> drawn = new ArrayList<>();
             view.groups().forEach(group -> drawn.add(section(group, presenter, redraw, this.scroll)));
             this.groups.getChildren().setAll(drawn);

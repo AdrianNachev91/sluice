@@ -540,7 +540,7 @@ class RunLauncherPresenterTest {
         assertThat(this.reported().text())
                 .contains(PathRoleLabels.of(PathRole.INBOX))
                 .contains(PathRoleLabels.of(PathRole.LIBRARY_ROOT));
-        assertThat(this.reported().wayThere()).isEqualTo(Location.SETTINGS);
+        assertThat(this.reported().location()).isEqualTo(Location.SETTINGS);
     }
 
     // Three of the four ways a sift ends leave work behind, and none of them is a failure, so the
@@ -565,7 +565,7 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(this.finishedView().action()).isNull();
-        assertThat(this.finishedView().wayThere()).isEqualTo(Location.RUNS);
+        assertThat(this.finishedView().location()).isEqualTo(Location.RUNS);
     }
 
     // The other two pauses put Continue on the card. A way out to another screen would compete with
@@ -578,7 +578,7 @@ class RunLauncherPresenterTest {
         this.presenter.start();
 
         assertThat(this.finishedView().action()).isNotNull();
-        assertThat(this.finishedView().wayThere()).isNull();
+        assertThat(this.finishedView().location()).isNull();
     }
 
     @Test
@@ -588,7 +588,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(((CardAction.ContinueRun) requireNonNull(this.finishedView().action())).question())
+        assertThat(((CardAction.ContinueRun) requireNonNull(this.finishedView().action())).note())
                 .contains("Nothing more has been spent from your provider account balance");
     }
 
@@ -817,7 +817,7 @@ class RunLauncherPresenterTest {
                 .isEqualTo("You already have a sift of 2019 that has not finished. Another cannot "
                         + "be started for the same timeframe while that one is there. "
                         + "Continue it or discard it first.");
-        assertThat(this.reported().wayThere()).isEqualTo(Location.RUNS);
+        assertThat(this.reported().location()).isEqualTo(Location.RUNS);
     }
 
     // The engine refuses a keyless provider before it starts a job. So this is the narrower shape:
@@ -834,7 +834,7 @@ class RunLauncherPresenterTest {
 
         assertThat(this.finishedView().detail())
                 .isEqualTo("A sift cannot be started because your provider key is not set.");
-        assertThat(this.finishedView().wayThere()).isEqualTo(Location.SETTINGS);
+        assertThat(this.finishedView().location()).isEqualTo(Location.SETTINGS);
     }
 
     // A store answering neither yes nor no is a broken install, so the bug line is earned here and
@@ -1033,7 +1033,7 @@ class RunLauncherPresenterTest {
         verify(this.pipeline, never()).cull(any());
         assertThat(this.reportedOnTheCard().text())
                 .isEqualTo("Sluice could not read your folders.");
-        assertThat(this.reportedOnTheCard().wayThere()).isEqualTo(Location.SETTINGS);
+        assertThat(this.reportedOnTheCard().location()).isEqualTo(Location.SETTINGS);
     }
 
     @Test

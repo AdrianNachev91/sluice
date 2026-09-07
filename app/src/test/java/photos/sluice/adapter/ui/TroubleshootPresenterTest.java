@@ -318,7 +318,7 @@ class TroubleshootPresenterTest {
         presenter.press(row, option(row, Answer.SKIP_FILE));
 
         assertThat(rows(presenter)).isEmpty();
-        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.plainly(roots));
+        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.refuseSentence(roots));
         assertThat(presenter.view().summary())
                 .isEqualTo(requireNonNull(presenter.view().message()).text());
     }
@@ -371,7 +371,7 @@ class TroubleshootPresenterTest {
 
         // Without it the press never happened and the rest of this passes for the wrong reason.
         assertThat(pressedMidDraw).isTrue();
-        assertThat(drawn.summary()).isEqualTo(RunRefusals.plainly(roots));
+        assertThat(drawn.summary()).isEqualTo(RunRefusals.refuseSentence(roots));
         assertThat(drawn.actions()).extracting(Action::id).doesNotContain("troubleshoot-finish");
     }
 
@@ -387,14 +387,14 @@ class TroubleshootPresenterTest {
                 List.of(new NotADirectory(PathRole.WORKING_ROOT, Path.of("D:", "gone"))));
         when(pipeline.cullRun(any())).thenThrow(roots);
         presenter.press(row, option(row, Answer.RECHECK));
-        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.plainly(roots));
+        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.refuseSentence(roots));
         // doReturn, because when(...) would call the still-throwing stub while setting up the
         // replacement for it.
         doReturn(summary(State.READY, List.of())).when(pipeline).cullRun(any());
 
         presenter.press(row, option(row, Answer.RECHECK));
 
-        assertThat(presenter.view().summary()).isNotEqualTo(RunRefusals.plainly(roots));
+        assertThat(presenter.view().summary()).isNotEqualTo(RunRefusals.refuseSentence(roots));
     }
 
     @Test
@@ -758,7 +758,7 @@ class TroubleshootPresenterTest {
 
         presenter.open(PREP_DIR, "2019");
 
-        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.plainly(roots));
+        assertThat(presenter.view().summary()).isEqualTo(RunRefusals.refuseSentence(roots));
         assertThat(presenter.view().summary())
                 .isEqualTo(requireNonNull(presenter.view().message()).text());
     }

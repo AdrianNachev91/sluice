@@ -158,8 +158,8 @@ public class RunsPresenter {
      * Says how the screen draws itself again once a job this screen started has ended.
      *
      * <p>Held rather than captured at each press. A discard outlives the screen that started it.
-     * Nothing stops somebody opening Settings while it runs, and the runs screen they come back to
-     * is a new one, and this field is what points at it.
+     * Nothing stops somebody opening Settings while it runs. The runs screen they come back to is a
+     * new one, and this field is what points at it.
      *
      * @param repaint {@link Runnable} reads the runs again and draws, off the thread that paints
      */
@@ -238,7 +238,6 @@ public class RunsPresenter {
         this.reread();
     }
 
-
     /**
      * What the screen shows right now.
      *
@@ -249,7 +248,7 @@ public class RunsPresenter {
         // read on another thread, so asking it twice can answer twice about two different moments.
         final CullRuns reading = this.runs;
         final List<CullRunSummary> found = found(reading);
-        final String unreadable = unreadable(reading);
+        final String unreadableLine = unreadableLine(reading);
         // Oldest timeframe first, which is the order a reader already has in their head. Sorted here
         // rather than left to the reading's own order, since where the cards sit is this screen's
         // claim to keep.
@@ -263,8 +262,8 @@ public class RunsPresenter {
                 .map(this::card)
                 .toList();
         final Message said = this.message == null ? this.readFailure : this.message;
-        return new RunsView(HEADING, unreadable, unfinished,
-                found.isEmpty() && unreadable == null ? NOTHING_YET : null,
+        return new RunsView(HEADING, unreadableLine, unfinished,
+                found.isEmpty() && unreadableLine == null ? NOTHING_YET : null,
                 completedHeading(completed.size()), completed, this.completedShown,
                 CLEAR_COMPLETED, !completed.isEmpty() && !this.working(),
                 completed.isEmpty() ? null : clearConfirm(completed), said);
@@ -307,7 +306,7 @@ public class RunsPresenter {
      *
      * @return {@link String} the label
      */
-    public String copied() {
+    public String copiedLabel() {
         return COPIED;
     }
 
@@ -320,8 +319,8 @@ public class RunsPresenter {
      * <p>A follow-up discards whatever came back unusable, then asks for every sheet outstanding,
      * both being sheets with no answer once the discard is done. A run with nothing to discard has
      * stalled rather than gone wrong, and its follow-up is the instructions themselves. The facade
-     * decides which it is, so a run put right between the card being drawn and this press still
-     * gets the answer that fits it rather than the one the card predicted.
+     * decides which it is. A run put right between the card being drawn and this press still gets
+     * the answer that fits it rather than the one the card predicted.
      *
      * <p>A run whose records have gone bad between the draw and this press has none to write. That
      * is reported on the screen the same way a refused press is, and nothing reaches the clipboard.
@@ -354,7 +353,7 @@ public class RunsPresenter {
             return this.pipeline.launchPromptFor(prepDir);
         } catch (final RuntimeException e) {
             log.info("Could not write the instructions for {}", prepDir, e);
-            this.message = RunRefusals.refusing(e);
+            this.message = RunRefusals.refuseMessage(e);
             return null;
         }
     }
@@ -387,7 +386,7 @@ public class RunsPresenter {
             this.pipeline.redoRejectedAnswers(prepDir);
         } catch (final RuntimeException e) {
             log.info("Could not set the rejected answers aside for {}", prepDir, e);
-            this.message = RunRefusals.refusing(e);
+            this.message = RunRefusals.refuseMessage(e);
             return null;
         }
         // The freed sheets are what this press exists to judge, so it never goes on without them.
@@ -509,7 +508,7 @@ public class RunsPresenter {
             handle.onComplete().whenComplete((_, failure) -> this.ended(action, failure));
         } catch (final RuntimeException e) {
             log.info("Refused to {}", action, e);
-            this.message = RunRefusals.refusing(e);
+            this.message = RunRefusals.refuseMessage(e);
         }
     }
 
@@ -525,7 +524,7 @@ public class RunsPresenter {
     private void ended(final String action, final @Nullable Throwable failure) {
         if (failure != null) {
             log.warn("Could not {}", action, failure);
-            this.message = RunRefusals.refusing(RunRefusals.rootOf(failure));
+            this.message = RunRefusals.refuseMessage(RunRefusals.rootOf(failure));
         }
         this.working = false;
         final Runnable draw = this.repaint;
@@ -550,7 +549,7 @@ public class RunsPresenter {
      *
      * @return {@link String} the sentence, or null where the folder was read
      */
-    private static @Nullable String unreadable(final CullRuns reading) {
+    private static @Nullable String unreadableLine(final CullRuns reading) {
         return reading instanceof CullRuns.Unlistable(final Path root)
                 ? UNREADABLE.formatted(root)
                 : null;
@@ -570,7 +569,7 @@ public class RunsPresenter {
      * <p>The way back leads only where the app does the judging, and only where it could clear the
      * run outright. A press that spends is worth leading with where it finishes the job. Where an
      * agent outside the app judges, nothing on the card is dressed as the way on, whatever state
-     * the run is in: what it waits on is not the reader, and a copy is a quiet act anyway.
+     * the run is in. What it waits on is not the reader, and a copy is a quiet act anyway.
      *
      * @param run {@link CullRunSummary} the run as it sits on disk
      * @return {@link RunCard} what the screen draws for it
@@ -640,8 +639,8 @@ public class RunsPresenter {
      *
      * <p>Counted the way the press chooses what to dispatch: the sheets the findings blame, plus
      * the sheets that never arrived. The tally's own valid count would be the wrong number here,
-     * being computed per shard for display, so a fault spanning two shards leaves both of them
-     * counted valid while the press dispatches them anyway.
+     * being computed per shard for display. A fault spanning two shards leaves both of them counted
+     * valid while the press dispatches them anyway.
      *
      * <p>Going ahead is the loud choice, unlike the discard below. Judging a few sheets again is
      * the cheaper of the two roads out. Backing away leaves a run nothing can finish, and the only
@@ -728,7 +727,6 @@ public class RunsPresenter {
         return state != State.WAITING || (sheets != null && sheets.present() >= 1);
     }
 
-
     /**
      * What can be done about a run, in the order the buttons are drawn.
      *
@@ -746,8 +744,8 @@ public class RunsPresenter {
      * <p>Every button goes dead while a job is running, since the app takes one at a time.
      *
      * <p>Finishing leads only where no answer has come back unusable. Apply refuses on one however
-     * many sheets have arrived, so finishing is then a press that cannot get through, whether or
-     * not the way back could clear the run either. A card where neither press can finish it draws
+     * many sheets have arrived. Finishing is then a press that cannot get through, whether or not
+     * the way back could clear the run either. A card where neither press can finish it draws
      * no filled button at all rather than dressing one of them as the way on.
      *
      * @param run {@link CullRunSummary} the run
@@ -820,8 +818,8 @@ public class RunsPresenter {
      * cost depends on the provider's own rates and on the model.
      *
      * <p>Only says they were paid for where the configured provider charges. On the other route the
-     * judging is done by an agent the reader runs, which may have cost them nothing at all, and a
-     * sentence telling them otherwise is asking for a decision on a fact the app made up.
+     * judging is done by an agent the reader runs, which may have cost them nothing at all. A
+     * sentence telling them otherwise asks for a decision on a fact the app made up.
      *
      * <p>Names the folder the records go to, because the reader can open it. Sluice offers no way
      * back to them from inside the app, and saying so is the part that decides whether somebody
@@ -906,7 +904,7 @@ public class RunsPresenter {
      *
      * <p>Accounts for every sheet, so the three numbers add up to the total a reader can see. A
      * line naming only what was judged leaves them subtracting to find out whether the rest are
-     * late or turned away, and those are different problems with different next steps.
+     * late or turned away. Those are different problems with different next steps.
      *
      * <p>Withheld from a stopped run whose sheets are all in and all sound. The tally counts what
      * arrived and parsed, which is narrower than the run being well. Where the sheets are not what
@@ -1030,7 +1028,7 @@ public class RunsPresenter {
      * The reading half of {@link #refresh}, without either of its two agings-out.
      *
      * <p>A tally moving as a watched run gains a shard is not a reader leaving this screen and
-     * coming back to it, which is what the two agings-out are about.
+     * coming back to it. That is what the two agings-out are about.
      */
     private void reread() {
         try {
@@ -1044,11 +1042,11 @@ public class RunsPresenter {
             // A trace here fills the log a reader would send about something else.
             log.info("Could not read the runs: {}", unset.getMessage());
             this.runs = new CullRuns.Listed(List.of());
-            this.readFailure = RunRefusals.refusing(unset);
+            this.readFailure = RunRefusals.refuseMessage(unset);
         } catch (final RuntimeException e) {
             log.info("Could not read the runs", e);
             this.runs = new CullRuns.Listed(List.of());
-            this.readFailure = RunRefusals.refusing(e);
+            this.readFailure = RunRefusals.refuseMessage(e);
         }
     }
 }

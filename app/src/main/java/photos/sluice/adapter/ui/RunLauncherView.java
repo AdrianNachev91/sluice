@@ -20,13 +20,13 @@ import java.util.List;
  *     nothing is
  * @param scopeNamesTheRun boolean whether the field and the Sorted rows decide what this run
  *     covers, false for a mode that takes the oldest year whatever they say
- * @param nothingStaged what to say in place of the rows when there are none, or null when there
+ * @param nothingStagedLine what to say in place of the rows when there are none, or null when there
  *     are some
  * @param scopeLabel {@link String} the label above the scope field
  * @param scopeText {@link String} what the scope field should read
  * @param scopeHint {@link String} what the field accepts for the mode now chosen
  * @param scopeRefusal what is wrong with what has been typed, or null while nothing is
- * @param scopeRefusalWayThere {@link Location} the screen that refusal can be acted on from, or
+ * @param scopeRefusalLocation {@link Location} the screen that refusal can be acted on from, or
  *     null where it names nowhere to go
  * @param cost {@link Cost} what the screen says about money, or null where this mode never reaches
  *     a vision provider
@@ -39,10 +39,10 @@ import java.util.List;
 public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String modeHint, InboxCard inbox,
                               List<YearChoice> years, @Nullable UndatedChoice undated,
                               boolean scopeNamesTheRun,
-                              @Nullable String nothingStaged,
+                              @Nullable String nothingStagedLine,
                               String scopeLabel, String scopeText, String scopeHint,
                               @Nullable String scopeRefusal,
-                              @Nullable Location scopeRefusalWayThere, @Nullable Cost cost,
+                              @Nullable Location scopeRefusalLocation, @Nullable Cost cost,
                               @Nullable String scopeLegend,
                               String startLabel, boolean canStart, StartAction startAction,
                               @Nullable Message message) {
@@ -57,12 +57,12 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      * @param years a {@link List} of {@link YearChoice} the Sorted rows, newest first
      * @param undated {@link UndatedChoice} the row for what is sorted without a date, or null
      * @param scopeNamesTheRun boolean whether the field and the rows decide what this run covers
-     * @param nothingStaged what to say in place of the rows when there are none
+     * @param nothingStagedLine what to say in place of the rows when there are none
      * @param scopeLabel {@link String} the label above the scope field
      * @param scopeText {@link String} what the scope field should read
      * @param scopeHint {@link String} what the field accepts for the mode now chosen
      * @param scopeRefusal what is wrong with what has been typed, or null
-     * @param scopeRefusalWayThere {@link Location} the screen that refusal leads to, or null
+     * @param scopeRefusalLocation {@link Location} the screen that refusal leads to, or null
      * @param cost {@link Cost} what the screen says about money, or null
      * @param scopeLegend what the mark on a timeframe row means, or null
      * @param startLabel {@link String} what the start button says
@@ -173,7 +173,7 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      * @param months a {@link List} of {@link MonthChoice} its months, always listed
      */
     public record YearChoice(int year, String id, String label, String counts, boolean chosen,
-                             boolean monthsShown, boolean unfinishedSift, List<MonthChoice> months) {
+                             boolean monthsShown, boolean hasUnfinishedSift, List<MonthChoice> months) {
 
         /**
          * Defensively copies the mutable list.
@@ -292,10 +292,10 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      *
      * @param text {@link String} what to say
      * @param refused boolean whether this is a refusal rather than an ordinary report
-     * @param wayThere {@link Location} the screen this can be acted on from, or null where the
+     * @param location {@link Location} the screen this can be acted on from, or null where the
      *         reader has nowhere to go about it
      */
-    public record Message(String text, boolean refused, @Nullable Location wayThere) {
+    public record Message(String text, boolean refused, @Nullable Location location) {
 
         /**
          * Something to report that names nowhere to go.

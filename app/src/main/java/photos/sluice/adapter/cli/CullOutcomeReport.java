@@ -33,7 +33,7 @@ final class CullOutcomeReport {
      * @param duplicates {@link Path} the Duplicates root, named in the row counting the copies
      *        moved there
      * @param instructions a {@link Function} of {@link Path} to {@link String} writes the text to
-     *        hand an agent, asked only on a run still waiting on its sheets
+     *        hand an agent. Asked only on a run still waiting on its sheets
      * @return {@link CommandOutcome} the outcome
      */
     static CommandOutcome of(final CullJobOutcome outcome, final Path duplicates,
@@ -56,7 +56,7 @@ final class CullOutcomeReport {
      * @param incomplete {@link CullException} what the provider could not finish, and why
      * @return {@link CommandOutcome} the outcome
      */
-    static CommandOutcome incomplete(final CullException incomplete) {
+    static CommandOutcome incompleteOutcome(final CullException incomplete) {
         final CullReport report = incomplete.report();
         final List<String> lines = List.of("This sift could not be finished.",
                 String.valueOf(incomplete.getMessage()),

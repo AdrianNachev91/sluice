@@ -121,7 +121,7 @@ class RunSetupPresenterTest {
         final RunSetupPresenter.Confirmation asked = this.presenter.confirmationNeeded();
 
         assertThat(asked).isNotNull();
-        assertThat(asked.question()).contains("160 files").contains("2019 and 2018");
+        assertThat(asked.detail()).contains("160 files").contains("2019 and 2018");
     }
 
     @Test
@@ -145,7 +145,7 @@ class RunSetupPresenterTest {
         final RunSetupPresenter.Confirmation asked = this.askedBeforeSifting(2019);
 
         assertThat(asked.heading()).isEqualTo("Sift 2019?");
-        assertThat(asked.question())
+        assertThat(asked.detail())
                 .isEqualTo("This looks at 100 photos sorted for 2019: 6 from this run and 94 "
                         + "sorted earlier. That is about 150,000 tokens, and sifting spends from "
                         + "your provider account balance. Sluice will stop and ask if it goes "
@@ -155,7 +155,7 @@ class RunSetupPresenterTest {
 
     @Test
     void theQuestionSplitsTheTimeframeIntoThisRunAndWhatWasThereBefore() {
-        assertThat(this.askedBeforeSifting(2019).question())
+        assertThat(this.askedBeforeSifting(2019).detail())
                 .contains("100 photos sorted for 2019: 6 from this run and 94 sorted earlier");
     }
 
@@ -165,7 +165,7 @@ class RunSetupPresenterTest {
                 new YearRow(2019, 6, 0, List.of(new MonthRow(6, 6, 0)))), 0));
         this.presenter.refreshCounts();
 
-        assertThat(this.askedBeforeSifting(2019).question())
+        assertThat(this.askedBeforeSifting(2019).detail())
                 .contains("This looks at 6 photos sorted for 2019, all of them from this run.");
     }
 
@@ -173,7 +173,7 @@ class RunSetupPresenterTest {
     void siftingFromACardStillSaysItSpendsWhereNoFigureCanBeGiven() {
         when(this.pipeline.estimateFor(anyInt())).thenReturn(new SpendEstimate(0, 0, true, false, false));
 
-        assertThat(this.askedBeforeSifting(2019).question())
+        assertThat(this.askedBeforeSifting(2019).detail())
                 .endsWith("Sifting spends from your provider account balance.")
                 .doesNotContain("tokens");
     }
@@ -182,7 +182,7 @@ class RunSetupPresenterTest {
     void siftingFromACardStillAsksWhereTheProviderSpendsNothing() {
         when(this.pipeline.configuredProviderSpends()).thenReturn(false);
 
-        assertThat(this.askedBeforeSifting(2019).question())
+        assertThat(this.askedBeforeSifting(2019).detail())
                 .contains("6 from this run and 94 sorted earlier", "costs you nothing through Sluice");
     }
 
@@ -360,7 +360,7 @@ class RunSetupPresenterTest {
 
         final Confirmation asked = requireNonNull(this.estimatedCost().warning()).repair().confirm();
 
-        assertThat(asked.question()).contains(archives.toString())
+        assertThat(asked.detail()).contains(archives.toString())
                 .contains("does not come back");
         assertThat(asked.goAheadLeads()).isFalse();
     }
@@ -510,7 +510,7 @@ class RunSetupPresenterTest {
 
         assertThat(this.presenter.view().canStart()).isFalse();
         assertThat(this.presenter.view().scopeRefusal()).isNull();
-        assertThat(this.presenter.view().nothingStaged()).contains("Nothing is sorted yet");
+        assertThat(this.presenter.view().nothingStagedLine()).contains("Nothing is sorted yet");
         assertThat(this.presenter.confirmationNeeded()).isNull();
     }
 
@@ -581,7 +581,7 @@ class RunSetupPresenterTest {
         this.choose(RunMode.SIFT, "2019");
 
         when(this.pipeline.inboxTally()).thenAnswer(_ -> {
-            assertThat(this.presenter.view().nothingStaged()).contains("Nothing is sorted yet");
+            assertThat(this.presenter.view().nothingStagedLine()).contains("Nothing is sorted yet");
             assertThat(this.presenter.view().cost()).isNull();
             return new InboxTally(1, 1L);
         });
@@ -772,7 +772,7 @@ class RunSetupPresenterTest {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         this.presenter.refreshCounts();
 
-        assertThat(this.presenter.view().nothingStaged()).contains("Sort your Inbox first");
+        assertThat(this.presenter.view().nothingStagedLine()).contains("Sort your Inbox first");
     }
 
     @Test
@@ -1064,7 +1064,7 @@ class RunSetupPresenterTest {
         this.presenter.refreshCounts();
 
         assertThat(this.presenter.view().undated()).isNotNull();
-        assertThat(this.presenter.view().nothingStaged()).isNull();
+        assertThat(this.presenter.view().nothingStagedLine()).isNull();
     }
 
     @Test
@@ -1072,7 +1072,7 @@ class RunSetupPresenterTest {
         when(this.pipeline.sortedTally()).thenReturn(new SortedTally(List.of(), 0));
         this.presenter.refreshCounts();
 
-        assertThat(this.presenter.view().nothingStaged())
+        assertThat(this.presenter.view().nothingStagedLine())
                 .isEqualTo("Nothing is sorted yet. Sort your Inbox first, and the years will show up here.");
     }
 
@@ -1107,7 +1107,7 @@ class RunSetupPresenterTest {
     void aTimeframeHoldingAnUnfinishedSiftIsMarkedAndTheOthersAreNot() {
         this.anUnfinishedSiftOf("2019", State.WAITING);
 
-        assertThat(this.presenter.view().years()).filteredOn(YearChoice::unfinishedSift)
+        assertThat(this.presenter.view().years()).filteredOn(YearChoice::hasUnfinishedSift)
                 .extracting(YearChoice::year).containsExactly(2019);
     }
 
@@ -1172,7 +1172,7 @@ class RunSetupPresenterTest {
         assertThat(this.presenter.view().scopeRefusal())
                 .isEqualTo("2019 overlaps June 2019, which is a sift you have not finished. "
                         + "Finish or discard it first.");
-        assertThat(this.presenter.view().scopeRefusalWayThere()).isEqualTo(Location.RUNS);
+        assertThat(this.presenter.view().scopeRefusalLocation()).isEqualTo(Location.RUNS);
         assertThat(this.presenter.view().canStart()).isFalse();
     }
 
@@ -1183,7 +1183,7 @@ class RunSetupPresenterTest {
         this.anUnfinishedSiftOf("2019-06", State.WAITING);
         this.choose(RunMode.SIFT, "2019");
 
-        final String refused = RunRefusals.plainly(new Pipeline.ScopeOverlapsException(
+        final String refused = RunRefusals.refuseSentence(new Pipeline.ScopeOverlapsException(
                 new CullScope.Year(2019, null), List.of(aRun("2019-06", State.WAITING))));
 
         assertThat(refused).isEqualTo(this.presenter.view().scopeRefusal());
@@ -1197,7 +1197,7 @@ class RunSetupPresenterTest {
         assertThat(this.presenter.view().scopeRefusal())
                 .isEqualTo("June 2019 overlaps 2019, which is a sift you have not finished. "
                         + "Finish or discard it first.");
-        assertThat(this.presenter.view().scopeRefusalWayThere()).isEqualTo(Location.RUNS);
+        assertThat(this.presenter.view().scopeRefusalLocation()).isEqualTo(Location.RUNS);
         assertThat(this.presenter.view().canStart()).isFalse();
     }
 
@@ -1233,7 +1233,7 @@ class RunSetupPresenterTest {
         this.anUnfinishedSiftOf("oldest-25", State.WAITING);
         this.choose(RunMode.SIFT, "2019");
 
-        assertThat(this.presenter.view().years()).noneMatch(YearChoice::unfinishedSift);
+        assertThat(this.presenter.view().years()).noneMatch(YearChoice::hasUnfinishedSift);
         assertThat(this.presenter.view().scopeRefusal()).isNull();
         assertThat(this.presenter.view().canStart()).isTrue();
     }
@@ -1243,7 +1243,7 @@ class RunSetupPresenterTest {
         when(this.pipeline.cullRuns()).thenReturn(new CullRuns.Unlistable(Path.of("p")));
         this.presenter.refreshCounts();
 
-        assertThat(this.presenter.view().years()).noneMatch(YearChoice::unfinishedSift);
+        assertThat(this.presenter.view().years()).noneMatch(YearChoice::hasUnfinishedSift);
         assertThat(this.presenter.view().scopeLegend()).isNull();
     }
 

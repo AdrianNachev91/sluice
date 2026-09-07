@@ -54,7 +54,7 @@ public class RunLauncherPresenter {
     private volatile @Nullable JobHandle<?> inFlight;
     // The card for the run that ended, and the only thing that keeps the launcher off the screen
     // once nothing is running. Cleared by the press that dismisses it.
-    private volatile @Nullable RunResultView ended;
+    private volatile @Nullable RunResultView endedCard;
     // What a refused press on that card has to report. Held apart from the card itself, which
     // RunResults builds out of what the run produced and nothing else.
     private volatile @Nullable Message cardMessage;
@@ -69,7 +69,7 @@ public class RunLauncherPresenter {
     private volatile @Nullable String narrowedTo;
     // What a cancelled import leaves behind differs between the two kinds, and the mode alone
     // cannot say which.
-    private volatile @Nullable ImportKind importing;
+    private volatile @Nullable ImportKind importKind;
 
     /**
      * Creates the presenter over the facade it starts work through, and the port a running job
@@ -104,9 +104,9 @@ public class RunLauncherPresenter {
     public RunStage stage() {
         if (this.running) {
             return new RunStage.Running(this.progress.view(this.ranAs, this.scopeOfTheRun,
-                    this.cancelRequested, this.abandonRequested, this.importing));
+                    this.cancelRequested, this.abandonRequested, this.importKind));
         }
-        final RunResultView done = this.ended;
+        final RunResultView done = this.endedCard;
         return done == null ? new RunStage.Setup() : new RunStage.Finished(done, this.cardMessage);
     }
 
@@ -297,7 +297,7 @@ public class RunLauncherPresenter {
      * back describes the folders as they now stand, not as the run found them.
      */
     public void dismissResult() {
-        this.ended = null;
+        this.endedCard = null;
         this.cardMessage = null;
         this.setup.forgetAScopeNothingIsLeftIn();
         this.markShell();
@@ -369,7 +369,7 @@ public class RunLauncherPresenter {
         if (this.running) {
             return DashboardMark.RUNNING;
         }
-        return this.ended == null ? DashboardMark.NONE : DashboardMark.FINISHED;
+        return this.endedCard == null ? DashboardMark.NONE : DashboardMark.FINISHED;
     }
 
     /**
@@ -467,8 +467,8 @@ public class RunLauncherPresenter {
             this.ranAs = ran;
             this.scopeOfTheRun = scope;
             this.narrowedTo = narrowedTo;
-            this.importing = kind;
-            this.ended = null;
+            this.importKind = kind;
+            this.endedCard = null;
             this.cancelRequested = false;
             this.abandonRequested = false;
             this.inFlight = handle;
@@ -480,7 +480,7 @@ public class RunLauncherPresenter {
             // already running, an app on its way out, a folder root gone bad since this screen was
             // drawn. Each carries a sentence written for the person reading it.
             log.info("Refused to start {}", ran, e);
-            this.report(RunRefusals.refusing(e));
+            this.report(RunRefusals.refuseMessage(e));
         }
     }
 
@@ -499,7 +499,7 @@ public class RunLauncherPresenter {
         if (message == null) {
             this.setup.report(null);
             this.cardMessage = null;
-        } else if (this.ended == null) {
+        } else if (this.endedCard == null) {
             this.setup.report(message);
         } else {
             this.cardMessage = message;
@@ -525,9 +525,9 @@ public class RunLauncherPresenter {
             log.warn("{} failed", ran, failure);
         }
         this.inFlight = null;
-        this.ended = failure == null
+        this.endedCard = failure == null
                 ? RunResults.of(ran, outcome, this.narrowedTo)
-                : RunResults.failed(ran, RunRefusals.said(RunRefusals.rootOf(failure)));
+                : RunResults.failedResult(ran, RunRefusals.said(RunRefusals.rootOf(failure)));
         this.running = false;
         this.repaint();
         this.recount();

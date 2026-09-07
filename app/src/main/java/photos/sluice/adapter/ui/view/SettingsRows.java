@@ -64,6 +64,20 @@ final class SettingsRows {
     // cards is never waiting on it.
     private static final Duration SCROLL_TRAVEL = Duration.millis(180);
 
+    // What a banner is given before anyone starts reading it. A reader who has just pressed a
+    // button is looking at the control they pressed rather than at the top of the page.
+    private static final double BANNER_NOTICED_SECONDS = 3;
+
+    // Reading time per word, at 150 words a minute. Slower than the 200 an adult reads prose at,
+    // because a banner is read out of the corner of the eye while the reader is somewhere else.
+    private static final double BANNER_SECONDS_A_WORD = 0.4;
+
+    // Past this, a reader who is not reading it is only waiting for it to go.
+    private static final double BANNER_HELD_AT_MOST_SECONDS = 15;
+
+    // Slow enough to read as the banner leaving rather than as a redraw dropping it.
+    private static final Duration BANNER_FADE = Duration.millis(400);
+
     // Marks a spinner as mid-number. Held on the control itself, since it is the control that knows
     // and every page asking the question has one to hand.
     private static final String TYPED_INTO = "typedInto";
@@ -203,13 +217,13 @@ final class SettingsRows {
      * @param line {@link TextArea} the screen's own report line
      * @param said {@link Message} what to report, or null for nothing
      * @param caution {@link String} the style class a refusal wears on this screen
-     * @param wayThere {@link Hyperlink} the control under that line
+     * @param locationLink {@link Hyperlink} the control under that line
      * @param navigation {@link ScreenNavigation} how this screen opens another
      */
     static void report(final TextArea line, final @Nullable Message said, final String caution,
-                       final Hyperlink wayThere, final ScreenNavigation navigation) {
+                       final Hyperlink locationLink, final ScreenNavigation navigation) {
         report(line, said, caution);
-        offering(wayThere, said == null ? null : said.wayThere(), navigation);
+        pointAt(locationLink, said == null ? null : said.location(), navigation);
     }
 
     /**
@@ -217,30 +231,31 @@ final class SettingsRows {
      * control under it.
      *
      * @param line {@link TextArea} the report line
-     * @param wayThere {@link Hyperlink} the control under it
+     * @param locationLink {@link Hyperlink} the control under it
      * @param said {@link Message} what to report, or null for nothing
      * @param navigation {@link ScreenNavigation} how this screen opens another
      */
-    static void reportRun(final TextArea line, final Hyperlink wayThere,
+    static void reportRun(final TextArea line, final Hyperlink locationLink,
                           final @Nullable Message said, final ScreenNavigation navigation) {
         line.setText(said == null ? "" : said.text());
         SelectableText.dressAs(line, "run-message",
                 said != null && said.refused() ? "settings-violation" : "settings-confirmation");
-        offering(wayThere, said == null ? null : said.wayThere(), navigation);
+        pointAt(locationLink, said == null ? null : said.location(), navigation);
     }
 
     /**
-     * Points a way-there control at a screen, or takes it off the page where there is none.
+     * Points a location link at a screen, or takes it off the page where there is none.
      *
      * @param link {@link Hyperlink} the control to point
-     * @param there {@link Location} the screen it should open, or null to take it off the page
+     * @param location {@link Location} the screen it should open, or null to take it off the page
      * @param navigation {@link ScreenNavigation} how this screen opens another
      */
-    static void offering(final Hyperlink link, final @Nullable Location there, final ScreenNavigation navigation) {
-        link.setText(there == null ? "" : there.label());
+    static void pointAt(final Hyperlink link, final @Nullable Location location,
+                        final ScreenNavigation navigation) {
+        link.setText(location == null ? "" : location.label());
         // Re-pointed on every fill. The same control serves whichever screen the line now names,
         // and an action left over from the last one would open a screen this sentence never named.
-        link.setOnAction(there == null ? null : _ -> navigation.setScreen(there));
+        link.setOnAction(location == null ? null : _ -> navigation.setScreen(location));
     }
 
     /**
@@ -249,7 +264,7 @@ final class SettingsRows {
      * @param id {@link String} the control's id
      * @return {@link Hyperlink} the control, pointing nowhere until it is offered a screen
      */
-    static Hyperlink wayThereLink(final String id) {
+    static Hyperlink locationLink(final String id) {
         final var link = new Hyperlink();
         link.setId(id);
         link.getStyleClass().add("in-app-link");
@@ -269,12 +284,20 @@ final class SettingsRows {
      * nothing to report carries no gap where this would be.
      *
      * @param sentence {@link TextArea} the words
-     * @param wayThere {@link Hyperlink} the control under them
+     * @param locationLink {@link Hyperlink} the control under them
      * @return {@link VBox} the pair
      */
-    static VBox wayThereLines(final TextArea sentence, final Hyperlink wayThere) {
-        final var pair = new VBox(sentence, wayThere);
-        pair.getStyleClass().add("way-there-lines");
+    static HBox locationLines(final TextArea sentence, final Hyperlink locationLink) {
+        final var pair = new HBox(sentence, locationLink);
+        pair.getStyleClass().add("location-lines");
+        // The link reads as the end of the sentence rather than as a control under it. So it sits
+        // level with the last line of the words and follows them across.
+        pair.setAlignment(Pos.BOTTOM_LEFT);
+        // The words take the room they need and no more, which is what puts the link against them
+        // rather than out at the far edge. Capped by the row, so a sentence longer than the card
+        // wraps instead of pushing the link off the end of it.
+        HBox.setHgrow(sentence, Priority.ALWAYS);
+        sentence.setMaxWidth(Region.USE_PREF_SIZE);
         pair.managedProperty().bind(pair.visibleProperty());
         pair.visibleProperty().bind(sentence.textProperty().isNotEmpty());
         return pair;
@@ -817,27 +840,44 @@ final class SettingsRows {
      *
      * <p>A short confirmation fades on its own. One left standing is still there the next time
      * something is refused, where it reads as a claim about that. A report carrying counts, a path
-     * or a consequence stays instead, since four seconds is not long enough to take one in.
+     * or a consequence stays instead, being one a reader needs longer with than any wait allows.
      *
      * @param container {@link VBox} the pane's body, which the banner removes itself from
      * @param id {@link String} the node id a test finds the banner by
      * @param text {@link String} what to say
-     * @param fades boolean whether it leaves on its own after a few seconds
+     * @param fades boolean whether it leaves on its own, after a wait its own length earns it
      * @return {@link HBox} the banner
      */
     static HBox banner(final VBox container, final String id, final String text, final boolean fades) {
+        return banner(container, id, text, fades, null);
+    }
+
+    /**
+     * A banner carrying somewhere to go, with the link reading as the end of its sentence.
+     *
+     * @param container {@link VBox} the page it sits at the top of
+     * @param id {@link String} the banner's own id
+     * @param text {@link String} what it says
+     * @param fades boolean whether it takes itself off the page after a while
+     * @param locationLink {@link Hyperlink} the way onward, or null where it offers none
+     * @return {@link HBox} the banner
+     */
+    static HBox banner(final VBox container, final String id, final String text, final boolean fades,
+                       final @Nullable Hyperlink locationLink) {
         final TextArea said = SelectableText.prose(text);
         said.getStyleClass().add("settings-banner-text");
-        // Hgrow offers a node the spare room; a maximum width is what lets it take any. A label
-        // stops at the width of its own text, leaving the dismiss button against the last word
-        // rather than at the end of the banner.
+        // Hgrow offers a node the spare room; a maximum width is what lets it take any. The
+        // sentence is centred inside its own box, so the box filling the banner is also what
+        // centres the words in it.
         said.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(said, Priority.ALWAYS);
 
         final var dismiss = new Button("×");
         dismiss.getStyleClass().add("settings-banner-dismiss");
 
-        final var banner = new HBox(said, dismiss);
+        final var banner = locationLink == null
+                ? new HBox(said, dismiss)
+                : new HBox(said, locationLink, dismiss);
         banner.setId(id);
         banner.setMaxWidth(Double.MAX_VALUE);
         banner.getStyleClass().add("settings-banner");
@@ -850,15 +890,32 @@ final class SettingsRows {
         dismiss.setOnAction(_ -> remove.run());
 
         if (fades) {
-            final var fade = new FadeTransition(Duration.millis(400), banner);
+            final var fade = new FadeTransition(BANNER_FADE, banner);
             fade.setFromValue(1);
             fade.setToValue(0);
             fade.setOnFinished(_ -> remove.run());
-            final var wait = new PauseTransition(Duration.seconds(4));
+            final var wait = new PauseTransition(heldFor(text));
             wait.setOnFinished(_ -> fade.play());
             wait.play();
         }
         return banner;
+    }
+
+    /**
+     * How long a self-dismissing banner stays up, which is what there is to read plus a moment to
+     * notice it.
+     *
+     * <p>A fixed time suits one length of sentence and no other. The same wait that is generous for
+     * a three-word confirmation is gone before a reader reaches the end of a sentence explaining
+     * what happened to their photo.
+     *
+     * @param text {@link String} what the banner says
+     * @return {@link Duration} how long to hold it before it starts fading
+     */
+    private static Duration heldFor(final String text) {
+        final int words = text.isBlank() ? 0 : text.trim().split("\\s+").length;
+        return Duration.seconds(Math.min(BANNER_HELD_AT_MOST_SECONDS,
+                BANNER_NOTICED_SECONDS + (words * BANNER_SECONDS_A_WORD)));
     }
 
     /**

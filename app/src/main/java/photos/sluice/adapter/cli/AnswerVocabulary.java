@@ -23,6 +23,12 @@ final class AnswerVocabulary {
     private static final String SKIP_OPTION = "SKIP";
     private static final String SET_ASIDE_OPTION = "SET_ASIDE";
 
+    /**
+     * Looks at the file again rather than recording anything. A photo reported missing may have
+     * been put back since the pass ran, and the desktop offers the same answer under Look again.
+     */
+    static final String RECHECK_OPTION = "RECHECK";
+
     private AnswerVocabulary() {
     }
 
@@ -76,7 +82,8 @@ final class AnswerVocabulary {
                     List.of(OverlapResolution.TRUST_DECISION.name(), OverlapResolution.TREAT_AS_UNREVIEWABLE.name()));
             case final Finding.CorruptSidecar f -> new Answerability(f.montage(),
                     List.of(CorruptSidecarResolution.SET_ASIDE.name(), CorruptSidecarResolution.APPLY_ANYWAY.name()));
-            case final Finding.MissingSource f -> new Answerability(text(f.file()), List.of(SKIP_OPTION));
+            case final Finding.MissingSource f -> new Answerability(text(f.file()),
+                    List.of(RECHECK_OPTION, SKIP_OPTION));
             case final Finding.StrayShard f -> new Answerability(f.shardFile(), List.of(SET_ASIDE_OPTION));
             case final Finding.CorruptIndex f -> new Answerability(text(f.indexPath()), List.of(DISCARD_OPTION));
             // Listed rather than a default arm, so a new Finding variant forces a choice here
@@ -105,7 +112,9 @@ final class AnswerVocabulary {
                     new ChoiceAnswer.ResolveOverlap(f.verdict().file(), OverlapResolution.valueOf(option)));
             case final Finding.CorruptSidecar f -> new Answer.Choice(
                     new ChoiceAnswer.ResolveCorruptSidecar(f.montage(), CorruptSidecarResolution.valueOf(option)));
-            case final Finding.MissingSource f -> new Answer.Choice(new ChoiceAnswer.SkipMissingSource(f.file()));
+            case final Finding.MissingSource f -> RECHECK_OPTION.equals(option)
+                    ? new Answer.LookAgain(f.file())
+                    : new Answer.Choice(new ChoiceAnswer.SkipMissingSource(f.file()));
             case final Finding.StrayShard f -> new Answer.Choice(new ChoiceAnswer.SetAsideStrayShard(f));
             case final Finding.CorruptIndex ignored -> new Answer.Discard(prepDir);
             default -> new Answer.NoMatch();
@@ -151,6 +160,14 @@ final class AnswerVocabulary {
          * @param prepDir {@link Path} the run to discard
          */
         record Discard(Path prepDir) implements Answer {
+        }
+
+        /**
+         * The key and option ask for the file to be looked at again, which records nothing.
+         *
+         * @param file {@link Path} the photo reported missing
+         */
+        record LookAgain(Path file) implements Answer {
         }
 
         /**

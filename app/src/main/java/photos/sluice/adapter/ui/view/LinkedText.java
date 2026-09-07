@@ -28,7 +28,7 @@ final class LinkedText {
 
     // The sentence beside it already shows the address, so naming it again would put it on the
     // screen twice.
-    private static final String OPENS_IT = "Open in your browser";
+    private static final String OPEN_IN_BROWSER = "Open in your browser";
 
     private LinkedText() {}
 
@@ -58,11 +58,11 @@ final class LinkedText {
      * @param address {@link String} the address, already stripped of any sentence punctuation
      * @return {@link Hyperlink} the control
      */
-    static Hyperlink opening(final String address) {
+    static Hyperlink browserLink(final String address) {
         final var mark = new SVGPath();
         mark.setContent(LEAVES_THE_APP);
         mark.getStyleClass().add("linked-text-mark");
-        final var link = new Hyperlink(OPENS_IT, mark);
+        final var link = new Hyperlink(OPEN_IN_BROWSER, mark);
         link.setContentDisplay(ContentDisplay.RIGHT);
         link.getStyleClass().add("linked-text-link");
         link.setOnAction(_ -> ExternalBrowser.open(address));

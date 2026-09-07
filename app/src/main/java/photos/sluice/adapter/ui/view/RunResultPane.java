@@ -63,8 +63,8 @@ final class RunResultPane {
         // Given its own ground only where the run failed, which tone() decides. On every other
         // ending this line introduces the counts under it. On a failure it is the whole card, and
         // it names a file the reader has to go and deal with.
-        final Hyperlink detailWayThere = SettingsRows.wayThereLink("run-result-detail-link");
-        final VBox detailBox = SettingsRows.wayThereLines(detail, detailWayThere);
+        final Hyperlink detailLocationLink = SettingsRows.locationLink("run-result-detail-link");
+        final HBox detailBox = SettingsRows.locationLines(detail, detailLocationLink);
         detailBox.setId("run-result-detail-box");
 
         final var counts = new VBox();
@@ -79,7 +79,6 @@ final class RunResultPane {
         warning.setId("run-result-warning");
         warning.getStyleClass().add("warning-box");
         showWhile(warning, warningHeadline);
-
 
         // The question sits in the body with everything else the card has to say, and only its
         // button joins the row of actions. In that row the sentence reads as a label on Done.
@@ -97,7 +96,7 @@ final class RunResultPane {
         final TextArea message = SelectableText.prose();
         message.setId("run-result-message");
         SettingsRows.showWhileItSaysSomething(message);
-        final Hyperlink messageWayThere = SettingsRows.wayThereLink("run-result-message-link");
+        final Hyperlink messageLocationLink = SettingsRows.locationLink("run-result-message-link");
 
         // Its weight is the arm's, set on every fill, so the class goes on there rather than here.
         final var actionButton = new Button();
@@ -130,13 +129,13 @@ final class RunResultPane {
         scroll.prefViewportHeightProperty().bind(body.heightProperty());
 
         final var page = new VBox(heading, scroll,
-                SettingsRows.wayThereLines(message, messageWayThere), doneRow);
+                SettingsRows.locationLines(message, messageLocationLink), doneRow);
         page.setId("run-result");
         page.getStyleClass().add("run-result");
 
         final var controls = new Controls(page, heading, detail, detailBox, counts, warningHeadline,
                 warningDetail, actionQuestion, actionButton, message, done,
-                detailWayThere, messageWayThere, navigation);
+                detailLocationLink, messageLocationLink, navigation);
         return new Mounted(page, showing -> controls.fill(showing, presenter, redraw));
     }
 
@@ -168,7 +167,7 @@ final class RunResultPane {
      * @return boolean true where they chose to go ahead
      */
     private static boolean agreed(final Node opensOver, final RunSetupPresenter.Confirmation asked) {
-        return Dialogs.ask(opensOver, asked.heading(), asked.question(),
+        return Dialogs.ask(opensOver, asked.heading(), asked.detail(),
                 new Dialogs.Choice(asked.goAhead(), Dialogs.Role.GO_AHEAD,
                         Dialogs.Emphasis.of(asked.goAheadLeads())),
                 new Dialogs.Choice(asked.cancel(), Dialogs.Role.CANCEL,
@@ -222,7 +221,7 @@ final class RunResultPane {
      * @param page {@link VBox} the card itself, which carries the tone
      * @param heading {@link TextArea} how the run ended
      * @param detail {@link TextArea} the sentence under it
-     * @param detailBox {@link VBox} what wears that sentence's own ground on a failed card
+     * @param detailBox {@link HBox} what wears that sentence's own ground on a failed card
      * @param counts {@link VBox} the rows saying what the run did
      * @param warningHeadline {@link TextArea} what a reader needs to know about it, in one line
      * @param warningDetail {@link TextArea} what caused it and what Sluice did instead
@@ -230,14 +229,14 @@ final class RunResultPane {
      * @param actionButton {@link Button} the card's own action, beside Done
      * @param message {@link TextArea} what a refused press on this card has to report
      * @param done {@link Button} the button back to the launcher
-     * @param detailWayThere {@link Hyperlink} the control under the detail, where it names a screen
-     * @param messageWayThere {@link Hyperlink} the control under that report, where it names one
+     * @param detailLocationLink {@link Hyperlink} the control under the detail, where it names a screen
+     * @param messageLocationLink {@link Hyperlink} the control under that report, where it names one
      * @param navigation {@link ScreenNavigation} how this card opens another screen
      */
-    private record Controls(VBox page, TextArea heading, TextArea detail, VBox detailBox, VBox counts,
+    private record Controls(VBox page, TextArea heading, TextArea detail, HBox detailBox, VBox counts,
                             TextArea warningHeadline, TextArea warningDetail,
                             TextArea actionQuestion, Button actionButton, TextArea message,
-                            Button done, Hyperlink detailWayThere, Hyperlink messageWayThere,
+                            Button done, Hyperlink detailLocationLink, Hyperlink messageLocationLink,
                             ScreenNavigation navigation) {
 
         /**
@@ -257,7 +256,7 @@ final class RunResultPane {
             this.warningHeadline.setText(view.warning() == null ? "" : view.warning().headline());
             this.warningDetail.setText(view.warning() == null ? "" : view.warning().detail());
             this.drawAction(view.action(), presenter, redraw);
-            SettingsRows.offering(this.detailWayThere, view.wayThere(), this.navigation);
+            SettingsRows.pointAt(this.detailLocationLink, view.location(), this.navigation);
             this.drawMessage(showing.message());
             this.done.setText(view.doneLabel());
         }
@@ -351,7 +350,7 @@ final class RunResultPane {
          * @param said {@link RunLauncherView.Message} what to report, or null for nothing
          */
         private void drawMessage(final RunLauncherView.@Nullable Message said) {
-            SettingsRows.reportRun(this.message, this.messageWayThere, said, this.navigation);
+            SettingsRows.reportRun(this.message, this.messageLocationLink, said, this.navigation);
         }
 
         /**

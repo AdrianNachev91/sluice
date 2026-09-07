@@ -42,8 +42,8 @@ import java.util.stream.Collectors;
  * for a person to see, and rewriting them here would leave two versions to keep in step.
  *
  * <p>The rest compose their own, and each says why in its own place. What decides it is who the
- * exception's message was written for: one written for a log, or for a screen this surface has
- * not got, is replaced rather than carried.
+ * exception's message was written for. One written for a log, or for a screen this surface has not
+ * got, is replaced rather than carried.
  *
  * <p>One arm classifies nothing. A scope argument a verb refused already carries its own refusal,
  * worked out where the rule that refused it lives. It comes through here so that a caller meets it
@@ -79,7 +79,7 @@ public class RefusalClassifier {
      * @return {@link Refusal} the refusal, or null when nothing here recognises it
      */
     public @Nullable Refusal refusalFor(final Throwable failure) {
-        return this.branchFor(unwrapped(failure));
+        return this.recognisedRefusal(unwrapped(failure));
     }
 
     /**
@@ -108,7 +108,7 @@ public class RefusalClassifier {
      * @param failure {@link Throwable} the unwrapped failure
      * @return {@link Refusal} the refusal, or null
      */
-    private @Nullable Refusal branchFor(final Throwable failure) {
+    private @Nullable Refusal recognisedRefusal(final Throwable failure) {
         return switch (failure) {
             case final ScopeRefusedException scope -> scope.refusal();
             case final PathsMisconfiguredException paths -> foldersUnusable(paths);
@@ -138,7 +138,7 @@ public class RefusalClassifier {
                             + "Run 'troubleshoot' on it to see what is wrong.");
             case final ShuttingDownException _ -> Refusal.of(RefusalKind.SHUTTING_DOWN,
                     "Shutdown in progress. This was not started.");
-            case final NoteIsNotTextException note -> noteIsNotText(note);
+            case final NoteIsNotTextException note -> noteNotText(note);
             // These three are one type family, most specific first. All three are an
             // UncheckedIOException, so a broader arm placed above a narrower one swallows it.
             case final MalformedPrepJsonException malformed -> runRecordsUnreadable(malformed);
@@ -191,7 +191,7 @@ public class RefusalClassifier {
      * @param note {@link NoteIsNotTextException} the read that came back as something else
      * @return {@link Refusal} the refusal
      */
-    private static Refusal noteIsNotText(final NoteIsNotTextException note) {
+    private static Refusal noteNotText(final NoteIsNotTextException note) {
         return new Refusal(RefusalKind.NOTE_IS_NOT_TEXT,
                 note.file() + " holds something other than the text Sluice wrote there. Open it to "
                         + "see what is in it, and delete it if it is not worth keeping.",
@@ -298,7 +298,7 @@ public class RefusalClassifier {
         return new Refusal(RefusalKind.FOLDERS_UNUSABLE,
                 "Unusable folder settings. " + paths.violations().stream()
                         .map(PathsMisconfiguredException::clause).collect(Collectors.joining(" ")),
-                Fields.of("violations", paths.violations().stream().map(RefusalClassifier::violation).toList()));
+                Fields.of("violations", paths.violations().stream().map(RefusalClassifier::violationFields).toList()));
     }
 
     /**
@@ -307,7 +307,7 @@ public class RefusalClassifier {
      * @param violation {@link PathViolation} why one root cannot be worked in
      * @return a {@link SequencedMap} of {@link String} to {@link Object} that violation's fields
      */
-    private static SequencedMap<String, Object> violation(final PathViolation violation) {
+    private static SequencedMap<String, Object> violationFields(final PathViolation violation) {
         return switch (violation) {
             case final PathViolation.NotConfigured v -> Fields.of("type", "NotConfigured", "role", v.role(),
                     "property", PathsMisconfiguredException.property(v.role()));
@@ -357,7 +357,7 @@ public class RefusalClassifier {
                         + id.environmentVariable() + ", or store a key in Settings.",
                 Fields.of("provider", id.provider(),
                         "environmentVariable", id.environmentVariable(),
-                        "places", places.stream().map(RefusalClassifier::place).toList()));
+                        "places", places.stream().map(RefusalClassifier::placeFields).toList()));
     }
 
     /**
@@ -366,7 +366,7 @@ public class RefusalClassifier {
      * @param holding {@link SecretHolding} the place and its answer
      * @return a {@link SequencedMap} of {@link String} to {@link Object} that place's fields
      */
-    private static SequencedMap<String, Object> place(final SecretHolding holding) {
+    private static SequencedMap<String, Object> placeFields(final SecretHolding holding) {
         return Fields.of("location", holding.location().getClass().getSimpleName(),
                 "holding", holding.holding());
     }

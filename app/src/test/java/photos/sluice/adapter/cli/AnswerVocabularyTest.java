@@ -41,11 +41,11 @@ class AnswerVocabularyTest {
     }
 
     @Test
-    void aMissingSourceIsKeyedByItsFileAndOffersOnlySkip() {
+    void aMissingSourceIsKeyedByItsFileAndOffersBothAnswers() {
         final Finding missing = new Finding.MissingSource(Path.of("gone.jpg"), Path.of("move-record.log"));
 
         assertThat(AnswerVocabulary.keyFor(missing)).isEqualTo("gone.jpg");
-        assertThat(AnswerVocabulary.optionsFor(missing)).containsExactly("SKIP");
+        assertThat(AnswerVocabulary.optionsFor(missing)).containsExactly("RECHECK", "SKIP");
     }
 
     @Test
@@ -128,6 +128,20 @@ class AnswerVocabularyTest {
         assertThat(answer).asInstanceOf(type(AnswerVocabulary.Answer.Choice.class))
                 .extracting(AnswerVocabulary.Answer.Choice::answer)
                 .isEqualTo(new ChoiceAnswer.SkipMissingSource(missing));
+    }
+
+    // RECHECK records nothing, so it resolves to its own answer rather than to a ChoiceAnswer the
+    // ledger would take. A resolution that came back as a Choice would write the skip away.
+    @Test
+    void resolvingAMissingSourceWithRecheckAsksForAnotherLook() {
+        final Path missing = Path.of("gone.jpg");
+        final Finding source = new Finding.MissingSource(missing, Path.of("move-record.log"));
+        final Path prepDir = Path.of("D:", "Sift", "2019");
+
+        final AnswerVocabulary.Answer answer = AnswerVocabulary.resolve(prepDir, "gone.jpg", "RECHECK",
+                List.of(source));
+
+        assertThat(answer).isEqualTo(new AnswerVocabulary.Answer.LookAgain(missing));
     }
 
     @Test

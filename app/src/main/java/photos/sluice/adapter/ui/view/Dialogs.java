@@ -114,7 +114,7 @@ final class Dialogs {
      * @return boolean true where the press should go ahead
      */
     static boolean agreed(final Node opensOver, final @Nullable Confirmation confirm) {
-        return confirm == null || ask(opensOver, confirm.heading(), confirm.question(),
+        return confirm == null || ask(opensOver, confirm.heading(), confirm.detail(),
                 new Choice(confirm.goAhead(), Role.GO_AHEAD, Emphasis.of(confirm.goAheadLeads())),
                 new Choice(confirm.cancel(), Role.CANCEL, Emphasis.of(!confirm.goAheadLeads())))
                 .isPresent();
@@ -129,16 +129,16 @@ final class Dialogs {
      *
      * @param opensOver {@link Node} something on the window the question opens over
      * @param heading {@link String} what the question is about
-     * @param question {@link String} the question, in the terms the choices answer it
+     * @param detail {@link String} the question, in the terms the choices answer it
      * @param choices the ways out of the dialog: one {@link Role#CANCEL}, at least one
      *     {@link Role#GO_AHEAD}, and exactly one {@link Emphasis#LOUD} among them
      * @return an {@link Optional} of {@link Choice} the one taken, empty where the dialog was
      *     cancelled or dismissed
      */
-    static Optional<Choice> ask(final Node opensOver, final String heading, final String question,
+    static Optional<Choice> ask(final Node opensOver, final String heading, final String detail,
                                 final Choice... choices) {
         final Map<ButtonType, Choice> buttons = buttonsFor(choices);
-        final Alert alert = asked(heading, question, buttons);
+        final Alert alert = asked(heading, detail, buttons);
         openOver(alert, opensOver);
         return alert.showAndWait().map(buttons::get).filter(taken -> taken.role() == Role.GO_AHEAD);
     }

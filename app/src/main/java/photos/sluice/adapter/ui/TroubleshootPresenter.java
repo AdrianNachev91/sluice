@@ -176,7 +176,7 @@ public class TroubleshootPresenter {
         this.prepDir = prepDir;
         this.scope = scope;
         this.report = null;
-        this.report(null);
+        this.announce(null);
         this.detailCopied = false;
         this.checkRefusedReason = null;
         this.reading.set(Reading.NOTHING_YET);
@@ -222,7 +222,7 @@ public class TroubleshootPresenter {
         if (run == null) {
             return;
         }
-        this.report(null);
+        this.announce(null);
         final Finding finding = problem.finding();
         // Found by identity rather than by the index the row was drawn at. Answering one finding
         // resolves it, so every later index shifts. A row the reader can still see would otherwise
@@ -315,7 +315,7 @@ public class TroubleshootPresenter {
             final RunRefusals.Refusal refused = RunRefusals.said(e);
             this.checking = false;
             this.checkRefusedReason = refused.sentence();
-            this.report(RunRefusals.refusing(e));
+            this.announce(RunRefusals.refuseMessage(e));
             this.draw();
         }
     }
@@ -338,8 +338,8 @@ public class TroubleshootPresenter {
         } else {
             log.warn("Could not look through {}", run, failure);
             final Throwable root = RunRefusals.rootOf(failure);
-            this.checkRefusedReason = RunRefusals.plainly(root);
-            this.report(RunRefusals.refusing(root));
+            this.checkRefusedReason = RunRefusals.refuseSentence(root);
+            this.announce(RunRefusals.refuseMessage(root));
         }
         this.report = pass;
         this.checking = false;
@@ -361,10 +361,10 @@ public class TroubleshootPresenter {
             this.pipeline.answer(run, answer, AnswerSource.DESKTOP);
         } catch (final RuntimeException e) {
             log.info("Could not answer {} on {}", chosen, run, e);
-            this.report(RunRefusals.refusing(e));
+            this.announce(RunRefusals.refuseMessage(e));
             return;
         }
-        this.report(new Message(requireNonNull(FindingWords.settled(chosen)), false));
+        this.announce(new Message(requireNonNull(FindingWords.settled(chosen)), false));
         this.reread(run);
     }
 
@@ -373,7 +373,7 @@ public class TroubleshootPresenter {
      *
      * @param message {@link Message} what to report, or null to leave the screen saying nothing
      */
-    private void report(final @Nullable Message message) {
+    private void announce(final @Nullable Message message) {
         this.notice.updateAndGet(last -> new Notice(message, last.number() + 1));
     }
 
@@ -403,7 +403,7 @@ public class TroubleshootPresenter {
         // An answer that ran and left the problem standing is what the reader has to notice. Said
         // in the tone of a confirmation, it reads as the press having worked.
         final boolean stillThere = landed.findings().contains(finding);
-        this.report(new Message(stillThere ? LOOKED_AGAIN_STILL_THERE : LOOKED_AGAIN_GONE,
+        this.announce(new Message(stillThere ? LOOKED_AGAIN_STILL_THERE : LOOKED_AGAIN_GONE,
                 stillThere));
     }
 
@@ -414,7 +414,7 @@ public class TroubleshootPresenter {
      */
     private void overtaken(final Path run) {
         if (this.reread(run) != null) {
-            this.report(new Message(RUN_MOVED, false));
+            this.announce(new Message(RUN_MOVED, false));
         }
     }
 
@@ -440,8 +440,8 @@ public class TroubleshootPresenter {
             log.info("Could not read {}", run, e);
             // Moved off READY with the findings it was read from, or Finish stays on offer over a
             // run this cannot see.
-            this.reading.set(new Reading(List.of(), State.DAMAGED, RunRefusals.plainly(e)));
-            this.report(RunRefusals.refusing(e));
+            this.reading.set(new Reading(List.of(), State.DAMAGED, RunRefusals.refuseSentence(e)));
+            this.announce(RunRefusals.refuseMessage(e));
             return null;
         }
     }
@@ -468,7 +468,7 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void finish(final Path run) {
-        this.report(null);
+        this.announce(null);
         this.launcher.continueRunFromRuns(run, this.scope, false);
         final Runnable dashboard = this.openDashboard;
         if (dashboard != null) {
@@ -486,13 +486,13 @@ public class TroubleshootPresenter {
      * @param run {@link Path} the run
      */
     private void discard(final Path run) {
-        this.report(null);
+        this.announce(null);
         final JobHandle<DiscardReport> handle;
         try {
             handle = this.pipeline.discard(run);
         } catch (final RuntimeException e) {
             log.info("Refused to discard {}", run, e);
-            this.report(RunRefusals.refusing(e));
+            this.announce(RunRefusals.refuseMessage(e));
             this.draw();
             return;
         }
@@ -511,7 +511,7 @@ public class TroubleshootPresenter {
         this.discarding = false;
         if (failure != null) {
             log.warn("Could not discard {}", run, failure);
-            this.report(RunRefusals.refusing(RunRefusals.rootOf(failure)));
+            this.announce(RunRefusals.refuseMessage(RunRefusals.rootOf(failure)));
             this.draw();
             return;
         }
@@ -561,15 +561,15 @@ public class TroubleshootPresenter {
      */
     private static Problem problem(final int i, final Finding finding, final boolean headed,
                                    final boolean busy) {
-        final FindingWords.Told told = FindingWords.of(finding);
+        final FindingWords.Statement statement = FindingWords.of(finding);
         final List<Option> options = new ArrayList<>();
-        for (final FindingWords.Choice choice : told.choices()) {
+        for (final FindingWords.Choice choice : statement.choices()) {
             options.add(new Option("troubleshoot-answer-" + i + "-" + choice.answer(),
                     choice.label(), choice.answer(), choice.leading() && !busy,
                     choice.confirm()));
         }
-        return new Problem("troubleshoot-problem-" + i, finding, headed ? null : told.problem(),
-                told.about(), busy ? List.of() : options);
+        return new Problem("troubleshoot-problem-" + i, finding, headed ? null : statement.problem(),
+                statement.about(), busy ? List.of() : options);
     }
 
     /**
@@ -695,10 +695,10 @@ public class TroubleshootPresenter {
             case RECHECK -> null;
             case SKIP_FILE -> finding instanceof final Finding.MissingSource missing
                     ? new ChoiceAnswer.SkipMissingSource(missing.file()) : null;
-            case TRUST_DECISION -> overlap(finding, OverlapResolution.TRUST_DECISION);
-            case TREAT_AS_UNREVIEWABLE -> overlap(finding, OverlapResolution.TREAT_AS_UNREVIEWABLE);
-            case SET_ASIDE_SHEET -> sidecar(finding, CorruptSidecarResolution.SET_ASIDE);
-            case APPLY_SHEET_ANYWAY -> sidecar(finding, CorruptSidecarResolution.APPLY_ANYWAY);
+            case TRUST_DECISION -> overlapAnswer(finding, OverlapResolution.TRUST_DECISION);
+            case TREAT_AS_UNREVIEWABLE -> overlapAnswer(finding, OverlapResolution.TREAT_AS_UNREVIEWABLE);
+            case SET_ASIDE_SHEET -> sidecarAnswer(finding, CorruptSidecarResolution.SET_ASIDE);
+            case APPLY_SHEET_ANYWAY -> sidecarAnswer(finding, CorruptSidecarResolution.APPLY_ANYWAY);
             case SET_ASIDE_STRAY_ANSWERS -> finding instanceof final Finding.StrayShard stray
                     ? new ChoiceAnswer.SetAsideStrayShard(stray) : null;
         };
@@ -711,8 +711,8 @@ public class TroubleshootPresenter {
      * @param resolution {@link OverlapResolution} which way the reader settled it
      * @return {@link ChoiceAnswer} what to record, or null where the finding is not an overlap
      */
-    private static @Nullable ChoiceAnswer overlap(final Finding finding,
-                                                  final OverlapResolution resolution) {
+    private static @Nullable ChoiceAnswer overlapAnswer(final Finding finding,
+                                                        final OverlapResolution resolution) {
         return finding instanceof Finding.VerdictUnreviewableOverlap(final Verdict both)
                 ? new ChoiceAnswer.ResolveOverlap(both.file(), resolution) : null;
     }
@@ -724,8 +724,8 @@ public class TroubleshootPresenter {
      * @param resolution {@link CorruptSidecarResolution} which way the reader settled it
      * @return {@link ChoiceAnswer} what to record, or null where the finding is not one
      */
-    private static @Nullable ChoiceAnswer sidecar(final Finding finding,
-                                                  final CorruptSidecarResolution resolution) {
+    private static @Nullable ChoiceAnswer sidecarAnswer(final Finding finding,
+                                                        final CorruptSidecarResolution resolution) {
         return finding instanceof Finding.CorruptSidecar(final String montage)
                 ? new ChoiceAnswer.ResolveCorruptSidecar(montage, resolution) : null;
     }

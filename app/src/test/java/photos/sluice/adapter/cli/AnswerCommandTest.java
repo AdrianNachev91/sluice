@@ -13,13 +13,19 @@ import photos.sluice.domain.cull.DiscardReport;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDirHealth;
 
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -119,6 +125,35 @@ class AnswerCommandTest {
         verify(this.pipeline).answer(PREP_DIR,
                 new ChoiceAnswer.ResolveCorruptSidecar("montage-002", CorruptSidecarResolution.APPLY_ANYWAY),
                 AnswerSource.CLI);
+    }
+
+    // Both RECHECK outcomes, and the second is the one a unit test alone would have missed. A
+    // restored photo closes its own finding, so nothing on the run answers to the key any more.
+    // Resolving against open findings alone therefore reports the good news as a failure.
+    @Test
+    void lookingAgainAtAPhotoStillMissingSaysSo() {
+        final Path gone = Path.of("D:", "Sorted", "2019", "gone.jpg");
+        this.answering(new Finding.MissingSource(gone, Path.of("move-record.log")));
+
+        final CliHarness.Result result = this.run("answer", "2019", gone.toString(), "RECHECK");
+
+        assertThat(result.exitCode()).isEqualTo(CommandStatus.DONE.exitCode());
+        assertThat(result.out().lines()).containsExactly("It is still missing.");
+        verify(this.pipeline, never()).answer(any(), any(), any());
+    }
+
+    @Test
+    void lookingAgainAtARestoredPhotoSaysTheProblemIsGone(@TempDir final Path sorted) throws IOException {
+        final Path restored = sorted.resolve("back.jpg");
+        Files.writeString(restored, "the photo, put back");
+        this.answering(new Finding.MissingSource(sorted.resolve("someone-else.jpg"),
+                Path.of("move-record.log")));
+
+        final CliHarness.Result result = this.run("answer", "2019", restored.toString(), "RECHECK");
+
+        assertThat(result.exitCode()).isEqualTo(CommandStatus.DONE.exitCode());
+        assertThat(result.out().lines()).containsExactly("That is no longer a problem.");
+        verify(this.pipeline, never()).answer(any(), any(), any());
     }
 
     private void answering(final Finding finding) {

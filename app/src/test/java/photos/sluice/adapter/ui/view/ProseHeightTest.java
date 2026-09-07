@@ -57,6 +57,32 @@ class ProseHeightTest {
         }
     }
 
+    // A block's preferred WIDTH decides the line count a parent gets back. A parent laying out a
+    // row asks how tall its child would be at that child's preferred width. A text area
+    // answers a column count, the same number whatever it holds, and a sentence wider than that
+    // comes back as two lines. The row is then built at twice the height the sentence draws in.
+    @Test
+    void aBlockPrefersTheWidthOfItsOwnWordsRatherThanAColumnCount() throws Exception {
+        final String oneLine = "Keep your library and your inbox apart. Neither may sit inside the "
+                + "other, and they may not be the same folder.";
+
+        final double[] measured = onFxThread(() -> {
+            final TextArea area = SelectableText.prose(oneLine);
+            final var scene = new Scene(new StackPane(area), 1200, 300);
+            Stylesheet.applyTo(scene);
+            scene.getRoot().applyCss();
+            scene.getRoot().layout();
+            final Text drawn = (Text) area.lookup(".text");
+            return new double[] {
+                area.prefHeight(area.prefWidth(-1)),
+                drawn == null ? -1 : drawn.getLayoutBounds().getHeight(),
+            };
+        });
+
+        assertThat(measured[1]).isPositive();
+        assertThat(measured[0]).isEqualTo(measured[1]);
+    }
+
     private static <T> T onFxThread(final Callable<T> work) throws Exception {
         return WaitForAsyncUtils.asyncFx(work).get(10, TimeUnit.SECONDS);
     }

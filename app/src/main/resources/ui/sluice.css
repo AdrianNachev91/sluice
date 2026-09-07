@@ -345,12 +345,24 @@
     -fx-text-fill: -sluice-accent;
 }
 
-/* A sentence and the control that leads where it points. Tighter than anything separating this pair
-   from what follows it, so the two read as one thought. The size is set here rather than on
-   .in-app-link, which the mode row also uses at button size. */
-.way-there-lines {
-    -fx-spacing: 3px;
+/* A sentence and the control that leads where it points, side by side so the link reads as the end
+   of the sentence. The spacing is one word's gap, since anything wider reads as a separate control.
+   The size is set here rather than on .in-app-link, which the mode row also uses at button size. */
+.location-lines {
+    -fx-spacing: 4px;
     -fx-font-size: 12px;
+}
+
+/* A hyperlink carries a pixel of border all round for its focus ring, and the disguised text beside
+   it carries none. Bottom-aligned in the row, that border puts the link's words one pixel lower
+   than the sentence's. Measured: both boxes 17px tall, baselines at 13 and 12.
+
+   Shifted at draw time rather than padded, because padding adds to that border instead of
+   replacing it: a 1px top padding of zero still leaves the border's own pixel, and the box grows
+   by whatever is added at the bottom. A translation moves the words and leaves the box alone. */
+.location-lines > .in-app-link,
+.location-lines > .linked-text-link {
+    -fx-translate-y: -1px;
 }
 
 .in-app-link:hover {
@@ -1913,7 +1925,6 @@
 .runs-card-lines {
     -fx-spacing: 6px;
 }
-
 
 .runs-card-detail {
     -fx-text-fill: -sluice-text;

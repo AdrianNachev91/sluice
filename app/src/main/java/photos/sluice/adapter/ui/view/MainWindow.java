@@ -112,8 +112,8 @@ final class MainWindow {
         // showing Settings as current. Arriving there with Dashboard still marked would leave the
         // two disagreeing about which screen this is.
         final Runnable openSettings = settings::fire;
-        final ScreenNavigation navigation = there -> {
-            switch (there) {
+        final ScreenNavigation navigation = location -> {
+            switch (location) {
                 case SETTINGS -> openSettings.run();
                 case RUNS -> runs.fire();
             }
@@ -148,13 +148,13 @@ final class MainWindow {
         final Runnable openPhotoCategories = () -> show(content, PHOTO_CATEGORIES, leaving, () -> {
             final PhotoCategoriesPane.Mounted mounted =
                     PhotoCategoriesPane.pane(photoCategoriesPresenter, openSettings);
-            leaving.loseWork().set(mounted.hasUnsavedEdits());
+            leaving.losesWork().set(mounted.hasUnsavedEdits());
             return filling(mounted.node());
         });
         settings.setOnAction(_ -> show(content, SETTINGS, leaving, () -> {
             final SettingsPane.Mounted mounted =
                     SettingsPane.pane(settingsPresenter, visionProviderPresenter, openPhotoCategories);
-            leaving.loseWork().set(mounted.hasUnsavedEdits());
+            leaving.losesWork().set(mounted.hasUnsavedEdits());
             return filling(mounted.node());
         }));
         review.setOnAction(_ -> {
@@ -281,13 +281,13 @@ final class MainWindow {
                 && !current.getStyleClass().contains(FAILED)) {
             return true;
         }
-        if (leaving.loseWork().get().getAsBoolean()
+        if (leaving.losesWork().get().getAsBoolean()
                 && !Dialogs.agreed(content, LeavingUnsaved.question())) {
             return false;
         }
         // Cleared before the draw and set again by it, so the guard belongs to the screen going up
         // rather than to the one coming down.
-        leaving.loseWork().set(() -> false);
+        leaving.losesWork().set(() -> false);
         final Node next = buildOrSayItFailed(screen, draw);
         next.setId(screen);
         content.getChildren().setAll(next);
@@ -300,9 +300,9 @@ final class MainWindow {
      * <p>Cleared as each screen is drawn, and set again by those that can lose work. A screen added
      * later therefore inherits no guard it never asked for.
      *
-     * @param loseWork an {@link AtomicReference} to whether the screen up now holds unsaved work
+     * @param losesWork an {@link AtomicReference} to whether the screen up now holds unsaved work
      */
-    private record Leaving(AtomicReference<BooleanSupplier> loseWork) {
+    private record Leaving(AtomicReference<BooleanSupplier> losesWork) {
     }
 
     /**
@@ -328,9 +328,9 @@ final class MainWindow {
             // working out which press this answers.
             final var panel = headingPane(screen);
             panel.getStyleClass().add(FAILED);
-            final TextArea message = SelectableText.prose(ScreenFailure.wouldNotOpen());
+            final TextArea message = SelectableText.prose(ScreenFailure.wouldNotOpenSentence());
             panel.getChildren().addAll(message, CopyableTrace.fold("screen-failure",
-                    ScreenFailure.showTheDetails(), ScreenFailure.copy(), ScreenFailure.copied(),
+                    ScreenFailure.showDetailsLabel(), ScreenFailure.copyLabel(), ScreenFailure.copiedLabel(),
                     ScreenFailure.trace(e)));
             return panel;
         }

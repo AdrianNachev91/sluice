@@ -207,9 +207,9 @@ final class VisionProviderCard {
      * @param card {@link VBox} the block to fill, whatever it held before
      * @param visionProvider {@link VisionProviderPresenter} reads and writes that credential
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
-     * @param providerFields {@link VBox} the model and endpoint rows, whose Test connection button a
-     *         credential change leaves enabled or not, and whose model picker a save or remove can
-     *         change the very choices in
+     * @param providerFields {@link VBox} the model and endpoint rows. A credential change leaves
+     *         their Test connection button enabled or not, and a save or remove can change the very
+     *         choices in their model picker
      * @param said what just happened to the key, or null when nothing has
      * @param keyLimit int the most the entry field may hold
      */
@@ -289,7 +289,7 @@ final class VisionProviderCard {
             final VisionProviderPresenter.SecretRemoval removal = visionProvider.secretRemoval(providerId);
             // Backing out leads, because this asks about the one thing on the card the app cannot
             // put back.
-            if (Dialogs.ask(removeButton, removal.heading(), removal.question(),
+            if (Dialogs.ask(removeButton, removal.heading(), removal.detail(),
                     new Dialogs.Choice("Remove key", Dialogs.Role.GO_AHEAD, Dialogs.Emphasis.QUIET),
                     new Dialogs.Choice("Keep it", Dialogs.Role.CANCEL, Dialogs.Emphasis.LOUD)).isEmpty()) {
                 return;
@@ -357,9 +357,9 @@ final class VisionProviderCard {
             if (address == null) {
                 children.add(whereToGetOne);
             } else {
-                final Hyperlink opensIt = LinkedText.opening(address);
-                opensIt.setId("settings-api-key-setup-guide-link");
-                children.add(SettingsRows.wayThereLines(whereToGetOne, opensIt));
+                final Hyperlink browserLink = LinkedText.browserLink(address);
+                browserLink.setId("settings-api-key-setup-guide-link");
+                children.add(SettingsRows.locationLines(whereToGetOne, browserLink));
             }
         }
         children.addAll(List.of(reassurance, billing));
@@ -614,8 +614,11 @@ final class VisionProviderCard {
                 // a custom cell factory to draw the empty case. Confirmed by rendering: the cell's
                 // own text for a null item never appeared on screen.
                 model.setPromptText("Nothing to choose from");
-                final TextArea violation = SelectableText.prose(unavailable.violation());
-                violation.getStyleClass().add("settings-violation");
+                final TextArea reason = SelectableText.prose(unavailable.reason());
+                reason.getStyleClass().add("settings-violation");
+                // Why there is nothing to choose from comes before what is saved. The saved model
+                // only matters once the reader knows the list could not be read.
+                modelInfo.getChildren().add(reason);
                 if (unavailable.savedModel() != null) {
                     final TextArea saved = SettingsRows.helpLine("You have '"
                             + unavailable.savedModel() + "' saved. Nothing has confirmed your "
@@ -641,7 +644,7 @@ final class VisionProviderCard {
                     retry.setText("Connecting...");
                     refreshModelPicker(model, modelInfo, visionProvider, providerId, providerBox);
                 });
-                modelInfo.getChildren().addAll(violation, retry);
+                modelInfo.getChildren().add(retry);
             }
         }
         if (result.unrecognisedNote() != null) {

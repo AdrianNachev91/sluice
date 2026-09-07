@@ -269,7 +269,7 @@ class VisionProviderPresenterTest {
 
         assertThat(visionProvider.modelPickerFor("anthropic").picker()).isInstanceOfSatisfying(
                 SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("could not reach").contains("timed out"));
+                unavailable -> assertThat(unavailable.reason()).contains("could not reach").contains("timed out"));
         answering.countDown();
     }
 
@@ -299,7 +299,7 @@ class VisionProviderPresenterTest {
 
         assertThat(visionProvider.modelPickerFor("anthropic").picker()).isInstanceOfSatisfying(
                 SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("the provider fell over"));
+                unavailable -> assertThat(unavailable.reason()).contains("the provider fell over"));
     }
 
     @Test
@@ -381,7 +381,7 @@ class VisionProviderPresenterTest {
         final SettingsView.ModelPicker picker = visionProvider.modelPickerFor("anthropic").picker();
 
         assertThat(picker).isInstanceOfSatisfying(SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).isEqualTo("This provider rejected the key."));
+                unavailable -> assertThat(unavailable.reason()).isEqualTo("This provider rejected the key."));
     }
 
     @Test
@@ -393,7 +393,7 @@ class VisionProviderPresenterTest {
 
         assertThat(visionProvider.modelPickerFor("anthropic").picker()).isInstanceOfSatisfying(
                 SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation())
+                unavailable -> assertThat(unavailable.reason())
                         .isEqualTo("This key works, but this account cannot run any model Sluice needs."));
     }
 
@@ -406,7 +406,7 @@ class VisionProviderPresenterTest {
 
         assertThat(visionProvider.modelPickerFor("anthropic").picker()).isInstanceOfSatisfying(
                 SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("credit balance is too low"));
+                unavailable -> assertThat(unavailable.reason()).contains("credit balance is too low"));
     }
 
     @Test
@@ -418,7 +418,7 @@ class VisionProviderPresenterTest {
 
         assertThat(visionProvider.modelPickerFor("anthropic").picker()).isInstanceOfSatisfying(
                 SettingsView.ModelPicker.Unavailable.class,
-                unavailable -> assertThat(unavailable.violation()).contains("connect timed out"));
+                unavailable -> assertThat(unavailable.reason()).contains("connect timed out"));
     }
 
     // The saved settings name a model MODELS does not offer; a-model is the only one it has.
@@ -484,8 +484,8 @@ class VisionProviderPresenterTest {
 
         final VisionProviderPresenter.SecretRemoval removal = visionProvider.secretRemoval("anthropic");
 
-        assertThat(removal.question()).contains("environment variable");
-        assertThat(removal.question()).doesNotContain("stop working");
+        assertThat(removal.detail()).contains("environment variable");
+        assertThat(removal.detail()).doesNotContain("stop working");
         assertThat(removal.removed()).contains("using the key in your environment");
     }
 
@@ -495,7 +495,7 @@ class VisionProviderPresenterTest {
 
         final VisionProviderPresenter.SecretRemoval removal = visionProvider.secretRemoval("anthropic");
 
-        assertThat(removal.question()).contains("stop working");
+        assertThat(removal.detail()).contains("stop working");
         assertThat(removal.removed()).contains("cannot run until you add a new key");
     }
 

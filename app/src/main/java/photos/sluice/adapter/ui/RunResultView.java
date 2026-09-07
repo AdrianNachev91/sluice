@@ -23,13 +23,13 @@ import java.util.List;
  * @param action {@link CardAction} the one thing this card offers beyond Done, or null where it
  *     offers nothing
  * @param doneLabel {@link String} what the button back to the launcher says
- * @param wayThere {@link Location} the screen the detail can be acted on from, or null where it
+ * @param location {@link Location} the screen the detail can be acted on from, or null where it
  *     names nowhere to go
  */
 public record RunResultView(String heading, Tone tone, @Nullable String detail, List<Count> counts,
                             @Nullable Warning warning,
                             @Nullable CardAction action, String doneLabel,
-                            @Nullable Location wayThere) {
+                            @Nullable Location location) {
 
     /**
      * A card whose detail names nowhere to go.
@@ -58,7 +58,7 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
      * @param warning {@link Warning} something worth attention that stopped nothing, or null
      * @param action {@link CardAction} the one thing offered beyond Done, or null
      * @param doneLabel {@link String} what the button back to the launcher says
-     * @param wayThere {@link Location} the screen the detail can be acted on from, or null
+     * @param location {@link Location} the screen the detail can be acted on from, or null
      */
     public RunResultView {
         counts = List.copyOf(counts);
@@ -144,11 +144,11 @@ public record RunResultView(String heading, Tone tone, @Nullable String detail, 
          * pressed rather than something for the screen to render. What the screen shows is
          * {@code label} and the question above it.
          *
-         * @param question {@link String} what the reader is being asked
+         * @param note {@link String} what the reader is being asked
          * @param label {@link String} what the button says
          * @param prepDir {@link Path} which stopped run it continues
          */
-        record ContinueRun(String question, String label, Path prepDir) implements CardAction {
+        record ContinueRun(String note, String label, Path prepDir) implements CardAction {
         }
 
         /**

@@ -39,10 +39,10 @@ final class RunRefusals {
      * What to tell the reader, and where to send them if anywhere.
      *
      * @param sentence {@link String} the words to show
-     * @param wayThere {@link Location} the screen that can be done something about, or null where
+     * @param location {@link Location} the screen that can be done something about, or null where
      *         the sentence names nowhere to go
      */
-    record Refusal(String sentence, @Nullable Location wayThere) {
+    record Refusal(String sentence, @Nullable Location location) {
     }
 
     /**
@@ -51,7 +51,7 @@ final class RunRefusals {
      * @param failure {@link Throwable} what went wrong
      * @return {@link String} the sentence to show
      */
-    static String plainly(final Throwable failure) {
+    static String refuseSentence(final Throwable failure) {
         return said(failure).sentence();
     }
 
@@ -59,11 +59,11 @@ final class RunRefusals {
      * A failure as a line a screen reports, dressed as a refusal.
      *
      * @param failure {@link Throwable} what went wrong
-     * @return {@link Message} the line, carrying any way there the sentence earned
+     * @return {@link Message} the line, carrying any location the sentence earned
      */
-    static Message refusing(final Throwable failure) {
+    static Message refuseMessage(final Throwable failure) {
         final Refusal refusal = said(failure);
-        return new Message(refusal.sentence(), true, refusal.wayThere());
+        return new Message(refusal.sentence(), true, refusal.location());
     }
 
     /**
@@ -78,15 +78,15 @@ final class RunRefusals {
      * never names, or left with no way to the screen that would fix it.
      *
      * @param failure {@link Throwable} what went wrong
-     * @return {@link Refusal} the sentence, and the way there where there is one
+     * @return {@link Refusal} the sentence, and the location where there is one
      */
     static Refusal said(final Throwable failure) {
         return switch (failure) {
             // These three are refusals this app writes for the person meeting them, and each says
             // what to do about itself.
-            case final JobInProgressException refused -> nowhereToGo(messageOf(refused));
-            case final ShuttingDownException closing -> nowhereToGo(messageOf(closing));
-            case final ImportSourceException unusable -> nowhereToGo(messageOf(unusable));
+            case final JobInProgressException refused -> refusalWithoutLocation(messageOf(refused));
+            case final ShuttingDownException closing -> refusalWithoutLocation(messageOf(closing));
+            case final ImportSourceException unusable -> refusalWithoutLocation(messageOf(unusable));
             // This one carries a message built for a log, down to the configuration key that is
             // wrong. Which folder is at fault is the part a reader needs, in the words the rest of
             // this app calls that folder by.
@@ -103,42 +103,42 @@ final class RunRefusals {
                     + "have configured is affected. Saving your key again often fixes it on its own. "
                     + "If it keeps happening, report this as a bug in Sluice, quoting this: "
                     + broken.getMessage(), Location.SETTINGS);
-            case final Pipeline.ScopeOccupiedException occupied -> occupiedBy(occupied);
-            case final Pipeline.ScopeOverlapsException overlaps -> overlapping(overlaps);
+            case final Pipeline.ScopeOccupiedException occupied -> scopeOccupiedRefusal(occupied);
+            case final Pipeline.ScopeOverlapsException overlaps -> scopeOverlapsRefusal(overlaps);
             // Written for the person meeting it, like the three above. A run finishing between a
             // screen being drawn and its button being pressed is the ordinary way here.
-            case final Pipeline.RunAlreadyFinishedException finished -> nowhereToGo(messageOf(finished));
-            case final Pipeline.NothingToRedoException nothing -> nowhereToGo(messageOf(nothing));
-            case final Pipeline.ScopeUnreadableException unreadable -> nowhereToGo("Sluice doesn't "
+            case final Pipeline.RunAlreadyFinishedException finished -> refusalWithoutLocation(messageOf(finished));
+            case final Pipeline.NothingToRedoException nothing -> refusalWithoutLocation(messageOf(nothing));
+            case final Pipeline.ScopeUnreadableException unreadable -> refusalWithoutLocation("Sluice doesn't "
                     + "know whether a sift is already running for that timeframe, because "
                     + unreadable.prepDir() + " cannot be read. Most likely the folder is held by "
                     + "another process or not there anymore.");
             // Discarding is one of the calls that raise this, so offering a discard here would name
             // the press that just refused.
-            case final Pipeline.RunOutsideWorkingRootException outside -> nowhereToGo("This sift is "
+            case final Pipeline.RunOutsideWorkingRootException outside -> refusalWithoutLocation("This sift is "
                     + "at " + outside.prepDir() + ", which is not inside the folders Sluice is set "
                     + "up with now. Point your working folder back at the one holding it to work on "
                     + "it again.");
-            case final MalformedPrepJsonException _ -> nowhereToGo("Sluice could not read that sift's "
+            case final MalformedPrepJsonException _ -> refusalWithoutLocation("Sluice could not read that sift's "
                     + "own records, because what is in them is damaged.");
             // Says nothing about which answer is wrong. What this carries is the engine's own list,
             // written for a report rather than for a reader.
-            case final ApplyException _ -> nowhereToGo("Sluice could not work on this sift, because "
+            case final ApplyException _ -> refusalWithoutLocation("Sluice could not work on this sift, because "
                     + "the answers in it do not hold together. Your photos are still in Sorted.");
-            case final NoteIsNotTextException note -> nowhereToGo(noteIsNotText(note.file()));
+            case final NoteIsNotTextException note -> refusalWithoutLocation(noteNotTextSentence(note.file()));
             // Above the two arms below it, since a file whose bytes are not text was reached, and
             // neither of the reasons they offer is true of it.
-            case final CharacterCodingException damaged -> nowhereToGo(fileIsNotText(damaged.toString()));
-            case final UncheckedIOException failed -> nowhereToGo(fileOutOfReach(failed.getMessage()));
+            case final CharacterCodingException damaged -> refusalWithoutLocation(fileNotTextSentence(damaged.toString()));
+            case final UncheckedIOException failed -> refusalWithoutLocation(fileOutOfReach(failed.getMessage()));
             // The same fault one level down. A job's failure arrives here through rootOf, which
             // answers with a throwable's cause, and an UncheckedIOException always has one. Without
             // this arm every filesystem failure a job reports falls to the default below and
             // reaches the reader as a Java class name.
-            case final IOException failed -> nowhereToGo(fileOutOfReach(failed.toString()));
+            case final IOException failed -> refusalWithoutLocation(fileOutOfReach(failed.toString()));
             // Nothing here was written for a reader, so the words are the app's own and the
             // technical text rides along verbatim. Quoting it is what makes the bug report worth
             // filing, and the dashboard is where the user can copy it from.
-            default -> nowhereToGo("Sluice could not do that, and has no plain words for why. "
+            default -> refusalWithoutLocation("Sluice could not do that, and has no plain words for why. "
                     + "Report this as a bug in Sluice, quoting this: " + failure);
         };
     }
@@ -161,7 +161,7 @@ final class RunRefusals {
      * @param chosen {@link String} the timeframe the reader picked
      * @return {@link Refusal} the sentence, and the runs screen to deal with them from
      */
-    static Refusal coveringUnfinished(final CullScope.Year chosen, final List<CullScope.Year> across) {
+    static Refusal overlapUnfinishedRefusal(final CullScope.Year chosen, final List<CullScope.Year> across) {
         return new Refusal(RunWords.spelledScope(chosen) + " overlaps "
                 + RunWords.listed(across.stream().map(RunWords::spelledScope).toList())
                 + ", which " + (across.size() == 1 ? "is a sift" : "are sifts")
@@ -173,9 +173,9 @@ final class RunRefusals {
      * A sentence that names no screen anything can be done from.
      *
      * @param sentence {@link String} the words to show
-     * @return {@link Refusal} those words, with no way there
+     * @return {@link Refusal} those words, naming no location
      */
-    private static Refusal nowhereToGo(final String sentence) {
+    private static Refusal refusalWithoutLocation(final String sentence) {
         return new Refusal(sentence, null);
     }
 
@@ -199,7 +199,7 @@ final class RunRefusals {
      * @param quoting {@link String} the technical text worth putting in a bug report
      * @return {@link String} the sentence to show
      */
-    private static String fileIsNotText(final String quoting) {
+    private static String fileNotTextSentence(final String quoting) {
         return "A file Sluice had to read does not hold text any more. Something else may have "
                 + "written over it. If it keeps happening, report it, quoting this: " + quoting;
     }
@@ -210,7 +210,7 @@ final class RunRefusals {
      * @param note {@link Path} the note whose bytes are not text
      * @return {@link String} the sentence to show
      */
-    private static String noteIsNotText(final Path note) {
+    private static String noteNotTextSentence(final Path note) {
         return "Sluice stopped, because " + note + " holds something other than the text it wrote "
                 + "there. Open it to see what is in it, and delete it if it is not worth keeping.";
     }
@@ -223,13 +223,13 @@ final class RunRefusals {
      *
      * <p>Names the runs screen, where that earlier sift can be carried on or thrown away. The
      * launcher offers the same thing on its own button wherever it can see the run coming. A reader
-     * meeting this sentence has usually arrived another way: a press on a finished sort's card, or
+     * meeting this sentence has usually arrived another way. A press on a finished sort's card, or
      * a run that appeared between the screen being drawn and the button being pressed.
      *
      * @param occupied {@link Pipeline.ScopeOccupiedException} the refusal, carrying the run
      * @return {@link Refusal} the sentence, and the runs screen to deal with it from
      */
-    private static Refusal occupiedBy(final Pipeline.ScopeOccupiedException occupied) {
+    private static Refusal scopeOccupiedRefusal(final Pipeline.ScopeOccupiedException occupied) {
         return new Refusal("You already have a sift of " + occupied.occupant().scope()
                 + " that has not finished. Another cannot be started for the same timeframe while "
                 + "that one is there. Continue it or discard it first.", Location.RUNS);
@@ -243,17 +243,17 @@ final class RunRefusals {
      * back to its own message rather than saying a timeframe overlaps an empty list.
      *
      * @param overlaps {@link Pipeline.ScopeOverlapsException} the refusal
-     * @return {@link Refusal} the sentence, and the way there where the runs could be named
+     * @return {@link Refusal} the sentence, and the location where the runs could be named
      */
-    private static Refusal overlapping(final Pipeline.ScopeOverlapsException overlaps) {
+    private static Refusal scopeOverlapsRefusal(final Pipeline.ScopeOverlapsException overlaps) {
         final List<CullScope.Year> across = overlaps.across().stream()
                 .map(run -> CullScope.yearScopeOf(run.scope()))
                 .filter(Objects::nonNull)
                 .toList();
         // Nothing to send the reader to where none of them could be read back.
         return across.isEmpty()
-                ? nowhereToGo(messageOf(overlaps))
-                : coveringUnfinished(overlaps.chosen(), across);
+                ? refusalWithoutLocation(messageOf(overlaps))
+                : overlapUnfinishedRefusal(overlaps.chosen(), across);
     }
 
     /**

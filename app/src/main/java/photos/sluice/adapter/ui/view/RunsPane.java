@@ -68,7 +68,7 @@ final class RunsPane {
         unreadableBox.visibleProperty().bind(unreadable.visibleProperty());
         final TextArea nothingYet = SettingsRows.emptyHelpLine("runs-nothing-yet");
         final TextArea message = SettingsRows.emptyHelpLine("runs-message");
-        final Hyperlink messageWayThere = SettingsRows.wayThereLink("runs-message-link");
+        final Hyperlink locationLink = SettingsRows.locationLink("runs-message-link");
 
         final var cards = new VBox();
         cards.setId("runs-cards");
@@ -94,7 +94,7 @@ final class RunsPane {
         completed.setId("runs-completed");
         completed.getStyleClass().add("runs-completed");
 
-        final var body = new VBox(SettingsRows.wayThereLines(message, messageWayThere),
+        final var body = new VBox(SettingsRows.locationLines(message, locationLink),
                 unreadableBox, nothingYet, cards, completed);
         body.getStyleClass().add("runs-body");
         final ScrollPane scroll = SettingsRows.scrolling(body);
@@ -105,7 +105,7 @@ final class RunsPane {
         page.setId("runs");
         page.getStyleClass().add("runs");
 
-        final var controls = new Controls(heading, clear, unreadable, nothingYet, message, messageWayThere, navigation, cards,
+        final var controls = new Controls(heading, clear, unreadable, nothingYet, message, locationLink, navigation, cards,
                 completedToggle, completedCards, completed,
                 new SectionFold(completedCards, completed, scroll));
         final Runnable redraw = new Runnable() {
@@ -176,7 +176,7 @@ final class RunsPane {
      * @param fold {@link SectionFold} opens and shuts that section
      */
     private record Controls(TextField heading, Button clear, TextArea unreadable, TextArea nothingYet,
-                            TextArea message, Hyperlink messageWayThere, ScreenNavigation navigation,
+                            TextArea message, Hyperlink locationLink, ScreenNavigation navigation,
                             VBox cards, Button completedToggle,
                             VBox completedCards, VBox completed, SectionFold fold) {
 
@@ -215,15 +215,15 @@ final class RunsPane {
             this.clear.setDisable(!view.canClearCompleted());
             this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
             this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
-            SettingsRows.report(this.message, view.message(), CAUTION, this.messageWayThere, this.navigation);
+            SettingsRows.report(this.message, view.message(), CAUTION, this.locationLink, this.navigation);
             this.draw(this.cards, view.unfinished(), presenter, redraw);
             this.completedToggle.setText(view.completedHeading());
             SettingsRows.pointing(this.completedToggle, view.completedShown());
             this.completed.setVisible(!view.completed().isEmpty());
             this.completed.setManaged(!view.completed().isEmpty());
             this.draw(this.completedCards, view.completed(), presenter, redraw);
-            // Shut where the section itself is gone. A sweep leaves nothing to fold, and a travel
-            // over a subtree the screen is no longer laying out reads its own geometry off bounds
+            // Shut where the section itself is gone. A sweep leaves nothing to fold. A travel over
+            // a subtree the screen is no longer laying out reads its own geometry off bounds
             // nothing has updated.
             this.fold.to(view.completedShown() && !view.completed().isEmpty());
         }
@@ -242,7 +242,6 @@ final class RunsPane {
             runs.forEach(run -> drawn.add(card(run, presenter, redraw)));
             into.getChildren().setAll(drawn);
         }
-
 
         /**
          * One run's card.
@@ -309,7 +308,7 @@ final class RunsPane {
             block.getStyleClass().add("runs-card-waiting");
             if (waiting.copyPrompt() != null) {
                 final var copyRow = new HBox(copyButton("run-copy-prompt", waiting.copyPrompt(),
-                        presenter.copied(), redraw,
+                        presenter.copiedLabel(), redraw,
                         () -> presenter.instructionsFor(waiting.folder(), waiting.promptCorrects())));
                 copyRow.getStyleClass().add("runs-card-copies");
                 block.getChildren().add(copyRow);

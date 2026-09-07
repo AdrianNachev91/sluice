@@ -101,7 +101,7 @@ public class CommandReports {
     private static CommandOutcome reading(final RuntimeException failure, final RefusalClassifier classifier) {
         try {
             if (RefusalClassifier.unwrapped(failure) instanceof final CullException incomplete) {
-                return CullOutcomeReport.incomplete(incomplete);
+                return CullOutcomeReport.incompleteOutcome(incomplete);
             }
             final Refusal refusal = classifier.refusalFor(failure);
             return refusal == null ? CommandOutcome.failed(failure) : CommandOutcome.refused(refusal);

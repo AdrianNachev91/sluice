@@ -216,16 +216,17 @@ final class TroubleshootPane {
             // A report with nothing to press is one short sentence about the press just made, so it
             // leaves on its own. One offering a screen stays: four seconds is not long enough to
             // read a sentence and reach for what it offers.
-            final HBox banner =
-                    SettingsRows.banner(this.page, BANNER, said.text(), said.wayThere() == null);
+            final Hyperlink locationLink;
+            if (said.location() == null) {
+                locationLink = null;
+            } else {
+                locationLink = SettingsRows.locationLink("troubleshoot-message-link");
+                SettingsRows.pointAt(locationLink, said.location(), this.navigation);
+            }
+            final HBox banner = SettingsRows.banner(this.page, BANNER, said.text(),
+                    said.location() == null, locationLink);
             if (said.refused()) {
                 banner.getStyleClass().add("settings-banner-caution");
-            }
-            if (said.wayThere() != null) {
-                final Hyperlink wayThere = SettingsRows.wayThereLink("troubleshoot-message-link");
-                SettingsRows.offering(wayThere, said.wayThere(), this.navigation);
-                // Before the dismiss button, which sits at the far end of every banner.
-                banner.getChildren().add(banner.getChildren().size() - 1, wayThere);
             }
             this.page.getChildren().addFirst(banner);
         }
@@ -261,7 +262,7 @@ final class TroubleshootPane {
                                         final Runnable redraw) {
             final List<Node> nodes = new ArrayList<>();
             if (same.heading() != null) {
-                nodes.add(heading(same.heading()));
+                nodes.add(stackHeading(same.heading()));
             }
             if (same.rows().stream().anyMatch(problem -> !problem.options().isEmpty())) {
                 same.rows().forEach(problem -> {
@@ -288,7 +289,7 @@ final class TroubleshootPane {
          * @param said {@link String} what it says
          * @return {@link TextArea} the heading
          */
-        private static TextArea heading(final String said) {
+        private static TextArea stackHeading(final String said) {
             final TextArea heading = SelectableText.prose(said);
             heading.getStyleClass().add("troubleshoot-stack-heading");
             return heading;
@@ -409,6 +410,5 @@ final class TroubleshootPane {
             line.getStyleClass().add(styleClass);
             into.getChildren().add(line);
         }
-
     }
 }
