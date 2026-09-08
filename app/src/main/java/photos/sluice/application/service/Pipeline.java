@@ -20,7 +20,6 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.port.out.MontageRenderer;
 import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
-import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SpendLedgerPort;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.commit.CommitSummary;
@@ -40,6 +39,7 @@ import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.rescue.RescueSummary;
+import photos.sluice.secrets.SecretStore;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -221,9 +221,9 @@ public class Pipeline {
     }
 
     /**
-     * Delegates to DisasterDrawer to sweep every prep dir's disaster drawer for retention-expired
-     * entries, meaning a corrupt original or a troubleshoot report older than 30 days. It sweeps
-     * every PrepDirRemedies.discard() graveyard folder past that same window too. The caller runs
+     * Sweeps every prep dir's disaster drawer for retention-expired entries, meaning a corrupt
+     * original or a troubleshoot report older than 30 days. Every discarded-run graveyard folder
+     * past that same window goes too. The caller runs
      * this itself, once its process owns the working root. The sweep deletes, so it must never run
      * before that.
      */
@@ -301,7 +301,7 @@ public class Pipeline {
     }
 
     /**
-     * Delegates to CullEngine to run a cull job.
+     * Runs a cull job over one scope.
      *
      * @param scope {@link CullScope} which files to cull
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running job
@@ -312,7 +312,7 @@ public class Pipeline {
     }
 
     /**
-     * Delegates to CurateEngine to run a sort followed by a cull.
+     * Runs a sort followed by a cull, as one job.
      *
      * <p>No surface calls this. It is kept whole and tested against the day one does.
      * {@code PipelineSurfaceTest} pins it, so a later deletion is a decision rather than a tidy-up.
@@ -326,7 +326,7 @@ public class Pipeline {
     }
 
     /**
-     * Delegates to CullEngine to resume a waiting cull job.
+     * Resumes a cull job that was waiting on shards.
      *
      * @param prepDir {@link Path} the cull prep directory to resume
      * @param allowPartial boolean whether to proceed with missing shards

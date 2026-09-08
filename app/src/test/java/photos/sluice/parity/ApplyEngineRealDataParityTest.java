@@ -72,7 +72,8 @@ class ApplyEngineRealDataParityTest {
         final Path sourceDir = Path.of(sourceDirProperty);
         Assumptions.assumeTrue(Files.isDirectory(sourceDir), "sluice.parity.sourceDir does not exist: " + sourceDir);
         final String leaf = sourceDir.getFileName().toString();
-        // sourceDir is <repoRoot>/logs/sift-prep/<leaf> - the fixed layout CLAUDE.md documents.
+        // A sift-prep directory always sits at <repoRoot>/logs/sift-prep/<leaf>, so three levels up
+        // is the root it belongs to.
         final Path sourceRepoRoot = sourceDir.getParent().getParent().getParent();
 
         final Path prepDirA = rootA.resolve("logs/sift-prep").resolve(leaf);

@@ -1,6 +1,7 @@
 package photos.sluice.application.port.out;
 
 import org.jspecify.annotations.Nullable;
+import photos.sluice.secrets.SecretId;
 
 import java.util.Set;
 
@@ -59,9 +60,9 @@ public record VisionProviderDescriptor(String id, String label, Set<ProviderSett
         }
         // A credential is filed under its own provider name, and nothing else polices that name.
         // Two providers naming one credential share it, and saving either key overwrites the other.
-        if (credential != null && !credential.provider().equals(id)) {
+        if (credential != null && !credential.name().equals(id)) {
             throw new IllegalArgumentException("Provider '" + id + "' names a credential belonging to '"
-                    + credential.provider() + "'");
+                    + credential.name() + "'");
         }
         // Otherwise a screen draws a model picker with nothing to offer, or holds a catalog behind
         // a control it never shows.

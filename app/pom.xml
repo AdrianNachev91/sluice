@@ -55,6 +55,14 @@
       <groupId>org.jspecify</groupId>
       <artifactId>jspecify</artifactId>
     </dependency>
+    <!-- Reads and writes the user's API credential through the machine's own credential store,
+         falling back to a permission-protected file where there is none. Brings nothing with it:
+         its only compile dependency is JSpecify, in provided scope. MIT. -->
+    <dependency>
+      <groupId>photos.sluice</groupId>
+      <artifactId>secret-store</artifactId>
+      <version>1.0.0</version>
+    </dependency>
     <!-- Parses the command line. The starter rather than picocli alone, for the one bean it adds:
          a factory that builds each command through Spring, so a command class can be injected with
          the services it drives. Help text generates from the same annotations the parser reads, so
@@ -205,8 +213,9 @@
                each fork then runs. A two-core machine floors to one fork and simply runs serial. -->
           <forkCount>0.25C</forkCount>
           <reuseForks>true</reuseForks>
-          <!-- The native-access flag silences the warning JavaFX raises when it loads its own
-               native libraries. A later JDK turns that warning into a hard failure. -->
+          <!-- The native-access flag silences the warning raised when JavaFX loads its own native
+               libraries, and when secret-store binds this machine's credential store. A later JDK
+               turns that warning into a hard failure. -->
           <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar} --enable-native-access=ALL-UNNAMED</argLine>
           <systemPropertyVariables>
             <!-- JavaFX's own headless backend, part of javafx.graphics on every platform since 26.
@@ -232,32 +241,6 @@
             <!-- The application's bootstrap entry point: it locates the config file and hands the
                  launch on, with nothing to unit-test. Standard exclusion for this kind of class. -->
             <exclude>photos/sluice/SluiceApplication.class</exclude>
-            <!-- The native credential-store bindings, one per platform. A binding only runs on the
-                 platform whose library it binds, so no single leg of the matrix can cover one and
-                 the gate would measure the matrix rather than the tests. Excluded on the same terms
-                 as the views above: it stays honest only while a binding carries bytes and decides
-                 nothing. What to store, what a refusal means and which platform to reach for all
-                 live in the tier and the selector, inside the gate. A binding's own proof is its
-                 round-trip test against the real credential store. -->
-            <exclude>photos/sluice/adapter/secrets/Advapi32CredentialManager.class</exclude>
-            <!-- One deliberate exception to "decides nothing", named rather than glossed over.
-                 LibsecretService.write rules that a store reporting neither success nor an error
-                 is a failure. That ruling has to sit here, because the silence it reads is a
-                 property of the native call and does not survive the seam. Every other decision
-                 stays in the tier. -->
-            <exclude>photos/sluice/adapter/secrets/LibsecretService.class</exclude>
-            <!-- The second such exception, and the same shape as the one above. The macOS binding
-                 rules that an entry the keychain matched and then produced no bytes for is a
-                 failure. That ruling has to sit here, because the pairing of a status code with an
-                 empty result is a property of the native call and does not survive the seam.
-                 The second line is for this binding's nested types, which compile to their own
-                 class files and so are not covered by the first. It is the only binding with any.
-                 The gate stays green without it, since the rule below measures the whole bundle and
-                 absorbs two small classes. Kept anyway: they are exactly as uncoverable off macOS
-                 as their enclosing class, and leaving them in would dilute the ratio rather than
-                 be excluded by it. -->
-            <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain.class</exclude>
-            <exclude>photos/sluice/adapter/secrets/SecurityFrameworkKeychain$*.class</exclude>
           </excludes>
         </configuration>
         <executions>
@@ -293,10 +276,10 @@
                    written there is dead, and the rule silently measures everything.
 
                    Appended rather than stated outright, because an execution's own list otherwise
-                   replaces the plugin's. Replacing it puts the native keyring bindings back into
-                   this rule's file set, and those carry no probes at all: prepare-agent reads the
-                   plugin-level list and never instrumented them. They would analyse as nothing
-                   covered and drag the ratio down by two points. -->
+                   replaces the plugin's. Replacing it puts SluiceApplication back into this rule's
+                   file set, and it carries no probes at all: prepare-agent reads the plugin-level
+                   list and never instrumented it. It would analyse as nothing covered and drag the
+                   ratio down. -->
               <excludes combine.children="append">
                 <exclude>photos/sluice/adapter/ui/view/**</exclude>
               </excludes>

@@ -1,6 +1,8 @@
 package photos.sluice.application.port.out;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStoreException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

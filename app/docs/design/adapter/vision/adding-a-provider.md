@@ -44,16 +44,16 @@ four production-shaped sheets through it and three were refused after their corr
 Four of the validator's clauses are closeable in a schema. The other four are cross-verdict or
 cross-shard rules that no per-item schema reaches, whatever keywords it supports:
 
-| Clause | Schema-closeable |
-|--------------------------------------------------------------|-----|
-| A classification carries a non-blank `reason` | Yes |
-| A near-dup keeper carries `chosen_reason` | Yes |
-| A classification's category is one the run declared | Yes |
-| A group id is a lowercase slug, at most 24 characters | Yes, and deliberately not used |
-| A near-dup group has exactly one keeper and one or more rejects | No |
-| A group id is not reused across shards | No |
-| A decision's file is one the montages actually showed | No |
-| No file is acted on twice | No |
+| Clause                                                          | Schema-closeable               |
+|-----------------------------------------------------------------|--------------------------------|
+| A classification carries a non-blank `reason`                   | Yes                            |
+| A near-dup keeper carries `chosen_reason`                       | Yes                            |
+| A classification's category is one the run declared             | Yes                            |
+| A group id is a lowercase slug, at most 24 characters           | Yes, and deliberately not used |
+| A near-dup group has exactly one keeper and one or more rejects | No                             |
+| A group id is not reused across shards                          | No                             |
+| A decision's file is one the montages actually showed           | No                             |
+| No file is acted on twice                                       | No                             |
 
 So some refusals reach any provider however strict its schema. **An `API` provider therefore also
 needs a genuinely corrective retry**, one that tells the model what was wrong rather than simply
@@ -109,12 +109,11 @@ working.
 
 ## Two mechanical traps
 
-**`SecretId.provider` is a second id namespace and nothing polices it.** It becomes the credential's
+**`SecretId.name` is a second id namespace and nothing polices it.** It becomes the credential's
 filename and its entry name in the OS keyring. The dispatcher's duplicate-id check covers only the
-id a culler describes itself with. Two providers whose culler ids differ but whose
-`SecretId.provider` both read `anthropic` would silently share one credential, where saving either
-key overwrites the other. Keep a provider's `SecretId.provider` equal to the id in its own
-description.
+id a culler describes itself with. Two providers whose culler ids differ but whose `SecretId.name`
+both read `anthropic` would silently share one credential, where saving either key overwrites the
+other. Keep a provider's `SecretId.name` equal to the id in its own description.
 
 **A provider describes itself.** `describe()` answers with the provider's name, its settings, which
 of them are required, its credential and the models it offers, so a provider added later arrives
@@ -123,8 +122,8 @@ central registry to be edited belongs in the provider instead.
 
 ## Copying the Anthropic culler
 
-`AnthropicCuller` is the structural template: its wiring, its credential lookup through the
-`SecretStore` port, its per-montage loop and its one-retry cap. Copy that shape.
+`AnthropicCuller` is the structural template: its wiring, its credential lookup through
+`SecretStore`, its per-montage loop and its one-retry cap. Copy that shape.
 
 Its response schema is strict as of 2026-08-22: a discriminated union on `action`, one branch per
 action kind, each requiring what that kind needs. Copy that shape too.

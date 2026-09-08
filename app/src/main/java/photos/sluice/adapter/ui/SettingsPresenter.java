@@ -16,7 +16,6 @@ import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.PathSettings;
 import photos.sluice.application.port.out.ProviderSetting;
-import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.Settings;
 import photos.sluice.application.port.out.SettingOverride;
 import photos.sluice.application.port.out.SettingOverride.ByAnotherSource;
@@ -31,6 +30,7 @@ import photos.sluice.domain.paths.PathViolation.NotAPath;
 import photos.sluice.domain.paths.PathViolation.NotConfigured;
 import photos.sluice.domain.paths.PathViolation.Overlap;
 import photos.sluice.domain.paths.PathViolation.Unreadable;
+import photos.sluice.secrets.SecretStore;
 
 import java.io.IOException;
 import java.nio.file.Files;

@@ -26,8 +26,6 @@ import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
 import photos.sluice.application.port.out.MissingCredentialException;
-import photos.sluice.application.port.out.SecretId;
-import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.TokenSpend;
 import photos.sluice.application.service.AutoResumedSifts;
 import photos.sluice.application.service.JobHandle;
@@ -45,6 +43,8 @@ import photos.sluice.domain.model.SortScope;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.domain.paths.PathViolation.NotADirectory;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStoreException;
 
 import java.io.UncheckedIOException;
 import java.nio.charset.MalformedInputException;

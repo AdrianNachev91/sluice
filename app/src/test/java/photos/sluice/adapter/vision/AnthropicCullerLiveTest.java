@@ -6,7 +6,6 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.TextBlock;
 import com.anthropic.services.blocking.MessageService;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,7 +15,6 @@ import photos.sluice.adapter.imaging.MontageBuilder;
 import photos.sluice.adapter.imaging.PrepIndexWriter;
 import photos.sluice.adapter.imaging.SidecarWriter;
 import photos.sluice.adapter.imaging.TileRenderer;
-import photos.sluice.adapter.secrets.TieredSecretStore;
 import photos.sluice.application.port.out.CullOptions;
 import photos.sluice.application.port.out.CullProviderSettings;
 import photos.sluice.application.port.out.CullReport;
@@ -31,6 +29,7 @@ import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.DecisionShard;
 import photos.sluice.domain.cull.MontageConfig;
 import photos.sluice.domain.cull.PrepDir;
+import photos.sluice.secrets.SecretStore;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -41,7 +40,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -101,8 +99,7 @@ class AnthropicCullerLiveTest {
         // the machine's own credential tiers, the absent endpoint override, and the transport-retry
         // knob. The environment tier answers first, so the file tier's directory is never reached.
         final AnthropicClient real = AnthropicCuller.defaultClient(settings.providerSettings("anthropic"),
-                TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
-                        root.resolve("secrets")));
+                machineStore(root.resolve("secrets")));
         final var culler = new AnthropicCuller(new CullerPrompt(settings),
                 new ShardCodec(), new SidecarReader(), settings, () -> this.tamperingClient(real),
                 _ -> {
@@ -135,8 +132,7 @@ class AnthropicCullerLiveTest {
         final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
                 new SidecarReader(), settings,
                 () -> AnthropicCuller.defaultClient(settings.providerSettings("anthropic"),
-                        TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
-                                root.resolve("secrets"))),
+                        machineStore(root.resolve("secrets"))),
                 _ -> {
                     throw new AssertionError("this test checks no credential");
                 });
@@ -167,9 +163,7 @@ class AnthropicCullerLiveTest {
     void checksARealCredentialAndListsWhatTheAccountCanRun(@TempDir final Path root) {
         final CullSettings settings = settings();
         final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
-                new SidecarReader(), settings,
-                TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
-                        root.resolve("secrets")));
+                new SidecarReader(), settings, machineStore(root.resolve("secrets")));
 
         final ProviderCheck outcome = culler.check();
 
@@ -191,19 +185,22 @@ class AnthropicCullerLiveTest {
     // Rejected is the outcome the Test button most often shows a user, through a typo'd or expired
     // key. A mocked UnauthorizedException is the only thing that has proven it so far.
     //
-    // The key itself never touches the real environment. TieredSecretStore's environment tier reads
-    // ANTHROPIC_API_KEY by that exact name, and the sibling live tests in this class need that name
-    // to hold a working key. Sourcing this one from a map of its own keeps the two from colliding.
+    // The key itself never touches the real environment. The sibling live tests here need
+    // ANTHROPIC_API_KEY to hold a working key. A store that read it would answer with theirs
+    // rather than the revoked one. So this store is built with no environment tier, and on an
+    // operating system no keyring is written for. The file it is handed is then the only tier a
+    // lookup can reach.
     @Test
     void aRevokedKeyIsAnsweredAsRejected(@TempDir final Path root) throws IOException {
-        final String revokedKey = revokedKeyFixture();
-        final Function<String, @Nullable String> ownEnvironment =
-                name -> AnthropicCuller.API_KEY.environmentVariable().equals(name) ? revokedKey : null;
+        final SecretStore revoked = SecretStore.forApplication("Sluice")
+                .inNamespace("photos.sluice")
+                .withCredentialFilesIn(root.resolve("secrets"))
+                .onOperatingSystem("no-keyring")
+                .open();
+        revoked.save(AnthropicCuller.API_KEY, revokedKeyFixture());
         final CullSettings settings = settings();
         final var culler = new AnthropicCuller(new CullerPrompt(settings), new ShardCodec(),
-                new SidecarReader(), settings,
-                TieredSecretStore.forMachine(ownEnvironment, System.getProperty("os.name"),
-                        root.resolve("secrets")));
+                new SidecarReader(), settings, revoked);
 
         final ProviderCheck outcome = culler.check();
 
@@ -309,13 +306,24 @@ class AnthropicCullerLiveTest {
     // whatever runner it lands on. A missing Secret Service is a reason to skip, never a red build.
     private static boolean aKeyIsReachable() {
         try {
-            return TieredSecretStore.forMachine(System::getenv, System.getProperty("os.name"),
-                    Path.of(System.getProperty("java.io.tmpdir"), "sluice-live-gate"))
+            return machineStore(Path.of(System.getProperty("java.io.tmpdir"), "sluice-live-gate"))
                     .secret(AnthropicCuller.API_KEY)
                     .isPresent();
         } catch (final RuntimeException | LinkageError unreachable) {
             return false;
         }
+    }
+
+    // The same three tiers AppConfig composes, named the same way. The secrets directory differs.
+    // So a machine holding its key only in a file is the one case where this reads nothing and a
+    // running Sluice reads a key.
+    private static SecretStore machineStore(final Path secretsDir) {
+        return SecretStore.forApplication("Sluice")
+                .inNamespace("photos.sluice")
+                .withEnvironmentOverride()
+                .withCredentialFilesIn(secretsDir)
+                .onOperatingSystem(System.getProperty("os.name"))
+                .open();
     }
 
     private record FixedSettings(String provider, List<CullCategory> categories,

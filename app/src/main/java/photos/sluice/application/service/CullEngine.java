@@ -21,10 +21,6 @@ import photos.sluice.application.port.out.PathsPort;
 import photos.sluice.application.port.out.ProgressPort;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.application.port.out.RunEnding;
-import photos.sluice.application.port.out.SecretId;
-import photos.sluice.application.port.out.SecretStatus;
-import photos.sluice.application.port.out.SecretStore;
-import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendLedgerEntry;
 import photos.sluice.application.port.out.SpendLedgerPort;
@@ -41,6 +37,10 @@ import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.paths.Containment;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStatus;
+import photos.sluice.secrets.SecretStore;
+import photos.sluice.secrets.SecretStoreException;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -260,7 +260,7 @@ final class CullEngine {
     }
 
     /**
-     * Delegates to {@link CullWatchers}: whether a watcher is currently polling prepDir.
+     * Whether a watcher is currently polling one prep dir.
      *
      * @param prepDir {@link Path} the prep dir to check
      * @return boolean whether a watcher is currently active for it
@@ -279,7 +279,7 @@ final class CullEngine {
     }
 
     /**
-     * Delegates to {@link CullWatchers#disarmAll}.
+     * Stops every watcher currently polling.
      */
     void disarmAllWatches() {
         this.cullWatchers.disarmAll();
@@ -349,7 +349,7 @@ final class CullEngine {
         final SecretId credential = this.cullDispatcher.configuredCredential();
         if (credential != null && this.secretStore.status(credential) instanceof SecretStatus.Absent) {
             throw new MissingCredentialException(credential,
-                    "No credential is stored for the '" + credential.provider() + "' vision provider");
+                    "No credential is stored for the '" + credential.name() + "' vision provider");
         }
     }
 

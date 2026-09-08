@@ -10,12 +10,12 @@ import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
-import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
+import photos.sluice.secrets.SecretStoreException;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

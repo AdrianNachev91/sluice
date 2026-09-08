@@ -9,11 +9,12 @@ import photos.sluice.adapter.metadata.ExifSource;
 import photos.sluice.adapter.metadata.FilenameSource;
 import photos.sluice.adapter.metadata.MtimeSource;
 import photos.sluice.adapter.metadata.TakeoutJsonSource;
-import photos.sluice.adapter.secrets.TieredSecretStore;
-import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SettingsStore;
 import photos.sluice.domain.dating.DateResolver;
 import photos.sluice.domain.dating.RescueDateResolver;
+import photos.sluice.secrets.SecretStore;
+
+import java.nio.file.Path;
 
 /**
  * The Spring configuration class that wires beans needing constructor arguments Spring cannot
@@ -84,9 +85,7 @@ public class AppConfig {
     }
 
     /**
-     * Builds the credential store over the tiers this machine offers. The store picks its own
-     * tiers. What this supplies is the environment, the operating system's name and the directory
-     * they need. That is why the store is an explicit bean rather than a scanned component.
+     * Builds the credential store over the tiers this machine offers.
      *
      * <p>The OS name is read once and passed to both. The credential store and the directory it
      * falls back to can then never be resolved against two different answers.
@@ -96,7 +95,28 @@ public class AppConfig {
     @Bean
     public SecretStore secretStore() {
         final String osName = System.getProperty("os.name");
-        return TieredSecretStore.forMachine(System::getenv, osName,
-                ConfigDirLocator.secretsDir(osName, System.getenv()));
+        return credentialStore(osName, ConfigDirLocator.secretsDir(osName, System.getenv()));
+    }
+
+    /**
+     * Composes the store, taking as arguments what the bean above reads off the machine. Kept apart
+     * from the bean so a caller can supply both rather than reach a real keyring and a real
+     * directory.
+     *
+     * @param osName {@link String} the operating system's name, which picks the keyring
+     * @param secretsDir {@link Path} where the fallback writes, on a machine offering no keyring
+     * @return {@link SecretStore} a store over the tiers those two answers allow
+     */
+    static SecretStore credentialStore(final String osName, final Path secretsDir) {
+        // A credential already saved on a user's machine sits under keys built from "Sluice" and
+        // "photos.sluice". The first is the Windows target prefix and the macOS service attribute,
+        // the second the Secret Service schema. Changing either leaves entries on the platforms it
+        // reaches behind, reported absent and still on disk.
+        return SecretStore.forApplication("Sluice")
+                .inNamespace("photos.sluice")
+                .withEnvironmentOverride()
+                .withCredentialFilesIn(secretsDir)
+                .onOperatingSystem(osName)
+                .open();
     }
 }

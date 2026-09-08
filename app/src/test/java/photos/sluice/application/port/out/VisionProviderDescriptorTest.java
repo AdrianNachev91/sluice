@@ -1,6 +1,7 @@
 package photos.sluice.application.port.out;
 
 import org.junit.jupiter.api.Test;
+import photos.sluice.secrets.SecretId;
 
 import java.util.HashSet;
 import java.util.List;

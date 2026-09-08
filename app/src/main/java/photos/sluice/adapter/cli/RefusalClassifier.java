@@ -11,10 +11,6 @@ import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MissingCredentialException;
-import photos.sluice.application.port.out.SecretHolding;
-import photos.sluice.application.port.out.SecretId;
-import photos.sluice.application.port.out.SecretStore;
-import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.WorkingRootBusyException;
 import photos.sluice.application.service.JobHandle;
@@ -22,6 +18,10 @@ import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.paths.PathViolation;
+import photos.sluice.secrets.SecretHolding;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStore;
+import photos.sluice.secrets.SecretStoreException;
 
 import java.io.UncheckedIOException;
 import java.nio.file.NoSuchFileException;
@@ -327,9 +327,9 @@ public class RefusalClassifier {
         final SecretId id = missing.id();
         final List<SecretHolding> places = this.secrets.holdings(id);
         return new Refusal(RefusalKind.CREDENTIAL_MISSING,
-                "No key is stored for the '" + id.provider() + "' vision provider. Set "
+                "No key is stored for the '" + id.name() + "' vision provider. Set "
                         + id.environmentVariable() + ", or store a key in Settings.",
-                Fields.of("provider", id.provider(),
+                Fields.of("provider", id.name(),
                         "environmentVariable", id.environmentVariable(),
                         "places", places.stream().map(RefusalClassifier::placeFields).toList()));
     }

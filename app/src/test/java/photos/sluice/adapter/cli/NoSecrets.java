@@ -1,9 +1,9 @@
 package photos.sluice.adapter.cli;
 
-import photos.sluice.application.port.out.SecretHolding;
-import photos.sluice.application.port.out.SecretId;
-import photos.sluice.application.port.out.SecretStatus;
-import photos.sluice.application.port.out.SecretStore;
+import photos.sluice.secrets.SecretHolding;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStatus;
+import photos.sluice.secrets.SecretStore;
 
 import java.util.List;
 import java.util.Optional;

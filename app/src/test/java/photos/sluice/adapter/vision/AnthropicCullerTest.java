@@ -42,10 +42,6 @@ import photos.sluice.application.port.out.ModelCatalog;
 import photos.sluice.application.port.out.ModelOption;
 import photos.sluice.application.port.out.ProviderCheck;
 import photos.sluice.application.port.out.ProviderType;
-import photos.sluice.application.port.out.SecretHolding;
-import photos.sluice.application.port.out.SecretId;
-import photos.sluice.application.port.out.SecretStatus;
-import photos.sluice.application.port.out.SecretStore;
 import photos.sluice.application.port.out.SpendCeiling;
 import photos.sluice.application.port.out.SpendForecast;
 import photos.sluice.application.port.out.TokenSpend;
@@ -59,6 +55,10 @@ import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.Verdict.Keep;
 import photos.sluice.domain.job.CancellationSignal;
 import photos.sluice.domain.job.ProgressCallback;
+import photos.sluice.secrets.SecretHolding;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStatus;
+import photos.sluice.secrets.SecretStore;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -1179,12 +1179,10 @@ class AnthropicCullerTest {
                 new FixedSecretStore("sk-synthetic-0001"))).doesNotThrowAnyException();
     }
 
-    // The provider half becomes the credential's filename, and a settings screen saves under the
-    // same id this culler reads back. Two separate literals agreeing today is not the same as them
-    // being tied together.
+    // Two separate literals agreeing today is not the same as them being tied together.
     @Test
     void namesItsCredentialAfterTheProviderItRegistersAs() {
-        assertThat(AnthropicCuller.API_KEY.provider()).isEqualTo(this.culler().describe().id());
+        assertThat(AnthropicCuller.API_KEY.name()).isEqualTo(this.culler().describe().id());
     }
 
     @Test

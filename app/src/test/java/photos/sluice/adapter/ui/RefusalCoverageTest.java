@@ -22,10 +22,6 @@ import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.MalformedPrepJsonException;
 import photos.sluice.application.port.out.MalformedSettingsException;
 import photos.sluice.application.port.out.MissingCredentialException;
-import photos.sluice.application.port.out.SecretId;
-import photos.sluice.application.port.out.SecretStore;
-import photos.sluice.application.port.out.SecretStoreException;
-import photos.sluice.application.port.out.StaleSecretNotClearedException;
 import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.application.port.out.UnrecognisedProviderException;
 import photos.sluice.application.port.out.UnusableSettingsException;
@@ -41,6 +37,10 @@ import photos.sluice.domain.model.SortSummary;
 import photos.sluice.domain.model.SortSummary.Guessed;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
+import photos.sluice.secrets.SecretId;
+import photos.sluice.secrets.SecretStore;
+import photos.sluice.secrets.SecretStoreException;
+import photos.sluice.secrets.StaleSecretNotClearedException;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -61,8 +61,9 @@ import static org.mockito.Mockito.when;
 // refusal set is a Throwable hierarchy, so widening it breaks no switch. This is the check that
 // stands in for one, over both surfaces at once.
 //
-// The scan behind it reaches application.port and Pipeline's nested types. A refusal declared as a
-// top-level class in application.service would be invisible to it, and none is today.
+// The scan behind it reaches application.port, the credential library, and Pipeline's nested types.
+// A refusal declared as a top-level class in application.service would be invisible to it, and none
+// is today.
 class RefusalCoverageTest {
 
     private final RefusalClassifier classifier = new RefusalClassifier(noCredentialsAnywhere());
@@ -229,19 +230,22 @@ class RefusalCoverageTest {
     private static Set<String> refusalTypesOnTheClasspath() {
         final JavaClasses ports = new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-                .importPackages("photos.sluice.application.port", "photos.sluice.application.service");
+                .importPackages("photos.sluice.application.port", "photos.sluice.application.service",
+                        "photos.sluice.secrets");
         return ports.stream()
                 .filter(RefusalCoverageTest::isARefusalType)
                 .map(JavaClass::getName)
                 .collect(Collectors.toSet());
     }
 
-    // A refusal type is one this app declared and named, which is what a surface can match on. The
-    // service package holds many classes and only Pipeline's nested refusals are among them.
+    // A refusal type is one a surface can match on by name. The service package holds many classes
+    // and only Pipeline's nested refusals are among them. photos.sluice.secrets is the credential
+    // library, whose throwables reach both switches exactly as this app's own do.
     private static boolean isARefusalType(final JavaClass candidate) {
         return candidate.isAssignableTo(Throwable.class)
                 && !candidate.getModifiers().contains(JavaModifier.ABSTRACT)
                 && (candidate.getPackageName().startsWith("photos.sluice.application.port")
+                    || candidate.getPackageName().startsWith("photos.sluice.secrets")
                     || candidate.getName().startsWith(Pipeline.class.getName() + "$"));
     }
 
