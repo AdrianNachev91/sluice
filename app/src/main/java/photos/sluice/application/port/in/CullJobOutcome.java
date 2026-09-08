@@ -86,9 +86,26 @@ public sealed interface CullJobOutcome {
      * @param reason {@link WaitingReason} why it paused
      * @param cullReport {@link CullReport} what the vision pass decided and consumed before pausing
      * @param archivedPriorRun {@link Path} the graveyard directory a prior completed run was archived into, or null
+     * @param movedBeforeItPaused {@link ApplyReport} what apply had already moved, where it had
+     *     begun at all. Null on every pause reached before apply starts, which is most of them.
+     *     Nothing else on this outcome carries it
      */
     record Waiting(WaitingCullJob job, WaitingReason reason, CullReport cullReport,
-                   @Nullable Path archivedPriorRun) implements CullJobOutcome {
+                   @Nullable Path archivedPriorRun,
+                   @Nullable ApplyReport movedBeforeItPaused) implements CullJobOutcome {
+
+        /**
+         * A pause that came before apply moved anything.
+         *
+         * @param job {@link WaitingCullJob} the paused job's resumable state
+         * @param reason {@link WaitingReason} why it paused
+         * @param cullReport {@link CullReport} what the vision pass decided and consumed
+         * @param archivedPriorRun {@link Path} the graveyard a prior completed run went to, or null
+         */
+        public Waiting(final WaitingCullJob job, final WaitingReason reason, final CullReport cullReport,
+                       final @Nullable Path archivedPriorRun) {
+            this(job, reason, cullReport, archivedPriorRun, null);
+        }
     }
 
     /**

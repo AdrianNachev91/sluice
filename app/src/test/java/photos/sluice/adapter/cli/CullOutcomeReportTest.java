@@ -54,6 +54,46 @@ class CullOutcomeReportTest {
     }
 
     @Test
+    void aRunStoppedWhileItMovedPhotosCountsThemAndSaysTheyHaveLeftSorted() {
+        final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019"), WaitingReason.CANCELLED,
+                zeroReport(), null, new ApplyReport(120, Map.of("Junk", 31), 2, 1, 4, List.of()));
+
+        final CommandOutcome outcome = CullOutcomeReport.of(waiting, DUPLICATES, INSTRUCTIONS);
+
+        assertThat(outcome.status()).isEqualTo(CommandStatus.WAITING);
+        assertThat(outcome.resultLines()).containsExactly(
+                "Stopped. You can continue at any time - run 'resume 2019'.",
+                "It had started moving photos. These left Sorted before it stopped.",
+                "Photos that left Sorted: 37",
+                "Junk: 31", "Copies moved to Duplicates: 4", "Could not be judged: 2");
+    }
+
+    // Every count zero is the apply that was entered and gave up before its first move.
+    @Test
+    void aRunStoppedBeforeItMovedAnythingClaimsNothingAboutSorted() {
+        final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019"), WaitingReason.CANCELLED,
+                zeroReport(), null, new ApplyReport(120, Map.of(), 0, 0, 0, List.of()));
+
+        final CommandOutcome outcome = CullOutcomeReport.of(waiting, DUPLICATES, INSTRUCTIONS);
+
+        assertThat(outcome.resultLines()).containsExactly(
+                "Stopped. You can continue at any time - run 'resume 2019'.");
+    }
+
+    // A near-duplicate group is resolved by copying its keeper, which stays in Sorted. It is the
+    // one count an apply can raise without a photo leaving.
+    @Test
+    void aRunThatOnlyResolvedNearDuplicateGroupsClaimsNothingLeftSorted() {
+        final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019"), WaitingReason.CANCELLED,
+                zeroReport(), null, new ApplyReport(120, Map.of(), 0, 1, 0, List.of()));
+
+        final CommandOutcome outcome = CullOutcomeReport.of(waiting, DUPLICATES, INSTRUCTIONS);
+
+        assertThat(outcome.resultLines()).containsExactly(
+                "Stopped. You can continue at any time - run 'resume 2019'.");
+    }
+
+    @Test
     void aRunWaitingOnAnAgentNamesNoScopeSinceTheReaderAlreadyKnowsIt() {
         final CullJobOutcome.Waiting waiting = new CullJobOutcome.Waiting(job("2019-06"),
                 WaitingReason.SHARDS_OUTSTANDING, zeroReport(), null);

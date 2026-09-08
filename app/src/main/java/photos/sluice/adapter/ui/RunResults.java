@@ -76,6 +76,11 @@ final class RunResults {
 
     private static final String CANCELLED_CONTINUE_NOTE = "You can continue at any time.";
 
+    // Claims nothing about what did not move. A run carried on from an earlier one counts only its
+    // own leg. An earlier leg's photos are in neither the counts nor a sentence about them.
+    private static final String STOPPED_MID_APPLY = "It had started moving photos when it stopped. "
+            + "The counts below are what this run moved.";
+
     // True because an import keeps no record. The folder it came from is the record, so running it
     // again is the resume.
     private static final String IMPORT_STOPPED = "Not all files were imported. Run the import "
@@ -575,9 +580,10 @@ final class RunResults {
                                         final Long tokens) ->
                     new RunResultView(finishedHeading(ran), Tone.FINISHED, null,
                             siftCounts(report, applied, tokens), null, null, DONE);
-            case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _) ->
-                    new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED, waitingDetail(why),
-                            sheetCounts(job.shards()), null,
+            case CullJobOutcome.Waiting(final var job, final WaitingReason why, _, Path _,
+                                        final ApplyReport moved) ->
+                    new RunResultView(waitingHeading(ran, why), Tone.UNFINISHED,
+                            waitingDetail(why, moved), pausedCounts(job.shards(), moved), null,
                             resumeOffer(why, job.prepDir()), DONE, resumeLocation(why));
             case CullJobOutcome.Blocked(final var job, final var findings, _, Path _) ->
                     new RunResultView(ran.verb() + " stopped and needs a look.", Tone.UNFINISHED,
@@ -638,16 +644,36 @@ final class RunResults {
         if (tokens != null && tokens > 0) {
             rows.add(new Count("result-tokens", "Tokens used", RunWords.grouped(tokens)));
         }
+        addMovedRows(rows, applied);
+        return rows;
+    }
+
+    /**
+     * Every row a completed apply earns, one per place its files went.
+     *
+     * @param rows a {@link List} of {@link Count} the card's rows, appended to
+     * @param applied {@link ApplyReport} what the apply moved
+     */
+    private static void addMovedRows(final List<Count> rows, final ApplyReport applied) {
+        addCategoryRows(rows, applied);
+        addWhenAny(rows, "result-near-dup-groups", "Near-duplicate groups", applied.nearDupGroups());
+        addWhenAny(rows, "result-near-dup-rejects", "Copies moved to Duplicates", applied.nearDupRejects());
+        addWhenAny(rows, "result-unreviewable", "Could not be judged", applied.unreviewable());
+    }
+
+    /**
+     * One row per category anything was routed into, biggest name first alphabetically.
+     *
+     * @param rows a {@link List} of {@link Count} the card's rows, appended to
+     * @param applied {@link ApplyReport} what the apply moved
+     */
+    private static void addCategoryRows(final List<Count> rows, final ApplyReport applied) {
         applied.byCategory().entrySet().stream()
                 .filter(category -> category.getValue() > 0)
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(category -> rows.add(new Count(
                         "result-category-" + category.getKey().toLowerCase(Locale.UK),
                         category.getKey(), RunWords.grouped(category.getValue()))));
-        addWhenAny(rows, "result-near-dup-groups", "Near-duplicate groups", applied.nearDupGroups());
-        addWhenAny(rows, "result-near-dup-rejects", "Copies moved to Duplicates", applied.nearDupRejects());
-        addWhenAny(rows, "result-unreviewable", "Could not be judged", applied.unreviewable());
-        return rows;
     }
 
     /**
@@ -666,8 +692,67 @@ final class RunResults {
      * @return a {@link List} of {@link Count} the rows
      */
     private static List<Count> sheetCounts(final ShardTally sheets) {
-        return List.of(new Count("result-sheets-judged", "Sheets judged",
-                RunWords.grouped(sheets.valid()) + " of " + RunWords.grouped(sheets.total())));
+        return List.of(new Count("result-sheets-judged", "Sheets judged", judgedOfTotal(sheets)));
+    }
+
+    /**
+     * How many of a run's sheets hold a decision, against how many it has.
+     *
+     * @param sheets {@link ShardTally} what the prep dir holds
+     * @return {@link String} the two numbers
+     */
+    private static String judgedOfTotal(final ShardTally sheets) {
+        return RunWords.grouped(sheets.valid()) + " of " + RunWords.grouped(sheets.total());
+    }
+
+    /**
+     * What a paused sift's card counts: its sheets, and the files it moved where it had begun
+     * moving any.
+     *
+     * <p>A stop landing mid-apply leaves photos in their categories.
+     *
+     * <p>Where those rows follow, the sheets row names the photos they are counted out of, and a
+     * total sits between the two. Sheets and photos are different units. Only some of those photos
+     * moved, so with one figure alone a reader adds the category rows up and lands nowhere near the
+     * number above them. The braced figure is the whole scope the sheets were built from. That is
+     * why it reads as a denominator beside the sheet count rather than as a row of its own.
+     *
+     * <p>The near-duplicate group count is left off, unlike a finished run's card. A group is
+     * resolved by copying its keeper, and that keeper stays in Sorted. Counted under a line about
+     * what left, it would name a photo that is still there.
+     *
+     * @param sheets {@link ShardTally} what the prep dir holds
+     * @param moved {@link ApplyReport} what apply moved before it stopped, or null where it never
+     *     started
+     * @return a {@link List} of {@link Count} the rows
+     */
+    private static List<Count> pausedCounts(final ShardTally sheets, final @Nullable ApplyReport moved) {
+        if (moved == null || movedTotal(moved) == 0) {
+            return sheetCounts(sheets);
+        }
+        final List<Count> rows = new ArrayList<>();
+        rows.add(new Count("result-sheets-judged", "Sheets judged",
+                judgedOfTotal(sheets) + " (" + RunWords.counted(moved.reviewed(), "photo", "photos") + ")"));
+        rows.add(new Count("result-left-sorted", "Photos that left Sorted",
+                RunWords.grouped(movedTotal(moved))));
+        addCategoryRows(rows, moved);
+        addWhenAny(rows, "result-near-dup-rejects", "Copies moved to Duplicates", moved.nearDupRejects());
+        addWhenAny(rows, "result-unreviewable", "Could not be judged", moved.unreviewable());
+        return List.copyOf(rows);
+    }
+
+    /**
+     * Every photo an apply moved out of Sorted, which is what the rows under the total add up to.
+     *
+     * <p>Near-duplicate groups are not in it. A group is resolved by copying its keeper, and the
+     * keeper stays in Sorted, so it is the one figure an apply can raise with nothing leaving.
+     *
+     * @param moved {@link ApplyReport} what the apply moved
+     * @return int how many photos left Sorted
+     */
+    private static int movedTotal(final ApplyReport moved) {
+        return moved.unreviewable() + moved.nearDupRejects()
+                + moved.byCategory().values().stream().mapToInt(Integer::intValue).sum();
     }
 
     /**
@@ -733,7 +818,11 @@ final class RunResults {
      * @param why {@link WaitingReason} why it paused
      * @return {@link String} the sentence, or null where the offer below carries it
      */
-    private static @Nullable String waitingDetail(final WaitingReason why) {
+    private static @Nullable String waitingDetail(final WaitingReason why,
+                                                  final @Nullable ApplyReport moved) {
+        if (moved != null && movedTotal(moved) > 0) {
+            return STOPPED_MID_APPLY;
+        }
         return switch (why) {
             case SHARDS_OUTSTANDING -> SHARDS_OUTSTANDING_DETAIL;
             case CEILING_REACHED, CANCELLED -> null;

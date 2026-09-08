@@ -50,6 +50,8 @@ final class RunProgressPane {
         scope.setId("run-progress-scope");
         scope.getStyleClass().add("run-progress-scope");
 
+        final var startedOnItsOwn = SettingsRows.emptyHelpLine("run-progress-started-on-its-own");
+
         final var bars = new VBox();
         bars.setId("run-progress-bars");
         bars.getStyleClass().add("run-progress-bars");
@@ -75,11 +77,12 @@ final class RunProgressPane {
         // Everything sits under the bars rather than the row being pushed to the foot. A run has
         // little to show. Stretching the page would put the bars at one end of a wide screen and
         // the way to stop them at the other.
-        final var page = new VBox(heading, scope, body, cancelling, cancelRow);
+        final var page = new VBox(heading, scope, startedOnItsOwn, body, cancelling, cancelRow);
         page.setId("run-progress");
         page.getStyleClass().add("run-progress");
 
-        return new Mounted(page, view -> fill(view, heading, scope, bars, waiting, cancelling, cancel));
+        return new Mounted(page,
+                view -> fill(view, heading, scope, startedOnItsOwn, bars, waiting, cancelling, cancel));
     }
 
     /**
@@ -88,16 +91,19 @@ final class RunProgressPane {
      * @param view {@link RunProgressView} what the area shows now
      * @param heading {@link TextField} what is running
      * @param scope {@link TextArea} what this run covers
+     * @param startedOnItsOwn {@link TextArea} what to say about a run nobody pressed for
      * @param bars {@link VBox} the phase bars
      * @param waiting {@link TextArea} what to say before the first phase arrives
      * @param cancelling {@link TextArea} what to say once a stop has been asked for
      * @param cancel {@link Button} the button that asks
      */
     private static void fill(final RunProgressView view, final TextField heading, final TextArea scope,
+                             final TextArea startedOnItsOwn,
                              final VBox bars, final TextArea waiting, final TextArea cancelling,
                              final Button cancel) {
         heading.setText(view.heading());
         scope.setText(view.scope());
+        startedOnItsOwn.setText(SettingsRows.orNothing(view.startedOnItsOwn()));
         drawBars(view.phases(), bars, view.reservedBars());
         waiting.setText(SettingsRows.orNothing(view.waiting()));
         cancelling.setText(SettingsRows.orNothing(view.cancelling()));

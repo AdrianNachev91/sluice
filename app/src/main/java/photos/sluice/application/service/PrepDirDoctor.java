@@ -11,6 +11,7 @@ import photos.sluice.application.port.out.MediaStore;
 import photos.sluice.application.service.MoveLedger.Ledger;
 import photos.sluice.domain.cull.CullRunSummary;
 import photos.sluice.domain.cull.CullRuns;
+import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDir;
 import photos.sluice.domain.cull.PrepDirHealth;
@@ -29,10 +30,9 @@ import java.util.Map;
 
 /**
  * Health checks for a prep dir, plus the purge that clears completed runs. diagnose() is
- * side-effect-free and safe to call any time. It never throws, whatever state the dir is in, so one
+ * side-effect-free and safe to call any time. It never throws, whatever state the dir is in. So one
  * unreadable run cannot take down a caller reading every other one. runs() diagnoses every prep
- * dir under the sift-prep root. Startup arming reads it today. The runs screen and the count its
- * sidebar entry carries are the consumers it was shaped for.
+ * dir under the sift-prep root.
  *
  * <p>Totality is not the same as cheapness. One diagnosis reads every sidecar twice, every shard
  * twice, and the move ledger twice. The validate pass and the tally pass each do their own reads,
@@ -48,8 +48,8 @@ import java.util.Map;
  * <p>Nothing on the diagnosis path can move a file: it reads through the planner, which is the
  * read-only half of applying. It also only ever holds a {@link LedgerReader}, never the
  * write-capable {@link MoveLedger}. Diagnosing can take a ledger snapshot, never append one.
- * purgeCompleted() is the one method here that deletes, and it only ever touches a run diagnose()
- * has certified COMPLETE. It never touches media.
+ * purgeCompleted() is the one method here that deletes. It only ever touches a run diagnose()
+ * has certified COMPLETE, and it never touches media.
  *
  * <p>Flowchart: {@code app/docs/design/application/service/prep-dir-doctor.md}.
  */
@@ -166,7 +166,7 @@ public class PrepDirDoctor {
      */
     public CullRunSummary summaryOf(final Path prepDirPath) {
         final Diagnosis diagnosis = this.examine(prepDirPath);
-        return new CullRunSummary(scopeOf(prepDirPath), prepDirPath, diagnosis.health(),
+        return new CullRunSummary(CullScope.tagOf(prepDirPath), prepDirPath, diagnosis.health(),
                 diagnosis.shards(), this.lastModifiedOrEpoch(prepDirPath));
     }
 
@@ -206,7 +206,7 @@ public class PrepDirDoctor {
         final var skipped = new LinkedHashMap<String, State>();
         final var unreadable = new LinkedHashMap<String, String>();
         for (final Path prepDir : prepDirs) {
-            final String scope = scopeOf(prepDir);
+            final String scope = CullScope.tagOf(prepDir);
             final State state = this.diagnose(prepDir).state();
             if (state == State.DAMAGED) {
                 unreadable.put(scope, "could not be read");
@@ -235,7 +235,7 @@ public class PrepDirDoctor {
      *
      * <p>Being a separate method from {@link #read} is what keeps the guard total. This body is
      * nothing but the try, so no statement can sit outside it. Merging the two would put the reading
-     * logic and its guard in one body, where a line added before the try, or after the catch, leaves
+     * logic and its guard in one body. A line added before the try, or after the catch, then leaves
      * the guard silently.
      *
      * @param prepDirPath {@link Path} the prep directory to examine
@@ -299,21 +299,6 @@ public class PrepDirDoctor {
         return findings.isEmpty()
                 ? new Diagnosis(new PrepDirHealth(State.READY, List.of()), tally)
                 : new Diagnosis(new PrepDirHealth(State.BLOCKED, ordered(findings)), tally);
-    }
-
-    /**
-     * prepDirPath's own folder name, which is the scope tag it was culled under.
-     *
-     * <p>Falls back to the whole path for a root directory, which has no name component at all. A
-     * root is never a prep dir, but {@link #summaryOf} is public and its never-throws contract has
-     * to hold for whatever it is handed.
-     *
-     * @param prepDirPath {@link Path} the prep directory to name
-     * @return {@link String} the folder name, or the whole path when it has none
-     */
-    private static String scopeOf(final Path prepDirPath) {
-        final Path name = prepDirPath.getFileName();
-        return name == null ? prepDirPath.toString() : name.toString();
     }
 
     /**

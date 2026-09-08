@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunLauncherView.StartAction;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
+import photos.sluice.application.port.in.CullJobOutcome;
 import photos.sluice.application.port.in.RescueRoot;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.service.JobHandle;
@@ -61,6 +62,8 @@ public class RunLauncherPresenter {
     private volatile @Nullable Message cardMessage;
     private volatile boolean cancelRequested;
     private volatile boolean abandonRequested;
+    // Whether the run on the dashboard is one nobody pressed for.
+    private volatile boolean startedItself;
     // What the running or just-ended job was started as, and what it covers. The mode buttons and
     // the field can both move while a job works, so neither can be asked afterwards what it was
     // started with.
@@ -83,6 +86,8 @@ public class RunLauncherPresenter {
         this.pipeline = pipeline;
         this.progress = new RunProgressPresenter(progress);
         this.setup = new RunSetupPresenter(pipeline, () -> this.running, this::repaint);
+        // Last, so every field adopt() writes is assigned before a watcher can reach it.
+        pipeline.onSiftResumedOnItsOwn(this::adopt);
     }
 
     /**
@@ -105,7 +110,7 @@ public class RunLauncherPresenter {
     public RunStage stage() {
         if (this.running) {
             return new RunStage.Running(this.progress.view(this.ranAs, this.scopeOfTheRun,
-                    this.cancelRequested, this.abandonRequested, this.importKind));
+                    this.cancelRequested, this.abandonRequested, this.importKind, this.startedItself));
         }
         final RunResultView done = this.endedCard;
         return done == null ? new RunStage.Setup() : new RunStage.Finished(done, this.cardMessage);
@@ -334,10 +339,10 @@ public class RunLauncherPresenter {
     }
 
     /**
-     * What the run now on the dashboard was started as, or null where the dashboard started none.
+     * What the run now on the dashboard was started as, or null where the dashboard has no run.
      *
-     * <p>Null does not mean nothing is running. A watcher resuming a sift of its own starts a job
-     * this presenter never saw, and a caller asking what is running has to allow for that.
+     * <p>Null does not mean nothing is running. Other screens run jobs of their own, and a caller
+     * asking what is running has to allow for that.
      *
      * @return {@link RunMode} the mode of the run in flight, or null
      */
@@ -438,6 +443,36 @@ public class RunLauncherPresenter {
     }
 
     /**
+     * Takes the screen into its running state over a sift that started without a press.
+     *
+     * <p>A run the reader's own agent triggered is theirs to watch and theirs to stop. So the
+     * dashboard holds it exactly as it holds one they pressed for.
+     *
+     * <p>Unlike {@link #begin}, this does not clear what the last run reported to the progress
+     * area. That clearing covers the gap between a press and the job's own first word. Here the job
+     * is already going and may already have spoken, so a clear could wipe the plan it had just
+     * announced.
+     *
+     * @param scope {@link String} what this sift covers, as its own run is named
+     * @param job a {@link JobHandle} of {@link CullJobOutcome} the sift now running
+     */
+    private void adopt(final String scope, final JobHandle<CullJobOutcome> job) {
+        this.report(null);
+        this.ranAs = RunMode.SIFT;
+        this.scopeOfTheRun = scope;
+        this.narrowedTo = null;
+        this.importKind = null;
+        this.endedCard = null;
+        this.cancelRequested = false;
+        this.abandonRequested = false;
+        this.startedItself = true;
+        this.inFlight = job;
+        this.running = true;
+        this.repaint();
+        job.onComplete().whenComplete((outcome, failure) -> this.ends(RunMode.SIFT, job, outcome, failure));
+    }
+
+    /**
      * Starts a job and takes the screen into its running state.
      *
      * <p>The one place a job's whole life is wired up, so a first press and a continue cannot end
@@ -474,10 +509,11 @@ public class RunLauncherPresenter {
             this.endedCard = null;
             this.cancelRequested = false;
             this.abandonRequested = false;
+            this.startedItself = false;
             this.inFlight = handle;
             this.running = true;
             this.markShell();
-            handle.onComplete().whenComplete((outcome, failure) -> this.ends(ran, outcome, failure));
+            handle.onComplete().whenComplete((outcome, failure) -> this.ends(ran, handle, outcome, failure));
         } catch (final RuntimeException e) {
             // Everything the facade refuses outright arrives here, before any job exists. A job
             // already running, an app on its way out, a folder root gone bad since this screen was
@@ -516,12 +552,21 @@ public class RunLauncherPresenter {
      * load-bearing. A reader between the two would otherwise find no job running and no result to
      * show, and be handed the launcher for one frame.
      *
+     * <p>A job whose slot has already been taken by another leaves the screen alone. The runner
+     * frees the slot a moment before it hands an outcome back, so another job can be admitted
+     * inside that gap. Without this the older run's card would go up over one that had only just
+     * started.
+     *
      * @param ran {@link RunMode} the mode the job was started in
+     * @param job a {@link JobHandle} of any result the job reporting itself
      * @param outcome what the job produced, null where it threw
      * @param failure {@link Throwable} what it threw, null where it did not
      */
-    private void ends(final RunMode ran, final @Nullable Object outcome,
+    private void ends(final RunMode ran, final JobHandle<?> job, final @Nullable Object outcome,
                       final @Nullable Throwable failure) {
+        if (this.inFlight != job) {
+            return;
+        }
         if (failure != null) {
             // JobRunner catches Throwable and completes the future without writing anything, so
             // this is the only record the failure gets.

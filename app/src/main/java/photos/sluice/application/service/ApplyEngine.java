@@ -1,6 +1,5 @@
 package photos.sluice.application.service;
 
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -38,7 +37,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -121,9 +119,11 @@ public class ApplyEngine {
      * @throws ApplyException if validation finds unresolved problems
      */
     public ApplyReport apply(final Path prepDirPath, final ApplyOptions options, final ProgressCallback progress) throws ApplyException {
-        // NEVER never trips, so the cancellation-aware overload below always runs to completion
-        // and returns non-null here - this just asserts that rather than silently trusting it.
-        return Objects.requireNonNull(this.apply(prepDirPath, options, progress, CancellationSignal.NEVER));
+        return switch (this.apply(prepDirPath, options, progress, CancellationSignal.NEVER)) {
+            case ApplyEnding.Finished(final ApplyReport report) -> report;
+            case ApplyEnding.StoppedPartWay _ ->
+                    throw new IllegalStateException("an uncancellable apply stopped part way");
+        };
     }
 
     /**
@@ -142,12 +142,12 @@ public class ApplyEngine {
      * @param options {@link ApplyOptions} apply behavior flags
      * @param progress {@link ProgressCallback} progress callback ticked per file
      * @param cancellation {@link CancellationSignal} signal checked between file operations
-     * @return {@link ApplyReport} the applied run's summary report, or null if cancelled
+     * @return {@link ApplyEnding} how it ended, carrying what it moved either way
      * @throws ApplyException if validation finds unresolved problems
      */
-    public @Nullable ApplyReport apply(final Path prepDirPath, final ApplyOptions options,
-                                       final ProgressCallback progress,
-                                       final CancellationSignal cancellation) throws ApplyException {
+    ApplyEnding apply(final Path prepDirPath, final ApplyOptions options,
+                      final ProgressCallback progress,
+                      final CancellationSignal cancellation) throws ApplyException {
         final PrepDir prepDir = this.cullPrepPort.readIndex(prepDirPath);
         // One snapshot for this whole run, taken before anything below could append to the ledger.
         final Ledger ledger = this.moveLedger.read(prepDirPath);
@@ -183,14 +183,17 @@ public class ApplyEngine {
         // Otherwise progress would reach 100% while unreviewable files are still being moved.
         final int total = statuses.size() + unreviewableStatuses.size();
         int current = 0;
+        // Counted as they move rather than taken from the planned list, so a run that stops part
+        // way reports files rather than intentions.
+        int unreviewableMoved = 0;
         // Checked per decision, in both loops below. On cancel, the finalizers past this point -
-        // writeMergedDecisions() and cleanupIntermediates() - must not run, so this returns null
-        // outright rather than falling through to them. No decisions.json means the prep dir still
-        // reads as a waiting job (see dispatchAndApply()'s own null handling).
+        // writeMergedDecisions() and cleanupIntermediates() - must not run, so this leaves outright
+        // rather than falling through to them. No decisions.json means the prep dir still reads as
+        // a waiting job.
         try {
             for (final Status status : statuses) {
                 if (cancellation.isCancelled()) {
-                    return null;
+                    return stoppedPartWay(prepDir, outcome, unreviewableMoved, validation);
                 }
                 switch (status) {
                     case final Status.Pending p ->
@@ -204,7 +207,7 @@ public class ApplyEngine {
             }
             for (final FileStatus status : unreviewableStatuses) {
                 if (cancellation.isCancelled()) {
-                    return null;
+                    return stoppedPartWay(prepDir, outcome, unreviewableMoved, validation);
                 }
                 switch (status) {
                     case final FileStatus.Pending pending -> {
@@ -213,6 +216,7 @@ public class ApplyEngine {
                         final MoveOutcome moved = this.recordThenMove(file, destDir, prepDirPath,
                                 cancellation, TransferProgress.within(progress, current, total));
                         this.note(file, destDir, moved.dest(), REASON_UNREVIEWABLE);
+                        unreviewableMoved++;
                     }
                     case final FileStatus.Done done -> this.backfillUnreviewableNote(done);
                     case FileStatus.Skipped _ -> {} // user gave up on this file - nothing to do
@@ -222,11 +226,11 @@ public class ApplyEngine {
             }
             this.writeNearDupNotes(nearDupGroups, outcome);
         } catch (final TransferAbandonedException e) {
-            // Null for the same reason a cancel between decisions gives null: the finalizers must
-            // not run. The abandoned decision left a move record with nothing at its destination,
-            // which is the crash-between-record-and-move case classification already resolves by
-            // hash on the next pass.
-            return null;
+            // Stopped for the same reason a cancel between decisions stops: the finalizers must not
+            // run. The abandoned decision left a move record with nothing at its destination, which
+            // is the crash-between-record-and-move case classification already resolves by hash on
+            // the next pass.
+            return stoppedPartWay(prepDir, outcome, unreviewableMoved, validation);
         }
 
         final var report = new ApplyReport(prepDir.photos(), outcome.byCategory, unreviewableFiles.size(),
@@ -235,7 +239,24 @@ public class ApplyEngine {
                 validation.heals());
         this.cullPrepPort.writeMergedDecisions(prepDirPath, prepDir.scope(), validation.decisions(), persistedSummary);
         this.cleanupIntermediates(prepDirPath);
-        return report;
+        return new ApplyEnding.Finished(report);
+    }
+
+    /**
+     * What an apply that gave up between two files moved before it did.
+     *
+     * @param prepDir {@link PrepDir} the run's own prep directory
+     * @param outcome {@link ApplyOutcome} what has moved so far
+     * @param unreviewableMoved int how many unjudgeable files were moved before it stopped
+     * @param validation {@link ValidationReport} the gate this run passed, for its heals
+     * @return {@link ApplyEnding} the stopped ending, carrying that report
+     */
+    private static ApplyEnding stoppedPartWay(final PrepDir prepDir, final ApplyOutcome outcome,
+                                              final int unreviewableMoved,
+                                              final ValidationReport validation) {
+        return new ApplyEnding.StoppedPartWay(new ApplyReport(prepDir.photos(), outcome.byCategory,
+                unreviewableMoved, outcome.nearDupGroupsChosen.size(), outcome.nearDupRejects,
+                validation.heals()));
     }
 
     /**
@@ -271,9 +292,9 @@ public class ApplyEngine {
      * Runs only for a decision already hash-verified as done. It never re-decides the move itself.
      * It only backfills the one write that could have landed after it and is still missing. That's a
      * funny decision's library hash-index row, or a review category's note line.
-     * A NearDupReject has no write of its own beyond the move. Its landed path is taken here all the
-     * same, because the note its group keeps is written once, from every member's landed name, and a
-     * prior run's rejects are named in it too.
+     * A NearDupReject has no write of its own beyond the move. Its landed path is taken here all
+     * the same, because the note its group keeps is written once from every member's landed name.
+     * A prior run's rejects are named in that note too.
      *
      * @param decision {@link Decision} the already-verified-done decision
      * @param record {@link MoveRecord} the verified move record proving it ran
@@ -413,9 +434,9 @@ public class ApplyEngine {
      */
     private void applyClassification(final Classification c, final Path prepDirPath, final ApplyOutcome outcome,
                                      final CancellationSignal cancellation, final TransferProgress watching) {
-        outcome.byCategory.merge(c.category(), 1, Integer::sum);
         final Path destDir = this.cullDestinations.destinationDirFor(c);
         final MoveOutcome moved = this.recordThenMove(c.file(), destDir, prepDirPath, cancellation, watching);
+        outcome.byCategory.merge(c.category(), 1, Integer::sum);
         if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
             this.hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
         } else {
@@ -560,8 +581,8 @@ public class ApplyEngine {
      * sat under in Sorted, then why it is here.
      *
      * <p>The month matters on the kept photo's own line as much as on a reject's. Its copy here is
-     * deleted rather than moved only where a rescue resolves the destination its original is at, and
-     * for a photo nothing else can date, this line is the only thing that resolves it.
+     * deleted rather than moved only where a rescue resolves the destination its original is at.
+     * For a photo nothing else can date, this line is the only thing that resolves it.
      *
      * <p>The folder's own name cannot stand in for any of them. It is built from the keeper's month,
      * and a group's members can sit in different ones.

@@ -56,9 +56,9 @@ public class QuitPresenter {
             "Finishing the current file. \"Force quit now\" gives up on it instead, and it is "
                     + "picked up again next time.";
 
-    // A job the dashboard never started: a discard, a sweep of finished runs, a troubleshoot pass.
-    // None of them re-runs itself, and none passes a stop signal into the store, so neither of the
-    // two lines above is true of one. What holds for any job at all is that it stops.
+    // A job the dashboard never started. None of them re-runs itself, and none passes a stop
+    // signal into the store, so neither of the two lines above is true of one. What holds for any
+    // job at all is that it stops.
     private static final String WAITING_ON_SOMETHING_ELSE =
             "Finishing what was already started. \"Force quit now\" leaves without waiting for it.";
 
@@ -168,10 +168,6 @@ public class QuitPresenter {
     /**
      * What the question names as still going.
      *
-     * <p>Falls back to naming nothing where the dashboard has no run of its own.
-     * A watcher resuming a sift starts a job nothing on the launcher recorded, so the mode there
-     * would describe the wrong work or none at all.
-     *
      * @return {@link String} the opening sentence of the question
      */
     private String whatIsRunning() {
@@ -187,9 +183,8 @@ public class QuitPresenter {
      * on is a model answering, which no stop can shorten, and the answer it gives up on has already
      * been paid for.
      *
-     * <p>A job with no mode gets a third, saying only that it stops. Discarding a run, clearing the
-     * finished ones and a troubleshoot pass all reach here. None of them is a file this app would
-     * move again, or could give up on part-way.
+     * <p>A job with no mode gets a third, saying only that it stops. None of those is a file this
+     * app would move again, or could give up on part-way.
      *
      * @return {@link String} the line the waiting dialog carries
      */

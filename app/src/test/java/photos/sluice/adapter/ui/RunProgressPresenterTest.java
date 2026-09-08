@@ -203,9 +203,9 @@ class RunProgressPresenterTest {
 
     @Test
     void theAreaHoldsRoomForAsManyBarsAsTheModeCanReport() {
-        assertThat(this.presenter.view(RunMode.SIFT, "2019", false, false, null).reservedBars())
+        assertThat(this.presenter.view(RunMode.SIFT, "2019", false, false, null, false).reservedBars())
                 .isEqualTo(3);
-        assertThat(this.presenter.view(RunMode.MOVE_TO_LIBRARY, "2019", false, false, null).reservedBars())
+        assertThat(this.presenter.view(RunMode.MOVE_TO_LIBRARY, "2019", false, false, null, false).reservedBars())
                 .isEqualTo(1);
     }
 
@@ -268,7 +268,7 @@ class RunProgressPresenterTest {
 
     @Test
     void aRunAlreadyGivingUpOnItsFileSaysSoAndOffersNothingFurther() {
-        final RunProgressView giving = this.presenter.view(RunMode.SORT, "2019", true, true, null);
+        final RunProgressView giving = this.presenter.view(RunMode.SORT, "2019", true, true, null, false);
 
         assertThat(giving.cancelLabel()).isEqualTo("Stopping now...");
         assertThat(giving.cancelPressable()).isFalse();
@@ -289,19 +289,19 @@ class RunProgressPresenterTest {
 
     @Test
     void anImportWithNoKindClaimsNothingAboutTheFolderItCameFrom() {
-        assertThat(this.presenter.view(RunMode.IMPORT, "DCIM", true, false, null).cancelling())
+        assertThat(this.presenter.view(RunMode.IMPORT, "DCIM", true, false, null, false).cancelling())
                 .isEqualTo(this.stoppingAnImport(ImportKind.COPY).cancelling());
     }
 
     private RunProgressView working() {
-        return this.presenter.view(RunMode.SORT, "the oldest year in your Inbox", false, false, null);
+        return this.presenter.view(RunMode.SORT, "the oldest year in your Inbox", false, false, null, false);
     }
 
     private RunProgressView stopping(final RunMode ran) {
-        return this.presenter.view(ran, "2019", true, false, null);
+        return this.presenter.view(ran, "2019", true, false, null, false);
     }
 
     private RunProgressView stoppingAnImport(final ImportKind kind) {
-        return this.presenter.view(RunMode.IMPORT, "DCIM", true, false, kind);
+        return this.presenter.view(RunMode.IMPORT, "DCIM", true, false, kind, false);
     }
 }

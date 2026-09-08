@@ -9,12 +9,14 @@ import photos.sluice.adapter.fs.Sha256Hasher;
 import photos.sluice.application.port.out.ApplyException;
 import photos.sluice.application.port.out.ApplyOptions;
 import photos.sluice.application.port.out.MediaStore;
+import photos.sluice.application.port.out.TransferAbandonedException;
 import photos.sluice.application.port.out.TransferProgress;
 import photos.sluice.config.SettingsFixture;
 import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.cull.Finding.MissingShard;
 import photos.sluice.domain.cull.Finding.StrayShard;
 import photos.sluice.domain.job.CancellationSignal;
+import photos.sluice.domain.job.ProgressCallback;
 import photos.sluice.domain.model.IndexEntry;
 
 import java.io.IOException;
@@ -29,6 +31,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static photos.sluice.application.service.CullPrepTestSupport.applyEngine;
@@ -914,10 +917,11 @@ class ApplyEngineTest {
         final AtomicInteger ticks = new AtomicInteger();
         final CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
 
-        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
+        final ApplyEnding ending = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, _) -> ticks.set(current), cancelAfterFirstTick);
 
-        assertThat(report).isNull();
+        assertThat(ending).isInstanceOf(ApplyEnding.StoppedPartWay.class);
+        assertThat(ending.report().byCategory()).containsExactly(entry("junk", 1));
         assertThat(Files.exists(first)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/first.jpg"))).isTrue();
         // The second decision was never reached.
@@ -927,6 +931,33 @@ class ApplyEngineTest {
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
         assertThat(Files.exists(prepDir.resolve("montage-001.jpg"))).isTrue();
         assertThat(Files.exists(prepDir.resolve("tile-001-01.jpg"))).isTrue();
+    }
+
+    // An abandoned transfer leaves the source where it was, so a count taken before the move would
+    // name a photo still in Sorted. That ordering is invisible to a cooperative cancel, which
+    // always lands between two files.
+    @Test
+    void aTransferGivenUpOnCountsNeitherThePhotoNorAnythingAfterIt(@TempDir final Path root)
+            throws IOException, ApplyException {
+        final Path libraryRoot = root.resolve("Library");
+        final Path prepDir = prepDir(root);
+        final Path first = root.resolve("Sorted/Photos/2019/06/first.jpg");
+        final Path second = root.resolve("Sorted/Photos/2019/06/second.jpg");
+        writeFile(first, "blurry1");
+        writeFile(second, "blurry2");
+        writeIndex(prepDir, 2, List.of("montage-001"));
+        writeSidecar(prepDir, "montage-001", sidecarEntry(first), sidecarEntry(second));
+        writeShard(prepDir, "montage-001",
+                classificationJson(first, "junk", "blurry"),
+                classificationJson(second, "junk", "also blurry"));
+
+        final ApplyEnding ending = applyEngine(root, libraryRoot, hashIndex(root), abandoningEveryMove())
+                .apply(prepDir, new ApplyOptions(false), ProgressCallback.NO_OP, CancellationSignal.NEVER);
+
+        assertThat(ending).isInstanceOf(ApplyEnding.StoppedPartWay.class);
+        assertThat(ending.report().byCategory()).isEmpty();
+        assertThat(Files.exists(first)).isTrue();
+        assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
     }
 
     @Test
@@ -946,10 +977,12 @@ class ApplyEngineTest {
         final AtomicInteger ticks = new AtomicInteger();
         final CancellationSignal cancelAfterFirstTick = () -> ticks.get() == 1;
 
-        final ApplyReport report = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
+        final ApplyEnding ending = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, _) -> ticks.set(current), cancelAfterFirstTick);
 
-        assertThat(report).isNull();
+        assertThat(ending).isInstanceOf(ApplyEnding.StoppedPartWay.class);
+        assertThat(ending.report().byCategory()).containsExactly(entry("junk", 1));
+        assertThat(ending.report().unreviewable()).isZero();
         assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/a.jpg"))).isTrue();
         // The unreviewable file was never reached.
@@ -1025,6 +1058,16 @@ class ApplyEngineTest {
     // invocation. Deterministically simulates that crash timing. No amount of pre-seeded state can
     // reproduce it: pre-seeding only proves the engine tolerates ALREADY-crashed state, not that a
     // crash mid-run leaves the right things durable.
+    private static MediaStore abandoningEveryMove() {
+        return new NioMediaStore() {
+            @Override
+            public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
+                               final TransferProgress watching) {
+                throw new TransferAbandonedException(source);
+            }
+        };
+    }
+
     private static final class FailingAfterMoves implements MediaStore {
         private final MediaStore delegate = new NioMediaStore();
         private final CrashPoint crashPoint;

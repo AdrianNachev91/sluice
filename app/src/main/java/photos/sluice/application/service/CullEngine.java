@@ -109,6 +109,8 @@ final class CullEngine {
      * @param secretStore {@link SecretStore} says whether the configured provider's credential is held
      * @param watchPollInterval {@link Duration} how often a watcher re-checks its prep dir
      * @param runChanges {@link RunChanges} told whenever a watch moves a run with nobody watching
+     * @param autoResumedSifts {@link AutoResumedSifts} told when a watcher carries a sift on by
+     *         itself
      */
     CullEngine(final MontageRenderer montageRenderer, final CullDispatcher cullDispatcher,
                final ApplyEngine applyEngine,
@@ -119,7 +121,8 @@ final class CullEngine {
                final PrepDirDoctor prepDirDoctor, final PrepDirRemedies prepDirRemedies,
                final RootsGuard rootsGuard, final SpendLedgerPort spendLedger,
                final SecretStore secretStore,
-               final Duration watchPollInterval, final RunChanges runChanges) {
+               final Duration watchPollInterval, final RunChanges runChanges,
+               final AutoResumedSifts autoResumedSifts) {
         this.secretStore = secretStore;
         this.spendLedger = spendLedger;
         this.spendEstimator = new SpendEstimator(spendLedger);
@@ -135,17 +138,15 @@ final class CullEngine {
         this.shardTallyCalculator = new ShardTallyCalculator(cullPrepPort, applyPlanner, ledgerReader);
         this.cullWatchers = new CullWatchers(cullDispatcher::configuredProviderIs,
                 this.shardTallyCalculator, watchPollInterval,
-                prepDir -> this.resume(prepDir, false), runChanges);
+                prepDir -> this.resume(prepDir, false), runChanges, autoResumedSifts);
         this.prepDirDoctor = prepDirDoctor;
         this.prepDirRemedies = prepDirRemedies;
         this.pathsPort = pathsPort;
     }
 
     /**
-     * Re-arms a watcher for every resumable run found on disk. There is no persistent job store (see
-     * WaitingCullJob's own doc), so restarting the app would otherwise stop watching every run armed
-     * before it. Pipeline calls this explicitly, on behalf of a driving adapter that stays open
-     * long enough for a watcher to be worth arming.
+     * Re-arms a watcher for every resumable run found on disk. There is no persistent job store, so
+     * restarting the app would otherwise stop watching every run armed before it.
      *
      * <p>Resumable means WAITING or READY: the two states a run can leave without a person. WAITING
      * still expects shards, which is what a watcher watches for. READY has them all already, the
@@ -278,7 +279,7 @@ final class CullEngine {
     }
 
     /**
-     * Delegates to {@link CullWatchers#disarmAll}. {@link Pipeline#stopAllWatching}'s own route in.
+     * Delegates to {@link CullWatchers#disarmAll}.
      */
     void disarmAllWatches() {
         this.cullWatchers.disarmAll();
@@ -338,7 +339,7 @@ final class CullEngine {
      * whole question, and an engine has no use for the value.
      *
      * <p>Not asked on a resume. A resume runs no prep, and its dispatch refuses before it makes a
-     * request. A run whose shards are all in enters no culler at all, and refusing that one would
+     * request. A run whose shards are all in enters no culler at all. Refusing that one would
      * strand work already paid for behind a key it does not need.
      *
      * @throws MissingCredentialException if the configured provider needs a credential and none is held
@@ -392,9 +393,8 @@ final class CullEngine {
      * cannot be shown to share a month, and refusing on what cannot be established would block a
      * scope over nothing.
      *
-     * <p>Reads the runs freshly rather than from a snapshot. The desktop makes the same check
-     * against its last reading to grey Start early, and that copy can be a moment stale. This one
-     * is the guarantee.
+     * <p>Reads the runs freshly rather than from a snapshot, so this is the guarantee rather than
+     * a check made against a reading that can be a moment stale.
      *
      * @param scope {@link CullScope} the scope about to be sifted
      */
@@ -692,12 +692,11 @@ final class CullEngine {
             return this.recorded(prep, new CullJobOutcome.Waiting(this.buildWaitingJob(prep),
                     WaitingReason.CANCELLED, cullReport, archivedPriorRun));
         }
-        final Optional<ApplyReport> applyReport;
+        final ApplyEnding applyEnding;
         try {
-            applyReport = this.phaseRunner.run(APPLYING,
-                    progress -> Optional.ofNullable(
-                            this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress,
-                                    cancellation)));
+            applyEnding = this.phaseRunner.run(APPLYING,
+                    progress -> this.applyEngine.apply(prep.prepDir(), new ApplyOptions(allowPartial), progress,
+                            cancellation));
         } catch (final ApplyException e) {
             return this.recorded(prep, new CullJobOutcome.Blocked(this.buildWaitingJob(prep), e.findings(),
                     cullReport, archivedPriorRun));
@@ -708,15 +707,17 @@ final class CullEngine {
             this.recordSpend(prep.scope(), cullReport, RunEnding.FAILED);
             throw e;
         }
-        // Empty means apply() itself stopped mid-loop and skipped its finalizers, so
-        // decisions.json was never written. The prep dir still reads as a waiting job, the same
-        // authority rule the renderer's own empty return follows above. No watcher is armed here
-        // either, for the same reason the pre-APPLYING check above doesn't: an auto-resume
-        // moments after a cancel would defy it.
-        return this.recorded(prep, applyReport
-                .<CullJobOutcome>map(applied -> new CullJobOutcome.Applied(cullReport, applied, archivedPriorRun, null))
-                .orElseGet(() -> new CullJobOutcome.Waiting(this.buildWaitingJob(prep),
-                        WaitingReason.CANCELLED, cullReport, archivedPriorRun)));
+        // Stopping part way means apply skipped its finalizers, so decisions.json was never
+        // written and the prep dir still reads as a waiting job. No watcher is armed here, for the
+        // same reason the pre-APPLYING check above doesn't: an auto-resume moments after a cancel
+        // would defy it.
+        return this.recorded(prep, switch (applyEnding) {
+            case ApplyEnding.Finished(final ApplyReport applied) ->
+                    new CullJobOutcome.Applied(cullReport, applied, archivedPriorRun, null);
+            case ApplyEnding.StoppedPartWay(final ApplyReport moved) ->
+                    new CullJobOutcome.Waiting(this.buildWaitingJob(prep), WaitingReason.CANCELLED,
+                            cullReport, archivedPriorRun, moved);
+        });
     }
 
     /**
@@ -769,7 +770,7 @@ final class CullEngine {
      *
      * <p>Just after the newest earlier line that freed the scope. Freeing it is what lets a fresh
      * sift have it, so anything older than that belongs to a run this one replaced. Applying frees
-     * it and so does giving up on one, which is why the question sits on {@link RunEnding} rather
+     * it and so does giving up on one. That is why the question sits on {@link RunEnding} rather
      * than on a list of endings kept here.
      *
      * <p>The newest line of all is this run's own and is never the boundary, which is what lets
@@ -932,7 +933,7 @@ final class CullEngine {
             case final CullJobOutcome.Applied ignored -> RunEnding.APPLIED;
             case final CullJobOutcome.Blocked ignored -> RunEnding.BLOCKED;
             case final CullJobOutcome.Cancelled ignored -> RunEnding.CANCELLED;
-            case CullJobOutcome.Waiting(_, final WaitingReason reason, _, _) -> switch (reason) {
+            case CullJobOutcome.Waiting(_, final WaitingReason reason, _, _, _) -> switch (reason) {
                 case CANCELLED -> RunEnding.CANCELLED;
                 case SHARDS_OUTSTANDING -> RunEnding.SHARDS_OUTSTANDING;
                 case CEILING_REACHED -> RunEnding.CEILING_REACHED;

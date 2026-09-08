@@ -3,6 +3,7 @@ package photos.sluice.adapter.ui;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import photos.sluice.adapter.ui.RunLauncherView.ModeChoice;
 import photos.sluice.adapter.ui.RunResultView.CardAction;
 import photos.sluice.domain.job.ShardTally;
@@ -28,6 +29,7 @@ import photos.sluice.application.port.out.MissingCredentialException;
 import photos.sluice.application.port.out.SecretId;
 import photos.sluice.application.port.out.SecretStoreException;
 import photos.sluice.application.port.out.TokenSpend;
+import photos.sluice.application.service.AutoResumedSifts;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
@@ -64,6 +66,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -1072,6 +1075,107 @@ class RunLauncherPresenterTest {
     }
 
     @Test
+    void aSiftStoppedWhileItMovedPhotosCountsWhatItMovedAndSaysItHadStarted() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(new CullJobOutcome.Waiting(
+                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+                new ApplyReport(120, Map.of("junk", 31, "scenery", 4), 0, 0, 0, List.of())));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label)
+                .containsExactly("Sheets judged", "Photos that left Sorted", "junk", "scenery");
+        assertThat(this.finishedView().detail()).contains("what this run moved");
+    }
+
+    // 4 sheets against 120 photos, so a row quoting the wrong one of them cannot pass by accident.
+    @Test
+    void theSheetsRowNamesThePhotosWhereTheRowsBelowItCountPhotos() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(new CullJobOutcome.Waiting(
+                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+                new ApplyReport(120, Map.of("junk", 31), 0, 0, 0, List.of())));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts())
+                .extracting(RunResultView.Count::label, RunResultView.Count::value)
+                .contains(tuple("Sheets judged", "4 of 4 (120 photos)"));
+    }
+
+    // Every destination contributes a different number, so a total that missed one, or that took
+    // the near-duplicate groups in, cannot land on 46 by accident. The 7 groups are the figure
+    // deliberately left out: a group is resolved by copying its keeper, which stays in Sorted.
+    @Test
+    void theTotalCountsEveryPhotoThatLeftSortedAndNoGroupWhoseKeeperStayed() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(new CullJobOutcome.Waiting(
+                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+                new ApplyReport(120, Map.of("junk", 31, "scenery", 4), 3, 7, 8, List.of())));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts())
+                .extracting(RunResultView.Count::label, RunResultView.Count::value)
+                .containsExactly(
+                        tuple("Sheets judged", "4 of 4 (120 photos)"),
+                        tuple("Photos that left Sorted", "46"),
+                        tuple("junk", "31"),
+                        tuple("scenery", "4"),
+                        tuple("Copies moved to Duplicates", "8"),
+                        tuple("Could not be judged", "3"));
+    }
+
+    // Nothing moved, so no photo rows follow and there is no change of unit for the sheets row to
+    // mark. The same tally and report as the test above, bar the category it filed nothing under.
+    @Test
+    void theSheetsRowNamesNoPhotosWhereNothingBelowItCountsAny() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(new CullJobOutcome.Waiting(
+                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+                new ApplyReport(120, Map.of(), 0, 0, 0, List.of())));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts())
+                .extracting(RunResultView.Count::label, RunResultView.Count::value)
+                .containsExactly(tuple("Sheets judged", "4 of 4"));
+    }
+
+    // A near-duplicate group is resolved by copying its keeper, which stays in Sorted. It is the
+    // one count an apply can raise without a photo leaving.
+    @Test
+    void aSiftThatOnlyResolvedNearDuplicateGroupsClaimsNothingLeftSorted() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(new CullJobOutcome.Waiting(
+                new WaitingCullJob("2019", PREP_DIR, new ShardTally(4, 4, 4), Instant.EPOCH),
+                WaitingReason.CANCELLED, CullReport.nothingSpent("anthropic", 4), null,
+                new ApplyReport(120, Map.of(), 0, 1, 0, List.of())));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label)
+                .containsExactly("Sheets judged");
+        assertThat(this.finishedView().detail()).isNull();
+    }
+
+    @Test
+    void aSiftStoppedBeforeItMovedAnythingClaimsNothingAboutPhotosLeavingSorted() {
+        this.choose(RunMode.SIFT, "2019");
+        this.siftEndsWith(waitingBecause(WaitingReason.CANCELLED));
+
+        this.presenter.start();
+
+        assertThat(this.finishedView().counts()).extracting(RunResultView.Count::label)
+                .containsExactly("Sheets judged");
+        assertThat(this.finishedView().detail()).isNull();
+    }
+
+    @Test
     void aSiftWaitingOnAnAgentOffersNoContinueBecauseNothingHasArrivedToActOn() {
         this.choose(RunMode.SIFT, "2019");
         this.siftEndsWith(waitingBecause(WaitingReason.SHARDS_OUTSTANDING));
@@ -1092,6 +1196,91 @@ class RunLauncherPresenterTest {
         this.presenter.continueRun(PREP_DIR);
 
         verify(this.pipeline).resume(PREP_DIR, false);
+    }
+
+    @Test
+    void aSiftThatContinuedOnItsOwnPutsUpTheProgressFaceAndMarksTheSidebar() {
+        this.aWatcherResumes("2019");
+
+        assertThat(this.runningView().heading()).isEqualTo("Sift progress");
+        assertThat(this.runningView().scope()).isEqualTo("2019");
+        assertThat(this.runningView().startedOnItsOwn())
+                .isEqualTo("Your agent judged every sheet, so this sift continued on its own.");
+        assertThat(this.presenter.dashboardMark()).isEqualTo(DashboardMark.RUNNING);
+        assertThat(this.presenter.runningMode()).isEqualTo(RunMode.SIFT);
+    }
+
+    @Test
+    void aSiftThatContinuedOnItsOwnKeepsWhatTheJobHasAlreadyReported() {
+        this.progress.phasesPlanned(List.of("Sifting...", "Applying decisions..."));
+        this.progress.phaseStarted("Sifting...");
+
+        this.aWatcherResumes("2019");
+
+        assertThat(this.runningView().phases()).extracting(PhaseBar::label)
+                .containsExactly("Sifting...", "Applying decisions...");
+    }
+
+    @Test
+    void stopReachesTheJobOfASiftNobodyStarted() {
+        final JobHandle<Object> resumed = this.aWatcherResumes("2019");
+
+        this.presenter.cancel();
+
+        verify(resumed).requestCancellation();
+    }
+
+    @Test
+    void aSiftThatContinuedOnItsOwnLeavesItsCardAndAMarkToRead() {
+        final JobHandle<Object> resumed = finished();
+        when(resumed.onComplete()).thenReturn(CompletableFuture.completedFuture(
+                waitingBecause(WaitingReason.SHARDS_OUTSTANDING)));
+
+        this.watcherResumed("2019", resumed);
+
+        assertThat(this.finishedView().heading()).isEqualTo("Sifting is waiting on your agent.");
+        assertThat(this.presenter.dashboardMark()).isEqualTo(DashboardMark.FINISHED);
+    }
+
+    @Test
+    void aRunTheReaderStartsAfterOneThatContinuedOnItsOwnSaysNothingAboutIt() {
+        final JobHandle<Object> resumed = finished();
+        when(resumed.onComplete()).thenReturn(CompletableFuture.completedFuture(
+                waitingBecause(WaitingReason.SHARDS_OUTSTANDING)));
+        this.watcherResumed("2019", resumed);
+        this.presenter.dismissResult();
+        this.choose(RunMode.SORT, "");
+        this.aSortStillRunning();
+
+        this.presenter.start();
+
+        assertThat(this.runningView().startedOnItsOwn()).isNull();
+    }
+
+    @Test
+    void aRunEndingAfterASiftHasTakenTheSlotLeavesTheScreenOnTheSift() {
+        this.choose(RunMode.SORT, "");
+        final CompletableFuture<Object> sorting = this.aSortStillRunning();
+        this.presenter.start();
+        this.aWatcherResumes("2019");
+
+        sorting.complete(sortSummaryWith(List.of()));
+
+        assertThat(this.runningView().scope()).isEqualTo("2019");
+    }
+
+    @SuppressWarnings("unchecked")
+    private JobHandle<Object> aWatcherResumes(final String scope) {
+        final JobHandle<Object> handle = mock(JobHandle.class);
+        when(handle.onComplete()).thenReturn(new CompletableFuture<>());
+        this.watcherResumed(scope, handle);
+        return handle;
+    }
+
+    private void watcherResumed(final String scope, final JobHandle<?> job) {
+        final var listener = ArgumentCaptor.forClass(AutoResumedSifts.Listener.class);
+        verify(this.pipeline, atLeastOnce()).onSiftResumedOnItsOwn(listener.capture());
+        listener.getValue().resumed(scope, retyped(job));
     }
 
     private RunProgressView runningView() {

@@ -11,6 +11,8 @@ import java.util.List;
  *
  * @param heading {@link String} what is running, named after the work the user chose
  * @param scope {@link String} what this run covers, written out
+ * @param startedOnItsOwn what the screen says about a run nobody pressed for, or null where the
+ *     reader started it themselves
  * @param phases a {@link List} of {@link PhaseBar} one bar per phase reported, oldest first
  * @param waiting {@link String} what to say before the first phase arrives, or null once one has
  * @param cancelLabel {@link String} what the cancel button says
@@ -20,7 +22,8 @@ import java.util.List;
  * @param reservedBars int how many bars' worth of room to hold from the first frame, so nothing
  *     below them moves as each phase arrives
  */
-public record RunProgressView(String heading, String scope, List<PhaseBar> phases,
+public record RunProgressView(String heading, String scope, @Nullable String startedOnItsOwn,
+                              List<PhaseBar> phases,
                               @Nullable String waiting, String cancelLabel, boolean cancelPressable,
                               @Nullable String cancelling, int reservedBars) {
 
@@ -29,6 +32,7 @@ public record RunProgressView(String heading, String scope, List<PhaseBar> phase
      *
      * @param heading {@link String} what is running
      * @param scope {@link String} what this run covers
+     * @param startedOnItsOwn what the screen says about a run nobody pressed for, or null
      * @param phases a {@link List} of {@link PhaseBar} one bar per phase reported
      * @param waiting {@link String} what to say before the first phase arrives, or null
      * @param cancelLabel {@link String} what the cancel button says

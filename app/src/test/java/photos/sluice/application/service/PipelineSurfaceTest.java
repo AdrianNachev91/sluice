@@ -44,6 +44,7 @@ class PipelineSurfaceTest {
             "cullRun(Path)",
             "isWatchActive(Path)",
             "onRunsMoved(Runnable)",
+            "onSiftResumedOnItsOwn(Listener)",
             "onJobFinished(Runnable)",
             "launchPromptFor(Path)",
             "redoRejectedAnswers(Path)",
@@ -103,10 +104,14 @@ class PipelineSurfaceTest {
     // onJobFinished adds a listener to a list too, and what would ask it is the closing path. An
     // install whose roots are unusable is the one most likely to be closed. Refused a listener
     // there, a quit could never learn that the run it is waiting on had ended.
+    //
+    // onSiftResumedOnItsOwn adds a listener to a list as well, and takes no path. It is asked
+    // before anything has said whether the roots are usable.
     private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK =
             Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "abandonTheFileInFlight()",
                     "estimateFor(int)", "configuredProviderSpends()", "archivesFolder()", "isBusy()",
-                    "isWatchActive(Path)", "onRunsMoved(Runnable)", "onJobFinished(Runnable)");
+                    "isWatchActive(Path)", "onRunsMoved(Runnable)", "onJobFinished(Runnable)",
+                    "onSiftResumedOnItsOwn(Listener)");
 
     // The facade is where every driving adapter passes through, so it is where the folder-root check
     // belongs. A guard written into a screen would be walked past by a command line. This reads the

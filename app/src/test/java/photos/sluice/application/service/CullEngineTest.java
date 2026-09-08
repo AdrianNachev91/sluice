@@ -1,5 +1,6 @@
 package photos.sluice.application.service;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,6 +41,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static java.util.Map.entry;
+import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1330,6 +1333,8 @@ class CullEngineTest {
 
         assertThat(outcome).isInstanceOf(CullJobOutcome.Waiting.class);
         final Path prepDir = ((CullJobOutcome.Waiting) outcome).job().prepDir();
+        assertThat(requireNonNull(((CullJobOutcome.Waiting) outcome).movedBeforeItPaused()).byCategory())
+                .containsExactly(entry("junk", 1));
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
         // Exactly one of the two photos was fully processed (moved + recorded) before the
         // cancellation stopped the loop; scan order between them isn't guaranteed.
@@ -1375,6 +1380,28 @@ class CullEngineTest {
         waitForJobToFinish(pipeline, Duration.ofSeconds(2));
         assertThat(Files.exists(photo)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/IMG_1.jpg"))).isTrue();
+    }
+
+    @Test
+    void anAutoResumeReachesAListenerOnTheFacadeWithTheRunsNameAndItsJob(@TempDir final Path root)
+            throws IOException {
+        final Path photo = writePhoto(sortedPhotosDir(root, "2019", "06"), "IMG_1.jpg",
+                Instant.parse("2019-06-01T10:00:00Z"));
+        final var pipeline = watchPipeline(root, new RecordingProgressPort(), defaultCullSettings(),
+                List.of(new ManualModeCuller()), Duration.ofMillis(20));
+        final var told = new AtomicReference<@Nullable String>();
+        final var job = new AtomicReference<@Nullable JobHandle<CullJobOutcome>>();
+        pipeline.onSiftResumedOnItsOwn((scope, resumed) -> {
+            told.set(scope);
+            job.set(resumed);
+        });
+        final var waiting = (CullJobOutcome.Waiting) pipeline.cull(new CullScope.Year(2019, null)).join();
+
+        writeShard(waiting.job().prepDir(), "montage-001", classificationJson(photo, "junk", "blurry"));
+
+        waitForJobToFinish(pipeline, Duration.ofSeconds(2));
+        assertThat(told.get()).isEqualTo("2019");
+        assertThat(requireNonNull(job.get()).join()).isInstanceOf(CullJobOutcome.Applied.class);
     }
 
     // Regression: disarmWatch() runs at the top of every dispatchAndApply() call, not just the

@@ -7,6 +7,7 @@ import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.ProviderType;
+import photos.sluice.domain.cull.CullScope;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
@@ -32,6 +33,7 @@ final class CullWatchers {
     private final Duration watchPollInterval;
     private final Function<Path, JobHandle<CullJobOutcome>> resume;
     private final RunChanges runChanges;
+    private final AutoResumedSifts autoResumedSifts;
     private final Map<Path, CullWatcher> activeWatches = new ConcurrentHashMap<>();
     // What each watched run's tally read as on the last poll, so a poll can tell a sheet arriving
     // from a folder that has not changed. Written and read on the watcher's own polling thread,
@@ -50,23 +52,22 @@ final class CullWatchers {
      * @param resume a {@link Function} of {@link Path} to {@link JobHandle} of {@link CullJobOutcome}
      *         the route back to {@link CullEngine#resume} a ready watcher's auto-resume attempt uses
      * @param runChanges {@link RunChanges} told whenever a watch arms, disarms, or finishes a run
+     * @param autoResumedSifts {@link AutoResumedSifts} told when a watcher's own resume goes in
      */
     CullWatchers(final Predicate<ProviderType> configuredProviderIs,
                  final ShardTallyCalculator shardTallyCalculator,
                  final Duration watchPollInterval, final Function<Path, JobHandle<CullJobOutcome>> resume,
-                 final RunChanges runChanges) {
+                 final RunChanges runChanges, final AutoResumedSifts autoResumedSifts) {
         this.configuredProviderIs = configuredProviderIs;
         this.shardTallyCalculator = shardTallyCalculator;
         this.watchPollInterval = watchPollInterval;
         this.resume = resume;
         this.runChanges = runChanges;
+        this.autoResumedSifts = autoResumedSifts;
     }
 
     /**
-     * Whether a watcher is currently polling prepDir, without reaching into the private
-     * activeWatches map. A test proves disarmWatch()'s own claim with it: that any
-     * dispatchAndApply() call retires an existing watcher, not just the watcher's own auto-resume
-     * trigger.
+     * Whether a watcher is currently polling prepDir.
      *
      * @param prepDir {@link Path} the prep dir to check
      * @return boolean whether a watcher is currently active for it
@@ -117,10 +118,7 @@ final class CullWatchers {
     }
 
     /**
-     * Stops and removes the active watcher for a prep dir, if one exists. Giving up on a
-     * still-waiting job must stop it from ever auto-resuming a prep dir that is about to be filed
-     * into the graveyard. So this is package-private rather than private: dispatchAndApply()'s own
-     * call site isn't the only place that needs to retire a watcher. It is also armWatch()'s
+     * Stops and removes the active watcher for a prep dir, if one exists. {@link #armWatch}'s
      * opposite. Retiring one leaves the run exactly as it is: still Waiting, still listed, still
      * blocking a re-cull of its scope.
      *
@@ -204,8 +202,7 @@ final class CullWatchers {
      * <p>A submitted resume is the ordinary one - the watcher's job is then done, win or lose (see
      * CullEngine's own dispatchAndApply() re-arm-on-Waiting note). The submitted job runs and
      * completes fully asynchronously; nothing here waits on it. A failure there would otherwise
-     * vanish silently, so it's logged here instead. That matches the visibility a manual Resume gets
-     * for free from whatever UI/CLI surfaces its own join()/onComplete() failure.
+     * vanish silently, so it is logged here.
      *
      * <p>A refused resume is the other. Unusable folder roots are not a condition that clears by
      * waiting, so polling on would spend a tally read every interval to be refused again. The
@@ -224,7 +221,7 @@ final class CullWatchers {
      * <p>Anything else propagates to CullWatcher.poll's own broad catch, which logs it and polls on
      * every tick. No fourth type reaches here today, so nothing does that yet. A refusal added to
      * the resume path later needs a clause of its own here, or it becomes exactly the
-     * poll-for-ever loop the naming above exists to prevent.
+     * poll-for-ever loop the naming above prevents.
      *
      * @param prepDir {@link Path} the prep dir to attempt to resume
      * @return boolean false only when a busy job runner makes it worth retrying
@@ -241,13 +238,11 @@ final class CullWatchers {
         } catch (final JobInProgressException busy) {
             return false;
         }
+        this.autoResumedSifts.resumed(CullScope.tagOf(prepDir), handle);
         handle.onComplete().whenComplete((_, failure) -> {
             if (failure != null) {
                 log.warn("Auto-resume for {} failed", prepDir, failure);
             }
-            // Told here rather than only where the watcher is retired. dispatchAndApply retires it
-            // on the way in. An announcement from there reaches a screen before the apply that
-            // follows has moved a single file. This one lands once the work is over.
             this.runChanges.moved();
         });
         return true;

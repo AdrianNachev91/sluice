@@ -6,6 +6,7 @@ import photos.sluice.application.port.in.WaitingReason;
 import photos.sluice.application.port.out.CullException;
 import photos.sluice.application.port.out.CullReport;
 import photos.sluice.application.port.out.TokenSpend;
+import photos.sluice.domain.cull.ApplyReport;
 import photos.sluice.domain.job.WaitingCullJob;
 
 import java.nio.file.Path;
@@ -40,7 +41,7 @@ final class CullOutcomeReport {
                              final Function<Path, String> instructions) {
         return switch (outcome) {
             case final CullJobOutcome.Applied applied -> appliedOutcome(applied, duplicates);
-            case final CullJobOutcome.Waiting waiting -> waitingOutcome(waiting, instructions);
+            case final CullJobOutcome.Waiting waiting -> waitingOutcome(waiting, duplicates, instructions);
             case final CullJobOutcome.Blocked blocked -> blockedOutcome(blocked);
             case final CullJobOutcome.Cancelled cancelled -> cancelledOutcome(cancelled);
         };
@@ -91,11 +92,14 @@ final class CullOutcomeReport {
      * A run that paused with work left, worded by why.
      *
      * @param waiting {@link CullJobOutcome.Waiting} the paused run
+     * @param duplicates {@link Path} the Duplicates root, named in the row counting the copies
+     *        moved there
      * @param instructions a {@link Function} of {@link Path} to {@link String} writes the text to
      *        hand an agent
      * @return {@link CommandOutcome} the outcome
      */
     private static CommandOutcome waitingOutcome(final CullJobOutcome.Waiting waiting,
+                                                 final Path duplicates,
                                                  final Function<Path, String> instructions) {
         final WaitingCullJob job = waiting.job();
         final String line = switch (waiting.reason()) {
@@ -107,7 +111,8 @@ final class CullOutcomeReport {
                     + "Run 'resume " + job.scope() + "' to continue under a fresh limit.";
         };
         if (waiting.reason() != WaitingReason.SHARDS_OUTSTANDING) {
-            return CommandOutcome.waiting(CullPayloads.outcome(waiting), List.of(line), notes(waiting));
+            return CommandOutcome.waiting(CullPayloads.outcome(waiting),
+                    stoppedLines(line, waiting.movedBeforeItPaused(), duplicates), notes(waiting));
         }
         final String handover = written(instructions, job.prepDir());
         final List<String> lines = List.of(line, "", handover == null
@@ -116,6 +121,55 @@ final class CullOutcomeReport {
                         + "whatever is holding them clears."
                 : handover);
         return CommandOutcome.waiting(CullPayloads.outcome(waiting, handover), lines, notes(waiting));
+    }
+
+    /**
+     * What a paused run prints, plus the files it had already moved where it had begun moving any.
+     *
+     * <p>A stop landing mid-apply leaves photos in their categories.
+     *
+     * <p>The near-duplicate group count is left off, unlike a completed run's report. A group is
+     * resolved by copying its keeper, and that keeper stays in Sorted. Counted under a line about
+     * what left, it would name a photo that is still there.
+     *
+     * @param line {@link String} what the pause itself says
+     * @param moved {@link ApplyReport} what apply moved before it stopped, or null where it never
+     *        started
+     * @param duplicates {@link Path} the Duplicates root, named in the row counting the copies
+     *        moved there
+     * @return a {@link List} of {@link String} the lines to print
+     */
+    private static List<String> stoppedLines(final String line, final @Nullable ApplyReport moved,
+                                             final Path duplicates) {
+        if (moved == null) {
+            return List.of(line);
+        }
+        final List<String> lines = new ArrayList<>();
+        lines.add(line);
+        moved.byCategory().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(category -> ResultLines.addWhenAny(lines, category.getKey(), category.getValue()));
+        ResultLines.addWhenAny(lines, "Copies moved to " + duplicates, moved.nearDupRejects());
+        ResultLines.addWhenAny(lines, "Could not be judged", moved.unreviewable());
+        if (lines.size() > 1) {
+            lines.add(1, "It had started moving photos. These left Sorted before it stopped.");
+            lines.add(2, ResultLines.count("Photos that left Sorted", leftSorted(moved)));
+        }
+        return List.copyOf(lines);
+    }
+
+    /**
+     * Every photo an apply moved out of Sorted, which is what the lines under the total add up to.
+     *
+     * <p>Near-duplicate groups are not in it. A group is resolved by copying its keeper, and the
+     * keeper stays in Sorted, so it is the one figure an apply can raise with nothing leaving.
+     *
+     * @param moved {@link ApplyReport} what the apply moved
+     * @return int how many photos left Sorted
+     */
+    private static int leftSorted(final ApplyReport moved) {
+        return moved.unreviewable() + moved.nearDupRejects()
+                + moved.byCategory().values().stream().mapToInt(Integer::intValue).sum();
     }
 
     /**

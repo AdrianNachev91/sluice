@@ -220,8 +220,9 @@ public final class CullPayloads {
                                           final @Nullable String archived,
                                           final @Nullable String instructions) {
         final WaitingCullJob job = waiting.job();
+        final ApplyReport moved = waiting.movedBeforeItPaused();
         return new OutcomePayload("Waiting", report, job.scope(), text(job.prepDir()), shards(job.shards()),
-                waiting.reason(), null, null, archived, instructions);
+                waiting.reason(), null, moved == null ? null : applied(moved), archived, instructions);
     }
 
     /**

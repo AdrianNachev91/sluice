@@ -2,11 +2,13 @@ package photos.sluice.adapter.ui;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import photos.sluice.application.port.in.InboxTally;
 import photos.sluice.application.port.in.SortedTally;
 import photos.sluice.application.port.in.SortedTally.MonthRow;
 import photos.sluice.application.port.in.SortedTally.YearRow;
 import photos.sluice.application.port.in.SpendEstimate;
+import photos.sluice.application.service.AutoResumedSifts;
 import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -179,6 +182,18 @@ class QuitPresenterTest {
         final var order = inOrder(this.pipeline, this.startup);
         order.verify(this.pipeline).abandonTheFileInFlight();
         order.verify(this.startup).windDownWithin(Duration.ZERO);
+    }
+
+    @Test
+    void aSiftNobodyStartedIsNamedAsASiftRatherThanAsSomething() {
+        final QuitView asked = this.quitViewOver(_ -> {
+            final var listener = ArgumentCaptor.forClass(AutoResumedSifts.Listener.class);
+            verify(this.pipeline, atLeastOnce()).onSiftResumedOnItsOwn(listener.capture());
+            listener.getValue().resumed("2019", retyped(neverFinishing()));
+        });
+
+        assertThat(asked.question()).startsWith("Sifting is still going.");
+        assertThat(asked.waiting()).contains("sheet").contains("provider account balance");
     }
 
     private QuitView quitView(final RunMode mode, final String scope) {

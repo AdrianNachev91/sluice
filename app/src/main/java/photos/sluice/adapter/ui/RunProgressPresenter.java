@@ -37,6 +37,8 @@ class RunProgressPresenter {
             + "to about a minute. Nothing further will be started.";
     private static final String CANCELLING_A_COPY = "What arrived stays in your Inbox.";
     private static final String CANCELLING_A_MOVE_IN = "Some files already moved to your Inbox.";
+    private static final String CONTINUED_ON_ITS_OWN =
+            "Your agent judged every sheet, so this sift continued on its own.";
 
     private final FxProgressPort progress;
 
@@ -57,14 +59,17 @@ class RunProgressPresenter {
      * @param cancelling boolean whether a stop has already been asked for
      * @param abandoning boolean whether the file in flight has been given up on as well
      * @param importing {@link ImportKind} null for anything but an import
+     * @param startedItself boolean whether this run began with nobody pressing anything
      * @return {@link RunProgressView} every value that area puts on the page
      */
     RunProgressView view(final RunMode ran, final String scope, final boolean cancelling,
-                         final boolean abandoning, final @Nullable ImportKind importing) {
+                         final boolean abandoning, final @Nullable ImportKind importing,
+                         final boolean startedItself) {
         final List<PhaseBar> bars = this.progress.phases().stream()
                 .map(phase -> bar(phase, cancelling))
                 .toList();
-        return new RunProgressView(ran.label() + " progress", scope, bars,
+        return new RunProgressView(ran.label() + " progress", scope,
+                startedItself ? CONTINUED_ON_ITS_OWN : null, bars,
                 bars.isEmpty() ? STARTING : null, stopLabel(ran, cancelling, abandoning),
                 !cancelling || offersToGiveUpOnTheFile(ran, abandoning),
                 cancelling ? cancellingLine(ran, abandoning, this.midFile(), importing) : null, ran.phases());

@@ -3,6 +3,7 @@ package photos.sluice.domain.cull;
 import org.jspecify.annotations.Nullable;
 import photos.sluice.domain.model.Numerals;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -68,8 +69,7 @@ public sealed interface CullScope {
     /**
      * The on-disk tag identifying this scope's prep dir (logs/sift-prep/<tag>/). Also PrepDir.scope()
      * and a WaitingCullJob's own scope() - both carry this same string. Lives here rather than in the
-     * adapter that names the directory, so the application layer can compute it too. Pipeline uses
-     * it to recognize an existing waiting job for a scope before rebuilding its prep dir.
+     * adapter that names the directory, so the application layer can compute it too.
      *
      * @param scope {@link CullScope} the cull scope to tag
      * @return {@link String} the scope's on-disk tag
@@ -79,6 +79,20 @@ public sealed interface CullScope {
             case Year(final int year, final List<Integer> months) -> yearTag(year, months);
             case OldestN(final int n) -> "oldest-" + n;
         };
+    }
+
+    /**
+     * The tag a prep dir on disk was culled under, which is its own folder name.
+     *
+     * <p>A path with no name component at all answers the whole path, so that a caller sweeping
+     * whatever it found on disk always gets a string back.
+     *
+     * @param prepDir {@link Path} the prep directory to name
+     * @return {@link String} its tag
+     */
+    static String tagOf(final Path prepDir) {
+        final Path name = prepDir.getFileName();
+        return name == null ? prepDir.toString() : name.toString();
     }
 
     /**

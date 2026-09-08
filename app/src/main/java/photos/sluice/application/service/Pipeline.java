@@ -75,8 +75,7 @@ public class Pipeline {
     // How often a waiting job re-checks its prep dir's shard tally. Not part of CullSettings: this
     // cadence is an internal responsiveness/overhead tradeoff rather than anything a user is
     // offered. Short enough that a human dropping files never perceives the delay; long enough not
-    // to hammer disk or spam re-validation. See the package-private constructor overload for how
-    // tests override it.
+    // to hammer disk or spam re-validation.
     private static final Duration DEFAULT_WATCH_POLL_INTERVAL = Duration.ofSeconds(2);
 
     private final SortEngine sortEngine;
@@ -97,6 +96,7 @@ public class Pipeline {
     private final MediaTallies mediaTallies;
     private final ReviewFolders reviewFolders;
     private final RunChanges runChanges = new RunChanges();
+    private final AutoResumedSifts autoResumedSifts = new AutoResumedSifts();
 
     /**
      * Explicit @Autowired: Spring's implicit single-constructor injection only kicks in when a
@@ -198,7 +198,7 @@ public class Pipeline {
         this.cullEngine = new CullEngine(montageRenderer, cullDispatcher, applyEngine, cullPrepPort, cullSettings,
                 mediaStore, pathsPort, jobRunner, progressPort, applyPlanner, ledgerReader,
                 prepDirDoctor, prepDirRemedies, this.rootsGuard, spendLedger, secretStore, watchPollInterval,
-                this.runChanges);
+                this.runChanges, this.autoResumedSifts);
         this.curateEngine = new CurateEngine(sortEngine, jobRunner, this.cullEngine, this.phaseRunner);
         this.disasterDrawer = disasterDrawer;
         this.troubleshooter = troubleshooter;
@@ -338,8 +338,7 @@ public class Pipeline {
     }
 
     /**
-     * Every cull run currently on disk, diagnosed. This is the one source the runs screen and its
-     * counted nav entry are both meant to render from.
+     * Every cull run currently on disk, diagnosed.
      *
      * <p>Derived by enumerating the sift-prep root and diagnosing each dir, never from a persisted
      * list. Enumerating is what keeps a damaged run visible, which is exactly when it most needs to
@@ -497,8 +496,8 @@ public class Pipeline {
      * the spend ledger, which is one small file rather than a walk. A caller putting this behind
      * every keystroke is doing that much disk work per keystroke.
      *
-     * <p>No roots check. The one path it reads is the spend ledger, where an unusable root degrades
-     * the estimate rather than escaping: a failed read falls back to the shipped seed.
+     * <p>No roots check. The one path it reads is the spend ledger. An unusable root degrades the
+     * estimate rather than escaping, since a failed read falls back to the shipped seed.
      *
      * @param photos how many photos the scope holds
      * @return {@link SpendEstimate} what a sift over them is expected to consume
@@ -748,6 +747,16 @@ public class Pipeline {
     }
 
     /**
+     * Asks to be told whenever a sift continues with nobody pressing anything.
+     *
+     * @param listener {@link AutoResumedSifts.Listener} what to run, on the watcher's own polling
+     *     thread. A listener marshals for itself
+     */
+    public void onSiftResumedOnItsOwn(final AutoResumedSifts.Listener listener) {
+        this.autoResumedSifts.onResumed(listener);
+    }
+
+    /**
      * Asks to be told each time the job that was running finishes.
      *
      * <p>Says nothing about which job it was or how it went, and does not promise the runner is
@@ -782,8 +791,7 @@ public class Pipeline {
      * resolves a path runs this first, including the ones that only read.
      *
      * <p>The guard sits here rather than in a screen, because both a screen and a command line pass
-     * through this class. A check written into either one would be walked past by the other. The
-     * same reasoning puts the working-root claim one layer up.
+     * through this class. A check written into either one would be walked past by the other.
      *
      * @throws PathsMisconfiguredException if any of the three roots is unset, missing, or overlapping
      */
@@ -1009,12 +1017,12 @@ public class Pipeline {
 
     /**
      * Thrown when a fresh cull or curate is refused because scope's own prep dir could not be read
-     * at all, rather than because a diagnosed run occupies it. Refusing is the same safe direction a
-     * {@link ScopeOccupiedException} takes: proceeding would let a fresh prep clear a directory
-     * nobody could confirm was actually empty. But nothing here was diagnosed, so no run is
-     * fabricated to carry one. This carries the prep dir path and the read failure instead. A
-     * caller names what could not be read and offers a retry, rather than routing to a specific
-     * state's remedy that was never actually reached.
+     * at all. That is a different fault from a diagnosed run occupying it. Refusing is the same
+     * safe direction a {@link ScopeOccupiedException} takes: proceeding would let a fresh prep
+     * clear a directory nobody could confirm was actually empty. But nothing here was diagnosed, so
+     * no run is fabricated to carry one. This carries the prep dir path and the read failure
+     * instead. A caller names what could not be read and offers a retry, rather than routing to a
+     * specific state's remedy that was never actually reached.
      *
      * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know the call was
      * refused needs no knowledge of this type at all.

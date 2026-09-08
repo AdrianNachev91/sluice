@@ -4,12 +4,14 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import photos.sluice.application.port.in.CullJobOutcome;
+import photos.sluice.application.port.in.JobInProgressException;
 import photos.sluice.application.port.out.ProviderType;
 import photos.sluice.domain.job.ShardTally;
 
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -33,6 +35,13 @@ class CullWatchersTest {
 
     private final AtomicReference<ShardTallyCalculator.Reading> reading =
             new AtomicReference<>(new ShardTallyCalculator.Reading(false, new ShardTally(1, 1, 3)));
+
+    private final AtomicReference<JobHandle<CullJobOutcome>> resumed =
+            new AtomicReference<>(neverFinishes());
+
+    private final AtomicBoolean busy = new AtomicBoolean();
+
+    private final AutoResumedSifts autoResumedSifts = new AutoResumedSifts();
 
     private @Nullable CullWatchers watchers;
 
@@ -137,6 +146,34 @@ class CullWatchersTest {
         assertThat(this.announcements.get()).isEqualTo(atRearming);
     }
 
+    @Test
+    void aResumeThatGoesInHandsTheJobAndTheRunsNameToWhoeverIsListening() {
+        final var told = new AtomicReference<@Nullable String>();
+        final var job = new AtomicReference<@Nullable JobHandle<CullJobOutcome>>();
+        this.autoResumedSifts.onResumed((scope, resumedJob) -> {
+            told.set(scope);
+            job.set(resumedJob);
+        });
+        this.reading.set(new ShardTallyCalculator.Reading(true, new ShardTally(3, 3, 3)));
+        this.arm();
+
+        waitUntil(Duration.ofSeconds(2), () -> told.get() != null);
+        assertThat(told.get()).isEqualTo("2019");
+        assertThat(job.get()).isSameAs(this.resumed.get());
+    }
+
+    @Test
+    void aResumeRefusedByABusyRunnerAnnouncesNothing() {
+        final var told = new AtomicInteger();
+        this.autoResumedSifts.onResumed((_, _) -> told.incrementAndGet());
+        this.reading.set(new ShardTallyCalculator.Reading(true, new ShardTally(3, 3, 3)));
+        this.busy.set(true);
+        this.arm();
+
+        waitUntil(Duration.ofSeconds(2), () -> this.polls.get() >= 2);
+        assertThat(told.get()).isZero();
+    }
+
     private void arm() {
         final ShardTallyCalculator calculator = mock(ShardTallyCalculator.class);
         when(calculator.poll(any())).thenAnswer(_ -> {
@@ -144,8 +181,15 @@ class CullWatchersTest {
             return this.reading.get();
         });
         this.watchers = new CullWatchers(ProviderType.MANUAL::equals, calculator, TICK,
-                _ -> neverFinishes(), runChanges(this.announcements));
+                _ -> this.resumeOrRefuse(), runChanges(this.announcements), this.autoResumedSifts);
         this.watchers.armWatch(PREP_DIR);
+    }
+
+    private JobHandle<CullJobOutcome> resumeOrRefuse() {
+        if (this.busy.get()) {
+            throw new JobInProgressException("Something else is running.");
+        }
+        return this.resumed.get();
     }
 
     private static RunChanges runChanges(final AtomicInteger announcements) {

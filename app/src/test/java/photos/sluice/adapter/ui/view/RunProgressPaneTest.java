@@ -138,7 +138,7 @@ class RunProgressPaneTest {
 
     @Test
     void aRunWithNoPhaseYetSaysItIsStartingRatherThanShowingAnEmptyArea() throws Exception {
-        final Parent pane = onFxThread(() -> shown(new RunProgressView("Sort progress", "2019",
+        final Parent pane = onFxThread(() -> shown(new RunProgressView("Sort progress", "2019", null,
                 List.of(), "Starting...", "Stop", true, null, 1)));
 
         assertThat(text(pane, "#run-progress-waiting")).isEqualTo("Starting...");
@@ -161,7 +161,7 @@ class RunProgressPaneTest {
 
     @Test
     void aCancellationInFlightSaysSoAndTakesTheButtonOutOfUse() throws Exception {
-        final Parent pane = onFxThread(() -> shown(new RunProgressView("Sift progress", "2019",
+        final Parent pane = onFxThread(() -> shown(new RunProgressView("Sift progress", "2019", null,
                 List.of(), null, "Stopping...", false, "Finishing the sheet it is already on.", 3)));
 
         assertThat(text(pane, "#run-progress-cancelling")).isEqualTo("Finishing the sheet it is already on.");
@@ -182,8 +182,8 @@ class RunProgressPaneTest {
     }
 
     private static RunProgressView view(final List<PhaseBar> phases) {
-        return new RunProgressView("Sift progress", "2019", phases, phases.isEmpty() ? "Starting..." : null,
-                "Stop", true, null, 3);
+        return new RunProgressView("Sift progress", "2019", null, phases,
+                phases.isEmpty() ? "Starting..." : null, "Stop", true, null, 3);
     }
 
     // Read off the rows rather than the labels, because a label inside a hidden row still answers
