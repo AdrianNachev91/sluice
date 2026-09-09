@@ -42,8 +42,15 @@ public class SluiceApplication {
     /**
      * Starts the application, importing the user's config file if present.
      *
+     * <p>{@code public} is required rather than redundant. The installer's launcher resolves this
+     * method reflectively instead of going through the JDK's own, so the relaxation that lets a
+     * package-private {@code main} start under {@code java} does not reach it. Dropping the
+     * modifier leaves every test, the IDE and the build green, and kills the installed
+     * application at startup.
+     *
      * @param args {@link String}[] command-line arguments
      */
+    @SuppressWarnings("UnnecessaryModifier")
     public static void main(final String[] args) {
         final Path configFile = ConfigDirLocator.configFile(System.getProperty("os.name"), System.getenv());
         if (opensTheWindow(args)) {
