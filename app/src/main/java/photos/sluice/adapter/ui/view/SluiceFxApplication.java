@@ -5,6 +5,7 @@ import javafx.application.Platform;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import org.jspecify.annotations.Nullable;
+import org.springframework.boot.Banner;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import photos.sluice.SluiceApplication;
@@ -130,6 +131,10 @@ public class SluiceFxApplication extends Application {
     private void buildContextAndRun() {
         try {
             final var built = new SpringApplicationBuilder(SluiceApplication.class)
+                    // The banner is not log output, so the logging configuration cannot reach it.
+                    // A packaged window has a stream attached whenever one was started from a
+                    // terminal, and a framework's logo is not something this app says.
+                    .bannerMode(Banner.Mode.OFF)
                     // Spring sets java.awt.headless true before the context starts, and
                     // GraphicsEnvironment latches it on first read. That leaves Desktop reporting
                     // itself unsupported, which is what opens a folder in the file manager. Left
