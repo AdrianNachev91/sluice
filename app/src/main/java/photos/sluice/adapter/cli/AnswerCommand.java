@@ -127,8 +127,8 @@ public class AnswerCommand implements Callable<Integer> {
         return switch (resolved) {
             case final AnswerVocabulary.Answer.Choice choice -> this.answer(prepDir, choice);
             case final AnswerVocabulary.Answer.Discard discard -> this.discard(discard.prepDir());
-            case final AnswerVocabulary.Answer.LookAgain lookAgain -> this.lookAgain(prepDir, lookAgain.file());
-            case final AnswerVocabulary.Answer.NoMatch ignored -> this.nothingAnswers(prepDir, key, option);
+            case final AnswerVocabulary.Answer.Recheck lookAgain -> this.lookAgain(prepDir, lookAgain.file());
+            case final AnswerVocabulary.Answer.NoMatch ignored -> this.noMatchOutcome(prepDir, key, option);
         };
     }
 
@@ -143,7 +143,7 @@ public class AnswerCommand implements Callable<Integer> {
         this.start.claimAndSweep();
         this.pipeline.answer(prepDir, choice.answer(), AnswerSource.CLI);
         final String address = Objects.requireNonNull(this.run, "picocli refuses a missing positional before this runs");
-        return CommandOutcome.done(null, List.of("Answered. Run 'troubleshoot " + Refusal.shown(address)
+        return CommandOutcome.done(null, List.of("Answered. Run 'troubleshoot " + Refusal.shownValue(address)
                 + "' to see what is still open."));
     }
 
@@ -156,9 +156,9 @@ public class AnswerCommand implements Callable<Integer> {
      * @return {@link CommandOutcome} the outcome, where another look explains the absence
      * @throws AnswerNotApplicableException where nothing does
      */
-    private CommandOutcome nothingAnswers(final Path prepDir, final String key, final String option) {
+    private CommandOutcome noMatchOutcome(final Path prepDir, final String key, final String option) {
         final CommandOutcome restored = AnswerVocabulary.RECHECK_OPTION.equals(option)
-                ? this.lookAgainAtARestoredFile(prepDir, key)
+                ? this.lookAgainAtRestoredFile(prepDir, key)
                 : null;
         if (restored != null) {
             return restored;
@@ -197,7 +197,7 @@ public class AnswerCommand implements Callable<Integer> {
      * @param key {@link String} the key the caller named, which is the photo's own path
      * @return {@link CommandOutcome} the outcome, or null where the key names no file on disk
      */
-    private @Nullable CommandOutcome lookAgainAtARestoredFile(final Path prepDir, final String key) {
+    private @Nullable CommandOutcome lookAgainAtRestoredFile(final Path prepDir, final String key) {
         final Path file;
         try {
             file = Path.of(key);

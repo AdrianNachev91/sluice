@@ -55,7 +55,7 @@ class SluiceFxApplicationTest {
     @BeforeEach
     void installWhatTheLauncherWould(@TempDir final Path configDir) {
         this.configFile = configDir.resolve("config.yml");
-        UiLauncher.install(this.configFile);
+        UiLauncher.installFailureHandling(this.configFile);
     }
 
     @AfterEach

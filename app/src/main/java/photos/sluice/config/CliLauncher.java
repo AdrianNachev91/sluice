@@ -101,7 +101,7 @@ public final class CliLauncher {
                     // them.
                     .bannerMode(Banner.Mode.OFF)
                     .logStartupInfo(false)
-                    .run(SpringLaunch.importing(configFile, args));
+                    .run(SpringLaunch.argsWithConfigImport(configFile, args));
         } catch (final RuntimeException failedToStart) {
             return new StartupFailureReport(System.out, System.err, SluiceCli.documentAsked(commandArgs(args)))
                     .write(new SpringStartupFailureClassifier(configFile).classify(failedToStart));

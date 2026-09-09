@@ -113,13 +113,13 @@ public class TroubleshootCommand implements Callable<Integer> {
             lines.add("This sift's records were unreadable and have been rebuilt.");
         }
         if (!report.strayShardsRepaired().isEmpty()) {
-            lines.add(ResultLines.count("Stray sheets filed into place", report.strayShardsRepaired().size()));
+            lines.add(ResultLines.countLine("Stray sheets filed into place", report.strayShardsRepaired().size()));
         }
         final List<Finding> open = report.after().findings();
         if (open.isEmpty()) {
             lines.add(nothingOpenLine(report.after().state()));
         } else {
-            lines.add(ResultLines.count("Needs your call", open.size()));
+            lines.add(ResultLines.countLine("Needs your call", open.size()));
             open.forEach(finding -> lines.add(humanLine(finding)));
         }
         return lines;

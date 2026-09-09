@@ -50,11 +50,11 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to move
      * @param destDir {@link Path} the destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the path the file was moved to
      * @throws TransferAbandonedException if stop escalated before the move finished
      */
-    Path move(Path source, Path destDir, CancellationSignal stop, TransferProgress watching);
+    Path move(Path source, Path destDir, CancellationSignal stop, TransferProgress transferProgress);
 
     /**
      * The exact free path move(source, destDir) would land on, without performing the move. That is
@@ -76,11 +76,11 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to move
      * @param destination {@link Path} the exact destination path
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      * @throws TransferAbandonedException if stop escalated before the move finished
      */
-    Path moveTo(Path source, Path destination, CancellationSignal stop, TransferProgress watching);
+    Path moveTo(Path source, Path destination, CancellationSignal stop, TransferProgress transferProgress);
 
     /**
      * Copies a file into a destination directory.
@@ -88,11 +88,11 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to copy
      * @param destDir {@link Path} the destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the path the copy was written to
      * @throws TransferAbandonedException if stop escalated before the copy finished
      */
-    Path copy(Path source, Path destDir, CancellationSignal stop, TransferProgress watching);
+    Path copy(Path source, Path destDir, CancellationSignal stop, TransferProgress transferProgress);
 
     /**
      * Copies source to exactly destination.
@@ -100,12 +100,12 @@ public interface MediaStore extends MediaReader {
      * @param source {@link Path} the file to copy
      * @param destination {@link Path} must be free
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      * @throws UncheckedIOException if destination is already taken, or the copy fails
      * @throws TransferAbandonedException if stop escalated before the copy finished
      */
-    Path copyTo(Path source, Path destination, CancellationSignal stop, TransferProgress watching);
+    Path copyTo(Path source, Path destination, CancellationSignal stop, TransferProgress transferProgress);
 
     /**
      * Deletes a file.

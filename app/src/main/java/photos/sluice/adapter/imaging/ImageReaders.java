@@ -32,7 +32,7 @@ final class ImageReaders {
          * @return the answer
          * @throws IOException where the reader cannot answer
          */
-        T from(ImageReader reader) throws IOException;
+        T readFrom(ImageReader reader) throws IOException;
     }
 
     /**
@@ -60,7 +60,7 @@ final class ImageReaders {
             final ImageReader reader = readers.next();
             try {
                 reader.setInput(stream);
-                return read.from(reader);
+                return read.readFrom(reader);
             } finally {
                 reader.dispose();
             }

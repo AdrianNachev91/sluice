@@ -83,13 +83,13 @@ class CullCategoryTest {
 
     @Test
     void rejectsADescriptionPastItsCeiling() {
-        final String tooLong = "x".repeat(CullCategory.maxDescription() + 1);
+        final String tooLong = "x".repeat(CullCategory.maxDescriptionLength() + 1);
 
         assertThatThrownBy(() -> CullCategory.of("receipts", tooLong))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("description longer");
-        assertThat(CullCategory.of("receipts", "x".repeat(CullCategory.maxDescription())).description())
-                .hasSize(CullCategory.maxDescription());
+        assertThat(CullCategory.of("receipts", "x".repeat(CullCategory.maxDescriptionLength())).description())
+                .hasSize(CullCategory.maxDescriptionLength());
     }
 
     @Test

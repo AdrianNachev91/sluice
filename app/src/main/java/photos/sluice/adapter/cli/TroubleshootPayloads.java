@@ -48,7 +48,7 @@ public final class TroubleshootPayloads {
      */
     public static ReportPayload of(final TroubleshootReport report) {
         return new ReportPayload(report.after().state(), report.indexRebuilt(), report.strayShardsRepaired(),
-                report.after().findings().stream().map(TroubleshootPayloads::open).toList());
+                report.after().findings().stream().map(TroubleshootPayloads::openFindingPayload).toList());
     }
 
     /**
@@ -57,7 +57,7 @@ public final class TroubleshootPayloads {
      * @param finding {@link Finding} the finding to report
      * @return {@link OpenFindingPayload} its machine-readable shape
      */
-    private static OpenFindingPayload open(final Finding finding) {
+    private static OpenFindingPayload openFindingPayload(final Finding finding) {
         return new OpenFindingPayload(FindingPayload.of(finding), AnswerVocabulary.keyFor(finding),
                 AnswerVocabulary.optionsFor(finding));
     }

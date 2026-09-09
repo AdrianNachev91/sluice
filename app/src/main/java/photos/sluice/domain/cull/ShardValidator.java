@@ -260,7 +260,7 @@ public final class ShardValidator {
                     heals);
             judged.add(resolved.file());
             healedVerdicts.add(resolved);
-            checkItsOwnSheet(montageId, index, resolved, sheet, inScope, problems);
+            checkPhotoBelongsToSheet(montageId, index, resolved, sheet, inScope, problems);
             // A keep reaching the report's list would move a photo somebody asked to leave alone.
             if (resolved instanceof final Decision decision) {
                 decisions.add(decision);
@@ -305,9 +305,9 @@ public final class ShardValidator {
      * @param inScope a {@link Set} of {@link Path} every in-scope file the montages actually showed
      * @param problems a {@link List} of {@link Finding} accumulated contract violations
      */
-    private static void checkItsOwnSheet(final String montage, final int index, final Verdict verdict,
-                                         final Set<Path> sheet, final Set<Path> inScope,
-                                         final List<Finding> problems) {
+    private static void checkPhotoBelongsToSheet(final String montage, final int index, final Verdict verdict,
+                                                 final Set<Path> sheet, final Set<Path> inScope,
+                                                 final List<Finding> problems) {
         final Path file = verdict.file();
         if (!sheet.isEmpty() && inScope.contains(file) && !sheet.contains(file)) {
             problems.add(new Finding.PhotoFromAnotherSheet(montage, index, file));
@@ -422,7 +422,7 @@ public final class ShardValidator {
         }
         final Path healed = healableByBasename.get(fileValue.getFileName().toString());
         if (healed != null) {
-            heals.add(Finding.at(montage, index) + ": '" + fileValue + "' -> '" + healed + "'");
+            heals.add(Finding.locationPrefix(montage, index) + ": '" + fileValue + "' -> '" + healed + "'");
             return withFile(verdict, healed);
         }
         problems.add(new FileOutOfScope(montage, index, fileValue));

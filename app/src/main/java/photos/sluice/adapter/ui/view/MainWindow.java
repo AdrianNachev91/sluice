@@ -51,7 +51,7 @@ final class MainWindow {
     private static final String FAILED = "screen-failed";
 
     // Has to stay in step with what the Runs screen says per run.
-    private static final String RUNS_COUNT_MEANS =
+    private static final String RUNS_COUNT_TOOLTIP =
             "Sifts you have started that have not finished. Open Runs to carry them on or throw "
                     + "them away.";
 
@@ -115,7 +115,7 @@ final class MainWindow {
 
         final var content = new VBox();
         content.getStyleClass().add("shell-content");
-        final var leaving = new Leaving(leavingLosesWork);
+        final var leaving = new UnsavedGuard(leavingLosesWork);
         drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter, null, navigation);
         // A ToggleGroup lets its own selected toggle be clicked back to unselected, unlike a radio
         // group. Clicking the active nav entry would otherwise leave the sidebar marking no entry
@@ -130,11 +130,11 @@ final class MainWindow {
         // Settings is the entry marked while Photo categories is up, and nothing else on the sidebar
         // can be current then. So that is where the mark goes back to when a reader asked about
         // unsaved work chooses to stay.
-        final Runnable markStaysWhereItWas = () -> settings.setSelected(true);
+        final Runnable restoreSidebarMark = () -> settings.setSelected(true);
         dashboard.setOnAction(_ -> {
             if (!show(content, DASHBOARD, leaving,
                     () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, null, navigation))) {
-                markStaysWhereItWas.run();
+                restoreSidebarMark.run();
             }
         });
         // A screen without a sidebar entry. Settings stays the destination it was reached from and
@@ -143,17 +143,17 @@ final class MainWindow {
             final PhotoCategoriesPane.Mounted mounted =
                     PhotoCategoriesPane.pane(photoCategoriesPresenter, openSettings);
             leaving.losesWork().set(mounted.hasUnsavedEdits());
-            return filling(mounted.node());
+            return fillHeight(mounted.node());
         });
         settings.setOnAction(_ -> show(content, SETTINGS, leaving, () -> {
             final SettingsPane.Mounted mounted =
                     SettingsPane.pane(settingsPresenter, visionProviderPresenter, openPhotoCategories);
             leaving.losesWork().set(mounted.hasUnsavedEdits());
-            return filling(mounted.node());
+            return fillHeight(mounted.node());
         }));
         review.setOnAction(_ -> {
-            if (!show(content, REVIEW, leaving, () -> filling(ReviewPane.pane(reviewPresenter, navigation)))) {
-                markStaysWhereItWas.run();
+            if (!show(content, REVIEW, leaving, () -> fillHeight(ReviewPane.pane(reviewPresenter, navigation)))) {
+                restoreSidebarMark.run();
             }
         });
         // Moving a folder into the library is a job like any other, so it reports on the dashboard.
@@ -175,7 +175,7 @@ final class MainWindow {
             Platform.runLater(() -> drawMark(dashboardMark, mark));
         });
         final Runnable drawCount = () -> runsCount.setText(countOf(runsPresenter));
-        final Runnable readThenCount = () -> countInTheBackground(runsPresenter, runsCount);
+        final Runnable readThenCount = () -> countInBackground(runsPresenter, runsCount);
         // The badge alone, from a reading the presenter has already taken. Marshalled here because
         // a run moving on its own is announced from whatever thread caused it.
         runsPresenter.setRedrawCount(() -> {
@@ -183,8 +183,8 @@ final class MainWindow {
             Platform.runLater(() -> runsCount.setText(outstanding));
         });
         runs.setOnAction(_ -> {
-            if (!show(content, RUNS, leaving, () -> filling(RunsPane.pane(runsPresenter, drawCount, navigation)))) {
-                markStaysWhereItWas.run();
+            if (!show(content, RUNS, leaving, () -> fillHeight(RunsPane.pane(runsPresenter, drawCount, navigation)))) {
+                restoreSidebarMark.run();
             }
         });
         // A screen without a sidebar entry. Runs stays the destination it was reached from and
@@ -193,7 +193,7 @@ final class MainWindow {
         // before it.
         runsPresenter.setOpenTroubleshoot((prepDir, scope) -> {
             troubleshootPresenter.open(prepDir, scope);
-            show(content, TROUBLESHOOT, leaving, () -> filling(TroubleshootPane.pane(troubleshootPresenter, navigation)));
+            show(content, TROUBLESHOOT, leaving, () -> fillHeight(TroubleshootPane.pane(troubleshootPresenter, navigation)));
         });
         // Hopped, unlike the wirings around it. A discard that works hands the reader back from the
         // job's own completion callback, which is not the thread that paints. Firing a sidebar
@@ -218,8 +218,8 @@ final class MainWindow {
         root.getStyleClass().add("shell");
         final Scene scene = Stylesheet.applyTo(
                 new Scene(root, Stylesheet.INITIAL_WIDTH, Stylesheet.INITIAL_HEIGHT));
-        ScreenWarmUp.afterFirstFrame(root);
-        checkTheConfiguredProviderOncePainted(settingsPresenter);
+        ScreenWarmUp.warmAfterFirstFrame(root);
+        checkProviderAfterFirstFrame(settingsPresenter);
         // Counted once as the app opens, because nothing else does. Selecting the Dashboard above
         // raises no action event. Without this, a reader with unfinished sifts comes back to a
         // sidebar saying nothing until they happen to press a nav entry.
@@ -239,7 +239,7 @@ final class MainWindow {
      *
      * @param settingsPresenter {@link SettingsPresenter} runs the check and keeps its answer
      */
-    private static void checkTheConfiguredProviderOncePainted(final SettingsPresenter settingsPresenter) {
+    private static void checkProviderAfterFirstFrame(final SettingsPresenter settingsPresenter) {
         AfterFirstFrame.run(() -> Thread.ofVirtual().start(settingsPresenter::refreshModelsAtStartup));
     }
 
@@ -259,11 +259,11 @@ final class MainWindow {
      *
      * @param content {@link VBox} the content area, holding exactly the screen on show
      * @param screen {@link String} the name of the screen being asked for
-     * @param leaving {@link Leaving} what has to be answered before the screen on show is replaced
+     * @param leaving {@link UnsavedGuard} what has to be answered before the screen on show is replaced
      * @param draw {@link Supplier} of {@link Node} builds it, called only if it is not up already
      * @return boolean false where the reader chose to stay where they were
      */
-    private static boolean show(final VBox content, final String screen, final Leaving leaving,
+    private static boolean show(final VBox content, final String screen, final UnsavedGuard leaving,
                                 final Supplier<Node> draw) {
         final Node current = content.getChildren().isEmpty() ? null : content.getChildren().getFirst();
         // A panel saying the screen would not open carries that screen's own id. A second press on
@@ -280,7 +280,7 @@ final class MainWindow {
         // Cleared before the draw and set again by it, so the guard belongs to the screen going up
         // rather than to the one coming down.
         leaving.losesWork().set(() -> false);
-        final Node next = buildOrSayItFailed(screen, draw);
+        final Node next = buildOrFailurePanel(screen, draw);
         next.setId(screen);
         content.getChildren().setAll(next);
         return true;
@@ -294,7 +294,7 @@ final class MainWindow {
      *
      * @param losesWork an {@link AtomicReference} to whether the screen up now holds unsaved work
      */
-    private record Leaving(AtomicReference<BooleanSupplier> losesWork) {
+    private record UnsavedGuard(AtomicReference<BooleanSupplier> losesWork) {
     }
 
     /**
@@ -311,7 +311,7 @@ final class MainWindow {
      * @param draw {@link Supplier} of {@link Node} builds it
      * @return {@link Node} the screen, or a panel saying it would not open
      */
-    private static Node buildOrSayItFailed(final String screen, final Supplier<Node> draw) {
+    private static Node buildOrFailurePanel(final String screen, final Supplier<Node> draw) {
         try {
             return draw.get();
         } catch (final RuntimeException e) {
@@ -339,7 +339,7 @@ final class MainWindow {
      * @param pane {@link Node} the screen about to be shown
      * @return {@link Node} that same screen
      */
-    private static Node filling(final Node pane) {
+    private static Node fillHeight(final Node pane) {
         VBox.setVgrow(pane, Priority.ALWAYS);
         return pane;
     }
@@ -352,30 +352,30 @@ final class MainWindow {
      * @param presenter {@link FirstRunPresenter} says which of the two this is
      * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
      * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the launcher
-     * @param said what the save that led here had to report, or null where nothing did
+     * @param message what the save that led here had to report, or null where nothing did
      * @param navigation {@link ScreenNavigation} how a screen it holds opens another
      * @return {@link Node} a pane ready to sit in the content area
      */
     private static Node dashboardPane(final VBox content, final FirstRunPresenter presenter,
                                       final SettingsPresenter settingsPresenter,
                                       final RunLauncherPresenter runLauncherPresenter,
-                                      final @Nullable String said, final ScreenNavigation navigation) {
+                                      final @Nullable String message, final ScreenNavigation navigation) {
         if (presenter.unfinished()) {
-            return filling(FirstRunCard.pane(settingsPresenter, presenter,
+            return fillHeight(FirstRunCard.pane(settingsPresenter, presenter,
                     reported -> drawDashboard(content, presenter, settingsPresenter, runLauncherPresenter,
                             reported, navigation)));
         }
         final Node launcher = RunLauncherPane.pane(runLauncherPresenter, navigation);
-        if (said == null) {
-            return filling(launcher);
+        if (message == null) {
+            return fillHeight(launcher);
         }
         // A report the save could not leave on the first-run card, because finishing took that card
         // off the screen. It stays until it is dismissed. A library move says what it did with the
         // old folder, and the wait a banner earns is not long enough to take that in.
         final var pane = new VBox(launcher);
         VBox.setVgrow(launcher, Priority.ALWAYS);
-        pane.getChildren().addFirst(SettingsRows.banner(pane, "dashboard-banner", said, false));
-        return filling(pane);
+        pane.getChildren().addFirst(SettingsRows.banner(pane, "dashboard-banner", message, false));
+        return fillHeight(pane);
     }
 
     /**
@@ -393,19 +393,19 @@ final class MainWindow {
      * @param presenter {@link FirstRunPresenter} says which state the Dashboard is in
      * @param settingsPresenter {@link SettingsPresenter} supplies and saves the first-run fields
      * @param runLauncherPresenter {@link RunLauncherPresenter} supplies and drives the launcher
-     * @param said what the save that led here had to report, or null where nothing did
+     * @param message what the save that led here had to report, or null where nothing did
      * @param navigation {@link ScreenNavigation} how a screen it holds opens another
      */
     private static void drawDashboard(final VBox content, final FirstRunPresenter presenter,
                                       final SettingsPresenter settingsPresenter,
                                       final RunLauncherPresenter runLauncherPresenter,
-                                      final @Nullable String said, final ScreenNavigation navigation) {
+                                      final @Nullable String message, final ScreenNavigation navigation) {
         final Node current = content.getChildren().isEmpty() ? null : content.getChildren().getFirst();
         if (current != null && !DASHBOARD.equals(current.getId())) {
             return;
         }
-        final Node pane = buildOrSayItFailed(DASHBOARD,
-                () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, said,
+        final Node pane = buildOrFailurePanel(DASHBOARD,
+                () -> dashboardPane(content, presenter, settingsPresenter, runLauncherPresenter, message,
                         navigation));
         pane.setId(DASHBOARD);
         content.getChildren().setAll(pane);
@@ -437,7 +437,7 @@ final class MainWindow {
         final var badge = new Label();
         badge.setId("nav-runs-count");
         badge.getStyleClass().add("nav-count");
-        badge.setTooltip(new Tooltip(RUNS_COUNT_MEANS));
+        badge.setTooltip(new Tooltip(RUNS_COUNT_TOOLTIP));
         SettingsRows.showWhileItSaysSomething(badge);
         return badge;
     }
@@ -484,7 +484,7 @@ final class MainWindow {
      * @param presenter {@link RunsPresenter} does the reading
      * @param badge {@link Label} the number to fill in once it lands
      */
-    private static void countInTheBackground(final RunsPresenter presenter, final Label badge) {
+    private static void countInBackground(final RunsPresenter presenter, final Label badge) {
         Thread.ofVirtual().start(() -> {
             presenter.refresh();
             final String outstanding = countOf(presenter);

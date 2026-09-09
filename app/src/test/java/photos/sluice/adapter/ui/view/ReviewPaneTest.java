@@ -138,7 +138,7 @@ class ReviewPaneTest {
             throws Exception {
         Files.delete(gone);
 
-        assertThatCode(() -> FileManager.inTheSystemFileManager(gone)).doesNotThrowAnyException();
+        assertThatCode(() -> FileManager.openInSystemFileManager(gone)).doesNotThrowAnyException();
     }
 
     @Test
@@ -180,11 +180,11 @@ class ReviewPaneTest {
     }
 
     private static Folder folder(final Root root, final String name) {
-        return folder(root, FiledBy.A_SIFT, name);
+        return folder(root, FiledBy.SIFT, name);
     }
 
     private static Folder heldBack(final String name) {
-        return folder(Root.REVIEW, FiledBy.A_SORT, name);
+        return folder(Root.REVIEW, FiledBy.SORT, name);
     }
 
     private static Folder folder(final Root root, final FiledBy filedBy, final String name) {

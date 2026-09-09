@@ -101,7 +101,7 @@ public interface CullSettings {
      * @return a {@link List} of {@link CullCategory} those cards, then junk
      */
     private static List<CullCategory> withJunkLast(final Stream<CullCategory> cards) {
-        return Stream.concat(cards.filter(card -> !JunkCategory.claims(card.name())),
-                Stream.of(JunkCategory.card())).toList();
+        return Stream.concat(cards.filter(card -> !JunkCategory.isJunkName(card.name())),
+                Stream.of(JunkCategory.category())).toList();
     }
 }

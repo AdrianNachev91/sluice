@@ -66,17 +66,17 @@ public class QuitPresenter {
     // finishing would otherwise put a question up that the reader answers for nothing. Long enough
     // for a job on its last file to land. Short enough to stay under the five seconds Windows waits
     // before calling a window not responding.
-    static final Duration CLOSING_BEAT = Duration.ofMillis(2_500);
+    static final Duration CLOSING_GRACE_PERIOD = Duration.ofMillis(2_500);
 
     // How often that wait re-asks, at most. Nothing announces a job ending, so this polls, and the
     // interval is what a reader would feel as a delay past the job's own end. Capped at a quarter
     // of the beat as well, or a wait shorter than one step would ask once and give up.
-    private static final Duration LONGEST_BEAT_STEP = Duration.ofMillis(50);
+    private static final Duration LONGEST_POLL_INTERVAL = Duration.ofMillis(50);
 
     private final Pipeline pipeline;
     private final StartupSequence startup;
     private final RunLauncherPresenter launcher;
-    private final Duration closingBeat;
+    private final Duration closingGracePeriod;
 
     /**
      * Creates the presenter over the facade it asks about running work and the sequence that winds
@@ -89,7 +89,7 @@ public class QuitPresenter {
     @Autowired
     public QuitPresenter(final Pipeline pipeline, final StartupSequence startup,
                          final RunLauncherPresenter launcher) {
-        this(pipeline, startup, launcher, CLOSING_BEAT);
+        this(pipeline, startup, launcher, CLOSING_GRACE_PERIOD);
     }
 
     /**
@@ -105,7 +105,7 @@ public class QuitPresenter {
         this.pipeline = pipeline;
         this.startup = startup;
         this.launcher = launcher;
-        this.closingBeat = closingBeat;
+        this.closingGracePeriod = closingBeat;
     }
 
     /**
@@ -114,12 +114,12 @@ public class QuitPresenter {
      * @return {@link QuitView} the wording of both dialogs, or null to close straight away
      */
     public @Nullable QuitView quitDialog() {
-        if (this.endsWithinTheBeat()) {
+        if (this.endsWithinGracePeriod()) {
             return null;
         }
         // Keeping leads, because quitting throws away a sheet already paid for and keeping costs
         // nothing.
-        return new QuitView(HEADING, this.whatIsRunning() + WHAT_IS_DONE_STAYS_DONE, STOP_AND_QUIT,
+        return new QuitView(HEADING, this.runningLine() + WHAT_IS_DONE_STAYS_DONE, STOP_AND_QUIT,
                 KEEP_RUNNING, false, WAITING_HEADING, this.waitingLine(), FORCE_QUIT);
     }
 
@@ -142,7 +142,7 @@ public class QuitPresenter {
      * kernel drops the claim with it, exactly as it would after a crash.
      */
     public void forceQuit() {
-        this.pipeline.abandonTheFileInFlight();
+        this.pipeline.abandonFileInFlight();
         this.windDownWithin(Duration.ZERO);
     }
 
@@ -172,7 +172,7 @@ public class QuitPresenter {
      *
      * @return {@link String} the opening sentence of the question
      */
-    private String whatIsRunning() {
+    private String runningLine() {
         final RunMode running = this.launcher.runningMode();
         return running == null ? "Something is still running."
                 : running.verb() + " is still going.";
@@ -208,9 +208,9 @@ public class QuitPresenter {
      *
      * @return boolean true where nothing is running by the end of the wait
      */
-    private boolean endsWithinTheBeat() {
-        final Instant deadline = Instant.now().plus(this.closingBeat);
-        final Duration step = min(LONGEST_BEAT_STEP, this.closingBeat.dividedBy(4));
+    private boolean endsWithinGracePeriod() {
+        final Instant deadline = Instant.now().plus(this.closingGracePeriod);
+        final Duration step = min(LONGEST_POLL_INTERVAL, this.closingGracePeriod.dividedBy(4));
         while (this.pipeline.isBusy()) {
             if (!Instant.now().isBefore(deadline)) {
                 return false;

@@ -31,8 +31,8 @@ public final class UiLauncher {
      * @param args {@link String}[] the command-line arguments to pass on
      */
     public static void launch(final Path configFile, final String[] args) {
-        install(configFile);
-        Application.launch(SluiceFxApplication.class, SpringLaunch.importing(configFile, args));
+        installFailureHandling(configFile);
+        Application.launch(SluiceFxApplication.class, SpringLaunch.argsWithConfigImport(configFile, args));
     }
 
     /**
@@ -45,7 +45,7 @@ public final class UiLauncher {
      *
      * @param configFile {@link Path} the user's config file, which need not exist
      */
-    public static void install(final Path configFile) {
+    public static void installFailureHandling(final Path configFile) {
         UiBootstrap.install(new SpringStartupFailureClassifier(configFile), new YamlConfigFileRepair(configFile));
     }
 }

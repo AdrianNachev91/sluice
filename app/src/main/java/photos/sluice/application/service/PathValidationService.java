@@ -112,7 +112,7 @@ public class PathValidationService implements PathValidationUseCase {
         try {
             // Asked before resolving, because resolving cannot separate a refusal from an absence
             // and this has to mark the field with the right one of the two.
-            if (!this.media.directoryIsThere(path)) {
+            if (!this.media.directoryExists(path)) {
                 violations.add(new NotADirectory(role, path));
                 return null;
             }

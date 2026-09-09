@@ -70,7 +70,7 @@ final class FolderRootsHelp {
 
         final var dot = new Circle(2.5);
         dot.getStyleClass().add("folder-roots-help-bullet");
-        sitOnTheLetter(dot, line);
+        keepDotOnLetterMiddle(dot, line);
 
         final var row = new HBox(dot, line);
         row.setAlignment(Pos.TOP_LEFT);
@@ -95,7 +95,7 @@ final class FolderRootsHelp {
      * @param dot {@link Circle} the bullet
      * @param line {@link TextArea} the rule, whose font decides everything here
      */
-    private static void sitOnTheLetter(final Circle dot, final TextArea line) {
+    private static void keepDotOnLetterMiddle(final Circle dot, final TextArea line) {
         line.fontProperty().addListener((_, _, _) -> place(dot, line));
         // The rule's baseline is only known once it has a skin and has been laid out. Asking a Text
         // node for the font's ascent instead lands a pixel high, because a label puts its own

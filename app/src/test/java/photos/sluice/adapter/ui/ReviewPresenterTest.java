@@ -43,7 +43,7 @@ class ReviewPresenterTest {
 
     @Test
     void aCardSaysWhatIsInTheFolderAndWhenItLastChanged() {
-        final ReviewPresenter presenter = over(new Folder(Root.REVIEW, FiledBy.A_SORT, "2019-06",
+        final ReviewPresenter presenter = over(new Folder(Root.REVIEW, FiledBy.SORT, "2019-06",
                 WORKING_ROOT.resolve("Review").resolve("2019-06"), 37, 2, Instant.now()));
 
         final FolderCard card = onlyCard(presenter);
@@ -55,7 +55,7 @@ class ReviewPresenterTest {
 
     @Test
     void aFolderNobodyCouldStatIsAgedAsNotKnownRatherThanAsADateIn1970() {
-        final ReviewPresenter presenter = over(new Folder(Root.REVIEW, FiledBy.A_SIFT, "Food",
+        final ReviewPresenter presenter = over(new Folder(Root.REVIEW, FiledBy.SIFT, "Food",
                 WORKING_ROOT.resolve("Review").resolve("Food"), 1, 0, Instant.EPOCH));
 
         assertThat(onlyCard(presenter).age()).isEqualTo("When it last changed is not known");
@@ -115,7 +115,7 @@ class ReviewPresenterTest {
         // waiting over a folder that is.
         @Test
         void aFolderNoneClaimsIsStillNotReportedAsNothingWaiting() {
-            final ReviewPresenter presenter = over(folder(Root.DUPLICATES, FiledBy.A_SORT, "made-by-hand"));
+            final ReviewPresenter presenter = over(folder(Root.DUPLICATES, FiledBy.SORT, "made-by-hand"));
 
             assertThat(presenter.view().nothingYet()).isNull();
         }
@@ -166,7 +166,7 @@ class ReviewPresenterTest {
 
         @Test
         void theQuestionNamesTheFolderAndPromisesNoCountAndNoRemoval() {
-            final ReviewPresenter presenter = over(new Folder(Root.REVIEW, FiledBy.A_SIFT, "Food",
+            final ReviewPresenter presenter = over(new Folder(Root.REVIEW, FiledBy.SIFT, "Food",
                     WORKING_ROOT.resolve("Review").resolve("Food"), 9, 0, Instant.now()));
 
             final Action move = actionsOn(presenter, 0).getLast();
@@ -434,7 +434,7 @@ class ReviewPresenterTest {
             presenter.toggleNotes(onlyCard(presenter).path());
 
             assertThat(notesOn(presenter).beyondTheFold()).isNull();
-            assertThat(notesOn(presenter).openTheFolder())
+            assertThat(notesOn(presenter).openFolderNote())
                     .isEqualTo("Open the folder to see all the notes.");
         }
 
@@ -448,7 +448,7 @@ class ReviewPresenterTest {
 
             assertThat(notesOn(presenter).nothingWritten())
                     .isEqualTo("Nothing was written about this folder.");
-            assertThat(notesOn(presenter).openTheFolder()).isNull();
+            assertThat(notesOn(presenter).openFolderNote()).isNull();
         }
 
         @Test
@@ -618,11 +618,11 @@ class ReviewPresenterTest {
     }
 
     private static Folder folder(final Root root, final String name) {
-        return folder(root, FiledBy.A_SIFT, name);
+        return folder(root, FiledBy.SIFT, name);
     }
 
     private static Folder heldBack(final String name) {
-        return folder(Root.REVIEW, FiledBy.A_SORT, name);
+        return folder(Root.REVIEW, FiledBy.SORT, name);
     }
 
     private static Folder folder(final Root root, final FiledBy filedBy, final String name) {

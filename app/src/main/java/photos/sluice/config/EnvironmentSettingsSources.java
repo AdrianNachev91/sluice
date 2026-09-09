@@ -51,8 +51,8 @@ public class EnvironmentSettingsSources implements SettingsSources {
      * @return an {@link Optional} of {@link SettingOverride} what supplies it from above
      */
     @Override
-    public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
-        return this.sourcesAboveTheConfigFile().stream()
+    public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
+        return this.sourcesOutrankingConfigFile().stream()
                 .filter(source -> source.containsProperty(property))
                 .findFirst()
                 .map(source -> describe(source, property));
@@ -63,7 +63,7 @@ public class EnvironmentSettingsSources implements SettingsSources {
      *
      * @return a {@link List} of {@link PropertySource} the sources above the config file
      */
-    private List<PropertySource<?>> sourcesAboveTheConfigFile() {
+    private List<PropertySource<?>> sourcesOutrankingConfigFile() {
         final List<PropertySource<?>> above = new ArrayList<>();
         for (final PropertySource<?> source : this.environment.getPropertySources()) {
             if (source instanceof OriginTrackedMapPropertySource) {
@@ -95,7 +95,7 @@ public class EnvironmentSettingsSources implements SettingsSources {
         if (OriginLookup.getOrigin(source, property) instanceof final SystemEnvironmentOrigin variable) {
             return new SettingOverride.ByEnvironmentVariable(property, variable.getProperty());
         }
-        return new SettingOverride.ByAnotherSource(property, whatThatSourceIs(source.getName()));
+        return new SettingOverride.ByAnotherSource(property, sourceLabel(source.getName()));
     }
 
     /**
@@ -109,7 +109,7 @@ public class EnvironmentSettingsSources implements SettingsSources {
      * @param name {@link String} the property source's own name
      * @return {@link String} what to call it, as a sentence starts
      */
-    private static String whatThatSourceIs(final String name) {
+    private static String sourceLabel(final String name) {
         return switch (name) {
             case "commandLineArgs" -> "A command-line argument";
             case "systemProperties" -> "A Java system property";

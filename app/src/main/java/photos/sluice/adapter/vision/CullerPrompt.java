@@ -62,7 +62,7 @@ class CullerPrompt {
             throw new IllegalStateException("This run recorded no photo categories, and there is nothing "
                     + "to sort photos into without them");
         }
-        return rendered(this.template, categories);
+        return render(this.template, categories);
     }
 
     /**
@@ -141,7 +141,7 @@ class CullerPrompt {
      * template
      * @return {@link String} the template with both placeholders replaced
      */
-    static String rendered(final String template, final List<CullCategory> categories) {
+    static String render(final String template, final List<CullCategory> categories) {
         requirePlaceholder(template, CATEGORIES_PLACEHOLDER);
         requirePlaceholder(template, JUDGEMENT_PLACEHOLDER);
         requirePlaceholder(template, GROUP_SLUG_MAX_PLACEHOLDER);

@@ -43,11 +43,11 @@ final class FindingWords {
      * @param problem {@link String} what went wrong, worded for one of them
      * @param forSeveral the same thing worded for several, with {@code {}} where the count goes,
      *     or null for a fault a run can only hold one of
-     * @param about what it happened to, or null where the problem is about the whole run
+     * @param subject what it happened to, or null where the problem is about the whole run
      * @param choices a {@link List} of {@link Choice} the answers on offer, empty where there are
      *     none
      */
-    record Statement(String problem, @Nullable String forSeveral, @Nullable String about,
+    record Statement(String problem, @Nullable String forSeveral, @Nullable String subject,
                      List<Choice> choices) {
 
         /**
@@ -55,7 +55,7 @@ final class FindingWords {
          *
          * @param problem {@link String} what went wrong, worded for one of them
          * @param forSeveral the same thing worded for several, with a place for the count, or null
-         * @param about what it happened to, or null
+         * @param subject what it happened to, or null
          * @param choices a {@link List} of {@link Choice} the answers on offer
          */
         Statement {
@@ -110,7 +110,7 @@ final class FindingWords {
                     "One photo was both judged and listed as one nobody could judge.",
                     "{} photos were both judged and listed as ones nobody could judge.",
                     overlap.verdict().file().toString(),
-                    List.of(new Choice(Answer.TRUST_DECISION, whatTrustingDoes(overlap.verdict()), true, null),
+                    List.of(new Choice(Answer.TRUST_DECISION, trustButtonLabel(overlap.verdict()), true, null),
                             new Choice(Answer.TREAT_AS_UNREVIEWABLE, "Leave the photo unjudged",
                                     false, null)));
             case final Finding.CorruptSidecar sidecar -> new Statement(
@@ -239,7 +239,7 @@ final class FindingWords {
      * @param verdict {@link Verdict} what the sift said about the photo
      * @return {@link String} what the button says
      */
-    private static String whatTrustingDoes(final Verdict verdict) {
+    private static String trustButtonLabel(final Verdict verdict) {
         return switch (verdict) {
             case Verdict.Keep _, Decision.NearDupChosen _ -> "Keep it in Sorted";
             case Decision.Classification _, Decision.NearDupReject _ -> "Move it where the sift said";

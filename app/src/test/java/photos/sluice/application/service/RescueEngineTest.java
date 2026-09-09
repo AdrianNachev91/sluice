@@ -612,8 +612,8 @@ class RescueEngineTest {
         }
 
         @Override
-        public Walk listFilesTolerating(final Path root) {
-            return this.delegate.listFilesTolerating(root);
+        public Walk listFilesToleratingRefusals(final Path root) {
+            return this.delegate.listFilesToleratingRefusals(root);
         }
 
         @Override
@@ -643,12 +643,12 @@ class RescueEngineTest {
 
         @Override
         public Path move(final Path source, final Path destDir, final CancellationSignal stop,
-                final TransferProgress watching) {
+                final TransferProgress transferProgress) {
             if (this.movesUntilFailure <= 0) {
                 throw new RuntimeException("simulated crash");
             }
             this.movesUntilFailure--;
-            return this.delegate.move(source, destDir, stop, watching);
+            return this.delegate.move(source, destDir, stop, transferProgress);
         }
 
         @Override
@@ -658,20 +658,20 @@ class RescueEngineTest {
 
         @Override
         public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
-                final TransferProgress watching) {
-            return this.delegate.moveTo(source, destination, stop, watching);
+                final TransferProgress transferProgress) {
+            return this.delegate.moveTo(source, destination, stop, transferProgress);
         }
 
         @Override
         public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
-                final TransferProgress watching) {
-            return this.delegate.copy(source, destDir, stop, watching);
+                final TransferProgress transferProgress) {
+            return this.delegate.copy(source, destDir, stop, transferProgress);
         }
 
         @Override
         public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
-                final TransferProgress watching) {
-            return this.delegate.copyTo(source, destination, stop, watching);
+                final TransferProgress transferProgress) {
+            return this.delegate.copyTo(source, destination, stop, transferProgress);
         }
 
         @Override
@@ -690,8 +690,8 @@ class RescueEngineTest {
         }
 
         @Override
-        public boolean directoryIsThere(final Path path) {
-            return this.delegate.directoryIsThere(path);
+        public boolean directoryExists(final Path path) {
+            return this.delegate.directoryExists(path);
         }
 
         @Override

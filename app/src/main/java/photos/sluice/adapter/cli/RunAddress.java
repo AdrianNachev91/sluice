@@ -116,7 +116,7 @@ public class RunAddress {
         final String remedy = tags.isEmpty() ? "There are none yet."
                 : "These are on disk: " + String.join(", ", tags) + ".";
         return new ScopeRefusedException(new Refusal(RefusalKind.RUN_NOT_FOUND,
-                "No sift called " + Refusal.shown(tag) + ". " + remedy,
+                "No sift called " + Refusal.shownValue(tag) + ". " + remedy,
                 Fields.of("address", tag, "known", tags)));
     }
 }

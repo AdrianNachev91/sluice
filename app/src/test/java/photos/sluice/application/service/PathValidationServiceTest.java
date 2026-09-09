@@ -191,11 +191,11 @@ class PathValidationServiceTest {
     private static MediaReader refusingToSayWhatIsThere(final Path refused) {
         return new NioMediaStore() {
             @Override
-            public boolean directoryIsThere(final Path path) {
+            public boolean directoryExists(final Path path) {
                 if (path.equals(refused)) {
                     throw new UncheckedIOException(new IOException("the share went away"));
                 }
-                return super.directoryIsThere(path);
+                return super.directoryExists(path);
             }
         };
     }

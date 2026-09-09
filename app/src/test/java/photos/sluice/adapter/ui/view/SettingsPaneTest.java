@@ -13,9 +13,9 @@ import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.adapter.ui.FxProgressPort;
 import photos.sluice.adapter.ui.SettingsPresenter;
 import photos.sluice.adapter.ui.VisionProviderPresenter;
-import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
+import photos.sluice.application.port.in.LibraryRootResolutionRequiredException;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome.CopiedAndMoved;
-import photos.sluice.application.port.in.LibraryRootMoveOutcome.MovedWithAFreshIndex;
+import photos.sluice.application.port.in.LibraryRootMoveOutcome.MovedWithFreshIndex;
 import photos.sluice.application.port.in.LibraryRootResolution;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.SettingsUseCase;
@@ -146,7 +146,7 @@ class SettingsPaneTest {
         final var received = new ArrayList<LibraryRootResolution>();
         final LibraryRootUseCase library = (_, resolution) -> {
             received.add(resolution);
-            return jobRunner.submit(_ -> new MovedWithAFreshIndex(null));
+            return jobRunner.submit(_ -> new MovedWithFreshIndex(null));
         };
         final Presenters presenters = presenterNeedingLibraryRootResolution(library);
         final Parent pane = onFxThread(() -> built(presenters.settings(), presenters.vision()));
@@ -235,14 +235,14 @@ class SettingsPaneTest {
             }
 
             @Override
-            public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+            public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
                 return Optional.empty();
             }
 
             @Override
             public void save(final Settings toSave) {
                 if (!libraryRootInForce.get().equals(toSave.paths().libraryRoot())) {
-                    throw new LibraryRootMoveNeedsAResolutionException(Path.of(libraryRootInForce.get()),
+                    throw new LibraryRootResolutionRequiredException(Path.of(libraryRootInForce.get()),
                             "sluice.paths.library-root would move");
                 }
             }

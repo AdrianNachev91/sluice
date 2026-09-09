@@ -83,7 +83,7 @@ final class PageHeader {
         status.getStyleClass().add("settings-save-status");
         // No text, no line. A bar that always reserved a row for a message would put a permanent
         // gap between the heading and the page.
-        SettingsRows.showWhileItSaysSomething(status);
+        SettingsRows.showWhileTextPresent(status);
 
         final var header = new VBox();
         if (above != null) {
@@ -104,14 +104,14 @@ final class PageHeader {
      * @param body {@link VBox} the page's own scrolling contents
      * @return {@link VBox} the page, ready for the shell's content area
      */
-    static VBox pinnedOver(final Result header, final VBox body) {
+    static VBox pinnedPage(final Result header, final VBox body) {
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
-        heldToTheViewport(scroll, header.header());
+        bindWidthToViewport(scroll, header.header());
         final var page = new VBox(header.header(), scroll);
         page.getStyleClass().add("pinned-header-page");
         saveOnEnter(page, header.save());
-        releaseAFieldWhenTheReaderClicksAway(page);
+        releaseFocusOnOutsideClick(page);
         return page;
     }
 
@@ -128,7 +128,7 @@ final class PageHeader {
      * @param scroll {@link ScrollPane} the pane they have to agree with
      * @param pinned {@link Region} the rows sitting outside it
      */
-    static void heldToTheViewport(final ScrollPane scroll, final Region... pinned) {
+    static void bindWidthToViewport(final ScrollPane scroll, final Region... pinned) {
         for (final Region row : pinned) {
             row.maxWidthProperty().bind(scroll.viewportBoundsProperty()
                     .map(seen -> seen.getWidth() <= 0 ? Double.MAX_VALUE : seen.getWidth()));
@@ -174,7 +174,7 @@ final class PageHeader {
      *
      * @param page {@link VBox} the whole page, header and scrolling body alike
      */
-    private static void releaseAFieldWhenTheReaderClicksAway(final VBox page) {
+    private static void releaseFocusOnOutsideClick(final VBox page) {
         page.addEventHandler(MouseEvent.MOUSE_PRESSED, pressed -> {
             if (page.getScene() == null || !isAField(page.getScene().getFocusOwner())) {
                 return;

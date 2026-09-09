@@ -26,7 +26,7 @@ public final class JunkCategory {
             + "delivery cards, letters, bills, forms, product and packaging shots. Received images "
             + "and memes that are clearly not the owner's own photos.";
 
-    private static final CullCategory CARD =
+    private static final CullCategory CATEGORY =
             new CullCategory(NAME, DESCRIPTION, List.of(), Boolean.TRUE);
 
     /**
@@ -40,8 +40,8 @@ public final class JunkCategory {
      *
      * @return {@link CullCategory} the junk card
      */
-    public static CullCategory card() {
-        return CARD;
+    public static CullCategory category() {
+        return CATEGORY;
     }
 
     /**
@@ -50,7 +50,7 @@ public final class JunkCategory {
      * @param name {@link String} a candidate category name
      * @return boolean true where it is junk's
      */
-    public static boolean claims(final String name) {
+    public static boolean isJunkName(final String name) {
         return NAME.equals(name);
     }
 }

@@ -91,10 +91,10 @@ class ReviewFoldersTest {
 
         assertThat(this.folders().list().folders())
                 .extracting(Folder::name, Folder::filedBy)
-                .containsExactlyInAnyOrder(tuple("2019-06", FiledBy.A_SORT),
-                        tuple("Unsorted", FiledBy.A_SORT),
-                        tuple("Food", FiledBy.A_SIFT),
-                        tuple("2019-06_beach", FiledBy.A_SIFT));
+                .containsExactlyInAnyOrder(tuple("2019-06", FiledBy.SORT),
+                        tuple("Unsorted", FiledBy.SORT),
+                        tuple("Food", FiledBy.SIFT),
+                        tuple("2019-06_beach", FiledBy.SIFT));
     }
 
     @Test
@@ -103,7 +103,7 @@ class ReviewFoldersTest {
         this.file("Unreviewable/Unsorted/b.jpg");
 
         assertThat(this.folders().list().folders()).extracting(Folder::filedBy)
-                .containsExactly(FiledBy.A_SIFT, FiledBy.A_SIFT);
+                .containsExactly(FiledBy.SIFT, FiledBy.SIFT);
     }
 
     @Test
@@ -278,8 +278,8 @@ class ReviewFoldersTest {
         }
 
         @Override
-        public Walk listFilesTolerating(final Path root) {
-            return this.real.listFilesTolerating(root);
+        public Walk listFilesToleratingRefusals(final Path root) {
+            return this.real.listFilesToleratingRefusals(root);
         }
 
         @Override
@@ -298,11 +298,11 @@ class ReviewFoldersTest {
         }
 
         @Override
-        public boolean directoryIsThere(final Path path) {
+        public boolean directoryExists(final Path path) {
             if (this.refusal == Refusal.AT_THE_ROOT && path.equals(this.refused)) {
                 throw new UncheckedIOException(new IOException(path + " will not say what is there"));
             }
-            return this.real.directoryIsThere(path);
+            return this.real.directoryExists(path);
         }
 
         @Override

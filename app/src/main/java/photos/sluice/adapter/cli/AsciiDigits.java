@@ -24,7 +24,7 @@ final class AsciiDigits {
      * @param text {@link String} the value as it was typed
      * @return boolean true when it holds at least one character and all of them are digits
      */
-    static boolean only(final String text) {
+    static boolean isAllDigits(final String text) {
         return !text.isEmpty() && text.chars().allMatch(character -> character >= '0' && character <= '9');
     }
 }

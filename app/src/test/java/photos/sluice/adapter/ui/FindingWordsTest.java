@@ -91,14 +91,14 @@ class FindingWordsTest {
     @Test
     void everyKindOfProblemNamesWhatItHappenedTo() {
         assertThat(EVERY_KIND).allSatisfy(finding ->
-                assertThat(FindingWords.of(finding).about()).isNotBlank());
+                assertThat(FindingWords.of(finding).subject()).isNotBlank());
     }
 
     @Test
     void aSheetIsNamedByItsNumberRatherThanByItsIdOnDisk() {
-        assertThat(FindingWords.of(new Finding.MissingShard("montage-004", "decisions-004.json")).about())
+        assertThat(FindingWords.of(new Finding.MissingShard("montage-004", "decisions-004.json")).subject())
                 .isEqualTo("Sheet 4");
-        assertThat(FindingWords.of(new Finding.MissingReason("montage-012", 3)).about())
+        assertThat(FindingWords.of(new Finding.MissingReason("montage-012", 3)).subject())
                 .startsWith("Sheet 12,");
     }
 
@@ -106,7 +106,7 @@ class FindingWordsTest {
     // observed.
     @Test
     void aSheetWhoseIdCarriesNoNumberIsNamedByThatIdInstead() {
-        assertThat(FindingWords.of(new Finding.MissingShard("montage-extra", "decisions-extra.json")).about())
+        assertThat(FindingWords.of(new Finding.MissingShard("montage-extra", "decisions-extra.json")).subject())
                 .isEqualTo("Sheet montage-extra");
     }
 
@@ -114,7 +114,7 @@ class FindingWordsTest {
     // would type to go and look.
     @Test
     void theDamagedRecordIsNamedSoAReaderCanGoAndLookAtIt() {
-        assertThat(FindingWords.of(new Finding.CorruptSidecar("montage-002")).about())
+        assertThat(FindingWords.of(new Finding.CorruptSidecar("montage-002")).subject())
                 .isEqualTo("Sheet 2, montage-002.json");
     }
 

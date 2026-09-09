@@ -109,7 +109,7 @@ public class RunsCommand implements Callable<Integer> {
         final List<List<String>> rows = new ArrayList<>();
         rows.add(List.of("SCOPE", "STATE", "SHEETS", "OPEN", "LAST WRITTEN"));
         runs.forEach(run -> rows.add(List.of(run.scope(), run.health().state().name(), sheets(run.shards()),
-                String.valueOf(run.health().findings().size()), written(run.since()))));
+                String.valueOf(run.health().findings().size()), lastWritten(run.since()))));
         final List<Integer> widths = widths(rows);
         return rows.stream().map(row -> line(row, widths)).toList();
     }
@@ -168,7 +168,7 @@ public class RunsCommand implements Callable<Integer> {
      * @param since {@link Instant} when the run was last written to
      * @return {@link String} the cell
      */
-    private static String written(final Instant since) {
+    private static String lastWritten(final Instant since) {
         return since.truncatedTo(ChronoUnit.SECONDS).toString();
     }
 

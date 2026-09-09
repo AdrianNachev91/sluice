@@ -98,7 +98,7 @@ class YamlConfigFileTest {
     void aGroupThatIsNotThereIsCreatedEmpty(@TempDir final Path dir) {
         final Map<String, Object> root = new LinkedHashMap<>();
 
-        final Map<String, Object> group = new YamlConfigFile(dir.resolve("config.yml")).group(root, "sluice");
+        final Map<String, Object> group = new YamlConfigFile(dir.resolve("config.yml")).ensureGroup(root, "sluice");
 
         assertThat(group).isEmpty();
         assertThat(root).containsOnlyKeys("sluice");
@@ -111,7 +111,7 @@ class YamlConfigFileTest {
         final var document = new YamlConfigFile(file);
         final Map<String, Object> root = document.read();
 
-        final Map<String, Object> group = document.group(root, "sluice");
+        final Map<String, Object> group = document.ensureGroup(root, "sluice");
 
         assertThat(group).containsEntry("unknown-to-this-app", "kept");
     }
@@ -123,7 +123,7 @@ class YamlConfigFileTest {
         final var document = new YamlConfigFile(file);
         final Map<String, Object> root = document.read();
 
-        assertThatThrownBy(() -> document.group(root, "sluice"))
+        assertThatThrownBy(() -> document.ensureGroup(root, "sluice"))
                 .isInstanceOf(MalformedSettingsException.class)
                 .hasMessageContaining("sluice");
     }

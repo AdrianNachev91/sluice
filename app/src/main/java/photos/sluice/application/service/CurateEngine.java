@@ -75,7 +75,7 @@ final class CurateEngine {
         // Before the sort, not only before the cull stage. A curate whose provider cannot
         // authenticate ends in a refusal whatever the sort does. By then it has moved real files
         // for a run that was never going to finish.
-        this.cullEngine.refuseIfTheProviderHasNoCredential();
+        this.cullEngine.refuseIfProviderHasNoCredential();
         final CullScope known = knownCullScope(scope);
         if (known != null) {
             this.cullEngine.refuseIfScopeOccupied(known);

@@ -112,7 +112,7 @@ class CullMontageRendererTest {
                   "montages": 2,
                   "entries": ["montage-001", "montage-002"]
                 }
-                """.formatted(JunkCategory.card().description(), jsonEscaped(result.basePath()),
+                """.formatted(JunkCategory.category().description(), jsonEscaped(result.basePath()),
                 jsonEscaped(corrupt)));
     }
 
@@ -339,12 +339,12 @@ class CullMontageRendererTest {
                 .build(new CullScope.Year(2019, null), new MontageConfig(64, 2));
 
         assertThat(result.categories()).containsExactly(configured.get(0), configured.get(1),
-                JunkCategory.card());
+                JunkCategory.category());
         assertThat(Files.readString(result.prepDir().resolve("index.json"), StandardCharsets.UTF_8))
                 .contains("\"categories\":[{\"name\":\"blurry\",\"description\":\"out of focus\"},"
                         + "{\"name\":\"receipts\",\"description\":\"photographed paperwork\"},"
                         + "{\"name\":\"junk\",\"description\":\""
-                        + JunkCategory.card().description() + "\"}]");
+                        + JunkCategory.category().description() + "\"}]");
     }
 
     private static PathsConfig pathsConfig(final Path root) {

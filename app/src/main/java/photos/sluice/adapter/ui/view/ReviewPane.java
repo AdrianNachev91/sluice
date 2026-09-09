@@ -57,13 +57,13 @@ final class ReviewPane {
         // Each on its own ground rather than in the caution colour. Both are paragraphs, and a
         // whole paragraph set in that colour shouts where a box says the same thing once.
         final TextArea unreadable = SettingsRows.emptyHelpLine("review-unreadable");
-        final VBox unreadableBox = boxed(unreadable, "review-unreadable-box");
+        final VBox unreadableBox = warningBox(unreadable, "review-unreadable-box");
         final TextArea message = SettingsRows.emptyHelpLine("review-message");
         final Hyperlink locationLink = SettingsRows.locationLink("review-message-link");
         final var messageBox = new VBox(SettingsRows.locationLines(message, locationLink));
         messageBox.setId("review-message-box");
         messageBox.getStyleClass().add("warning-box");
-        SettingsRows.showWhileTheLineDoes(messageBox, message);
+        SettingsRows.showWhileLineShows(messageBox, message);
         final TextArea nothingYet = SettingsRows.emptyHelpLine("review-nothing-yet");
 
         final TextArea explained = SettingsRows.emptyHelpLine("review-explained");
@@ -71,7 +71,7 @@ final class ReviewPane {
         // on the outside: hiding only the box inside would leave the badge floating on the page.
         final Node explainer = SettingsRows.badgedCallout(new VBox(explained));
         explainer.setId("review-explained-box");
-        SettingsRows.showWhileTheLineDoes(explainer, explained);
+        SettingsRows.showWhileLineShows(explainer, explained);
 
         final var groups = new VBox();
         groups.setId("review-groups");
@@ -82,7 +82,7 @@ final class ReviewPane {
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        PageHeader.heldToTheViewport(scroll, headerRow);
+        PageHeader.bindWidthToViewport(scroll, headerRow);
         final var page = new VBox(headerRow, scroll);
         page.setId("review");
         page.getStyleClass().add("review");
@@ -120,11 +120,11 @@ final class ReviewPane {
      * @param id {@link String} the box's own id
      * @return {@link VBox} the box, which collapses with the line
      */
-    private static VBox boxed(final TextArea line, final String id) {
+    private static VBox warningBox(final TextArea line, final String id) {
         final var box = new VBox(line);
         box.setId(id);
         box.getStyleClass().add("warning-box");
-        SettingsRows.showWhileTheLineDoes(box, line);
+        SettingsRows.showWhileLineShows(box, line);
         return box;
     }
 
@@ -155,9 +155,9 @@ final class ReviewPane {
         private void fill(final ReviewView view, final ReviewPresenter presenter,
                           final Runnable redraw) {
             this.heading.setText(view.heading());
-            this.explained.setText(SettingsRows.orNothing(view.explained()));
-            this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
-            this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
+            this.explained.setText(SettingsRows.textOrEmpty(view.explained()));
+            this.unreadable.setText(SettingsRows.textOrEmpty(view.unreadable()));
+            this.nothingYet.setText(SettingsRows.textOrEmpty(view.nothingYet()));
             this.message.setText(view.message() == null ? "" : view.message().text());
             SettingsRows.pointAt(this.locationLink,
                     view.message() == null ? null : view.message().location(), this.navigation);
@@ -254,22 +254,22 @@ final class ReviewPane {
             final var toggle = new Button(notes.label());
             toggle.setId(notes.id());
             toggle.getStyleClass().add("review-notes-toggle");
-            SettingsRows.pointing(toggle, notes.shown());
+            SettingsRows.setFoldMarker(toggle, notes.shown());
 
             final var row = new HBox(toggle, SettingsRows.spacer(), buttons);
             row.setAlignment(Pos.CENTER_LEFT);
             row.getStyleClass().add("review-notes");
 
             final var travel = new SectionFold(written, card, scroll);
-            travel.to(notes.shown());
+            travel.setOpen(notes.shown());
 
             final var showing = new AtomicBoolean(notes.shown());
             toggle.setOnAction(_ -> {
                 final boolean opening = !showing.get();
                 showing.set(opening);
-                SettingsRows.pointing(toggle, opening);
+                SettingsRows.setFoldMarker(toggle, opening);
                 if (!opening) {
-                    travel.to(false);
+                    travel.setOpen(false);
                     presenter.toggleNotes(folder);
                     return;
                 }
@@ -279,7 +279,7 @@ final class ReviewPane {
                     presenter.toggleNotes(folder);
                     Platform.runLater(() -> {
                         fillNotes(written, presenter.notesOn(folder));
-                        travel.to(true);
+                        travel.setOpen(true);
                     });
                 });
             });
@@ -298,8 +298,8 @@ final class ReviewPane {
                 if (notes.beyondTheFold() != null) {
                     drawn.add(SettingsRows.helpLine(notes.beyondTheFold()));
                 }
-                if (notes.openTheFolder() != null) {
-                    drawn.add(SettingsRows.helpLine(notes.openTheFolder()));
+                if (notes.openFolderNote() != null) {
+                    drawn.add(SettingsRows.helpLine(notes.openFolderNote()));
                 }
                 notes.lines().forEach(line -> drawn.add(noteLine(line)));
                 if (notes.nothingWritten() != null) {

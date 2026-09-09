@@ -111,7 +111,7 @@ public class TypedCancel {
         int asked = 0;
         try (final var lines = new BufferedReader(new InputStreamReader(this.input, Charset.defaultCharset()))) {
             String line = lines.readLine();
-            while (line != null && watch.open()) {
+            while (line != null && watch.isOpen()) {
                 if (CANCEL.equals(typed(line))) {
                     asked++;
                     this.cancel(job, asked);
@@ -171,7 +171,7 @@ public class TypedCancel {
          *
          * @return boolean true while it is
          */
-        boolean open() {
+        boolean isOpen() {
             return this.open;
         }
 

@@ -252,21 +252,21 @@ class NioMediaStoreTest {
     }
 
     @Test
-    void directoryIsThereIsTrueForAFolder(@TempDir final Path root) throws IOException {
-        assertThat(this.store.directoryIsThere(Files.createDirectory(root.resolve("folder")))).isTrue();
+    void directoryExistsIsTrueForAFolder(@TempDir final Path root) throws IOException {
+        assertThat(this.store.directoryExists(Files.createDirectory(root.resolve("folder")))).isTrue();
     }
 
     @Test
-    void directoryIsThereIsFalseForAPathNamingNothing(@TempDir final Path root) {
-        assertThat(this.store.directoryIsThere(root.resolve("absent"))).isFalse();
+    void directoryExistsIsFalseForAPathNamingNothing(@TempDir final Path root) {
+        assertThat(this.store.directoryExists(root.resolve("absent"))).isFalse();
     }
 
     @Test
-    void directoryIsThereIsFalseForARegularFile(@TempDir final Path root) throws IOException {
+    void directoryExistsIsFalseForARegularFile(@TempDir final Path root) throws IOException {
         final Path file = root.resolve("file.jpg");
         Files.writeString(file, "bytes");
 
-        assertThat(this.store.directoryIsThere(file)).isFalse();
+        assertThat(this.store.directoryExists(file)).isFalse();
     }
 
     @Test
@@ -544,11 +544,11 @@ class NioMediaStoreTest {
         Files.createDirectories(root.resolve("2019"));
         Files.writeString(root.resolve("2019").resolve("holiday.jpg"), "holiday");
 
-        final NioMediaStore.Walk walk = this.store.listFilesTolerating(root);
+        final NioMediaStore.Walk walk = this.store.listFilesToleratingRefusals(root);
 
         assertThat(walk.files()).containsExactlyInAnyOrder(
                 root.resolve("top.jpg"), root.resolve("2019").resolve("holiday.jpg"));
-        assertThat(walk.unreadablePlaces()).isEmpty();
+        assertThat(walk.unreadableFolders()).isEmpty();
     }
 
     @Test

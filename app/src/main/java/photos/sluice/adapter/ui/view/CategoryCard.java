@@ -63,12 +63,12 @@ final class CategoryCard {
         name.setId("category-name");
         SettingsRows.holdTo(name, limits.name());
         final var nameViolation = SettingsRows.violationLabel();
-        SettingsRows.markWhileSomethingIsWrong(name, nameViolation);
+        SettingsRows.markWhileRefused(name, nameViolation);
 
         final TextArea description = box(row.description(), DESCRIPTION_ROWS, "category-description");
         SettingsRows.holdTo(description, limits.description());
         final var descriptionViolation = SettingsRows.violationLabel();
-        SettingsRows.markWhileSomethingIsWrong(description, descriptionViolation);
+        SettingsRows.markWhileRefused(description, descriptionViolation);
 
         final TextArea examples = box(String.join("\n", row.examples()), EXAMPLES_ROWS, "category-examples");
         // One ceiling over the whole box, because the box is the control. What a card is judged by
@@ -76,7 +76,7 @@ final class CategoryCard {
         // be refused. The presenter says so under the box rather than letting the value type throw.
         SettingsRows.holdTo(examples, limits.examples());
         final var examplesViolation = SettingsRows.violationLabel();
-        SettingsRows.markWhileSomethingIsWrong(examples, examplesViolation);
+        SettingsRows.markWhileRefused(examples, examplesViolation);
 
         final var enabled = new CheckBox();
         enabled.setId("category-enabled");
@@ -86,18 +86,18 @@ final class CategoryCard {
         enabled.textProperty().bind(
                 Bindings.when(enabled.selectedProperty()).then("Enabled").otherwise("Disabled"));
 
-        final Button delete = row.fixed() == null ? deleteButton(onDelete) : null;
+        final Button delete = row.fixedReason() == null ? deleteButton(onDelete) : null;
         final var card = new VBox(header(enabled, delete), nameRow(name), nameViolation);
         card.getStyleClass().addAll("card", "category-card");
-        if (row.fixed() != null) {
+        if (row.fixedReason() != null) {
             name.setEditable(false);
             name.getStyleClass().add("field-fixed");
             name.setFocusTraversable(false);
-            card.getChildren().add(SettingsRows.helpLine(row.fixed()));
+            card.getChildren().add(SettingsRows.helpLine(row.fixedReason()));
         }
         card.getChildren().addAll(
-                labelled("What belongs here", description, descriptionViolation),
-                labelled("Examples (optional, one per line)", examples, examplesViolation));
+                fieldRow("What belongs here", description, descriptionViolation),
+                fieldRow("Examples (optional, one per line)", examples, examplesViolation));
         return new Result(card, name, description, examples, enabled, delete, nameViolation,
                 descriptionViolation, examplesViolation);
     }
@@ -140,7 +140,7 @@ final class CategoryCard {
      * @param violation {@link TextArea} what is wrong with it, empty while nothing is
      * @return {@link VBox} the row
      */
-    private static VBox labelled(final String label, final TextArea field,
+    private static VBox fieldRow(final String label, final TextArea field,
                                  final TextArea violation) {
         final var row = new VBox(SettingsRows.fieldLabel(label), field, violation);
         row.getStyleClass().add("settings-row");

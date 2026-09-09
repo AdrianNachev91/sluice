@@ -161,7 +161,7 @@ class AnthropicCuller implements VisionCuller {
     // A field the validator reads and refuses when blank. Carried on every branch, including the
     // ones where the field is optional, where it costs nothing: an action that ignores the field
     // ignores it whatever it holds.
-    private static final Map<String, Object> NON_BLANK = Map.of("type", "string", "minLength", 1);
+    private static final Map<String, Object> NON_BLANK_STRING_SCHEMA = Map.of("type", "string", "minLength", 1);
 
     // Anchored, because a JSON Schema pattern searches where ShardValidator's own matcher demands
     // the whole value. Reusing that validator's expression verbatim would accept "FOO-bar", which it
@@ -172,7 +172,7 @@ class AnthropicCuller implements VisionCuller {
     // fall in the same year-month. The validator catches that only when both groups brought a chosen
     // keeper, since the merged id then carries two and WrongChosenCount fires. A merge where one
     // side brought only rejects passes validation and lands silently.
-    private static final Map<String, Object> GROUP_SLUG =
+    private static final Map<String, Object> GROUP_SLUG_SCHEMA =
             Map.of("type", "string", "minLength", 1, "pattern", "^[a-z0-9]+(-[a-z0-9]+)*$");
 
     private final CullerPrompt prompt;
@@ -410,7 +410,7 @@ class AnthropicCuller implements VisionCuller {
                         scopeSrcs, categoryNames)) {
                     skipped++;
                     counted = true;
-                } else if (exhausted(ceiling, apiCalls, montagesAttempted, inputTokens + outputTokens)) {
+                } else if (ceilingExhausted(ceiling, apiCalls, montagesAttempted, inputTokens + outputTokens)) {
                     // Checked before this montage's first call rather than only after the last one,
                     // so the run stops owing nothing further. This montage and every one after it
                     // keep their place: they have no shard, so a resume dispatches for them.
@@ -512,13 +512,13 @@ class AnthropicCuller implements VisionCuller {
                     responseSchema(prep.categoryNames()));
             final AnthropicClient client = this.clientFactory.get();
             try {
-                return new SpendForecast.Counted(client.messages().countTokens(counting(request)).inputTokens());
+                return new SpendForecast.Counted(client.messages().countTokens(tokenCountRequest(request)).inputTokens());
             } finally {
                 client.close();
             }
         } catch (final RuntimeException e) {
             log.info("Could not count what a sift of {} would send", prep.scope(), e);
-            return new SpendForecast.Unknown(said(e));
+            return new SpendForecast.Unknown(messageOf(e));
         }
     }
 
@@ -590,8 +590,8 @@ class AnthropicCuller implements VisionCuller {
      * @param tokensConsumed how many tokens the run has consumed
      * @return boolean true when the run may not start another montage
      */
-    private static boolean exhausted(final @Nullable SpendCeiling ceiling, final int apiCalls,
-                                     final int montagesAttempted, final long tokensConsumed) {
+    private static boolean ceilingExhausted(final @Nullable SpendCeiling ceiling, final int apiCalls,
+                                            final int montagesAttempted, final long tokensConsumed) {
         return callsExhausted(ceiling, apiCalls)
                 || (ceiling != null && ceiling.tokensExhausted(montagesAttempted, tokensConsumed));
     }
@@ -617,7 +617,7 @@ class AnthropicCuller implements VisionCuller {
      * @param sending {@link MessageCreateParams} the request that would be sent
      * @return {@link MessageCountTokensParams} the same body, addressed to the counting route
      */
-    private static MessageCountTokensParams counting(final MessageCreateParams sending) {
+    private static MessageCountTokensParams tokenCountRequest(final MessageCreateParams sending) {
         final MessageCountTokensParams.Builder counting = MessageCountTokensParams.builder()
                 .model(sending.model())
                 .messages(sending.messages());
@@ -642,25 +642,25 @@ class AnthropicCuller implements VisionCuller {
         } catch (final MissingCredentialException e) {
             return new ProviderCheck.NoCredential();
         } catch (final RuntimeException e) {
-            return new ProviderCheck.Unreachable(said(e));
+            return new ProviderCheck.Unreachable(messageOf(e));
         }
         try {
-            final List<ModelOption> offerable = client.models().list().autoPager().stream()
+            final List<ModelOption> offerableModels = client.models().list().autoPager().stream()
                     .limit(CHECK_MODEL_CEILING)
                     .filter(AnthropicCuller::offerable)
                     .map(model -> new ModelOption(model.id(), model.displayName()))
                     .toList();
-            if (offerable.isEmpty()) {
+            if (offerableModels.isEmpty()) {
                 return new ProviderCheck.NoUsableModels();
             }
-            final List<ModelOption> ranked = ranked(offerable);
-            return new ProviderCheck.Accepted(new ModelCatalog(ranked, recommendedAmong(ranked)));
+            final List<ModelOption> rankedModels = rankModels(offerableModels);
+            return new ProviderCheck.Accepted(new ModelCatalog(rankedModels, recommendedAmong(rankedModels)));
         } catch (final UnauthorizedException e) {
             return new ProviderCheck.Rejected();
         } catch (final PermissionDeniedException e) {
-            return new ProviderCheck.Refused(said(e));
+            return new ProviderCheck.Refused(messageOf(e));
         } catch (final RuntimeException e) {
-            return new ProviderCheck.Unreachable(said(e));
+            return new ProviderCheck.Unreachable(messageOf(e));
         } finally {
             client.close();
         }
@@ -691,47 +691,47 @@ class AnthropicCuller implements VisionCuller {
     /**
      * Orders the account's own models the way {@link #MODELS} orders the ones this class knows.
      * Anything it does not know follows, in the order the service gave. A model the service names
-     * by a dated snapshot takes the rung of the plain id that snapshot is of.
+     * by a dated snapshot takes the rank of the plain id that snapshot is of.
      *
      * <p>Sorting the known models ahead of the rest keeps an unknown one out of the first position,
      * which is where a surface with no recommendation to fall back on starts.
      *
-     * @param offerable a {@link List} of {@link ModelOption}, the models this account can be offered
+     * @param offerableModels a {@link List} of {@link ModelOption}, the models this account can be offered
      * @return a {@link List} of {@link ModelOption} the same models, in the order to offer them
      */
-    private static List<ModelOption> ranked(final List<ModelOption> offerable) {
-        final List<String> ladder = MODELS.options().stream().map(ModelOption::id).toList();
-        return offerable.stream()
-                .sorted(Comparator.comparingInt(option -> rungOf(ladder, option.id())))
+    private static List<ModelOption> rankModels(final List<ModelOption> offerableModels) {
+        final List<String> rankedIds = MODELS.options().stream().map(ModelOption::id).toList();
+        return offerableModels.stream()
+                .sorted(Comparator.comparingInt(option -> rankOf(rankedIds, option.id())))
                 .toList();
     }
 
     /**
-     * Where an offered model sits on the ladder, or one past its end when it sits on none.
+     * Where an offered model sits in rankedIds, or one past its end when it sits on none.
      *
-     * @param ladder a {@link List} of {@link String} model ids, in the order this class ranks them
+     * @param rankedIds a {@link List} of {@link String} model ids, in the order this class ranks them
      * @param offeredId {@link String} id of a model the account can be offered
-     * @return int the ladder position to sort this model by
+     * @return int the rank to sort this model by
      */
-    private static int rungOf(final List<String> ladder, final String offeredId) {
-        return IntStream.range(0, ladder.size())
-                .filter(rung -> namesTheSameModel(ladder.get(rung), offeredId))
+    private static int rankOf(final List<String> rankedIds, final String offeredId) {
+        return IntStream.range(0, rankedIds.size())
+                .filter(rank -> isSameModel(rankedIds.get(rank), offeredId))
                 .findFirst()
-                .orElse(ladder.size());
+                .orElse(rankedIds.size());
     }
 
     /**
      * Whether an id this class carries and one the service offered name the same model, allowing
      * for the service naming it by a dated snapshot.
      *
-     * @param ladderId {@link String} a model id from {@link #MODELS}
+     * @param rankedId {@link String} a model id from {@link #MODELS}
      * @param offeredId {@link String} id of a model the account can be offered
      * @return boolean true when both name the same model
      */
-    private static boolean namesTheSameModel(final String ladderId, final String offeredId) {
-        return offeredId.equals(ladderId)
-                || (offeredId.startsWith(ladderId)
-                && SNAPSHOT_SUFFIX.matcher(offeredId.substring(ladderId.length())).matches());
+    private static boolean isSameModel(final String rankedId, final String offeredId) {
+        return offeredId.equals(rankedId)
+                || (offeredId.startsWith(rankedId)
+                && SNAPSHOT_SUFFIX.matcher(offeredId.substring(rankedId.length())).matches());
     }
 
     /**
@@ -742,18 +742,18 @@ class AnthropicCuller implements VisionCuller {
      * named a snapshot. This class's own id would name a model absent from the list it is offered
      * beside.
      *
-     * @param offerable a {@link List} of {@link ModelOption}, the models this account can be offered
+     * @param offerableModels a {@link List} of {@link ModelOption}, the models this account can be offered
      * @return {@link String} the offered id of the recommended model, or null when it is not among
      *     them
      */
-    private static @Nullable String recommendedAmong(final List<ModelOption> offerable) {
+    private static @Nullable String recommendedAmong(final List<ModelOption> offerableModels) {
         final String recommended = MODELS.recommended();
         if (recommended == null) {
             return null;
         }
-        return offerable.stream()
+        return offerableModels.stream()
                 .map(ModelOption::id)
-                .filter(offeredId -> namesTheSameModel(recommended, offeredId))
+                .filter(offeredId -> isSameModel(recommended, offeredId))
                 .findFirst()
                 .orElse(null);
     }
@@ -764,7 +764,7 @@ class AnthropicCuller implements VisionCuller {
      * @param failure {@link RuntimeException} what was raised
      * @return {@link String} the failure's message, or its type when it carried none
      */
-    private static String said(final RuntimeException failure) {
+    private static String messageOf(final RuntimeException failure) {
         final String message = failure.getMessage();
         return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
     }
@@ -1118,7 +1118,7 @@ class AnthropicCuller implements VisionCuller {
      * decides whether it is safe. A floor only steers an empty value away, which is what
      * {@code minLength} does for a reason and the slug's character rule does for a shape. A ceiling
      * truncates instead, so the slug's 24-character cap stays with the validator - see
-     * {@link #GROUP_SLUG} for what a silent truncation costs.
+     * {@link #GROUP_SLUG_SCHEMA} for what a silent truncation costs.
      *
      * @param categories a {@link List} of {@link String}, the run's recorded category names
      * @return {@link JsonOutputFormat.Schema} the schema to send with every montage in this run
@@ -1173,9 +1173,9 @@ class AnthropicCuller implements VisionCuller {
                         "index", Map.of("type", "integer"),
                         "name", Map.of("type", "string"),
                         "action", action,
-                        "reason", NON_BLANK,
-                        "group", GROUP_SLUG,
-                        "chosen_reason", NON_BLANK),
+                        "reason", NON_BLANK_STRING_SCHEMA,
+                        "group", GROUP_SLUG_SCHEMA,
+                        "chosen_reason", NON_BLANK_STRING_SCHEMA),
                 "required", List.copyOf(required),
                 "additionalProperties", false);
     }

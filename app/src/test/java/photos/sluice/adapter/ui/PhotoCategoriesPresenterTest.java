@@ -51,8 +51,8 @@ class PhotoCategoriesPresenterTest {
     void theLibraryCategoryIsTheOnlyOneDrawnAsFixed() {
         final PhotoCategoriesView view = presenterOver(BLURRY, FUNNY).view();
 
-        assertThat(view.categories().getFirst().fixed()).contains("Library");
-        assertThat(view.categories().getLast().fixed()).isNull();
+        assertThat(view.categories().getFirst().fixedReason()).contains("Library");
+        assertThat(view.categories().getLast().fixedReason()).isNull();
     }
 
     @Test
@@ -70,7 +70,7 @@ class PhotoCategoriesPresenterTest {
         assertThat(blank.description()).isEmpty();
         assertThat(blank.examples()).isEmpty();
         assertThat(blank.enabled()).isTrue();
-        assertThat(blank.fixed()).isNull();
+        assertThat(blank.fixedReason()).isNull();
     }
 
     @Test
@@ -360,7 +360,7 @@ class PhotoCategoriesPresenterTest {
         }
 
         @Override
-        public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+        public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
             return Optional.empty();
         }
 

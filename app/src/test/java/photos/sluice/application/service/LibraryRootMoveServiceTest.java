@@ -173,7 +173,7 @@ class LibraryRootMoveServiceTest {
             final LibraryRootMoveOutcome outcome =
                     fixture.move(newLibrary, LibraryRootResolution.START_A_FRESH_INDEX);
 
-            final Path filedAt = ((LibraryRootMoveOutcome.MovedWithAFreshIndex) outcome).previousIndexFiledAt();
+            final Path filedAt = ((LibraryRootMoveOutcome.MovedWithFreshIndex) outcome).previousIndexFiledAt();
             assertThat(filedAt).isNotNull().exists().hasParent(root.resolve("logs/archives"));
             assertThat(fixture.hashIndex.contains("abc123")).isFalse();
             assertThat(fixture.libraryRootInForce()).isEqualTo(newLibrary.toString());
@@ -197,7 +197,7 @@ class LibraryRootMoveServiceTest {
             final LibraryRootMoveOutcome outcome =
                     fixture.move(newLibrary, LibraryRootResolution.START_A_FRESH_INDEX);
 
-            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.MovedWithAFreshIndex(null));
+            assertThat(outcome).isEqualTo(new LibraryRootMoveOutcome.MovedWithFreshIndex(null));
         }
     }
 
@@ -274,7 +274,7 @@ class LibraryRootMoveServiceTest {
                     .isInstanceOf(IllegalArgumentException.class);
 
             assertThat(fixture.move(newLibrary, LibraryRootResolution.START_A_FRESH_INDEX))
-                    .isInstanceOf(LibraryRootMoveOutcome.MovedWithAFreshIndex.class);
+                    .isInstanceOf(LibraryRootMoveOutcome.MovedWithFreshIndex.class);
         }
     }
 

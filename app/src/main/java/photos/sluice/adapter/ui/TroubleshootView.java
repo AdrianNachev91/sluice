@@ -80,13 +80,13 @@ public record TroubleshootView(String heading, String back, @Nullable String che
      *     {@link TroubleshootPresenter#press}. Never something for the screen to read
      * @param problem what went wrong, in the terms a reader would use, or null where the heading
      *     above this row says it for several rows at once
-     * @param about what it happened to, such as the photo or the sheet, or null where the problem
+     * @param subject what it happened to, such as the photo or the sheet, or null where the problem
      *     names nothing narrower than the run
      * @param options a {@link List} of {@link Option} the answers on offer, empty while a job holds
      *     the run
      */
     public record Problem(String id, Finding finding, @Nullable String problem,
-                          @Nullable String about, List<Option> options) {
+                          @Nullable String subject, List<Option> options) {
 
         /**
          * Defensively copies the mutable list.
@@ -94,7 +94,7 @@ public record TroubleshootView(String heading, String back, @Nullable String che
          * @param id {@link String} the row's id
          * @param finding {@link Finding} the fault this row was drawn from
          * @param problem what went wrong, or null where a heading says it
-         * @param about what it happened to, or null
+         * @param subject what it happened to, or null
          * @param options a {@link List} of {@link Option} the answers on offer
          */
         public Problem {
@@ -133,18 +133,18 @@ public record TroubleshootView(String heading, String back, @Nullable String che
      *
      * @param id {@link String} the button's id, for the screen to set on it
      * @param label {@link String} what the button says
-     * @param deed {@link Deed} what pressing it does
+     * @param deed {@link Kind} what pressing it does
      * @param leading boolean whether this is the way on, drawn to be reached for
      * @param confirm {@link Confirmation} what to ask first, or null where it needs no asking
      */
-    public record Action(String id, String label, Deed deed, boolean leading,
+    public record Action(String id, String label, Kind deed, boolean leading,
                          @Nullable Confirmation confirm) {
     }
 
     /**
      * What an action does, which is what {@link TroubleshootPresenter#press(Action)} switches on.
      */
-    public enum Deed {
+    public enum Kind {
 
         /** Picks the run back up now that nothing blocks it. */
         FINISH,

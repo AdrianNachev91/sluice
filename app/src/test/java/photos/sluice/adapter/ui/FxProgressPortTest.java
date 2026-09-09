@@ -178,7 +178,7 @@ class FxProgressPortTest {
         this.port.phaseStarted("Sifting...");
         this.port.tick("Sifting...", 11, 28);
 
-        this.port.phaseCutShort("Sifting...");
+        this.port.phaseStopped("Sifting...");
         this.port.phaseFinished("Sifting...");
 
         assertThat(this.port.phases())
@@ -201,7 +201,7 @@ class FxProgressPortTest {
     void aGivingUpForAPhaseNobodyStartedIsDroppedRatherThanMarkingAnotherPhase() {
         this.port.phaseStarted("Sorting...");
 
-        this.port.phaseCutShort("Rescuing...");
+        this.port.phaseStopped("Rescuing...");
 
         assertThat(this.port.phases()).singleElement()
                 .extracting(ProgressPhase::label, ProgressPhase::cutShort)

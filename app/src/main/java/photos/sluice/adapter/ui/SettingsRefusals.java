@@ -44,7 +44,7 @@ final class SettingsRefusals {
      *         caller's business alone
      * @return {@link String} what to show
      */
-    static String wordedForAUser(final RuntimeException refusal, final String notSaved) {
+    static String refusalWording(final RuntimeException refusal, final String notSaved) {
         return switch (refusal) {
             case final JobInProgressException running -> messageOf(running, notSaved);
             case final WorkingRootBusyException held -> messageOf(held, notSaved);
@@ -70,9 +70,9 @@ final class SettingsRefusals {
      * @return {@link String} what to show
      */
     private static String messageOf(final RuntimeException refusal, final String notSaved) {
-        final String said = refusal.getMessage();
-        return said == null || said.isBlank()
+        final String message = refusal.getMessage();
+        return message == null || message.isBlank()
                 ? notSaved + " It's not known why. Nothing you had configured has changed."
-                : said;
+                : message;
     }
 }

@@ -248,7 +248,7 @@ class FolderCountsTest {
         counts.refresh();
 
         assertThat(counts.unreadable()).isFalse();
-        assertThat(counts.countsAreIn()).isTrue();
+        assertThat(counts.countsAvailable()).isTrue();
         assertThat(counts.stagedYears()).isNotEmpty();
         assertThat(requireNonNull(counts.inbox()).files()).isEqualTo(300);
         assertThat(counts.unfinished()).isEmpty();

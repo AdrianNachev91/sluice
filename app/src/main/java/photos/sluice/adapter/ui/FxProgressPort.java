@@ -47,7 +47,7 @@ public class FxProgressPort implements ProgressPort {
     // removing and running all happen on the application thread today, so no writer can reach it
     // mid-walk. Copy-on-write is what keeps that true of a caller who registers from somewhere
     // else, at the cost of a copy per registration and none per redraw.
-    private final List<Runnable> alongside = new CopyOnWriteArrayList<>();
+    private final List<Runnable> extraRedraws = new CopyOnWriteArrayList<>();
 
     /**
      * The one Spring builds. With no constructor annotated and no single candidate to infer, Spring
@@ -95,8 +95,8 @@ public class FxProgressPort implements ProgressPort {
      * @return {@link AutoCloseable} closing it stops this running again
      */
     public AutoCloseable alsoRedraw(final Runnable redraw) {
-        this.alongside.add(redraw);
-        return () -> this.alongside.remove(redraw);
+        this.extraRedraws.add(redraw);
+        return () -> this.extraRedraws.remove(redraw);
     }
 
     /**
@@ -194,7 +194,7 @@ public class FxProgressPort implements ProgressPort {
      * @param phase {@link String} short human-readable label for the phase
      */
     @Override
-    public void phaseCutShort(final String phase) {
+    public void phaseStopped(final String phase) {
         this.change(before -> replaceLast(before, phase,
                 found -> new ProgressPhase(found.label(), found.current(), found.total(),
                         true, found.finished(), found.partDone(), true)));
@@ -231,7 +231,7 @@ public class FxProgressPort implements ProgressPort {
     private void change(final UnaryOperator<List<ProgressPhase>> next) {
         this.phases.updateAndGet(next);
         if (this.redrawPending.compareAndSet(false, true)) {
-            this.askForARedraw();
+            this.requestRedraw();
         }
     }
 
@@ -247,12 +247,12 @@ public class FxProgressPort implements ProgressPort {
      * while the screen is drawing then asks for another one, instead of being folded into a draw
      * that has already read the list.
      */
-    private void askForARedraw() {
+    private void requestRedraw() {
         try {
             this.onFxThread.accept(() -> {
                 this.redrawPending.set(false);
                 this.repaint.run();
-                this.alongside.forEach(Runnable::run);
+                this.extraRedraws.forEach(Runnable::run);
             });
         } catch (final IllegalStateException noToolkitToDrawOn) {
             this.redrawPending.set(false);

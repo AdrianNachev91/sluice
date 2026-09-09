@@ -72,7 +72,7 @@ public class CommandReports {
         try {
             return work.get();
         } catch (final RuntimeException failure) {
-            return reading(failure, classifier);
+            return outcomeOfFailure(failure, classifier);
         }
     }
 
@@ -94,7 +94,7 @@ public class CommandReports {
      * @param classifier {@link RefusalClassifier} says whether that was a refusal
      * @return {@link CommandOutcome} the outcome to report
      */
-    private static CommandOutcome reading(final RuntimeException failure, final RefusalClassifier classifier) {
+    private static CommandOutcome outcomeOfFailure(final RuntimeException failure, final RefusalClassifier classifier) {
         try {
             if (JobHandle.failureIn(failure) instanceof final CullException incomplete) {
                 return CullOutcomeReport.incompleteOutcome(incomplete);

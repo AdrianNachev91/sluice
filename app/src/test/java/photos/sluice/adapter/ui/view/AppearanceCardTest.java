@@ -144,7 +144,7 @@ class AppearanceCardTest {
             }
 
             @Override
-            public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+            public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
                 return Optional.empty();
             }
 

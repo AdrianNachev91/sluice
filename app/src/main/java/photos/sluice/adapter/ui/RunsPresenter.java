@@ -59,7 +59,7 @@ public class RunsPresenter {
     // How many scopes the clear question spells out before it falls back to the count above it. A
     // scope can be as long as "2019 6,8,11", and a list of eight of those buries the two sentences
     // the reader actually has to weigh.
-    private static final int NAMED_IN_A_CLEAR = 4;
+    private static final int MOST_SCOPES_NAMED = 4;
 
     private static final String COPY_PROMPT = "Copy instructions for your agent";
 
@@ -80,7 +80,7 @@ public class RunsPresenter {
 
     private static final String TROUBLESHOOT = "Troubleshoot";
 
-    private static final String FINISH_WITHOUT_THE_MISSING = "Finish without the missing sheets";
+    private static final String FINISH_WITHOUT_MISSING_SHEETS = "Finish without the missing sheets";
 
     private static final String WAITING_ON_AN_AGENT = "Copy the instructions for your own agent. "
             + "They prompt it to write its decisions back into the folder below.";
@@ -127,7 +127,7 @@ public class RunsPresenter {
     // the redraw that follows builds a new button.
     private volatile @Nullable Path justCopied;
     // The read that press triggers must not clear what the press just set.
-    private volatile boolean copiedAwaitsItsRead;
+    private volatile boolean copiedSurvivesNextRead;
 
     // Plain, unlike the fields above: one thread both writes and reads it, on the thread that
     // paints.
@@ -144,7 +144,7 @@ public class RunsPresenter {
         this.launcher = launcher;
         // Registered once, for the life of the app. The screen behind it is rebuilt on every visit,
         // and a listener per visit would pile up.
-        pipeline.onRunsMoved(this::runsMovedElsewhere);
+        pipeline.onRunsChanged(this::runsMovedElsewhere);
     }
 
     /**
@@ -223,7 +223,7 @@ public class RunsPresenter {
      * walked away from.
      */
     public void refresh() {
-        this.forgetTheCopyAfterItsOwnRead();
+        this.forgetCopiedMarker();
         // A press reports against the run as it stood then, and this reading may find a different
         // one.
         this.message = null;
@@ -253,12 +253,12 @@ public class RunsPresenter {
                 .filter(run -> run.health().state() == State.COMPLETE)
                 .map(this::card)
                 .toList();
-        final Message said = this.message == null ? this.readFailure : this.message;
+        final Message shownMessage = this.message == null ? this.readFailure : this.message;
         return new RunsView(HEADING, unreadableLine, unfinished,
                 found.isEmpty() && unreadableLine == null ? NOTHING_YET : null,
                 completedHeading(completed.size()), completed, this.completedShown,
                 CLEAR_COMPLETED, !completed.isEmpty() && !this.working(),
-                completed.isEmpty() ? null : clearConfirm(completed), said);
+                completed.isEmpty() ? null : clearConfirm(completed), shownMessage);
     }
 
     /**
@@ -285,7 +285,7 @@ public class RunsPresenter {
     public void press(final Action action) {
         switch (action.kind()) {
             case CONTINUE -> this.carryOn(action.prepDir(), action.scope(), false);
-            case CONTINUE_WITHOUT_THE_MISSING -> this.carryOn(action.prepDir(), action.scope(), true);
+            case CONTINUE_WITHOUT_MISSING_SHEETS -> this.carryOn(action.prepDir(), action.scope(), true);
             case TROUBLESHOOT -> this.troubleshoot(action.prepDir(), action.scope());
             case DISCARD -> this.start("discard " + action.prepDir(),
                     () -> this.pipeline.discard(action.prepDir()));
@@ -331,7 +331,7 @@ public class RunsPresenter {
                 try {
                     final String freed = this.pipeline.redoRejectedAnswers(prepDir);
                     this.justCopied = prepDir;
-                    this.copiedAwaitsItsRead = true;
+                    this.copiedSurvivesNextRead = true;
                     final Runnable draw = this.repaint;
                     if (draw != null) {
                         draw.run();
@@ -571,21 +571,21 @@ public class RunsPresenter {
     private RunCard card(final CullRunSummary run) {
         final State state = run.health().state();
         final List<Finding> findings = run.health().findings();
-        final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
+        final boolean providerJudgesSheets = this.pipeline.configuredProviderSpends();
         final boolean blamesASheet = !LaunchPrompt.sheetsToRedo(findings).isEmpty();
         // On the agent route this slot is used only where there is no waiting block to hold the
         // follow-up. A card then carries one control rather than two saying near-enough the same.
         final boolean anythingToRedo = !this.working() && blamesASheet
-                && (itJudgesThemItself || state == State.BLOCKED);
-        final boolean redoLeads = anythingToRedo && itJudgesThemItself
+                && (providerJudgesSheets || state == State.BLOCKED);
+        final boolean redoLeads = anythingToRedo && providerJudgesSheets
                 && findings.stream().allMatch(finding -> LaunchPrompt.sheetOf(finding) != null);
-        final boolean waitingOnAnAgent = state == State.WAITING && !itJudgesThemItself;
+        final boolean waitingOnAnAgent = state == State.WAITING && !providerJudgesSheets;
         final List<Action> actions =
                 this.actions(run, state, blamesASheet || waitingOnAnAgent, redoLeads);
         // Counted off the row, so the two cannot disagree about whether this card offers a way to
         // finish the run. Null where an agent judges. The offer sits with the card's text there,
         // which is where the waiting block puts it, so one press does not move the control.
-        final Integer redoAt = itJudgesThemItself
+        final Integer redoAt = providerJudgesSheets
                 ? (int) actions.stream().filter(action -> action.kind() == Kind.CONTINUE).count()
                 : null;
         return new RunCard("run-card-" + run.scope(), run.scope(), this.headline(state),
@@ -614,12 +614,12 @@ public class RunsPresenter {
      */
     private RunsView.Redo redo(final CullRunSummary run, final List<Finding> findings,
                                final boolean leads, final @Nullable Integer drawnAt) {
-        final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
+        final boolean providerJudgesSheets = this.pipeline.configuredProviderSpends();
         return new RunsView.Redo("run-redo-" + run.scope(),
-                itJudgesThemItself ? JUDGE_AGAIN : COPY_FOLLOW_UP,
-                itJudgesThemItself ? JUDGE_AGAIN_NOTE : FOLLOW_UP_NOTE,
+                providerJudgesSheets ? JUDGE_AGAIN : COPY_FOLLOW_UP,
+                providerJudgesSheets ? JUDGE_AGAIN_NOTE : FOLLOW_UP_NOTE,
                 leads, drawnAt, run.prepDir(), run.scope(),
-                itJudgesThemItself ? this.judgeAgainConfirm(run, findings) : null);
+                providerJudgesSheets ? this.judgeAgainConfirm(run, findings) : null);
     }
 
     /**
@@ -683,15 +683,15 @@ public class RunsPresenter {
         if (state != State.WAITING) {
             return null;
         }
-        final boolean itJudgesThemItself = this.pipeline.configuredProviderSpends();
-        final boolean corrects = !itJudgesThemItself && !this.working()
-                && anAgentLeftItUnfinished(run);
+        final boolean providerJudgesSheets = this.pipeline.configuredProviderSpends();
+        final boolean corrects = !providerJudgesSheets && !this.working()
+                && hasAnySheetAnswer(run);
         final String asks = run.prepDir().equals(this.justCopied)
                 ? COPIED
                 : corrects ? COPY_FOLLOW_UP : COPY_PROMPT;
         return new RunsView.Waiting(run.prepDir(),
-                itJudgesThemItself ? null : asks, corrects,
-                itJudgesThemItself
+                providerJudgesSheets ? null : asks, corrects,
+                providerJudgesSheets
                         ? blamesASheet ? WAITING_ON_A_PROVIDER_BLAMED : WAITING_ON_A_PROVIDER
                         : corrects ? FOLLOW_UP_NOTE : WAITING_ON_AN_AGENT);
     }
@@ -712,7 +712,7 @@ public class RunsPresenter {
      * @param run {@link CullRunSummary} the run
      * @return boolean whether the press should ask for a follow-up
      */
-    private static boolean anAgentLeftItUnfinished(final CullRunSummary run) {
+    private static boolean hasAnySheetAnswer(final CullRunSummary run) {
         final ShardTally sheets = run.shards();
         return sheets != null && sheets.present() >= 1;
     }
@@ -754,9 +754,9 @@ public class RunsPresenter {
             actions.add(new Action("run-continue-" + run.scope(), this.finishLabel(state),
                     Kind.CONTINUE, !blamesASheet, run.prepDir(), run.scope(), null));
         }
-        if (this.canGoOnWithoutTheMissing(run, state)) {
-            actions.add(new Action("run-continue-partial-" + run.scope(), FINISH_WITHOUT_THE_MISSING,
-                    Kind.CONTINUE_WITHOUT_THE_MISSING, false, run.prepDir(), run.scope(), null));
+        if (this.canFinishWithoutMissingSheets(run, state)) {
+            actions.add(new Action("run-continue-partial-" + run.scope(), FINISH_WITHOUT_MISSING_SHEETS,
+                    Kind.CONTINUE_WITHOUT_MISSING_SHEETS, false, run.prepDir(), run.scope(), null));
         }
         if (state == State.BLOCKED) {
             actions.add(new Action("run-troubleshoot-" + run.scope(), TROUBLESHOOT,
@@ -793,7 +793,7 @@ public class RunsPresenter {
      * @param state {@link State} its state
      * @return boolean whether to offer it
      */
-    private boolean canGoOnWithoutTheMissing(final CullRunSummary run, final State state) {
+    private boolean canFinishWithoutMissingSheets(final CullRunSummary run, final State state) {
         final ShardTally sheets = run.shards();
         return state == State.WAITING && !this.pipeline.configuredProviderSpends()
                 && sheets != null && sheets.present() < sheets.total();
@@ -821,13 +821,13 @@ public class RunsPresenter {
         final ShardTally sheets = run.shards();
         final String judged = RunWords.counted(
                 sheets == null ? 0 : sheets.valid(), "sheet decision", "sheet decisions");
-        final String paidFor = sheets == null || sheets.valid() == 0
+        final String paidDecisionsText = sheets == null || sheets.valid() == 0
                 ? ""
                 : judged + (this.pipeline.configuredProviderSpends()
                         ? " you have already paid for are set aside with it. "
                         : " are set aside with it. ");
         return new Confirmation("Discard the sift of " + run.scope() + "?",
-                paidFor + "Discarding this sift's records will archive them. "
+                paidDecisionsText + "Discarding this sift's records will archive them. "
                         + "They will stay on disk in " + this.pipeline.archivesFolder()
                         + " for 30 days.",
                 "Discard", "Keep", false);
@@ -957,7 +957,7 @@ public class RunsPresenter {
         final List<String> scopes = completed.stream().map(RunCard::scope).toList();
         return new Confirmation("Clear the records of "
                 + RunWords.counted(completed.size(), "finished sift", "finished sifts") + "?",
-                (scopes.size() > NAMED_IN_A_CLEAR ? "This deletes everything kept about them."
+                (scopes.size() > MOST_SCOPES_NAMED ? "This deletes everything kept about them."
                         : "This deletes everything kept about " + RunWords.listed(scopes) + ".")
                         + " Your photos are not touched, and neither is any sift you have not "
                         + "finished. There is no way back to them.",
@@ -1005,9 +1005,9 @@ public class RunsPresenter {
      * Lets what a copy control handed over stand through the read its own press sets off, and
      * clears it on the read after that.
      */
-    private void forgetTheCopyAfterItsOwnRead() {
-        if (this.copiedAwaitsItsRead) {
-            this.copiedAwaitsItsRead = false;
+    private void forgetCopiedMarker() {
+        if (this.copiedSurvivesNextRead) {
+            this.copiedSurvivesNextRead = false;
             return;
         }
         this.justCopied = null;

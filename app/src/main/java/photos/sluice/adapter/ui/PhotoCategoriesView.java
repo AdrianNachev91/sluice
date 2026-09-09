@@ -40,10 +40,10 @@ public record PhotoCategoriesView(List<CategoryRow> categories, String dispositi
      * @param description {@link String} the "what belongs here" prose
      * @param examples a {@link List} of {@link String} sample subjects, empty when it offers none
      * @param enabled boolean whether a cull routes to this card
-     * @param fixed why this card cannot be renamed or deleted, or null for an ordinary card
+     * @param fixedReason why this card cannot be renamed or deleted, or null for an ordinary card
      */
     public record CategoryRow(String name, String description, List<String> examples, boolean enabled,
-                              @Nullable String fixed) {
+                              @Nullable String fixedReason) {
     }
 
     /**

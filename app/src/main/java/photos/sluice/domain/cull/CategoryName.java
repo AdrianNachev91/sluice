@@ -78,7 +78,7 @@ public final class CategoryName {
         }
         // A sort files into the Review root as well. A category taking one of its two names would
         // be handed a folder already holding photos nothing classified.
-        if (SortFolderNames.writtenByASort(name)) {
+        if (SortFolderNames.isSortFolderName(name)) {
             return "names a folder a sort fills by itself";
         }
         return null;

@@ -45,7 +45,7 @@ public interface TransferProgress {
     static TransferProgress within(final ProgressCallback progress, final int done, final int total) {
         return (written, size) -> {
             if (size > 0) {
-                progress.partOf(done, total, (double) written / size);
+                progress.partialTick(done, total, (double) written / size);
             }
         };
     }

@@ -227,7 +227,7 @@ class RunProgressPresenter {
      */
     private static String cancellingLine(final RunMode ran, final boolean abandoning,
                                          final boolean midFile, final @Nullable ImportKind importing) {
-        return whatSurvives(ran, importing) + escalation(ran, abandoning, midFile);
+        return reassuranceLine(ran, importing) + escalation(ran, abandoning, midFile);
     }
 
     /**
@@ -259,7 +259,7 @@ class RunProgressPresenter {
      * @param importing {@link ImportKind} null for anything but an import
      * @return {@link String} the reassurance the line opens with
      */
-    private static String whatSurvives(final RunMode ran, final @Nullable ImportKind importing) {
+    private static String reassuranceLine(final RunMode ran, final @Nullable ImportKind importing) {
         return switch (ran) {
             case SIFT -> CANCELLING_A_SIFT;
             case MOVE_TO_LIBRARY -> CANCELLING_A_MOVE;

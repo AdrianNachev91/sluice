@@ -10,9 +10,9 @@ final class AnswerNotApplicableException extends IllegalStateException {
     /**
      * Creates the exception.
      *
-     * @param said {@link String} what was named and why it matched nothing open
+     * @param message {@link String} what was named and why it matched nothing open
      */
-    AnswerNotApplicableException(final String said) {
-        super(said);
+    AnswerNotApplicableException(final String message) {
+        super(message);
     }
 }

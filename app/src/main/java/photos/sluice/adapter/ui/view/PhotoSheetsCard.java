@@ -34,12 +34,12 @@ final class PhotoSheetsCard {
                         "How large each photo is drawn on the sheet. Bigger is easier to judge, so fewer "
                                 + "photos end up in the wrong place, and costs more per photo. What you pay "
                                 + "follows this number, not how many fit on a sheet. "
-                                + SettingsRows.anythingFrom(view.tileSizeRange()),
+                                + SettingsRows.rangeSentence(view.tileSizeRange()),
                         tileSize, view.tileSizeOverride()),
                 SettingsRows.explainedRow("Photos per row",
                         "How many share one sheet. More means fewer sheets and a quicker, cheaper run, and "
                                 + "draws every photo smaller, so more of them end up in the wrong place. "
-                                + SettingsRows.anythingFrom(view.tilesPerRowRange()),
+                                + SettingsRows.rangeSentence(view.tilesPerRowRange()),
                         tilesPerRow, view.tilesPerRowOverride()));
         return new Result(card, tileSize, tilesPerRow);
     }

@@ -133,9 +133,9 @@ public record RunLauncherView(List<ModeChoice> modes, RowLink rowLink, String mo
      *
      * @param id {@link String} the control's id, for the screen to set on it
      * @param label {@link String} what it says
-     * @param after {@link RunMode} the mode it is drawn after
+     * @param drawnAfterMode {@link RunMode} the mode it is drawn after
      */
-    public record RowLink(String id, String label, RunMode after) {
+    public record RowLink(String id, String label, RunMode drawnAfterMode) {
     }
 
     /**

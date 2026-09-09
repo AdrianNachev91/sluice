@@ -35,23 +35,23 @@ final class RunScopeText {
      * Reads the scope field's text.
      *
      * @param text {@link String} the field's text
-     * @return {@link Typed} the year and months in it, or why it could not be read
+     * @return {@link ParsedScope} the year and months in it, or why it could not be read
      */
-    static Typed parse(final String text) {
+    static ParsedScope parse(final String text) {
         final String trimmed = text.trim();
         if (trimmed.isEmpty()) {
-            return new Typed.Blank();
+            return new ParsedScope.Blank();
         }
         if (UNDATED.equalsIgnoreCase(trimmed)) {
-            return new Typed.Undated();
+            return new ParsedScope.Undated();
         }
         final String[] parts = trimmed.split("\\s+", 2);
         if (!parts[0].matches("\\d{4}")) {
-            return new Typed.Refused("A scope is a four-digit year, like 2019, or the word "
+            return new ParsedScope.Refused("A scope is a four-digit year, like 2019, or the word "
                     + UNDATED + ".");
         }
         final int year = Integer.parseInt(parts[0]);
-        return parts.length == 1 ? new Typed.OfYear(year, List.of()) : months(year, parts[1]);
+        return parts.length == 1 ? new ParsedScope.OfYear(year, List.of()) : months(year, parts[1]);
     }
 
     /**
@@ -69,21 +69,21 @@ final class RunScopeText {
      *
      * @param year int the year already read
      * @param text {@link String} everything after the year
-     * @return {@link Typed} the year and its months, or why they could not be read
+     * @return {@link ParsedScope} the year and its months, or why they could not be read
      */
-    private static Typed months(final int year, final String text) {
+    private static ParsedScope months(final int year, final String text) {
         final List<Integer> months = new ArrayList<>();
         // Keeping the empty pieces, so a trailing comma is refused the way a leading one already
         // is. Dropped, "2019 ," reads as the bare year and starts a paid sift of all twelve months.
         for (final String part : text.split(",", -1)) {
             final String piece = part.trim();
-            final Typed refusal = refusedFormat(piece);
+            final ParsedScope refusal = refusedFormat(piece);
             if (refusal != null) {
                 return refusal;
             }
             months.addAll(monthsIn(piece));
         }
-        return new Typed.OfYear(year, months.stream().distinct().sorted().toList());
+        return new ParsedScope.OfYear(year, months.stream().distinct().sorted().toList());
     }
 
     /**
@@ -95,17 +95,17 @@ final class RunScopeText {
      * something.
      *
      * @param part {@link String} the piece to judge
-     * @return {@link Typed} the refusal, or null where the piece is a legal one
+     * @return {@link ParsedScope} the refusal, or null where the piece is a legal one
      */
-    private static @Nullable Typed refusedFormat(final String part) {
+    private static @Nullable ParsedScope refusedFormat(final String part) {
         final String[] ends = part.split("-", 2);
         final OptionalInt first = monthIn(ends[0]);
         final OptionalInt last = ends.length == 1 ? first : monthIn(ends[1]);
         if (first.isEmpty() || last.isEmpty()) {
-            return new Typed.Refused("Months are numbers from 1 to 12, like 6 or 6-8.");
+            return new ParsedScope.Refused("Months are numbers from 1 to 12, like 6 or 6-8.");
         }
         if (last.getAsInt() < first.getAsInt()) {
-            return new Typed.Refused("A span of months goes from the earlier one to the later, like 6-8.");
+            return new ParsedScope.Refused("A span of months goes from the earlier one to the later, like 6-8.");
         }
         return null;
     }
@@ -154,14 +154,14 @@ final class RunScopeText {
     /**
      * What the scope field's text amounts to before a mode has been applied to it.
      */
-    sealed interface Typed {
+    sealed interface ParsedScope {
 
         /** Nothing has been typed. */
-        record Blank() implements Typed {
+        record Blank() implements ParsedScope {
         }
 
         /** The word naming the photos nothing could date. */
-        record Undated() implements Typed {
+        record Undated() implements ParsedScope {
         }
 
         /**
@@ -171,7 +171,7 @@ final class RunScopeText {
          * @param months a {@link List} of {@link Integer} the months, sorted and deduplicated,
          *     empty for the whole year
          */
-        record OfYear(int year, List<Integer> months) implements Typed {
+        record OfYear(int year, List<Integer> months) implements ParsedScope {
         }
 
         /**
@@ -179,7 +179,7 @@ final class RunScopeText {
          *
          * @param reason {@link String} what is wrong with it
          */
-        record Refused(String reason) implements Typed {
+        record Refused(String reason) implements ParsedScope {
         }
     }
 }

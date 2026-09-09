@@ -168,7 +168,7 @@ class RunsPresenterTest {
 
             assertThat(presenter.view().unfinished()).allSatisfy(card ->
                     assertThat(card.actions()).extracting(Action::kind)
-                            .doesNotContain(Kind.CONTINUE, Kind.CONTINUE_WITHOUT_THE_MISSING));
+                            .doesNotContain(Kind.CONTINUE, Kind.CONTINUE_WITHOUT_MISSING_SHEETS));
         }
 
         @Test
@@ -380,7 +380,7 @@ class RunsPresenterTest {
             doAnswer(call -> {
                 listener.set(call.getArgument(0));
                 return null;
-            }).when(pipeline).onRunsMoved(any());
+            }).when(pipeline).onRunsChanged(any());
             final var presenter = runsPresenter(pipeline);
             final var countDrawn = new CountDownLatch(1);
             final var cardsDrawn = new CountDownLatch(1);
@@ -401,7 +401,7 @@ class RunsPresenterTest {
             doAnswer(call -> {
                 listener.set(call.getArgument(0));
                 return null;
-            }).when(pipeline).onRunsMoved(any());
+            }).when(pipeline).onRunsChanged(any());
             final var presenter = runsPresenter(pipeline);
             final var bothDrawn = new CountDownLatch(2);
             presenter.setRedrawCount(bothDrawn::countDown);
@@ -514,7 +514,7 @@ class RunsPresenterTest {
             doAnswer(call -> {
                 listener.set(call.getArgument(0));
                 return null;
-            }).when(pipeline).onRunsMoved(any());
+            }).when(pipeline).onRunsChanged(any());
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
             presenter.press(presenter.view().unfinished().getFirst().actions().getLast());
@@ -608,7 +608,7 @@ class RunsPresenterTest {
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
 
-            presenter.press(onlyActionOfKind(presenter, Kind.CONTINUE_WITHOUT_THE_MISSING));
+            presenter.press(onlyActionOfKind(presenter, Kind.CONTINUE_WITHOUT_MISSING_SHEETS));
 
             verify(pipeline).resume(prepDir, true);
         }
@@ -665,7 +665,7 @@ class RunsPresenterTest {
             presenter.refresh();
 
             assertThat(presenter.view().unfinished().getFirst().actions()).extracting(Action::kind)
-                    .doesNotContain(Kind.CONTINUE_WITHOUT_THE_MISSING);
+                    .doesNotContain(Kind.CONTINUE_WITHOUT_MISSING_SHEETS);
         }
     }
 
@@ -779,7 +779,7 @@ class RunsPresenterTest {
             assertThat(requireNonNull(card.waiting()).copyPrompt()).isNull();
             assertThat(requireNonNull(card.waiting()).note()).contains("provider account balance");
             assertThat(card.actions()).extracting(Action::kind)
-                    .doesNotContain(Kind.CONTINUE_WITHOUT_THE_MISSING);
+                    .doesNotContain(Kind.CONTINUE_WITHOUT_MISSING_SHEETS);
         }
 
         @Test
@@ -1243,7 +1243,7 @@ class RunsPresenterTest {
             doAnswer(call -> {
                 listener.set(call.getArgument(0));
                 return null;
-            }).when(pipeline).onRunsMoved(any());
+            }).when(pipeline).onRunsChanged(any());
             final var presenter = runsPresenter(pipeline);
             presenter.refresh();
             presenter.instructionsFor(prepDir, true);

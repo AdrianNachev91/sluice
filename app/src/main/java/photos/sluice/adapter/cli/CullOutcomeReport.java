@@ -76,7 +76,7 @@ final class CullOutcomeReport {
      */
     private static CommandOutcome appliedOutcome(final CullJobOutcome.Applied applied, final Path duplicates) {
         final List<String> lines = new ArrayList<>();
-        lines.add(ResultLines.count("Photos looked at", applied.applyReport().reviewed()));
+        lines.add(ResultLines.countLine("Photos looked at", applied.applyReport().reviewed()));
         ResultLines.addWhenAny(lines, "Sheets judged", applied.cullReport().montagesCulled());
         ResultLines.addWhenAny(lines, "Calls to your provider", applied.cullReport().apiCalls());
         applied.applyReport().byCategory().entrySet().stream()
@@ -114,7 +114,7 @@ final class CullOutcomeReport {
             return CommandOutcome.waiting(CullPayloads.outcome(waiting),
                     stoppedLines(line, waiting.movedBeforeItPaused(), duplicates), notes(waiting));
         }
-        final String handover = written(instructions, job.prepDir());
+        final String handover = instructionsFor(instructions, job.prepDir());
         final List<String> lines = List.of(line, "", handover == null
                 ? "The instructions for judging them could not be written, because this sift's own "
                         + "records could not be read. Run 'resume " + job.scope() + "' again once "
@@ -152,7 +152,7 @@ final class CullOutcomeReport {
         ResultLines.addWhenAny(lines, "Could not be judged", moved.unreviewable());
         if (lines.size() > 1) {
             lines.add(1, "It had started moving photos. These left Sorted before it stopped.");
-            lines.add(2, ResultLines.count("Photos that left Sorted", leftSorted(moved)));
+            lines.add(2, ResultLines.countLine("Photos that left Sorted", movedOutOfSorted(moved)));
         }
         return List.copyOf(lines);
     }
@@ -166,7 +166,7 @@ final class CullOutcomeReport {
      * @param moved {@link ApplyReport} what the apply moved
      * @return int how many photos left Sorted
      */
-    private static int leftSorted(final ApplyReport moved) {
+    private static int movedOutOfSorted(final ApplyReport moved) {
         return moved.unreviewable() + moved.nearDupRejects()
                 + moved.byCategory().values().stream().mapToInt(Integer::intValue).sum();
     }
@@ -183,7 +183,7 @@ final class CullOutcomeReport {
      * @param prepDir {@link Path} the run to write them for
      * @return {@link String} the text, or null where the records could not be read
      */
-    private static @Nullable String written(final Function<Path, String> instructions, final Path prepDir) {
+    private static @Nullable String instructionsFor(final Function<Path, String> instructions, final Path prepDir) {
         try {
             return instructions.apply(prepDir);
         } catch (final RuntimeException couldNotBeWritten) {

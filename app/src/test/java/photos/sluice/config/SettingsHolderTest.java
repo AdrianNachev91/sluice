@@ -27,7 +27,7 @@ class SettingsHolderTest {
     // turns the mapping into a silent tileSize/tilesPerRow swap.
     @Test
     void theBoundGridMapsFieldsByNameNotPosition() {
-        final Settings settings = SettingsHolder.bound(new PathsProperties("repo", "library", "inbox"),
+        final Settings settings = SettingsHolder.boundSettings(new PathsProperties("repo", "library", "inbox"),
                 cullConfig(), new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM));
 
         assertThat(settings.montage().tileSize()).isEqualTo(224);
@@ -98,7 +98,7 @@ class SettingsHolderTest {
                 List.of(CullCategory.of("receipts", "paper receipts"),
                         CullCategory.of("receipts", "till slips")));
 
-        assertThatThrownBy(() -> SettingsHolder.bound(new PathsProperties("repo", "library", "inbox"),
+        assertThatThrownBy(() -> SettingsHolder.boundSettings(new PathsProperties("repo", "library", "inbox"),
                 cull, new MontageProperties(224, 5), new UiProperties(ThemeChoice.SYSTEM)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("receipts");

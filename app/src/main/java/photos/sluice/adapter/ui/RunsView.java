@@ -160,7 +160,7 @@ public record RunsView(String heading, @Nullable String unreadable, List<RunCard
         CONTINUE,
 
         /** Picks it back up without waiting for the sheets that have not arrived. */
-        CONTINUE_WITHOUT_THE_MISSING,
+        CONTINUE_WITHOUT_MISSING_SHEETS,
 
         /** Opens the screen that says what is wrong with the run and what can be done about it. */
         TROUBLESHOOT,

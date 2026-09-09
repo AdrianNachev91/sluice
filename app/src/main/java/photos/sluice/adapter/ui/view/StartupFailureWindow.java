@@ -165,7 +165,7 @@ final class StartupFailureWindow {
         final var copy = new Button("Copy");
         copy.setId("copy-trace-button");
         copy.setOnAction(_ -> {
-            CopyableTrace.putOnTheClipboard(trace);
+            CopyableTrace.copyToClipboard(trace);
             copy.setText("Copied");
         });
 
@@ -180,7 +180,7 @@ final class StartupFailureWindow {
      * @return {@link HBox} the brand row
      */
     private static HBox brand() {
-        final var mark = BrandMark.styled();
+        final var mark = BrandMark.windowMark();
 
         final TextField name = SelectableText.line("Sluice");
         name.getStyleClass().add("brand-name");

@@ -11,7 +11,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import photos.sluice.adapter.cli.RefusalClassifier;
 import photos.sluice.application.port.in.ImportSourceException;
 import photos.sluice.application.port.in.JobInProgressException;
-import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
+import photos.sluice.application.port.in.LibraryRootResolutionRequiredException;
 import photos.sluice.application.port.in.NoteIsNotTextException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.RunsUnreadableException;
@@ -34,7 +34,7 @@ import photos.sluice.domain.cull.Finding;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.model.SortSummary;
-import photos.sluice.domain.model.SortSummary.Guessed;
+import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.domain.paths.PathRole;
 import photos.sluice.domain.paths.PathViolation;
 import photos.sluice.secrets.SecretId;
@@ -72,7 +72,7 @@ class RefusalCoverageTest {
     @MethodSource("refusals")
     void theDesktopWordsEveryRefusalItCanMeet(final Refusal refusal) {
         if (refusal.desktop().wordedHere()) {
-            assertThat(RunRefusals.said(refusal.thrown()).sentence())
+            assertThat(RunRefusals.refusalOf(refusal.thrown()).sentence())
                     .as("the desktop words %s with somebody else's arm", refusal.name())
                     .doesNotContain(String.valueOf(refusal.thrown()))
                     .contains(refusal.desktop().says());
@@ -116,7 +116,7 @@ class RefusalCoverageTest {
     }
 
     // A job's failure arrives through JobHandle.failureIn, and what that hands over decides which
-    // arm fires. Every other test here calls said() with an exception built in the test, which is
+    // arm fires. Every other test here calls refusalOf() with an exception built in the test, which is
     // exactly why an unwrap that stripped a real level went unnoticed.
     @Test
     void aTypedRefusalThrownInsideAJobKeepsItsOwnArm() {
@@ -124,9 +124,9 @@ class RefusalCoverageTest {
         final var thrown = new NoteIsNotTextException(note,
                 new UncheckedIOException(new MalformedInputException(1)));
 
-        final String said = RunRefusals.said(deliveredByAJobThatThrew(thrown)).sentence();
+        final String sentence = RunRefusals.refusalOf(deliveredByAJobThatThrew(thrown)).sentence();
 
-        assertThat(said).contains(note.toString());
+        assertThat(sentence).contains(note.toString());
     }
 
     @Test
@@ -205,7 +205,7 @@ class RefusalCoverageTest {
                         Handling.unreachable("VisionProviderPresenter catches it on the key card"),
                         Handling.unreachable("no verb writes a credential")),
 
-                new Refusal(new LibraryRootMoveNeedsAResolutionException(aLibraryRoot(), "asks first"),
+                new Refusal(new LibraryRootResolutionRequiredException(aLibraryRoot(), "asks first"),
                         Handling.unreachable("SettingsPresenter.save catches it and opens the dialog"),
                         Handling.unreachable("no verb moves the library root")),
                 new Refusal(new RunsUnreadableException(aPrepDir()),
@@ -267,7 +267,7 @@ class RefusalCoverageTest {
     }
 
     private static SortSummary aSortThatFilledIt() {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(),
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), LowConfidenceCounts.NONE, List.of(),
                 Set.of(2019), List.of(), false, 0);
     }
 

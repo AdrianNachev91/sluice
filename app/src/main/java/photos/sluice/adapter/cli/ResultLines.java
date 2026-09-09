@@ -23,7 +23,7 @@ final class ResultLines {
      */
     static void addWhenAny(final List<String> lines, final String label, final int counted) {
         if (counted > 0) {
-            lines.add(count(label, counted));
+            lines.add(countLine(label, counted));
         }
     }
 
@@ -34,7 +34,7 @@ final class ResultLines {
      * @param counted int what it counted
      * @return {@link String} the line
      */
-    static String count(final String label, final int counted) {
+    static String countLine(final String label, final int counted) {
         return label + ": " + grouped(counted);
     }
 

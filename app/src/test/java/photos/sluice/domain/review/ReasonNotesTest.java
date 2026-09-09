@@ -117,19 +117,19 @@ class ReasonNotesTest {
 
     @Test
     void bothOfTheShapesThisAppWritesAreItsOwn() {
-        assertThat(ReasonNotes.isANote("_reasons.txt")).isTrue();
-        assertThat(ReasonNotes.isANote("IMG_1.jpg.txt")).isTrue();
-        assertThat(ReasonNotes.isANote("clip.MOV.txt")).isTrue();
-        assertThat(ReasonNotes.isANote("IMG_1 - Copy.jpg.txt")).isTrue();
+        assertThat(ReasonNotes.isReasonNote("_reasons.txt")).isTrue();
+        assertThat(ReasonNotes.isReasonNote("IMG_1.jpg.txt")).isTrue();
+        assertThat(ReasonNotes.isReasonNote("clip.MOV.txt")).isTrue();
+        assertThat(ReasonNotes.isReasonNote("IMG_1 - Copy.jpg.txt")).isTrue();
     }
 
     @Test
     void aTextFileNamedForNoPhotoBelongsToWhoeverPutItThere() {
-        assertThat(ReasonNotes.isANote("my-own-notes.txt")).isFalse();
-        assertThat(ReasonNotes.isANote("holiday.notes.txt")).isFalse();
-        assertThat(ReasonNotes.isANote("notes.docx")).isFalse();
-        assertThat(ReasonNotes.isANote("IMG_1.jpg")).isFalse();
-        assertThat(ReasonNotes.isANote(".txt")).isFalse();
+        assertThat(ReasonNotes.isReasonNote("my-own-notes.txt")).isFalse();
+        assertThat(ReasonNotes.isReasonNote("holiday.notes.txt")).isFalse();
+        assertThat(ReasonNotes.isReasonNote("notes.docx")).isFalse();
+        assertThat(ReasonNotes.isReasonNote("IMG_1.jpg")).isFalse();
+        assertThat(ReasonNotes.isReasonNote(".txt")).isFalse();
     }
 
     private static Map.Entry<String, LocalDate> entry(final String name, final int year,

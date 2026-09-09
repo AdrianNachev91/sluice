@@ -17,7 +17,7 @@ import java.nio.file.Path;
  * <p>An {@link IllegalStateException} subtype, so a caller that only wants to know it was refused
  * needs no knowledge of this type at all.
  */
-public final class LibraryRootMoveNeedsAResolutionException extends IllegalStateException {
+public final class LibraryRootResolutionRequiredException extends IllegalStateException {
 
     private final transient Path previousLibraryRoot;
 
@@ -27,7 +27,7 @@ public final class LibraryRootMoveNeedsAResolutionException extends IllegalState
      * @param previousLibraryRoot {@link Path} the library root the save would move away from
      * @param message {@link String} what was refused, for a log
      */
-    public LibraryRootMoveNeedsAResolutionException(final Path previousLibraryRoot, final String message) {
+    public LibraryRootResolutionRequiredException(final Path previousLibraryRoot, final String message) {
         super(message);
         this.previousLibraryRoot = previousLibraryRoot;
     }

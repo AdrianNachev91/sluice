@@ -12,19 +12,19 @@ public class ImportSourceException extends IllegalArgumentException {
     /**
      * Creates the refusal.
      *
-     * @param said {@link String} what is wrong with what was chosen
+     * @param message {@link String} what is wrong with what was chosen
      */
-    public ImportSourceException(final String said) {
-        super(said);
+    public ImportSourceException(final String message) {
+        super(message);
     }
 
     /**
      * Creates the refusal over the failure that produced it.
      *
-     * @param said {@link String} what is wrong with what was chosen
+     * @param message {@link String} what is wrong with what was chosen
      * @param cause {@link Throwable}
      */
-    public ImportSourceException(final String said, final Throwable cause) {
-        super(said, cause);
+    public ImportSourceException(final String message, final Throwable cause) {
+        super(message, cause);
     }
 }

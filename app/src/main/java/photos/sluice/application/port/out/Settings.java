@@ -70,7 +70,7 @@ public record Settings(PathSettings paths, String provider,
                     + (duplicates.size() == 1 ? "This one is used" : "These are used")
                     + " more than once: " + String.join(", ", duplicates) + ".");
         }
-        if (categories.stream().map(CullCategory::name).anyMatch(JunkCategory::claims)) {
+        if (categories.stream().map(CullCategory::name).anyMatch(JunkCategory::isJunkName)) {
             throw new UnusableSettingsException("Photo categories may not hold one called '"
                     + JunkCategory.NAME + "'. Sluice supplies that one itself, and it is always on.");
         }

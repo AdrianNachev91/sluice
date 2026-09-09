@@ -124,7 +124,7 @@ public class CommitCommand implements Callable<Integer> {
         if (stopped) {
             lines.add(stoppedLine(committed.leftBehind()));
         }
-        lines.add(ResultLines.count("Moved to your Library", committed.committed()));
+        lines.add(ResultLines.countLine("Moved to your Library", committed.committed()));
         for (final LibraryBucket bucket : LibraryBucket.values()) {
             ResultLines.addWhenAny(lines, label(bucket), committed.byBucket().getOrDefault(bucket, 0));
         }

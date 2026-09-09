@@ -183,7 +183,7 @@ class PhotoCategoriesPaneTest {
         });
 
         assertThat(name.getText()).hasSize(CategoryName.maxLength());
-        assertThat(description.getText()).hasSize(CullCategory.maxDescription());
+        assertThat(description.getText()).hasSize(CullCategory.maxDescriptionLength());
         assertThat(examples.getText())
                 .hasSize(CullCategory.maxExamples() * CullCategory.maxExample());
     }
@@ -544,7 +544,7 @@ class PhotoCategoriesPaneTest {
         }
 
         @Override
-        public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+        public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
             return Optional.empty();
         }
 

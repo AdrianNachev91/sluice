@@ -215,7 +215,7 @@ public class VisionProviderPresenter {
                         + "and keeps answering reads until it is unset."
                 : null;
         return new SettingsView.SecretRow(this.reassuranceLine(), environmentOverride,
-                this.multiHolderNote(id), null, this.hasAStoredValue(id));
+                this.multiHolderNote(id), null, this.hasStoredValue(id));
     }
 
     /**
@@ -233,7 +233,7 @@ public class VisionProviderPresenter {
      * @param providerId {@link String} the provider to check
      */
     public void refreshModels(final String providerId) {
-        if (this.offersAModelCatalog(providerId)) {
+        if (this.hasModelCatalog(providerId)) {
             this.lastCheck.put(providerId, this.providers.check(providerId));
         }
     }
@@ -274,7 +274,7 @@ public class VisionProviderPresenter {
      * @param budget {@link Duration} how long to wait for the answer before giving up on it
      */
     void refreshModelsAtStartup(final String providerId, final Duration budget) {
-        if (!this.offersAModelCatalog(providerId)) {
+        if (!this.hasModelCatalog(providerId)) {
             return;
         }
         final var settled = new CountDownLatch(1);
@@ -359,7 +359,7 @@ public class VisionProviderPresenter {
     public ConnectionCheckResult testConnection(final String providerId, final String endpoint) {
         final ProviderCheck outcome = this.providers.check(providerId,
                 new CullProviderSettings(null, SettingsPresenter.blankToNull(endpoint), null));
-        return new ConnectionCheckResult(wordCheckOutcome(outcome), outcome instanceof ProviderCheck.Accepted);
+        return new ConnectionCheckResult(checkOutcomeWording(outcome), outcome instanceof ProviderCheck.Accepted);
     }
 
     /**
@@ -421,7 +421,7 @@ public class VisionProviderPresenter {
      * @param providerId {@link String} the provider to ask about
      * @return boolean true when it offers one
      */
-    boolean offersAModelCatalog(final String providerId) {
+    boolean hasModelCatalog(final String providerId) {
         return this.providers.byId(providerId).filter(provider -> provider.models() != null).isPresent();
     }
 
@@ -470,7 +470,7 @@ public class VisionProviderPresenter {
             return this.picked(live, savedModel, "What your account can run, from the last connection or test.");
         }
         // NoCredential is handled above; reaching here it is one of the four failure outcomes.
-        return new ModelPickerResult(new SettingsView.ModelPicker.Unavailable(wordCheckOutcome(last), savedModel), null);
+        return new ModelPickerResult(new SettingsView.ModelPicker.Unavailable(checkOutcomeWording(last), savedModel), null);
     }
 
     /**
@@ -508,7 +508,7 @@ public class VisionProviderPresenter {
      * @param outcome {@link ProviderCheck} what the provider said
      * @return {@link String} the sentence
      */
-    private static String wordCheckOutcome(final ProviderCheck outcome) {
+    private static String checkOutcomeWording(final ProviderCheck outcome) {
         return switch (outcome) {
             case ProviderCheck.Accepted(final ModelCatalog models) ->
                     "This works. This account can run " + models.options().size() + " model(s).";
@@ -566,7 +566,7 @@ public class VisionProviderPresenter {
      * @param id {@link SecretId} the credential to ask about
      * @return boolean true when a stored tier holds a value
      */
-    private boolean hasAStoredValue(final SecretId id) {
+    private boolean hasStoredValue(final SecretId id) {
         return this.secretStore.holdings(id).stream()
                 .anyMatch(holding -> holding.location() instanceof StoredLocation && holding.holding() == Holding.HOLDS);
     }

@@ -27,7 +27,7 @@ final class ProgressPace {
      * <p>Ten a second reads as a live count rather than a stuck one. It also holds a sort of
      * sixteen thousand files to a few hundred redraws instead of sixteen thousand.
      */
-    static final Duration REDRAWN = Duration.ofMillis(100);
+    static final Duration REDRAW_INTERVAL = Duration.ofMillis(100);
 
     /**
      * How often a plain line is allowed to be written.
@@ -35,7 +35,7 @@ final class ProgressPace {
      * <p>Often enough to show a long run is still alive. Rare enough that ten minutes of sorting
      * leaves a few hundred lines in a log rather than one per file.
      */
-    static final Duration PLAIN = Duration.ofSeconds(2);
+    static final Duration PLAIN_LINE_INTERVAL = Duration.ofSeconds(2);
 
     private final long interval;
     private final LongSupplier now;

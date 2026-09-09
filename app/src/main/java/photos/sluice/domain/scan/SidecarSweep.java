@@ -96,7 +96,7 @@ public final class SidecarSweep {
         }
         final String ownerKey = TakeoutSidecarPairer.ownerKeyOf(json);
         final String ownerKeyLower = ownerKey.toLowerCase(Locale.ROOT);
-        if (!couldHaveBeenASidecar(json, ownerKeyLower)) {
+        if (!hasSidecarShape(json, ownerKeyLower)) {
             return false;
         }
         final Map<String, List<String>> namesInDir =
@@ -116,7 +116,7 @@ public final class SidecarSweep {
      * @param ownerKeyLower {@link String} the lowercased owner key derived from it
      * @return boolean true if the name is consistent with a per-photo sidecar
      */
-    private static boolean couldHaveBeenASidecar(final Path json, final String ownerKeyLower) {
+    private static boolean hasSidecarShape(final Path json, final String ownerKeyLower) {
         return TakeoutSidecarPairer.looksLikeMediaSidecar(json)
                 || ownerKeyLower.length() >= MIN_TRUNCATED_OWNER_KEY_LENGTH;
     }

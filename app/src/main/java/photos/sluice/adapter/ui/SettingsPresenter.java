@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome;
-import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
+import photos.sluice.application.port.in.LibraryRootResolutionRequiredException;
 import photos.sluice.application.port.in.LibraryRootResolution;
 import photos.sluice.application.port.in.LibraryRootUseCase;
 import photos.sluice.application.port.in.PathValidationUseCase;
@@ -234,7 +234,7 @@ public class SettingsPresenter {
             // Names the theme rather than the settings. This save carries what is already stored
             // with only the theme swapped, so nothing typed on this screen was ever in it.
             return new ThemeOutcome(current.theme().name(),
-                    SettingsRefusals.wordedForAUser(e, "Your theme was not saved."));
+                    SettingsRefusals.refusalWording(e, "Your theme was not saved."));
         }
         ThemeSelection.set(theme);
         return new ThemeOutcome(theme.name(), null);
@@ -317,13 +317,13 @@ public class SettingsPresenter {
                             final int tileSize, final int tilesPerRow, final String themeId) {
         // Before anything touches the disk. What a provider needs is answerable from the field
         // values alone, so refusing on it leaves no folder behind.
-        final String missing = this.whatThisProviderNeeds(provider, model);
+        final String missing = this.missingSettingNote(provider, model);
         if (missing != null) {
             return SaveOutcome.Refused.markingTheModel(missing);
         }
-        createIfItIsOurOwnSuggestion(workingRoot, workingRootSuggestion());
-        createIfItIsOurOwnSuggestion(libraryRoot, librarySuggestion());
-        createIfItIsOurOwnSuggestion(inbox, inboxSuggestion(workingRoot));
+        createIfSuggested(workingRoot, workingRootSuggestion());
+        createIfSuggested(libraryRoot, librarySuggestion());
+        createIfSuggested(inbox, inboxSuggestion(workingRoot));
         final var paths = new PathSettings(blankToNull(workingRoot), blankToNull(libraryRoot),
                 blankToNull(inbox));
         final Settings settings;
@@ -349,7 +349,7 @@ public class SettingsPresenter {
             // look its own settings do not name.
             ThemeSelection.set(settings.theme());
             return new SaveOutcome.Saved();
-        } catch (final LibraryRootMoveNeedsAResolutionException e) {
+        } catch (final LibraryRootResolutionRequiredException e) {
             // Emptying a configured library root raises the same refusal, since a clear followed by
             // a set is the move this exists to catch, done in two steps. There is no resolution to
             // state for it though: both answers are about what to do with a library arriving
@@ -363,13 +363,13 @@ public class SettingsPresenter {
             // whatever the reader answers. Asking the question first would spend a dialog to reach a
             // refusal that was certain before it opened.
             if (!this.pathValidation.violationsInForce().isEmpty()) {
-                return this.storeEverythingExceptTheMove(settings, e.previousLibraryRoot());
+                return this.saveWithoutMovingLibrary(settings, e.previousLibraryRoot());
             }
             // Nothing reached disk, so the whole document travels with the question. The resolution
             // answers for the library root alone, and everything else this save carried still has
             // to be stored once it is answered.
             return new SaveOutcome.NeedsLibraryRootResolution(Path.of(libraryRoot), settings,
-                    wordLibraryRootMove(e.previousLibraryRoot()));
+                    libraryRootMoveWording(e.previousLibraryRoot()));
         } catch (final RuntimeException e) {
             return this.refusalMarkingItsFields(e, paths);
         }
@@ -390,7 +390,7 @@ public class SettingsPresenter {
      * @param stayingAt {@link Path} where the library is now, which it keeps
      * @return {@link SaveOutcome} what happened, worded for the screen
      */
-    private SaveOutcome storeEverythingExceptTheMove(final Settings settings, final Path stayingAt) {
+    private SaveOutcome saveWithoutMovingLibrary(final Settings settings, final Path stayingAt) {
         final PathSettings asked = settings.paths();
         final var keeping = new PathSettings(asked.repoRoot(), stayingAt.toString(), asked.inbox());
         try {
@@ -467,11 +467,11 @@ public class SettingsPresenter {
         } catch (final RuntimeException e) {
             return failedMove(e);
         }
-        if (!movedTheLibrary(outcome)) {
+        if (!hasLibraryMoved(outcome)) {
             // A cancelled copy left the library where it was, so the rest of this save would be
             // stored against a library root that never changed. Said as a state of its own, so the
             // screen keeps every field as the user typed it and they can press Save again.
-            return new MoveOutcome.NothingChanged(wordMoveOutcome(outcome));
+            return new MoveOutcome.NothingChanged(moveOutcomeWording(outcome));
         }
         try {
             this.settingsUseCase.save(refused.pending());
@@ -483,7 +483,7 @@ public class SettingsPresenter {
                     + wordedForAUser(e));
         }
         ThemeSelection.set(refused.pending().theme());
-        return new MoveOutcome.Moved(wordMoveOutcome(outcome));
+        return new MoveOutcome.Moved(moveOutcomeWording(outcome));
     }
 
     /**
@@ -543,7 +543,7 @@ public class SettingsPresenter {
      * @param model {@link String} the selected model id, blank when the picker has nothing to offer
      * @return {@link String} what to tell the user, or null when nothing is missing
      */
-    private @Nullable String whatThisProviderNeeds(final String providerId, final String model) {
+    private @Nullable String missingSettingNote(final String providerId, final String model) {
         final boolean modelIsRequired = this.providers.byId(providerId)
                 .map(VisionProviderDescriptor::required)
                 .orElseGet(Set::of)
@@ -583,7 +583,7 @@ public class SettingsPresenter {
      * @param previousLibraryRoot {@link Path} the root the library would move away from
      * @return {@link String} the question, in the same terms as the buttons answering it
      */
-    private static String wordLibraryRootMove(final Path previousLibraryRoot) {
+    private static String libraryRootMoveWording(final Path previousLibraryRoot) {
         return "Your Library is at " + previousLibraryRoot + ", and there is a record of what is "
                 + "already in it. Moving the Library leaves that record describing the old folder. "
                 + "Copy the old Library across to keep it, or start the record fresh and let it "
@@ -600,7 +600,7 @@ public class SettingsPresenter {
      * @param override {@link SettingOverride} what is outranking the saved value
      * @return {@link String} the note to put under the field
      */
-    private static String wordOverride(final SettingOverride override) {
+    private static String overrideWording(final SettingOverride override) {
         return switch (override) {
             case final ByEnvironmentVariable env -> "The " + env.variableName() + " environment variable "
                     + "outranks what is saved here. What you save still applies for now, and the variable "
@@ -619,7 +619,7 @@ public class SettingsPresenter {
      * @param outcome {@link LibraryRootMoveOutcome} what the move reported
      * @return {@link String} what to show
      */
-    private static String wordMoveOutcome(final LibraryRootMoveOutcome outcome) {
+    private static String moveOutcomeWording(final LibraryRootMoveOutcome outcome) {
         return switch (outcome) {
             case final LibraryRootMoveOutcome.CopiedAndMoved copied -> copiedAndMoved(copied);
             case final LibraryRootMoveOutcome.CopyCancelled cancelled -> "You stopped the copy after "
@@ -628,7 +628,7 @@ public class SettingsPresenter {
                     + "also exist in your new location. Resuming the Library move continues copying the "
                     + "files instead of from the start. Sluice will never remove a Library folder. If you "
                     + "want to do this you can go to " + cancelled.copiedInto() + " and remove it by hand.";
-            case final LibraryRootMoveOutcome.MovedWithAFreshIndex fresh -> fresh.previousIndexFiledAt() == null
+            case final LibraryRootMoveOutcome.MovedWithFreshIndex fresh -> fresh.previousIndexFiledAt() == null
                     ? "The Library root moved. There was no record yet of what was already in the Library, "
                             + "so there was nothing to keep."
                     : "The Library root moved. The record of what was already in the Library described "
@@ -721,10 +721,10 @@ public class SettingsPresenter {
         final var byRole = new EnumMap<PathRole, String>(PathRole.class);
         for (final PathViolation violation : this.pathValidation.violations(paths)) {
             if (violation instanceof Overlap(final PathRole first, final PathRole second)) {
-                byRole.put(first, wordOverlap(second));
-                byRole.put(second, wordOverlap(first));
+                byRole.put(first, overlapWording(second));
+                byRole.put(second, overlapWording(first));
             } else if (!(violation instanceof NotConfigured)) {
-                byRole.put(roleOf(violation), wordViolation(violation));
+                byRole.put(roleOf(violation), violationWording(violation));
             }
         }
         return byRole;
@@ -740,7 +740,7 @@ public class SettingsPresenter {
         };
     }
 
-    private static String wordViolation(final PathViolation violation) {
+    private static String violationWording(final PathViolation violation) {
         return switch (violation) {
             case final NotConfigured _ -> "";
             // One message for every way a path can be malformed. What the filesystem refused is not
@@ -755,7 +755,7 @@ public class SettingsPresenter {
             case final Unreadable _ -> "This folder is there, but it could not be opened. Check that "
                     + "you have permission to open it, and that the drive or network share it sits on "
                     + "is connected.";
-            case final Overlap v -> wordOverlap(v.second());
+            case final Overlap v -> overlapWording(v.second());
         };
     }
 
@@ -766,10 +766,10 @@ public class SettingsPresenter {
      * @return {@link String} what to show
      */
     private static String wordedForAUser(final RuntimeException refusal) {
-        return SettingsRefusals.wordedForAUser(refusal, "Your settings were not saved.");
+        return SettingsRefusals.refusalWording(refusal, "Your settings were not saved.");
     }
 
-    private static String wordOverlap(final PathRole other) {
+    private static String overlapWording(final PathRole other) {
         return "This overlaps with the " + PathRoleLabels.of(other) + " folder.";
     }
 
@@ -783,7 +783,7 @@ public class SettingsPresenter {
      * @param value {@link String} the field's text
      * @param suggestion {@link String} what this screen offered for that field
      */
-    private static void createIfItIsOurOwnSuggestion(final String value, final String suggestion) {
+    private static void createIfSuggested(final String value, final String suggestion) {
         if (!value.equals(suggestion)) {
             return;
         }
@@ -962,8 +962,8 @@ public class SettingsPresenter {
     }
 
     private @Nullable String overrideNote(final String property) {
-        return this.settingsUseCase.overriddenAboveTheConfigFile(property)
-                .map(SettingsPresenter::wordOverride)
+        return this.settingsUseCase.higherPrecedenceOverride(property)
+                .map(SettingsPresenter::overrideWording)
                 .orElse(null);
     }
 
@@ -1007,9 +1007,9 @@ public class SettingsPresenter {
      * @param outcome {@link LibraryRootMoveOutcome} what the move reported
      * @return boolean true when the library root in force is now the new one
      */
-    private static boolean movedTheLibrary(final LibraryRootMoveOutcome outcome) {
+    private static boolean hasLibraryMoved(final LibraryRootMoveOutcome outcome) {
         return switch (outcome) {
-            case LibraryRootMoveOutcome.CopiedAndMoved _, LibraryRootMoveOutcome.MovedWithAFreshIndex _ -> true;
+            case LibraryRootMoveOutcome.CopiedAndMoved _, LibraryRootMoveOutcome.MovedWithFreshIndex _ -> true;
             case LibraryRootMoveOutcome.CopyCancelled _ -> false;
         };
     }
@@ -1025,11 +1025,11 @@ public class SettingsPresenter {
      * @return {@link MoveOutcome} the failure, worded for the screen
      */
     private static MoveOutcome failedMove(final Throwable failure) {
-        final String said = failure.getMessage();
-        return new MoveOutcome.Failed(said == null || said.isBlank()
+        final String message = failure.getMessage();
+        return new MoveOutcome.Failed(message == null || message.isBlank()
                 ? "The Library did not move, and it's not known why. Your photos are still where they "
                         + "were. Report this as a bug, quoting this: " + failure
-                : said);
+                : message);
     }
 
     /**

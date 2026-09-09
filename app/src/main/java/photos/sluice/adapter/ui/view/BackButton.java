@@ -6,9 +6,9 @@ import javafx.scene.shape.SVGPath;
 /**
  * The way out of a screen that has no sidebar entry of its own.
  */
-final class WayBack {
+final class BackButton {
 
-    private WayBack() {
+    private BackButton() {
     }
 
     /**
@@ -19,7 +19,7 @@ final class WayBack {
      * @param onBack {@link Runnable} returns to that screen
      * @return {@link Button} the way back
      */
-    static Button to(final String id, final String label, final Runnable onBack) {
+    static Button of(final String id, final String label, final Runnable onBack) {
         final var back = new Button(label);
         back.setId(id);
         back.getStyleClass().add("button-quiet");

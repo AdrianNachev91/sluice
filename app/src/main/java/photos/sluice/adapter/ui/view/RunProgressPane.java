@@ -101,10 +101,10 @@ final class RunProgressPane {
                              final Button cancel) {
         heading.setText(view.heading());
         scope.setText(view.scope());
-        startedOnItsOwn.setText(SettingsRows.orNothing(view.startedOnItsOwn()));
+        startedOnItsOwn.setText(SettingsRows.textOrEmpty(view.autoStartedNote()));
         drawBars(view.phases(), bars, view.reservedBars());
-        waiting.setText(SettingsRows.orNothing(view.waiting()));
-        cancelling.setText(SettingsRows.orNothing(view.cancelling()));
+        waiting.setText(SettingsRows.textOrEmpty(view.waiting()));
+        cancelling.setText(SettingsRows.textOrEmpty(view.cancelling()));
         cancel.setText(view.cancelLabel());
         cancel.setDisable(!view.cancelPressable());
     }
@@ -158,13 +158,13 @@ final class RunProgressPane {
     private static Node barRow(final PhaseBar phase) {
         final TextField label = SelectableText.line(phase.label());
         label.getStyleClass().add("run-phase-label");
-        final TextField counts = SelectableText.line(SettingsRows.orNothing(phase.counts()));
+        final TextField counts = SelectableText.line(SettingsRows.textOrEmpty(phase.counts()));
         counts.getStyleClass().add("run-phase-counts");
         final var top = new HBox(label, SettingsRows.spacer(), counts);
         top.setAlignment(Pos.CENTER_LEFT);
 
         final var bar = new ProgressBar();
-        bar.setProgress(waitingBar(phase));
+        bar.setProgress(barFill(phase));
         bar.setMaxWidth(Double.MAX_VALUE);
         bar.getStyleClass().add("run-phase-bar");
 
@@ -177,7 +177,7 @@ final class RunProgressPane {
         if (phase.cutShort()) {
             row.getStyleClass().add("run-phase-cut-short");
         }
-        if (phase.wentThrough()) {
+        if (phase.completedAllWork()) {
             row.getStyleClass().add("run-phase-through");
         }
         if (!phase.started()) {
@@ -192,7 +192,7 @@ final class RunProgressPane {
      * @param phase {@link PhaseBar} the phase to draw
      * @return double the fill, or the toolkit's indeterminate marker
      */
-    private static double waitingBar(final PhaseBar phase) {
+    private static double barFill(final PhaseBar phase) {
         if (!phase.started()) {
             return 0;
         }

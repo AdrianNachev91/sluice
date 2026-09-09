@@ -37,9 +37,9 @@ public class DiscardConfirmation {
      */
     String messageFor(final Path prepDir) {
         final Optional<CullRunSummary> run = this.runAt(prepDir);
-        final String paidFor = run.map(this::paidFor)
+        final String paidDecisionsText = run.map(this::paidDecisionsClause)
                 .orElse("The number of paid sheet decisions is unknown. ");
-        return paidFor + "Discarding this run's records will archive them. They will stay on disk in "
+        return paidDecisionsText + "Discarding this run's records will archive them. They will stay on disk in "
                 + this.pipeline.archivesFolder() + " for 30 days. Run this again with --yes to continue.";
     }
 
@@ -49,7 +49,7 @@ public class DiscardConfirmation {
      * @param run {@link CullRunSummary} the run, freshly diagnosed
      * @return {@link String} the clause, empty when nothing counted is worth naming
      */
-    private String paidFor(final CullRunSummary run) {
+    private String paidDecisionsClause(final CullRunSummary run) {
         final var sheets = run.shards();
         if (sheets == null || sheets.valid() == 0) {
             return "";

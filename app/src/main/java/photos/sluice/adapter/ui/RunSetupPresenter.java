@@ -231,7 +231,7 @@ public class RunSetupPresenter {
      * which folder is at fault, and that is more than this screen knows.
      */
     public void refreshCounts() {
-        this.retireTheHeldEstimate();
+        this.forgetHeldEstimate();
         this.folders.refresh();
     }
 
@@ -239,7 +239,7 @@ public class RunSetupPresenter {
      * Reads the same three folders for a caller nobody asked for an answer from.
      */
     public void refreshCountsUnprompted() {
-        this.retireTheHeldEstimate();
+        this.forgetHeldEstimate();
         this.folders.refreshUnprompted();
     }
 
@@ -282,7 +282,7 @@ public class RunSetupPresenter {
      * stopped leaves something behind, so its scope is not refused and it stays, which is what they
      * need to finish it. A year still worth running in another mode stays for the same reason.
      */
-    public void forgetAScopeNothingIsLeftIn() {
+    public void clearRefusedScope() {
         if (!this.scopeText.isBlank() && this.scope() instanceof RunScope.Refused) {
             this.setScope("");
         }
@@ -367,7 +367,7 @@ public class RunSetupPresenter {
     public @Nullable Confirmation confirmationNeeded() {
         // Nothing to ask where the counts are not in: this question names years and a file count it
         // has neither of.
-        if (this.chosen != RunMode.MOVE_TO_LIBRARY || !this.folders.countsAreIn()
+        if (this.chosen != RunMode.MOVE_TO_LIBRARY || !this.folders.countsAvailable()
                 || !(this.scope() instanceof RunScope.Everything)) {
             return null;
         }
@@ -408,7 +408,7 @@ public class RunSetupPresenter {
             return new SiftNow.Refuse(new Message(nothingToSift(year), true));
         }
         return new SiftNow.Ask(new Confirmation("Sift " + year + "?",
-                whatItCovers(year, photos, justSorted) + " " + this.spendClause(photos),
+                coverageLine(year, photos, justSorted) + " " + this.spendClause(photos),
                 "Sift " + year, "Cancel", true));
     }
 
@@ -429,7 +429,7 @@ public class RunSetupPresenter {
      * @param justSorted int how many of those this run filed
      * @return {@link String} the sentence
      */
-    private static String whatItCovers(final int year, final int photos, final int justSorted) {
+    private static String coverageLine(final int year, final int photos, final int justSorted) {
         final String looksAt = "This looks at " + RunWords.counted(photos, "photo", "photos")
                 + " sorted for " + year;
         final int earlier = photos - justSorted;
@@ -518,10 +518,10 @@ public class RunSetupPresenter {
             return this.blankScope();
         }
         return switch (RunScopeText.parse(this.scopeText)) {
-            case RunScopeText.Typed.Refused(final String reason) -> new RunScope.Refused(reason);
-            case RunScopeText.Typed.Blank _ -> this.blankScope();
-            case RunScopeText.Typed.Undated _ -> this.undatedScope();
-            case RunScopeText.Typed.OfYear(final int year, final List<Integer> months) ->
+            case RunScopeText.ParsedScope.Refused(final String reason) -> new RunScope.Refused(reason);
+            case RunScopeText.ParsedScope.Blank _ -> this.blankScope();
+            case RunScopeText.ParsedScope.Undated _ -> this.undatedScope();
+            case RunScopeText.ParsedScope.OfYear(final int year, final List<Integer> months) ->
                     this.yearScope(year, months);
         };
     }
@@ -558,10 +558,10 @@ public class RunSetupPresenter {
     /**
      * Puts a line on the launcher, or takes the one there away.
      *
-     * @param said {@link Message} what to report, or null to leave the screen saying nothing
+     * @param message {@link Message} what to report, or null to leave the screen saying nothing
      */
-    void report(final @Nullable Message said) {
-        this.message = said;
+    void report(final @Nullable Message message) {
+        this.message = message;
     }
 
     /**
@@ -573,7 +573,7 @@ public class RunSetupPresenter {
      * <p>A record that turns out to read is left alone, and the reader is told so. The button is
      * drawn from a reading that can be minutes old on a screen nobody has touched.
      */
-    public void startAFreshSpendRecord() {
+    public void startFreshSpendRecord() {
         this.lastEstimate = null;
         try {
             this.message = this.pipeline.setAsideUnreadableSpendLedger() == null
@@ -676,10 +676,10 @@ public class RunSetupPresenter {
         // Nothing marked at all where the run reads the Inbox. These are Sorted years, holding
         // Sorted counts, and a sort works on files the Inbox holds. A mark would put the run's own
         // timeframe beside a number counting a different folder.
-        final RunScopeText.Typed typed = RunScopeText.parse(this.scopeText);
+        final RunScopeText.ParsedScope typed = RunScopeText.parse(this.scopeText);
         final int selected = this.readsSorted() ? this.typedYear() : 0;
         final List<Integer> narrowed =
-                typed instanceof RunScopeText.Typed.OfYear(int _, final List<Integer> months)
+                typed instanceof RunScopeText.ParsedScope.OfYear(int _, final List<Integer> months)
                         ? months
                         : List.of();
         return this.folders.stagedYears().stream()
@@ -749,7 +749,7 @@ public class RunSetupPresenter {
      * @return {@link Cost} what to say about money, or null where this mode never spends
      */
     private @Nullable Cost cost(final RunScope scope) {
-        if (!this.reachesAProvider()) {
+        if (!this.reachesProvider()) {
             return null;
         }
         if (!this.pipeline.configuredProviderSpends()) {
@@ -764,7 +764,7 @@ public class RunSetupPresenter {
      *
      * @return boolean true for the one mode that sifts
      */
-    private boolean reachesAProvider() {
+    private boolean reachesProvider() {
         return this.chosen == RunMode.SIFT;
     }
 
@@ -787,7 +787,7 @@ public class RunSetupPresenter {
         if (expected.totalTokens() == 0) {
             return null;
         }
-        final String rests = whereTheFigureCameFrom(expected);
+        final String rests = estimateSourceLine(expected);
         return new Cost.Estimate("About " + RunWords.rounded(expected.totalTokens()) + " tokens",
                 ESTIMATE_OPENING + (rests == null ? "" : " " + rests) + ESTIMATE_CEILING,
                 expected.historyUnreadable() ? this.brokenRecord() : null);
@@ -819,7 +819,7 @@ public class RunSetupPresenter {
      * @param expected {@link SpendEstimate} what the facade said about this scope
      * @return the middle of the disclaimer, or null where the warning box carries it instead
      */
-    private static @Nullable String whereTheFigureCameFrom(final SpendEstimate expected) {
+    private static @Nullable String estimateSourceLine(final SpendEstimate expected) {
         if (expected.historicOutput()) {
             return FROM_HISTORY;
         }
@@ -854,7 +854,7 @@ public class RunSetupPresenter {
     /**
      * Throws away the estimate held for the last scope.
      */
-    private void retireTheHeldEstimate() {
+    private void forgetHeldEstimate() {
         this.lastEstimateCovered = -1;
     }
 
@@ -888,7 +888,7 @@ public class RunSetupPresenter {
             // and the file count, and a read that failed leaves neither knowable. So the press is
             // withheld rather than offered without its question. A typed year still goes through:
             // it is bounded, and the facade names the folder at fault.
-            case MOVE_TO_LIBRARY -> this.folders.countsAreIn() && !this.folders.stagedYears().isEmpty()
+            case MOVE_TO_LIBRARY -> this.folders.countsAvailable() && !this.folders.stagedYears().isEmpty()
                     ? new RunScope.Everything()
                     : new RunScope.Nothing();
             // A sift has no oldest-year to fall back on, deliberately. It reads Sorted, where
@@ -909,7 +909,7 @@ public class RunSetupPresenter {
      */
     private RunScope undatedScope() {
         return switch (this.chosen) {
-            case MOVE_TO_LIBRARY -> this.folders.countsAreIn() && this.folders.undatedHeld() == 0
+            case MOVE_TO_LIBRARY -> this.folders.countsAvailable() && this.folders.undatedHeld() == 0
                     ? new RunScope.Refused(NOTHING_UNDATED)
                     : new RunScope.Undated();
             case SIFT -> new RunScope.Refused(SIFT_TAKES_NO_UNDATED);
@@ -943,7 +943,7 @@ public class RunSetupPresenter {
      * @return {@link RunScope} the scope it stands for, or a refusal where the mode cannot take it
      */
     private RunScope yearScope(final int year, final List<Integer> months) {
-        if (this.readsSorted() && this.folders.countsAreIn()
+        if (this.readsSorted() && this.folders.countsAvailable()
                 && this.folders.stagedYears().stream().noneMatch(row -> row.year() == year)) {
             return new RunScope.Refused("Nothing is sorted for " + year + ".");
         }
@@ -951,7 +951,7 @@ public class RunSetupPresenter {
             final RunScope sift = new RunScope.OfYear(year, months);
             // A year can hold videos alone, and months can be named that hold nothing. Both leave a
             // sift with no photo to look at, and neither is caught by the year check above.
-            return this.folders.countsAreIn() && this.photosIn(sift) == 0
+            return this.folders.countsAvailable() && this.photosIn(sift) == 0
                     ? new RunScope.Refused(months.isEmpty()
                             ? nothingToSift(year)
                             : "No photos are sorted for the chosen months of " + year
@@ -971,7 +971,7 @@ public class RunSetupPresenter {
             return new RunScope.Refused(this.chosen.verb()
                     + " narrows to a span of months, not a list. Reading "
                     + RunWords.joined(months) + " as " + months.getFirst() + "-" + months.getLast()
-                    + " would take " + wouldAlsoTake(blocking) + ". Choose a span of months, like "
+                    + " would take " + extraMonthsPhrase(blocking) + ". Choose a span of months, like "
                     + "6-8, or none at all for the whole year.");
         }
         return new RunScope.OfYear(year, months);
@@ -994,7 +994,7 @@ public class RunSetupPresenter {
      */
     private List<Integer> monthsNamedFor(final int year) {
         return RunScopeText.parse(this.scopeText)
-                instanceof RunScopeText.Typed.OfYear(final int named, final List<Integer> months)
+                instanceof RunScopeText.ParsedScope.OfYear(final int named, final List<Integer> months)
                 && named == year
                 ? months
                 : List.of();
@@ -1007,7 +1007,7 @@ public class RunSetupPresenter {
      */
     private int typedYear() {
         return RunScopeText.parse(this.scopeText)
-                instanceof RunScopeText.Typed.OfYear(final int year, List<Integer> _) ? year : 0;
+                instanceof RunScopeText.ParsedScope.OfYear(final int year, List<Integer> _) ? year : 0;
     }
 
     /**
@@ -1136,7 +1136,7 @@ public class RunSetupPresenter {
         return this.folders.unfinished().stream()
                 .filter(run -> run.scope().equals(exact))
                 .findFirst()
-                .<StartAction>map(run -> carriedOn(run.health().state())
+                .<StartAction>map(run -> isContinuable(run.health().state())
                         ? new StartAction.ContinueRun(run.prepDir())
                         : new StartAction.OpenRuns())
                 .orElseGet(StartAction.StartFresh::new);
@@ -1148,7 +1148,7 @@ public class RunSetupPresenter {
      * @param state {@link State} the run's state
      * @return boolean true where continuing it would get somewhere
      */
-    private static boolean carriedOn(final State state) {
+    private static boolean isContinuable(final State state) {
         return state == State.WAITING || state == State.READY;
     }
 
@@ -1215,7 +1215,7 @@ public class RunSetupPresenter {
      * @return a {@link List} of {@link Integer} what the gap holds, or null where that cannot be said
      */
     private @Nullable List<Integer> monthsFiledInTheGap(final int year, final List<Integer> months) {
-        if (!this.folders.countsAreIn()) {
+        if (!this.folders.countsAvailable()) {
             return null;
         }
         final List<Integer> filed = this.folders.stagedYears().stream()
@@ -1237,7 +1237,7 @@ public class RunSetupPresenter {
      *     or null where the counts cannot say which they are
      * @return {@link String} what the run would take, to sit inside the refusal
      */
-    private static String wouldAlsoTake(final @Nullable List<Integer> blocking) {
+    private static String extraMonthsPhrase(final @Nullable List<Integer> blocking) {
         if (blocking == null) {
             return "months you did not ask for";
         }

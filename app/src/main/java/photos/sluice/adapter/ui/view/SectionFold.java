@@ -78,7 +78,7 @@ final class SectionFold {
      *
      * @param wanted boolean whether the contents should end up showing
      */
-    void to(final boolean wanted) {
+    void setOpen(final boolean wanted) {
         // A fold already going where it is being asked to go has nothing to do. Without this, every
         // redraw travels again, and every travel carries the pane with it. A press anywhere on the
         // page would then throw a reader who had scrolled away.
@@ -105,18 +105,18 @@ final class SectionFold {
                 new KeyValue(this.travelling.maxHeightProperty(), to, Interpolator.EASE_BOTH),
                 new KeyValue(this.travelling.opacityProperty(), wanted ? 1 : 0,
                         Interpolator.EASE_BOTH)));
-        final KeyValue following = wanted
+        final KeyValue scrollFollowFrame = wanted
                 ? this.following(to - this.travelling.getHeight())
                 : null;
-        if (following != null) {
-            frames.add(following);
+        if (scrollFollowFrame != null) {
+            frames.add(scrollFollowFrame);
         }
         final var travel = new Timeline(new KeyFrame(TRAVEL, frames.toArray(new KeyValue[0])));
         travel.setOnFinished(_ -> {
             this.running = null;
             settle(this.travelling, wanted);
             if (wanted) {
-                Platform.runLater(this::arrive);
+                Platform.runLater(this::bringSectionIntoView);
             }
         });
         this.running = travel;
@@ -165,7 +165,7 @@ final class SectionFold {
      * height on the layout pass after, so a reading taken as the travel ends answers for the page
      * as it stood before the section grew.
      */
-    private void arrive() {
+    private void bringSectionIntoView() {
         // The fold can have been shut again in the pulse this waited out, and travelling toward a
         // section that is closing shows the reader nothing.
         if (!this.open || this.scroll == null

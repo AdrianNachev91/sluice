@@ -42,7 +42,7 @@ public final class CommitScopeSelector {
      * <p>Matched on the first segment alone. Something further down happening to carry that name is
      * a folder inside a year, which a year scope already reaches.
      *
-     * <p>Case-insensitive, as {@link SortFolderNames#writtenByASort} is. Windows and a stock Mac
+     * <p>Case-insensitive, as {@link SortFolderNames#isSortFolderName} is. Windows and a stock Mac
      * both hand a hand-made {@code unsorted} the very folder this app writes.
      *
      * @param relativePath {@link String} the Sorted-relative file path

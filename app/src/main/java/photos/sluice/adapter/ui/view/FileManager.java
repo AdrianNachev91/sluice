@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import java.awt.Desktop;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -26,8 +25,6 @@ final class FileManager {
 
     private static @Nullable Consumer<Path> opener;
 
-    private static @Nullable BiConsumer<Path, Runnable> fileOpener;
-
     private FileManager() {}
 
     /**
@@ -40,22 +37,10 @@ final class FileManager {
     }
 
     /**
-     * Says what opens a file from now on, and how it reports back where nothing can.
-     *
-     * @param handler a {@link BiConsumer} of {@link Path} and {@link Runnable} hands the file to
-     *     whatever is registered for its type. It runs the second argument where nothing is
-     */
-    static void openFilesWith(final BiConsumer<Path, Runnable> handler) {
-        fileOpener = handler;
-    }
-
-    /**
-     * Forgets whatever was opening folders and files, so a test cannot decide what the next one
-     * does.
+     * Forgets whatever was opening folders, so a test cannot decide what the next one does.
      */
     static void clear() {
         opener = null;
-        fileOpener = null;
     }
 
     /**
@@ -67,47 +52,6 @@ final class FileManager {
         final Consumer<Path> handler = opener;
         if (handler != null) {
             handler.accept(folder);
-        }
-    }
-
-    /**
-     * Opens one file, or does nothing when nothing is set to open one.
-     *
-     * @param file {@link Path} the file to open
-     * @param whenNothingCan {@link Runnable} what to run where the machine has nothing registered
-     *     for this kind of file
-     */
-    static void openFile(final Path file, final Runnable whenNothingCan) {
-        final BiConsumer<Path, Runnable> handler = fileOpener;
-        if (handler != null) {
-            handler.accept(file, whenNothingCan);
-        }
-    }
-
-    /**
-     * Hands one file to whatever the machine has registered for its type, and says whether anything
-     * took it.
-     *
-     * <p>Reported rather than swallowed, unlike a folder. A folder that will not open leaves the
-     * reader nothing to do about it. A note file that will not open leaves them the folder it sits
-     * in, which the same card already offers.
-     *
-     * <p>Blocking, so a caller runs it off the thread that paints.
-     *
-     * @param file {@link Path} the file to open
-     * @return boolean true where something opened it
-     */
-    static boolean inTheRegisteredApplication(final Path file) {
-        if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-            log.info("This machine has no desktop to open the file {} with", file);
-            return false;
-        }
-        try {
-            Desktop.getDesktop().open(file.toFile());
-            return true;
-        } catch (final IOException | IllegalArgumentException | UnsupportedOperationException e) {
-            log.info("Could not open {}", file, e);
-            return false;
         }
     }
 
@@ -128,7 +72,7 @@ final class FileManager {
      *
      * @param folder {@link Path} the folder to open
      */
-    static void inTheSystemFileManager(final Path folder) {
+    static void openInSystemFileManager(final Path folder) {
         if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
             log.info("This machine has no desktop to open {} with", folder);
             return;

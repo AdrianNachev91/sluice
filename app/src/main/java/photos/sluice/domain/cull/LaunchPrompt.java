@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
  */
 public final class LaunchPrompt {
 
-    private static final String PASS_IT_WHOLE = "Everything below is the contract those files have "
+    private static final String WHOLE_MESSAGE_NOTE = "Everything below is the contract those files have "
             + "to meet. Read it before you start, and if you hand this work to another agent, hand "
             + "it this whole message rather than a summary of it.";
 
@@ -76,7 +76,7 @@ public final class LaunchPrompt {
                 %s
 
                 %s
-                """.formatted(prep.prepDir(), problems, PASS_IT_WHOLE) + body(prep);
+                """.formatted(prep.prepDir(), problems, WHOLE_MESSAGE_NOTE) + body(prep);
     }
 
     /**
@@ -149,7 +149,7 @@ public final class LaunchPrompt {
 
                 %s
                 """.formatted(prep.prepDir(), sheets(prep.montages()), photos(prep.photos()),
-                unreviewableNote(prep.unreviewable().size()), PASS_IT_WHOLE);
+                unreviewableNote(prep.unreviewable().size()), WHOLE_MESSAGE_NOTE);
     }
 
     /**

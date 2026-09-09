@@ -71,7 +71,7 @@ public class NioMediaStore implements MediaStore {
      * @return {@link Walk} the files reached and the places refused
      */
     @Override
-    public Walk listFilesTolerating(final Path root) {
+    public Walk listFilesToleratingRefusals(final Path root) {
         final List<Path> files = new ArrayList<>();
         final List<Path> unreadable = new ArrayList<>();
         try {
@@ -158,13 +158,13 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to move
      * @param destDir {@link Path} destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the file's final path after the move
      */
     @Override
     public Path move(final Path source, final Path destDir, final CancellationSignal stop,
-                     final TransferProgress watching) {
-        return this.moveTo(source, this.resolveDestination(source, destDir), stop, watching);
+                     final TransferProgress transferProgress) {
+        return this.moveTo(source, this.resolveDestination(source, destDir), stop, transferProgress);
     }
 
     /**
@@ -182,15 +182,15 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to move
      * @param destination {@link Path} exact target path
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      */
     @Override
     public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
-                       final TransferProgress watching) {
+                       final TransferProgress transferProgress) {
         this.ensureDirectory(destination.getParent());
         if (!this.sameFileStore(source, destination.getParent())) {
-            this.copyTo(source, destination, stop, watching);
+            this.copyTo(source, destination, stop, transferProgress);
             this.delete(source);
             return destination;
         }
@@ -208,13 +208,13 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to copy
      * @param destDir {@link Path} destination directory
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the path of the copy
      */
     @Override
     public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
-                     final TransferProgress watching) {
-        return this.copyTo(source, this.prepareDestination(source, destDir), stop, watching);
+                     final TransferProgress transferProgress) {
+        return this.copyTo(source, this.prepareDestination(source, destDir), stop, transferProgress);
     }
 
     /**
@@ -223,14 +223,14 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to copy
      * @param destination {@link Path} exact target path, which must be free
      * @param stop {@link CancellationSignal} asked while the bytes are moving
-     * @param watching {@link TransferProgress} told how far the bytes have got
+     * @param transferProgress {@link TransferProgress} told how far the bytes have got
      * @return {@link Path} the destination path
      */
     @Override
     public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
-                       final TransferProgress watching) {
+                       final TransferProgress transferProgress) {
         this.ensureDirectory(destination.getParent());
-        interruptibleCopy(source, destination, stop, watching);
+        interruptibleCopy(source, destination, stop, transferProgress);
         return destination;
     }
 
@@ -280,7 +280,7 @@ public class NioMediaStore implements MediaStore {
      * @return boolean true if a directory is there, false if nothing is
      */
     @Override
-    public boolean directoryIsThere(final Path path) {
+    public boolean directoryExists(final Path path) {
         try {
             return Files.readAttributes(path, BasicFileAttributes.class).isDirectory();
         } catch (final NoSuchFileException e) {
@@ -485,11 +485,11 @@ public class NioMediaStore implements MediaStore {
      * @param source {@link Path} file to read
      * @param destination {@link Path} exact target path
      * @param stop {@link CancellationSignal} asked between blocks
-     * @param watching {@link TransferProgress} told how much has been written
+     * @param transferProgress {@link TransferProgress} told how much has been written
      */
     private static void interruptibleCopy(final Path source, final Path destination,
                                           final CancellationSignal stop,
-                                          final TransferProgress watching) {
+                                          final TransferProgress transferProgress) {
         final Path part = destination.resolveSibling(destination.getFileName() + PART_SUFFIX);
         try {
             final BasicFileAttributes sourceTimes = Files.readAttributes(source, BasicFileAttributes.class);
@@ -502,11 +502,11 @@ public class NioMediaStore implements MediaStore {
                 int read = in.read(buffer);
                 while (read >= 0) {
                     if (stop.isAbandonRequested()) {
-                        throw new AbandonedMidBlock();
+                        throw new AbandonedMidBlockException();
                     }
                     out.write(buffer, 0, read);
                     written += read;
-                    watching.moved(written, size);
+                    transferProgress.moved(written, size);
                     read = in.read(buffer);
                 }
             }
@@ -514,7 +514,7 @@ public class NioMediaStore implements MediaStore {
                     .setTimes(sourceTimes.lastModifiedTime(), sourceTimes.lastAccessTime(),
                             sourceTimes.creationTime());
             Files.move(part, destination);
-        } catch (final AbandonedMidBlock e) {
+        } catch (final AbandonedMidBlockException e) {
             deleteIfPresent(part);
             throw new TransferAbandonedException(source);
         } catch (final IOException e) {
@@ -623,6 +623,6 @@ public class NioMediaStore implements MediaStore {
      * Unwinds the copy loop out of its try-with-resources, so both streams are closed by the time
      * the part file is deleted. Windows refuses to delete a file it still holds open.
      */
-    private static final class AbandonedMidBlock extends IOException {
+    private static final class AbandonedMidBlockException extends IOException {
     }
 }

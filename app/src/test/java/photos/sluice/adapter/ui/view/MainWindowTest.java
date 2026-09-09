@@ -448,7 +448,7 @@ class MainWindowTest {
     }
 
     private static SortSummary sortSummary() {
-        return new SortSummary(12, 0, 0, 12, 0, 0, 0, 0, List.of(), SortSummary.Guessed.NONE,
+        return new SortSummary(12, 0, 0, 12, 0, 0, 0, 0, List.of(), SortSummary.LowConfidenceCounts.NONE,
                 List.of(), Set.of(2019), List.of(), false, 0);
     }
 
@@ -514,7 +514,7 @@ class MainWindowTest {
         }
 
         @Override
-        public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+        public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
             return Optional.empty();
         }
 
@@ -612,7 +612,7 @@ class MainWindowTest {
             }
 
             @Override
-            public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+            public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
                 return Optional.empty();
             }
 
@@ -634,7 +634,7 @@ class MainWindowTest {
             }
 
             @Override
-            public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+            public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
                 return Optional.empty();
             }
 

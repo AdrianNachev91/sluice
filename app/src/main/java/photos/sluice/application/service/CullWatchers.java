@@ -111,7 +111,7 @@ final class CullWatchers {
         // Outside compute(), because a listener reads the runs again and a map this call still holds
         // locked is one it could block on.
         if (armed.get()) {
-            this.runChanges.moved();
+            this.runChanges.changed();
         }
     }
 
@@ -124,7 +124,7 @@ final class CullWatchers {
      */
     void disarmWatch(final Path prepDir) {
         if (this.retire(prepDir)) {
-            this.runChanges.moved();
+            this.runChanges.changed();
         }
     }
 
@@ -187,7 +187,7 @@ final class CullWatchers {
         }
         final ShardTally before = this.lastSeenTally.put(prepDir, now);
         if (before != null && !before.equals(now)) {
-            this.runChanges.moved();
+            this.runChanges.changed();
         }
         return reading.readyToResume();
     }
@@ -240,7 +240,7 @@ final class CullWatchers {
             if (failure != null) {
                 log.warn("Auto-resume for {} failed", prepDir, failure);
             }
-            this.runChanges.moved();
+            this.runChanges.changed();
         });
         return true;
     }

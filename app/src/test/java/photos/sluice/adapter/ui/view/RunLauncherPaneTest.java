@@ -31,7 +31,7 @@ import photos.sluice.domain.cull.CullRuns;
 import photos.sluice.domain.cull.PrepDirHealth;
 import photos.sluice.domain.cull.PrepDirHealth.State;
 import photos.sluice.domain.model.SortSummary;
-import photos.sluice.domain.model.SortSummary.Guessed;
+import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.application.service.JobHandle;
 
 import java.nio.file.Path;
@@ -533,7 +533,7 @@ class RunLauncherPaneTest {
 
     private static void sortFinishes(final Pipeline pipeline) {
         sortAnswering(pipeline, CompletableFuture.completedFuture(
-                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0)));
+                new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), LowConfidenceCounts.NONE, List.of(), Set.of(), List.of(), false, 0)));
     }
 
     @SuppressWarnings("unchecked")

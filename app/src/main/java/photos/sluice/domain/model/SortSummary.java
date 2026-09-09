@@ -35,7 +35,7 @@ public record SortSummary(
         int unsorted,
         int sidecarsDeleted,
         List<String> lowConfidenceFiles,
-        Guessed guessed,
+        LowConfidenceCounts lowConfidenceCounts,
         List<String> unsortedFiles,
         Set<Integer> yearsSorted,
         List<String> warnings,
@@ -56,10 +56,10 @@ public record SortSummary(
      * @param videosSorted int videos filed the same way
      * @param lowRes int files set aside for review whose date came the same way
      */
-    public record Guessed(int photosSorted, int videosSorted, int lowRes) {
+    public record LowConfidenceCounts(int photosSorted, int videosSorted, int lowRes) {
 
         /** Every date this run resolved came off the photo rather than off the file. */
-        public static final Guessed NONE = new Guessed(0, 0, 0);
+        public static final LowConfidenceCounts NONE = new LowConfidenceCounts(0, 0, 0);
 
         /**
          * How many files this run dated from a timestamp, wherever it then put them.
@@ -85,7 +85,7 @@ public record SortSummary(
      * @param sidecarsDeleted int consumed Takeout JSON sidecars deleted
      * @param lowConfidenceFiles a {@link List} of {@link String} filenames dated off the file's own
      * timestamp, wherever this run then put them
-     * @param guessed {@link Guessed} how many of those went to each bucket that can hold one
+     * @param lowConfidenceCounts {@link LowConfidenceCounts} how many of those went to each bucket that can hold one
      * @param unsortedFiles a {@link List} of {@link String} filenames routed to Review\Unsorted
      * @param yearsSorted a {@link Set} of {@link Integer} distinct years any file landed in this run
      * @param warnings a {@link List} of {@link String} conditions worth attention that stopped nothing
@@ -105,11 +105,11 @@ public record SortSummary(
         }
         // Two readings of one set: the names, and where each of them went. A record whose halves
         // disagree has parts that do not add up.
-        if (guessed.total() != lowConfidenceFiles.size()) {
+        if (lowConfidenceCounts.total() != lowConfidenceFiles.size()) {
             throw new IllegalArgumentException(("guessed must account for every low-confidence file: "
                     + "files=%d, guessed=%d (photosSorted=%d, videosSorted=%d, lowRes=%d)")
-                    .formatted(lowConfidenceFiles.size(), guessed.total(), guessed.photosSorted(),
-                            guessed.videosSorted(), guessed.lowRes()));
+                    .formatted(lowConfidenceFiles.size(), lowConfidenceCounts.total(), lowConfidenceCounts.photosSorted(),
+                            lowConfidenceCounts.videosSorted(), lowConfidenceCounts.lowRes()));
         }
         lowConfidenceFiles = List.copyOf(lowConfidenceFiles);
         unsortedFiles = List.copyOf(unsortedFiles);

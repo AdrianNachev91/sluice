@@ -65,7 +65,7 @@ public class PhotoCategoriesPresenter {
     // The whole examples box rather than one line of it, since the box is the control. Its own
     // per-line rule stays with the value type, which is what a save is judged against.
     private static final PhotoCategoriesView.Limits LIMITS = new PhotoCategoriesView.Limits(
-            CategoryName.maxLength(), CullCategory.maxDescription(),
+            CategoryName.maxLength(), CullCategory.maxDescriptionLength(),
             CullCategory.maxExamples() * CullCategory.maxExample());
 
     private static final String TOO_MANY = "There is room for at most " + Settings.maxCategories()
@@ -156,7 +156,7 @@ public class PhotoCategoriesPresenter {
         } catch (final RuntimeException e) {
             log.warn("Could not save the photo categories", e);
             return new SaveOutcome.Refused(
-                    SettingsRefusals.wordedForAUser(e, "Your photo categories were not saved."),
+                    SettingsRefusals.refusalWording(e, "Your photo categories were not saved."),
                     refusals);
         }
         return new SaveOutcome.Saved();
@@ -284,7 +284,7 @@ public class PhotoCategoriesPresenter {
         }
         // Marked here as well as refused in Settings, because reaching that one throws out of a
         // button press rather than answering the screen.
-        if (JunkCategory.claims(name)) {
+        if (JunkCategory.isJunkName(name)) {
             return new CardRefusal(SUPPLIED_NAME, descriptionProblem, examplesProblem);
         }
         final String shape = CategoryName.problemWith(name);

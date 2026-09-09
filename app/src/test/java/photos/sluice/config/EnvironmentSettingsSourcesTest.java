@@ -27,7 +27,7 @@ class EnvironmentSettingsSourcesTest {
             final var sources = new EnvironmentSettingsSources(
                     environmentWith(plain("commandLineArgs", LIBRARY_ROOT), configFile(LIBRARY_ROOT)));
 
-            assertThat(sources.overriddenAboveTheConfigFile(LIBRARY_ROOT))
+            assertThat(sources.higherPrecedenceOverride(LIBRARY_ROOT))
                     .contains(new SettingOverride.ByAnotherSource(LIBRARY_ROOT, "A command-line argument"));
         }
 
@@ -42,7 +42,7 @@ class EnvironmentSettingsSourcesTest {
         private String describing(final String sourceName) {
             final var sources = new EnvironmentSettingsSources(
                     environmentWith(plain(sourceName, LIBRARY_ROOT), configFile(LIBRARY_ROOT)));
-            return ((SettingOverride.ByAnotherSource) sources.overriddenAboveTheConfigFile(LIBRARY_ROOT)
+            return ((SettingOverride.ByAnotherSource) sources.higherPrecedenceOverride(LIBRARY_ROOT)
                     .orElseThrow()).source();
         }
 
@@ -51,7 +51,7 @@ class EnvironmentSettingsSourcesTest {
             final var sources = new EnvironmentSettingsSources(
                     environmentWith(configFile(LIBRARY_ROOT), configFile(LIBRARY_ROOT)));
 
-            assertThat(sources.overriddenAboveTheConfigFile(LIBRARY_ROOT)).isEmpty();
+            assertThat(sources.higherPrecedenceOverride(LIBRARY_ROOT)).isEmpty();
         }
 
         @Test
@@ -59,7 +59,7 @@ class EnvironmentSettingsSourcesTest {
             final var sources = new EnvironmentSettingsSources(environmentWith(
                     configFile("sluice.cull.provider"), plain("belowEverything", LIBRARY_ROOT)));
 
-            assertThat(sources.overriddenAboveTheConfigFile(LIBRARY_ROOT)).isEmpty();
+            assertThat(sources.higherPrecedenceOverride(LIBRARY_ROOT)).isEmpty();
         }
 
         @Test
@@ -67,7 +67,7 @@ class EnvironmentSettingsSourcesTest {
             final var sources = new EnvironmentSettingsSources(
                     environmentWith(plain("commandLineArgs", "sluice.cull.provider"), configFile(LIBRARY_ROOT)));
 
-            assertThat(sources.overriddenAboveTheConfigFile("sluice.paths.inbox")).isEmpty();
+            assertThat(sources.higherPrecedenceOverride("sluice.paths.inbox")).isEmpty();
         }
 
         @Test
@@ -76,7 +76,7 @@ class EnvironmentSettingsSourcesTest {
                     plain("commandLineArgs", LIBRARY_ROOT), plain("systemProperties", LIBRARY_ROOT),
                     configFile(LIBRARY_ROOT)));
 
-            assertThat(sources.overriddenAboveTheConfigFile(LIBRARY_ROOT))
+            assertThat(sources.higherPrecedenceOverride(LIBRARY_ROOT))
                     .contains(new SettingOverride.ByAnotherSource(LIBRARY_ROOT, "A command-line argument"));
         }
     }
@@ -92,7 +92,7 @@ class EnvironmentSettingsSourcesTest {
 
         @Test
         void namesTheEnvironmentVariableBehindAProperty() {
-            assertThat(this.sources.overriddenAboveTheConfigFile("path"))
+            assertThat(this.sources.higherPrecedenceOverride("path"))
                     .get()
                     .isInstanceOfSatisfying(SettingOverride.ByEnvironmentVariable.class,
                             override -> assertThat(override.variableName().toLowerCase(Locale.ROOT))
@@ -101,7 +101,7 @@ class EnvironmentSettingsSourcesTest {
 
         @Test
         void reportsNothingForASettingNobodyHasOverridden() {
-            assertThat(this.sources.overriddenAboveTheConfigFile("sluice.montage.tile-size"))
+            assertThat(this.sources.higherPrecedenceOverride("sluice.montage.tile-size"))
                     .withFailMessage("Expected no override, so this machine has SLUICE_MONTAGE_TILE_SIZE "
                             + "set (or the property passed on the command line). The query is answering "
                             + "correctly; the test's premise is what is untrue here.")

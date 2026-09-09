@@ -371,7 +371,7 @@ class RunSetupPresenterTest {
     void startingAFreshRecordFilesTheOldOneAwayAndSaysSo() {
         when(this.pipeline.setAsideUnreadableSpendLedger()).thenReturn(Path.of("logs", "archives", "old.csv"));
 
-        this.presenter.startAFreshSpendRecord();
+        this.presenter.startFreshSpendRecord();
 
         verify(this.pipeline).setAsideUnreadableSpendLedger();
         assertThat(requireNonNull(this.presenter.view().message()).text())
@@ -382,7 +382,7 @@ class RunSetupPresenterTest {
     void aRecordThatReadsAfterAllIsLeftWhereItIs() {
         when(this.pipeline.setAsideUnreadableSpendLedger()).thenReturn(null);
 
-        this.presenter.startAFreshSpendRecord();
+        this.presenter.startFreshSpendRecord();
 
         assertThat(requireNonNull(this.presenter.view().message()).text())
                 .isEqualTo("The record is now healthy, so it has been left where it is.");
@@ -393,11 +393,11 @@ class RunSetupPresenterTest {
         when(this.pipeline.setAsideUnreadableSpendLedger())
                 .thenThrow(new JobInProgressException("Something else is running."));
 
-        this.presenter.startAFreshSpendRecord();
+        this.presenter.startFreshSpendRecord();
 
-        final RunLauncherView.Message said = requireNonNull(this.presenter.view().message());
-        assertThat(said.text()).isEqualTo("Something else is running.");
-        assertThat(said.refused()).isTrue();
+        final RunLauncherView.Message message = requireNonNull(this.presenter.view().message());
+        assertThat(message.text()).isEqualTo("Something else is running.");
+        assertThat(message.refused()).isTrue();
     }
 
     @Test
@@ -410,7 +410,7 @@ class RunSetupPresenterTest {
         when(this.pipeline.estimateFor(anyInt()))
                 .thenReturn(new SpendEstimate(148_231, 6_402, false, false, false));
 
-        this.presenter.startAFreshSpendRecord();
+        this.presenter.startFreshSpendRecord();
 
         assertThat(this.estimatedCost().warning()).isNull();
     }
@@ -632,13 +632,13 @@ class RunSetupPresenterTest {
 
     @Test
     void everyModeSaysWhatItDoesRatherThanOnlyNamingItself() {
-        final List<String> said = new ArrayList<>();
+        final List<String> hints = new ArrayList<>();
         for (final RunMode mode : this.modesInTheRow()) {
             this.presenter.setMode(mode);
-            said.add(this.presenter.view().modeHint());
+            hints.add(this.presenter.view().modeHint());
         }
 
-        assertThat(said).containsExactly(
+        assertThat(hints).containsExactly(
                 "Reads the dates on what is in your Inbox and moves it into Sorted, by year and "
                         + "month. Takes the oldest year in your Inbox.",
                 "Looks at your sorted photos and moves anything it does not keep out of Sorted.",
@@ -982,7 +982,7 @@ class RunSetupPresenterTest {
     @Test
     void theRowsOneLinkLeadsToReviewAndFollowsSifting() {
         assertThat(this.presenter.view().rowLink().label()).isEqualTo("Review");
-        assertThat(this.presenter.view().rowLink().after()).isEqualTo(RunMode.SIFT);
+        assertThat(this.presenter.view().rowLink().drawnAfterMode()).isEqualTo(RunMode.SIFT);
     }
 
     @Test
@@ -1077,7 +1077,7 @@ class RunSetupPresenterTest {
     void aScopeNothingIsLeftInIsDroppedRatherThanDrawnWithItsOwnRefusal() {
         this.choose(RunMode.SIFT, "1998");
 
-        this.presenter.forgetAScopeNothingIsLeftIn();
+        this.presenter.clearRefusedScope();
 
         assertThat(this.presenter.view().scopeText()).isEmpty();
         assertThat(this.presenter.view().scopeRefusal()).isNull();
@@ -1087,7 +1087,7 @@ class RunSetupPresenterTest {
     void aScopeStillWorthRunningIsKept() {
         this.choose(RunMode.SIFT, "2019");
 
-        this.presenter.forgetAScopeNothingIsLeftIn();
+        this.presenter.clearRefusedScope();
 
         assertThat(this.presenter.view().scopeText()).isEqualTo("2019");
     }

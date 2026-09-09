@@ -137,9 +137,9 @@ class SettingsRowsTest {
     // the middle of the ground behind it.
     @Test
     void theBannersSentenceIsNotStretchedToTheHeightOfItsDismissButton() throws Exception {
-        final TextArea said = onFxThread(SettingsRowsTest::aBannerOnScreen);
+        final TextArea banner = onFxThread(SettingsRowsTest::aBannerOnScreen);
 
-        assertThat(said.getHeight()).isCloseTo(said.prefHeight(said.getWidth()), within(1.0));
+        assertThat(banner.getHeight()).isCloseTo(banner.prefHeight(banner.getWidth()), within(1.0));
     }
 
     private static TextArea aBannerOnScreen() {

@@ -32,7 +32,7 @@ import photos.sluice.application.service.JobHandle;
 import photos.sluice.application.service.Pipeline;
 import photos.sluice.domain.commit.CommitScope;
 import photos.sluice.domain.model.SortSummary;
-import photos.sluice.domain.model.SortSummary.Guessed;
+import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.domain.commit.LibraryBucket;
 import photos.sluice.domain.commit.CommitSummary;
 import photos.sluice.domain.cull.CullScope;
@@ -656,7 +656,7 @@ class RunLauncherPresenterTest {
     @Test
     void aSortsCardCountsEveryBucketAnythingLandedIn() {
         this.choose(RunMode.SORT, "");
-        this.sortEndsWith(new SortSummary(12, 1, 2, 5, 1, 2, 1, 0, List.of(), Guessed.NONE,
+        this.sortEndsWith(new SortSummary(12, 1, 2, 5, 1, 2, 1, 0, List.of(), LowConfidenceCounts.NONE,
                 List.of(), Set.of(2019), List.of(), false, 0));
 
         this.presenter.start();
@@ -1203,7 +1203,7 @@ class RunLauncherPresenterTest {
 
         assertThat(this.runningView().heading()).isEqualTo("Sift progress");
         assertThat(this.runningView().scope()).isEqualTo("2019");
-        assertThat(this.runningView().startedOnItsOwn())
+        assertThat(this.runningView().autoStartedNote())
                 .isEqualTo("Your agent judged every sheet, so this sift continued on its own.");
         assertThat(this.presenter.dashboardMark()).isEqualTo(DashboardMark.RUNNING);
         assertThat(this.presenter.runningMode()).isEqualTo(RunMode.SIFT);
@@ -1253,7 +1253,7 @@ class RunLauncherPresenterTest {
 
         this.presenter.start();
 
-        assertThat(this.runningView().startedOnItsOwn()).isNull();
+        assertThat(this.runningView().autoStartedNote()).isNull();
     }
 
     @Test
@@ -1278,7 +1278,7 @@ class RunLauncherPresenterTest {
 
     private void watcherResumed(final String scope, final JobHandle<?> job) {
         final var listener = ArgumentCaptor.forClass(AutoResumedSifts.Listener.class);
-        verify(this.pipeline, atLeastOnce()).onSiftResumedOnItsOwn(listener.capture());
+        verify(this.pipeline, atLeastOnce()).onSiftAutoResumed(listener.capture());
         listener.getValue().resumed(scope, retyped(job));
     }
 
@@ -1359,7 +1359,7 @@ class RunLauncherPresenterTest {
     }
 
     private static SortSummary sortSummaryWith(final List<String> warnings) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), warnings, false, 0);
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), LowConfidenceCounts.NONE, List.of(), Set.of(2019), warnings, false, 0);
     }
 
     private void pipelineStarts() {

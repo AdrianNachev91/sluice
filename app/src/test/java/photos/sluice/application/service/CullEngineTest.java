@@ -329,7 +329,7 @@ class CullEngineTest {
                     List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
 
             assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
-                    applied -> assertThat(applied.tokensAcrossEveryLeg()).isEqualTo(12_000L));
+                    applied -> assertThat(applied.totalTokens()).isEqualTo(12_000L));
         }
 
         @Test
@@ -342,7 +342,7 @@ class CullEngineTest {
                     List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
 
             assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
-                    applied -> assertThat(applied.tokensAcrossEveryLeg()).isZero());
+                    applied -> assertThat(applied.totalTokens()).isZero());
         }
 
         @Test
@@ -371,7 +371,7 @@ class CullEngineTest {
                     List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
 
             assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
-                    applied -> assertThat(applied.tokensAcrossEveryLeg()).isEqualTo(12_000L));
+                    applied -> assertThat(applied.totalTokens()).isEqualTo(12_000L));
         }
 
         @Test
@@ -383,7 +383,7 @@ class CullEngineTest {
                     List.of(new AutoApproveCuller())).cull(new CullScope.Year(2019, null)).join();
 
             assertThat(outcome).isInstanceOfSatisfying(CullJobOutcome.Applied.class,
-                    applied -> assertThat(applied.tokensAcrossEveryLeg()).isZero());
+                    applied -> assertThat(applied.totalTokens()).isZero());
         }
 
         @Test
@@ -1433,7 +1433,7 @@ class CullEngineTest {
                     List.of(new ManualModeCuller()), Duration.ofMillis(20));
             final var told = new AtomicReference<@Nullable String>();
             final var job = new AtomicReference<@Nullable JobHandle<CullJobOutcome>>();
-            pipeline.onSiftResumedOnItsOwn((scope, resumed) -> {
+            pipeline.onSiftAutoResumed((scope, resumed) -> {
                 told.set(scope);
                 job.set(resumed);
             });
@@ -1536,7 +1536,7 @@ class CullEngineTest {
                     .job().prepDir();
             // Registered after the cull, so the arming this run already did is not what the wait sees.
             final var toldAfterThePhotoMoved = new AtomicBoolean();
-            pipeline.onRunsMoved(() -> {
+            pipeline.onRunsChanged(() -> {
                 if (!Files.exists(photo)) {
                     toldAfterThePhotoMoved.set(true);
                 }

@@ -93,11 +93,11 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      */
     private record Held(Claim claim, int holders) {
 
-        private Held plusOne() {
+        private Held plusHolder() {
             return new Held(this.claim, this.holders + 1);
         }
 
-        private Held minusOne() {
+        private Held minusHolder() {
             return new Held(this.claim, this.holders - 1);
         }
     }
@@ -121,7 +121,7 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
             final Path root = canonical(workingRoot);
             final Held current = this.claims.get(root);
             if (current != null) {
-                this.claims.put(root, current.plusOne());
+                this.claims.put(root, current.plusHolder());
                 return;
             }
             // Nothing is given up here. A refusal throws out of claimOf() with every existing claim
@@ -147,7 +147,7 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
                 return;
             }
             if (current.holders() > 1) {
-                this.claims.put(root, current.minusOne());
+                this.claims.put(root, current.minusHolder());
                 return;
             }
             this.claims.remove(root);
@@ -173,7 +173,7 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
                 try {
                     this.close(entry.claim());
                 } catch (final UncheckedIOException e) {
-                    failure = reporting(failure, e);
+                    failure = combineFailures(failure, e);
                 }
             }
             if (failure != null) {
@@ -220,8 +220,8 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * @param next {@link UncheckedIOException} the failure just caught
      * @return {@link UncheckedIOException} the failure to keep
      */
-    private static UncheckedIOException reporting(final @Nullable UncheckedIOException kept,
-                                                  final UncheckedIOException next) {
+    private static UncheckedIOException combineFailures(final @Nullable UncheckedIOException kept,
+                                                        final UncheckedIOException next) {
         if (kept == null) {
             return next;
         }
@@ -317,12 +317,12 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
             // leaked descriptor costs less than a claim that silently stops holding anything.
             throw new WorkingRootBusyException(root, e);
         } catch (final IOException e) {
-            throw closing(channel, new UncheckedIOException("Failed to claim working root " + root + ".", e));
+            throw closeAndAttach(channel, new UncheckedIOException("Failed to claim working root " + root + ".", e));
         }
         if (lock == null) {
             // Another process holds it. Closing this channel is safe here, since the lock being
             // protected belongs to a different process and no descriptor of ours touches it.
-            throw closing(channel, new WorkingRootBusyException(root));
+            throw closeAndAttach(channel, new WorkingRootBusyException(root));
         }
         return new Claim(root, channel, lock);
     }
@@ -350,7 +350,7 @@ public class FileChannelWorkingRootLock implements WorkingRootLock {
      * @param failure E the failure that is about to be thrown
      * @return E that same failure, for the caller to throw
      */
-    private static <E extends RuntimeException> E closing(final FileChannel channel, final E failure) {
+    private static <E extends RuntimeException> E closeAndAttach(final FileChannel channel, final E failure) {
         try {
             channel.close();
         } catch (final IOException e) {

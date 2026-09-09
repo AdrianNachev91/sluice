@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import photos.sluice.adapter.fs.NioMediaStore;
 import photos.sluice.application.port.in.JobInProgressException;
-import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
+import photos.sluice.application.port.in.LibraryRootResolutionRequiredException;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.ShuttingDownException;
 import photos.sluice.application.port.out.LiveSettings;
@@ -213,7 +213,7 @@ class SettingsServiceTest {
         final var store = new RecordingStore();
         final var service = settingsService(live, store, new RecordingLock(), new JobRunner());
 
-        final var refused = catchThrowableOfType(LibraryRootMoveNeedsAResolutionException.class,
+        final var refused = catchThrowableOfType(LibraryRootResolutionRequiredException.class,
                 () -> service.save(settingsWithLibrary(root, library)));
         assertThat(refused).isNotNull();
         assertThat(refused.previousLibraryRoot()).isEqualTo(sharedLibrary);
@@ -242,7 +242,7 @@ class SettingsServiceTest {
         final var service = settingsService(live, new RecordingStore(), new RecordingLock(), new JobRunner());
 
         assertThatThrownBy(() -> service.save(unconfigured()))
-                .isInstanceOf(LibraryRootMoveNeedsAResolutionException.class);
+                .isInstanceOf(LibraryRootResolutionRequiredException.class);
     }
 
     @Test
@@ -255,8 +255,8 @@ class SettingsServiceTest {
                 property -> "sluice.paths.library-root".equals(property) ? Optional.of(override) : Optional.empty(),
                 List.of());
 
-        assertThat(service.overriddenAboveTheConfigFile("sluice.paths.library-root")).contains(override);
-        assertThat(service.overriddenAboveTheConfigFile("sluice.paths.inbox")).isEmpty();
+        assertThat(service.higherPrecedenceOverride("sluice.paths.library-root")).contains(override);
+        assertThat(service.higherPrecedenceOverride("sluice.paths.inbox")).isEmpty();
     }
 
     @Test
@@ -880,8 +880,8 @@ class SettingsServiceTest {
     private static MediaReader bothNaming(final Path alias, final Path folder) {
         return new NioMediaStore() {
             @Override
-            public boolean directoryIsThere(final Path path) {
-                return path.equals(alias) || path.equals(folder) || super.directoryIsThere(path);
+            public boolean directoryExists(final Path path) {
+                return path.equals(alias) || path.equals(folder) || super.directoryExists(path);
             }
 
             @Override

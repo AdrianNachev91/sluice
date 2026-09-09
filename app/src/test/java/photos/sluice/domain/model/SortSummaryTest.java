@@ -52,7 +52,7 @@ class SortSummaryTest {
     @Test
     void sidecarsDeletedIsOutsideTheSum() {
         final SortSummary summary = new SortSummary(1, 0, 0, 1, 0, 0, 0, 4,
-                List.of(), SortSummary.Guessed.NONE, List.of(), Set.of(), List.of(), false, 0);
+                List.of(), SortSummary.LowConfidenceCounts.NONE, List.of(), Set.of(), List.of(), false, 0);
 
         assertThat(summary.sidecarsDeleted()).isEqualTo(4);
     }
@@ -61,6 +61,6 @@ class SortSummaryTest {
                                        final int photosSorted, final int videosSorted, final int lowRes,
                                        final int unsorted) {
         return new SortSummary(processed, reimportsDeleted, byteDupsDeleted, photosSorted, videosSorted, lowRes,
-                unsorted, 0, List.of(), SortSummary.Guessed.NONE, List.of(), Set.of(), List.of(), false, 0);
+                unsorted, 0, List.of(), SortSummary.LowConfidenceCounts.NONE, List.of(), Set.of(), List.of(), false, 0);
     }
 }

@@ -80,7 +80,7 @@ final class SettingsRows {
 
     // Marks a spinner as mid-number. Held on the control itself, since it is the control that knows
     // and every page asking the question has one to hand.
-    private static final String TYPED_INTO = "typedInto";
+    private static final String LAST_INPUT_TYPED = "typedInto";
 
     // The one slot a page reports a save in. Named rather than per-tone, so a refusal replaces a
     // confirmation instead of standing beside one.
@@ -131,15 +131,15 @@ final class SettingsRows {
      *
      * @param spinner {@link Spinner} the field to watch
      */
-    private static void rememberWhichInputItLastTook(final Spinner<Integer> spinner) {
-        spinner.addEventFilter(KeyEvent.KEY_TYPED, _ -> spinner.getProperties().put(TYPED_INTO, true));
+    private static void trackLastInput(final Spinner<Integer> spinner) {
+        spinner.addEventFilter(KeyEvent.KEY_TYPED, _ -> spinner.getProperties().put(LAST_INPUT_TYPED, true));
         spinner.addEventFilter(KeyEvent.KEY_PRESSED, pressed -> {
             if (pressed.getCode() == KeyCode.UP || pressed.getCode() == KeyCode.DOWN) {
-                spinner.getProperties().put(TYPED_INTO, false);
+                spinner.getProperties().put(LAST_INPUT_TYPED, false);
             }
         });
         spinner.addEventFilter(MouseEvent.MOUSE_PRESSED, pressed ->
-                spinner.getProperties().put(TYPED_INTO,
+                spinner.getProperties().put(LAST_INPUT_TYPED,
                         pressed.getTarget() instanceof final Node hit && sitsInside(hit, spinner.getEditor())));
     }
 
@@ -150,7 +150,7 @@ final class SettingsRows {
      * @return boolean true while the last thing it took was a typed character
      */
     static boolean beingTypedInto(final Spinner<?> spinner) {
-        return Boolean.TRUE.equals(spinner.getProperties().get(TYPED_INTO));
+        return Boolean.TRUE.equals(spinner.getProperties().get(LAST_INPUT_TYPED));
     }
 
     /**
@@ -180,7 +180,7 @@ final class SettingsRows {
         final TextArea line = SelectableText.prose();
         line.setId(id);
         line.getStyleClass().add("settings-help");
-        showWhileItSaysSomething(line);
+        showWhileTextPresent(line);
         return line;
     }
 
@@ -198,17 +198,17 @@ final class SettingsRows {
     /**
      * Adds a prose line to a card, where there is one to add.
      *
-     * @param into {@link VBox} the card's lines
+     * @param card {@link VBox} the card's lines
      * @param value what the line reads, or null where the card has no such line
      * @param styleClass {@link String} the line's own style class
      */
-    static void addIfPresent(final VBox into, final @Nullable String value, final String styleClass) {
+    static void addIfPresent(final VBox card, final @Nullable String value, final String styleClass) {
         if (value == null) {
             return;
         }
         final TextArea line = SelectableText.prose(value);
         line.getStyleClass().add(styleClass);
-        into.getChildren().add(line);
+        card.getChildren().add(line);
     }
 
     /**
@@ -218,13 +218,13 @@ final class SettingsRows {
      * whatever the last refusal was.
      *
      * @param line {@link TextArea} the screen's own report line
-     * @param said {@link Message} what to report, or null for nothing
+     * @param message {@link Message} what to report, or null for nothing
      * @param caution {@link String} the style class a refusal wears on this screen
      */
-    private static void report(final TextArea line, final @Nullable Message said, final String caution) {
-        line.setText(said == null ? "" : said.text());
+    private static void report(final TextArea line, final @Nullable Message message, final String caution) {
+        line.setText(message == null ? "" : message.text());
         line.getStyleClass().remove(caution);
-        if (said != null && said.refused()) {
+        if (message != null && message.refused()) {
             line.getStyleClass().add(caution);
         }
     }
@@ -233,15 +233,15 @@ final class SettingsRows {
      * Puts what a screen has to report on its report line, and offers the screen it leads to.
      *
      * @param line {@link TextArea} the screen's own report line
-     * @param said {@link Message} what to report, or null for nothing
+     * @param message {@link Message} what to report, or null for nothing
      * @param caution {@link String} the style class a refusal wears on this screen
      * @param locationLink {@link Hyperlink} the control under that line
      * @param navigation {@link ScreenNavigation} how this screen opens another
      */
-    static void report(final TextArea line, final @Nullable Message said, final String caution,
+    static void report(final TextArea line, final @Nullable Message message, final String caution,
                        final Hyperlink locationLink, final ScreenNavigation navigation) {
-        report(line, said, caution);
-        pointAt(locationLink, said == null ? null : said.location(), navigation);
+        report(line, message, caution);
+        pointAt(locationLink, message == null ? null : message.location(), navigation);
     }
 
     /**
@@ -250,15 +250,15 @@ final class SettingsRows {
      *
      * @param line {@link TextArea} the report line
      * @param locationLink {@link Hyperlink} the control under it
-     * @param said {@link Message} what to report, or null for nothing
+     * @param message {@link Message} what to report, or null for nothing
      * @param navigation {@link ScreenNavigation} how this screen opens another
      */
     static void reportRun(final TextArea line, final Hyperlink locationLink,
-                          final @Nullable Message said, final ScreenNavigation navigation) {
-        line.setText(said == null ? "" : said.text());
+                          final @Nullable Message message, final ScreenNavigation navigation) {
+        line.setText(message == null ? "" : message.text());
         SelectableText.dressAs(line, "run-message",
-                said != null && said.refused() ? "settings-violation" : "settings-confirmation");
-        pointAt(locationLink, said == null ? null : said.location(), navigation);
+                message != null && message.refused() ? "settings-violation" : "settings-confirmation");
+        pointAt(locationLink, message == null ? null : message.location(), navigation);
     }
 
     /**
@@ -328,7 +328,7 @@ final class SettingsRows {
      * @param toggle {@link Button} the fold's own control
      * @param open boolean whether the section below it is showing
      */
-    static void pointing(final Button toggle, final boolean open) {
+    static void setFoldMarker(final Button toggle, final boolean open) {
         if (toggle.getGraphic() == null) {
             toggle.setGraphic(foldMarker());
         }
@@ -387,7 +387,7 @@ final class SettingsRows {
         final var row = new HBox(mark, line);
         row.setAlignment(Pos.TOP_LEFT);
         HBox.setHgrow(line, Priority.ALWAYS);
-        showWhileTheLineDoes(row, line);
+        showWhileLineShows(row, line);
         return row;
     }
 
@@ -416,7 +416,7 @@ final class SettingsRows {
      * @param box {@link Node} the box around the line
      * @param line {@link Node} the line that decides
      */
-    static void showWhileTheLineDoes(final Node box, final Node line) {
+    static void showWhileLineShows(final Node box, final Node line) {
         box.managedProperty().bind(box.visibleProperty());
         box.visibleProperty().bind(line.visibleProperty());
     }
@@ -437,7 +437,7 @@ final class SettingsRows {
      *
      * @param line {@link TextInputControl} the line to bind
      */
-    static void showWhileItSaysSomething(final TextInputControl line) {
+    static void showWhileTextPresent(final TextInputControl line) {
         line.managedProperty().bind(line.visibleProperty());
         line.visibleProperty().bind(line.textProperty().isNotEmpty());
     }
@@ -455,11 +455,11 @@ final class SettingsRows {
     /**
      * Text for a label, where nothing to say is an empty string rather than a missing one.
      *
-     * @param said what the presenter had, or null where it had nothing
+     * @param text what the presenter had, or null where it had nothing
      * @return {@link String} what to put in the label
      */
-    static String orNothing(final @Nullable String said) {
-        return said == null ? "" : said;
+    static String textOrEmpty(final @Nullable String text) {
+        return text == null ? "" : text;
     }
 
     /**
@@ -494,11 +494,11 @@ final class SettingsRows {
     static void report(final VBox body, final @Nullable String tone, final String message,
                        final boolean fades) {
         clearReport(body);
-        final HBox said = banner(body, REPORT, message, fades);
+        final HBox banner = banner(body, REPORT, message, fades);
         if (tone != null) {
-            said.getStyleClass().add(tone);
+            banner.getStyleClass().add(tone);
         }
-        body.getChildren().addFirst(said);
+        body.getChildren().addFirst(banner);
         travelToTop(body);
     }
 
@@ -697,7 +697,7 @@ final class SettingsRows {
         HBox.setHgrow(text, Priority.ALWAYS);
 
         final var violation = violationLabel();
-        markWhileSomethingIsWrong(text, violation);
+        markWhileRefused(text, violation);
         say(violation, field.violation());
 
         final var children = new VBox(fieldLabel(label), helpLine(explanation), fieldRow, violation);
@@ -791,7 +791,7 @@ final class SettingsRows {
      * @param field {@link Node} the control the message is about
      * @param violation {@link TextArea} the message under it
      */
-    static void markWhileSomethingIsWrong(final Node field, final TextArea violation) {
+    static void markWhileRefused(final Node field, final TextArea violation) {
         violation.textProperty().addListener((_, _, message) ->
                 field.pseudoClassStateChanged(REFUSED, !message.isEmpty()));
     }
@@ -847,7 +847,7 @@ final class SettingsRows {
     static TextArea violationLabel() {
         final TextArea violation = SelectableText.prose();
         violation.getStyleClass().add("settings-violation");
-        showWhileItSaysSomething(violation);
+        showWhileTextPresent(violation);
         return violation;
     }
 
@@ -882,20 +882,20 @@ final class SettingsRows {
      */
     static HBox banner(final VBox container, final String id, final String text, final boolean fades,
                        final @Nullable Hyperlink locationLink) {
-        final TextArea said = SelectableText.prose(text);
-        said.getStyleClass().add("settings-banner-text");
+        final TextArea bannerText = SelectableText.prose(text);
+        bannerText.getStyleClass().add("settings-banner-text");
         // Hgrow offers a node the spare room; a maximum width is what lets it take any. The
         // sentence is centred inside its own box, so the box filling the banner is also what
         // centres the words in it.
-        said.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(said, Priority.ALWAYS);
+        bannerText.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(bannerText, Priority.ALWAYS);
 
         final var dismiss = new Button("×");
         dismiss.getStyleClass().add("settings-banner-dismiss");
 
         final var banner = locationLink == null
-                ? new HBox(said, dismiss)
-                : new HBox(said, locationLink, dismiss);
+                ? new HBox(bannerText, dismiss)
+                : new HBox(bannerText, locationLink, dismiss);
         banner.setId(id);
         banner.setMaxWidth(Double.MAX_VALUE);
         banner.getStyleClass().add("settings-banner");
@@ -1035,10 +1035,10 @@ final class SettingsRows {
      * @return {@link Spinner} of {@link Integer} the field
      */
     static Spinner<Integer> numberField(final SettingsView.NumberRange range, final int value) {
-        final var spinner = new Spinner<Integer>(range.least(), range.most(), value, range.step());
+        final var spinner = new Spinner<Integer>(range.min(), range.max(), value, range.step());
         spinner.setEditable(true);
-        rememberWhichInputItLastTook(spinner);
-        final int digits = String.valueOf(range.most()).length();
+        trackLastInput(spinner);
+        final int digits = String.valueOf(range.max()).length();
         spinner.getEditor().setTextFormatter(new TextFormatter<>(change -> {
             final String proposed = change.getControlNewText();
             if (!proposed.matches("\\d{0," + digits + "}")) {
@@ -1046,7 +1046,7 @@ final class SettingsRows {
             }
             // Empty is allowed while typing, since clearing the field is how a value gets replaced.
             // What it must never do is reach the commit below.
-            return proposed.isEmpty() || Integer.parseInt(proposed) <= range.most() ? change : null;
+            return proposed.isEmpty() || Integer.parseInt(proposed) <= range.max() ? change : null;
         }));
         // Spinner's own focus-lost handling runs first and commits the editor's text through the
         // converter regardless. So spinner.getValue() can already be null here, and the last value
@@ -1088,8 +1088,8 @@ final class SettingsRows {
      * @param range {@link SettingsView.NumberRange} the field's own bounds
      * @return {@link String} a sentence naming them
      */
-    static String anythingFrom(final SettingsView.NumberRange range) {
-        return "Anything from " + range.least() + " to " + range.most() + ".";
+    static String rangeSentence(final SettingsView.NumberRange range) {
+        return "Anything from " + range.min() + " to " + range.max() + ".";
     }
 
     private static TextField sectionEyebrow(final String text) {

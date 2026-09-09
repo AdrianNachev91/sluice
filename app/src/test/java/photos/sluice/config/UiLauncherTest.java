@@ -28,7 +28,7 @@ class UiLauncherTest {
     // answer the same way for every failure, and pass a weaker assertion.
     @Test
     void launchingInstallsWhatTheWindowNeedsIfStartupFails(@TempDir final Path dir) {
-        UiLauncher.install(dir.resolve("config.yml"));
+        UiLauncher.installFailureHandling(dir.resolve("config.yml"));
 
         assertThat(UiBootstrap.reportAndPresent(new WorkingRootBusyException(dir)).card().detail())
                 .contains("Another Sluice process is already running");
@@ -39,7 +39,7 @@ class UiLauncherTest {
         final Path configFile = dir.resolve("config.yml");
         Files.writeString(configFile, "sluice:\n  montage:\n    tile-size: [1, 2\n");
 
-        UiLauncher.install(configFile);
+        UiLauncher.installFailureHandling(configFile);
 
         final ConfigFileRepairPort repair = UiBootstrap.repair();
         assertThat(repair).isNotNull();

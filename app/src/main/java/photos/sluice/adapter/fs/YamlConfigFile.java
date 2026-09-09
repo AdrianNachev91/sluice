@@ -153,7 +153,7 @@ class YamlConfigFile {
      * @return a {@link Map} of {@link String} to {@link Object}, the child mapping
      * @throws MalformedSettingsException if what is stored under the key is not a group of settings
      */
-    Map<String, Object> group(final Map<String, Object> parent, final String key) {
+    Map<String, Object> ensureGroup(final Map<String, Object> parent, final String key) {
         final Object existing = remove(parent, key);
         final Map<String, Object> mapping = existing == null
                 ? new LinkedHashMap<>()
@@ -209,11 +209,11 @@ class YamlConfigFile {
      * @return {@link Object} the value that was stored, or null when there was none
      */
     static @Nullable Object remove(final Map<String, Object> mapping, final String key) {
-        final String canonical = relaxed(key);
+        final String canonical = relaxedKey(key);
         Object found = null;
         final var stored = List.copyOf(mapping.keySet());
         for (final String candidate : stored) {
-            if (relaxed(candidate).equals(canonical)) {
+            if (relaxedKey(candidate).equals(canonical)) {
                 found = mapping.remove(candidate);
             }
         }
@@ -257,7 +257,7 @@ class YamlConfigFile {
      * @param key {@link String} the key as written
      * @return {@link String} the comparable form
      */
-    private static String relaxed(final String key) {
+    private static String relaxedKey(final String key) {
         return key.toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
     }
 }

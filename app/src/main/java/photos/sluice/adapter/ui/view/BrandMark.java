@@ -45,7 +45,7 @@ final class BrandMark {
      *
      * @return {@link StackPane} the mark
      */
-    static StackPane styled() {
+    static StackPane windowMark() {
         final var droplet = new SVGPath();
         droplet.setContent(DROPLET);
         droplet.setScaleX(GLYPH_SCALE);

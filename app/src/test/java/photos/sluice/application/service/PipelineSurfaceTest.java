@@ -43,14 +43,14 @@ class PipelineSurfaceTest {
             "cullRuns()",
             "cullRun(Path)",
             "isWatchActive(Path)",
-            "onRunsMoved(Runnable)",
-            "onSiftResumedOnItsOwn(Listener)",
+            "onRunsChanged(Runnable)",
+            "onSiftAutoResumed(Listener)",
             "onJobFinished(Runnable)",
             "launchPromptFor(Path)",
             "redoRejectedAnswers(Path)",
             "stopAllWatching()",
             "stopAcceptingJobs(Duration)",
-            "abandonTheFileInFlight()",
+            "abandonFileInFlight()",
             "troubleshoot(Path)",
             "answer(Path, ChoiceAnswer, AnswerSource)",
             "setAsideUnreadableSpendLedger()",
@@ -74,7 +74,7 @@ class PipelineSurfaceTest {
     // roots are unusable is the one most likely to be closed. Refused there, its exit path could
     // never learn whether anything was still moving files.
     //
-    // abandonTheFileInFlight is a stop the reader has already asked for, escalated. It sets a flag on
+    // abandonFileInFlight is a stop the reader has already asked for, escalated. It sets a flag on
     // the running job and resolves nothing. Refused while the roots are unusable, a reader could not
     // stop a run writing into a folder they have since moved. That is when they most want to.
     //
@@ -98,20 +98,20 @@ class PipelineSurfaceTest {
     // answer it. Only tests ask, and what they ask about is arming and retiring, neither of which
     // is a folder-root question.
     //
-    // onRunsMoved takes no path at all. It adds a listener to a list, which is a question about this
+    // onRunsChanged takes no path at all. It adds a listener to a list, which is a question about this
     // process rather than about any folder.
     //
     // onJobFinished adds a listener to a list too, and what would ask it is the closing path. An
     // install whose roots are unusable is the one most likely to be closed. Refused a listener
     // there, a quit could never learn that the run it is waiting on had ended.
     //
-    // onSiftResumedOnItsOwn adds a listener to a list as well, and takes no path. It is asked
+    // onSiftAutoResumed adds a listener to a list as well, and takes no path. It is asked
     // before anything has said whether the roots are usable.
     private static final Set<String> EXEMPT_FROM_THE_ROOT_CHECK =
-            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "abandonTheFileInFlight()",
+            Set.of("stopAllWatching()", "stopAcceptingJobs(Duration)", "abandonFileInFlight()",
                     "estimateFor(int)", "configuredProviderSpends()", "archivesFolder()", "isBusy()",
-                    "isWatchActive(Path)", "onRunsMoved(Runnable)", "onJobFinished(Runnable)",
-                    "onSiftResumedOnItsOwn(Listener)");
+                    "isWatchActive(Path)", "onRunsChanged(Runnable)", "onJobFinished(Runnable)",
+                    "onSiftAutoResumed(Listener)");
 
     // The facade is where every driving adapter passes through, so it is where the folder-root check
     // belongs. A guard written into a screen would be walked past by a command line. This reads the

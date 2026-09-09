@@ -51,7 +51,7 @@ final class PhotoCategoriesPane {
         // has to read the cards standing now rather than the ones this page opened with.
         final var onScreen = new AtomicReference<List<CategoryCard.Result>>(List.of());
         refresh(container, header, presenter, onScreen);
-        return new Mounted(PageHeader.pinnedOver(header, container),
+        return new Mounted(PageHeader.pinnedPage(header, container),
                 () -> presenter.hasUnsavedEdits(editsOf(onScreen.get())));
     }
 
@@ -258,7 +258,7 @@ final class PhotoCategoriesPane {
      * @return {@link Button} the way back
      */
     private static Button backButton(final Runnable onBack) {
-        return WayBack.to("photo-categories-back", "Back to Settings", onBack);
+        return BackButton.of("photo-categories-back", "Back to Settings", onBack);
     }
 
 }

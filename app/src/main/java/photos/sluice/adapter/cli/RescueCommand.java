@@ -42,7 +42,7 @@ public class RescueCommand implements Callable<Integer> {
     /**
      * The option naming which root holds the folder.
      */
-    static final String FROM = "--from";
+    static final String FROM_OPTION = "--from";
 
     private static final String REVIEW = "review";
     private static final String UNREVIEWABLE = "unreviewable";
@@ -62,7 +62,7 @@ public class RescueCommand implements Callable<Integer> {
     @SuppressWarnings("unused")
     private @Nullable String folder;
 
-    @Option(names = FROM, paramLabel = "ROOT",
+    @Option(names = FROM_OPTION, paramLabel = "ROOT",
             description = "Which root holds it: " + REVIEW + ", the default, " + UNREVIEWABLE
                     + " or " + DUPLICATES + ".")
     @SuppressWarnings("unused")
@@ -119,9 +119,9 @@ public class RescueCommand implements Callable<Integer> {
             case UNREVIEWABLE -> RescueRoot.UNREVIEWABLE;
             case DUPLICATES -> RescueRoot.DUPLICATES;
             default -> throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
-                    "Not a root: " + Refusal.shown(asked) + ". " + FROM + " takes " + REVIEW + ", "
+                    "Not a root: " + Refusal.shownValue(asked) + ". " + FROM_OPTION + " takes " + REVIEW + ", "
                             + UNREVIEWABLE + " or " + DUPLICATES + ".",
-                    Fields.of("option", FROM, "value", asked)));
+                    Fields.of("option", FROM_OPTION, "value", asked)));
         };
     }
 
@@ -136,7 +136,7 @@ public class RescueCommand implements Callable<Integer> {
                 "picocli refuses a missing positional before this runs");
         if (!withinRoot(name)) {
             throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
-                    "Not a folder to rescue: " + Refusal.shown(name) + ". Name one folder, "
+                    "Not a folder to rescue: " + Refusal.shownValue(name) + ". Name one folder, "
                             + "like 2019-06 or Food.",
                     Fields.of("parameter", "FOLDER", "value", name)));
         }

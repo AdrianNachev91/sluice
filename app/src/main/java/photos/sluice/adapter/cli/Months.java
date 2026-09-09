@@ -23,22 +23,22 @@ final class Months {
     /**
      * Separates the months of a list.
      */
-    private static final String LIST = ",";
+    private static final String LIST_SEPARATOR = ",";
 
     /**
      * Separates the ends of a span.
      */
-    private static final String SPAN = "-";
+    private static final String SPAN_SEPARATOR = "-";
 
     /**
      * The first month of the year.
      */
-    private static final int FIRST = 1;
+    private static final int FIRST_MONTH = 1;
 
     /**
      * The last month of the year.
      */
-    private static final int LAST = 12;
+    private static final int LAST_MONTH = 12;
 
     /**
      * Prevents instantiation of this static utility class.
@@ -54,7 +54,7 @@ final class Months {
      *         names something outside the calendar
      */
     static List<Integer> of(final String text) {
-        return Arrays.stream(text.split(LIST, -1))
+        return Arrays.stream(text.split(LIST_SEPARATOR, -1))
                 .map(piece -> monthsIn(piece, text))
                 .flatMap(List::stream)
                 .distinct()
@@ -71,7 +71,7 @@ final class Months {
      * @throws ScopeRefusedException when the piece is not months
      */
     private static List<Integer> monthsIn(final String piece, final String text) {
-        return piece.contains(SPAN) ? span(piece, text) : List.of(month(piece, text));
+        return piece.contains(SPAN_SEPARATOR) ? span(piece, text) : List.of(month(piece, text));
     }
 
     /**
@@ -91,7 +91,7 @@ final class Months {
         final int to = months.getLast();
         if (months.size() != to - from + 1) {
             throw new ScopeRefusedException(new Refusal(RefusalKind.MONTHS_NOT_A_SPAN,
-                    "Not a span: " + Refusal.shown(text) + ". " + verb
+                    "Not a span: " + Refusal.shownValue(text) + ". " + verb
                             + " narrows a year by a span of months, so write one, like 6-8.",
                     Fields.of("verb", verb, "value", text, "months", months)));
         }
@@ -107,7 +107,7 @@ final class Months {
      * @throws ScopeRefusedException when it is not a span of two months, or runs backwards
      */
     private static List<Integer> span(final String piece, final String text) {
-        final String[] ends = piece.split(SPAN, -1);
+        final String[] ends = piece.split(SPAN_SEPARATOR, -1);
         if (ends.length != 2) {
             throw refused(text);
         }
@@ -129,7 +129,7 @@ final class Months {
      */
     private static int month(final String part, final String text) {
         final String trimmed = part.trim();
-        if (!AsciiDigits.only(trimmed)) {
+        if (!AsciiDigits.isAllDigits(trimmed)) {
             throw refused(text);
         }
         final int month;
@@ -138,7 +138,7 @@ final class Months {
         } catch (final NumberFormatException tooManyDigits) {
             throw refused(text);
         }
-        if (month < FIRST || month > LAST) {
+        if (month < FIRST_MONTH || month > LAST_MONTH) {
             throw refused(text);
         }
         return month;
@@ -152,7 +152,7 @@ final class Months {
      */
     private static ScopeRefusedException refused(final String text) {
         return new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
-                "Not months: " + Refusal.shown(text) + ". Write a span, like 6-8, or a list, "
+                "Not months: " + Refusal.shownValue(text) + ". Write a span, like 6-8, or a list, "
                         + "like 6,8,11, or both, like 6-8,11.",
                 Fields.of("option", "--months", "value", text)));
     }

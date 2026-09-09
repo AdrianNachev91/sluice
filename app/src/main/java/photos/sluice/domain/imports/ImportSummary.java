@@ -11,13 +11,13 @@ package photos.sluice.domain.imports;
  * is in {@code found} at all.
  *
  * @param found int how many files the chosen folders and files came to
- * @param broughtIn int how many landed in the Inbox on this run
- * @param alreadyThere int how many the Inbox already held byte for byte
+ * @param imported int how many landed in the Inbox on this run
+ * @param alreadyInInbox int how many the Inbox already held byte for byte
  * @param unverified int how many arrived with bytes that did not match the original, on a move
- * @param couldNotBeRead int how many the filesystem refused partway through
- * @param unreadablePlaces int how many folders the walk could not look inside at all
+ * @param unreadableFiles int how many the filesystem refused partway through
+ * @param unreadableFolders int how many folders the walk could not look inside at all
  * @param cancelled boolean whether it stopped before reaching every file
  */
-public record ImportSummary(int found, int broughtIn, int alreadyThere, int unverified,
-                            int couldNotBeRead, int unreadablePlaces, boolean cancelled) {
+public record ImportSummary(int found, int imported, int alreadyInInbox, int unverified,
+                            int unreadableFiles, int unreadableFolders, boolean cancelled) {
 }

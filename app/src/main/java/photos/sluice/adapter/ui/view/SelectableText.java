@@ -33,7 +33,7 @@ import java.util.List;
  */
 final class SelectableText {
 
-    private static final String DISGUISED = "selectable-text";
+    private static final String STYLE_CLASS = "selectable-text";
 
     // Where the structural classes are kept, so a screen restating what a line is dressed as can
     // put back what the toolkit and the disguise put on.
@@ -118,7 +118,7 @@ final class SelectableText {
 
     private static void disguise(final TextInputControl control) {
         control.setEditable(false);
-        control.getStyleClass().add(DISGUISED);
+        control.getStyleClass().add(STYLE_CLASS);
         // Taken before a caller adds anything, so it holds what the toolkit gave the control plus
         // the disguise, and nothing a screen dresses it in afterwards.
         control.getProperties().put(STRUCTURE, List.copyOf(control.getStyleClass()));
@@ -142,7 +142,7 @@ final class SelectableText {
     @SuppressWarnings("unchecked")
     private static List<String> structureOf(final TextInputControl control) {
         final Object held = control.getProperties().get(STRUCTURE);
-        return held == null ? List.of(DISGUISED) : (List<String>) held;
+        return held == null ? List.of(STYLE_CLASS) : (List<String>) held;
     }
 
     /**
@@ -163,7 +163,7 @@ final class SelectableText {
             this.measure.setBoundsType(TextBoundsType.LOGICAL_VERTICAL_CENTER);
         }
 
-        private void take(final TextInputControl control, final double wrapAt) {
+        private void measureFrom(final TextInputControl control, final double wrapAt) {
             this.measure.setText(control.getText());
             this.measure.setFont(control.getFont());
             this.measure.setWrappingWidth(wrapAt);
@@ -184,7 +184,7 @@ final class SelectableText {
 
         @Override
         protected double computePrefWidth(final double height) {
-            this.ruler.take(this, 0);
+            this.ruler.measureFrom(this, 0);
             return this.ruler.width() + this.snappedLeftInset() + this.snappedRightInset();
         }
 
@@ -195,7 +195,7 @@ final class SelectableText {
 
         @Override
         protected double computePrefHeight(final double width) {
-            this.ruler.take(this, 0);
+            this.ruler.measureFrom(this, 0);
             return this.ruler.height() + this.snappedTopInset() + this.snappedBottomInset();
         }
     }
@@ -220,13 +220,13 @@ final class SelectableText {
         // at its preferred width. A column count turns one line into two.
         @Override
         protected double computePrefWidth(final double height) {
-            this.ruler.take(this, 0);
+            this.ruler.measureFrom(this, 0);
             return this.ruler.width() + this.snappedLeftInset() + this.snappedRightInset();
         }
 
         @Override
         protected double computePrefHeight(final double width) {
-            this.ruler.take(this, this.wrapAt(width));
+            this.ruler.measureFrom(this, this.wrapAt(width));
             return this.ruler.height() + this.snappedTopInset() + this.snappedBottomInset();
         }
 

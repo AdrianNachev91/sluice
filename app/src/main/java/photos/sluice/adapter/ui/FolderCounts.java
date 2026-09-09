@@ -24,7 +24,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * {@link #refreshUnprompted} off whatever thread paints.
  *
  * <p>An empty answer means three different things: the folder is empty, the walk has not got there
- * yet, and the walk failed. {@link #countsAreIn} is what tells them apart, and anything refusing on
+ * yet, and the walk failed. {@link #countsAvailable} is what tells them apart, and anything refusing on
  * a count has to ask it first.
  */
 class FolderCounts {
@@ -33,7 +33,7 @@ class FolderCounts {
 
     // How long a folder read is given before the screen says it is reading. Under this, a reader
     // sees one state rather than three. Over it, they are waiting and want to know why.
-    private static final long SETTLE_BEFORE_SAYING_SO = 200;
+    private static final long READING_SETTLE_WINDOW = 200;
 
     private final Pipeline pipeline;
     private final Runnable repaint;
@@ -51,7 +51,7 @@ class FolderCounts {
 
     private volatile boolean wasReadAtLeastOnce;
 
-    private final ReentrantLock reading = new ReentrantLock();
+    private final ReentrantLock readLock = new ReentrantLock();
 
     /**
      * Creates the reading over the facade it walks, and the way to draw the screen again.
@@ -104,7 +104,7 @@ class FolderCounts {
      *
      * @return boolean true only where a completed read succeeded
      */
-    boolean countsAreIn() {
+    boolean countsAvailable() {
         return !this.isCounting() && !this.unreadable;
     }
 
@@ -175,7 +175,7 @@ class FolderCounts {
      */
     boolean inboxIsEmpty() {
         final InboxTally waiting = this.inbox;
-        return this.countsAreIn() && waiting != null && waiting.files() == 0;
+        return this.countsAvailable() && waiting != null && waiting.files() == 0;
     }
 
     /**
@@ -194,13 +194,13 @@ class FolderCounts {
             // waits for nothing and walks an empty Inbox is over in milliseconds. Going into the
             // counting state and out again inside that reads as a glitch. So the draw waits to see
             // which kind of read this turns out to be.
-            this.redrawIfStillReadingByThen();
+            this.redrawIfStillCounting();
             // Last before the lock, so nothing that allocates sits between the count going up and
             // the try that brings it down again. A count left up has no way back down, and
             // isCounting then answers true for the life of the process.
             this.askedReads.incrementAndGet();
         }
-        this.reading.lock();
+        this.readLock.lock();
         // A throw between the lock and the try would reach the caller with the lock still held,
         // and with the count above it still up. Every later read would park on that lock for the
         // rest of the run.
@@ -223,7 +223,7 @@ class FolderCounts {
             if (prompted) {
                 this.askedReads.decrementAndGet();
             }
-            this.reading.unlock();
+            this.readLock.unlock();
         }
     }
 
@@ -234,14 +234,14 @@ class FolderCounts {
      * has already finished leaves it nothing to draw. A second asked-for read in the meantime
      * raises the flag again. A read nobody asked for does not.
      */
-    private void redrawIfStillReadingByThen() {
+    private void redrawIfStillCounting() {
         CompletableFuture.runAsync(
                 () -> {
                     if (this.isCounting()) {
                         this.repaint.run();
                     }
                 },
-                CompletableFuture.delayedExecutor(SETTLE_BEFORE_SAYING_SO, TimeUnit.MILLISECONDS));
+                CompletableFuture.delayedExecutor(READING_SETTLE_WINDOW, TimeUnit.MILLISECONDS));
     }
 
     /**

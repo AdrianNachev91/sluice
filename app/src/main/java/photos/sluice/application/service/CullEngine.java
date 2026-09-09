@@ -185,7 +185,7 @@ final class CullEngine {
      * @return a {@link JobHandle} of {@link CullJobOutcome} a handle to the running or waiting cull job
      */
     JobHandle<CullJobOutcome> cull(final CullScope scope) {
-        this.refuseIfTheProviderHasNoCredential();
+        this.refuseIfProviderHasNoCredential();
         this.refuseIfScopeOccupied(scope);
         this.refuseIfScopeOverlaps(scope);
         return this.jobRunner.submit(handle -> {
@@ -221,7 +221,7 @@ final class CullEngine {
         this.rootsGuard.requireUsable();
         return this.jobRunner.submit(handle -> {
             this.phaseRunner.planned(RESUME_PHASES);
-            this.refuseRunOutsideTheWorkingRoot(prepDir);
+            this.refuseRunOutsideWorkingRoot(prepDir);
             return this.dispatchAndApply(this.cullPrepPort.readIndex(prepDir), allowPartial,
                     handle.stopSignal(), null);
         });
@@ -334,7 +334,7 @@ final class CullEngine {
      * @throws MissingCredentialException if the configured provider needs a credential and none is held
      * @throws SecretStoreException if a tier cannot say what it holds
      */
-    void refuseIfTheProviderHasNoCredential() {
+    void refuseIfProviderHasNoCredential() {
         final SecretId credential = this.cullDispatcher.configuredCredential();
         if (credential != null && this.secretStore.status(credential) instanceof SecretStatus.Absent) {
             throw new MissingCredentialException(credential,
@@ -470,7 +470,7 @@ final class CullEngine {
      * @throws PathsMisconfiguredException if the folder roots stopped being usable during the wait
      * @throws Pipeline.RunOutsideWorkingRootException if it sits outside the sift-prep root in force
      */
-    void refuseRunOutsideTheWorkingRoot(final Path prepDir) {
+    void refuseRunOutsideWorkingRoot(final Path prepDir) {
         this.rootsGuard.requireUsable();
         if (!Containment.strictlyUnder(this.cullPrepRoot(), prepDir)) {
             throw new Pipeline.RunOutsideWorkingRootException(prepDir);
@@ -697,7 +697,7 @@ final class CullEngine {
         return this.recorded(prep, switch (applyEnding) {
             case ApplyEnding.Finished(final ApplyReport applied) ->
                     new CullJobOutcome.Applied(cullReport, applied, archivedPriorRun, null);
-            case ApplyEnding.StoppedPartWay(final ApplyReport moved) ->
+            case ApplyEnding.StoppedMidRun(final ApplyReport moved) ->
                     new CullJobOutcome.Waiting(this.buildWaitingJob(prep), WaitingReason.CANCELLED,
                             cullReport, archivedPriorRun, moved);
         });
@@ -720,7 +720,7 @@ final class CullEngine {
         if (outcome instanceof final CullJobOutcome.Applied applied) {
             return new CullJobOutcome.Applied(applied.cullReport(), applied.applyReport(),
                     applied.archivedPriorRun(),
-                    recorded ? this.tokensAcrossEveryLeg(prep.scope()) : null);
+                    recorded ? this.totalTokensFor(prep.scope()) : null);
         }
         return outcome;
     }
@@ -734,7 +734,7 @@ final class CullEngine {
      * @param scope {@link String} the run's scope tag
      * @return {@link Long} the tokens, or null where the ledger could not be read
      */
-    private @Nullable Long tokensAcrossEveryLeg(final String scope) {
+    private @Nullable Long totalTokensFor(final String scope) {
         try {
             final List<SpendLedgerEntry> inTimeframe = this.spendLedger.read().stream()
                     .filter(entry -> entry.scope().equals(scope))
@@ -765,7 +765,7 @@ final class CullEngine {
     private static int runStart(final List<SpendLedgerEntry> inTimeframe) {
         final List<SpendLedgerEntry> earlier = inTimeframe.subList(0, Math.max(0, inTimeframe.size() - 1));
         return IntStream.range(0, earlier.size())
-                .filter(i -> earlier.get(i).ending().freedTheScope())
+                .filter(i -> earlier.get(i).ending().freesScope())
                 .max().orElse(-1) + 1;
     }
 

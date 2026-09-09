@@ -62,7 +62,7 @@ public final class SortFolderNames {
      * @param name {@link String} a folder name below the Review root
      * @return boolean true where a sort writes that name
      */
-    public static boolean writtenByASort(final String name) {
+    public static boolean isSortFolderName(final String name) {
         return DATED.matcher(name).matches() || UNDATED.equalsIgnoreCase(name);
     }
 }

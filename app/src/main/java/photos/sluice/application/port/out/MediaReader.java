@@ -35,25 +35,25 @@ public interface MediaReader {
      * @param root {@link Path}
      * @return {@link Walk} the files reached and the places refused
      */
-    Walk listFilesTolerating(Path root);
+    Walk listFilesToleratingRefusals(Path root);
 
     /**
      * What a tolerant walk found.
      *
      * @param files a {@link List} of {@link Path} every regular file it reached, as absolute paths
-     * @param unreadablePlaces a {@link List} of {@link Path}, deepest first
+     * @param unreadableFolders a {@link List} of {@link Path}, deepest first
      */
-    record Walk(List<Path> files, List<Path> unreadablePlaces) {
+    record Walk(List<Path> files, List<Path> unreadableFolders) {
 
         /**
          * Defensively copies the mutable collection components.
          *
          * @param files a {@link List} of {@link Path}
-         * @param unreadablePlaces a {@link List} of {@link Path}
+         * @param unreadableFolders a {@link List} of {@link Path}
          */
         public Walk {
             files = List.copyOf(files);
-            unreadablePlaces = List.copyOf(unreadablePlaces);
+            unreadableFolders = List.copyOf(unreadableFolders);
         }
     }
 
@@ -92,7 +92,7 @@ public interface MediaReader {
      * @return boolean true if a directory is there, false if nothing is
      * @throws UncheckedIOException if the filesystem would not say what is there
      */
-    boolean directoryIsThere(Path path);
+    boolean directoryExists(Path path);
 
     /**
      * The real, symlink- and junction-free form of path, when a directory can be confirmed there.
@@ -164,7 +164,7 @@ public interface MediaReader {
      * @param failure {@link UncheckedIOException} what readLines threw
      * @return boolean true unless the file was reached and its bytes turned out not to be text
      */
-    static boolean mustStayLoud(final UncheckedIOException failure) {
+    static boolean mustBeRethrown(final UncheckedIOException failure) {
         return !(failure.getCause() instanceof CharacterCodingException);
     }
 }

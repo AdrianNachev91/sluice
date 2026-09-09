@@ -32,7 +32,7 @@ final class SpringLaunch {
      * @param args {@link String}[] the command-line arguments to pass on
      * @return {@link String}[] the arguments to start Spring with
      */
-    static String[] importing(final Path configFile, final String[] args) {
+    static String[] argsWithConfigImport(final Path configFile, final String[] args) {
         return Stream.concat(Stream.of(CONFIG_IMPORT_ARG + configFile), Stream.of(args))
                 .toArray(String[]::new);
     }

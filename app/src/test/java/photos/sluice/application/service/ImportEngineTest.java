@@ -415,7 +415,7 @@ class ImportEngineTest {
     private static MediaStore refusingToWalkInto(final Path locked) {
         return new NioMediaStore() {
             @Override
-            public Walk listFilesTolerating(final Path root) {
+            public Walk listFilesToleratingRefusals(final Path root) {
                 return new Walk(this.listFiles(root), List.of(locked));
             }
         };
@@ -424,7 +424,7 @@ class ImportEngineTest {
     private static MediaStore refusingToWalkAtAll() {
         return new NioMediaStore() {
             @Override
-            public Walk listFilesTolerating(final Path root) {
+            public Walk listFilesToleratingRefusals(final Path root) {
                 throw new UncheckedIOException(new IOException("gone " + root));
             }
         };
@@ -436,11 +436,11 @@ class ImportEngineTest {
         return new NioMediaStore() {
             @Override
             public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
-                    final TransferProgress watching) {
+                    final TransferProgress transferProgress) {
                 if (source.getFileName().toString().equals(unreadable)) {
                     throw new UncheckedIOException(new IOException("refused " + source));
                 }
-                return super.copyTo(source, destination, stop, watching);
+                return super.copyTo(source, destination, stop, transferProgress);
             }
         };
     }

@@ -63,7 +63,7 @@ final class RunsPane {
         final TextArea unreadable = SettingsRows.emptyHelpLine("runs-unreadable");
         final var unreadableBox = new VBox(unreadable);
         unreadableBox.getStyleClass().add("warning-box");
-        SettingsRows.showWhileTheLineDoes(unreadableBox, unreadable);
+        SettingsRows.showWhileLineShows(unreadableBox, unreadable);
         final TextArea nothingYet = SettingsRows.emptyHelpLine("runs-nothing-yet");
         final TextArea message = SettingsRows.emptyHelpLine("runs-message");
         final Hyperlink locationLink = SettingsRows.locationLink("runs-message-link");
@@ -98,7 +98,7 @@ final class RunsPane {
         final ScrollPane scroll = SettingsRows.scrolling(body);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        PageHeader.heldToTheViewport(scroll, headerRow);
+        PageHeader.bindWidthToViewport(scroll, headerRow);
         final var page = new VBox(headerRow, scroll);
         page.setId("runs");
         page.getStyleClass().add("runs");
@@ -200,31 +200,31 @@ final class RunsPane {
             this.heading.setText(view.heading());
             this.clear.setText(view.clearCompleted());
             this.clear.setDisable(!view.canClearCompleted());
-            this.unreadable.setText(SettingsRows.orNothing(view.unreadable()));
-            this.nothingYet.setText(SettingsRows.orNothing(view.nothingYet()));
+            this.unreadable.setText(SettingsRows.textOrEmpty(view.unreadable()));
+            this.nothingYet.setText(SettingsRows.textOrEmpty(view.nothingYet()));
             SettingsRows.report(this.message, view.message(), CAUTION, this.locationLink, this.navigation);
             this.draw(this.cards, view.unfinished(), presenter, redraw);
             this.completedToggle.setText(view.completedHeading());
-            SettingsRows.pointing(this.completedToggle, view.completedShown());
+            SettingsRows.setFoldMarker(this.completedToggle, view.completedShown());
             SettingsRows.showIf(this.completed, !view.completed().isEmpty());
             this.draw(this.completedCards, view.completed(), presenter, redraw);
             // Shut where the section itself is gone. A sweep leaves nothing to fold. A travel over
             // a subtree the screen is no longer laying out reads its own geometry off bounds
             // nothing has updated.
-            this.fold.to(view.completedShown() && !view.completed().isEmpty());
+            this.fold.setOpen(view.completedShown() && !view.completed().isEmpty());
         }
 
         /**
          * Replaces one section's cards with the ones it now holds.
          *
-         * @param into {@link VBox} the section
+         * @param section {@link VBox} the section
          * @param runs a {@link List} of {@link RunCard} its cards, in the order drawn
          * @param presenter {@link RunsPresenter} takes a press on any of their buttons
          * @param redraw {@link Runnable} draws the screen again after one of those presses
          */
-        private void draw(final VBox into, final List<RunCard> runs, final RunsPresenter presenter,
+        private void draw(final VBox section, final List<RunCard> runs, final RunsPresenter presenter,
                           final Runnable redraw) {
-            into.getChildren().setAll(runs.stream()
+            section.getChildren().setAll(runs.stream()
                     .map(run -> card(run, presenter, redraw))
                     .toList());
         }
@@ -324,7 +324,7 @@ final class RunsPane {
                 if (Dialogs.agreed(button, redo.confirm())) {
                     final String text = presenter.judgeAgain(redo.prepDir(), redo.scope());
                     if (text != null) {
-                        CopyableTrace.putOnTheClipboard(text);
+                        CopyableTrace.copyToClipboard(text);
                     }
                     redraw.run();
                 }
@@ -362,7 +362,7 @@ final class RunsPane {
                     redraw.run();
                     return;
                 }
-                CopyableTrace.putOnTheClipboard(copied);
+                CopyableTrace.copyToClipboard(copied);
                 button.setText(done);
             });
             return button;

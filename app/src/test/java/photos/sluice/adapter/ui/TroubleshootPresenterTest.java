@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import photos.sluice.adapter.ui.TroubleshootView.Action;
 import photos.sluice.adapter.ui.TroubleshootView.Answer;
-import photos.sluice.adapter.ui.TroubleshootView.Deed;
+import photos.sluice.adapter.ui.TroubleshootView.Kind;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
 import photos.sluice.adapter.ui.TroubleshootView.ProblemStack;
@@ -80,7 +80,7 @@ class TroubleshootPresenterTest {
         final Problem problem = rows(presenter).getFirst();
 
         assertThat(problem.problem()).isEqualTo("A photo this sift wants to move is not where it was.");
-        assertThat(problem.about()).isEqualTo(PHOTO.toString());
+        assertThat(problem.subject()).isEqualTo(PHOTO.toString());
         assertThat(problem.options()).extracting(Option::answer)
                 .containsExactly(Answer.RECHECK, Answer.SKIP_FILE);
     }
@@ -98,7 +98,7 @@ class TroubleshootPresenterTest {
         assertThat(stacked.heading())
                 .isEqualTo("3 photos this sift wants to move are not under the Sorted folder currently saved.");
         assertThat(stacked.rows()).extracting(Problem::problem).containsOnlyNulls();
-        assertThat(stacked.rows()).extracting(Problem::about)
+        assertThat(stacked.rows()).extracting(Problem::subject)
                 .containsExactly(PHOTO.toString(), "b.jpg", "c.jpg");
     }
 
@@ -261,9 +261,9 @@ class TroubleshootPresenterTest {
             pressOption(presenter, Answer.SKIP_FILE);
 
             assertThat(rows(presenter)).isEmpty();
-            final RunLauncherView.Message said = requireNonNull(presenter.view().message());
-            assertThat(said.text()).contains("go on without that photo");
-            assertThat(said.refused()).isFalse();
+            final RunLauncherView.Message message = requireNonNull(presenter.view().message());
+            assertThat(message.text()).contains("go on without that photo");
+            assertThat(message.refused()).isFalse();
         }
 
         @Test
@@ -308,9 +308,9 @@ class TroubleshootPresenterTest {
 
             pressOption(presenter, Answer.RECHECK);
 
-            final RunLauncherView.Message said = requireNonNull(presenter.view().message());
-            assertThat(said.text()).isEqualTo("It is still missing.");
-            assertThat(said.refused()).isTrue();
+            final RunLauncherView.Message message = requireNonNull(presenter.view().message());
+            assertThat(message.text()).isEqualTo("It is still missing.");
+            assertThat(message.refused()).isTrue();
             assertThat(presenter.view().problems()).hasSize(1);
         }
 
@@ -643,9 +643,9 @@ class TroubleshootPresenterTest {
         void isOfferedOnlyOnceNothingBlocksTheRun() {
             assertThat(opened(pipelineReporting(State.BLOCKED,
                     List.of(new Finding.CorruptSidecar("montage-002")))).view().actions())
-                    .extracting(Action::deed).containsExactly(Deed.DISCARD);
+                    .extracting(Action::deed).containsExactly(Kind.DISCARD);
             assertThat(opened(pipelineReporting(State.READY, List.of())).view().actions())
-                    .extracting(Action::deed).containsExactly(Deed.DISCARD, Deed.FINISH);
+                    .extracting(Action::deed).containsExactly(Kind.DISCARD, Kind.FINISH);
         }
 
         @Test
@@ -659,7 +659,7 @@ class TroubleshootPresenterTest {
             presenter.setOpenRuns(left::incrementAndGet);
             presenter.setOpenDashboard(dashboard::incrementAndGet);
 
-            presenter.press(actionOf(presenter, Deed.FINISH));
+            presenter.press(actionOf(presenter, Kind.FINISH));
 
             verify(pipeline).resume(PREP_DIR, false);
             assertThat(dashboard.get()).isEqualTo(1);
@@ -675,9 +675,9 @@ class TroubleshootPresenterTest {
             final var dashboard = new AtomicInteger();
             presenter.setOpenDashboard(dashboard::incrementAndGet);
             // The first press takes the single job slot, so the second one has nothing to start.
-            presenter.press(actionOf(presenter, Deed.FINISH));
+            presenter.press(actionOf(presenter, Kind.FINISH));
 
-            presenter.press(actionOf(presenter, Deed.FINISH));
+            presenter.press(actionOf(presenter, Kind.FINISH));
 
             assertThat(requireNonNull(presenter.view().message()).text())
                     .contains("only one job runs at a time")
@@ -699,7 +699,7 @@ class TroubleshootPresenterTest {
             final var left = new AtomicInteger();
             presenter.setOpenRuns(left::incrementAndGet);
 
-            presenter.press(actionOf(presenter, Deed.DISCARD));
+            presenter.press(actionOf(presenter, Kind.DISCARD));
 
             verify(pipeline).discard(PREP_DIR);
             assertThat(left.get()).isEqualTo(1);
@@ -714,7 +714,7 @@ class TroubleshootPresenterTest {
             final var left = new AtomicInteger();
             presenter.setOpenRuns(left::incrementAndGet);
 
-            presenter.press(actionOf(presenter, Deed.DISCARD));
+            presenter.press(actionOf(presenter, Kind.DISCARD));
 
             assertThat(left.get()).isZero();
             assertThat(presenter.working()).isTrue();
@@ -734,7 +734,7 @@ class TroubleshootPresenterTest {
             final var left = new AtomicInteger();
             presenter.setOpenRuns(left::incrementAndGet);
 
-            presenter.press(actionOf(presenter, Deed.DISCARD));
+            presenter.press(actionOf(presenter, Kind.DISCARD));
 
             assertThat(left.get()).isZero();
             assertThat(presenter.working()).isFalse();
@@ -753,7 +753,7 @@ class TroubleshootPresenterTest {
             final var left = new AtomicInteger();
             presenter.setOpenRuns(left::incrementAndGet);
 
-            presenter.press(actionOf(presenter, Deed.DISCARD));
+            presenter.press(actionOf(presenter, Kind.DISCARD));
 
             assertThat(requireNonNull(presenter.view().message()).text())
                     .isEqualTo("Something else is running.");
@@ -862,7 +862,7 @@ class TroubleshootPresenterTest {
                 .orElseThrow());
     }
 
-    private static Action actionOf(final TroubleshootPresenter presenter, final Deed deed) {
+    private static Action actionOf(final TroubleshootPresenter presenter, final Kind deed) {
         return presenter.view().actions().stream()
                 .filter(action -> action.deed() == deed)
                 .findFirst()

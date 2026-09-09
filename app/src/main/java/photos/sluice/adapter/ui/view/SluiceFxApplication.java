@@ -1,7 +1,6 @@
 package photos.sluice.adapter.ui.view;
 
 import javafx.application.Application;
-import javafx.application.Platform;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import org.jspecify.annotations.Nullable;
@@ -70,12 +69,7 @@ public class SluiceFxApplication extends Application {
         stage.getIcons().setAll(BrandMark.icons());
         ExternalBrowser.openWith(this.getHostServices()::showDocument);
         FileManager.openWith(folder ->
-                Thread.ofVirtual().start(() -> FileManager.inTheSystemFileManager(folder)));
-        FileManager.openFilesWith((file, whenNothingCan) -> Thread.ofVirtual().start(() -> {
-            if (!FileManager.inTheRegisteredApplication(file)) {
-                Platform.runLater(whenNothingCan);
-            }
-        }));
+                Thread.ofVirtual().start(() -> FileManager.openInSystemFileManager(folder)));
         this.present(stage);
         Stylesheet.openNoLargerThan(stage, Screen.getPrimary().getVisualBounds());
         stage.show();

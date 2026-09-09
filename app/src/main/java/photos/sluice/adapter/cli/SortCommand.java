@@ -173,10 +173,10 @@ public class SortCommand implements Callable<Integer> {
         if (stopped) {
             lines.add(stoppedLine(sorted.leftBehind()));
         }
-        final SortSummary.Guessed guessed = sorted.guessed();
-        lines.add(ResultLines.count("Photos sorted", sorted.photosSorted()));
+        final SortSummary.LowConfidenceCounts guessed = sorted.lowConfidenceCounts();
+        lines.add(ResultLines.countLine("Photos sorted", sorted.photosSorted()));
         ResultLines.addWhenAny(lines, GUESSED_LABEL, guessed.photosSorted());
-        lines.add(ResultLines.count("Videos sorted", sorted.videosSorted()));
+        lines.add(ResultLines.countLine("Videos sorted", sorted.videosSorted()));
         ResultLines.addWhenAny(lines, GUESSED_LABEL, guessed.videosSorted());
         ResultLines.addWhenAny(lines, "Already in your Library", sorted.reimportsDeleted());
         ResultLines.addWhenAny(lines, "Identical copies removed", sorted.byteDupsDeleted());

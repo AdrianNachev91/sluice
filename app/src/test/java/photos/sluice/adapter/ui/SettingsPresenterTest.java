@@ -8,7 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.testfx.api.FxToolkit;
 import org.testfx.util.WaitForAsyncUtils;
 import photos.sluice.application.port.in.JobInProgressException;
-import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
+import photos.sluice.application.port.in.LibraryRootResolutionRequiredException;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome.CopiedAndMoved;
 import photos.sluice.application.port.in.LibraryRootMoveOutcome.CopyCancelled;
@@ -480,7 +480,7 @@ class SettingsPresenterTest {
     void saveThatMovesTheLibraryRootAsksForAResolution() {
         final Path libraryRoot = Path.of("/library");
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
-        settingsUseCase.saveFailure = new LibraryRootMoveNeedsAResolutionException(
+        settingsUseCase.saveFailure = new LibraryRootResolutionRequiredException(
                 libraryRoot, "refused, for a log");
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
@@ -500,7 +500,7 @@ class SettingsPresenterTest {
     @Test
     void emptyingAConfiguredLibraryRootIsRefusedOnTheFieldRatherThanAsked() {
         final var settingsUseCase = new FixedSettingsUseCase(settings("/repo", "/library", "/inbox"));
-        settingsUseCase.saveFailure = new LibraryRootMoveNeedsAResolutionException(
+        settingsUseCase.saveFailure = new LibraryRootResolutionRequiredException(
                 Path.of("/library"), "refused, for a log");
         final var presenter = presenter(settingsUseCase, new FixedSecretStore(new Absent()), noViolations());
 
@@ -715,47 +715,47 @@ class SettingsPresenterTest {
 
     @Test
     void aMoveThatHasReportedNothingYetSaysOnlyThatItIsMoving() throws Exception {
-        final var said = new ArrayList<String>();
+        final var lines = new ArrayList<String>();
 
-        try (AutoCloseable _ = presenterWatching(new FxProgressPort(Runnable::run)).reportMoving(said::add)) {
-            assertThat(said).containsExactly("Moving the library...");
+        try (AutoCloseable _ = presenterWatching(new FxProgressPort(Runnable::run)).reportMoving(lines::add)) {
+            assertThat(lines).containsExactly("Moving the library...");
         }
     }
 
     @Test
     void aMoveInFlightSaysWhichPhaseItIsOnAndHowFarThroughItIs() throws Exception {
         final var port = new FxProgressPort(Runnable::run);
-        final var said = new ArrayList<String>();
+        final var lines = new ArrayList<String>();
 
-        try (AutoCloseable _ = presenterWatching(port).reportMoving(said::add)) {
+        try (AutoCloseable _ = presenterWatching(port).reportMoving(lines::add)) {
             port.phaseStarted("Copying");
             port.tick("Copying", 1500, 12000);
         }
 
-        assertThat(said).last().isEqualTo("Copying... 1,500 of 12,000");
+        assertThat(lines).last().isEqualTo("Copying... 1,500 of 12,000");
     }
 
     @Test
     void aPhaseWithNoTotalToCountAgainstIsNamedWithoutANumber() throws Exception {
         final var port = new FxProgressPort(Runnable::run);
-        final var said = new ArrayList<String>();
+        final var lines = new ArrayList<String>();
 
-        try (AutoCloseable _ = presenterWatching(port).reportMoving(said::add)) {
+        try (AutoCloseable _ = presenterWatching(port).reportMoving(lines::add)) {
             port.phaseStarted("Reading the library");
         }
 
-        assertThat(said).last().isEqualTo("Reading the library...");
+        assertThat(lines).last().isEqualTo("Reading the library...");
     }
 
     @Test
     void aClosedHandleIgnoresPhasesReportedAfterIt() throws Exception {
         final var port = new FxProgressPort(Runnable::run);
-        final var said = new ArrayList<String>();
-        presenterWatching(port).reportMoving(said::add).close();
+        final var lines = new ArrayList<String>();
+        presenterWatching(port).reportMoving(lines::add).close();
 
         port.phaseStarted("Copying");
 
-        assertThat(said).containsExactly("Moving the library...");
+        assertThat(lines).containsExactly("Moving the library...");
     }
 
     @Test
@@ -1021,7 +1021,7 @@ class SettingsPresenterTest {
         }
 
         @Override
-        public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
+        public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
             return Optional.ofNullable(this.overrides.get(property));
         }
 

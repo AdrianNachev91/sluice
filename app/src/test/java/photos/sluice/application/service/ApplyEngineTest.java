@@ -890,7 +890,7 @@ class ApplyEngineTest {
         final ApplyEnding ending = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, _) -> ticks.set(current), cancelAfterFirstTick);
 
-        assertThat(ending).isInstanceOf(ApplyEnding.StoppedPartWay.class);
+        assertThat(ending).isInstanceOf(ApplyEnding.StoppedMidRun.class);
         assertThat(ending.report().byCategory()).containsExactly(entry("junk", 1));
         assertThat(Files.exists(first)).isFalse();
         assertThat(Files.exists(root.resolve("Review/junk/first.jpg"))).isTrue();
@@ -922,7 +922,7 @@ class ApplyEngineTest {
         final ApplyEnding ending = applyEngine(root, libraryRoot, hashIndex(root), abandoningEveryMove())
                 .apply(prepDir, new ApplyOptions(false), ProgressCallback.NO_OP, CancellationSignal.NEVER);
 
-        assertThat(ending).isInstanceOf(ApplyEnding.StoppedPartWay.class);
+        assertThat(ending).isInstanceOf(ApplyEnding.StoppedMidRun.class);
         assertThat(ending.report().byCategory()).isEmpty();
         assertThat(Files.exists(first)).isTrue();
         assertThat(Files.exists(prepDir.resolve("decisions.json"))).isFalse();
@@ -946,7 +946,7 @@ class ApplyEngineTest {
         final ApplyEnding ending = applyEngine(root, libraryRoot).apply(prepDir, new ApplyOptions(false),
                 (current, _) -> ticks.set(current), cancelAfterFirstTick);
 
-        assertThat(ending).isInstanceOf(ApplyEnding.StoppedPartWay.class);
+        assertThat(ending).isInstanceOf(ApplyEnding.StoppedMidRun.class);
         assertThat(ending.report().byCategory()).containsExactly(entry("junk", 1));
         assertThat(ending.report().unreviewable()).isZero();
         assertThat(Files.exists(photo)).isFalse();
@@ -1024,7 +1024,7 @@ class ApplyEngineTest {
         return new NioMediaStore() {
             @Override
             public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
-                               final TransferProgress watching) {
+                               final TransferProgress transferProgress) {
                 throw new TransferAbandonedException(source);
             }
         };
@@ -1046,8 +1046,8 @@ class ApplyEngineTest {
 
         @Override
         public Path move(final Path source, final Path destDir, final CancellationSignal stop,
-                final TransferProgress watching) {
-            return this.delegate.move(source, destDir, stop, watching);
+                final TransferProgress transferProgress) {
+            return this.delegate.move(source, destDir, stop, transferProgress);
         }
 
         @Override
@@ -1057,15 +1057,15 @@ class ApplyEngineTest {
 
         @Override
         public Path moveTo(final Path source, final Path destination, final CancellationSignal stop,
-                final TransferProgress watching) {
+                final TransferProgress transferProgress) {
             if (this.movesUntilFailure <= 0) {
                 if (this.crashPoint == CrashPoint.AFTER_THE_MOVE) {
-                    this.delegate.moveTo(source, destination, stop, watching);
+                    this.delegate.moveTo(source, destination, stop, transferProgress);
                 }
                 throw new RuntimeException("simulated crash");
             }
             this.movesUntilFailure--;
-            return this.delegate.moveTo(source, destination, stop, watching);
+            return this.delegate.moveTo(source, destination, stop, transferProgress);
         }
 
         @Override
@@ -1074,8 +1074,8 @@ class ApplyEngineTest {
         }
 
         @Override
-        public Walk listFilesTolerating(final Path root) {
-            return this.delegate.listFilesTolerating(root);
+        public Walk listFilesToleratingRefusals(final Path root) {
+            return this.delegate.listFilesToleratingRefusals(root);
         }
 
         @Override
@@ -1100,14 +1100,14 @@ class ApplyEngineTest {
 
         @Override
         public Path copy(final Path source, final Path destDir, final CancellationSignal stop,
-                final TransferProgress watching) {
-            return this.delegate.copy(source, destDir, stop, watching);
+                final TransferProgress transferProgress) {
+            return this.delegate.copy(source, destDir, stop, transferProgress);
         }
 
         @Override
         public Path copyTo(final Path source, final Path destination, final CancellationSignal stop,
-                final TransferProgress watching) {
-            return this.delegate.copyTo(source, destination, stop, watching);
+                final TransferProgress transferProgress) {
+            return this.delegate.copyTo(source, destination, stop, transferProgress);
         }
 
         @Override
@@ -1126,8 +1126,8 @@ class ApplyEngineTest {
         }
 
         @Override
-        public boolean directoryIsThere(final Path path) {
-            return this.delegate.directoryIsThere(path);
+        public boolean directoryExists(final Path path) {
+            return this.delegate.directoryExists(path);
         }
 
         @Override

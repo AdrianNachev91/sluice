@@ -25,7 +25,7 @@ public final class RelativePaths {
      * @param relative {@link Path} the path below a root
      * @return {@link String} it written with forward slashes
      */
-    public static String slashed(final Path relative) {
+    public static String toForwardSlashes(final Path relative) {
         final List<String> parts = new ArrayList<>();
         relative.forEach(part -> parts.add(part.toString()));
         return String.join("/", parts);

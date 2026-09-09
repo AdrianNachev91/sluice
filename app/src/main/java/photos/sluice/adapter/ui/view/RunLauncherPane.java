@@ -161,7 +161,7 @@ final class RunLauncherPane {
         // What this says of a gapped month list runs to a short paragraph. The bold weight that
         // suits a single line under a field turns a paragraph into shouting.
         refusal.getStyleClass().add("settings-violation-detail");
-        SettingsRows.showWhileItSaysSomething(refusal);
+        SettingsRows.showWhileTextPresent(refusal);
         final Hyperlink refusalLocationLink = SettingsRows.locationLink("run-scope-refusal-link");
 
         final TextField figure = SelectableText.line();
@@ -177,7 +177,7 @@ final class RunLauncherPane {
         final var warningBox = new VBox(warning, repair);
         warningBox.setId("run-estimate-warning-box");
         warningBox.getStyleClass().addAll("warning-box", "run-estimate-warning");
-        SettingsRows.showWhileTheLineDoes(warningBox, warning);
+        SettingsRows.showWhileLineShows(warningBox, warning);
         final var estimate = new VBox(figure, disclaimer, warningBox);
         estimate.setId("run-estimate");
         estimate.getStyleClass().add("run-estimate");
@@ -196,7 +196,7 @@ final class RunLauncherPane {
 
         final TextArea message = SelectableText.prose();
         message.setId("run-message");
-        SettingsRows.showWhileItSaysSomething(message);
+        SettingsRows.showWhileTextPresent(message);
         final Hyperlink messageLocationLink = SettingsRows.locationLink("run-message-link");
 
         final var action = new VBox(scopeLabel, scopeField, hint,
@@ -223,7 +223,7 @@ final class RunLauncherPane {
         });
         presenter.setRecount(() -> recount(setup, controls));
 
-        PageHeader.heldToTheViewport(scroll, heading, modeRow, modeHint, action);
+        PageHeader.bindWidthToViewport(scroll, heading, modeRow, modeHint, action);
         final var launcher = new VBox(heading, modeRow, modeHint, scroll, action);
         launcher.setId("run-launcher");
         launcher.getStyleClass().add("run-launcher");
@@ -238,7 +238,7 @@ final class RunLauncherPane {
         // here would be overwritten.
         final var dashboard = new StackPane(launcher, progress.node(), result.node());
         final Runnable draw = () -> show(presenter, setup, controls, launcher, progress, result);
-        redraw.becomes(draw);
+        redraw.setDraw(draw);
         start.setOnAction(_ -> onStart(presenter, start, draw));
         importPhotos.setOnAction(_ -> onImportPressed(presenter, importPhotos, draw));
         repair.setOnAction(_ -> onRepairPressed(setup, repair, draw));
@@ -251,8 +251,8 @@ final class RunLauncherPane {
         presenter.setProgressRepaint(draw);
         controls.drawCounts(setup);
         draw.run();
-        countInTheBackground(setup, controls);
-        keepCountingWhileThisScreenIsUp(dashboard, presenter, setup, controls);
+        countInBackground(setup, controls);
+        recountWhileOnScreen(dashboard, presenter, setup, controls);
         return dashboard;
     }
 
@@ -276,10 +276,10 @@ final class RunLauncherPane {
      * @param setup {@link RunSetupPresenter} does the reading
      * @param controls {@link Controls} the controls to fill in once it lands
      */
-    private static void keepCountingWhileThisScreenIsUp(final Node dashboard,
-                                                        final RunLauncherPresenter presenter,
-                                                        final RunSetupPresenter setup,
-                                                        final Controls controls) {
+    private static void recountWhileOnScreen(final Node dashboard,
+                                             final RunLauncherPresenter presenter,
+                                             final RunSetupPresenter setup,
+                                             final Controls controls) {
         final var reading = new AtomicBoolean();
         final var poll = new Timeline(new KeyFrame(RECOUNT_INTERVAL, _ -> {
             // Only the launcher's own face reads these counts. The other two report themselves.
@@ -401,7 +401,7 @@ final class RunLauncherPane {
         if (wrong == null || !Dialogs.agreed(opensOver, wrong.repair().confirm())) {
             return;
         }
-        setup.startAFreshSpendRecord();
+        setup.startFreshSpendRecord();
         redraw.run();
     }
 
@@ -521,14 +521,14 @@ final class RunLauncherPane {
      * @param setup {@link RunSetupPresenter} does the reading
      * @param controls {@link Controls} the controls to fill in once it lands
      */
-    private static void countInTheBackground(final RunSetupPresenter setup, final Controls controls) {
+    private static void countInBackground(final RunSetupPresenter setup, final Controls controls) {
         AfterFirstFrame.run(() -> Thread.ofVirtual().start(() -> {
             setup.refreshCounts();
             Platform.runLater(() -> {
                 // The presenter outlives the screen, so a scope a run emptied is still in it when
                 // the reader arrives back here by any route. Dropped before the draw, so the field
                 // follows. On this thread because it writes the field a reader types into.
-                setup.forgetAScopeNothingIsLeftIn();
+                setup.clearRefusedScope();
                 controls.drawCounts(setup);
             });
         }));
@@ -631,7 +631,7 @@ final class RunLauncherPane {
                     this.fillFrom(setup.view());
                 });
                 row.add(button);
-                if (mode.mode() == link.after()) {
+                if (mode.mode() == link.drawnAfterMode()) {
                     row.add(flowArrow());
                     row.add(rowLink(link, openReview));
                 }
@@ -720,7 +720,7 @@ final class RunLauncherPane {
             }
             this.undatedRow.getStyleClass().add(UNDATED_FILLED);
             final ToggleButton row = this.scopeRow(undated.id(), "run-year-row",
-                    rowInside("run-year-label", undated.label(), undated.counts(), null, null),
+                    rowContents("run-year-label", undated.label(), undated.counts(), null, null),
                     undated.chosen(), setup::pressUndated, setup);
             this.undatedRow.getChildren().setAll(row);
         }
@@ -740,15 +740,15 @@ final class RunLauncherPane {
             this.drawModes(view.modes());
             this.modeHint.setText(view.modeHint());
             this.inboxHeadline.setText(view.inbox().headline());
-            this.inboxDetail.setText(SettingsRows.orNothing(view.inbox().detail()));
+            this.inboxDetail.setText(SettingsRows.textOrEmpty(view.inbox().detail()));
             this.importPhotos.setText(view.inbox().importLabel());
             this.importHint.setText(view.inbox().importHint());
             this.importPhotos.setDisable(!view.inbox().canImport());
             this.selectYear(view.years(), view.scopeNamesTheRun());
             this.selectUndated(view.undated());
             this.scopeField.setDisable(!view.scopeNamesTheRun());
-            this.nothingStaged.setText(SettingsRows.orNothing(view.nothingStagedLine()));
-            this.scopeLegend.setText(SettingsRows.orNothing(view.scopeLegend()));
+            this.nothingStaged.setText(SettingsRows.textOrEmpty(view.nothingStagedLine()));
+            this.scopeLegend.setText(SettingsRows.textOrEmpty(view.scopeLegend()));
             this.openRuns.setText(view.scopeLegend() == null ? "" : Location.RUNS.label());
             this.scopeLabel.setText(view.scopeLabel());
             // Only when it differs. Setting it fires the listener that got here, and an unguarded
@@ -757,7 +757,7 @@ final class RunLauncherPane {
                 this.scopeField.setText(view.scopeText());
             }
             this.hint.setText(view.scopeHint());
-            this.refusal.setText(SettingsRows.orNothing(view.scopeRefusal()));
+            this.refusal.setText(SettingsRows.textOrEmpty(view.scopeRefusal()));
             SettingsRows.pointAt(this.refusalLocationLink, view.scopeRefusalLocation(), this.navigation);
             this.drawCost(view.cost());
             this.start.setText(view.startLabel());
@@ -816,7 +816,7 @@ final class RunLauncherPane {
         private Node yearRow(final YearChoice year, final ToggleGroup group,
                              final RunSetupPresenter setup) {
             final ToggleButton row = this.scopeRow(year.id(), "run-year-row",
-                    rowInside("run-year-label", year.label(), year.counts(), null,
+                    rowContents("run-year-label", year.label(), year.counts(), null,
                             unfinishedMark(year.hasUnfinishedSift())),
                     year.chosen(), () -> setup.pressYear(year.year()), setup);
             row.setToggleGroup(group);
@@ -830,7 +830,7 @@ final class RunLauncherPane {
                     .toArray(Node[]::new));
             months.setId(monthsId(year.year()));
             months.getStyleClass().add("run-month-rows");
-            croppable(months);
+            clipToBounds(months);
             // Built in the state it belongs in rather than closed and then opened. A recount
             // rebuilds these rows, and a year the user has open would otherwise shut and reopen
             // itself each time one lands.
@@ -851,7 +851,7 @@ final class RunLauncherPane {
          *
          * @param months {@link VBox} a year's month rows
          */
-        private static void croppable(final VBox months) {
+        private static void clipToBounds(final VBox months) {
             months.setMinHeight(0);
             final var crop = new Rectangle();
             crop.widthProperty().bind(months.widthProperty());
@@ -913,14 +913,14 @@ final class RunLauncherPane {
             }
             final List<KeyValue> frames = new ArrayList<>();
             turns.forEach(turn -> {
-                frames.add(new KeyValue(turn.months().maxHeightProperty(), turn.open(),
+                frames.add(new KeyValue(turn.months().maxHeightProperty(), turn.endHeight(),
                         Interpolator.EASE_BOTH));
                 frames.add(new KeyValue(turn.months().opacityProperty(), turn.shown() ? 1 : 0,
                         Interpolator.EASE_BOTH));
             });
-            final KeyValue following = this.following(turns);
-            if (following != null) {
-                frames.add(following);
+            final KeyValue scrollFollowFrame = this.following(turns);
+            if (scrollFollowFrame != null) {
+                frames.add(scrollFollowFrame);
             }
             final var travel = new Timeline(new KeyFrame(FOLD_TRAVEL, frames.toArray(new KeyValue[0])));
             travel.setOnFinished(_ -> {
@@ -928,7 +928,7 @@ final class RunLauncherPane {
                     this.folding.remove(turn.months());
                     settle(turn.months(), turn.shown());
                 });
-                Platform.runLater(() -> this.arrive(turns));
+                Platform.runLater(() -> this.bringOpenedMonthsIntoView(turns));
             });
             turns.forEach(turn -> this.folding.put(turn.months(), travel));
             travel.play();
@@ -957,10 +957,10 @@ final class RunLauncherPane {
             // all in it, so an unstyled measurement is short and the fold crops the last row to it.
             months.applyCss();
             months.setVisible(true);
-            final double open = year.monthsShown()
+            final double endHeight = year.monthsShown()
                     ? months.prefHeight(months.getWidth() > 0 ? months.getWidth() : -1)
                     : 0;
-            return new Turn(months, year.monthsShown(), open, open - months.getHeight());
+            return new Turn(months, year.monthsShown(), endHeight, endHeight - months.getHeight());
         }
 
         /**
@@ -1017,7 +1017,7 @@ final class RunLauncherPane {
             if (after <= 0) {
                 return before > 0 ? new KeyValue(this.scroll.vvalueProperty(), 0, Interpolator.EASE_BOTH) : null;
             }
-            final double wanted = Math.max(top, this.revealing(turns, viewport, top));
+            final double wanted = Math.max(top, this.scrollTopToReveal(turns, viewport, top));
             return new KeyValue(this.scroll.vvalueProperty(),
                     Math.clamp(wanted, 0, after) / after * this.scroll.getVmax(), Interpolator.EASE_BOTH);
         }
@@ -1043,7 +1043,7 @@ final class RunLauncherPane {
          *
          * @param turns a {@link List} of {@link Turn} everything this fill moved, in row order
          */
-        private void arrive(final List<Turn> turns) {
+        private void bringOpenedMonthsIntoView(final List<Turn> turns) {
             final Optional<Turn> opened = turns.stream().filter(Turn::shown).findFirst();
             if (opened.isEmpty() || !(this.scroll.getContent() instanceof final Parent laidOut)
                     || !this.unfolded.contains(opened.get().months())) {
@@ -1077,7 +1077,7 @@ final class RunLauncherPane {
          * @param top double where the pane sits now, in the page's own coordinates
          * @return double where it should sit, or {@code top} where nothing is opening
          */
-        private double revealing(final List<Turn> turns, final double viewport, final double top) {
+        private double scrollTopToReveal(final List<Turn> turns, final double viewport, final double top) {
             final Optional<Turn> opened = turns.stream().filter(Turn::shown).findFirst();
             if (opened.isEmpty()) {
                 return top;
@@ -1121,7 +1121,7 @@ final class RunLauncherPane {
                               final RunSetupPresenter setup) {
             final var box = new Region();
             box.getStyleClass().add("run-month-box");
-            final var inside = rowInside("run-month-label", month.label(), month.counts(), box,
+            final var inside = rowContents("run-month-label", month.label(), month.counts(), box,
                     unfinishedMark(month.unfinishedSift()));
             return this.scopeRow(month.id(), "run-month-row", inside, month.chosen(),
                     () -> setup.pressMonth(year.year(), month.month()), setup);
@@ -1155,8 +1155,8 @@ final class RunLauncherPane {
          * @param mark {@link Node} drawn at the end, or null where the row carries none
          * @return {@link HBox} the row's contents
          */
-        private static HBox rowInside(final String labelClass, final String name, final String counts,
-                                      final @Nullable Node leading, final @Nullable Node mark) {
+        private static HBox rowContents(final String labelClass, final String name, final String counts,
+                                        final @Nullable Node leading, final @Nullable Node mark) {
             final var label = new Label(name);
             label.getStyleClass().add(labelClass);
             final var held = new Label(counts);
@@ -1235,7 +1235,7 @@ final class RunLauncherPane {
          *
          * @param draw {@link Runnable} the real thing
          */
-        private void becomes(final Runnable draw) {
+        private void setDraw(final Runnable draw) {
             this.draw = draw;
         }
 
@@ -1250,9 +1250,9 @@ final class RunLauncherPane {
      *
      * @param months {@link VBox} the rows being moved
      * @param shown boolean where they are going
-     * @param open double the height they end at, zero when closing
+     * @param endHeight double the height they end at, zero when closing
      * @param growth double how much taller the page gets because of them, negative when closing
      */
-    private record Turn(VBox months, boolean shown, double open, double growth) {
+    private record Turn(VBox months, boolean shown, double endHeight, double growth) {
     }
 }

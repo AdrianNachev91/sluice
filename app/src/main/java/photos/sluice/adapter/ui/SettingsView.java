@@ -55,11 +55,11 @@ public record SettingsView(FolderField workingRoot, FolderField libraryRoot, Fol
      * What a number field accepts, decided where the other limits are rather than by whichever
      * control happens to draw it.
      *
-     * @param least int the smallest value this app accepts
-     * @param most int the largest
+     * @param min int the smallest value this app accepts
+     * @param max int the largest
      * @param step int how far one press of the arrows moves it
      */
-    public record NumberRange(int least, int most, int step) {
+    public record NumberRange(int min, int max, int step) {
     }
 
     /**

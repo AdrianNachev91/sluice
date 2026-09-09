@@ -33,6 +33,6 @@ public interface ProgressCallback {
      * @param total int total units in this run
      * @param partDone double how much of the current unit is done, from 0 to 1
      */
-    default void partOf(final int current, final int total, final double partDone) {
+    default void partialTick(final int current, final int total, final double partDone) {
     }
 }

@@ -97,7 +97,7 @@ public record CullCategory(String name, String description, List<String> example
      *
      * @return int the character ceiling
      */
-    public static int maxDescription() {
+    public static int maxDescriptionLength() {
         return MAX_DESCRIPTION;
     }
 

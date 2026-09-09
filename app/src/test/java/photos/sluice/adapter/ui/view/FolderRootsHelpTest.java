@@ -44,9 +44,9 @@ class FolderRootsHelpTest {
 
     @Test
     void everyRootIsNamedBySomeRule() throws Exception {
-        final String said = String.join(" ", rules()).toLowerCase(Locale.ROOT);
+        final String helpText = String.join(" ", rules()).toLowerCase(Locale.ROOT);
 
-        assertThat(said).contains("working root").contains("library").contains("inbox");
+        assertThat(helpText).contains("working root").contains("library").contains("inbox");
     }
 
     private static List<String> rules() throws Exception {

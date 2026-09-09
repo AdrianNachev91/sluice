@@ -78,7 +78,7 @@ public final class ReasonNotes {
      * @param fileName {@link String} a file's own name, with no folder above it
      * @return boolean true where this app wrote it
      */
-    public static boolean isANote(final String fileName) {
+    public static boolean isReasonNote(final String fileName) {
         if (FILE_NAME.equals(fileName)) {
             return true;
         }
@@ -146,7 +146,7 @@ public final class ReasonNotes {
         for (final String line : lines) {
             final Matcher dated = DATED_LINE.matcher(line);
             if (dated.find()) {
-                final LocalDate taken = on(dated.group(2), dated.group(3), dated.group(4));
+                final LocalDate taken = dateOf(dated.group(2), dated.group(3), dated.group(4));
                 if (taken != null) {
                     dates.put(dated.group(1), taken);
                 }
@@ -210,7 +210,7 @@ public final class ReasonNotes {
      * @param day {@link String} two digits, or null where the line names none
      * @return {@link LocalDate} that date, or null where those digits name no real one
      */
-    private static @Nullable LocalDate on(final String year, final String month, final @Nullable String day) {
+    private static @Nullable LocalDate dateOf(final String year, final String month, final @Nullable String day) {
         try {
             return LocalDate.of(Integer.parseInt(year), Integer.parseInt(month),
                     day == null ? 1 : Integer.parseInt(day));

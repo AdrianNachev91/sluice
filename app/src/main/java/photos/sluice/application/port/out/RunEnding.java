@@ -61,7 +61,7 @@ public enum RunEnding {
      *
      * @return boolean true where a fresh run of that scope could start afterwards
      */
-    public boolean freedTheScope() {
+    public boolean freesScope() {
         return this == APPLIED || this == DISCARDED;
     }
 }

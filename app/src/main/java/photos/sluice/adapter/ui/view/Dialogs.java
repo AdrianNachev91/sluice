@@ -43,9 +43,9 @@ final class Dialogs {
     // choice then ends up wider than the room the skin reserved, and ellipsizes. A floor on the
     // pane settles it: wide enough for the choices at their real widths, and still well inside the
     // window the dialog covers.
-    private static final double PANE_FLOOR = 650;
+    private static final double MIN_PANE_WIDTH = 650;
 
-    // Where the body text folds. Inside PANE_FLOOR by the pane's own padding.
+    // Where the body text folds. Inside MIN_PANE_WIDTH by the pane's own padding.
     private static final double BODY_WIDTH = 610;
 
     /**
@@ -130,7 +130,7 @@ final class Dialogs {
     static Optional<Choice> ask(final Node opensOver, final String heading, final String detail,
                                 final Choice... choices) {
         final Map<ButtonType, Choice> buttons = buttonsFor(choices);
-        final Alert alert = asked(heading, detail, buttons);
+        final Alert alert = questionDialog(heading, detail, buttons);
         openOver(alert, opensOver);
         return alert.showAndWait().map(buttons::get).filter(taken -> taken.role() == Role.GO_AHEAD);
     }
@@ -148,7 +148,7 @@ final class Dialogs {
     /**
      * The wait built and dressed, with nothing shown and no way out wired.
      *
-     * <p>Separate from showing it for the same reason as {@link #asked}: a drawn dialog is the only
+     * <p>Separate from showing it for the same reason as {@link #questionDialog}: a drawn dialog is the only
      * way anything can look at one.
      *
      * @param heading {@link String} what the dialog is about
@@ -156,7 +156,7 @@ final class Dialogs {
      * @param pressed {@link ButtonType} the one control, from {@link #givingUp}
      * @return {@link Alert} ready to show
      */
-    static Alert waited(final String heading, final String message, final ButtonType pressed) {
+    static Alert waitDialog(final String heading, final String message, final ButtonType pressed) {
         final var alert = new Alert(AlertType.CONFIRMATION, message, pressed);
         alert.setHeaderText(heading);
         dress(alert);
@@ -175,8 +175,8 @@ final class Dialogs {
      * @param buttons a {@link Map} of {@link ButtonType} to {@link Choice} the ways out
      * @return {@link Alert} ready to show
      */
-    static Alert asked(final String heading, final String question,
-                       final Map<ButtonType, Choice> buttons) {
+    static Alert questionDialog(final String heading, final String question,
+                                final Map<ButtonType, Choice> buttons) {
         final var alert = new Alert(AlertType.CONFIRMATION, question,
                 buttons.keySet().toArray(new ButtonType[0]));
         alert.setHeaderText(heading);
@@ -213,7 +213,7 @@ final class Dialogs {
     static Waiting waiting(final Window owner, final String heading, final String message,
                            final String giveUp, final Runnable onGiveUp) {
         final ButtonType pressed = givingUp(giveUp);
-        final Alert alert = waited(heading, message, pressed);
+        final Alert alert = waitDialog(heading, message, pressed);
         alert.initOwner(owner);
         // Cleared by the handle below, so this app's own close is the one that goes through.
         // Dialog.close() raises the same event Escape does, and a blanket refusal refuses both.
@@ -380,7 +380,7 @@ final class Dialogs {
                 button.setMinWidth(Region.USE_PREF_SIZE);
             }
         }
-        alert.getDialogPane().setMinWidth(PANE_FLOOR);
+        alert.getDialogPane().setMinWidth(MIN_PANE_WIDTH);
         // The pane's own content label wraps or fails to by sizing arithmetic that has shifted
         // under every width change above. A label of our own with the bound stated makes the wrap
         // a fact rather than an outcome. The bound goes on the PREFERRED width, because that is

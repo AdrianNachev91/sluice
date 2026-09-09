@@ -36,13 +36,13 @@ public interface SettingsUseCase {
      * @param property {@link String} the property name, as the app spells it in its own config file
      * @return an {@link Optional} of {@link SettingOverride} what supplies it from above
      */
-    Optional<SettingOverride> overriddenAboveTheConfigFile(String property);
+    Optional<SettingOverride> higherPrecedenceOverride(String property);
 
     /**
      * Persists the given settings and puts them in force.
      *
      * @param settings {@link Settings} the settings to save
-     * @throws LibraryRootMoveNeedsAResolutionException if these settings move a configured library
+     * @throws LibraryRootResolutionRequiredException if these settings move a configured library
      *         root. That goes through {@link LibraryRootUseCase#moveLibraryRoot}, which is where a
      *         caller says what becomes of the hash index. Setting one for the first time saves here
      * @throws PathsMisconfiguredException if these settings move a folder root and any root they set

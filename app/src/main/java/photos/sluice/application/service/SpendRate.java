@@ -56,7 +56,7 @@ record SpendRate(double callsPerMontage, long outputTokensPerMontage, boolean fr
     // expensive, and leaving it in would raise the estimate. A multiple over a raised estimate stops
     // firing, so one bad line would disarm the guard this rate feeds. The check is against a run's
     // average, since a run records totals and never its individual montages.
-    private static final long ABSURD_OUTPUT_TOKENS_PER_MONTAGE = MAX_CALLS_PER_MONTAGE * MAX_RESPONSE_TOKENS;
+    private static final long MAX_CREDIBLE_OUTPUT_TOKENS_PER_MONTAGE = MAX_CALLS_PER_MONTAGE * MAX_RESPONSE_TOKENS;
 
     // The two endings where the vision pass ran to completion, so what the run consumed is what that
     // much work costs. Every other ending is a partial run, and a partial run's average is not a
@@ -124,6 +124,6 @@ record SpendRate(double callsPerMontage, long outputTokensPerMontage, boolean fr
         final long montages = entry.montagesCulled();
         return entry.apiCalls() >= montages
                 && entry.apiCalls() <= montages * MAX_CALLS_PER_MONTAGE
-                && entry.outputTokens() <= montages * ABSURD_OUTPUT_TOKENS_PER_MONTAGE;
+                && entry.outputTokens() <= montages * MAX_CREDIBLE_OUTPUT_TOKENS_PER_MONTAGE;
     }
 }

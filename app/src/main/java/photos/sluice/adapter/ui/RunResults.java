@@ -149,15 +149,15 @@ final class RunResults {
      * What the card says about a job that threw.
      *
      * @param ran {@link RunMode} the mode the job was started in
-     * @param said {@link RunRefusals.Refusal} the failure in plain words, and any screen it can be
+     * @param refusal {@link RunRefusals.Refusal} the failure in plain words, and any screen it can be
      *         acted on from
      * @return {@link RunResultView} the card
      */
-    static RunResultView failedResult(final RunMode ran, final RunRefusals.Refusal said) {
+    static RunResultView failedResult(final RunMode ran, final RunRefusals.Refusal refusal) {
         // Not "stopped", which heads a run the reader stopped on purpose. A reader cannot be left
         // reading one word for both, with only the colour behind it telling them which happened.
-        return new RunResultView(ran.verb() + " could not finish.", Tone.FAILED, said.sentence(),
-                List.of(), null, null, DONE, said.location());
+        return new RunResultView(ran.verb() + " could not finish.", Tone.FAILED, refusal.sentence(),
+                List.of(), null, null, DONE, refusal.location());
     }
 
     /**
@@ -313,7 +313,7 @@ final class RunResults {
             return null;
         }
         if (sorted.processed() > 0) {
-            return "Nothing ended up in Sorted, so there is nothing to sift yet. " + becauseOf(sorted);
+            return "Nothing ended up in Sorted, so there is nothing to sift yet. " + reasonNothingReachedSorted(sorted);
         }
         return narrowedTo == null
                 ? "Nothing in your Inbox was ready to sort."
@@ -332,7 +332,7 @@ final class RunResults {
      * @param sorted {@link SortSummary} what the sort did
      * @return {@link String} the reason, or a pointer to the rows where several share it
      */
-    private static String becauseOf(final SortSummary sorted) {
+    private static String reasonNothingReachedSorted(final SortSummary sorted) {
         final int all = sorted.processed();
         if (sorted.lowRes() == all) {
             return "Their file size or their resolution is under what a sift looks at, so they are "
@@ -374,7 +374,7 @@ final class RunResults {
      * @return a {@link List} of {@link Count} the rows
      */
     private static List<Count> sortCounts(final SortSummary sorted) {
-        final SortSummary.Guessed guessed = sorted.guessed();
+        final SortSummary.LowConfidenceCounts guessed = sorted.lowConfidenceCounts();
         final List<Count> rows = new ArrayList<>();
         rows.add(new Count("result-photos-sorted", PHOTOS_SORTED, RunWords.grouped(sorted.photosSorted())));
         addGuessed(rows, "result-photos-sorted-guessed", guessed.photosSorted());
@@ -519,13 +519,13 @@ final class RunResults {
         final List<Count> rows = new ArrayList<>();
         // Drawn at zero as well, since an import that brought nothing in has to say so rather than
         // showing an empty card.
-        rows.add(new Count("result-imported", "Imported", RunWords.grouped(brought.broughtIn())));
+        rows.add(new Count("result-imported", "Imported", RunWords.grouped(brought.imported())));
         addWhenAny(rows, "result-import-already", "Skipped: already in your Inbox",
-                brought.alreadyThere());
-        addWhenAny(rows, "result-import-unreadable", "Could not be read", brought.couldNotBeRead());
+                brought.alreadyInInbox());
+        addWhenAny(rows, "result-import-unreadable", "Could not be read", brought.unreadableFiles());
         addWhenAny(rows, "result-import-unverified", "Arrived broken", brought.unverified());
         addWhenAny(rows, "result-import-unopenable", "Folders could not be opened",
-                brought.unreadablePlaces());
+                brought.unreadableFolders());
         return new RunResultView(
                 brought.cancelled() ? ran.verb() + " stopped." : importHeading(ran, brought),
                 brought.cancelled() ? Tone.UNFINISHED : Tone.FINISHED,
@@ -547,7 +547,7 @@ final class RunResults {
      * @return {@link String} the heading
      */
     private static String importHeading(final RunMode ran, final ImportSummary brought) {
-        final int leftBehind = brought.couldNotBeRead() + brought.unverified();
+        final int leftBehind = brought.unreadableFiles() + brought.unverified();
         if (leftBehind == 0) {
             return finishedHeading(ran);
         }

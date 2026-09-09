@@ -31,27 +31,27 @@ public class ConsoleProgressPort implements ProgressPort {
 
     // Written by the command thread before a job starts, and read by the job's own thread as it
     // reports. Volatile is what gives those two the happens-before.
-    private volatile boolean quiet;
+    private volatile boolean setQuiet;
 
-    // Set by phaseCutShort and read by the phaseFinished that follows it. Both arrive from the job's
+    // Set by phaseStopped and read by the phaseFinished that follows it. Both arrive from the job's
     // own thread, in that order, so this one is not shared across threads.
     private boolean cutShort;
 
     // Two threads write this stream: the job reporting its progress, and the cancel reader saying
     // it heard a caller. Each write is several calls, so without one lock a note lands partway
     // along a row of counts. It also guards the width below, which both of them read and set.
-    private final Object writing = new Object();
+    private final Object writeLock = new Object();
 
     // How wide the redrawn line was last time. A shorter line drawn over a longer one leaves the
     // tail of the longer one behind, so what is not overwritten is blanked.
-    private int drawn;
+    private int drawnWidth;
 
     /**
      * Creates the reporter over the process's own error stream, drawing whichever shape this
      * process is attached to.
      */
     public ConsoleProgressPort() {
-        this(System.err, drawnForAPerson());
+        this(System.err, isTerminalAttached());
     }
 
     /**
@@ -61,7 +61,7 @@ public class ConsoleProgressPort implements ProgressPort {
      * @param redrawn boolean whether one line is redrawn in place
      */
     ConsoleProgressPort(final PrintStream stream, final boolean redrawn) {
-        this(stream, redrawn, new ProgressPace(redrawn ? ProgressPace.REDRAWN : ProgressPace.PLAIN));
+        this(stream, redrawn, new ProgressPace(redrawn ? ProgressPace.REDRAW_INTERVAL : ProgressPace.PLAIN_LINE_INTERVAL));
     }
 
     /**
@@ -83,7 +83,7 @@ public class ConsoleProgressPort implements ProgressPort {
      * @param quiet boolean true to report nothing at all
      */
     public void quiet(final boolean quiet) {
-        this.quiet = quiet;
+        this.setQuiet = quiet;
     }
 
     /**
@@ -91,7 +91,7 @@ public class ConsoleProgressPort implements ProgressPort {
      *
      * @return boolean true when progress is being redrawn on a terminal
      */
-    public boolean watched() {
+    public boolean isTerminal() {
         return this.redrawn;
     }
 
@@ -107,7 +107,7 @@ public class ConsoleProgressPort implements ProgressPort {
      * @param note {@link String} the line
      */
     public void note(final String note) {
-        synchronized (this.writing) {
+        synchronized (this.writeLock) {
             this.endAnyOpenRow();
             this.stream.println(note);
             this.stream.flush();
@@ -122,7 +122,7 @@ public class ConsoleProgressPort implements ProgressPort {
     @Override
     public void phaseStarted(final String phase) {
         this.pace.phaseStarted();
-        if (this.quiet) {
+        if (this.setQuiet) {
             return;
         }
         this.write(phase);
@@ -137,7 +137,7 @@ public class ConsoleProgressPort implements ProgressPort {
      */
     @Override
     public void tick(final String phase, final int current, final int total) {
-        if (this.quiet || !this.pace.due(current, total)) {
+        if (this.setQuiet || !this.pace.due(current, total)) {
             return;
         }
         this.write(phase + " " + grouped(current) + "/" + grouped(total));
@@ -149,7 +149,7 @@ public class ConsoleProgressPort implements ProgressPort {
      * @param phase {@link String} the phase name
      */
     @Override
-    public void phaseCutShort(final String phase) {
+    public void phaseStopped(final String phase) {
         this.cutShort = true;
     }
 
@@ -168,10 +168,10 @@ public class ConsoleProgressPort implements ProgressPort {
     public void phaseFinished(final String phase) {
         final boolean gaveUp = this.cutShort;
         this.cutShort = false;
-        if (this.quiet) {
+        if (this.setQuiet) {
             return;
         }
-        synchronized (this.writing) {
+        synchronized (this.writeLock) {
             if (this.redrawn) {
                 this.endAnyOpenRow();
             } else if (!gaveUp) {
@@ -186,11 +186,11 @@ public class ConsoleProgressPort implements ProgressPort {
      * @param line {@link String} what it says
      */
     private void write(final String line) {
-        synchronized (this.writing) {
+        synchronized (this.writeLock) {
             if (this.redrawn) {
-                this.stream.print("\r" + line + " ".repeat(Math.max(0, this.drawn - line.length())));
+                this.stream.print("\r" + line + " ".repeat(Math.max(0, this.drawnWidth - line.length())));
                 this.stream.flush();
-                this.drawn = line.length();
+                this.drawnWidth = line.length();
             } else {
                 this.stream.println(line);
             }
@@ -203,9 +203,9 @@ public class ConsoleProgressPort implements ProgressPort {
      * @implNote the caller holds the write lock
      */
     private void endAnyOpenRow() {
-        if (this.drawn > 0) {
+        if (this.drawnWidth > 0) {
             this.stream.println();
-            this.drawn = 0;
+            this.drawnWidth = 0;
         }
     }
 
@@ -218,7 +218,7 @@ public class ConsoleProgressPort implements ProgressPort {
      *
      * @return boolean true when progress should be redrawn in place
      */
-    private static boolean drawnForAPerson() {
+    private static boolean isTerminalAttached() {
         final Console console = System.console();
         return console != null && console.isTerminal();
     }

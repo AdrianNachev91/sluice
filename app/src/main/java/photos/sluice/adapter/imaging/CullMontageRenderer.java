@@ -290,7 +290,7 @@ public class CullMontageRenderer implements MontageRenderer {
             return;
         }
         try (final Stream<Path> walk = Files.walk(prepDir)) {
-            walk.sorted(Comparator.reverseOrder()).forEach(CullMontageRenderer::deleteQuietly);
+            walk.sorted(Comparator.reverseOrder()).forEach(CullMontageRenderer::deleteUnchecked);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to clear stale prep dir " + prepDir, e);
         }
@@ -301,7 +301,7 @@ public class CullMontageRenderer implements MontageRenderer {
      *
      * @param path {@link Path} the file to delete
      */
-    private static void deleteQuietly(final Path path) {
+    private static void deleteUnchecked(final Path path) {
         try {
             Files.delete(path);
         } catch (final IOException e) {

@@ -78,7 +78,7 @@ public class FirstRunPresenter {
      *
      * @return {@link String} the refusal
      */
-    public String libraryRootCannotMoveYet() {
+    public String libraryRootMoveRefusal() {
         return "Your Library folder cannot be changed until all three folders are chosen, so nothing "
                 + "was saved. Choose the ones still needed and save those first. You can change your "
                 + "Library folder in Settings afterwards.";

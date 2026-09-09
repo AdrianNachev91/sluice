@@ -71,7 +71,7 @@ public record Refusal(RefusalKind kind, String sentence, SequencedMap<String, Ob
      * @param value {@link String} what the caller typed
      * @return {@link String} the value, or what to call it where there is nothing to show
      */
-    static String shown(final String value) {
+    static String shownValue(final String value) {
         return value.isBlank() ? "an empty value" : value;
     }
 

@@ -87,9 +87,9 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
         // nothing. Copying a library first and refusing afterwards is the failure this order exists
         // to rule out.
         this.rootsGuard.requireUsable();
-        requireItNamesAFolder(newLibraryRoot);
+        requirePathIsFolder(newLibraryRoot);
         final Path movingTo = newLibraryRoot.toAbsolutePath().normalize();
-        this.requireItIsActuallyMoving(movingTo);
+        this.requireDifferentLibraryRoot(movingTo);
         this.settings.requireLibraryRootIsUsable(movingTo);
         this.requireEveryRunHasFinished();
         final Path movingFrom = this.paths.library();
@@ -160,7 +160,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
         } catch (final RuntimeException e) {
             throw thereWasOne ? withTheIndexLocation(e, filedAt) : e;
         }
-        return new LibraryRootMoveOutcome.MovedWithAFreshIndex(thereWasOne ? filedAt : null);
+        return new LibraryRootMoveOutcome.MovedWithFreshIndex(thereWasOne ? filedAt : null);
     }
 
     /**
@@ -189,7 +189,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
      * @param newLibraryRoot {@link Path} the folder the library would move to, as handed over
      * @throws IllegalArgumentException when the path names nothing
      */
-    private static void requireItNamesAFolder(final Path newLibraryRoot) {
+    private static void requirePathIsFolder(final Path newLibraryRoot) {
         if (newLibraryRoot.toString().isBlank()) {
             throw new IllegalArgumentException("A library-root move has to name the folder it is moving to");
         }
@@ -205,7 +205,7 @@ public class LibraryRootMoveService implements LibraryRootUseCase {
      * @param movingTo {@link Path} the folder the library would move to, already resolved
      * @throws IllegalArgumentException when the library is already there
      */
-    private void requireItIsActuallyMoving(final Path movingTo) {
+    private void requireDifferentLibraryRoot(final Path movingTo) {
         final String stayingAt = this.settings.settings().paths().libraryRoot();
         if (stayingAt != null && !stayingAt.isBlank()
                 && movingTo.equals(Path.of(stayingAt).toAbsolutePath().normalize())) {

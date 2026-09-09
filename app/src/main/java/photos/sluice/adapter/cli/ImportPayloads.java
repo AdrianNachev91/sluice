@@ -39,7 +39,7 @@ public final class ImportPayloads {
      * @return {@link ImportedPayload} its machine-readable shape
      */
     public static ImportedPayload imported(final ImportSummary summary) {
-        return new ImportedPayload(summary.found(), summary.broughtIn(), summary.alreadyThere(),
-                summary.unverified(), summary.couldNotBeRead(), summary.unreadablePlaces(), summary.cancelled());
+        return new ImportedPayload(summary.found(), summary.imported(), summary.alreadyInInbox(),
+                summary.unverified(), summary.unreadableFiles(), summary.unreadableFolders(), summary.cancelled());
     }
 }

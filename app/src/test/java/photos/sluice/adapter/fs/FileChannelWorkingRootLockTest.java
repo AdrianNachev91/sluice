@@ -383,14 +383,14 @@ class FileChannelWorkingRootLockTest {
     // Reads the holder's output until it announces the claim, or until it dies without doing so.
     // On that second path it returns everything the holder said, which is what the caller reports.
     private static String awaitClaim(final BufferedReader output) {
-        final var said = new StringBuilder();
+        final var lines = new StringBuilder();
         try {
             String line = output.readLine();
             while (line != null && !line.equals(WorkingRootHolder.CLAIMED)) {
-                said.append(line).append(System.lineSeparator());
+                lines.append(line).append(System.lineSeparator());
                 line = output.readLine();
             }
-            return line == null ? said.toString() : line;
+            return line == null ? lines.toString() : line;
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
         }

@@ -121,7 +121,7 @@ public class ApplyEngine {
     public ApplyReport apply(final Path prepDirPath, final ApplyOptions options, final ProgressCallback progress) throws ApplyException {
         return switch (this.apply(prepDirPath, options, progress, CancellationSignal.NEVER)) {
             case ApplyEnding.Finished(final ApplyReport report) -> report;
-            case ApplyEnding.StoppedPartWay _ ->
+            case ApplyEnding.StoppedMidRun _ ->
                     throw new IllegalStateException("an uncancellable apply stopped part way");
         };
     }
@@ -255,7 +255,7 @@ public class ApplyEngine {
     private static ApplyEnding stoppedPartWay(final PrepDir prepDir, final ApplyOutcome outcome,
                                               final int unreviewableMoved,
                                               final ValidationReport validation) {
-        return new ApplyEnding.StoppedPartWay(new ApplyReport(prepDir.photos(), outcome.byCategory,
+        return new ApplyEnding.StoppedMidRun(new ApplyReport(prepDir.photos(), outcome.byCategory,
                 unreviewableMoved, outcome.nearDupGroupsChosen.size(), outcome.nearDupRejects,
                 validation.heals()));
     }
@@ -360,7 +360,7 @@ public class ApplyEngine {
         try {
             lines = this.mediaStore.readLines(destDir.resolve(ReasonNotes.FILE_NAME));
         } catch (final UncheckedIOException e) {
-            if (MediaReader.mustStayLoud(e)) {
+            if (MediaReader.mustBeRethrown(e)) {
                 throw e;
             }
             log.warn("The note in {} is not text, so {} is left out of it", destDir, landed.getFileName(), e);
@@ -402,17 +402,17 @@ public class ApplyEngine {
      * group id
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      * @param cancellation {@link CancellationSignal} asked while a file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this decision's file has got
+     * @param transferProgress {@link TransferProgress} told how far this decision's file has got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void apply(final Decision decision, final Path prepDirPath,
                        final Map<String, Path> nearDupAnchors, final ApplyOutcome outcome,
-                       final CancellationSignal cancellation, final TransferProgress watching) {
+                       final CancellationSignal cancellation, final TransferProgress transferProgress) {
         switch (decision) {
-            case final Classification c -> this.applyClassification(c, prepDirPath, outcome, cancellation, watching);
-            case final NearDupChosen c -> this.applyNearDupChosen(c, outcome, cancellation, watching);
+            case final Classification c -> this.applyClassification(c, prepDirPath, outcome, cancellation, transferProgress);
+            case final NearDupChosen c -> this.applyNearDupChosen(c, outcome, cancellation, transferProgress);
             case final NearDupReject reject -> this.applyNearDupReject(reject, nearDupAnchors.get(reject.group()),
-                    prepDirPath, outcome, cancellation, watching);
+                    prepDirPath, outcome, cancellation, transferProgress);
         }
     }
 
@@ -429,13 +429,13 @@ public class ApplyEngine {
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void applyClassification(final Classification c, final Path prepDirPath, final ApplyOutcome outcome,
-                                     final CancellationSignal cancellation, final TransferProgress watching) {
+                                     final CancellationSignal cancellation, final TransferProgress transferProgress) {
         final Path destDir = this.cullDestinations.destinationDirFor(c);
-        final MoveOutcome moved = this.recordThenMove(c.file(), destDir, prepDirPath, cancellation, watching);
+        final MoveOutcome moved = this.recordThenMove(c.file(), destDir, prepDirPath, cancellation, transferProgress);
         outcome.byCategory.merge(c.category(), 1, Integer::sum);
         if (c.category().equals(CullDestinations.FUNNY_CATEGORY)) {
             this.hashIndexPort.append(List.of(new IndexEntry(moved.hash(), moved.dest())));
@@ -516,18 +516,18 @@ public class ApplyEngine {
      * @param c {@link NearDupChosen} the chosen near-dup decision
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are copying
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the copy finished
      */
     private void applyNearDupChosen(final NearDupChosen c, final ApplyOutcome outcome,
-                                    final CancellationSignal cancellation, final TransferProgress watching) {
+                                    final CancellationSignal cancellation, final TransferProgress transferProgress) {
         // A copy rather than a move, so it takes the source check directly. Every other decision
         // type picks it up from recordThenMove.
         this.cullDestinations.requireUnderSorted(c.file());
         final Path dupDir = this.cullDestinations.duplicatesDir(c.file(), c.group());
         final Path dest = dupDir.resolve(c.file().getFileName().toString());
         if (!this.mediaStore.exists(dest)) {
-            this.mediaStore.copy(c.file(), dupDir, cancellation, watching);
+            this.mediaStore.copy(c.file(), dupDir, cancellation, transferProgress);
         }
         outcome.nearDupGroupsChosen.add(c.group());
     }
@@ -542,15 +542,15 @@ public class ApplyEngine {
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param outcome {@link ApplyOutcome} the run's accumulating outcome
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void applyNearDupReject(final NearDupReject reject, final Path groupAnchor, final Path prepDirPath,
                                     final ApplyOutcome outcome, final CancellationSignal cancellation,
-                                    final TransferProgress watching) {
+                                    final TransferProgress transferProgress) {
         final MoveOutcome moved = this.recordThenMove(reject.file(),
                 this.cullDestinations.duplicatesDir(groupAnchor, reject.group()), prepDirPath,
-                cancellation, watching);
+                cancellation, transferProgress);
         outcome.landedRejects.put(reject.file(), moved.dest());
         outcome.nearDupRejects++;
     }
@@ -567,18 +567,18 @@ public class ApplyEngine {
      * @param destDir {@link Path} the destination directory
      * @param prepDirPath {@link Path} the prep directory whose ledger records the move
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @return {@link MoveOutcome} the resolved destination and source hash
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private MoveOutcome recordThenMove(final Path source, final Path destDir, final Path prepDirPath,
                                        final CancellationSignal cancellation,
-                                       final TransferProgress watching) {
+                                       final TransferProgress transferProgress) {
         this.cullDestinations.requireUnderSorted(source);
         final Path dest = this.mediaStore.resolveDestination(source, destDir);
         final String hash = this.sha256Port.hash(source);
         this.moveLedger.recordMove(prepDirPath, source, dest, hash);
-        this.mediaStore.moveTo(source, dest, cancellation, watching);
+        this.mediaStore.moveTo(source, dest, cancellation, transferProgress);
         return new MoveOutcome(dest, hash);
     }
 

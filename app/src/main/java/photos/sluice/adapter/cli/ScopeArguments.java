@@ -58,7 +58,7 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
     /**
      * The smallest count {@code --oldest} can be asked for.
      */
-    private static final int FEWEST = 1;
+    private static final int MINIMUM_PHOTOS = 1;
 
     /**
      * The scope a sort run takes from these arguments.
@@ -210,11 +210,11 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      * @throws ScopeRefusedException when it is not four digits, or carries a leading zero
      */
     private static int yearOf(final String text, final @Nullable String alsoAccepted) {
-        if (text.length() != YEAR_DIGITS || !AsciiDigits.only(text) || text.startsWith(LEADING_ZERO)) {
-            final String said = "Not a year: " + Refusal.shown(text)
+        if (text.length() != YEAR_DIGITS || !AsciiDigits.isAllDigits(text) || text.startsWith(LEADING_ZERO)) {
+            final String sentence = "Not a year: " + Refusal.shownValue(text)
                     + ". A year is four digits with no leading zero, like 2019.";
             throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
-                    alsoAccepted == null ? said : Refusal.sentences(List.of(said, alsoAccepted)),
+                    alsoAccepted == null ? sentence : Refusal.sentences(List.of(sentence, alsoAccepted)),
                     Fields.of("parameter", "year", "value", text)));
         }
         return Integer.parseInt(text);
@@ -228,7 +228,7 @@ public record ScopeArguments(@Nullable String year, @Nullable String months, @Nu
      * @throws ScopeRefusedException when it is fewer than one photo
      */
     private static int count(final Integer asked) {
-        if (asked < FEWEST) {
+        if (asked < MINIMUM_PHOTOS) {
             throw new ScopeRefusedException(new Refusal(RefusalKind.SCOPE_VALUE_REFUSED,
                     "Not a photo count: " + asked + ". " + OLDEST + " needs at least 1.",
                     Fields.of("option", OLDEST, "value", asked)));

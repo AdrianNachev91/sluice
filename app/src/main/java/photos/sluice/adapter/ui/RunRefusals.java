@@ -53,7 +53,7 @@ final class RunRefusals {
      * @return {@link String} the sentence to show
      */
     static String refuseSentence(final Throwable failure) {
-        return said(failure).sentence();
+        return refusalOf(failure).sentence();
     }
 
     /**
@@ -63,7 +63,7 @@ final class RunRefusals {
      * @return {@link Message} the line, carrying any location the sentence earned
      */
     static Message refuseMessage(final Throwable failure) {
-        final Refusal refusal = said(failure);
+        final Refusal refusal = refusalOf(failure);
         return new Message(refusal.sentence(), true, refusal.location());
     }
 
@@ -81,7 +81,7 @@ final class RunRefusals {
      * @param failure {@link Throwable} what went wrong
      * @return {@link Refusal} the sentence, and the location where there is one
      */
-    static Refusal said(final Throwable failure) {
+    static Refusal refusalOf(final Throwable failure) {
         return switch (failure) {
             // These three are refusals this app writes for the person meeting them, and each says
             // what to do about itself.
@@ -268,10 +268,10 @@ final class RunRefusals {
      * @return {@link String} the sentence to show
      */
     private static String messageOf(final RuntimeException refusal) {
-        final String said = refusal.getMessage();
-        return said == null || said.isBlank()
+        final String message = refusal.getMessage();
+        return message == null || message.isBlank()
                 ? "That did not work, and it's not known why."
-                : said;
+                : message;
     }
 
     /**

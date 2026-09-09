@@ -403,7 +403,7 @@ and no file moves. No watcher ever arms for an automated provider, so nothing sp
 |---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
 | A valid shard for every montage eventually appears                  | The next poll tick's readiness check passes, `resume()` is submitted automatically, `Applied` follows |
 | The auto-resume's own apply then refuses                            | `Blocked`; the watcher already stopped after its one attempt and nothing re-arms it                   |
-| `JobRunner` is busy with an unrelated job when the run reads ready  | `attemptConsume` returns false; the watcher keeps polling and retries on the next tick                |
+| `JobRunner` is busy with an unrelated job when the run reads ready  | `tryConsume` returns false; the watcher keeps polling and retries on the next tick                    |
 | A shard is present but never parses                                 | The watcher polls on, submitting nothing; the card's tally stays short of total                       |
 | Every shard arrives but the batch is invalid                        | The watcher fires once; that resume lands `Blocked` with the findings, and nothing re-arms            |
 | A poll tick throws                                                  | Logged and treated as "not ready this tick"; the watch survives and retries                           |

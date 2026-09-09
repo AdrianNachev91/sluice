@@ -71,7 +71,7 @@ final class RunResultPane {
         final var warning = new VBox(warningHeadline, warningDetail);
         warning.setId("run-result-warning");
         warning.getStyleClass().add("warning-box");
-        showWhile(warning, warningHeadline);
+        showWhileTextPresent(warning, warningHeadline);
 
         // The question sits in the body with everything else the card has to say, and only its
         // button joins the row of actions. In that row the sentence reads as a label on Done.
@@ -79,7 +79,7 @@ final class RunResultPane {
         final var question = new VBox(actionQuestion);
         question.setId("run-result-resume");
         question.getStyleClass().add("run-result-resume");
-        showWhile(question, actionQuestion);
+        showWhileTextPresent(question, actionQuestion);
 
         // What a refused press on this card has to say. It belongs here rather than on the
         // launcher, which is behind the card and unread until the card is dismissed. Outside the
@@ -88,7 +88,7 @@ final class RunResultPane {
         // view. That reads as a press that did nothing.
         final TextArea message = SelectableText.prose();
         message.setId("run-result-message");
-        SettingsRows.showWhileItSaysSomething(message);
+        SettingsRows.showWhileTextPresent(message);
         final Hyperlink messageLocationLink = SettingsRows.locationLink("run-result-message-link");
 
         // Its weight is the arm's, set on every fill, so the class goes on there rather than here.
@@ -160,7 +160,7 @@ final class RunResultPane {
      * @param button {@link Button} the button to weigh
      * @param weight {@link String} the style class to carry
      */
-    private static void weigh(final Button button, final String weight) {
+    private static void setWeight(final Button button, final String weight) {
         button.getStyleClass().removeAll("run-start", "run-cancel");
         button.getStyleClass().add(weight);
     }
@@ -174,7 +174,7 @@ final class RunResultPane {
      * @param region {@link Region} the box
      * @param says {@link TextArea} the label that decides
      */
-    private static void showWhile(final Region region, final TextArea says) {
+    private static void showWhileTextPresent(final Region region, final TextArea says) {
         region.managedProperty().bind(region.visibleProperty());
         region.visibleProperty().bind(says.textProperty().isNotEmpty());
     }
@@ -214,8 +214,8 @@ final class RunResultPane {
                           final Runnable redraw) {
             final RunResultView view = showing.result();
             this.heading.setText(view.heading());
-            this.tone(view.tone());
-            this.detail.setText(SettingsRows.orNothing(view.detail()));
+            this.setTone(view.tone());
+            this.detail.setText(SettingsRows.textOrEmpty(view.detail()));
             this.drawCounts(view.counts());
             this.warningHeadline.setText(view.warning() == null ? "" : view.warning().headline());
             this.warningDetail.setText(view.warning() == null ? "" : view.warning().detail());
@@ -241,7 +241,7 @@ final class RunResultPane {
          *
          * @param tone {@link Tone} how the run ended
          */
-        private void tone(final Tone tone) {
+        private void setTone(final Tone tone) {
             this.page.pseudoClassStateChanged(FAILED, tone == Tone.FAILED);
             this.detailBox.getStyleClass().remove("warning-box");
             if (tone == Tone.FAILED) {
@@ -278,7 +278,7 @@ final class RunResultPane {
                 case null -> {
                     this.actionQuestion.setText("");
                     this.actionButton.setText("");
-                    weigh(this.actionButton, "run-cancel");
+                    setWeight(this.actionButton, "run-cancel");
                     this.actionButton.setOnAction(null);
                 }
                 // Quiet, because a run that stopped at its spending limit leaves the reader
@@ -287,7 +287,7 @@ final class RunResultPane {
                 case CardAction.ContinueRun(final String asked, final String label, final Path dir) -> {
                     this.actionQuestion.setText(asked);
                     this.actionButton.setText(label);
-                    weigh(this.actionButton, "run-cancel");
+                    setWeight(this.actionButton, "run-cancel");
                     this.actionButton.setOnAction(_ -> {
                         presenter.continueRun(dir);
                         redraw.run();
@@ -301,7 +301,7 @@ final class RunResultPane {
                 case final CardAction.SiftNow offer -> {
                     this.actionQuestion.setText("");
                     this.actionButton.setText(offer.label());
-                    weigh(this.actionButton, "run-start");
+                    setWeight(this.actionButton, "run-start");
                     this.actionButton.setOnAction(_ -> onSiftNow(presenter, this.actionButton, offer, redraw));
                 }
             }

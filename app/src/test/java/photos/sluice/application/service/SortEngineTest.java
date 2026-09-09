@@ -541,7 +541,7 @@ class SortEngineTest {
         }
 
         @Override
-        public void phaseCutShort(final String phase) {
+        public void phaseStopped(final String phase) {
             this.events.add("cut-short:" + phase);
         }
 
@@ -836,12 +836,12 @@ class SortEngineTest {
 
             @Override
             public Path move(final Path source, final Path destDir, final CancellationSignal stop,
-                    final TransferProgress watching) {
+                    final TransferProgress transferProgress) {
                 this.moves++;
                 if (this.moves == 2) {
                     throw new TransferAbandonedException(source);
                 }
-                return super.move(source, destDir, stop, watching);
+                return super.move(source, destDir, stop, transferProgress);
             }
         };
     }

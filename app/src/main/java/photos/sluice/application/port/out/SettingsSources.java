@@ -25,5 +25,5 @@ public interface SettingsSources {
      * @param property {@link String} the property name, as the app spells it in its own config file
      * @return an {@link Optional} of {@link SettingOverride} what supplies it from above
      */
-    Optional<SettingOverride> overriddenAboveTheConfigFile(String property);
+    Optional<SettingOverride> higherPrecedenceOverride(String property);
 }

@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import photos.sluice.application.port.in.JobInProgressException;
-import photos.sluice.application.port.in.LibraryRootMoveNeedsAResolutionException;
+import photos.sluice.application.port.in.LibraryRootResolutionRequiredException;
 import photos.sluice.application.port.in.PathValidationUseCase;
 import photos.sluice.application.port.in.PathsMisconfiguredException;
 import photos.sluice.application.port.in.SettingsUseCase;
@@ -107,8 +107,8 @@ public class SettingsService implements SettingsUseCase {
      * {@inheritDoc}
      */
     @Override
-    public Optional<SettingOverride> overriddenAboveTheConfigFile(final String property) {
-        return this.settingsSources.overriddenAboveTheConfigFile(property);
+    public Optional<SettingOverride> higherPrecedenceOverride(final String property) {
+        return this.settingsSources.higherPrecedenceOverride(property);
     }
 
     /**
@@ -123,7 +123,7 @@ public class SettingsService implements SettingsUseCase {
                 return;
             }
             this.requireUsableRoots(settings.paths());
-            this.requireTheLibraryRootStaysPut(settings, previous);
+            this.requireLibraryRootUnchanged(settings, previous);
             final boolean workingRootMoved = !this.sameFolder(workingRoot(settings), workingRoot(previous));
             if (!this.jobRunner.runIfIdle(() -> {
                 this.moveRoots(settings, previous);
@@ -212,14 +212,14 @@ public class SettingsService implements SettingsUseCase {
      *
      * @param settings {@link Settings} the settings this save would put in force
      * @param previous {@link Settings} the settings running now
-     * @throws LibraryRootMoveNeedsAResolutionException when a configured library root would change
+     * @throws LibraryRootResolutionRequiredException when a configured library root would change
      */
-    private void requireTheLibraryRootStaysPut(final Settings settings, final Settings previous) {
+    private void requireLibraryRootUnchanged(final Settings settings, final Settings previous) {
         final Optional<Path> was = libraryRoot(previous);
         if (was.isEmpty() || this.sameFolder(was, libraryRoot(settings))) {
             return;
         }
-        throw new LibraryRootMoveNeedsAResolutionException(was.get(),
+        throw new LibraryRootResolutionRequiredException(was.get(),
                 "Refusing a save that would move the library root away from " + was.get()
                         + " without a stated resolution for the hash index");
     }
@@ -260,7 +260,7 @@ public class SettingsService implements SettingsUseCase {
      */
     private void requireUsableRoots(final PathSettings paths) {
         final List<PathViolation> refusals = this.pathValidation.violations(paths).stream()
-                .filter(SettingsService::refuses)
+                .filter(SettingsService::blocksSave)
                 .toList();
         if (!refusals.isEmpty()) {
             throw new PathsMisconfiguredException(refusals);
@@ -276,7 +276,7 @@ public class SettingsService implements SettingsUseCase {
      * @param violation {@link PathViolation} the violation to judge
      * @return boolean true when a save carrying this violation is refused
      */
-    private static boolean refuses(final PathViolation violation) {
+    private static boolean blocksSave(final PathViolation violation) {
         return switch (violation) {
             case NotConfigured _ -> false;
             case NotAPath _, NotADirectory _, Unreadable _, Overlap _ -> true;
@@ -314,7 +314,7 @@ public class SettingsService implements SettingsUseCase {
         // Covers both shapes of a successful move. A root the settings moved off, and a root the
         // settings replaced with nothing at all. Left held, either would lock a folder this process
         // is no longer working in against every other Sluice for as long as it runs.
-        heldUntilNow.ifPresent(this::releaseOnceTheSaveHasLanded);
+        heldUntilNow.ifPresent(this::releaseAfterSave);
     }
 
     /**
@@ -392,7 +392,7 @@ public class SettingsService implements SettingsUseCase {
      *
      * @param root {@link Path} the working root the save moved off
      */
-    private void releaseOnceTheSaveHasLanded(final Path root) {
+    private void releaseAfterSave(final Path root) {
         try {
             this.workingRootLock.release(root);
         } catch (final RuntimeException e) {
@@ -418,10 +418,10 @@ public class SettingsService implements SettingsUseCase {
      * @return boolean true when both name the same folder, or neither is set
      */
     private boolean sameFolder(final Optional<Path> one, final Optional<Path> other) {
-        return this.followed(one).equals(this.followed(other));
+        return this.realPathOf(one).equals(this.realPathOf(other));
     }
 
-    private Optional<Path> followed(final Optional<Path> root) {
+    private Optional<Path> realPathOf(final Optional<Path> root) {
         return root.map(folder -> this.media.realDirectory(folder).orElse(folder));
     }
 

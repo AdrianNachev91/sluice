@@ -74,7 +74,7 @@ final class ReviewFolders {
             this.collect(root, folders, unreadable);
         }
         folders.removeIf(folder -> folder.photos() == 0 && folder.videos() == 0);
-        folders.sort(Comparator.comparing(Folder::changed).reversed()
+        folders.sort(Comparator.comparing(Folder::changedAt).reversed()
                 .thenComparing(Folder::name));
         return new ReviewListing(folders, unreadable);
     }
@@ -109,7 +109,7 @@ final class ReviewFolders {
             throw new IllegalArgumentException("folder must be under a review root: " + folder);
         }
         return this.filesIn(asked).stream()
-                .filter(file -> ReasonNotes.isANote(file.getFileName().toString()))
+                .filter(file -> ReasonNotes.isReasonNote(file.getFileName().toString()))
                 .sorted()
                 .toList();
     }
@@ -124,7 +124,7 @@ final class ReviewFolders {
      * path that is a file answers with that file, whose own folder is the working root. Relativized
      * against this root, that produces a name climbing out of it.
      *
-     * <p>{@code directoryIsThere} is what separates the two, rather than the other presence checks
+     * <p>{@code directoryExists} is what separates the two, rather than the other presence checks
      * on the same port. Those answer false for a refusal as well as for an absence, which would
      * report the ordinary state for a root the operating system would not open.
      *
@@ -135,7 +135,7 @@ final class ReviewFolders {
     private void collect(final Root root, final List<Folder> folders, final List<Path> unreadable) {
         final Path rootPath = this.pathOf(root);
         try {
-            if (this.media.directoryIsThere(rootPath)) {
+            if (this.media.directoryExists(rootPath)) {
                 this.byFolder(rootPath).forEach((dir, files) ->
                         folders.add(this.folder(root, rootPath, dir, files)));
             }
@@ -183,7 +183,7 @@ final class ReviewFolders {
                 .toList();
         final int photos = (int) kinds.stream().filter(MediaType.PHOTO::equals).count();
         final int videos = (int) kinds.stream().filter(MediaType.VIDEO::equals).count();
-        final String name = RelativePaths.slashed(rootPath.relativize(dir));
+        final String name = RelativePaths.toForwardSlashes(rootPath.relativize(dir));
         return new Folder(root, filedBy(root, name), name, dir, photos, videos, this.changed(dir));
     }
 
@@ -203,9 +203,9 @@ final class ReviewFolders {
      * @return {@link FiledBy} the job that put it there
      */
     private static FiledBy filedBy(final Root root, final String name) {
-        return root == Root.REVIEW && SortFolderNames.writtenByASort(name)
-                ? FiledBy.A_SORT
-                : FiledBy.A_SIFT;
+        return root == Root.REVIEW && SortFolderNames.isSortFolderName(name)
+                ? FiledBy.SORT
+                : FiledBy.SIFT;
     }
 
     /**

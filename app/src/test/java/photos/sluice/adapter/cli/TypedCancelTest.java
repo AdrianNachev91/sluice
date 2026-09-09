@@ -26,10 +26,10 @@ class TypedCancelTest {
 
     static final int PATIENCE = 10;
 
-    private final ByteArrayOutputStream said = new ByteArrayOutputStream();
+    private final ByteArrayOutputStream printedBytes = new ByteArrayOutputStream();
 
     private final ConsoleProgressPort progress =
-            new ConsoleProgressPort(new PrintStream(this.said, true, StandardCharsets.UTF_8), false);
+            new ConsoleProgressPort(new PrintStream(this.printedBytes, true, StandardCharsets.UTF_8), false);
 
     private final JobRunner runner = new JobRunner();
 
@@ -103,7 +103,7 @@ class TypedCancelTest {
             job.join();
         }
 
-        assertThat(this.said()).contains("Stopping.").contains("finishes what it is on");
+        assertThat(this.printedText()).contains("Stopping.").contains("finishes what it is on");
     }
 
     // The job waits for the input to run out as well as for the cancel, so both lines have been
@@ -124,7 +124,7 @@ class TypedCancelTest {
             assertThat(job.join()).isEqualTo("stopped");
         }
 
-        assertThat(this.said().lines()).containsExactly(
+        assertThat(this.printedText().lines()).containsExactly(
                 "Stopping. It finishes what it is on, then says what it did.",
                 "Stopping now. A file still being copied is abandoned rather than finished.");
     }
@@ -143,7 +143,7 @@ class TypedCancelTest {
         closed.countDown();
 
         assertThat(given.await(PATIENCE, TimeUnit.SECONDS)).isTrue();
-        assertThat(this.said()).isEmpty();
+        assertThat(this.printedText()).isEmpty();
     }
 
     private JobHandle<String> jobUntilCancelled() {
@@ -163,8 +163,8 @@ class TypedCancelTest {
         });
     }
 
-    private String said() {
-        return this.said.toString(StandardCharsets.UTF_8);
+    private String printedText() {
+        return this.printedBytes.toString(StandardCharsets.UTF_8);
     }
 
     private static InputStream typed(final String lines) {

@@ -110,13 +110,13 @@ public record ReviewView(String heading, @Nullable String explained, @Nullable S
      * @param lines a {@link List} of {@link String} what was written, empty while it is shut
      * @param beyondTheFold what to say about the lines the fold does not draw, or null where it
      *     draws them all
-     * @param openTheFolder what to say about reading the notes where they are, or null where the
+     * @param openFolderNote what to say about reading the notes where they are, or null where the
      *     fold has none to point at
      * @param nothingWritten what to say in place of the lines where the folder carries no note, or
      *     null where it carries one
      */
     public record Notes(String id, String label, boolean shown, List<String> lines,
-                        @Nullable String beyondTheFold, @Nullable String openTheFolder,
+                        @Nullable String beyondTheFold, @Nullable String openFolderNote,
                         @Nullable String nothingWritten) {
 
         /**
@@ -127,7 +127,7 @@ public record ReviewView(String heading, @Nullable String explained, @Nullable S
          * @param shown boolean whether the lines are showing
          * @param lines a {@link List} of {@link String} what was written
          * @param beyondTheFold what to say about the lines it does not draw
-         * @param openTheFolder what to say about reading the notes where they are
+         * @param openFolderNote what to say about reading the notes where they are
          * @param nothingWritten what to say where the folder carries no note
          */
         public Notes {

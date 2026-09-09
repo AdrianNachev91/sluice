@@ -108,7 +108,7 @@ public class ImportCommand implements Callable<Integer> {
         try {
             return Path.of(source);
         } catch (final InvalidPathException notAPath) {
-            throw new ImportSourceException("Not a file path: " + Refusal.shown(source)
+            throw new ImportSourceException("Not a file path: " + Refusal.shownValue(source)
                     + ". Check it for a typo, and put quotes around a path with spaces in it.",
                     notAPath);
         }
@@ -145,7 +145,7 @@ public class ImportCommand implements Callable<Integer> {
      * @return a {@link List} of {@link String} the lines to print
      */
     private static List<String> lines(final ImportSummary imported, final boolean stopped) {
-        if (imported.found() == 0 && imported.unreadablePlaces() == 0) {
+        if (imported.found() == 0 && imported.unreadableFolders() == 0) {
             return List.of(stopped ? "Stopped before anything was found." : "Nothing to import there.");
         }
         final List<String> lines = new ArrayList<>();
@@ -153,11 +153,11 @@ public class ImportCommand implements Callable<Integer> {
             lines.add(stoppedLine(leftBehind(imported)));
         }
         ResultLines.addWhenAny(lines, "Found", imported.found());
-        ResultLines.addWhenAny(lines, "Imported", imported.broughtIn());
-        ResultLines.addWhenAny(lines, "Skipped: already in your Inbox", imported.alreadyThere());
+        ResultLines.addWhenAny(lines, "Imported", imported.imported());
+        ResultLines.addWhenAny(lines, "Skipped: already in your Inbox", imported.alreadyInInbox());
         ResultLines.addWhenAny(lines, "Arrived broken", imported.unverified());
-        ResultLines.addWhenAny(lines, "Could not be read", imported.couldNotBeRead());
-        ResultLines.addWhenAny(lines, "Folders could not be opened", imported.unreadablePlaces());
+        ResultLines.addWhenAny(lines, "Could not be read", imported.unreadableFiles());
+        ResultLines.addWhenAny(lines, "Folders could not be opened", imported.unreadableFolders());
         return lines;
     }
 
@@ -168,8 +168,8 @@ public class ImportCommand implements Callable<Integer> {
      * @return int the count
      */
     private static int leftBehind(final ImportSummary imported) {
-        return imported.found() - imported.broughtIn() - imported.alreadyThere() - imported.unverified()
-                - imported.couldNotBeRead();
+        return imported.found() - imported.imported() - imported.alreadyInInbox() - imported.unverified()
+                - imported.unreadableFiles();
     }
 
     /**

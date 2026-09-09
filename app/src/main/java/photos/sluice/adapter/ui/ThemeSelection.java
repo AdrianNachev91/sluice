@@ -36,7 +36,7 @@ public final class ThemeSelection {
     // Built on first use rather than at class load, because it reads the desktop's preferences and
     // those need a started toolkit. One binding serves the process: every scene attaches a weak
     // listener to this, and this stays alive for as long as the app does.
-    private static @Nullable ObservableValue<Theme> effective;
+    private static @Nullable ObservableValue<Theme> effectiveTheme;
 
     /**
      * Prevents instantiation of this static holder.
@@ -53,11 +53,11 @@ public final class ThemeSelection {
      * @return an {@link ObservableValue} of {@link Theme} the look in force
      */
     public static synchronized ObservableValue<Theme> effectiveTheme() {
-        if (effective == null) {
+        if (effectiveTheme == null) {
             final var scheme = Platform.getPreferences().colorSchemeProperty();
-            effective = Bindings.createObjectBinding(() -> look(CHOICE.get(), scheme.get()), CHOICE, scheme);
+            effectiveTheme = Bindings.createObjectBinding(() -> themeFor(CHOICE.get(), scheme.get()), CHOICE, scheme);
         }
-        return effective;
+        return effectiveTheme;
     }
 
     /**
@@ -88,7 +88,7 @@ public final class ThemeSelection {
      * @param scheme {@link ColorScheme} the scheme the desktop reports
      * @return {@link Theme} the look to wear
      */
-    private static Theme look(final ThemeChoice choice, final ColorScheme scheme) {
+    private static Theme themeFor(final ThemeChoice choice, final ColorScheme scheme) {
         return switch (choice) {
             case SYSTEM -> Theme.matching(scheme);
             case LIGHT -> Theme.LIGHT;

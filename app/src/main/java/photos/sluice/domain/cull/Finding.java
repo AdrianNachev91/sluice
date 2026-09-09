@@ -76,7 +76,7 @@ public sealed interface Finding {
          */
         @Override
         public String describe() {
-            return at(this.montage, this.index) + ": invalid action '" + this.category + "' (" + this.allowedClause + ")";
+            return locationPrefix(this.montage, this.index) + ": invalid action '" + this.category + "' (" + this.allowedClause + ")";
         }
     }
 
@@ -90,7 +90,7 @@ public sealed interface Finding {
          */
         @Override
         public String describe() {
-            return at(this.montage, this.index) + ": missing 'reason'";
+            return locationPrefix(this.montage, this.index) + ": missing 'reason'";
         }
     }
 
@@ -104,7 +104,7 @@ public sealed interface Finding {
          */
         @Override
         public String describe() {
-            return at(this.montage, this.index) + ": missing 'group'";
+            return locationPrefix(this.montage, this.index) + ": missing 'group'";
         }
     }
 
@@ -118,7 +118,7 @@ public sealed interface Finding {
          */
         @Override
         public String describe() {
-            return at(this.montage, this.index) + ": missing 'chosen_reason'";
+            return locationPrefix(this.montage, this.index) + ": missing 'chosen_reason'";
         }
     }
 
@@ -241,7 +241,7 @@ public sealed interface Finding {
          */
         @Override
         public String describe() {
-            return at(this.montage, this.index) + ": missing 'file'";
+            return locationPrefix(this.montage, this.index) + ": missing 'file'";
         }
     }
 
@@ -286,7 +286,7 @@ public sealed interface Finding {
          */
         @Override
         public String describe() {
-            return at(this.montage, this.index) + ": names a photo another sheet showed: " + this.file;
+            return locationPrefix(this.montage, this.index) + ": names a photo another sheet showed: " + this.file;
         }
     }
 
@@ -300,7 +300,7 @@ public sealed interface Finding {
          */
         @Override
         public String describe() {
-            return at(this.montage, this.index) + ": file out of scope: " + this.file;
+            return locationPrefix(this.montage, this.index) + ": file out of scope: " + this.file;
         }
     }
 
@@ -506,7 +506,7 @@ public sealed interface Finding {
      * @param index int the decision's 1-based position within its shard
      * @return {@link String} the location prefix
      */
-    static String at(final String montage, final int index) {
+    static String locationPrefix(final String montage, final int index) {
         return montage + "[#" + index + "]";
     }
 }

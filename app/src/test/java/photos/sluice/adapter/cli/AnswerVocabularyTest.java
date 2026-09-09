@@ -141,7 +141,7 @@ class AnswerVocabularyTest {
         final AnswerVocabulary.Answer answer = AnswerVocabulary.resolve(prepDir, "gone.jpg", "RECHECK",
                 List.of(source));
 
-        assertThat(answer).isEqualTo(new AnswerVocabulary.Answer.LookAgain(missing));
+        assertThat(answer).isEqualTo(new AnswerVocabulary.Answer.Recheck(missing));
     }
 
     @Test

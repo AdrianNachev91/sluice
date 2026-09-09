@@ -113,7 +113,7 @@ final class AnswerVocabulary {
             case final Finding.CorruptSidecar f -> new Answer.Choice(
                     new ChoiceAnswer.ResolveCorruptSidecar(f.montage(), CorruptSidecarResolution.valueOf(option)));
             case final Finding.MissingSource f -> RECHECK_OPTION.equals(option)
-                    ? new Answer.LookAgain(f.file())
+                    ? new Answer.Recheck(f.file())
                     : new Answer.Choice(new ChoiceAnswer.SkipMissingSource(f.file()));
             case final Finding.StrayShard f -> new Answer.Choice(new ChoiceAnswer.SetAsideStrayShard(f));
             case final Finding.CorruptIndex ignored -> new Answer.Discard(prepDir);
@@ -167,7 +167,7 @@ final class AnswerVocabulary {
          *
          * @param file {@link Path} the photo reported missing
          */
-        record LookAgain(Path file) implements Answer {
+        record Recheck(Path file) implements Answer {
         }
 
         /**

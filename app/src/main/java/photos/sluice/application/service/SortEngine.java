@@ -81,7 +81,7 @@ public class SortEngine implements SortUseCase {
     // anything is moved, deleted or written, so it is a clean abort with nothing to report. Its
     // counts are what an empty Inbox also produces, and the cancelled flag is what tells them apart.
     private static final SortSummary STOPPED_BEFORE_ANYTHING_MOVED =
-            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), SortSummary.Guessed.NONE, List.of(),
+            new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), SortSummary.LowConfidenceCounts.NONE, List.of(),
                     Set.of(), List.of(), true, 0);
 
     private final PathsPort pathsPort;
@@ -158,7 +158,7 @@ public class SortEngine implements SortUseCase {
         // of its time and neither moves a file. Reported as one phase, the bar ran indeterminate
         // through the reading and the hashing and then measured only the fast part.
         final ScanResult scanResult = this.inboxScanner.scan(this.pathsPort.inbox());
-        final List<DatedMedia> allDated = this.phaseRunner.around(FINDING_DATES,
+        final List<DatedMedia> allDated = this.phaseRunner.runReporting(FINDING_DATES,
                 dating -> this.dateEveryFile(scanResult, cancellation, dating));
         if (allDated == null) {
             return STOPPED_BEFORE_ANYTHING_MOVED;
@@ -167,7 +167,7 @@ public class SortEngine implements SortUseCase {
         final Map<MediaFile, DateResult> dateByFile = new HashMap<>();
         inScope.forEach(dated -> dateByFile.put(dated.file(), dated.date()));
 
-        final DedupPlan plan = this.phaseRunner.around(CHECKING_COPIES,
+        final DedupPlan plan = this.phaseRunner.runReporting(CHECKING_COPIES,
                 hashing -> this.dedupPlanFor(inScope, hashing, cancellation));
         // Asked again after the plan lands, because the two loops below are the first deletions of
         // the run. A stop arriving in the gap between hashing and them still finds nothing gone.
@@ -180,7 +180,7 @@ public class SortEngine implements SortUseCase {
 
         // This pass has no cancelled answer: it catches the abandon and reports what it routed. The
         // phase runner's return is nullable for the stages that do have one.
-        final RoutingResult routing = Objects.requireNonNull(this.phaseRunner.around(SORTING,
+        final RoutingResult routing = Objects.requireNonNull(this.phaseRunner.runReporting(SORTING,
                 moving -> this.routeSurvivors(plan.toSort(), dateByFile, moving, cancellation)));
 
         // A cancelled routing pass can stop before every survivor is routed. Those unrouted files
@@ -216,7 +216,7 @@ public class SortEngine implements SortUseCase {
         return new SortSummary(actuallyRemoved.size(), plan.redundantVsLibrary().size(),
                 plan.withinBatchDuplicates().size(), routing.photosSorted, routing.videosSorted, routing.lowRes,
                 routing.unsorted, consumedSidecars.size(), routing.lowConfidenceFiles,
-                new SortSummary.Guessed(routing.photosSortedGuessed, routing.videosSortedGuessed,
+                new SortSummary.LowConfidenceCounts(routing.photosSortedGuessed, routing.videosSortedGuessed,
                         routing.lowResGuessed),
                 routing.unsortedFiles,
                 routing.yearsSorted, pairingWarnings(scanResult), stoppedShort,
@@ -449,16 +449,16 @@ public class SortEngine implements SortUseCase {
      * @param date {@link DateResult} its resolved date
      * @param routing {@link RoutingResult} tallies updated with this file's outcome
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void routeOneSurvivor(final MediaFile file, final DateResult date, final RoutingResult routing,
-                                  final CancellationSignal cancellation, final TransferProgress watching) {
+                                  final CancellationSignal cancellation, final TransferProgress transferProgress) {
         final String leaf = file.path().getFileName().toString();
 
         if (date.confidence() == Confidence.UNSORTABLE) {
             this.routeToReview(file, this.pathsPort.review().resolve(SortFolderNames.UNDATED),
-                    null, false, REASON_UNSORTED, cancellation, watching);
+                    null, false, REASON_UNSORTED, cancellation, transferProgress);
             routing.unsorted++;
             routing.unsortedFiles.add(leaf);
             return;
@@ -474,7 +474,7 @@ public class SortEngine implements SortUseCase {
 
         if (!isVideo && this.isLowRes(file, type, extension)) {
             this.routeToReview(file, this.pathsPort.review().resolve(yearMonthDash(date.when())),
-                    date.when().toLocalDate(), guessed, REASON_LOW_RES, cancellation, watching);
+                    date.when().toLocalDate(), guessed, REASON_LOW_RES, cancellation, transferProgress);
             routing.lowRes++;
             tallyGuess(routing, guessed, leaf, date, GuessBucket.LOW_RES);
             return;
@@ -484,7 +484,7 @@ public class SortEngine implements SortUseCase {
         final Path destDir = this.pathsPort.sorted().resolve(mediaFolder)
                 .resolve(SortFolderNames.yearFolder(date.when()))
                 .resolve(SortFolderNames.monthFolder(date.when()));
-        this.mediaStore.move(file.path(), destDir, cancellation, watching);
+        this.mediaStore.move(file.path(), destDir, cancellation, transferProgress);
         routing.yearsSorted.add(date.when().getYear());
         if (isVideo) {
             routing.videosSorted++;
@@ -546,13 +546,13 @@ public class SortEngine implements SortUseCase {
      * @param guessed boolean true where that date came off the file's timestamp
      * @param reason {@link String} why it is here, as the note says it to a reader
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void routeToReview(final MediaFile file, final Path destDir, final @Nullable LocalDate taken,
                                final boolean guessed, final String reason,
-                               final CancellationSignal cancellation, final TransferProgress watching) {
-        final Path landed = this.mediaStore.move(file.path(), destDir, cancellation, watching);
+                               final CancellationSignal cancellation, final TransferProgress transferProgress) {
+        final Path landed = this.mediaStore.move(file.path(), destDir, cancellation, transferProgress);
         final String name = landed.getFileName().toString();
         this.mediaStore.appendLine(destDir.resolve(ReasonNotes.FILE_NAME), taken == null
                 ? ReasonNotes.line(name, reason)

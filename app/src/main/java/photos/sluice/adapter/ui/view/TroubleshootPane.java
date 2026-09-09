@@ -56,7 +56,7 @@ final class TroubleshootPane {
         heading.setId("troubleshoot-heading");
         heading.getStyleClass().add("pane-heading");
 
-        final Button back = WayBack.to("troubleshoot-back", "", presenter::back);
+        final Button back = BackButton.of("troubleshoot-back", "", presenter::back);
 
         final var header = new VBox(back, heading);
         header.getStyleClass().add("pane-header");
@@ -93,7 +93,7 @@ final class TroubleshootPane {
         actions.setId("troubleshoot-actions");
         actions.getStyleClass().add("run-start-row");
 
-        PageHeader.heldToTheViewport(scroll, header, actions);
+        PageHeader.bindWidthToViewport(scroll, header, actions);
         final var page = new VBox(header, scroll, actions);
         page.setId("troubleshoot");
         page.getStyleClass().add("runs");
@@ -166,9 +166,9 @@ final class TroubleshootPane {
             this.back.setText(view.back());
             this.heading.setText(view.heading());
             this.report(view.message(), view.reportNumber());
-            this.checking.setText(SettingsRows.orNothing(view.checking()));
-            this.summary.setText(SettingsRows.orNothing(view.summary()));
-            this.nothingLeft.setText(SettingsRows.orNothing(view.nothingLeft()));
+            this.checking.setText(SettingsRows.textOrEmpty(view.checking()));
+            this.summary.setText(SettingsRows.textOrEmpty(view.summary()));
+            this.nothingLeft.setText(SettingsRows.textOrEmpty(view.nothingLeft()));
             this.drawProblems(view.problems(), presenter, redraw);
             this.drawDetail(view.detail(), presenter);
             this.drawActions(view.actions(), presenter, redraw);
@@ -186,31 +186,31 @@ final class TroubleshootPane {
          * the whole screen, and a fresh banner each time would restart its clock for as long as the
          * reader kept pressing.
          *
-         * @param said {@link Message} what to report, or null where there is nothing
+         * @param message {@link Message} what to report, or null where there is nothing
          * @param number int which report this is, counted by the presenter
          */
-        private void report(final @Nullable Message said, final int number) {
+        private void report(final @Nullable Message message, final int number) {
             if (Integer.valueOf(number).equals(this.reported.get())) {
                 return;
             }
             this.reported.set(number);
             this.page.getChildren().removeIf(node -> BANNER.equals(node.getId()));
-            if (said == null) {
+            if (message == null) {
                 return;
             }
             // A report with nothing to press is one short sentence about the press just made, so it
             // leaves on its own. One offering a screen stays: the wait a banner earns is not long
             // enough to read a sentence and reach for what it offers.
             final Hyperlink locationLink;
-            if (said.location() == null) {
+            if (message.location() == null) {
                 locationLink = null;
             } else {
                 locationLink = SettingsRows.locationLink("troubleshoot-message-link");
-                SettingsRows.pointAt(locationLink, said.location(), this.navigation);
+                SettingsRows.pointAt(locationLink, message.location(), this.navigation);
             }
-            final HBox banner = SettingsRows.banner(this.page, BANNER, said.text(),
-                    said.location() == null, locationLink);
-            if (said.refused()) {
+            final HBox banner = SettingsRows.banner(this.page, BANNER, message.text(),
+                    message.location() == null, locationLink);
+            if (message.refused()) {
                 banner.getStyleClass().add("settings-banner-caution");
             }
             this.page.getChildren().addFirst(banner);
@@ -226,7 +226,7 @@ final class TroubleshootPane {
         private void drawProblems(final List<ProblemStack> problems,
                                   final TroubleshootPresenter presenter, final Runnable redraw) {
             this.problems.getChildren().setAll(problems.stream()
-                    .flatMap(same -> drawn(same, presenter, redraw).stream())
+                    .flatMap(same -> stackNodes(same, presenter, redraw).stream())
                     .toList());
         }
 
@@ -242,9 +242,9 @@ final class TroubleshootPane {
          * @param redraw {@link Runnable} draws the screen again once it has been told
          * @return a {@link List} of {@link Node} what to add, in drawing order
          */
-        private static List<Node> drawn(final ProblemStack same,
-                                        final TroubleshootPresenter presenter,
-                                        final Runnable redraw) {
+        private static List<Node> stackNodes(final ProblemStack same,
+                                             final TroubleshootPresenter presenter,
+                                             final Runnable redraw) {
             final List<Node> nodes = new ArrayList<>();
             if (same.heading() != null) {
                 nodes.add(stackHeading(same.heading()));
@@ -271,11 +271,11 @@ final class TroubleshootPane {
         /**
          * The line above one kind's rows, counting them.
          *
-         * @param said {@link String} what it says
+         * @param text {@link String} what it says
          * @return {@link TextArea} the heading
          */
-        private static TextArea stackHeading(final String said) {
-            final TextArea heading = SelectableText.prose(said);
+        private static TextArea stackHeading(final String text) {
+            final TextArea heading = SelectableText.prose(text);
             heading.getStyleClass().add("troubleshoot-stack-heading");
             return heading;
         }
@@ -293,17 +293,17 @@ final class TroubleshootPane {
                 return;
             }
             this.detailToggle.setText(detail.label());
-            SettingsRows.pointing(this.detailToggle, this.unfolded.get());
+            SettingsRows.setFoldMarker(this.detailToggle, this.unfolded.get());
             this.detailCopy.setText(presenter.detailCopied() ? detail.copied() : detail.copy());
             this.detailCopy.setOnAction(_ -> {
                 final String text = presenter.detail();
                 if (text != null) {
-                    CopyableTrace.putOnTheClipboard(text);
+                    CopyableTrace.copyToClipboard(text);
                     this.detailCopy.setText(detail.copied());
                 }
             });
             this.trace.setText(detail.text());
-            this.fold.to(this.unfolded.get());
+            this.fold.setOpen(this.unfolded.get());
         }
 
         /**
@@ -338,7 +338,7 @@ final class TroubleshootPane {
             final var lines = new VBox();
             lines.getStyleClass().add("runs-card-lines");
             SettingsRows.addIfPresent(lines, problem.problem(), "runs-card-headline");
-            SettingsRows.addIfPresent(lines, problem.about(), "runs-card-detail");
+            SettingsRows.addIfPresent(lines, problem.subject(), "runs-card-detail");
 
             final var row = new VBox(lines);
             row.setId(problem.id());

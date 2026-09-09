@@ -59,27 +59,27 @@ public class YamlSettingsStore implements SettingsStore {
     @Override
     public void save(final Settings settings) {
         final Map<String, Object> root = this.document.read();
-        final Map<String, Object> sluice = this.document.group(root, "sluice");
+        final Map<String, Object> sluice = this.document.ensureGroup(root, "sluice");
 
-        final Map<String, Object> paths = this.document.group(sluice, "paths");
+        final Map<String, Object> paths = this.document.ensureGroup(sluice, "paths");
         YamlConfigFile.set(paths, "repo-root", settings.paths().repoRoot());
         YamlConfigFile.set(paths, "library-root", settings.paths().libraryRoot());
         YamlConfigFile.set(paths, "inbox", settings.paths().inbox());
 
-        final Map<String, Object> montage = this.document.group(sluice, "montage");
+        final Map<String, Object> montage = this.document.ensureGroup(sluice, "montage");
         YamlConfigFile.set(montage, "tile-size", settings.montage().tileSize());
         YamlConfigFile.set(montage, "tiles-per-row", settings.montage().tilesPerRow());
 
-        final Map<String, Object> cull = this.document.group(sluice, "cull");
+        final Map<String, Object> cull = this.document.ensureGroup(sluice, "cull");
         YamlConfigFile.set(cull, "provider", settings.provider());
         YamlConfigFile.set(cull, "categories", categories(settings.categories()));
 
         // One group per provider, merged into rather than replaced. A block belonging to a provider
         // this install does not have then survives a save, the same way any unknown key does.
-        final Map<String, Object> providerSettings = this.document.group(cull, "provider-settings");
+        final Map<String, Object> providerSettings = this.document.ensureGroup(cull, "provider-settings");
         for (final Map.Entry<String, CullProviderSettings> entry : settings.providerSettingsById().entrySet()) {
             final CullProviderSettings provider = entry.getValue();
-            final Map<String, Object> group = this.document.group(providerSettings, entry.getKey());
+            final Map<String, Object> group = this.document.ensureGroup(providerSettings, entry.getKey());
             YamlConfigFile.set(group, "model", provider.model());
             YamlConfigFile.set(group, "endpoint", provider.endpoint());
             YamlConfigFile.set(group, "max-retries", provider.maxRetries());
@@ -91,7 +91,7 @@ public class YamlSettingsStore implements SettingsStore {
             YamlConfigFile.remove(cull, "provider-settings");
         }
 
-        final Map<String, Object> ui = this.document.group(sluice, "ui");
+        final Map<String, Object> ui = this.document.ensureGroup(sluice, "ui");
         YamlConfigFile.set(ui, "theme", settings.theme().name().toLowerCase(Locale.ROOT));
 
         this.document.write(root);

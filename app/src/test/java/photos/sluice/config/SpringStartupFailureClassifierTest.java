@@ -205,7 +205,7 @@ class SpringStartupFailureClassifierTest {
     private static Throwable startWith(final Path configFile, final String... extraArgs) {
         final Throwable thrown = catchThrowable(
                 () -> new SpringApplicationBuilder(SluiceApplication.class)
-                        .run(SpringLaunch.importing(configFile, extraArgs))
+                        .run(SpringLaunch.argsWithConfigImport(configFile, extraArgs))
                         .close());
         assertThat(thrown).as("the app was expected not to start").isNotNull();
         return thrown;

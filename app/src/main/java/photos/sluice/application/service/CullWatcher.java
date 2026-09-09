@@ -22,7 +22,7 @@ import java.util.function.BooleanSupplier;
  * hand would ever notice.
  *
  * <p>{@code isReady} reads the prep dir, opening every sidecar and every shard in it
- * ({@link ShardTallyCalculator}). {@code attemptConsume} is heavier still, a real resume
+ * ({@link ShardTallyCalculator}). {@code tryConsume} is heavier still, a real resume
  * attempt, run only once {@code isReady} says so. It returns whether this watcher has anything
  * left to do. False means the job runner was busy with something else, so this watcher keeps
  * polling and retries later rather than giving up. True means this watcher's job is done, whether
@@ -45,7 +45,7 @@ final class CullWatcher {
 
     private final Duration pollInterval;
     private final BooleanSupplier isReady;
-    private final BooleanSupplier attemptConsume;
+    private final BooleanSupplier tryConsume;
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(DAEMON_THREADS);
     // Null until start() runs; stop() before start() is a valid no-op (see its own doc).
     private volatile @Nullable ScheduledFuture<?> task;
@@ -55,13 +55,13 @@ final class CullWatcher {
      *
      * @param pollInterval {@link Duration} how often to check readiness
      * @param isReady {@link BooleanSupplier} cheap readiness check
-     * @param attemptConsume {@link BooleanSupplier} the real resume attempt to run once ready,
+     * @param tryConsume {@link BooleanSupplier} the real resume attempt to run once ready,
      *         answering whether this watcher is done
      */
-    CullWatcher(final Duration pollInterval, final BooleanSupplier isReady, final BooleanSupplier attemptConsume) {
+    CullWatcher(final Duration pollInterval, final BooleanSupplier isReady, final BooleanSupplier tryConsume) {
         this.pollInterval = pollInterval;
         this.isReady = isReady;
-        this.attemptConsume = attemptConsume;
+        this.tryConsume = tryConsume;
     }
 
     /**
@@ -112,7 +112,7 @@ final class CullWatcher {
      * Checks readiness and attempts one consume.
      */
     private void pollUnsafe() {
-        if (this.isReady.getAsBoolean() && this.attemptConsume.getAsBoolean()) {
+        if (this.isReady.getAsBoolean() && this.tryConsume.getAsBoolean()) {
             this.stop();
         }
     }

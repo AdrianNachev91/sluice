@@ -19,7 +19,7 @@ import photos.sluice.domain.imports.ImportSummary;
 import photos.sluice.domain.job.ShardTally;
 import photos.sluice.domain.job.WaitingCullJob;
 import photos.sluice.domain.model.SortSummary;
-import photos.sluice.domain.model.SortSummary.Guessed;
+import photos.sluice.domain.model.SortSummary.LowConfidenceCounts;
 import photos.sluice.domain.rescue.RescueSummary;
 
 import java.nio.file.Path;
@@ -340,7 +340,7 @@ class RunResultsTest {
         @Test
         void aRunWhoseFilesWentSeveralWaysLeavesTheReasonToTheRows() {
             final RunResultView card = card(RunMode.SORT,
-                    new SortSummary(20, 0, 0, 0, 0, 12, 8, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
+                    new SortSummary(20, 0, 0, 0, 0, 12, 8, 0, List.of(), LowConfidenceCounts.NONE, List.of(), Set.of(), List.of(), false, 0));
 
             assertThat(requireNonNull(card.detail()))
                     .endsWith("The rows below say what became of each one.");
@@ -349,7 +349,7 @@ class RunResultsTest {
         @Test
         void aRunWithNothingInScopeSaysSoRatherThanNamingRowsItHasNone() {
             final RunResultView card = card(RunMode.SORT,
-                    new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), false, 0));
+                    new SortSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of(), LowConfidenceCounts.NONE, List.of(), Set.of(), List.of(), false, 0));
 
             assertThat(card.detail()).isEqualTo("Nothing in your Inbox was ready to sort.");
         }
@@ -543,7 +543,7 @@ class RunResultsTest {
     }
 
     private static SortSummary sortSummary(final List<String> warnings) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(), Set.of(2019), warnings, false, 0);
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), LowConfidenceCounts.NONE, List.of(), Set.of(2019), warnings, false, 0);
     }
 
     private static SortSummary allOf(final int files, final String bucket) {
@@ -556,7 +556,7 @@ class RunResultsTest {
                 0, 0, 0,
                 "lowRes".equals(bucket) ? files : 0,
                 "unsorted".equals(bucket) ? files : 0,
-                0, List.of(), Guessed.NONE, List.of(), Set.of(), List.of(), stopped,
+                0, List.of(), LowConfidenceCounts.NONE, List.of(), Set.of(), List.of(), stopped,
                 stopped ? 205 : 0);
     }
 
@@ -565,12 +565,12 @@ class RunResultsTest {
     }
 
     private static SortSummary sortedInto(final Set<Integer> years, final boolean stopped) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(), years,
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), LowConfidenceCounts.NONE, List.of(), years,
                 List.of(), stopped, stopped ? 205 : 0);
     }
 
     private static SortSummary stoppedSortLeaving(final int leftBehind) {
-        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), Guessed.NONE, List.of(),
+        return new SortSummary(3, 0, 0, 2, 1, 0, 0, 0, List.of(), LowConfidenceCounts.NONE, List.of(),
                 Set.of(2019), List.of(), true, leftBehind);
     }
 }

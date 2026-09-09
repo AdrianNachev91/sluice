@@ -40,7 +40,7 @@ public class SettingsHolder implements LiveSettings, CullSettings {
     @Autowired
     public SettingsHolder(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
                           final UiProperties ui) {
-        this(bound(paths, cull, montage, ui));
+        this(boundSettings(paths, cull, montage, ui));
     }
 
     /**
@@ -62,8 +62,8 @@ public class SettingsHolder implements LiveSettings, CullSettings {
      * @param ui {@link UiProperties} the bound look
      * @return {@link Settings} the settings the app starts on
      */
-    static Settings bound(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
-                          final UiProperties ui) {
+    static Settings boundSettings(final PathsProperties paths, final CullConfig cull, final MontageProperties montage,
+                                  final UiProperties ui) {
         return new Settings(
                 new PathSettings(paths.repoRoot(), paths.libraryRoot(), paths.inbox()),
                 cull.provider(), cull.providerSettings(), cull.categories(),

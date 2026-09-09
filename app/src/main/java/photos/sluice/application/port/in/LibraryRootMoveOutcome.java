@@ -53,6 +53,6 @@ public sealed interface LibraryRootMoveOutcome {
      * @param previousIndexFiledAt {@link Path} where the old index went, null when there was none
      *         to file
      */
-    record MovedWithAFreshIndex(@Nullable Path previousIndexFiledAt) implements LibraryRootMoveOutcome {
+    record MovedWithFreshIndex(@Nullable Path previousIndexFiledAt) implements LibraryRootMoveOutcome {
     }
 }

@@ -42,10 +42,10 @@ public record ReviewListing(List<Folder> folders, List<Path> unreadable) {
      * @param path {@link Path} where it is, for handing to the file manager
      * @param photos int how many photos are in it
      * @param videos int how many videos are in it
-     * @param changed {@link Instant} when it was last written to
+     * @param changedAt {@link Instant} when it was last written to
      */
     public record Folder(Root root, FiledBy filedBy, String name, Path path, int photos, int videos,
-                         Instant changed) {
+                         Instant changedAt) {
     }
 
     /**
@@ -57,10 +57,10 @@ public record ReviewListing(List<Folder> folders, List<Path> unreadable) {
     public enum FiledBy {
 
         /** A sort, which files what it could not date and what it judged too small to keep. */
-        A_SORT,
+        SORT,
 
         /** A sift, which files a category, a near-copy group and anything it could not judge. */
-        A_SIFT
+        SIFT
     }
 
     /**

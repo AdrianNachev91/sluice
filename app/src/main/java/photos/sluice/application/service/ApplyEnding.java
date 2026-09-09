@@ -26,7 +26,7 @@ sealed interface ApplyEnding {
      *     a count of files this leg actually moved, rather than the scope figure a finished run
      *     reports
      */
-    record StoppedPartWay(ApplyReport report) implements ApplyEnding {
+    record StoppedMidRun(ApplyReport report) implements ApplyEnding {
     }
 
     /**

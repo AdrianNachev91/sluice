@@ -28,14 +28,14 @@ public class YamlConfigFileRepair implements ConfigFileRepairPort {
     // its own name. Colon-free, because a Windows path segment cannot hold one. Matched rather than
     // shared, since the class holding it is not visible from here. What one shape buys is a person
     // recognising these names across the app; nothing parses them back.
-    private static final DateTimeFormatter SET_ASIDE_STAMP =
+    private static final DateTimeFormatter SET_ASIDE_STAMP_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").withZone(ZoneOffset.UTC);
 
     // How many names one moment may need before this gives up. Needing a second one at all takes
     // two repairs inside one second. The bound exists so the search terminates, and its refusal
     // says where to look, since nothing removes a kept file and deleting some by hand is the way
     // out.
-    private static final int SET_ASIDE_LIMIT = 100;
+    private static final int SET_ASIDE_ATTEMPT_LIMIT = 100;
 
     private final YamlConfigFile document;
     private final Clock clock;
@@ -86,7 +86,7 @@ public class YamlConfigFileRepair implements ConfigFileRepairPort {
         final Map<String, Object> root = this.document.read();
         Map<String, Object> group = root;
         for (int depth = 0; depth < segments.length - 1; depth++) {
-            group = this.document.group(group, segments[depth]);
+            group = this.document.ensureGroup(group, segments[depth]);
         }
         if (YamlConfigFile.remove(group, segments[segments.length - 1]) == null) {
             return false;
@@ -111,8 +111,8 @@ public class YamlConfigFileRepair implements ConfigFileRepairPort {
     @Override
     public Path setAside() {
         final Path source = this.document.path();
-        final String moment = SET_ASIDE_STAMP.format(this.clock.instant());
-        for (int attempt = 1; attempt <= SET_ASIDE_LIMIT; attempt++) {
+        final String moment = SET_ASIDE_STAMP_FORMATTER.format(this.clock.instant());
+        for (int attempt = 1; attempt <= SET_ASIDE_ATTEMPT_LIMIT; attempt++) {
             final Path moved = this.moveAside(source, source.resolveSibling(setAsideName(source, moment, attempt)));
             if (moved != null) {
                 return moved;

@@ -101,7 +101,7 @@ class CullerPromptTest {
 
     @Test
     void renderingFailsLoudWhenTheTemplateLacksThePlaceholder() {
-        assertThatThrownBy(() -> CullerPrompt.rendered("a template with no slot", CARDS))
+        assertThatThrownBy(() -> CullerPrompt.render("a template with no slot", CARDS))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CullerPrompt.CATEGORIES_PLACEHOLDER);
     }

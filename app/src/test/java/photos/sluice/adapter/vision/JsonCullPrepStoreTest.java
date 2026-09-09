@@ -101,7 +101,7 @@ class JsonCullPrepStoreTest {
         @Test
         void refusesADescriptionPastItsCeiling(@TempDir final Path dir) throws IOException {
             Files.writeString(dir.resolve("index.json"), oneCardIndex(dir,
-                    "\"description\": \"" + "x".repeat(CullCategory.maxDescription() + 1) + "\""));
+                    "\"description\": \"" + "x".repeat(CullCategory.maxDescriptionLength() + 1) + "\""));
 
             assertThatThrownBy(() -> JsonCullPrepStoreTest.this.store.readIndex(dir))
                     .isInstanceOf(MalformedPrepJsonException.class)

@@ -111,21 +111,21 @@ public class ReviewPresenter {
 
     // A fold inside a card on a scrolling page. Past a couple of hundred lines nobody is reading
     // one, they are looking for a name, and the file manager does that better than a VBox.
-    private static final int MOST_LINES_DRAWN = 200;
+    private static final int MAX_LINES_DRAWN = 200;
 
     private static final Predicate<String> ANY_NAME = _ -> true;
 
     // The order the sections are drawn in: the Review root's, then the other roots.
     private static final List<Section> SECTIONS = List.of(
-            new Section(Root.REVIEW, FiledBy.A_SIFT, JunkCategory::claims, "general-junk",
+            new Section(Root.REVIEW, FiledBy.SIFT, JunkCategory::isJunkName, "general-junk",
                     GENERAL_JUNK_HEADING, GENERAL_JUNK_EXPLAINED),
-            new Section(Root.REVIEW, FiledBy.A_SIFT, name -> !JunkCategory.claims(name),
+            new Section(Root.REVIEW, FiledBy.SIFT, name -> !JunkCategory.isJunkName(name),
                     "category-junk", CATEGORY_JUNK_HEADING, CATEGORY_JUNK_EXPLAINED),
-            new Section(Root.REVIEW, FiledBy.A_SORT, ANY_NAME, "never-sifted",
+            new Section(Root.REVIEW, FiledBy.SORT, ANY_NAME, "never-sifted",
                     NEVER_SIFTED_HEADING, NEVER_SIFTED_EXPLAINED),
-            new Section(Root.DUPLICATES, FiledBy.A_SIFT, ANY_NAME, "duplicates",
+            new Section(Root.DUPLICATES, FiledBy.SIFT, ANY_NAME, "duplicates",
                     DUPLICATES_HEADING, DUPLICATES_EXPLAINED),
-            new Section(Root.UNREVIEWABLE, FiledBy.A_SIFT, ANY_NAME, "unreviewable",
+            new Section(Root.UNREVIEWABLE, FiledBy.SIFT, ANY_NAME, "unreviewable",
                     UNREVIEWABLE_HEADING, UNREVIEWABLE_EXPLAINED));
 
     private final Pipeline pipeline;
@@ -141,7 +141,7 @@ public class ReviewPresenter {
     // Every fold that is drawn, by the folder it is over.
     private final Map<Path, Fold> folds = new ConcurrentHashMap<>();
     // The folders a press has asked to open, whether or not their reads have landed.
-    private final Set<Path> asked = ConcurrentHashMap.newKeySet();
+    private final Set<Path> openFolds = ConcurrentHashMap.newKeySet();
     // Held while a press decides what it means and while a read publishes. The thread that paints
     // takes neither, reading both collections above without it.
     private final Object foldLock = new Object();
@@ -199,7 +199,7 @@ public class ReviewPresenter {
      */
     public ReviewView view() {
         final ReviewListing listed = this.listing;
-        final Message said = this.message;
+        final Message shownMessage = this.message;
         if (!this.hasRead) {
             return new ReviewView(HEADING, null, null, LOOKING, List.of(), null);
         }
@@ -213,11 +213,11 @@ public class ReviewPresenter {
         //
         // A read that failed establishes nothing, so it cannot also report that nothing is waiting.
         final boolean nothingWaiting =
-                listed.folders().isEmpty() && listed.unreadable().isEmpty() && said == null;
+                listed.folders().isEmpty() && listed.unreadable().isEmpty() && shownMessage == null;
         // Only over folders. On a screen showing nothing waiting, telling a reader what to do with
         // folders they have not got is one more thing to read past.
         return new ReviewView(HEADING, groups.isEmpty() ? null : SCREEN_EXPLAINED,
-                unreadableLine(listed), nothingWaiting ? NOTHING_YET : null, groups, said);
+                unreadableLine(listed), nothingWaiting ? NOTHING_YET : null, groups, shownMessage);
     }
 
     /**
@@ -236,8 +236,8 @@ public class ReviewPresenter {
     public void toggleNotes(final Path folder) {
         synchronized (this.foldLock) {
             // Shut covers a fold already drawn and one still being read for.
-            if (!this.asked.add(folder)) {
-                this.asked.remove(folder);
+            if (!this.openFolds.add(folder)) {
+                this.openFolds.remove(folder);
                 this.folds.remove(folder);
                 return;
             }
@@ -251,7 +251,7 @@ public class ReviewPresenter {
             fold = new Fold(List.of(), null, NOTES_UNREADABLE);
         }
         synchronized (this.foldLock) {
-            if (this.asked.contains(folder)) {
+            if (this.openFolds.contains(folder)) {
                 this.folds.put(folder, fold);
             }
         }
@@ -316,7 +316,7 @@ public class ReviewPresenter {
         final List<FolderCard> cards = listing.folders().stream()
                 .filter(folder -> folder.root() == section.root()
                         && folder.filedBy() == section.filedBy()
-                        && section.named().test(folder.name()))
+                        && section.nameFilter().test(folder.name()))
                 .map(folder -> this.card(folder, busy))
                 .toList();
         return cards.isEmpty()
@@ -329,13 +329,13 @@ public class ReviewPresenter {
      *
      * @param root {@link Root} the root its folders sit under
      * @param filedBy {@link FiledBy} the job that filed them
-     * @param named a {@link Predicate} of {@link String} which of that root's folder names belong
+     * @param nameFilter a {@link Predicate} of {@link String} which of that root's folder names belong
      *     here
      * @param id {@link String} the section's own id, for the screen to set on it
      * @param heading {@link String} what the section is called
      * @param explained {@link String} what put these photos here and what to do about them
      */
-    private record Section(Root root, FiledBy filedBy, Predicate<String> named, String id,
+    private record Section(Root root, FiledBy filedBy, Predicate<String> nameFilter, String id,
                            String heading, String explained) {
     }
 
@@ -358,9 +358,9 @@ public class ReviewPresenter {
                 shown ? nothingIn(failed, written) : null);
         return new FolderCard(idFor(folder, "card"), folder.path(), folder.name(),
                 RunWords.held(folder.photos(), folder.videos()),
-                Instant.EPOCH.equals(folder.changed())
+                Instant.EPOCH.equals(folder.changedAt())
                         ? "When it last changed is not known"
-                        : "Last changed " + RunWords.howLongAgo(folder.changed()),
+                        : "Last changed " + RunWords.howLongAgo(folder.changedAt()),
                 notes, actions(folder, busy));
     }
 
@@ -375,7 +375,7 @@ public class ReviewPresenter {
      * @return a {@link List} of {@link String} what to draw
      */
     private static List<String> capped(final List<String> lines) {
-        return lines.size() <= MOST_LINES_DRAWN ? lines : lines.subList(0, MOST_LINES_DRAWN);
+        return lines.size() <= MAX_LINES_DRAWN ? lines : lines.subList(0, MAX_LINES_DRAWN);
     }
 
     /**
@@ -385,10 +385,10 @@ public class ReviewPresenter {
      * @return {@link String} the sentence
      */
     private static @Nullable String beyondTheFold(final int held) {
-        if (held <= MOST_LINES_DRAWN) {
+        if (held <= MAX_LINES_DRAWN) {
             return null;
         }
-        return RunWords.counted(held - MOST_LINES_DRAWN, "more line is", "more lines are")
+        return RunWords.counted(held - MAX_LINES_DRAWN, "more line is", "more lines are")
                 + " in the note file itself.";
     }
 
@@ -467,7 +467,7 @@ public class ReviewPresenter {
      */
     private void closeNotes() {
         synchronized (this.foldLock) {
-            this.asked.clear();
+            this.openFolds.clear();
             this.folds.clear();
         }
     }

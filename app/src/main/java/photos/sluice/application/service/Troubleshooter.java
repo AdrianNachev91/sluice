@@ -35,7 +35,7 @@ import java.util.List;
 @Component
 public class Troubleshooter {
 
-    private static final String REPORT_WHAT = "troubleshoot-report";
+    private static final String REPORT_LABEL = "troubleshoot-report";
 
     private final PrepDirDoctor prepDirDoctor;
     private final ReconcileEngine reconcileEngine;
@@ -87,7 +87,7 @@ public class Troubleshooter {
                 this.prepDirDoctor.diagnose(prepDir);
 
         final String text = render(prepDir, before, indexRebuilt, reconcile, strayShardsRepaired, after);
-        this.disasterDrawer.write(prepDir, REPORT_WHAT, text);
+        this.disasterDrawer.write(prepDir, REPORT_LABEL, text);
         return new TroubleshootReport(before, indexRebuilt, reconcile, strayShardsRepaired, after, text);
     }
 

@@ -150,7 +150,7 @@ public class RescueEngine implements RescueUseCase {
         boolean folderRemoved = false;
         if (ranToCompletion) {
             allFiles.stream()
-                    .filter(file -> ReasonNotes.isANote(file.getFileName().toString()))
+                    .filter(file -> ReasonNotes.isReasonNote(file.getFileName().toString()))
                     .forEach(this.mediaStore::delete);
             this.mediaStore.removeIfEmptyOfFiles(target);
             folderRemoved = !this.mediaStore.exists(target);
@@ -202,31 +202,31 @@ public class RescueEngine implements RescueUseCase {
      * @param notesByFolder a {@link Map} of {@link Path} to a {@link List} of {@link Path}, the
      *     notes each folder held before anything moved
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
     private void rescueOneFile(final Path file, final Path rootPath, final Path sortedRoot,
                                final RescueOutcome outcome, final Map<Path, Map<String, LocalDate>> noted,
                                final Map<Path, List<Path>> notesByFolder,
-                               final CancellationSignal cancellation, final TransferProgress watching) {
+                               final CancellationSignal cancellation, final TransferProgress transferProgress) {
         final Optional<MediaType> type = this.mediaTypeDetector.classify(file);
         if (type.isEmpty()) {
             return;
         }
-        final String within = RelativePaths.slashed(rootPath.relativize(file));
+        final String within = RelativePaths.toForwardSlashes(rootPath.relativize(file));
         final LocalDate wasTaken = this.notesBeside(file, noted, notesByFolder)
                 .get(file.getFileName().toString());
         final Optional<LocalDateTime> date = this.rescueDateResolver.resolve(new MediaFile(file), within,
                 wasTaken == null ? null : wasTaken.atStartOfDay());
         if (date.isEmpty()) {
-            this.moveOrDropAsAlreadyThere(file, sortedRoot.resolve(SortFolderNames.UNDATED), false,
-                    outcome, cancellation, watching);
+            this.moveUnlessAlreadyAtDestination(file, sortedRoot.resolve(SortFolderNames.UNDATED), false,
+                    outcome, cancellation, transferProgress);
             return;
         }
         final Path destDir = sortedRoot.resolve(type.get() == MediaType.VIDEO ? "Videos" : "Photos")
                 .resolve(SortFolderNames.yearFolder(date.get()))
                 .resolve(SortFolderNames.monthFolder(date.get()));
-        this.moveOrDropAsAlreadyThere(file, destDir, true, outcome, cancellation, watching);
+        this.moveUnlessAlreadyAtDestination(file, destDir, true, outcome, cancellation, transferProgress);
     }
 
     /**
@@ -244,18 +244,18 @@ public class RescueEngine implements RescueUseCase {
      * @param dated boolean true where something dated it, so it lands under a year and month
      * @param outcome {@link RescueOutcome} accumulator for what moved where
      * @param cancellation {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @throws TransferAbandonedException if cancellation escalated before the file landed
      */
-    private void moveOrDropAsAlreadyThere(final Path file, final Path destDir, final boolean dated,
-                                          final RescueOutcome outcome, final CancellationSignal cancellation,
-                                          final TransferProgress watching) {
+    private void moveUnlessAlreadyAtDestination(final Path file, final Path destDir, final boolean dated,
+                                                final RescueOutcome outcome, final CancellationSignal cancellation,
+                                                final TransferProgress transferProgress) {
         if (this.isAlreadyAt(destDir.resolve(file.getFileName()), file)) {
             this.mediaStore.delete(file);
             outcome.alreadyThere++;
             return;
         }
-        this.mediaStore.move(file, destDir, cancellation, watching);
+        this.mediaStore.move(file, destDir, cancellation, transferProgress);
         if (dated) {
             outcome.rescued++;
         } else {
@@ -320,7 +320,7 @@ public class RescueEngine implements RescueUseCase {
         try {
             return this.mediaStore.readLines(note);
         } catch (final UncheckedIOException e) {
-            if (MediaReader.mustStayLoud(e)) {
+            if (MediaReader.mustBeRethrown(e)) {
                 throw e;
             }
             throw new NoteIsNotTextException(note, e);

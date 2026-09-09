@@ -73,7 +73,7 @@ final class ScreenWarmUp {
      *
      * @param host {@link Pane} a pane in the live scene, borrowed and left as it was found
      */
-    static void afterFirstFrame(final Pane host) {
+    static void warmAfterFirstFrame(final Pane host) {
         AfterFirstFrame.run(() -> warm(host));
     }
 

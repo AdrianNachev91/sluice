@@ -67,10 +67,10 @@ public class RunLauncherPresenter {
     // What the running or just-ended job was started as, and what it covers. The mode buttons and
     // the field can both move while a job works, so neither can be asked afterwards what it was
     // started with.
-    private volatile RunMode ranAs = RunMode.SORT;
+    private volatile RunMode startedMode = RunMode.SORT;
     private volatile String scopeOfTheRun = "";
     // What the run was narrowed to, where it was.
-    private volatile @Nullable String narrowedTo;
+    private volatile @Nullable String narrowedScope;
     // What a cancelled import leaves behind differs between the two kinds, and the mode alone
     // cannot say which.
     private volatile @Nullable ImportKind importKind;
@@ -87,7 +87,7 @@ public class RunLauncherPresenter {
         this.progress = new RunProgressPresenter(progress);
         this.setup = new RunSetupPresenter(pipeline, () -> this.running, this::repaint);
         // Last, so every field adopt() writes is assigned before a watcher can reach it.
-        pipeline.onSiftResumedOnItsOwn(this::adopt);
+        pipeline.onSiftAutoResumed(this::adopt);
     }
 
     /**
@@ -109,7 +109,7 @@ public class RunLauncherPresenter {
      */
     public RunStage stage() {
         if (this.running) {
-            return new RunStage.Running(this.progress.view(this.ranAs, this.scopeOfTheRun,
+            return new RunStage.Running(this.progress.view(this.startedMode, this.scopeOfTheRun,
                     this.cancelRequested, this.abandonRequested, this.importKind, this.startedItself));
         }
         final RunResultView done = this.endedCard;
@@ -308,7 +308,7 @@ public class RunLauncherPresenter {
     public void dismissResult() {
         this.endedCard = null;
         this.cardMessage = null;
-        this.setup.forgetAScopeNothingIsLeftIn();
+        this.setup.clearRefusedScope();
         this.markShell();
     }
 
@@ -348,7 +348,7 @@ public class RunLauncherPresenter {
      * @return {@link RunMode} the mode of the run in flight, or null
      */
     public @Nullable RunMode runningMode() {
-        return this.running ? this.ranAs : null;
+        return this.running ? this.startedMode : null;
     }
 
     /**
@@ -459,9 +459,9 @@ public class RunLauncherPresenter {
      */
     private void adopt(final String scope, final JobHandle<CullJobOutcome> job) {
         this.report(null);
-        this.ranAs = RunMode.SIFT;
+        this.startedMode = RunMode.SIFT;
         this.scopeOfTheRun = scope;
-        this.narrowedTo = null;
+        this.narrowedScope = null;
         this.importKind = null;
         this.endedCard = null;
         this.cancelRequested = false;
@@ -503,9 +503,9 @@ public class RunLauncherPresenter {
             // spending limit, that card holds the only offer to continue it. Cleared beforehand, a
             // refused press would strand the reader on a launcher with no way back to sheets they
             // have already paid for.
-            this.ranAs = ran;
+            this.startedMode = ran;
             this.scopeOfTheRun = scope;
-            this.narrowedTo = narrowedTo;
+            this.narrowedScope = narrowedTo;
             this.importKind = kind;
             this.endedCard = null;
             this.cancelRequested = false;
@@ -575,7 +575,7 @@ public class RunLauncherPresenter {
         }
         this.inFlight = null;
         this.endedCard = failure == null
-                ? RunResults.of(ran, outcome, this.narrowedTo)
+                ? RunResults.of(ran, outcome, this.narrowedScope)
                 : cardFor(ran, JobHandle.failureIn(failure));
         this.running = false;
         this.repaint();
@@ -597,7 +597,7 @@ public class RunLauncherPresenter {
         if (failure instanceof final CullException incomplete) {
             return RunResults.incompleteResult(ran, incomplete);
         }
-        return RunResults.failedResult(ran, RunRefusals.said(failure));
+        return RunResults.failedResult(ran, RunRefusals.refusalOf(failure));
     }
 
     /**

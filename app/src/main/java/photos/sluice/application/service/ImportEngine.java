@@ -98,14 +98,14 @@ public class ImportEngine {
                                     final CancellationSignal cancelled) {
         // Taken in full before anything is written, so the set being walked cannot grow as it is
         // walked.
-        final Gathered gathered = this.arrivals(sources);
+        final ImportScan gathered = this.arrivals(sources);
         final int total = gathered.arrivals().size();
         var counts = new Counts(0, 0, 0, 0);
         int seen = 0;
         try {
             for (final Arrival arrival : gathered.arrivals()) {
                 if (cancelled.isCancelled()) {
-                    return counts.summary(total, gathered.unreadablePlaces(), true);
+                    return counts.summary(total, gathered.unreadableFolders(), true);
                 }
                 counts = this.bringInTolerating(arrival, kind, counts, cancelled,
                         TransferProgress.within(progress, seen, total));
@@ -113,9 +113,9 @@ public class ImportEngine {
             }
         } catch (final TransferAbandonedException e) {
             // Reported the way a stop between files is, because it is one.
-            return counts.summary(total, gathered.unreadablePlaces(), true);
+            return counts.summary(total, gathered.unreadableFolders(), true);
         }
-        return counts.summary(total, gathered.unreadablePlaces(), false);
+        return counts.summary(total, gathered.unreadableFolders(), false);
     }
 
     /**
@@ -128,15 +128,15 @@ public class ImportEngine {
      * @param kind {@link ImportKind} whether the original stays where it is
      * @param counts {@link Counts}
      * @param cancelled {@link CancellationSignal} asked while a file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @return {@link Counts} the same, with this file counted
      * @throws TransferAbandonedException if cancelled escalated before the file landed
      */
     private Counts bringInTolerating(final Arrival arrival, final ImportKind kind,
                                      final Counts counts, final CancellationSignal cancelled,
-                                     final TransferProgress watching) {
+                                     final TransferProgress transferProgress) {
         try {
-            return this.bringIn(arrival, kind, counts, cancelled, watching);
+            return this.bringIn(arrival, kind, counts, cancelled, transferProgress);
         } catch (final UncheckedIOException e) {
             // Only the filesystem refusing. Anything else is a fault here, and still ends the run.
             log.warn("Could not bring in {}", arrival.file(), e);
@@ -148,12 +148,12 @@ public class ImportEngine {
      * Every file the chosen sources hold, each paired with where in the Inbox it belongs.
      *
      * @param sources a {@link List} of {@link Path}
-     * @return {@link Gathered}
+     * @return {@link ImportScan}
      */
-    private Gathered arrivals(final List<Path> sources) {
+    private ImportScan arrivals(final List<Path> sources) {
         final Path inbox = this.paths.inbox();
         final List<Arrival> arrivalsSoFar = new ArrayList<>();
-        int unreadablePlaces = 0;
+        int unreadableFolders = 0;
         // The sources are a list and may overlap. A folder and a file inside it name that file
         // twice, and a move would then delete an original twice.
         final Set<Path> alreadyGathered = new HashSet<>();
@@ -168,10 +168,10 @@ public class ImportEngine {
                     final Path walkedRoot = resolvedFolder.get();
                     // Tolerant, because a Windows-formatted card carries a directory nobody may
                     // read, and throwing on it would make importing a whole card impossible.
-                    final MediaReader.Walk walk = this.mediaStore.listFilesTolerating(walkedRoot);
-                    unreadablePlaces += walk.unreadablePlaces().size();
+                    final MediaReader.Walk walk = this.mediaStore.listFilesToleratingRefusals(walkedRoot);
+                    unreadableFolders += walk.unreadableFolders().size();
                     for (final Path file : walk.files()) {
-                        addOnce(arrivalsSoFar, alreadyGathered, under(inbox, walkedRoot, file));
+                        addOnce(arrivalsSoFar, alreadyGathered, arrivalUnder(inbox, walkedRoot, file));
                     }
                 } else {
                     // Resolved for the same reason the folder above is. A walked file arrives
@@ -185,7 +185,7 @@ public class ImportEngine {
                         + "drive, check it is still plugged in.", e);
             }
         }
-        return new Gathered(arrivalsSoFar, unreadablePlaces);
+        return new ImportScan(arrivalsSoFar, unreadableFolders);
     }
 
     /**
@@ -210,7 +210,7 @@ public class ImportEngine {
      * @param file {@link Path}
      * @return {@link Arrival}
      */
-    private static Arrival under(final Path inbox, final Path source, final Path file) {
+    private static Arrival arrivalUnder(final Path inbox, final Path source, final Path file) {
         final Path relative = source.relativize(file).getParent();
         return new Arrival(file, relative == null ? inbox : inbox.resolve(relative));
     }
@@ -222,12 +222,12 @@ public class ImportEngine {
      * @param kind {@link ImportKind} whether the original stays where it is
      * @param counts {@link Counts}
      * @param cancelled {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @return {@link Counts} the same, with this file counted
      * @throws TransferAbandonedException if cancelled escalated before the file landed
      */
     private Counts bringIn(final Arrival arrival, final ImportKind kind, final Counts counts,
-                           final CancellationSignal cancelled, final TransferProgress watching) {
+                           final CancellationSignal cancelled, final TransferProgress transferProgress) {
         if (this.alreadySameFile(arrival)) {
             if (kind == ImportKind.MOVE) {
                 // On the strength of the byte comparison alreadySameFile just made.
@@ -235,7 +235,7 @@ public class ImportEngine {
             }
             return counts.oneMoreAlreadyThere();
         }
-        return this.copyItIn(arrival, kind, counts, cancelled, watching);
+        return this.copyIntoInbox(arrival, kind, counts, cancelled, transferProgress);
     }
 
     /**
@@ -248,18 +248,18 @@ public class ImportEngine {
      * @param kind {@link ImportKind} whether the original stays where it is
      * @param counts {@link Counts}
      * @param cancelled {@link CancellationSignal} asked while the file's bytes are moving
-     * @param watching {@link TransferProgress} told how far this file's bytes have got
+     * @param transferProgress {@link TransferProgress} told how far this file's bytes have got
      * @return {@link Counts} the same, with this file counted
      * @throws TransferAbandonedException if cancelled escalated before the copy finished
      */
-    private Counts copyItIn(final Arrival arrival, final ImportKind kind, final Counts counts,
-                            final CancellationSignal cancelled, final TransferProgress watching) {
+    private Counts copyIntoInbox(final Arrival arrival, final ImportKind kind, final Counts counts,
+                                 final CancellationSignal cancelled, final TransferProgress transferProgress) {
         final Path landing = this.mediaStore.resolveDestination(arrival.file(), arrival.destination());
         // A free name, not a composed one. An earlier crash between copy and rename leaves a whole
         // photo under that name, and its card may be gone. Writing over it can lose the only copy.
         final Path part = this.mediaStore.resolveDestination(Path.of(landing + PART_SUFFIX),
                 arrival.destination());
-        this.mediaStore.copyTo(arrival.file(), part, cancelled, watching);
+        this.mediaStore.copyTo(arrival.file(), part, cancelled, transferProgress);
         if (kind == ImportKind.MOVE && !this.sameBytes(arrival.file(), part)) {
             this.mediaStore.delete(part);
             return counts.oneMoreUnverified();
@@ -284,7 +284,7 @@ public class ImportEngine {
      * @return boolean
      */
     private boolean alreadySameFile(final Arrival arrival) {
-        final Path there = whereItWouldSit(arrival);
+        final Path there = destinationFor(arrival);
         return this.mediaStore.exists(there)
                 && this.mediaStore.size(there) == this.mediaStore.size(arrival.file())
                 && this.sameBytes(arrival.file(), there);
@@ -296,7 +296,7 @@ public class ImportEngine {
      * @param arrival {@link Arrival}
      * @return {@link Path}
      */
-    private static Path whereItWouldSit(final Arrival arrival) {
+    private static Path destinationFor(final Arrival arrival) {
         return arrival.destination().resolve(arrival.file().getFileName());
     }
 
@@ -347,20 +347,20 @@ public class ImportEngine {
      * What the walk over the chosen sources came to.
      *
      * @param arrivals a {@link List} of {@link Arrival} every file it reached
-     * @param unreadablePlaces int how many folders it could not look inside at all
+     * @param unreadableFolders int how many folders it could not look inside at all
      */
-    private record Gathered(List<Arrival> arrivals, int unreadablePlaces) {
+    private record ImportScan(List<Arrival> arrivals, int unreadableFolders) {
     }
 
     /**
      * What an import has come to so far.
      *
-     * @param broughtIn int how many landed in the Inbox on this run
-     * @param alreadyThere int how many the Inbox already held
+     * @param imported int how many landed in the Inbox on this run
+     * @param alreadyInInbox int how many the Inbox already held
      * @param unverified int how many arrived with bytes that did not match the original
-     * @param couldNotBeRead int how many the filesystem refused partway through
+     * @param unreadableFiles int how many the filesystem refused partway through
      */
-    private record Counts(int broughtIn, int alreadyThere, int unverified, int couldNotBeRead) {
+    private record Counts(int imported, int alreadyInInbox, int unverified, int unreadableFiles) {
 
         /**
          * The same counts, with one more file brought in.
@@ -368,7 +368,7 @@ public class ImportEngine {
          * @return {@link Counts}
          */
         private Counts oneMoreBroughtIn() {
-            return new Counts(this.broughtIn + 1, this.alreadyThere, this.unverified, this.couldNotBeRead);
+            return new Counts(this.imported + 1, this.alreadyInInbox, this.unverified, this.unreadableFiles);
         }
 
         /**
@@ -377,7 +377,7 @@ public class ImportEngine {
          * @return {@link Counts}
          */
         private Counts oneMoreAlreadyThere() {
-            return new Counts(this.broughtIn, this.alreadyThere + 1, this.unverified, this.couldNotBeRead);
+            return new Counts(this.imported, this.alreadyInInbox + 1, this.unverified, this.unreadableFiles);
         }
 
         /**
@@ -386,7 +386,7 @@ public class ImportEngine {
          * @return {@link Counts}
          */
         private Counts oneMoreUnverified() {
-            return new Counts(this.broughtIn, this.alreadyThere, this.unverified + 1, this.couldNotBeRead);
+            return new Counts(this.imported, this.alreadyInInbox, this.unverified + 1, this.unreadableFiles);
         }
 
         /**
@@ -395,22 +395,22 @@ public class ImportEngine {
          * @return {@link Counts}
          */
         private Counts oneMoreCouldNotBeRead() {
-            return new Counts(this.broughtIn, this.alreadyThere, this.unverified,
-                    this.couldNotBeRead + 1);
+            return new Counts(this.imported, this.alreadyInInbox, this.unverified,
+                    this.unreadableFiles + 1);
         }
 
         /**
          * These counts as the summary an import answers with.
          *
          * @param found int how many files the import walked
-         * @param unreadablePlaces int how many folders it could not look inside
+         * @param unreadableFolders int how many folders it could not look inside
          * @param cancelled boolean whether it stopped before reaching every one of them
          * @return {@link ImportSummary}
          */
-        private ImportSummary summary(final int found, final int unreadablePlaces,
+        private ImportSummary summary(final int found, final int unreadableFolders,
                                       final boolean cancelled) {
-            return new ImportSummary(found, this.broughtIn, this.alreadyThere, this.unverified,
-                    this.couldNotBeRead, unreadablePlaces, cancelled);
+            return new ImportSummary(found, this.imported, this.alreadyInInbox, this.unverified,
+                    this.unreadableFiles, unreadableFolders, cancelled);
         }
     }
 }

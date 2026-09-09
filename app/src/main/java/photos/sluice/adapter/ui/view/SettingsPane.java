@@ -46,11 +46,11 @@ final class SettingsPane {
         final PageHeader.Result header = PageHeader.build("Settings", "settings-save-button", null);
         // Replaced on every draw, since a save rebuilds every card. Whatever asks about unsaved work
         // has to read the controls standing now rather than the ones this page opened with.
-        final var onScreen = new AtomicReference<@Nullable OnScreen>(null);
-        refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, null, onScreen);
+        final var drawnControls = new AtomicReference<@Nullable DrawnControls>(null);
+        refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, null, drawnControls);
 
-        return new Mounted(PageHeader.pinnedOver(header, container),
-                () -> hasUnsavedEdits(presenter, onScreen.get()));
+        return new Mounted(PageHeader.pinnedPage(header, container),
+                () -> hasUnsavedEdits(presenter, drawnControls.get()));
     }
 
     /**
@@ -69,8 +69,8 @@ final class SettingsPane {
      * @param provider {@link VisionProviderCard.Result} the provider choice and its own fields
      * @param montage {@link PhotoSheetsCard.Result} the sheet's two numbers
      */
-    private record OnScreen(FoldersCard.Result folders, VisionProviderCard.Result provider,
-                            PhotoSheetsCard.Result montage) {
+    private record DrawnControls(FoldersCard.Result folders, VisionProviderCard.Result provider,
+                                 PhotoSheetsCard.Result montage) {
     }
 
     /**
@@ -80,25 +80,25 @@ final class SettingsPane {
      * there is nothing to read and nothing could have been typed either.
      *
      * @param presenter {@link SettingsPresenter} compares what is on screen against what is stored
-     * @param onScreen {@link OnScreen} the controls the last draw put up, or null before it ran
+     * @param drawnControls {@link DrawnControls} the controls the last draw put up, or null before it ran
      * @return boolean true where leaving would lose something
      */
     private static boolean hasUnsavedEdits(final SettingsPresenter presenter,
-                                           final @Nullable OnScreen onScreen) {
-        if (onScreen == null) {
+                                           final @Nullable DrawnControls drawnControls) {
+        if (drawnControls == null) {
             return false;
         }
         final VisionProviderCard.ProviderFieldControls controls =
-                VisionProviderCard.controlsOf(onScreen.provider().providerFields());
+                VisionProviderCard.controlsOf(drawnControls.provider().providerFields());
         return presenter.hasUnsavedEdits(new SettingsPresenter.SettingsEdits(
-                onScreen.folders().workingRoot().field().getText(),
-                onScreen.folders().libraryRoot().field().getText(),
-                onScreen.folders().inbox().field().getText(),
-                VisionProviderCard.providerChoiceOf(onScreen.provider().providerBox()).id(),
+                drawnControls.folders().workingRoot().field().getText(),
+                drawnControls.folders().libraryRoot().field().getText(),
+                drawnControls.folders().inbox().field().getText(),
+                VisionProviderCard.providerChoiceOf(drawnControls.provider().providerBox()).id(),
                 VisionProviderCard.selectedModelId(controls.model()),
                 controls.endpoint().getText(),
-                onScreen.montage().tileSize().getValue(),
-                onScreen.montage().tilesPerRow().getValue()));
+                drawnControls.montage().tileSize().getValue(),
+                drawnControls.montage().tilesPerRow().getValue()));
     }
 
     /**
@@ -113,14 +113,14 @@ final class SettingsPane {
      *         model catalogue and connection check
      * @param onOpenPhotoCategories {@link Runnable} opens the photo categories screen
      * @param banner what to say above the screen about what just happened, or null for nothing
-     * @param onScreen an {@link AtomicReference} the controls this draw builds are published to,
+     * @param drawnControls an {@link AtomicReference} the controls this draw builds are published to,
      *     so the unsaved-work question reads the ones standing rather than an earlier draw's
      */
     private static void refresh(final VBox container, final PageHeader.Result header,
                                 final SettingsPresenter presenter, final VisionProviderPresenter visionProvider,
                                 final Runnable onOpenPhotoCategories,
                                 final @Nullable String banner,
-                                final AtomicReference<@Nullable OnScreen> onScreen) {
+                                final AtomicReference<@Nullable DrawnControls> drawnControls) {
         header.clearStatus();
         final SettingsView view = presenter.view();
         final FoldersCard.Result folders = FoldersCard.build(view);
@@ -131,7 +131,7 @@ final class SettingsPane {
         // no Save button to sit under. This is the one place the page reports anything.
         final AppearanceCard.Result appearance = AppearanceCard.build(view, presenter,
                 refused -> showRefusal(container, status, refused, false));
-        onScreen.set(new OnScreen(folders, provider, montage));
+        drawnControls.set(new DrawnControls(folders, provider, montage));
 
         provider.providerBox().getSelectionModel().selectedItemProperty().addListener((_, _, chosen) -> {
             // A refusal answers one press of Save against one set of choices. Changing the provider
@@ -140,7 +140,7 @@ final class SettingsPane {
             final var controls = VisionProviderCard.controlsOf(provider.providerFields());
             clearRefusal(status, folders.workingRoot().violation(), folders.libraryRoot().violation(),
                     folders.inbox().violation(), controls.modelViolation());
-            VisionProviderCard.showOnlyWhatTheProviderUses(chosen.fields(), provider.providerFields(),
+            VisionProviderCard.showProviderFields(chosen.fields(), provider.providerFields(),
                     provider.secretCard());
             // Both rebuilt rather than toggled. A credential and a model catalog each belong to the
             // provider that owns them, so what these say and offer has to change with the choice.
@@ -160,8 +160,8 @@ final class SettingsPane {
                 VisionProviderCard.providerChoiceOf(provider.providerBox()), provider.providerFields(),
                 montage.tileSize().getValue(),
                 montage.tilesPerRow().getValue(), AppearanceCard.themeChoiceOf(appearance.themeBox()), status,
-                said -> refresh(container, header, presenter, visionProvider, onOpenPhotoCategories, said,
-                        onScreen)));
+                nextBanner -> refresh(container, header, presenter, visionProvider, onOpenPhotoCategories,
+                        nextBanner, drawnControls)));
 
         // The secret card belongs to the provider card, not here. A node named in two parents lands
         // in whichever claimed it last, so adding it would quietly lift it out of the provider card.
@@ -216,7 +216,7 @@ final class SettingsPane {
                 // nothing saved yet, would otherwise be told Sluice is checking something it has
                 // not got. The line still clears either way, so a refusal from a previous press
                 // cannot sit under a save that worked.
-                working(status,
+                showStatus(status,
                         visionProvider.secretRow(provider.id()).hasStoredValue() ? "Checking your key..." : "");
                 final var task = new Task<Void>() {
                     @Override
@@ -238,7 +238,7 @@ final class SettingsPane {
             }
             case final SaveOutcome.NeedsLibraryRootResolution needsResolution ->
                     LibraryRootMoveDialog.resolve(container, presenter, needsResolution,
-                            said -> working(status, said),
+                            text -> showStatus(status, text),
                             moveOutcome -> reportTheMove(container, moveOutcome, status, showBanner));
         }
     }
@@ -281,7 +281,7 @@ final class SettingsPane {
                                       final Consumer<String> showBanner) {
         switch (outcome) {
             case final SettingsPresenter.MoveOutcome.Moved moved -> showBanner.accept(moved.message());
-            case final SettingsPresenter.MoveOutcome.NothingChanged nothing -> working(status, nothing.message());
+            case final SettingsPresenter.MoveOutcome.NothingChanged nothing -> showStatus(status, nothing.message());
             case final SettingsPresenter.MoveOutcome.Failed failed ->
                     showRefusal(container, status, failed.message(), false);
         }
@@ -291,10 +291,10 @@ final class SettingsPane {
      * Says what the screen is busy with, in the line beside Save.
      *
      * @param status {@link TextArea} the line beside Save
-     * @param said {@link String} what is happening, or nothing at all
+     * @param text {@link String} what is happening, or nothing at all
      */
-    private static void working(final TextArea status, final String said) {
-        status.setText(said);
+    private static void showStatus(final TextArea status, final String text) {
+        status.setText(text);
         SelectableText.dressAs(status, "settings-save-status");
     }
 

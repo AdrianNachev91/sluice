@@ -406,7 +406,7 @@ public class Pipeline {
      */
     public @Nullable Path setAsideUnreadableSpendLedger() {
         this.requireUsableRoots();
-        if (this.spendLedgerReads()) {
+        if (this.spendLedgerIsReadable()) {
             return null;
         }
         final Path destination = this.pathsPort.graveyard()
@@ -560,7 +560,7 @@ public class Pipeline {
      * <p>No roots check. A reader stopping a run may not be blocked by an install whose folders have
      * since gone.
      */
-    public void abandonTheFileInFlight() {
+    public void abandonFileInFlight() {
         this.jobRunner.abandonInFlight();
     }
 
@@ -577,7 +577,7 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
             this.phaseRunner.planned(List.of());
-            this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
+            this.cullEngine.refuseRunOutsideWorkingRoot(prepDir);
             return this.troubleshooter.troubleshoot(prepDir);
         });
     }
@@ -640,7 +640,7 @@ public class Pipeline {
         this.requireUsableRoots();
         return this.jobRunner.submit(_ -> {
             this.phaseRunner.planned(List.of(DISCARDING));
-            this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
+            this.cullEngine.refuseRunOutsideWorkingRoot(prepDir);
             if (this.prepDirDoctor.diagnose(prepDir).state() == PrepDirHealth.State.COMPLETE) {
                 throw new RunAlreadyFinishedException(prepDir);
             }
@@ -689,7 +689,7 @@ public class Pipeline {
      */
     public String redoRejectedAnswers(final Path prepDir) {
         this.requireUsableRoots();
-        this.cullEngine.refuseRunOutsideTheWorkingRoot(prepDir);
+        this.cullEngine.refuseRunOutsideWorkingRoot(prepDir);
         final List<Finding> findings = this.prepDirDoctor.diagnose(prepDir).findings();
         final List<String> sheets = LaunchPrompt.sheetsToRedo(findings);
         if (sheets.isEmpty()) {
@@ -717,7 +717,7 @@ public class Pipeline {
      *     be the one that paints, since a startup scan arms from it. A listener marshals for itself
      *     and does anything slow somewhere else
      */
-    public void onRunsMoved(final Runnable listener) {
+    public void onRunsChanged(final Runnable listener) {
         this.runChanges.onMoved(listener);
     }
 
@@ -727,7 +727,7 @@ public class Pipeline {
      * @param listener {@link AutoResumedSifts.Listener} what to run, on the watcher's own polling
      *     thread. A listener marshals for itself
      */
-    public void onSiftResumedOnItsOwn(final AutoResumedSifts.Listener listener) {
+    public void onSiftAutoResumed(final AutoResumedSifts.Listener listener) {
         this.autoResumedSifts.onResumed(listener);
     }
 
@@ -782,7 +782,7 @@ public class Pipeline {
      *
      * @return boolean true where the record can be read, false where a line defeats the parser
      */
-    private boolean spendLedgerReads() {
+    private boolean spendLedgerIsReadable() {
         try {
             this.spendLedger.read();
             return true;

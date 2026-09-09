@@ -11,6 +11,7 @@ import photos.sluice.domain.paths.PathViolation.Overlap;
 
 import java.util.List;
 
+import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FirstRunPresenterTest {
@@ -57,7 +58,7 @@ class FirstRunPresenterTest {
     void aSaveLeavingOneRootUnsetSaysWhichOne() {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete(null).message())
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete(null)).message())
                 .isEqualTo("Saved. You still need to set up your Inbox before any work can start on your photos.");
     }
 
@@ -66,7 +67,7 @@ class FirstRunPresenterTest {
         final var presenter = new FirstRunPresenter(violating(
                 new NotConfigured(PathRole.LIBRARY_ROOT), new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete(null).message()).isEqualTo(
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete(null)).message()).isEqualTo(
                 "Saved. You still need to set up your Library root and Inbox before any work can "
                         + "start on your photos.");
     }
@@ -78,7 +79,7 @@ class FirstRunPresenterTest {
                 new NotConfigured(PathRole.LIBRARY_ROOT),
                 new NotConfigured(PathRole.WORKING_ROOT)));
 
-        assertThat(presenter.savedWhileStillIncomplete(null).message()).isEqualTo(
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete(null)).message()).isEqualTo(
                 "You still need to set up your Working root, Library root and Inbox before any work "
                         + "can start on your photos.");
     }
@@ -117,7 +118,7 @@ class FirstRunPresenterTest {
                 new NotConfigured(PathRole.LIBRARY_ROOT),
                 new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete(null).message()).doesNotContain("Saved.");
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete(null)).message()).doesNotContain("Saved.");
     }
 
     @Test
@@ -127,28 +128,28 @@ class FirstRunPresenterTest {
                 new NotConfigured(PathRole.LIBRARY_ROOT),
                 new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete(null).anythingWasStored()).isFalse();
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete(null)).anythingWasStored()).isFalse();
     }
 
     @Test
     void aSaveThatStoredOneFolderIsReportedAsGoodNews() {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete(null).anythingWasStored()).isTrue();
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete(null)).anythingWasStored()).isTrue();
     }
 
     @Test
     void aSaveThatMovedTheLibraryIsGoodNewsEvenWithFoldersLeft() {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete("Copied 12 file(s).").anythingWasStored()).isTrue();
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete("Copied 12 file(s).")).anythingWasStored()).isTrue();
     }
 
     @Test
     void aSaveThatReportedSomethingKeepsThatReportAndAddsWhatIsLeft() {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.savedWhileStillIncomplete("Copied 12 file(s) into the new Library.").message())
+        assertThat(requireNonNull(presenter.savedWhileStillIncomplete("Copied 12 file(s) into the new Library.")).message())
                 .isEqualTo("Copied 12 file(s) into the new Library. You still need to set up your Inbox "
                         + "before any work can start on your photos.");
     }
@@ -157,7 +158,7 @@ class FirstRunPresenterTest {
     void theLibraryRefusalCoversChangingItRatherThanOnlyMovingIt() {
         final var presenter = new FirstRunPresenter(violating(new NotConfigured(PathRole.INBOX)));
 
-        assertThat(presenter.libraryRootCannotMoveYet())
+        assertThat(presenter.libraryRootMoveRefusal())
                 .contains("cannot be changed")
                 .doesNotContain("cannot move");
     }

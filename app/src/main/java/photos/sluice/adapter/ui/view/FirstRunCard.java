@@ -45,7 +45,7 @@ final class FirstRunCard {
         container.getStyleClass().add("first-run-pane");
         final PageHeader.Result header = PageHeader.build("Welcome", "first-run-save-button", null);
         refresh(container, header, presenter, firstRun, onFinished, null);
-        return PageHeader.pinnedOver(header, container);
+        return PageHeader.pinnedPage(header, container);
     }
 
     /**
@@ -80,7 +80,7 @@ final class FirstRunCard {
         final Runnable dismissBanner = () -> SettingsRows.clearReport(container);
         header.save().setOnAction(_ -> onSave(presenter, firstRun, onFinished, workingRoot, libraryRoot,
                 inbox, VisionProviderCard.providerChoiceOf(provider), container, status, dismissBanner,
-                said -> refresh(container, header, presenter, firstRun, onFinished, said)));
+                incompleteSave -> refresh(container, header, presenter, firstRun, onFinished, incompleteSave)));
 
         final var card = new VBox(headline(), opening(firstRun.opening()),
                 workingRoot.row(), libraryRoot.row(), inbox.row(),
@@ -137,7 +137,7 @@ final class FirstRunCard {
             // the folders and keeps the library where it is, and answers as a refusal instead.
             case final SaveOutcome.NeedsLibraryRootResolution _ -> {
                 dismissBanner.run();
-                showRefusal(container, status, firstRun.libraryRootCannotMoveYet(), false);
+                showRefusal(container, status, firstRun.libraryRootMoveRefusal(), false);
             }
         }
     }
@@ -154,11 +154,11 @@ final class FirstRunCard {
      */
     private static void settled(final FirstRunPresenter firstRun, final Consumer<@Nullable String> onFinished,
                                 final Consumer<FirstRunPresenter.IncompleteSave> redraw, final @Nullable String reported) {
-        final FirstRunPresenter.IncompleteSave said = firstRun.savedWhileStillIncomplete(reported);
-        if (said == null) {
+        final FirstRunPresenter.IncompleteSave incompleteSave = firstRun.savedWhileStillIncomplete(reported);
+        if (incompleteSave == null) {
             onFinished.accept(reported);
         } else {
-            redraw.accept(said);
+            redraw.accept(incompleteSave);
         }
     }
 
@@ -168,8 +168,8 @@ final class FirstRunCard {
         return headline;
     }
 
-    private static TextArea opening(final String said) {
-        final TextArea opening = SelectableText.prose(said);
+    private static TextArea opening(final String text) {
+        final TextArea opening = SelectableText.prose(text);
         opening.getStyleClass().add("first-run-opening");
         return opening;
     }

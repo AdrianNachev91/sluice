@@ -174,7 +174,7 @@ class QuitPresenterTest {
         this.presenter.forceQuit();
 
         final var order = inOrder(this.pipeline, this.startup);
-        order.verify(this.pipeline).abandonTheFileInFlight();
+        order.verify(this.pipeline).abandonFileInFlight();
         order.verify(this.startup).windDownWithin(Duration.ZERO);
     }
 
@@ -182,7 +182,7 @@ class QuitPresenterTest {
     void aSiftNobodyStartedIsNamedAsASiftRatherThanAsSomething() {
         final QuitView asked = this.quitViewOver(_ -> {
             final var listener = ArgumentCaptor.forClass(AutoResumedSifts.Listener.class);
-            verify(this.pipeline, atLeastOnce()).onSiftResumedOnItsOwn(listener.capture());
+            verify(this.pipeline, atLeastOnce()).onSiftAutoResumed(listener.capture());
             listener.getValue().resumed("2019", retyped(neverFinishing()));
         });
 

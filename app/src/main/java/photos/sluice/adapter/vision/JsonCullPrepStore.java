@@ -178,7 +178,7 @@ public class JsonCullPrepStore implements CullPrepPort {
     @Override
     @SuppressWarnings("DuplicatedCode")
     public void writeIndex(final Path prepDir, final PrepDir index) {
-        final var document = new RawIndexOut(
+        final var document = new RawIndexWrite(
                 index.scope(),
                 index.categories().stream()
                         .map(card -> new RawCategory(card.name(), card.description(), card.examples())).toList(),
@@ -234,8 +234,8 @@ public class JsonCullPrepStore implements CullPrepPort {
      * @param montages int count of montages generated
      * @param entries a {@link List} of {@link String} the montage entry filenames
      */
-    private record RawIndexOut(String scope, List<RawCategory> categories, String basePath, int photos,
-                               List<String> unreviewable, int montages, List<String> entries) {
+    private record RawIndexWrite(String scope, List<RawCategory> categories, String basePath, int photos,
+                                 List<String> unreviewable, int montages, List<String> entries) {
     }
 
     /**
@@ -353,9 +353,9 @@ public class JsonCullPrepStore implements CullPrepPort {
             throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
                     + "' with no description", new IOException("blank category description"));
         }
-        if (description.length() > CullCategory.maxDescription()) {
+        if (description.length() > CullCategory.maxDescriptionLength()) {
             throw new MalformedPrepJsonException("Prep index " + indexPath + " has a category '" + name
-                    + "' whose description is longer than " + CullCategory.maxDescription()
+                    + "' whose description is longer than " + CullCategory.maxDescriptionLength()
                     + " characters", new IOException("over-long category description"));
         }
         return new CullCategory(name, description, boundedExamples(name, raw, indexPath), Boolean.TRUE);

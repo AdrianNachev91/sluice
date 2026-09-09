@@ -17,7 +17,7 @@ class RunChangesTest {
         changes.onMoved(first::incrementAndGet);
         changes.onMoved(second::incrementAndGet);
 
-        changes.moved();
+        changes.changed();
 
         assertThat(first).hasValue(1);
         assertThat(second).hasValue(1);
@@ -41,7 +41,7 @@ class RunChangesTest {
         });
         changes.onMoved(reached::incrementAndGet);
 
-        assertThatCode(changes::moved).doesNotThrowAnyException();
+        assertThatCode(changes::changed).doesNotThrowAnyException();
         assertThat(reached).hasValue(1);
     }
 }

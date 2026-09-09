@@ -33,9 +33,9 @@ class SettingsRefusalsTest {
 
     @Test
     void anotherSluiceHoldingTheWorkingRootSaysWhichProblemItIs() {
-        final String said = worded(new WorkingRootBusyException(Path.of("D:", "Photos", "Sluice")));
+        final String sentence = worded(new WorkingRootBusyException(Path.of("D:", "Photos", "Sluice")));
 
-        assertThat(said).doesNotContain(NOT_KNOWN_WHY).contains("running");
+        assertThat(sentence).doesNotContain(NOT_KNOWN_WHY).contains("running");
     }
 
     @Test
@@ -52,9 +52,9 @@ class SettingsRefusalsTest {
 
     @Test
     void aSettingsFileThatCannotBeUnderstoodNamesTheFileToGoAndLookAt() {
-        final String said = worded(new MalformedSettingsException(CONFIG, "not valid YAML at line 4"));
+        final String sentence = worded(new MalformedSettingsException(CONFIG, "not valid YAML at line 4"));
 
-        assertThat(said)
+        assertThat(sentence)
                 .doesNotContain(NOT_KNOWN_WHY)
                 .contains(CONFIG.toString())
                 .contains("Nothing you had configured has changed");
@@ -62,16 +62,16 @@ class SettingsRefusalsTest {
 
     @Test
     void aFileTheFilesystemWouldNotGiveUpSaysToTryAgain() {
-        final String said = worded(new UncheckedIOException(new IOException("held by another process")));
+        final String sentence = worded(new UncheckedIOException(new IOException("held by another process")));
 
-        assertThat(said).doesNotContain(NOT_KNOWN_WHY).contains("Try again");
+        assertThat(sentence).doesNotContain(NOT_KNOWN_WHY).contains("Try again");
     }
 
     @Test
     void anythingUnforeseenIsWordedInThisAppsVoiceAndQuotesTheRest() {
-        final String said = worded(new IllegalStateException("writeAndApply: NoSuchFileException"));
+        final String sentence = worded(new IllegalStateException("writeAndApply: NoSuchFileException"));
 
-        assertThat(said)
+        assertThat(sentence)
                 .startsWith("Your settings were not saved")
                 .contains(NOT_KNOWN_WHY)
                 .contains("NoSuchFileException");
@@ -87,13 +87,13 @@ class SettingsRefusalsTest {
         final String tail = settings.substring(SETTINGS_NOT_SAVED.length());
 
         assertThat(tail).isNotBlank();
-        assertThat(SettingsRefusals.wordedForAUser(thrown, "Your photo categories were not saved."))
+        assertThat(SettingsRefusals.refusalWording(thrown, "Your photo categories were not saved."))
                 .isEqualTo("Your photo categories were not saved." + tail);
-        assertThat(SettingsRefusals.wordedForAUser(thrown, "Your theme was not saved."))
+        assertThat(SettingsRefusals.refusalWording(thrown, "Your theme was not saved."))
                 .isEqualTo("Your theme was not saved." + tail);
     }
 
     private static String worded(final RuntimeException refusal) {
-        return SettingsRefusals.wordedForAUser(refusal, SETTINGS_NOT_SAVED);
+        return SettingsRefusals.refusalWording(refusal, SETTINGS_NOT_SAVED);
     }
 }

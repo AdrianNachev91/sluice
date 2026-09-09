@@ -72,7 +72,7 @@ class RunProgressPresenterTest {
         this.port.phaseStarted("Sifting");
         this.port.tick("Sifting", 11, 28);
 
-        this.port.phaseCutShort("Sifting");
+        this.port.phaseStopped("Sifting");
         this.port.phaseFinished("Sifting");
 
         assertThat(this.working().phases()).singleElement()
@@ -95,7 +95,7 @@ class RunProgressPresenterTest {
     void aPhaseThatGaveUpBeforeCountingAnythingIsEmptyRatherThanFull() {
         this.port.phaseStarted("Applying decisions");
 
-        this.port.phaseCutShort("Applying decisions");
+        this.port.phaseStopped("Applying decisions");
         this.port.phaseFinished("Applying decisions");
 
         assertThat(this.working().phases()).singleElement()
@@ -122,7 +122,7 @@ class RunProgressPresenterTest {
         this.port.phaseFinished("Finding dates");
 
         assertThat(this.working().phases()).singleElement()
-                .extracting(PhaseBar::finished, PhaseBar::wentThrough)
+                .extracting(PhaseBar::finished, PhaseBar::completedAllWork)
                 .containsExactly(true, true);
     }
 
@@ -133,7 +133,7 @@ class RunProgressPresenterTest {
         this.port.phaseFinished("Finding dates");
 
         assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
-                .extracting(PhaseBar::wentThrough)
+                .extracting(PhaseBar::completedAllWork)
                 .isEqualTo(true);
     }
 
@@ -144,7 +144,7 @@ class RunProgressPresenterTest {
         this.port.phaseFinished("Sorting");
 
         assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
-                .extracting(PhaseBar::wentThrough)
+                .extracting(PhaseBar::completedAllWork)
                 .isEqualTo(false);
     }
 
@@ -154,7 +154,7 @@ class RunProgressPresenterTest {
         this.port.phaseFinished("Finding dates");
 
         assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
-                .extracting(PhaseBar::finished, PhaseBar::cutShort, PhaseBar::wentThrough)
+                .extracting(PhaseBar::finished, PhaseBar::cutShort, PhaseBar::completedAllWork)
                 .containsExactly(true, false, false);
     }
 
@@ -163,11 +163,11 @@ class RunProgressPresenterTest {
         this.port.phaseStarted("Sorting");
         this.port.tick("Sorting", 850, 1204);
 
-        this.port.phaseCutShort("Sorting");
+        this.port.phaseStopped("Sorting");
         this.port.phaseFinished("Sorting");
 
         assertThat(this.working().phases()).singleElement()
-                .extracting(PhaseBar::fraction, PhaseBar::cutShort, PhaseBar::wentThrough)
+                .extracting(PhaseBar::fraction, PhaseBar::cutShort, PhaseBar::completedAllWork)
                 .containsExactly(850d / 1204, true, false);
     }
 
@@ -179,7 +179,7 @@ class RunProgressPresenterTest {
         this.port.phaseFinished("Sorting");
 
         assertThat(this.stopping(RunMode.SORT).phases()).singleElement()
-                .extracting(PhaseBar::fraction, PhaseBar::cutShort, PhaseBar::wentThrough)
+                .extracting(PhaseBar::fraction, PhaseBar::cutShort, PhaseBar::completedAllWork)
                 .containsExactly(850d / 1204, false, false);
     }
 
@@ -187,7 +187,7 @@ class RunProgressPresenterTest {
     void aPhaseThatGaveUpPartWayIsCarriedToTheScreenAsHavingDoneSo() {
         this.port.phaseStarted("Sorting");
 
-        this.port.phaseCutShort("Sorting");
+        this.port.phaseStopped("Sorting");
         this.port.phaseFinished("Sorting");
 
         assertThat(this.working().phases()).singleElement()

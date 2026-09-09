@@ -164,7 +164,7 @@ class PageHeaderTest {
                 SettingsRows.numberField(new SettingsView.NumberRange(1, 12, 1), 5);
         final TextArea prose = SelectableText.prose("a help line the reader can select");
         final var body = new VBox(field, elsewhere, radio, spinner, prose);
-        final VBox root = PageHeader.pinnedOver(header, body);
+        final VBox root = PageHeader.pinnedPage(header, body);
 
         final var stage = new Stage();
         stage.setScene(new Scene(root, 400, 300));

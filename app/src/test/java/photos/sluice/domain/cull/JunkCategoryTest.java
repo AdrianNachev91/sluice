@@ -8,7 +8,7 @@ class JunkCategoryTest {
 
     @Test
     void theCardIsOnAndCarriesTheDescriptionAProviderIsGiven() {
-        final CullCategory card = JunkCategory.card();
+        final CullCategory card = JunkCategory.category();
 
         assertThat(card.name()).isEqualTo("junk");
         assertThat(card.enabled()).isTrue();
@@ -19,16 +19,16 @@ class JunkCategoryTest {
     // would cost money and judge nothing.
     @Test
     void theDescriptionNamesTheClassItSaysIsMostMissed() {
-        assertThat(JunkCategory.card().description())
+        assertThat(JunkCategory.category().description())
                 .contains("photo of a monitor")
                 .contains("single most-missed junk class");
     }
 
     @Test
     void onlyItsOwnNameIsClaimed() {
-        assertThat(JunkCategory.claims("junk")).isTrue();
-        assertThat(JunkCategory.claims("Junk")).isFalse();
-        assertThat(JunkCategory.claims("junky")).isFalse();
-        assertThat(JunkCategory.claims("food")).isFalse();
+        assertThat(JunkCategory.isJunkName("junk")).isTrue();
+        assertThat(JunkCategory.isJunkName("Junk")).isFalse();
+        assertThat(JunkCategory.isJunkName("junky")).isFalse();
+        assertThat(JunkCategory.isJunkName("food")).isFalse();
     }
 }

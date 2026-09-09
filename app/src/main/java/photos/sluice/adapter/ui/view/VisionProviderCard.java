@@ -44,7 +44,7 @@ final class VisionProviderCard {
             + "110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z";
     // Its four corners average to the eye's own centre, which is what puts the stroke through the
     // pupil rather than across a corner.
-    private static final String CROSSED_OUT = "M2.6 4.4l1.8-1.8 17 17-1.8 1.8z";
+    private static final String EYE_STROKE = "M2.6 4.4l1.8-1.8 17 17-1.8 1.8z";
 
     private VisionProviderCard() {}
 
@@ -81,7 +81,7 @@ final class VisionProviderCard {
         // Every provider shares one set of controls, so what the chosen one does not use is hidden
         // rather than rebuilt. A rebuild reads the saved settings back, wiping anything typed but
         // not yet saved. That is every field on the page, not only this card's.
-        showOnlyWhatTheProviderUses(providerChoiceOf(providerBox).fields(), providerFields, secretCard);
+        showProviderFields(providerChoiceOf(providerBox).fields(), providerFields, secretCard);
 
         return new Result(card, providerBox, providerFields, secretCard);
     }
@@ -101,9 +101,9 @@ final class VisionProviderCard {
      * @param providerFields {@link VBox} the model and endpoint rows
      * @param secretCard {@link VBox} the credential card
      */
-    static void showOnlyWhatTheProviderUses(final SettingsView.ProviderFields fields,
-                                            final VBox providerFields,
-                                            final VBox secretCard) {
+    static void showProviderFields(final SettingsView.ProviderFields fields,
+                                   final VBox providerFields,
+                                   final VBox secretCard) {
         final ProviderFieldControls controls = controlsOf(providerFields);
         SettingsRows.showIf(controls.model().getParent(), fields.model());
         SettingsRows.showIf(controls.endpointField().getParent(), fields.endpoint());
@@ -202,33 +202,33 @@ final class VisionProviderCard {
      * @param providerFields {@link VBox} the model and endpoint rows. A credential change leaves
      *         their Test connection button enabled or not, and a save or remove can change the very
      *         choices in their model picker
-     * @param said what just happened to the key, or null when nothing has
+     * @param confirmation what just happened to the key, or null when nothing has
      * @param keyLimit int the most the entry field may hold
      */
     static void fillSecretCard(final VBox card, final VisionProviderPresenter visionProvider,
                                final ComboBox<SettingsView.ProviderChoice> providerBox,
-                               final VBox providerFields, final @Nullable String said,
+                               final VBox providerFields, final @Nullable String confirmation,
                                final int keyLimit) {
         final String providerId = providerChoiceOf(providerBox).id();
         card.getChildren().setAll(secretCardContents(visionProvider, visionProvider.secretRow(providerId), providerId,
-                said, message -> fillSecretCard(card, visionProvider, providerBox, providerFields, message, keyLimit),
+                confirmation, message -> fillSecretCard(card, visionProvider, providerBox, providerFields, message, keyLimit),
                 providerFields, providerBox, keyLimit));
         // The button that was pressed leaves the scene along with the rest of this block. Focus goes
         // to whatever the window finds next, and a scrolling pane travels to wherever focus lands.
         // A key saved half way down the page then shows the top of it. Putting focus back on the
         // button that replaced it keeps the reader where they were standing.
         final Node pressedAgain = card.lookup("#settings-api-key-save");
-        if (said != null && pressedAgain != null) {
+        if (confirmation != null && pressedAgain != null) {
             pressedAgain.requestFocus();
         }
         // A save or a remove is exactly what Test's own enabled state depends on.
         final ProviderFieldControls controls = controlsOf(providerFields);
-        enableTestIfThereIsSomethingToTry(controls.testConnection(), visionProvider, providerBox);
+        enableTestIfCredentialStored(controls.testConnection(), visionProvider, providerBox);
     }
 
     private static List<Node> secretCardContents(final VisionProviderPresenter visionProvider,
                                                  final SettingsView.SecretRow secret,
-                                                 final String providerId, final @Nullable String said,
+                                                 final String providerId, final @Nullable String confirmation,
                                                  final Consumer<String> onChanged,
                                                  final VBox providerFields,
                                                  final ComboBox<SettingsView.ProviderChoice> providerBox,
@@ -296,10 +296,10 @@ final class VisionProviderCard {
 
         // Beside the row it happened on rather than at the top of the page, which is not where the
         // reader is standing. Taken away again on its own, the way the page's own banner is.
-        if (said != null) {
-            result.setText(said);
+        if (confirmation != null) {
+            result.setText(confirmation);
             SelectableText.dressAs(result, "settings-confirmation");
-            takeAwayAfterFourSeconds(result);
+            fadeOutAfterDelay(result);
         }
 
         final var entryRow = new HBox(entry, reveal, eye, saveButton, removeButton);
@@ -399,7 +399,7 @@ final class VisionProviderCard {
      *
      * @param line {@link TextArea} the line to take away
      */
-    private static void takeAwayAfterFourSeconds(final TextArea line) {
+    private static void fadeOutAfterDelay(final TextArea line) {
         final var fade = new FadeTransition(Duration.millis(400), line);
         fade.setFromValue(1);
         fade.setToValue(0);
@@ -469,8 +469,8 @@ final class VisionProviderCard {
         testResult.getStyleClass().add("settings-help");
         // Nothing has been tested until the button is pressed, so this label starts empty and
         // would otherwise leave a line's gap below the Endpoint row.
-        SettingsRows.showWhileItSaysSomething(testResult);
-        enableTestIfThereIsSomethingToTry(testConnection, visionProvider, providerBox);
+        SettingsRows.showWhileTextPresent(testResult);
+        enableTestIfCredentialStored(testConnection, visionProvider, providerBox);
         testConnection.setOnAction(_ -> {
             testResult.setText("Checking...");
             SelectableText.dressAs(testResult, "settings-help");
@@ -504,7 +504,7 @@ final class VisionProviderCard {
         // Built whether or not there is anything to say, so a refused save can fill it without
         // rebuilding the row. It takes no space while empty.
         final var modelViolation = SettingsRows.violationLabel();
-        SettingsRows.markWhileSomethingIsWrong(model, modelViolation);
+        SettingsRows.markWhileRefused(model, modelViolation);
 
         final var modelRow = SettingsRows.explainedRow("Model",
                 "Which model reads your photos.",
@@ -544,9 +544,9 @@ final class VisionProviderCard {
      * @param visionProvider {@link VisionProviderPresenter} answers whether a credential is stored
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
-    private static void enableTestIfThereIsSomethingToTry(final Button testConnection,
-                                                          final VisionProviderPresenter visionProvider,
-                                                          final ComboBox<SettingsView.ProviderChoice> providerBox) {
+    private static void enableTestIfCredentialStored(final Button testConnection,
+                                                     final VisionProviderPresenter visionProvider,
+                                                     final ComboBox<SettingsView.ProviderChoice> providerBox) {
         testConnection.setDisable(!visionProvider.secretRow(providerChoiceOf(providerBox).id()).hasStoredValue());
     }
 
@@ -569,7 +569,7 @@ final class VisionProviderCard {
         switch (result.picker()) {
             // A provider with no model setting at all, whose picker is hidden anyway. Cleared
             // rather than left showing whatever the last provider offered.
-            case null -> emptyAndDisabled(model);
+            case null -> clearAndDisable(model);
             case final SettingsView.ModelPicker.Options options -> {
                 model.setDisable(false);
                 model.getItems().setAll(options.choices());
@@ -582,17 +582,17 @@ final class VisionProviderCard {
                 modelInfo.getChildren().add(SettingsRows.helpLine(options.sourceNote()));
             }
             case SettingsView.ModelPicker.Pending(final String message) -> {
-                emptyAndDisabled(model);
+                clearAndDisable(model);
                 model.setPromptText(message);
                 // Holds one line's height, so the rows below do not jump when the answer arrives
                 // and fills this slot. An empty instance of the same styled line rather than a
                 // number, which would be a second place to keep the font size in step. One line is
                 // what the answer usually brings; a wrapped violation is taller and still moves.
                 modelInfo.getChildren().add(SettingsRows.helpLine(""));
-                redrawWhenTheStartUpCheckSettles(model, modelInfo, visionProvider, providerId, providerBox);
+                redrawAfterStartUpCheck(model, modelInfo, visionProvider, providerId, providerBox);
             }
             case final SettingsView.ModelPicker.Unavailable unavailable -> {
-                emptyAndDisabled(model);
+                clearAndDisable(model);
                 // A closed ComboBox with nothing selected draws its own promptText. It never asks
                 // a custom cell factory to draw the empty case. Confirmed by rendering: the cell's
                 // own text for a null item never appeared on screen.
@@ -640,11 +640,11 @@ final class VisionProviderCard {
      *
      * @param model {@link ComboBox} the model picker
      */
-    private static void emptyAndDisabled(final ComboBox<SettingsView.ModelChoice> model) {
+    private static void clearAndDisable(final ComboBox<SettingsView.ModelChoice> model) {
         model.setDisable(true);
         model.getItems().clear();
         model.getSelectionModel().clearSelection();
-        // The prompt too. Whichever state follows says what it wants said.
+        // The prompt too. Whichever state follows says what it wants confirmation.
         model.setPromptText(null);
     }
 
@@ -662,12 +662,12 @@ final class VisionProviderCard {
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider,
      *         read again once the wait ends in case the choice moved on while it ran
      */
-    private static void redrawWhenTheStartUpCheckSettles(final ComboBox<SettingsView.ModelChoice> model,
-                                                         final VBox modelInfo,
-                                                         final VisionProviderPresenter visionProvider,
-                                                         final String providerId,
-                                                         final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        redrawWhicheverWayItEnds(() -> visionProvider.awaitStartUpCheck(providerId),
+    private static void redrawAfterStartUpCheck(final ComboBox<SettingsView.ModelChoice> model,
+                                                final VBox modelInfo,
+                                                final VisionProviderPresenter visionProvider,
+                                                final String providerId,
+                                                final ComboBox<SettingsView.ProviderChoice> providerBox) {
+        redrawWhenCheckEnds(() -> visionProvider.awaitStartUpCheck(providerId),
                 model, modelInfo, visionProvider, providerId, providerBox);
     }
 
@@ -687,7 +687,7 @@ final class VisionProviderCard {
     private static void refreshModelPicker(final ComboBox<SettingsView.ModelChoice> model, final VBox modelInfo,
                                            final VisionProviderPresenter visionProvider, final String providerId,
                                            final ComboBox<SettingsView.ProviderChoice> providerBox) {
-        redrawWhicheverWayItEnds(() -> visionProvider.refreshModels(providerId),
+        redrawWhenCheckEnds(() -> visionProvider.refreshModels(providerId),
                 model, modelInfo, visionProvider, providerId, providerBox);
     }
 
@@ -708,12 +708,12 @@ final class VisionProviderCard {
      * @param providerId {@link String} the provider this task asked about
      * @param providerBox {@link ComboBox} of {@link SettingsView.ProviderChoice} the chosen provider
      */
-    private static void redrawWhicheverWayItEnds(final Runnable check,
-                                                 final ComboBox<SettingsView.ModelChoice> model,
-                                                 final VBox modelInfo,
-                                                 final VisionProviderPresenter visionProvider,
-                                                 final String providerId,
-                                                 final ComboBox<SettingsView.ProviderChoice> providerBox) {
+    private static void redrawWhenCheckEnds(final Runnable check,
+                                            final ComboBox<SettingsView.ModelChoice> model,
+                                            final VBox modelInfo,
+                                            final VisionProviderPresenter visionProvider,
+                                            final String providerId,
+                                            final ComboBox<SettingsView.ProviderChoice> providerBox) {
         final var task = new Task<Void>() {
             @Override
             protected Void call() {
@@ -747,7 +747,7 @@ final class VisionProviderCard {
         eye.getStyleClass().add("reveal-glyph");
 
         final var crossedOut = new SVGPath();
-        crossedOut.setContent(CROSSED_OUT);
+        crossedOut.setContent(EYE_STROKE);
         crossedOut.getStyleClass().add("reveal-glyph");
         crossedOut.setVisible(false);
 

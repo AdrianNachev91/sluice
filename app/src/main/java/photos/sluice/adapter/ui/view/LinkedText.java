@@ -19,7 +19,7 @@ final class LinkedText {
 
     // A box with an arrow leaving it, drawn rather than taken from a font. A character that renders
     // on one desktop can draw a box on another. A shape cannot go missing.
-    private static final String LEAVES_THE_APP =
+    private static final String EXTERNAL_LINK_GLYPH =
             "M2 4 h4 v1 h-3 v6 h6 v-3 h1 v4 h-8 z M8 2 h4 v4 h-1 v-2.3 l-3.6 3.6 -0.7-0.7 3.6-3.6 h-2.3 z";
 
     // Ordinary sentence punctuation, which ends a word without belonging to the address in it. A
@@ -60,7 +60,7 @@ final class LinkedText {
      */
     static Hyperlink browserLink(final String address) {
         final var mark = new SVGPath();
-        mark.setContent(LEAVES_THE_APP);
+        mark.setContent(EXTERNAL_LINK_GLYPH);
         mark.getStyleClass().add("linked-text-mark");
         final var link = new Hyperlink(OPEN_IN_BROWSER, mark);
         link.setContentDisplay(ContentDisplay.RIGHT);

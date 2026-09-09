@@ -132,7 +132,7 @@ public class JobReports {
         final S scope = asked.get();
         this.start.claimAndSweep();
         final JobHandle<T> job = submit.apply(scope);
-        if (interruptible && !quiet && this.progress.watched()) {
+        if (interruptible && !quiet && this.progress.isTerminal()) {
             this.progress.note(TypedCancel.HINT);
         }
         final T produced;

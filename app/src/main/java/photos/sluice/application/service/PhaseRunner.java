@@ -13,8 +13,8 @@ import java.util.function.Predicate;
  * ticks then {@code phaseFinished}, around one engine call.
  *
  * <p>{@code phaseFinished} fires in a finally, so the bracket closes even when the engine call
- * throws. A listener otherwise has no signal the phase ever ended. {@code phaseCutShort} goes ahead
- * of it on a throw, in {@link #around} on a null return, and where a result fails the predicate
+ * throws. A listener otherwise has no signal the phase ever ended. {@code phaseStopped} goes ahead
+ * of it on a throw, in {@link #runReporting} on a null return, and where a result fails the predicate
  * {@link #run(String, PhaseWork, Predicate)} was given.
  *
  * <p>A null return is the one stop this class reads off a value by itself. A stage carrying its
@@ -61,18 +61,18 @@ final class PhaseRunner {
      *
      * @param phase {@link String} name of the phase being run
      * @param work a {@link PhaseWork} of T the engine call to bracket
-     * @param workedThrough a {@link Predicate} of T, false where the result says the stage stopped
+     * @param isComplete a {@link Predicate} of T, false where the result says the stage stopped
      *     before its end. Read once on a normal return, and not at all on a throw. It must not
      *     throw itself: that reads as the stage having stopped, and the throw reaches the caller
      * @return T the engine call's result
      */
-    <T> T run(final String phase, final PhaseWork<T> work, final Predicate<T> workedThrough)
+    <T> T run(final String phase, final PhaseWork<T> work, final Predicate<T> isComplete)
             throws Exception {
         this.progressPort.phaseStarted(phase);
         boolean completed = false;
         try {
             final T result = work.run(this.reporting(phase));
-            completed = workedThrough.test(result);
+            completed = isComplete.test(result);
             return result;
         } finally {
             this.report(phase, completed);
@@ -92,7 +92,7 @@ final class PhaseRunner {
      * @param <T> the type of result the stage produces
      * @return T the stage's result
      */
-    <T extends @Nullable Object> T around(final String phase, final Function<ProgressCallback, T> work) {
+    <T extends @Nullable Object> T runReporting(final String phase, final Function<ProgressCallback, T> work) {
         this.progressPort.phaseStarted(phase);
         boolean completed = false;
         try {
@@ -112,7 +112,7 @@ final class PhaseRunner {
      */
     private void report(final String phase, final boolean completed) {
         if (!completed) {
-            this.progressPort.phaseCutShort(phase);
+            this.progressPort.phaseStopped(phase);
         }
         this.progressPort.phaseFinished(phase);
     }
@@ -135,7 +135,7 @@ final class PhaseRunner {
             }
 
             @Override
-            public void partOf(final int current, final int total, final double partDone) {
+            public void partialTick(final int current, final int total, final double partDone) {
                 PhaseRunner.this.progressPort.tickWithin(phase, current, total, partDone);
             }
         };

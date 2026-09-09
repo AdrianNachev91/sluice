@@ -10,9 +10,9 @@ final class ConfirmationRequiredException extends IllegalStateException {
     /**
      * Creates the exception.
      *
-     * @param said {@link String} what would be lost, and that {@code --yes} repeats the command
+     * @param message {@link String} what would be lost, and that {@code --yes} repeats the command
      */
-    ConfirmationRequiredException(final String said) {
-        super(said);
+    ConfirmationRequiredException(final String message) {
+        super(message);
     }
 }

@@ -9,7 +9,7 @@ import photos.sluice.adapter.ui.RunLauncherView.Message;
 import photos.sluice.adapter.ui.RunSetupPresenter.Confirmation;
 import photos.sluice.adapter.ui.TroubleshootView.Action;
 import photos.sluice.adapter.ui.TroubleshootView.Answer;
-import photos.sluice.adapter.ui.TroubleshootView.Deed;
+import photos.sluice.adapter.ui.TroubleshootView.Kind;
 import photos.sluice.adapter.ui.TroubleshootView.Detail;
 import photos.sluice.adapter.ui.TroubleshootView.Option;
 import photos.sluice.adapter.ui.TroubleshootView.Problem;
@@ -184,7 +184,7 @@ public class TroubleshootPresenter {
         this.checkRefusedReason = null;
         this.reading.set(Reading.NOTHING_YET);
         this.checking = true;
-        this.startTheCheck(prepDir);
+        this.startCheck(prepDir);
     }
 
     /**
@@ -229,7 +229,7 @@ public class TroubleshootPresenter {
         // resolves it, so every later index shifts. A row the reader can still see would otherwise
         // be answered against whatever slid into its place.
         if (!this.reading.get().findings().contains(finding)) {
-            this.overtaken(run);
+            this.rereadAfterMoving(run);
             return;
         }
         if (option.answer() == Answer.RECHECK) {
@@ -238,7 +238,7 @@ public class TroubleshootPresenter {
         }
         final ChoiceAnswer answer = answerFor(finding, option.answer());
         if (answer == null) {
-            this.overtaken(run);
+            this.rereadAfterMoving(run);
             return;
         }
         this.answer(run, option.answer(), answer);
@@ -307,13 +307,13 @@ public class TroubleshootPresenter {
      *
      * @param run {@link Path} the run to look through
      */
-    private void startTheCheck(final Path run) {
+    private void startCheck(final Path run) {
         try {
             final JobHandle<TroubleshootReport> handle = this.pipeline.troubleshoot(run);
             handle.onComplete().whenComplete((pass, failure) -> this.checked(run, pass, failure));
         } catch (final RuntimeException e) {
             log.info("Could not look through {}", run, e);
-            final RunRefusals.Refusal refused = RunRefusals.said(e);
+            final RunRefusals.Refusal refused = RunRefusals.refusalOf(e);
             this.checking = false;
             this.checkRefusedReason = refused.sentence();
             this.announce(RunRefusals.refuseMessage(e));
@@ -413,7 +413,7 @@ public class TroubleshootPresenter {
      *
      * @param run {@link Path} the run
      */
-    private void overtaken(final Path run) {
+    private void rereadAfterMoving(final Path run) {
         if (this.reread(run) != null) {
             this.announce(new Message(RUN_MOVED, false));
         }
@@ -575,7 +575,7 @@ public class TroubleshootPresenter {
                     choice.confirm()));
         }
         return new Problem("troubleshoot-problem-" + i, finding, headed ? null : statement.problem(),
-                statement.about(), busy ? List.of() : options);
+                statement.subject(), busy ? List.of() : options);
     }
 
     /**
@@ -656,10 +656,10 @@ public class TroubleshootPresenter {
             return List.of();
         }
         final List<Action> actions = new ArrayList<>();
-        actions.add(new Action("troubleshoot-discard", "Discard", Deed.DISCARD, false,
+        actions.add(new Action("troubleshoot-discard", "Discard", Kind.DISCARD, false,
                 this.discardConfirm()));
         if (state == State.READY) {
-            actions.add(new Action("troubleshoot-finish", FINISH, Deed.FINISH, true, null));
+            actions.add(new Action("troubleshoot-finish", FINISH, Kind.FINISH, true, null));
         }
         return actions;
     }

@@ -45,7 +45,7 @@ public final class RunChanges {
     /**
      * Broadcasts to every listener that a run may have moved.
      */
-    void moved() {
+    void changed() {
         this.listeners.forEach(RunChanges::announce);
     }
 

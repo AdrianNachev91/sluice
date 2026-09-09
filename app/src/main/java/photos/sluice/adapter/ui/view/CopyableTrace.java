@@ -49,7 +49,7 @@ final class CopyableTrace {
      *
      * @param text {@link String} what to put there
      */
-    static void putOnTheClipboard(final String text) {
+    static void copyToClipboard(final String text) {
         final var content = new ClipboardContent();
         content.putString(text);
         Clipboard.getSystemClipboard().setContent(content);
@@ -74,7 +74,7 @@ final class CopyableTrace {
         button.setId(id);
         button.getStyleClass().add("button-quiet");
         button.setOnAction(_ -> {
-            putOnTheClipboard(text.get());
+            copyToClipboard(text.get());
             button.setText(copied);
         });
         return button;
@@ -104,7 +104,7 @@ final class CopyableTrace {
         toggle.setId(idPrefix + "-toggle");
         toggle.getStyleClass().add("runs-section-toggle");
         final TextArea body = area(idPrefix + "-text", text);
-        SettingsRows.pointing(toggle, false);
+        SettingsRows.setFoldMarker(toggle, false);
 
         final var head = new HBox(toggle, SettingsRows.spacer(),
                 copyButton(idPrefix + "-copy", copy, copied, () -> text));
@@ -117,8 +117,8 @@ final class CopyableTrace {
         toggle.setOnAction(_ -> {
             final boolean showing = !open.get();
             open.set(showing);
-            travel.to(showing);
-            SettingsRows.pointing(toggle, showing);
+            travel.setOpen(showing);
+            SettingsRows.setFoldMarker(toggle, showing);
         });
         return whole;
     }
