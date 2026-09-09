@@ -128,6 +128,10 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-configuration-processor</artifactId>
       <optional>true</optional>
+      <!-- An annotation processor, so it runs at compile time and has no job at runtime. Optional
+           alone only stops it reaching a consumer of this artifact; it stays on this project's own
+           runtime classpath, and the installer copies whatever is there. -->
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
@@ -189,6 +193,14 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!-- The executable jar takes a classifier so it stops replacing the plain one. Without
+               this it claims the artifact's own name and the plain jar is renamed to
+               .jar.original, which no classpath entry matches. The installer needs the plain jar
+               beside the dependency jars, since it puts them all on one flat classpath rather
+               than running a nested-archive loader. -->
+          <classifier>boot</classifier>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

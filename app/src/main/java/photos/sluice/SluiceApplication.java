@@ -44,7 +44,7 @@ public class SluiceApplication {
      *
      * @param args {@link String}[] command-line arguments
      */
-    static void main(final String[] args) {
+    public static void main(final String[] args) {
         final Path configFile = ConfigDirLocator.configFile(System.getProperty("os.name"), System.getenv());
         if (opensTheWindow(args)) {
             UiLauncher.launch(configFile, NO_ARGUMENTS);
