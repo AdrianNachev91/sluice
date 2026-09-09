@@ -60,7 +60,15 @@ jobs:
         # libheif-examples only pulls in libheif-plugin-aomdec (AV1, for AVIF) as a hard
         # dependency; the HEVC decoder plugin HEIC needs is merely suggested, so heif-convert
         # silently fails on real HEIC input unless it's installed explicitly too.
-        run: sudo apt-get update && sudo apt-get install -y libheif-examples libheif-plugin-libde265
+        #
+        # The Chrome source comes with the runner image and this project installs nothing from it,
+        # but apt-get update refreshes every source and fails the step on any one of them. That
+        # repository has served an index whose hash disagrees with its own Release file, which
+        # reddened this leg on a commit that touched no Linux code. Dropped rather than tolerating
+        # a failed update, so a source we do need still fails loudly.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update && sudo apt-get install -y libheif-examples libheif-plugin-libde265
 
       # The Linux keyring tests need a real Secret Service on a session bus, and a headless runner
       # has neither. Start both: a private D-Bus session, then gnome-keyring's secrets daemon
